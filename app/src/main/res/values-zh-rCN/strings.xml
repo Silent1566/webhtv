@@ -124,6 +124,9 @@
     <string name="setting_debug_log">调试日志</string>
     <string name="setting_incognito">无痕模式</string>
     <string name="setting_drive_check">网盘检测</string>
+    <string name="setting_search_thread">搜索线程</string>
+    <string name="setting_search_ui">搜索排版</string>
+    <string name="setting_search_column">每行个数</string>
     <string name="setting_theme_color">主题色彩</string>
     <string name="setting_auto">自动</string>
     <string name="setting_custom">自定义</string>
@@ -227,6 +230,18 @@
         <item>中</item>
         <item>大</item>
         <item>特大</item>
+    </string-array>
+
+    <string-array name="select_search_ui">
+        <item>横向</item>
+        <item>纵向</item>
+    </string-array>
+
+    <string-array name="select_search_column">
+        <item>自适应</item>
+        <item>1个</item>
+        <item>2个</item>
+        <item>3个</item>
     </string-array>
 
     <string-array name="select_scale">

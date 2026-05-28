@@ -20,6 +20,7 @@ import com.fongmi.android.tv.bean.Result;
 import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.databinding.FragmentTypeBinding;
 import com.fongmi.android.tv.model.SiteViewModel;
+import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.activity.VideoActivity;
 import com.fongmi.android.tv.ui.activity.VodActivity;
 import com.fongmi.android.tv.ui.base.BaseFragment;
@@ -42,6 +43,7 @@ public class CollectFragment extends BaseFragment implements CustomScroller.Call
     private SiteViewModel mViewModel;
     private Collect mCollect;
     private String mKeyword;
+    private final List<Vod> mItems = new ArrayList<>();
 
     public static CollectFragment newInstance(String keyword, Collect collect) {
         Bundle args = new Bundle();
@@ -91,7 +93,7 @@ public class CollectFragment extends BaseFragment implements CustomScroller.Call
 
     private boolean checkLastSize(List<Vod> items) {
         if (mLast == null || items.isEmpty()) return false;
-        int size = Product.getColumn() - mLast.size();
+        int size = getColumn() - mLast.size();
         if (size == 0) return false;
         size = Math.min(size, items.size());
         mLast.addAll(mLast.size(), items.subList(0, size));
@@ -104,15 +106,33 @@ public class CollectFragment extends BaseFragment implements CustomScroller.Call
     }
 
     public void addVideo(List<Vod> items) {
+        if (!items.isEmpty()) mItems.addAll(items);
         if (checkLastSize(items) || getActivity() == null || getActivity().isFinishing()) return;
         List<ListRow> rows = new ArrayList<>();
-        VodPresenter presenter = new VodPresenter(this);
-        for (List<Vod> part : Lists.partition(items, Product.getColumn())) {
+        VodPresenter presenter = new VodPresenter(this, getColumn());
+        for (List<Vod> part : Lists.partition(items, getColumn())) {
             mLast = new ArrayObjectAdapter(presenter);
             mLast.addAll(0, part);
             rows.add(new ListRow(mLast));
         }
         mAdapter.addAll(mAdapter.size(), rows);
+    }
+
+    public void setColumn() {
+        mLast = null;
+        mAdapter.clear();
+        List<ListRow> rows = new ArrayList<>();
+        VodPresenter presenter = new VodPresenter(this, getColumn());
+        for (List<Vod> part : Lists.partition(mItems, getColumn())) {
+            mLast = new ArrayObjectAdapter(presenter);
+            mLast.addAll(0, part);
+            rows.add(new ListRow(mLast));
+        }
+        mAdapter.addAll(0, rows);
+    }
+
+    private int getColumn() {
+        return Setting.getSearchColumn() > 0 ? Setting.getSearchColumn() : Product.getColumn();
     }
 
     @Override

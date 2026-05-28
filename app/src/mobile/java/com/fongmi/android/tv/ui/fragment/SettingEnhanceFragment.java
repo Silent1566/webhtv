@@ -24,6 +24,8 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 public class SettingEnhanceFragment extends BaseFragment {
 
+    private static final int[] SEARCH_THREADS = {1, 2, 4, 6, 8, 10, 12, 16, 20, 32};
+
     private FragmentSettingEnhanceBinding mBinding;
 
     public static SettingEnhanceFragment newInstance() {
@@ -47,6 +49,7 @@ public class SettingEnhanceFragment extends BaseFragment {
     @Override
     protected void initEvent() {
         mBinding.detailOpenMode.setOnClickListener(this::setDetailOpenMode);
+        mBinding.searchThread.setOnClickListener(this::setSearchThread);
         mBinding.tmdbConfig.setOnClickListener(this::setTmdbConfig);
         mBinding.driveCheck.setOnClickListener(this::setDriveCheck);
         mBinding.debugLog.setOnClickListener(this::setDebugLog);
@@ -54,6 +57,7 @@ public class SettingEnhanceFragment extends BaseFragment {
 
     private void setText() {
         mBinding.detailOpenModeText.setText(getDetailOpenMode());
+        mBinding.searchThreadText.setText(String.valueOf(Setting.getSearchThread()));
         mBinding.tmdbConfigText.setText(TmdbConfig.objectFrom(Setting.getTmdbConfig()).isReady() ? R.string.setting_configured : R.string.setting_unconfigured);
         mBinding.driveCheckText.setText(getSwitch(Setting.isDriveCheck()));
         mBinding.debugLogText.setText(getSwitch(Setting.isDebugLog()));
@@ -65,6 +69,13 @@ public class SettingEnhanceFragment extends BaseFragment {
 
     private String[] getDetailOpenModes() {
         return new String[]{getString(R.string.setting_detail_open_fusion), getString(R.string.setting_detail_open_enhanced), getString(R.string.setting_detail_open_direct)};
+    }
+
+    private void setSearchThread(View view) {
+        int index = 0;
+        for (int i = 0; i < SEARCH_THREADS.length; i++) if (SEARCH_THREADS[i] == Setting.getSearchThread()) index = i;
+        Setting.putSearchThread(SEARCH_THREADS[(index + 1) % SEARCH_THREADS.length]);
+        mBinding.searchThreadText.setText(String.valueOf(Setting.getSearchThread()));
     }
 
     private void setDetailOpenMode(View view) {

@@ -17,6 +17,7 @@ import com.fongmi.android.tv.ui.base.ViewType;
 import com.fongmi.android.tv.ui.holder.VodListHolder;
 import com.fongmi.android.tv.ui.holder.VodOvalHolder;
 import com.fongmi.android.tv.ui.holder.VodRectHolder;
+import com.fongmi.android.tv.utils.ResUtil;
 
 public class VodPresenter extends Presenter {
 
@@ -28,10 +29,18 @@ public class VodPresenter extends Presenter {
         this(listener, Style.rect());
     }
 
+    public VodPresenter(OnClickListener listener, int column) {
+        this(listener, Style.rect(), column);
+    }
+
     public VodPresenter(OnClickListener listener, Style style) {
+        this(listener, style, Product.getColumn(style));
+    }
+
+    public VodPresenter(OnClickListener listener, Style style, int column) {
         this.listener = listener;
         this.style = style;
-        this.size = Product.getSpec(style);
+        this.size = Product.getSpec(ResUtil.dp2px(48) + ResUtil.dp2px(16 * (column - 1)), column, style);
     }
 
     public interface OnClickListener {

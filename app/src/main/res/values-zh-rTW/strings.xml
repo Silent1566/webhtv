@@ -124,6 +124,9 @@
     <string name="setting_debug_log">調試日誌</string>
     <string name="setting_incognito">無痕模式</string>
     <string name="setting_drive_check">網盤檢測</string>
+    <string name="setting_search_thread">搜索線程</string>
+    <string name="setting_search_ui">搜索排版</string>
+    <string name="setting_search_column">每行個數</string>
     <string name="setting_theme_color">主題色彩</string>
     <string name="setting_auto">自動</string>
     <string name="setting_custom">自訂</string>
@@ -227,6 +230,18 @@
         <item>中</item>
         <item>大</item>
         <item>特大</item>
+    </string-array>
+
+    <string-array name="select_search_ui">
+        <item>橫向</item>
+        <item>縱向</item>
+    </string-array>
+
+    <string-array name="select_search_column">
+        <item>自適應</item>
+        <item>1個</item>
+        <item>2個</item>
+        <item>3個</item>
     </string-array>
 
     <string-array name="select_scale">

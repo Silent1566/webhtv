@@ -125,6 +125,9 @@
     <string name="setting_debug_log">Debug log</string>
     <string name="setting_incognito">Incognito mode</string>
     <string name="setting_drive_check">Drive link check</string>
+    <string name="setting_search_thread">Search threads</string>
+    <string name="setting_search_ui">Search layout</string>
+    <string name="setting_search_column">Items per row</string>
     <string name="setting_theme_color">Theme color</string>
     <string name="setting_auto">Auto</string>
     <string name="setting_custom">Custom</string>
@@ -233,6 +236,18 @@
         <item>Medium</item>
         <item>Large</item>
         <item>Extra</item>
+    </string-array>
+
+    <string-array name="select_search_ui">
+        <item>Horizontal</item>
+        <item>Vertical</item>
+    </string-array>
+
+    <string-array name="select_search_column">
+        <item>Auto</item>
+        <item>1 item</item>
+        <item>2 items</item>
+        <item>3 items</item>
     </string-array>
 
     <string-array name="select_scale">

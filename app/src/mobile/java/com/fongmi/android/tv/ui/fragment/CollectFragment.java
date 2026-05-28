@@ -10,12 +10,15 @@ import android.view.ViewGroup;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.LinearLayoutCompat;
 import androidx.core.view.MenuProvider;
 import androidx.lifecycle.Lifecycle;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.GridLayoutManager;
+import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.viewbinding.ViewBinding;
 
+import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Collect;
 import com.fongmi.android.tv.bean.Result;
@@ -23,6 +26,7 @@ import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.databinding.FragmentCollectBinding;
 import com.fongmi.android.tv.model.SiteViewModel;
+import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.activity.FolderActivity;
 import com.fongmi.android.tv.ui.activity.VideoActivity;
 import com.fongmi.android.tv.ui.adapter.CollectAdapter;
@@ -75,7 +79,7 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
         setRecyclerView();
         setViewModel();
         setSites();
-        setWidth();
+        setCollectLayout();
         search();
     }
 
@@ -92,11 +96,11 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
     private void setRecyclerView() {
         mBinding.collect.setItemAnimator(null);
         mBinding.collect.setHasFixedSize(true);
-        mBinding.collect.setAdapter(mCollectAdapter = new CollectAdapter(this));
+        mBinding.collect.setAdapter(mCollectAdapter = new CollectAdapter(this, isHorizontalUi()));
         mBinding.recycler.setHasFixedSize(true);
         mBinding.recycler.addOnScrollListener(mScroller);
         mBinding.recycler.setAdapter(mSearchAdapter = new SearchAdapter(this));
-        ((GridLayoutManager) (mBinding.recycler.getLayoutManager())).setSpanCount(getCount());
+        updateSpanCount();
     }
 
     private void setViewModel() {
@@ -109,17 +113,64 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
         mSites = VodConfig.get().getSites().stream().filter(Site::isSearchable).toList();
     }
 
-    private void setWidth() {
+    private void setCollectLayout() {
+        boolean horizontal = isHorizontalUi();
+        int gap = ResUtil.dp2px(8);
+        mBinding.content.setOrientation(horizontal ? LinearLayoutCompat.VERTICAL : LinearLayoutCompat.HORIZONTAL);
+        mBinding.collect.setLayoutManager(new LinearLayoutManager(requireActivity(), horizontal ? LinearLayoutManager.HORIZONTAL : LinearLayoutManager.VERTICAL, false));
+        LinearLayoutCompat.LayoutParams collectParams = (LinearLayoutCompat.LayoutParams) mBinding.collect.getLayoutParams();
+        LinearLayoutCompat.LayoutParams recyclerParams = (LinearLayoutCompat.LayoutParams) mBinding.recycler.getLayoutParams();
+        collectParams.width = horizontal ? ViewGroup.LayoutParams.MATCH_PARENT : getCollectWidth();
+        collectParams.height = horizontal ? ViewGroup.LayoutParams.WRAP_CONTENT : ViewGroup.LayoutParams.MATCH_PARENT;
+        collectParams.weight = 0;
+        collectParams.topMargin = -gap;
+        recyclerParams.width = horizontal ? ViewGroup.LayoutParams.MATCH_PARENT : 0;
+        recyclerParams.height = horizontal ? 0 : ViewGroup.LayoutParams.MATCH_PARENT;
+        recyclerParams.weight = 1;
+        recyclerParams.topMargin = horizontal ? 0 : -gap;
+        mBinding.collect.setPadding(gap, 0, horizontal ? gap : 0, horizontal ? 0 : gap);
+        mBinding.recycler.setPadding(horizontal ? gap : 0, 0, gap, gap);
+        mBinding.collect.setLayoutParams(collectParams);
+        mBinding.recycler.setLayoutParams(recyclerParams);
+    }
+
+    private int getCollectWidth() {
         int width = 0;
         int space = ResUtil.dp2px(48);
         int maxWidth = ResUtil.getScreenWidth() / (getCount() + 1) - ResUtil.dp2px(40);
         for (Site site : mSites) width = Math.max(width, ResUtil.getTextWidth(site.getName(), 14));
         int contentWidth = width + space;
         int minWidth = ResUtil.dp2px(120);
-        int finalWidth = Math.max(minWidth, Math.min(contentWidth, maxWidth));
-        ViewGroup.LayoutParams params = mBinding.collect.getLayoutParams();
-        params.width = finalWidth;
-        mBinding.collect.setLayoutParams(params);
+        return Math.max(minWidth, Math.min(contentWidth, maxWidth));
+    }
+
+    private boolean isHorizontalUi() {
+        return Setting.getSearchUi() == 0;
+    }
+
+    private String getSearchUi() {
+        return getResources().getStringArray(R.array.select_search_ui)[Setting.getSearchUi()];
+    }
+
+    private String getSearchColumn() {
+        return getResources().getStringArray(R.array.select_search_column)[Setting.getSearchColumn()];
+    }
+
+    private void setSearchUi() {
+        int position = mCollectAdapter.getPosition();
+        Setting.putSearchUi((Setting.getSearchUi() + 1) % getResources().getStringArray(R.array.select_search_ui).length);
+        mCollectAdapter.setHorizontal(isHorizontalUi());
+        setCollectLayout();
+        mBinding.collect.post(() -> mBinding.collect.scrollToPosition(position));
+        requireActivity().invalidateOptionsMenu();
+    }
+
+    private void setSearchColumn() {
+        int column = Setting.getSearchColumn();
+        Setting.putSearchColumn(column >= 3 ? 1 : column + 1);
+        updateSpanCount();
+        mBinding.recycler.post(() -> mBinding.recycler.scrollToPosition(0));
+        requireActivity().invalidateOptionsMenu();
     }
 
     private void search() {
@@ -128,9 +179,12 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
     }
 
     private int getCount() {
-        int count = ResUtil.isLand(requireActivity()) ? 2 : 1;
-        if (ResUtil.isPad()) count++;
-        return count;
+        if (Setting.getSearchColumn() > 0) return Setting.getSearchColumn();
+        return ResUtil.isLand(requireActivity()) || ResUtil.isPad() ? 3 : 1;
+    }
+
+    private void updateSpanCount() {
+        ((GridLayoutManager) (mBinding.recycler.getLayoutManager())).setSpanCount(getCount());
     }
 
     private void setCollect(Result result) {
@@ -172,11 +226,20 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
 
     @Override
     public void onCreateMenu(@NonNull Menu menu, @NonNull MenuInflater menuInflater) {
+        menuInflater.inflate(R.menu.menu_collect, menu);
+    }
+
+    @Override
+    public void onPrepareMenu(@NonNull Menu menu) {
+        menu.findItem(R.id.action_layout).setTitle(getSearchUi());
+        menu.findItem(R.id.action_column).setTitle(getSearchColumn());
     }
 
     @Override
     public boolean onMenuItemSelected(@NonNull MenuItem menuItem) {
         if (menuItem.getItemId() == android.R.id.home) requireActivity().getOnBackPressedDispatcher().onBackPressed();
+        if (menuItem.getItemId() == R.id.action_layout) setSearchUi();
+        if (menuItem.getItemId() == R.id.action_column) setSearchColumn();
         return true;
     }
 

@@ -105,6 +105,38 @@ public class Setting {
         Prefers.put("drive_check", driveCheck);
     }
 
+    public static int getSearchThread() {
+        return clampSearchThread(Prefers.getInt("search_thread", 10));
+    }
+
+    public static void putSearchThread(int thread) {
+        Prefers.put("search_thread", clampSearchThread(thread));
+    }
+
+    public static int getSearchUi() {
+        return Prefers.getInt("search_ui", 1) == 0 ? 0 : 1;
+    }
+
+    public static void putSearchUi(int ui) {
+        Prefers.put("search_ui", ui == 0 ? 0 : 1);
+    }
+
+    public static int getSearchColumn() {
+        return clampSearchColumn(Prefers.getInt("search_column", 0));
+    }
+
+    public static void putSearchColumn(int column) {
+        Prefers.put("search_column", clampSearchColumn(column));
+    }
+
+    private static int clampSearchThread(int thread) {
+        return Math.max(1, Math.min(thread, 32));
+    }
+
+    private static int clampSearchColumn(int column) {
+        return Math.max(0, Math.min(column, 3));
+    }
+
     public static boolean isDebugLog() {
         return DebugLogStore.isEnabled();
     }
