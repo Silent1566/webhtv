@@ -1,6 +1,17 @@
 name: Release APK
 
 on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag, for example v5.5.1"
+        required: true
+        type: string
+      prerelease:
+        description: "Mark as pre-release"
+        required: false
+        default: false
+        type: boolean
   push:
     tags:
       - "v*"
@@ -49,4 +60,7 @@ jobs:
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          target_commitish: ${{ github.sha }}
+          prerelease: ${{ github.event_name == 'workflow_dispatch' && inputs.prerelease || false }}
           files: Release/apk/*.apk
