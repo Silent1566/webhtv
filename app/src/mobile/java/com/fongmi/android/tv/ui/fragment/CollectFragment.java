@@ -1,6 +1,7 @@
 package com.fongmi.android.tv.ui.fragment;
 
 import android.os.Bundle;
+import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuInflater;
@@ -33,6 +34,7 @@ import com.fongmi.android.tv.ui.adapter.CollectAdapter;
 import com.fongmi.android.tv.ui.adapter.SearchAdapter;
 import com.fongmi.android.tv.ui.base.BaseFragment;
 import com.fongmi.android.tv.ui.custom.CustomScroller;
+import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
 
 import java.util.List;
@@ -47,8 +49,13 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
     private List<Site> mSites;
 
     public static CollectFragment newInstance(String keyword) {
+        return newInstance(keyword, "");
+    }
+
+    public static CollectFragment newInstance(String keyword, String siteKey) {
         Bundle args = new Bundle();
         args.putString("keyword", keyword);
+        args.putString("siteKey", siteKey);
         CollectFragment fragment = new CollectFragment();
         fragment.setArguments(args);
         return fragment;
@@ -56,6 +63,15 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
 
     private String getKeyword() {
         return getArguments().getString("keyword");
+    }
+
+    private String getSiteKey() {
+        String siteKey = getArguments().getString("siteKey");
+        return siteKey == null ? "" : siteKey;
+    }
+
+    private boolean isSiteSearch() {
+        return !TextUtils.isEmpty(getSiteKey());
     }
 
     @Override
@@ -70,7 +86,7 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
         activity.setSupportActionBar(mBinding.toolbar);
         activity.getSupportActionBar().setDisplayHomeAsUpEnabled(true);
         activity.addMenuProvider(this, getViewLifecycleOwner(), Lifecycle.State.RESUMED);
-        activity.setTitle(getKeyword());
+        activity.setTitle(isSiteSearch() ? getString(R.string.search_result_current, getKeyword()) : getKeyword());
     }
 
     @Override
@@ -110,7 +126,12 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
     }
 
     private void setSites() {
-        mSites = VodConfig.get().getSites().stream().filter(Site::isSearchable).toList();
+        if (!isSiteSearch()) {
+            mSites = VodConfig.get().getSites().stream().filter(Site::isSearchable).toList();
+            return;
+        }
+        Site site = VodConfig.get().getSite(getSiteKey());
+        mSites = site.isSearchable() ? List.of(site) : List.of();
     }
 
     private void setCollectLayout() {
@@ -174,7 +195,10 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
     }
 
     private void search() {
-        if (mSites.isEmpty()) return;
+        if (mSites.isEmpty()) {
+            if (isSiteSearch()) Notify.show(R.string.detail_site_not_searchable);
+            return;
+        }
         mCollectAdapter.setItems(List.of(Collect.all()), () -> mViewModel.searchContent(mSites, getKeyword(), false));
     }
 

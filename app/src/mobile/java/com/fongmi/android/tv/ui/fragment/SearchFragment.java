@@ -24,6 +24,8 @@ import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
+import com.fongmi.android.tv.api.config.VodConfig;
+import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.bean.Word;
 import com.fongmi.android.tv.databinding.FragmentSearchBinding;
 import com.fongmi.android.tv.impl.Callback;
@@ -33,6 +35,7 @@ import com.fongmi.android.tv.ui.adapter.WordAdapter;
 import com.fongmi.android.tv.ui.base.BaseFragment;
 import com.fongmi.android.tv.ui.custom.CustomTextListener;
 import com.fongmi.android.tv.ui.dialog.SiteDialog;
+import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.Util;
 import com.github.catvod.net.OkHttp;
 import com.google.android.flexbox.FlexDirection;
@@ -52,10 +55,16 @@ public class SearchFragment extends BaseFragment implements MenuProvider, WordAd
     private FragmentSearchBinding mBinding;
     private RecordAdapter mRecordAdapter;
     private WordAdapter mWordAdapter;
+    private boolean mCurrentSite;
 
     public static SearchFragment newInstance(String keyword) {
+        return newInstance(keyword, "");
+    }
+
+    public static SearchFragment newInstance(String keyword, String siteKey) {
         Bundle args = new Bundle();
         args.putString("keyword", keyword);
+        args.putString("siteKey", siteKey);
         SearchFragment fragment = new SearchFragment();
         fragment.setArguments(args);
         return fragment;
@@ -63,6 +72,15 @@ public class SearchFragment extends BaseFragment implements MenuProvider, WordAd
 
     private String getKeyword() {
         return getArguments().getString("keyword");
+    }
+
+    private String getSiteKey() {
+        String siteKey = getArguments().getString("siteKey");
+        return siteKey == null ? "" : siteKey;
+    }
+
+    private Site getHome() {
+        return VodConfig.get().getHome();
     }
 
     private boolean empty() {
@@ -86,6 +104,7 @@ public class SearchFragment extends BaseFragment implements MenuProvider, WordAd
 
     @Override
     protected void initView() {
+        mCurrentSite = !TextUtils.isEmpty(getSiteKey());
         setRecyclerView();
         checkKeyword();
         search();
@@ -144,9 +163,14 @@ public class SearchFragment extends BaseFragment implements MenuProvider, WordAd
         if (fm.findFragmentByTag(collectTag) != null) return;
         String searchTag = SearchFragment.class.getSimpleName();
         FragmentTransaction ft = fm.beginTransaction().setTransition(TRANSIT_FRAGMENT_OPEN);
-        ft.add(R.id.container, CollectFragment.newInstance(keyword), collectTag);
+        ft.add(R.id.container, CollectFragment.newInstance(keyword, getSearchSiteKey()), collectTag);
         Optional.ofNullable(fm.findFragmentByTag(searchTag)).ifPresent(ft::hide);
         ft.setReorderingAllowed(true).addToBackStack(null).commit();
+    }
+
+    private String getSearchSiteKey() {
+        if (!mCurrentSite) return "";
+        return TextUtils.isEmpty(getSiteKey()) ? getHome().getKey() : getSiteKey();
     }
 
     private void getWord(String text) {
@@ -192,6 +216,19 @@ public class SearchFragment extends BaseFragment implements MenuProvider, WordAd
         mBinding.keyword.post(() -> SiteDialog.create().search().show(this));
     }
 
+    private void onScope() {
+        if (!mCurrentSite) {
+            Site site = getHome();
+            if (site.isEmpty() || !site.isSearchable()) {
+                Notify.show(R.string.detail_site_not_searchable);
+                return;
+            }
+            Notify.show(getString(R.string.search_scope_current_hint, site.getName()));
+        }
+        mCurrentSite = !mCurrentSite;
+        requireActivity().invalidateOptionsMenu();
+    }
+
     @Override
     public void onItemClick(String text) {
         setKeyword(text);
@@ -213,12 +250,14 @@ public class SearchFragment extends BaseFragment implements MenuProvider, WordAd
     @Override
     public void onPrepareMenu(@NonNull Menu menu) {
         menu.findItem(R.id.action_reset).setVisible(!empty());
+        menu.findItem(R.id.action_scope).setTitle(mCurrentSite ? R.string.search_scope_current : R.string.search_scope_all);
     }
 
     @Override
     public boolean onMenuItemSelected(@NonNull MenuItem menuItem) {
         if (menuItem.getItemId() == android.R.id.home) requireActivity().getOnBackPressedDispatcher().onBackPressed();
         if (menuItem.getItemId() == R.id.action_reset) onReset();
+        if (menuItem.getItemId() == R.id.action_scope) onScope();
         if (menuItem.getItemId() == R.id.action_site) onSite();
         return true;
     }

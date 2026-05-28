@@ -15,6 +15,8 @@ import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
+import com.fongmi.android.tv.api.config.VodConfig;
+import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.bean.Word;
 import com.fongmi.android.tv.databinding.ActivitySearchBinding;
 import com.fongmi.android.tv.impl.Callback;
@@ -26,6 +28,7 @@ import com.fongmi.android.tv.ui.custom.CustomKeyboard;
 import com.fongmi.android.tv.ui.custom.CustomTextListener;
 import com.fongmi.android.tv.ui.dialog.SiteDialog;
 import com.fongmi.android.tv.utils.KeyUtil;
+import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.Util;
 import com.fongmi.android.tv.utils.ZhuToPin;
 import com.github.catvod.net.OkHttp;
@@ -45,24 +48,43 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
     private ActivitySearchBinding mBinding;
     private RecordAdapter mRecordAdapter;
     private WordAdapter mWordAdapter;
+    private boolean mCurrentSite;
 
     public static void start(Activity activity) {
         activity.startActivity(new Intent(activity, SearchActivity.class));
     }
 
     public static void start(Activity activity, String keyword) {
+        start(activity, keyword, "");
+    }
+
+    public static void start(Activity activity, String keyword, String siteKey) {
         Intent intent = new Intent(activity, SearchActivity.class);
         intent.putExtra("keyword", keyword);
+        if (!TextUtils.isEmpty(siteKey)) intent.putExtra("siteKey", siteKey);
         activity.startActivity(intent);
     }
 
     public static void direct(Activity activity, String keyword) {
-        CollectActivity.start(activity, keyword);
+        direct(activity, keyword, "");
+    }
+
+    public static void direct(Activity activity, String keyword, String siteKey) {
+        CollectActivity.start(activity, keyword, siteKey);
     }
 
     private String getKeyword() {
         String keyword = getIntent().getStringExtra("keyword");
         return keyword != null ? keyword : "";
+    }
+
+    private String getSiteKey() {
+        String siteKey = getIntent().getStringExtra("siteKey");
+        return siteKey != null ? siteKey : "";
+    }
+
+    private Site getHome() {
+        return VodConfig.get().getHome();
     }
 
     private boolean empty() {
@@ -76,9 +98,11 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
 
     @Override
     protected void initView(Bundle savedInstanceState) {
+        mCurrentSite = !TextUtils.isEmpty(getSiteKey());
         CustomKeyboard.init(this, mBinding);
         setRecyclerView();
         checkKeyword();
+        setSearchScope();
         onSearch();
     }
 
@@ -95,6 +119,7 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
             }
         });
         mBinding.mic.setOnClickListener(v -> mBinding.mic.start());
+        mBinding.searchScope.setOnClickListener(v -> onScope());
         mBinding.mic.setListener(this, new CustomTextListener() {
             @Override
             public void onResults(String result) {
@@ -175,7 +200,29 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
         String keyword = mBinding.keyword.getText().toString().trim();
         App.post(() -> mRecordAdapter.add(keyword), 250);
         Util.hideKeyboard(mBinding.keyword);
-        CollectActivity.start(this, keyword);
+        CollectActivity.start(this, keyword, getSearchSiteKey());
+    }
+
+    private String getSearchSiteKey() {
+        if (!mCurrentSite) return "";
+        return TextUtils.isEmpty(getSiteKey()) ? getHome().getKey() : getSiteKey();
+    }
+
+    private void setSearchScope() {
+        mBinding.searchScope.setText(mCurrentSite ? R.string.search_scope_current : R.string.search_scope_all);
+    }
+
+    private void onScope() {
+        if (!mCurrentSite) {
+            Site site = getHome();
+            if (site.isEmpty() || !site.isSearchable()) {
+                Notify.show(R.string.detail_site_not_searchable);
+                return;
+            }
+            Notify.show(getString(R.string.search_scope_current_hint, site.getName()));
+        }
+        mCurrentSite = !mCurrentSite;
+        setSearchScope();
     }
 
     @Override

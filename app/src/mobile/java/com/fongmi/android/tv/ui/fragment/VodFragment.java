@@ -106,6 +106,7 @@ public class VodFragment extends BaseFragment implements ConfigListener, SiteLis
         mBinding.filter.setOnClickListener(this::onFilter);
         mBinding.filter.setOnLongClickListener(this::onLink);
         mBinding.toolbar.setOnMenuItemClickListener(this::onMenuItemClick);
+        mBinding.toolbar.post(this::setSearchLongClick);
         mBinding.appBar.addOnOffsetChangedListener((appBarLayout, verticalOffset) -> {
             float factor = Math.abs(verticalOffset * 1f / appBarLayout.getTotalScrollRange());
             int padding = (int) (ResUtil.dp2px(12) * factor);
@@ -195,6 +196,21 @@ public class VodFragment extends BaseFragment implements ConfigListener, SiteLis
 
     private void onFilter(View view) {
         if (mAdapter.getItemCount() > 0) FilterDialog.create().filter(mAdapter.get(mBinding.pager.getCurrentItem()).getFilters()).show(this);
+    }
+
+    private void setSearchLongClick() {
+        View search = mBinding.toolbar.findViewById(R.id.search);
+        if (search != null) search.setOnLongClickListener(this::onSearchLongClick);
+    }
+
+    private boolean onSearchLongClick(View view) {
+        if (getHome().isEmpty() || !getHome().isSearchable()) {
+            Notify.show(R.string.detail_site_not_searchable);
+            return true;
+        }
+        Notify.show(getString(R.string.search_scope_current_hint, getHome().getName()));
+        SearchActivity.start(requireActivity(), "", getHome().getKey());
+        return true;
     }
 
     private boolean onMenuItemClick(MenuItem item) {

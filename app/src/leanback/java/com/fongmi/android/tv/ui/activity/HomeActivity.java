@@ -415,6 +415,18 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     }
 
     @Override
+    public boolean onLongClick(Func item) {
+        if (item.getResId() != R.string.home_search) return false;
+        if (getHome().isEmpty() || !getHome().isSearchable()) {
+            Notify.show(R.string.detail_site_not_searchable);
+            return true;
+        }
+        Notify.show(getString(R.string.search_scope_current_hint, getHome().getName()));
+        SearchActivity.start(this, "", getHome().getKey());
+        return true;
+    }
+
+    @Override
     public void onItemClick(Vod item) {
         if (item.isAction()) mViewModel.action(getHome().getKey(), item.getAction());
         else if (getHome().isIndex()) CollectActivity.start(this, item.getName());

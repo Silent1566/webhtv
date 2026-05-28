@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.Intent;
 import android.os.Bundle;
 import android.os.Parcelable;
+import android.text.TextUtils;
 import android.view.View;
 import android.view.ViewGroup;
 
@@ -33,6 +34,7 @@ import com.fongmi.android.tv.ui.adapter.CollectAdapter;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.custom.CustomViewPager;
 import com.fongmi.android.tv.ui.fragment.CollectFragment;
+import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.google.gson.reflect.TypeToken;
 
@@ -48,8 +50,13 @@ public class CollectActivity extends BaseActivity {
     private View mOldView;
 
     public static void start(Activity activity, String keyword) {
+        start(activity, keyword, "");
+    }
+
+    public static void start(Activity activity, String keyword, String siteKey) {
         Intent intent = new Intent(activity, CollectActivity.class);
         intent.putExtra("keyword", keyword);
+        if (!TextUtils.isEmpty(siteKey)) intent.putExtra("siteKey", siteKey);
         activity.startActivity(intent);
     }
 
@@ -59,6 +66,15 @@ public class CollectActivity extends BaseActivity {
 
     private String getKeyword() {
         return getIntent().getStringExtra("keyword");
+    }
+
+    private String getSiteKey() {
+        String siteKey = getIntent().getStringExtra("siteKey");
+        return siteKey == null ? "" : siteKey;
+    }
+
+    private boolean isSiteSearch() {
+        return !TextUtils.isEmpty(getSiteKey());
     }
 
     @Override
@@ -71,6 +87,7 @@ public class CollectActivity extends BaseActivity {
         super.onNewIntent(intent);
         getIntent().putExtras(intent);
         mAdapter.clear();
+        setSites();
         setPager();
         search();
     }
@@ -176,7 +193,12 @@ public class CollectActivity extends BaseActivity {
     }
 
     private void setSites() {
-        mSites = VodConfig.get().getSites().stream().filter(Site::isSearchable).toList();
+        if (!isSiteSearch()) {
+            mSites = VodConfig.get().getSites().stream().filter(Site::isSearchable).toList();
+            return;
+        }
+        Site site = VodConfig.get().getSite(getSiteKey());
+        mSites = site.isSearchable() ? List.of(site) : List.of();
     }
 
     private void setPager() {
@@ -205,10 +227,13 @@ public class CollectActivity extends BaseActivity {
     }
 
     private void search() {
-        if (mSites.isEmpty()) return;
+        if (mSites.isEmpty()) {
+            if (isSiteSearch()) Notify.show(R.string.detail_site_not_searchable);
+            return;
+        }
         mAdapter.add(Collect.all());
         getPager().getAdapter().notifyDataSetChanged();
-        mBinding.result.setText(getString(R.string.collect_result, getKeyword()));
+        mBinding.result.setText(getString(isSiteSearch() ? R.string.search_result_current : R.string.collect_result, getKeyword()));
         mViewModel.searchContent(mSites, getKeyword(), false);
     }
 

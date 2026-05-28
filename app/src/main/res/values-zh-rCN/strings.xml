@@ -307,6 +307,11 @@
     <string name="detail_work_not_found">当前站源未找到 %1$s</string>
     <string name="detail_work_global_searching">当前站源未找到，正在全站搜索 %1$s...</string>
     <string name="detail_site_not_searchable">当前站源不支持搜索</string>
+    <string name="search_scope_all">全站</string>
+    <string name="search_scope_current">当前站</string>
+    <string name="search_scope_current_hint">当前站：%1$s</string>
+    <string name="search_result_all">%1$s 的搜索结果</string>
+    <string name="search_result_current">当前站搜索：%1$s</string>
     <string name="detail_tmdb_searching">正在搜索 TMDB...</string>
     <string name="detail_tmdb_loading_detail">正在加载 TMDB 详情...</string>
     <string name="detail_tmdb_search_hint">搜索标题</string>

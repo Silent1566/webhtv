@@ -313,6 +313,11 @@
     <string name="detail_work_not_found">No current-source result for %1$s</string>
     <string name="detail_work_global_searching">No current-source result. Searching all sites for %1$s...</string>
     <string name="detail_site_not_searchable">Current source does not support search</string>
+    <string name="search_scope_all">All sites</string>
+    <string name="search_scope_current">Current site</string>
+    <string name="search_scope_current_hint">Current site: %1$s</string>
+    <string name="search_result_all">Search results for %1$s</string>
+    <string name="search_result_current">Current site search for %1$s</string>
     <string name="detail_tmdb_searching">Searching TMDB...</string>
     <string name="detail_tmdb_loading_detail">Loading TMDB details...</string>
     <string name="detail_tmdb_search_hint">Search title</string>

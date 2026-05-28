@@ -30,6 +30,7 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
     private Episode selected;
     private boolean light;
     private boolean compactPlain;
+    private int activeStrokeColor = 0xFF2CC56F;
 
     public TmdbEpisodeAdapter(Listener listener) {
         this.listener = listener;
@@ -53,6 +54,15 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
     public void setLight(boolean light) {
         this.light = light;
         notifyDataSetChanged();
+    }
+
+    public void setActiveStrokeColor(int activeStrokeColor) {
+        this.activeStrokeColor = activeStrokeColor;
+        notifyDataSetChanged();
+    }
+
+    public int getPosition(Episode episode) {
+        return items.indexOf(episode);
     }
 
     @NonNull
@@ -95,7 +105,7 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
         TmdbCardFocusHelper.bind(
                 holder.binding.getRoot(),
                 activated ? (light ? 0xFFE5F7EC : 0x6630A86B) : (light ? 0xEEFFFFFF : 0xCC16202A),
-                activated ? 0xFF2CC56F : (light ? 0x33647480 : 0x33FFFFFF),
+                activated ? activeStrokeColor : (light ? 0x33647480 : 0x33FFFFFF),
                 activated ? 2 : 1);
         if (tmdbEpisode != null && !TextUtils.isEmpty(tmdbEpisode.getStillUrl())) {
             holder.binding.still.setVisibility(View.VISIBLE);
