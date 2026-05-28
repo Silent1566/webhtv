@@ -533,14 +533,29 @@
 
                                 <com.google.android.material.button.MaterialButton
                                     android:id="@+id/play"
-                                    android:layout_width="0dp"
+                                    android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
+                                    android:ellipsize="end"
+                                    android:maxWidth="320dp"
                                     android:minWidth="128dp"
                                     android:minHeight="46dp"
+                                    android:singleLine="true"
                                     android:textColor="@android:color/white"
                                     android:textStyle="bold"
-                                    app:layout_flexGrow="1"
                                     app:backgroundTint="#2CC56F" />
+
+                                <com.google.android.material.button.MaterialButton
+                                    android:id="@+id/changeSourceDetail"
+                                    style="?attr/materialButtonOutlinedStyle"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="10dp"
+                                    android:minWidth="92dp"
+                                    android:minHeight="46dp"
+                                    android:text="@string/play_change"
+                                    android:textColor="@android:color/white"
+                                    app:backgroundTint="#2B3743"
+                                    app:strokeColor="@android:color/transparent" />
 
                                 <com.google.android.material.button.MaterialButton
                                     android:id="@+id/keep"
@@ -548,6 +563,7 @@
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:layout_marginStart="10dp"
+                                    android:minWidth="92dp"
                                     android:minHeight="46dp"
                                     android:textColor="@android:color/white"
                                     app:backgroundTint="#2B3743"
@@ -559,6 +575,7 @@
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:layout_marginStart="10dp"
+                                    android:minWidth="92dp"
                                     android:minHeight="46dp"
                                     android:text="@string/detail_tmdb_rematch"
                                     android:textColor="@android:color/white"

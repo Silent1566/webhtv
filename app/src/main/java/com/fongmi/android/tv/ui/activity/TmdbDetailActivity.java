@@ -266,6 +266,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         binding.rematchTop.setOnClickListener(view -> showManualTmdbMatchDialog());
         binding.rematchFusion.setOnClickListener(view -> showManualTmdbMatchDialog());
         binding.changeSource.setOnClickListener(view -> changeSource());
+        binding.changeSourceDetail.setOnClickListener(view -> changeSource());
         binding.themeMode.setOnClickListener(view -> cycleThemeMode());
         binding.overview.setOnClickListener(view -> toggleOverview());
         binding.overviewToggle.setOnClickListener(view -> toggleOverview());
@@ -490,6 +491,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         setButton(binding.rematchTop, colors.control, colors.line, colors.primary);
         setButton(binding.rematchFusion, colors.control, colors.line, colors.primary);
         setButton(binding.changeSource, colors.control, colors.line, colors.primary);
+        setButton(binding.changeSourceDetail, colors.control, colors.line, colors.primary);
         setButton(binding.themeMode, colors.control, colors.line, colors.primary);
         setButton(binding.play, colors.play, colors.play, 0xFFFFFFFF);
         binding.headerTitle.setTextColor(colors.primary);
@@ -1767,7 +1769,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
                     return;
                 }
                 Notify.show(getString(R.string.play_switch_site, match.vod().getSiteName()));
-                openMatchedDetail(match.site(), match.vod(), matchedTmdbItem);
+                switchSourceDetail(match.site(), match.vod(), matchedTmdbItem);
             });
         });
     }
@@ -1812,18 +1814,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
 
     private void openMatchedDetail(Site site, Vod match, TmdbItem item) {
         if (isFusionMode()) {
-            TmdbBundle reusableBundle = activeTmdbBundle;
-            Intent intent = new Intent(getIntent());
-            intent.putExtra("fusion", true);
-            intent.putExtra("key", site.getKey());
-            intent.putExtra("id", match.getId());
-            intent.putExtra("name", match.getName());
-            intent.putExtra("pic", match.getPic());
-            intent.putExtra("mark", match.getRemarks());
-            putTmdbItem(intent, item);
-            setIntent(intent);
-            resetDetailState();
-            loadContent(reusableBundle);
+            switchSourceDetail(site, match, item);
             return;
         }
         Intent intent = new Intent(this, TmdbDetailActivity.class);
@@ -1835,6 +1826,21 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         intent.putExtra("mark", match.getRemarks());
         putTmdbItem(intent, item);
         startActivity(intent);
+    }
+
+    private void switchSourceDetail(Site site, Vod match, TmdbItem item) {
+        TmdbBundle reusableBundle = activeTmdbBundle;
+        Intent intent = new Intent(getIntent());
+        intent.putExtra("fusion", isFusionMode());
+        intent.putExtra("key", site.getKey());
+        intent.putExtra("id", match.getId());
+        intent.putExtra("name", match.getName());
+        intent.putExtra("pic", match.getPic());
+        intent.putExtra("mark", match.getRemarks());
+        putTmdbItem(intent, item);
+        setIntent(intent);
+        resetDetailState();
+        loadContent(reusableBundle);
     }
 
     private Vod searchCurrentSite(String keyword, Site site) {
@@ -2206,7 +2212,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
                     0xE612202D,
                     0xFF1D8F5A,
                     0xFF20B866,
-                    0xB8F7FAFC
+                    0x88F7FAFC
             );
         }
     }
