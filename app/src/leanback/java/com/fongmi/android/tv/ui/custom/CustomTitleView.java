@@ -25,6 +25,7 @@ public class CustomTitleView extends MaterialTextView {
     private Listener listener;
     private Animation flicker;
     private boolean coolDown;
+    private boolean longPress;
 
     private Site getHome() {
         return VodConfig.get().getHome();
@@ -67,11 +68,20 @@ public class CustomTitleView extends MaterialTextView {
     }
 
     private void onKeyDown(KeyEvent event) {
-        if (event.isLongPress() && KeyUtil.isEnterKey(event)) listener.onReloadConfig();
-        else if (KeyUtil.isActionDown(event) && KeyUtil.isEnterKey(event)) listener.showDialog();
+        if (KeyUtil.isEnterKey(event)) onEnter(event);
         else if (KeyUtil.isActionDown(event) && KeyUtil.isUpKey(event)) onKeyUp();
         else if (KeyUtil.isActionDown(event) && KeyUtil.isLeftKey(event)) listener.setSite(getSite(false));
         else if (KeyUtil.isActionDown(event) && KeyUtil.isRightKey(event)) listener.setSite(getSite(true));
+    }
+
+    private void onEnter(KeyEvent event) {
+        if (KeyUtil.isActionDown(event) && (event.isLongPress() || event.getRepeatCount() > 0)) {
+            longPress = true;
+            listener.onReloadConfig();
+        } else if (KeyUtil.isActionUp(event)) {
+            if (!longPress) listener.showDialog();
+            longPress = false;
+        }
     }
 
     private void onKeyUp() {
