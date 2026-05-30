@@ -6,9 +6,13 @@ import android.text.TextUtils;
 import android.view.View;
 
 import com.fongmi.android.tv.bean.TmdbItem;
+import com.fongmi.android.tv.bean.Episode;
+import com.fongmi.android.tv.bean.Flag;
 import com.fongmi.android.tv.bean.Vod;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 
 public class TmdbPlaybackActivity extends VideoActivity implements TmdbPlaybackEnhancer.Host {
 
@@ -60,6 +64,7 @@ public class TmdbPlaybackActivity extends VideoActivity implements TmdbPlaybackE
     @Override
     protected void onDetailReady(Vod item) {
         Vod merged = mergeIntentTmdbVod(item);
+        applyTmdbEpisodeTitles(merged);
         if (merged != item) updateVod(merged);
         if (!hasIntentTmdbVod()) tmdbEnhancer.onDetailReady(item);
     }
@@ -81,6 +86,7 @@ public class TmdbPlaybackActivity extends VideoActivity implements TmdbPlaybackE
 
     @Override
     public void applyTmdbVod(Vod vod) {
+        applyTmdbEpisodeTitles(vod);
         updateVod(vod);
     }
 
@@ -106,6 +112,33 @@ public class TmdbPlaybackActivity extends VideoActivity implements TmdbPlaybackE
         vod.setFlags(source.getFlags());
         vod.setSite(source.getSite());
         return vod;
+    }
+
+    private void applyTmdbEpisodeTitles(Vod vod) {
+        Map<Integer, String> titles = getEpisodeTitles();
+        if (vod == null || titles.isEmpty() || vod.getFlags() == null) return;
+        for (Flag flag : vod.getFlags()) {
+            for (Episode episode : flag.getEpisodes()) {
+                String title = titles.get(episode.getNumber());
+                if (TextUtils.isEmpty(title) || TextUtils.isEmpty(episode.getName()) || episode.getName().contains(title)) continue;
+                episode.setDisplayName("第" + episode.getNumber() + "集 " + title);
+            }
+        }
+    }
+
+    private Map<Integer, String> getEpisodeTitles() {
+        Map<Integer, String> titles = new HashMap<>();
+        ArrayList<String> values = getIntent().getStringArrayListExtra("tmdb_episode_titles");
+        if (values == null) return titles;
+        for (String value : values) {
+            String[] parts = value.split("\t", 2);
+            if (parts.length != 2 || TextUtils.isEmpty(parts[1])) continue;
+            try {
+                titles.put(Integer.parseInt(parts[0]), parts[1]);
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return titles;
     }
 
     private boolean hasIntentTmdbVod() {

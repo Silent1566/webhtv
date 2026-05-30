@@ -1231,9 +1231,10 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
     }
 
     private void updateHistory(Episode item) {
-        mHistory.setPosition(item.matchesName(mHistory.getEpisode()) ? mHistory.getPosition() : C.TIME_UNSET);
+        boolean same = item.getUrl().equals(mHistory.getEpisodeUrl()) || item.matchesName(mHistory.getEpisode());
+        mHistory.setPosition(same ? mHistory.getPosition() : C.TIME_UNSET);
         mHistory.setVodFlag(getFlag().getFlag());
-        mHistory.setVodRemarks(item.getName());
+        mHistory.setVodRemarks(item.getDisplayName());
         mHistory.setEpisodeUrl(item.getUrl());
     }
 

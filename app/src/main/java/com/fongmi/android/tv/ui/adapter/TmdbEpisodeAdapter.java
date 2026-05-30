@@ -97,41 +97,41 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
         Episode episode = items.get(position);
         int episodeNumber = episodeNumber(episode, position);
         TmdbEpisode tmdbEpisode = tmdbItems.get(episodeNumber);
-        String title = tmdbEpisode != null && !TextUtils.isEmpty(tmdbEpisode.getTitle()) ? tmdbEpisode.getTitle() : episode.getName();
+        String tmdbTitle = tmdbEpisode != null ? tmdbEpisode.getTitle() : "";
+        String title = episodeTitle(episode, episodeNumber, tmdbTitle);
         String date = tmdbEpisode != null ? tmdbEpisode.getDate() : "";
         String overview = tmdbEpisode != null ? tmdbEpisode.getOverview() : episode.getDesc();
         boolean activated = episode.equals(selected);
         boolean compact = compactPlain && tmdbEpisode == null && TextUtils.isEmpty(overview);
+        boolean hasStill = mode == Mode.LIST && tmdbEpisode != null && !TextUtils.isEmpty(tmdbEpisode.getStillUrl());
 
         applyCardSize(holder, compact);
         if (mode == Mode.GRID) {
-            holder.binding.index.setText(String.valueOf(episodeNumber));
+            holder.binding.index.setText(title);
             holder.binding.index.setTextSize(14f);
-            holder.binding.title.setText(title);
-            holder.binding.title.setVisibility(TextUtils.isEmpty(title) ? View.GONE : View.VISIBLE);
+            holder.binding.title.setVisibility(View.GONE);
             holder.binding.date.setText(date);
             holder.binding.date.setVisibility(TextUtils.isEmpty(date) ? View.GONE : View.VISIBLE);
             holder.binding.overview.setVisibility(View.GONE);
         } else if (compact) {
-            holder.binding.index.setText(episode.getName());
+            holder.binding.index.setText(title);
             holder.binding.index.setTextSize(14f);
             holder.binding.title.setVisibility(View.GONE);
             holder.binding.date.setVisibility(View.GONE);
             holder.binding.overview.setVisibility(View.GONE);
         } else {
-            holder.binding.index.setText((position + 1) + ". " + episode.getName());
+            holder.binding.index.setText(title);
             holder.binding.index.setTextSize(12f);
-            holder.binding.title.setText(title);
-            holder.binding.title.setVisibility(View.VISIBLE);
+            holder.binding.title.setVisibility(View.GONE);
             holder.binding.date.setText(date);
             holder.binding.date.setVisibility(TextUtils.isEmpty(date) ? View.GONE : View.VISIBLE);
             holder.binding.overview.setText(overview);
             holder.binding.overview.setVisibility(TextUtils.isEmpty(overview) ? View.GONE : View.VISIBLE);
         }
-        holder.binding.index.setTextColor(light ? 0xFF15202B : 0xFFFFFFFF);
-        holder.binding.title.setTextColor(light ? 0xCC15202B : 0xE6FFFFFF);
-        holder.binding.date.setTextColor(light ? 0x9915202B : 0x99FFFFFF);
-        holder.binding.overview.setTextColor(light ? 0xB315202B : 0xCCFFFFFF);
+        holder.binding.index.setTextColor(hasStill || !light ? 0xFFFFFFFF : 0xFF15202B);
+        holder.binding.title.setTextColor(hasStill || !light ? 0xE6FFFFFF : 0xCC15202B);
+        holder.binding.date.setTextColor(hasStill || !light ? 0xCCFFFFFF : 0x9915202B);
+        holder.binding.overview.setTextColor(hasStill || !light ? 0xE6FFFFFF : 0xB315202B);
         holder.binding.badge.setText(episodeBadge(tmdbEpisode));
         holder.binding.badge.setVisibility(TextUtils.isEmpty(holder.binding.badge.getText()) ? View.GONE : View.VISIBLE);
         TmdbCardFocusHelper.bind(
@@ -139,12 +139,13 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
                 activated ? (light ? 0xFFE5F7EC : 0x6630A86B) : (light ? 0xEEFFFFFF : 0xCC16202A),
                 activated ? activeStrokeColor : (light ? 0x33647480 : 0x33FFFFFF),
                 activated ? 2 : 1);
-        if (mode == Mode.LIST && tmdbEpisode != null && !TextUtils.isEmpty(tmdbEpisode.getStillUrl())) {
+        if (hasStill) {
             holder.binding.stillFrame.setVisibility(View.VISIBLE);
             ImgUtil.load(title, tmdbEpisode.getStillUrl(), holder.binding.still);
         } else {
             holder.binding.stillFrame.setVisibility(View.GONE);
         }
+        holder.binding.scrim.setVisibility(hasStill ? View.VISIBLE : View.GONE);
         holder.binding.getRoot().setOnClickListener(view -> listener.onItemClick(episode));
         holder.binding.getRoot().setOnLongClickListener(view -> {
             listener.onItemLongClick(episode, episodeNumber);
@@ -162,6 +163,13 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
             params.height = dp(holder.itemView, compact ? 78 : 190);
         }
         holder.binding.getRoot().setLayoutParams(params);
+    }
+
+    private String episodeTitle(Episode episode, int number, String tmdbTitle) {
+        String label = number > 0 ? "第" + number + "集" : episode.getName();
+        if (TextUtils.isEmpty(tmdbTitle)) return label;
+        if (label.equals(tmdbTitle) || episode.getName().equals(tmdbTitle)) return label;
+        return label + " " + tmdbTitle;
     }
 
     private int episodeNumber(Episode episode, int position) {

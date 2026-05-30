@@ -320,7 +320,10 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         mBinding.video.setOnClickListener(view -> onVideo());
         mBinding.change1.setOnClickListener(view -> onChange());
         mBinding.content.setOnClickListener(view -> onContent());
+        mBinding.episodeReverse.setOnClickListener(view -> onRevSort());
         mBinding.episodeMore.setOnClickListener(view -> onEpisodes());
+        mBinding.flag.setOnKeyListener(this::focusEpisodeActionOnDown);
+        mBinding.quality.setOnKeyListener(this::focusEpisodeActionOnDown);
         mBinding.control.action.text.setOnClickListener(this::onTrack);
         mBinding.control.action.audio.setOnClickListener(this::onTrack);
         mBinding.control.action.video.setOnClickListener(this::onTrack);
@@ -374,12 +377,14 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         mBinding.flag.setHorizontalSpacing(ResUtil.dp2px(8));
         mBinding.flag.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
         mBinding.flag.setAdapter(mFlagAdapter = new FlagAdapter(this));
+        mFlagAdapter.setOnKeyListener(this::focusEpisodeActionOnDown);
         mBinding.episode.setHorizontalSpacing(ResUtil.dp2px(8));
         mBinding.episode.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
         mBinding.episode.setAdapter(mEpisodeAdapter = new EpisodeAdapter(this));
         mBinding.quality.setHorizontalSpacing(ResUtil.dp2px(8));
         mBinding.quality.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
         mBinding.quality.setAdapter(mQualityAdapter = new QualityAdapter(this));
+        mQualityAdapter.setOnKeyListener(this::focusEpisodeActionOnDown);
         mBinding.array.setHorizontalSpacing(ResUtil.dp2px(8));
         mBinding.array.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
         mBinding.array.setAdapter(mArrayAdapter = new ArrayAdapter(this));
@@ -589,9 +594,15 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     private void setEpisodeAdapter(List<Episode> items) {
         mBinding.episode.setVisibility(items.isEmpty() ? View.GONE : View.VISIBLE);
         mBinding.episodeHeader.setVisibility(items.isEmpty() ? View.GONE : View.VISIBLE);
+        setEpisodeReverseText();
         mEpisodeAdapter.addAll(items);
         setArrayAdapter(items.size());
         setR2Callback();
+    }
+
+    private void setEpisodeReverseText() {
+        if (mHistory == null) return;
+        mBinding.episodeReverse.setContentDescription(getString(mHistory.isRevSort() ? R.string.detail_episode_forward : R.string.detail_episode_reverse));
     }
 
     private void seamless(Flag flag) {
@@ -658,17 +669,38 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
 
     private void updateFocus() {
         int episodeFocusUp = findFocusUp(2);
+        int episodeAction = getEpisodeActionFocus();
+        mBinding.episodeReverse.setNextFocusUpId(episodeFocusUp == 0 ? R.id.episodeReverse : episodeFocusUp);
         mBinding.episodeMore.setNextFocusUpId(episodeFocusUp == 0 ? R.id.episodeMore : episodeFocusUp);
-        mEpisodeAdapter.setNextFocusUp(isVisible(mBinding.episodeMore) ? R.id.episodeMore : episodeFocusUp);
-        mFlagAdapter.setNextFocusDown(findFocusDown(0));
+        mEpisodeAdapter.setNextFocusUp(episodeAction == 0 ? episodeFocusUp : episodeAction);
+        mFlagAdapter.setNextFocusDown(isVisible(mBinding.quality) ? R.id.quality : episodeAction == 0 ? findFocusDown(0) : episodeAction);
+        mQualityAdapter.setNextFocusDown(episodeAction == 0 ? findFocusDown(1) : episodeAction);
         mEpisodeAdapter.setNextFocusDown(findFocusDown(2));
         notifyItemChanged(mBinding.episode, mEpisodeAdapter);
         notifyItemChanged(mBinding.flag, mFlagAdapter);
+        notifyItemChanged(mBinding.quality, mQualityAdapter);
+    }
+
+    private int getEpisodeActionFocus() {
+        if (isVisible(mBinding.episodeReverse)) return R.id.episodeReverse;
+        if (isVisible(mBinding.episodeMore)) return R.id.episodeMore;
+        return 0;
+    }
+
+    private boolean focusEpisodeActionOnDown(View view, int keyCode, KeyEvent event) {
+        if (event.getAction() != KeyEvent.ACTION_DOWN || keyCode != KeyEvent.KEYCODE_DPAD_DOWN) return false;
+        int focus = getEpisodeActionFocus();
+        if (focus == 0) return false;
+        View target = findViewById(focus);
+        if (!isVisible(target)) return false;
+        target.requestFocus();
+        return true;
     }
 
     @Override
     public void onRevSort() {
         mHistory.setRevSort(!mHistory.isRevSort());
+        setEpisodeReverseText();
         reverseEpisode(false);
     }
 
@@ -1042,9 +1074,10 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     }
 
     private void updateHistory(Episode item) {
-        mHistory.setPosition(item.matchesName(mHistory.getEpisode()) ? mHistory.getPosition() : C.TIME_UNSET);
+        boolean same = item.getUrl().equals(mHistory.getEpisodeUrl()) || item.matchesName(mHistory.getEpisode());
+        mHistory.setPosition(same ? mHistory.getPosition() : C.TIME_UNSET);
         mHistory.setVodFlag(getFlag().getFlag());
-        mHistory.setVodRemarks(item.getName());
+        mHistory.setVodRemarks(item.getDisplayName());
         mHistory.setEpisodeUrl(item.getUrl());
     }
 

@@ -127,7 +127,7 @@ public class TmdbPlaybackActivity extends VideoActivity implements TmdbPlaybackE
             for (Episode episode : flag.getEpisodes()) {
                 String title = titles.get(episode.getNumber());
                 if (TextUtils.isEmpty(title) || TextUtils.isEmpty(episode.getName()) || episode.getName().contains(title)) continue;
-                episode.setDisplayName(episode.getName() + " " + title);
+                episode.setDisplayName("第" + episode.getNumber() + "集 " + title);
             }
         }
     }

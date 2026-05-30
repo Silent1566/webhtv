@@ -465,6 +465,22 @@
                     android:textStyle="bold" />
 
                 <androidx.appcompat.widget.AppCompatImageView
+                    android:id="@+id/episodeReverse"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_marginEnd="8dp"
+                    android:background="@drawable/selector_item"
+                    android:clickable="true"
+                    android:contentDescription="@string/detail_episode_reverse"
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:nextFocusDown="@id/episode"
+                    android:nextFocusRight="@id/episodeMore"
+                    android:padding="8dp"
+                    android:src="@drawable/ic_action_reverse"
+                    app:tint="@color/white" />
+
+                <androidx.appcompat.widget.AppCompatImageView
                     android:id="@+id/episodeMore"
                     android:layout_width="40dp"
                     android:layout_height="40dp"
@@ -473,7 +489,7 @@
                     android:focusable="true"
                     android:focusableInTouchMode="true"
                     android:nextFocusDown="@id/episode"
-                    android:nextFocusLeft="@id/episode"
+                    android:nextFocusLeft="@id/episodeReverse"
                     android:padding="8dp"
                     android:src="@drawable/ic_action_more" />
 

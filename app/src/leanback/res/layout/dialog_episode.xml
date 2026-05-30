@@ -28,28 +28,27 @@
             android:id="@+id/reverse"
             android:layout_width="34dp"
             android:layout_height="34dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
+            android:background="@drawable/selector_episode_dialog_page"
+            android:clickable="true"
             android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:nextFocusDown="@id/page"
+            android:nextFocusLeft="@id/page"
             android:padding="8dp"
             android:src="@drawable/ic_action_reverse"
             app:tint="#2B2730" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 
-    <com.google.android.material.tabs.TabLayout
-        android:id="@+id/tabs"
+    <androidx.leanback.widget.HorizontalGridView
+        android:id="@+id/page"
         android:layout_width="match_parent"
-        android:layout_height="36dp"
+        android:layout_height="42dp"
         android:layout_marginTop="6dp"
-        android:background="@color/transparent"
-        app:tabGravity="fill"
-        app:tabIndicatorAnimationMode="elastic"
-        app:tabIndicatorColor="#2196F3"
-        app:tabIndicatorFullWidth="false"
-        app:tabIndicatorHeight="2dp"
-        app:tabMode="fixed"
-        app:tabSelectedTextColor="#2196F3"
-        app:tabTextColor="#9D9AA0" />
+        android:clipChildren="false"
+        android:clipToPadding="false"
+        android:focusable="true"
+        android:focusableInTouchMode="true" />
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recycler"

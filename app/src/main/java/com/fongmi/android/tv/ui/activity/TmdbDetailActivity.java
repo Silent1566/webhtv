@@ -1120,7 +1120,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         }
         if (selectedEpisode == null) {
             String remarks = history != null ? history.getVodRemarks() : "";
-            selectedEpisode = selectedFlag.find(remarks, getMarkText().isEmpty());
+            selectedEpisode = findEpisodeByUrl(history == null ? "" : history.getEpisodeUrl(), selectedFlag.getEpisodes());
+            if (selectedEpisode == null) selectedEpisode = selectedFlag.find(remarks, getMarkText().isEmpty());
             if (selectedEpisode == null) selectedEpisode = episodes.get(0);
         }
         if (selectedSeasonNumber < 0) selectedSeasonNumber = seasonForEpisode(selectedEpisode, episodes);
@@ -1350,8 +1351,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
 
     private void updatePlayLabel() {
         if (selectedEpisode != null) {
-            boolean canResume = history != null && selectedEpisode.getName().equals(history.getVodRemarks()) && history.getPosition() > 0;
-            binding.play.setText(canResume ? getString(R.string.detail_play_resume, selectedEpisode.getName()) : getString(R.string.detail_play_now));
+            boolean canResume = history != null && isHistoryEpisode(selectedEpisode, history) && history.getPosition() > 0;
+            binding.play.setText(canResume ? getString(R.string.detail_play_resume, historyEpisodeTitle(selectedEpisode)) : getString(R.string.detail_play_now));
             return;
         }
         boolean hasResume = history != null && history.getPosition() > 0 && !TextUtils.isEmpty(history.getVodRemarks());
@@ -1364,7 +1365,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         if (isFusionMode()) playInline();
         else {
             Vod tmdbVod = playbackTmdbVod();
-            TmdbPlaybackActivity.start(this, getKeyText(), getIdText(), vod.getName(), vod.getPic(), selectedEpisode != null ? selectedEpisode.getName() : getMarkText(), selectedTmdbEpisodeTitles(), playbackTmdbItem(), tmdbVod);
+            TmdbPlaybackActivity.start(this, getKeyText(), getIdText(), playbackHistoryName(), playbackHistoryPic(), selectedEpisode != null ? selectedEpisode.getName() : getMarkText(), selectedTmdbEpisodeTitles(), playbackTmdbItem(), tmdbVod);
         }
     }
 
@@ -1681,6 +1682,42 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         ArrayList<String> result = new ArrayList<>();
         for (Map.Entry<Integer, String> entry : titles.entrySet()) result.add(entry.getKey() + "\t" + entry.getValue());
         return result;
+    }
+
+    private Episode findEpisodeByUrl(String url, List<Episode> episodes) {
+        if (TextUtils.isEmpty(url) || episodes == null) return null;
+        for (Episode episode : episodes) if (url.equals(episode.getUrl())) return episode;
+        return null;
+    }
+
+    private boolean isHistoryEpisode(Episode episode, History item) {
+        if (episode == null || item == null) return false;
+        if (!TextUtils.isEmpty(item.getEpisodeUrl()) && item.getEpisodeUrl().equals(episode.getUrl())) return true;
+        return episode.getName().equals(item.getVodRemarks()) || historyEpisodeTitle(episode).equals(item.getVodRemarks());
+    }
+
+    private String historyEpisodeTitle(Episode episode) {
+        int number = episodeNumberForHistory(episode);
+        TmdbEpisode tmdbEpisode = number <= 0 ? null : tmdbEpisodes.get(number);
+        String label = number > 0 ? "第" + number + "集" : episode.getDisplayName();
+        String title = tmdbEpisode == null ? "" : tmdbEpisode.getTitle();
+        if (TextUtils.isEmpty(title) || title.equals(label) || title.equals(episode.getName())) return label;
+        return label + " " + title;
+    }
+
+    private int episodeNumberForHistory(Episode episode) {
+        if (episode == null || selectedFlag == null || selectedFlag.getEpisodes() == null) return -1;
+        List<Episode> visible = visibleEpisodes(selectedFlag.getEpisodes());
+        int index = visible.indexOf(episode);
+        return index < 0 ? -1 : index + 1;
+    }
+
+    private String playbackHistoryName() {
+        return coalesce(matchedTmdbItem == null ? "" : matchedTmdbItem.getTitle(), vod == null ? "" : vod.getName(), getNameText());
+    }
+
+    private String playbackHistoryPic() {
+        return coalesce(matchedTmdbItem == null ? "" : matchedTmdbItem.getPosterUrl(), matchedTmdbItem == null ? "" : matchedTmdbItem.getBackdropUrl(), vod == null ? "" : vod.getPic(), getPicText());
     }
 
     private boolean isFusionMode() {
@@ -2134,10 +2171,10 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private MediaMetadata buildMetadata() {
-        String title = vod != null ? vod.getName() : getNameText();
-        String episode = selectedEpisode != null ? selectedEpisode.getName() : "";
+        String title = playbackHistoryName();
+        String episode = selectedEpisode != null ? historyEpisodeTitle(selectedEpisode) : "";
         String artist = TextUtils.isEmpty(episode) || title.equals(episode) ? "" : episode;
-        return new MediaMetadata.Builder().setTitle(title).setArtist(artist).setArtworkUri(android.net.Uri.parse(vod != null ? vod.getPic() : getPicText())).build();
+        return new MediaMetadata.Builder().setTitle(title).setArtist(artist).setArtworkUri(android.net.Uri.parse(playbackHistoryPic())).build();
     }
 
     @Override
@@ -2311,12 +2348,12 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             saved.setCid(VodConfig.getCid());
         }
         saved.setCid(VodConfig.getCid());
-        saved.setVodName(vod.getName());
-        if (!selectedEpisode.getName().equals(saved.getVodRemarks())) saved.setPosition(androidx.media3.common.C.TIME_UNSET);
+        saved.setVodName(playbackHistoryName());
+        if (!isHistoryEpisode(selectedEpisode, saved)) saved.setPosition(androidx.media3.common.C.TIME_UNSET);
         saved.setVodFlag(selectedFlag.getFlag());
-        saved.setVodRemarks(selectedEpisode.getName());
+        saved.setVodRemarks(historyEpisodeTitle(selectedEpisode));
         saved.setEpisodeUrl(selectedEpisode.getUrl());
-        saved.setVodPic(vod.getPic());
+        saved.setVodPic(playbackHistoryPic());
         saved.save();
         history = saved;
     }
@@ -2692,9 +2729,9 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private Vod playbackTmdbVod() {
         if (vod == null) return null;
         Vod item = new Vod();
-        item.setName(coalesce(vod.getName(), matchedTmdbItem == null ? "" : matchedTmdbItem.getTitle()));
+        item.setName(playbackHistoryName());
         item.setContent(displayOverview());
-        item.setPic(coalesce(matchedTmdbItem == null ? "" : matchedTmdbItem.getBackdropUrl(), matchedTmdbItem == null ? "" : matchedTmdbItem.getPosterUrl(), vod.getPic()));
+        item.setPic(playbackHistoryPic());
         item.setYear(yearLabel());
         item.setArea(coalesce(firstCountry(), vod.getArea()));
         item.setTypeName(coalesce(firstGenre(), vod.getTypeName()));
