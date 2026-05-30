@@ -286,6 +286,10 @@
     <string name="detail_tmdb_photos">Photos</string>
     <string name="detail_flag">Line</string>
     <string name="detail_episode">Episode</string>
+    <string name="detail_episode_detail_title">Episode %1$d · %2$s</string>
+    <string name="detail_episode_crew">Crew</string>
+    <string name="detail_episode_guests">Guest Cast</string>
+    <string name="detail_runtime_format">%1$d min</string>
     <string name="detail_source">Sources</string>
     <string name="detail_source_searching">Searching sources...</string>
     <string name="detail_source_select">Select source</string>

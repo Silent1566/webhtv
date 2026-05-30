@@ -280,6 +280,10 @@
     <string name="detail_tmdb_photos">劇照</string>
     <string name="detail_flag">線路</string>
     <string name="detail_episode">選集</string>
+    <string name="detail_episode_detail_title">第 %1$d 集 · %2$s</string>
+    <string name="detail_episode_crew">職員</string>
+    <string name="detail_episode_guests">客串演員</string>
+    <string name="detail_runtime_format">%1$d 分鐘</string>
     <string name="detail_source">站源</string>
     <string name="detail_source_searching">正在搜尋站源...</string>
     <string name="detail_source_select">選擇站源</string>

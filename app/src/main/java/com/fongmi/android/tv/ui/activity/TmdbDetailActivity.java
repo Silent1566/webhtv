@@ -6,6 +6,7 @@ import android.content.pm.ActivityInfo;
 import android.content.res.ColorStateList;
 import android.content.res.Configuration;
 import android.content.Intent;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.text.TextUtils;
@@ -18,8 +19,10 @@ import android.view.Window;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.media3.common.C;
@@ -50,6 +53,7 @@ import com.fongmi.android.tv.bean.TmdbMatchCache;
 import com.fongmi.android.tv.bean.TmdbPerson;
 import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.databinding.ActivityTmdbDetailBinding;
+import com.fongmi.android.tv.databinding.DialogTmdbEpisodeBinding;
 import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.player.PlayerHelper;
 import com.fongmi.android.tv.service.PlaybackService;
@@ -80,6 +84,8 @@ import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.request.target.CustomTarget;
+import com.bumptech.glide.request.transition.Transition;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -100,14 +106,19 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private static final int FOCUS_STROKE = 0xFFFFD166;
     private static final int FOCUS_STROKE_DP = 3;
     private static final int CHIP_STROKE_DP = 1;
+    private static final int PHOTO_PRELOAD_RADIUS = 2;
 
     private final TmdbService tmdbService = new TmdbService();
+    private final List<TmdbPerson> detailCastItems = new ArrayList<>();
     private final List<TmdbPerson> castItems = new ArrayList<>();
     private final List<TmdbItem> relatedItems = new ArrayList<>();
     private final Map<Integer, TmdbEpisode> tmdbEpisodes = new HashMap<>();
     private final List<Integer> seasonNumbers = new ArrayList<>();
     private final Map<Integer, Integer> seasonEpisodeCounts = new HashMap<>();
     private final Map<Integer, List<TmdbEpisode>> tmdbSeasonEpisodes = new HashMap<>();
+    private final Map<Integer, List<TmdbPerson>> tmdbSeasonCast = new HashMap<>();
+    private final Map<Integer, List<String>> tmdbSeasonPhotos = new HashMap<>();
+    private final List<String> detailTmdbPhotos = new ArrayList<>();
     private final List<String> tmdbEpisodePhotos = new ArrayList<>();
 
     private ActivityTmdbDetailBinding binding;
@@ -299,11 +310,19 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             ImgUtil.load(getNameText(), getPicText(), binding.backdropFill);
             ImgUtil.load(getNameText(), getPicText(), binding.backdrop, false);
         }
-        episodeAdapter = new TmdbEpisodeAdapter(episode -> {
-            selectedEpisode = episode;
-            episodeAdapter.setSelected(episode);
-            updatePlayLabel();
-            onPlay();
+        episodeAdapter = new TmdbEpisodeAdapter(new TmdbEpisodeAdapter.Listener() {
+            @Override
+            public void onItemClick(Episode episode) {
+                selectedEpisode = episode;
+                episodeAdapter.setSelected(episode);
+                updatePlayLabel();
+                onPlay();
+            }
+
+            @Override
+            public void onItemLongClick(Episode episode, int episodeNumber) {
+                showTmdbEpisodeDetail(episode, episodeNumber);
+            }
         });
         castAdapter = new TmdbPersonAdapter(this::loadPersonDetail);
         episodePhotoAdapter = new TmdbPhotoAdapter(this::showPhotoDialog);
@@ -691,28 +710,38 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         List<TmdbPerson> cast = tmdbService.cast(detail, tmdbConfig);
         List<String> photos = tmdbService.photos(detail, tmdbConfig);
         List<TmdbItem> related = tmdbService.recommendations(detail, tmdbConfig);
+        if (related.isEmpty()) related = tmdbService.similar(detail, tmdbConfig);
         List<Integer> seasons = new ArrayList<>();
         Map<Integer, Integer> seasonCounts = new HashMap<>();
         Map<Integer, List<TmdbEpisode>> seasonEpisodes = new HashMap<>();
+        Map<Integer, List<TmdbPerson>> seasonCast = new HashMap<>();
+        Map<Integer, List<String>> seasonPhotos = new HashMap<>();
         if ("tv".equalsIgnoreCase(item.getMediaType())) {
             seasonCounts = seasonEpisodeCounts(detail);
             seasons.addAll(seasonCounts.keySet());
             int seasonNumber = firstSeasonNumber(detail);
             if (seasonNumber >= 0) {
-                seasonEpisodes.put(seasonNumber, tmdbService.episodes(tmdbService.season(item, seasonNumber, tmdbConfig), tmdbConfig));
+                JsonObject season = tmdbService.season(item, seasonNumber, tmdbConfig, detail);
+                seasonEpisodes.put(seasonNumber, tmdbService.episodes(season, tmdbConfig));
+                seasonCast.put(seasonNumber, tmdbService.seasonCast(season, tmdbConfig));
+                seasonPhotos.put(seasonNumber, tmdbService.seasonPhotos(season, tmdbConfig));
             }
         }
-        return new TmdbBundle(item, detail, cast, photos, related, seasons, seasonCounts, seasonEpisodes);
+        return new TmdbBundle(item, detail, cast, photos, related, seasons, seasonCounts, seasonEpisodes, seasonCast, seasonPhotos);
     }
 
     private void applyTmdbBundle(TmdbBundle bundle) {
         activeTmdbBundle = bundle;
         matchedTmdbItem = bundle == null ? null : bundle.item();
         matchedTmdbDetail = bundle == null ? null : bundle.detail();
+        detailCastItems.clear();
+        if (bundle != null) detailCastItems.addAll(bundle.cast());
         castItems.clear();
-        if (bundle != null) castItems.addAll(bundle.cast());
+        castItems.addAll(detailCastItems);
+        detailTmdbPhotos.clear();
+        if (bundle != null) detailTmdbPhotos.addAll(bundle.photos());
         tmdbEpisodePhotos.clear();
-        if (bundle != null) tmdbEpisodePhotos.addAll(bundle.photos());
+        tmdbEpisodePhotos.addAll(detailTmdbPhotos);
         relatedItems.clear();
         if (bundle != null) relatedItems.addAll(bundle.related());
         tmdbEpisodes.clear();
@@ -722,6 +751,10 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         if (bundle != null) seasonEpisodeCounts.putAll(bundle.seasonCounts());
         tmdbSeasonEpisodes.clear();
         if (bundle != null) tmdbSeasonEpisodes.putAll(bundle.seasonEpisodes());
+        tmdbSeasonCast.clear();
+        if (bundle != null) tmdbSeasonCast.putAll(bundle.seasonCast());
+        tmdbSeasonPhotos.clear();
+        if (bundle != null) tmdbSeasonPhotos.putAll(bundle.seasonPhotos());
     }
 
     private void showTmdbMatchDialog(List<TmdbItem> items) {
@@ -823,7 +856,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             if (TextUtils.isEmpty(vod.getPic())) vod.setPic(matchedTmdbItem.getPosterUrl());
         }
         if (matchedTmdbDetail == null) return;
-        String overview = string(matchedTmdbDetail, "overview");
+        String overview = tmdbService.translatedOverview(matchedTmdbDetail, tmdbConfig);
         if (!TextUtils.isEmpty(overview)) vod.setContent(overview);
         if ((TextUtils.isEmpty(vod.getPic()) || vod.getPic().startsWith("data:")) && matchedTmdbItem != null) {
             vod.setPic(matchedTmdbItem.getPosterUrl());
@@ -874,8 +907,10 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         addMetaChip(firstGenre());
         addMetaChip(firstCountry());
         addMetaChip(firstCrew("Director"));
+        addMetaChip(certificationLabel());
         String rating = ratingLabel();
         if (!TextUtils.isEmpty(rating)) addMetaChip(rating);
+        addMetaChip(externalIdLabel());
     }
 
     private void bindOverview() {
@@ -983,6 +1018,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         episodeAdapter.setItems(visibleEpisodes, tmdbEpisodes, selectedEpisode);
         scrollEpisodeToSelected();
         updatePlayLabel();
+        bindTmdbSection();
     }
 
     private void scrollEpisodeToSelected() {
@@ -1026,6 +1062,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         if (episodes != null) {
             for (TmdbEpisode episode : episodes) tmdbEpisodes.put(episode.getNumber(), episode);
         }
+        bindSeasonTmdbMedia(selectedSeasonNumber);
         fetchSeasonIfNeeded(selectedSeasonNumber);
     }
 
@@ -1034,14 +1071,29 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         tmdbSeasonEpisodes.put(seasonNumber, List.of());
         Task.execute(() -> {
             try {
-                List<TmdbEpisode> episodes = tmdbService.episodes(tmdbService.season(matchedTmdbItem, seasonNumber, tmdbConfig), tmdbConfig);
+                JsonObject season = tmdbService.season(matchedTmdbItem, seasonNumber, tmdbConfig, matchedTmdbDetail);
+                List<TmdbEpisode> episodes = tmdbService.episodes(season, tmdbConfig);
+                List<TmdbPerson> cast = tmdbService.seasonCast(season, tmdbConfig);
+                List<String> photos = tmdbService.seasonPhotos(season, tmdbConfig);
                 runOnAliveUi(() -> {
                     tmdbSeasonEpisodes.put(seasonNumber, episodes);
+                    tmdbSeasonCast.put(seasonNumber, cast);
+                    tmdbSeasonPhotos.put(seasonNumber, photos);
                     if (seasonNumber == selectedSeasonNumber) renderEpisodes();
                 });
             } catch (Throwable ignored) {
             }
         });
+    }
+
+    private void bindSeasonTmdbMedia(int seasonNumber) {
+        castItems.clear();
+        List<TmdbPerson> seasonCast = tmdbSeasonCast.get(seasonNumber);
+        castItems.addAll(seasonCast == null || seasonCast.isEmpty() ? detailCastItems : seasonCast);
+
+        tmdbEpisodePhotos.clear();
+        List<String> seasonPhotos = tmdbSeasonPhotos.get(seasonNumber);
+        tmdbEpisodePhotos.addAll(seasonPhotos == null || seasonPhotos.isEmpty() ? detailTmdbPhotos : seasonPhotos);
     }
 
     private List<Episode> visibleEpisodes(List<Episode> episodes) {
@@ -1149,9 +1201,89 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         view.setLayoutParams(marginParams);
     }
 
+    private void showTmdbEpisodeDetail(Episode episode, int episodeNumber) {
+        if (matchedTmdbItem == null || !"tv".equalsIgnoreCase(matchedTmdbItem.getMediaType()) || selectedSeasonNumber < 0 || episodeNumber <= 0 || !tmdbConfig.isReady()) {
+            Notify.show(R.string.detail_tmdb_empty);
+            return;
+        }
+        binding.loading.setVisibility(View.VISIBLE);
+        Task.execute(() -> {
+            try {
+                JsonObject detail = tmdbService.episode(matchedTmdbItem, selectedSeasonNumber, episodeNumber, tmdbConfig, matchedTmdbDetail);
+                List<String> photos = tmdbService.episodePhotos(detail, tmdbConfig);
+                List<TmdbPerson> guests = tmdbService.episodeGuests(detail, tmdbConfig);
+                runOnAliveUi(() -> {
+                    binding.loading.setVisibility(View.GONE);
+                    showTmdbEpisodeDialog(episode, episodeNumber, detail, photos, guests);
+                });
+            } catch (Throwable e) {
+                runOnAliveUi(() -> {
+                    binding.loading.setVisibility(View.GONE);
+                    Notify.show(TextUtils.isEmpty(e.getMessage()) ? getString(R.string.detail_tmdb_empty) : e.getMessage());
+                });
+            }
+        });
+    }
+
+    private void showTmdbEpisodeDialog(Episode episode, int episodeNumber, JsonObject detail, List<String> photos, List<TmdbPerson> guests) {
+        DialogTmdbEpisodeBinding dialogBinding = DialogTmdbEpisodeBinding.inflate(getLayoutInflater());
+        AlertDialog dialog = new MaterialAlertDialogBuilder(this).setView(dialogBinding.getRoot()).create();
+        ThemeColors colors = lightTheme ? ThemeColors.light() : ThemeColors.dark();
+        dialogBinding.panel.setCardBackgroundColor(colors.panel);
+        dialogBinding.panel.setStrokeColor(colors.line);
+        tintTextTree(dialogBinding.getRoot(), colors);
+        dialogBinding.title.setText(episodeDetailTitle(episode, episodeNumber, detail));
+        dialogBinding.meta.setText(episodeMeta(detail));
+        dialogBinding.meta.setVisibility(TextUtils.isEmpty(dialogBinding.meta.getText()) ? View.GONE : View.VISIBLE);
+        String overview = string(detail, "overview");
+        if (TextUtils.isEmpty(overview)) overview = episode == null ? "" : episode.getDesc();
+        dialogBinding.overview.setText(TextUtils.isEmpty(overview) ? getString(R.string.detail_tmdb_empty) : overview);
+        String crew = episodeCrew(detail);
+        dialogBinding.crewTitle.setVisibility(TextUtils.isEmpty(crew) ? View.GONE : View.VISIBLE);
+        dialogBinding.crew.setText(crew);
+        dialogBinding.crew.setVisibility(TextUtils.isEmpty(crew) ? View.GONE : View.VISIBLE);
+        String still = photos.isEmpty() ? "" : photos.get(0);
+        dialogBinding.still.setVisibility(TextUtils.isEmpty(still) ? View.GONE : View.VISIBLE);
+        if (!TextUtils.isEmpty(still)) ImgUtil.load(episodeDetailTitle(episode, episodeNumber, detail), still, dialogBinding.still);
+
+        TmdbPhotoAdapter photoAdapter = new TmdbPhotoAdapter((position, url) -> showPhotoDialog(position, url, photos));
+        photoAdapter.setLight(lightTheme);
+        photoAdapter.setItems(photos);
+        dialogBinding.photoList.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+        dialogBinding.photoList.setNestedScrollingEnabled(false);
+        dialogBinding.photoList.setAdapter(photoAdapter);
+        dialogBinding.photoTitle.setVisibility(photos.isEmpty() ? View.GONE : View.VISIBLE);
+        dialogBinding.photoList.setVisibility(photos.isEmpty() ? View.GONE : View.VISIBLE);
+
+        TmdbPersonAdapter guestAdapter = new TmdbPersonAdapter(this::loadPersonDetail);
+        guestAdapter.setItems(guests);
+        dialogBinding.guestList.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+        dialogBinding.guestList.setNestedScrollingEnabled(false);
+        dialogBinding.guestList.setAdapter(guestAdapter);
+        dialogBinding.guestTitle.setVisibility(guests.isEmpty() ? View.GONE : View.VISIBLE);
+        dialogBinding.guestList.setVisibility(guests.isEmpty() ? View.GONE : View.VISIBLE);
+        dialogBinding.close.setOnClickListener(view -> dialog.dismiss());
+        setButton(dialogBinding.close, colors.control, colors.line, colors.primary);
+
+        dialog.show();
+        dialogBinding.close.post(dialogBinding.close::requestFocus);
+        Window window = dialog.getWindow();
+        if (window != null) {
+            window.setBackgroundDrawableResource(android.R.color.transparent);
+            window.setDimAmount(0.56f);
+            int width = getResources().getDisplayMetrics().widthPixels;
+            window.setLayout((int) (width * (width >= 1200 ? 0.78f : 0.94f)), WindowManager.LayoutParams.WRAP_CONTENT);
+        }
+    }
+
     private void showPhotoDialog(int position, String url) {
         if (TextUtils.isEmpty(url)) return;
-        List<String> photos = new ArrayList<>(tmdbEpisodePhotos);
+        showPhotoDialog(position, url, new ArrayList<>(tmdbEpisodePhotos));
+    }
+
+    private void showPhotoDialog(int position, String url, List<String> sourcePhotos) {
+        if (TextUtils.isEmpty(url)) return;
+        List<String> photos = new ArrayList<>(sourcePhotos);
         if (photos.isEmpty()) photos.add(url);
         int start = position >= 0 && position < photos.size() ? position : Math.max(0, photos.indexOf(url));
         int[] current = new int[]{Math.max(0, start)};
@@ -1160,11 +1292,23 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         image.setFocusable(true);
         image.setScaleType(ImageView.ScaleType.FIT_CENTER);
         int[] size = photoDialogSize();
-        image.setLayoutParams(new ViewGroup.LayoutParams(size[0], size[1]));
+        image.setLayoutParams(new FrameLayout.LayoutParams(size[0], size[1]));
+
+        ProgressBar progress = new ProgressBar(this);
+        progress.setIndeterminate(true);
+        progress.setVisibility(View.GONE);
+        FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(ResUtil.dp2px(38), ResUtil.dp2px(38), android.view.Gravity.CENTER);
+        progress.setLayoutParams(progressParams);
+
+        FrameLayout content = new FrameLayout(this);
+        content.setLayoutParams(new ViewGroup.LayoutParams(size[0], size[1]));
+        content.addView(image);
+        content.addView(progress);
+        int[] request = new int[]{0};
 
         Dialog dialog = new Dialog(this);
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
-        dialog.setContentView(image);
+        dialog.setContentView(content);
         GestureDetector photoGesture = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
             @Override
             public boolean onDown(MotionEvent event) {
@@ -1180,9 +1324,9 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
                 float x = event.getX();
                 int width = image.getWidth();
                 if (x < width * 0.33f) {
-                    showPhotoAt(image, photos, current, -1);
+                    showPhotoAt(image, progress, photos, current, request, -1);
                 } else if (x > width * 0.67f) {
-                    showPhotoAt(image, photos, current, 1);
+                    showPhotoAt(image, progress, photos, current, request, 1);
                 } else {
                     dialog.dismiss();
                 }
@@ -1194,7 +1338,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
                 if (photos.size() <= 1 || down == null || up == null) return false;
                 float distanceX = up.getX() - down.getX();
                 if (Math.abs(distanceX) < ResUtil.dp2px(48) || Math.abs(velocityX) < 120f) return false;
-                showPhotoAt(image, photos, current, distanceX < 0 ? 1 : -1);
+                showPhotoAt(image, progress, photos, current, request, distanceX < 0 ? 1 : -1);
                 return true;
             }
         });
@@ -1202,11 +1346,11 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         dialog.setOnKeyListener((instance, keyCode, event) -> {
             if (!KeyUtil.isActionUp(event)) return false;
             if (KeyUtil.isLeftKey(event)) {
-                showPhotoAt(image, photos, current, -1);
+                showPhotoAt(image, progress, photos, current, request, -1);
                 return true;
             }
             if (KeyUtil.isRightKey(event)) {
-                showPhotoAt(image, photos, current, 1);
+                showPhotoAt(image, progress, photos, current, request, 1);
                 return true;
             }
             if (KeyUtil.isEnterKey(event)) {
@@ -1223,27 +1367,64 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
         }
         image.requestFocus();
-        loadPhotoImage(image, photos.get(current[0]));
+        loadPhotoImage(image, progress, photos.get(current[0]), request);
+        preloadPhotoNeighbors(photos, current[0]);
     }
 
-    private void showPhotoAt(ImageView image, List<String> photos, int[] current, int direction) {
+    private void showPhotoAt(ImageView image, ProgressBar progress, List<String> photos, int[] current, int[] request, int direction) {
         if (photos.isEmpty()) return;
         int next = (current[0] + direction + photos.size()) % photos.size();
         if (next == current[0]) return;
         current[0] = next;
-        loadPhotoImage(image, photos.get(current[0]));
+        loadPhotoImage(image, progress, photos.get(current[0]), request);
+        preloadPhotoNeighbors(photos, current[0]);
     }
 
-    private void loadPhotoImage(ImageView image, String url) {
+    private void loadPhotoImage(ImageView image, ProgressBar progress, String url, int[] request) {
+        int token = ++request[0];
+        progress.setVisibility(View.VISIBLE);
         try {
             Glide.with(image)
                     .load(ImgUtil.getUrl(highResTmdbImage(url)))
-                    .thumbnail(Glide.with(image).load(ImgUtil.getUrl(url)).fitCenter())
                     .fitCenter()
-                    .error(R.drawable.artwork)
-                    .into(image);
+                    .into(new CustomTarget<Drawable>() {
+                        @Override
+                        public void onResourceReady(@NonNull Drawable resource, @Nullable Transition<? super Drawable> transition) {
+                            if (token != request[0]) return;
+                            image.setImageDrawable(resource);
+                            progress.setVisibility(View.GONE);
+                        }
+
+                        @Override
+                        public void onLoadFailed(@Nullable Drawable errorDrawable) {
+                            if (token != request[0]) return;
+                            if (image.getDrawable() == null && errorDrawable != null) image.setImageDrawable(errorDrawable);
+                            progress.setVisibility(View.GONE);
+                        }
+
+                        @Override
+                        public void onLoadCleared(@Nullable Drawable placeholder) {
+                        }
+                    });
         } catch (Throwable e) {
+            progress.setVisibility(View.GONE);
             Notify.show(R.string.detail_tmdb_empty);
+        }
+    }
+
+    private void preloadPhotoNeighbors(List<String> photos, int current) {
+        if (photos.size() <= 1) return;
+        List<Integer> positions = new ArrayList<>();
+        for (int offset = 1; offset <= PHOTO_PRELOAD_RADIUS && offset < photos.size(); offset++) {
+            int next = (current + offset) % photos.size();
+            int previous = (current - offset + photos.size()) % photos.size();
+            if (!positions.contains(next)) positions.add(next);
+            if (!positions.contains(previous)) positions.add(previous);
+        }
+        for (Integer position : positions) {
+            String url = photos.get(position);
+            if (TextUtils.isEmpty(url)) continue;
+            Glide.with(this).load(ImgUtil.getUrl(highResTmdbImage(url))).preload();
         }
     }
 
@@ -1266,6 +1447,50 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         int sizeEnd = url.indexOf('/', sizeStart);
         if (sizeEnd < 0) return url;
         return url.substring(0, sizeStart) + "original" + url.substring(sizeEnd);
+    }
+
+    private String episodeDetailTitle(Episode episode, int episodeNumber, JsonObject detail) {
+        String name = string(detail, "name");
+        if (TextUtils.isEmpty(name)) {
+            TmdbEpisode tmdbEpisode = tmdbEpisodes.get(episodeNumber);
+            name = tmdbEpisode == null ? "" : tmdbEpisode.getTitle();
+        }
+        if (TextUtils.isEmpty(name) && episode != null) name = episode.getName();
+        return getString(R.string.detail_episode_detail_title, episodeNumber, name);
+    }
+
+    private String episodeMeta(JsonObject detail) {
+        List<String> parts = new ArrayList<>();
+        String date = string(detail, "air_date");
+        if (!TextUtils.isEmpty(date)) parts.add(date);
+        if (detail != null && detail.has("runtime") && !detail.get("runtime").isJsonNull()) {
+            int runtime = detail.get("runtime").getAsInt();
+            if (runtime > 0) parts.add(getString(R.string.detail_runtime_format, runtime));
+        }
+        if (detail != null && detail.has("vote_average") && !detail.get("vote_average").isJsonNull()) {
+            double vote = detail.get("vote_average").getAsDouble();
+            if (vote > 0) parts.add(getString(R.string.detail_score, String.format(Locale.US, "%.1f", vote)));
+        }
+        return TextUtils.join(" · ", parts);
+    }
+
+    private String episodeCrew(JsonObject detail) {
+        Map<String, List<String>> jobs = new LinkedHashMap<>();
+        for (JsonElement element : array(detail, "crew")) {
+            if (!element.isJsonObject()) continue;
+            JsonObject person = element.getAsJsonObject();
+            String job = string(person, "job", "department");
+            String name = string(person, "name");
+            if (TextUtils.isEmpty(job) || TextUtils.isEmpty(name)) continue;
+            List<String> names = jobs.computeIfAbsent(job, key -> new ArrayList<>());
+            if (!names.contains(name) && names.size() < 4) names.add(name);
+            if (jobs.size() >= 6) break;
+        }
+        List<String> lines = new ArrayList<>();
+        for (Map.Entry<String, List<String>> entry : jobs.entrySet()) {
+            if (!entry.getValue().isEmpty()) lines.add(entry.getKey() + ": " + TextUtils.join(" / ", entry.getValue()));
+        }
+        return TextUtils.join("\n", lines);
     }
 
     private ArrayList<String> selectedTmdbEpisodeTitles() {
@@ -2293,6 +2518,60 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         return getString(R.string.detail_score, String.format(Locale.US, "%.1f", matchedTmdbDetail.get("vote_average").getAsDouble()));
     }
 
+    private String certificationLabel() {
+        if (matchedTmdbDetail == null) return "";
+        boolean tv = matchedTmdbItem != null && "tv".equalsIgnoreCase(matchedTmdbItem.getMediaType());
+        JsonArray results = tv ? array(matchedTmdbDetail, "content_ratings", "results") : array(matchedTmdbDetail, "release_dates", "results");
+        String region = regionFromLanguage(tmdbConfig == null ? "" : tmdbConfig.getLanguage());
+        String value = certificationForRegion(results, region, tv);
+        if (TextUtils.isEmpty(value)) value = certificationForRegion(results, "US", tv);
+        if (TextUtils.isEmpty(value)) value = firstCertification(results, tv);
+        return value;
+    }
+
+    private String certificationForRegion(JsonArray results, String region, boolean tv) {
+        if (TextUtils.isEmpty(region)) return "";
+        for (JsonElement element : results) {
+            if (!element.isJsonObject()) continue;
+            JsonObject object = element.getAsJsonObject();
+            if (!region.equalsIgnoreCase(string(object, "iso_3166_1"))) continue;
+            return tv ? string(object, "rating") : firstReleaseCertification(object);
+        }
+        return "";
+    }
+
+    private String firstCertification(JsonArray results, boolean tv) {
+        for (JsonElement element : results) {
+            if (!element.isJsonObject()) continue;
+            String value = tv ? string(element.getAsJsonObject(), "rating") : firstReleaseCertification(element.getAsJsonObject());
+            if (!TextUtils.isEmpty(value)) return value;
+        }
+        return "";
+    }
+
+    private String firstReleaseCertification(JsonObject object) {
+        for (JsonElement release : array(object, "release_dates")) {
+            if (!release.isJsonObject()) continue;
+            String value = string(release.getAsJsonObject(), "certification");
+            if (!TextUtils.isEmpty(value)) return value;
+        }
+        return "";
+    }
+
+    private String regionFromLanguage(String language) {
+        if (TextUtils.isEmpty(language)) return "";
+        int separator = language.indexOf('-');
+        return separator >= 0 && separator + 1 < language.length() ? language.substring(separator + 1).toUpperCase(Locale.ROOT) : "";
+    }
+
+    private String externalIdLabel() {
+        JsonObject ids = object(matchedTmdbDetail, "external_ids");
+        String imdb = string(ids, "imdb_id");
+        if (!TextUtils.isEmpty(imdb)) return "IMDb " + imdb;
+        String tvdb = string(ids, "tvdb_id");
+        return TextUtils.isEmpty(tvdb) ? "" : "TVDB " + tvdb;
+    }
+
     private String getMediaTypeLabel() {
         if (matchedTmdbItem == null) return getString(R.string.detail_media_unknown);
         return "tv".equalsIgnoreCase(matchedTmdbItem.getMediaType()) ? getString(R.string.detail_media_tv) : getString(R.string.detail_media_movie);
@@ -2337,6 +2616,17 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             current = currentObject.get(key);
         }
         return current != null && current.isJsonArray() ? current.getAsJsonArray() : new JsonArray();
+    }
+
+    private JsonObject object(JsonObject object, String... keys) {
+        JsonElement current = object;
+        for (String key : keys) {
+            if (current == null || !current.isJsonObject()) return null;
+            JsonObject currentObject = current.getAsJsonObject();
+            if (!currentObject.has(key) || currentObject.get(key).isJsonNull()) return null;
+            current = currentObject.get(key);
+        }
+        return current != null && current.isJsonObject() ? current.getAsJsonObject() : null;
     }
 
     private String string(JsonObject object, String... keys) {
@@ -2405,7 +2695,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
                 Objects.toString(getIntent().getStringExtra("tmdb_credit"), ""));
     }
 
-    private record TmdbBundle(TmdbItem item, JsonObject detail, List<TmdbPerson> cast, List<String> photos, List<TmdbItem> related, List<Integer> seasons, Map<Integer, Integer> seasonCounts, Map<Integer, List<TmdbEpisode>> seasonEpisodes) {
+    private record TmdbBundle(TmdbItem item, JsonObject detail, List<TmdbPerson> cast, List<String> photos, List<TmdbItem> related, List<Integer> seasons, Map<Integer, Integer> seasonCounts, Map<Integer, List<TmdbEpisode>> seasonEpisodes, Map<Integer, List<TmdbPerson>> seasonCast, Map<Integer, List<String>> seasonPhotos) {
     }
 
     private record SourceMatch(Site site, Vod vod, int score) {

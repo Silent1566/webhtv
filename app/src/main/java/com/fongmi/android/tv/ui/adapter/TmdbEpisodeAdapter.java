@@ -22,6 +22,8 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
 
     public interface Listener {
         void onItemClick(Episode item);
+
+        void onItemLongClick(Episode item, int episodeNumber);
     }
 
     private final Listener listener;
@@ -114,6 +116,10 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
             holder.binding.still.setVisibility(View.GONE);
         }
         holder.binding.getRoot().setOnClickListener(view -> listener.onItemClick(episode));
+        holder.binding.getRoot().setOnLongClickListener(view -> {
+            listener.onItemLongClick(episode, position + 1);
+            return true;
+        });
     }
 
     private void applyCardSize(ViewHolder holder, boolean compact) {
