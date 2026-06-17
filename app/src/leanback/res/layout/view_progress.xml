@@ -16,12 +16,100 @@
         android:id="@+id/traffic"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="center"
-        android:layout_marginTop="40dp"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="24dp"
+        android:layout_marginBottom="24dp"
+        android:fontFeatureSettings="tnum"
         android:textColor="@color/white"
         android:textSize="16sp"
         android:visibility="gone"
         tools:text="120 KB/s"
         tools:visibility="visible" />
+
+    <androidx.appcompat.widget.LinearLayoutCompat
+        android:id="@+id/topLeft"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|start"
+        android:layout_marginStart="24dp"
+        android:layout_marginTop="24dp"
+        android:orientation="vertical"
+        android:visibility="gone"
+        tools:visibility="visible">
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/title"
+            style="@style/Shadow"
+            android:layout_width="320dp"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:singleLine="true"
+            android:textColor="@color/white"
+            android:textSize="18sp"
+            tools:text="娇阳似我：第01集" />
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/size"
+            style="@style/Shadow"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:background="@null"
+            android:fontFeatureSettings="tnum"
+            android:textColor="@color/white"
+            android:textSize="16sp"
+            tools:text="1920 x 804" />
+
+    </androidx.appcompat.widget.LinearLayoutCompat>
+
+    <com.google.android.material.textview.MaterialTextView
+        android:id="@+id/clock"
+        style="@style/Shadow"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="24dp"
+        android:layout_marginEnd="24dp"
+        android:fontFeatureSettings="tnum"
+        android:textColor="@color/white"
+        android:textSize="18sp"
+        android:visibility="gone"
+        tools:text="21:49:24"
+        tools:visibility="visible" />
+
+    <androidx.appcompat.widget.LinearLayoutCompat
+        android:id="@+id/bottomProgress"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|start"
+        android:layout_marginStart="24dp"
+        android:layout_marginEnd="96dp"
+        android:layout_marginBottom="22dp"
+        android:orientation="vertical"
+        android:visibility="gone"
+        tools:visibility="visible">
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/position"
+            style="@style/Shadow"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFeatureSettings="tnum"
+            android:textColor="@color/white"
+            android:textSize="16sp"
+            tools:text="13:47/47:31" />
+
+        <ProgressBar
+            android:id="@+id/bar"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="4dp"
+            android:layout_marginTop="8dp"
+            android:max="10000"
+            android:progress="0"
+            android:progressBackgroundTint="@color/white_40"
+            android:progressTint="#2196F3" />
+
+    </androidx.appcompat.widget.LinearLayoutCompat>
 
 </FrameLayout>

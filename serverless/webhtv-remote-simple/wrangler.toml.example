@@ -1,0 +1,6 @@
+name = "webhtv-remote-simple"
+main = "src/index.js"
+compatibility_date = "2026-06-01"
+
+# This origin-token-memory relay does not need KV, R2,
+# Durable Objects, databases, or required environment variables.

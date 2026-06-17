@@ -23,9 +23,15 @@ public class SearchActivity extends BaseActivity {
     }
 
     public static void start(Activity activity, String keyword, String siteKey) {
+        start(activity, keyword, siteKey, null, null);
+    }
+
+    public static void start(Activity activity, String keyword, String siteKey, String pic, String wallPic) {
         Intent intent = new Intent(activity, SearchActivity.class);
         intent.putExtra("keyword", keyword);
         intent.putExtra("siteKey", siteKey);
+        intent.putExtra("pic", pic);
+        intent.putExtra("wallPic", wallPic);
         activity.startActivity(intent);
     }
 
@@ -34,9 +40,15 @@ public class SearchActivity extends BaseActivity {
     }
 
     public static void direct(Activity activity, String keyword, String siteKey) {
+        direct(activity, keyword, siteKey, null, null);
+    }
+
+    public static void direct(Activity activity, String keyword, String siteKey, String pic, String wallPic) {
         Intent intent = new Intent(activity, SearchActivity.class);
         intent.putExtra("keyword", keyword);
         intent.putExtra("siteKey", siteKey);
+        intent.putExtra("pic", pic);
+        intent.putExtra("wallPic", wallPic);
         intent.putExtra("direct", true);
         activity.startActivity(intent);
     }
@@ -53,6 +65,14 @@ public class SearchActivity extends BaseActivity {
         return getIntent().getStringExtra("siteKey");
     }
 
+    private String getPic() {
+        return getIntent().getStringExtra("pic");
+    }
+
+    private String getWallPic() {
+        return getIntent().getStringExtra("wallPic");
+    }
+
     @Override
     protected ViewBinding getBinding() {
         return ActivitySearchBinding.inflate(getLayoutInflater());
@@ -61,8 +81,8 @@ public class SearchActivity extends BaseActivity {
     @Override
     protected void initView(Bundle savedInstanceState) {
         if (savedInstanceState == null) {
-            if (isDirect()) getSupportFragmentManager().beginTransaction().replace(R.id.container, CollectFragment.newInstance(getKeyword(), getSiteKey()), CollectFragment.class.getSimpleName()).commit();
-            else getSupportFragmentManager().beginTransaction().replace(R.id.container, SearchFragment.newInstance(getKeyword(), getSiteKey()), SearchFragment.class.getSimpleName()).commit();
+            if (isDirect()) getSupportFragmentManager().beginTransaction().replace(R.id.container, CollectFragment.newInstance(getKeyword(), getSiteKey(), getPic(), getWallPic()), CollectFragment.class.getSimpleName()).commit();
+            else getSupportFragmentManager().beginTransaction().replace(R.id.container, SearchFragment.newInstance(getKeyword(), getSiteKey(), getPic(), getWallPic()), SearchFragment.class.getSimpleName()).commit();
         }
     }
 

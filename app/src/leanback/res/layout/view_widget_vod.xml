@@ -32,6 +32,7 @@
             android:layout_height="wrap_content"
             android:layout_below="@+id/title"
             android:layout_alignStart="@+id/title"
+            android:background="@null"
             android:textColor="@color/white"
             android:textSize="16sp"
             tools:text="1920 x 1080" />
@@ -48,6 +49,120 @@
             tools:text="09:20:00" />
 
     </RelativeLayout>
+
+    <androidx.appcompat.widget.LinearLayoutCompat
+        android:id="@+id/displayTopLeft"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|start"
+        android:layout_marginStart="24dp"
+        android:layout_marginTop="24dp"
+        android:orientation="vertical"
+        android:visibility="gone"
+        tools:visibility="visible">
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/displayTitle"
+            style="@style/Shadow"
+            android:layout_width="360dp"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:singleLine="true"
+            android:textColor="@color/white"
+            android:textSize="18sp"
+            tools:text="庆余年第一季：第一集" />
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/displaySize"
+            style="@style/Shadow"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:background="@null"
+            android:fontFeatureSettings="tnum"
+            android:textColor="@color/white"
+            android:textSize="16sp"
+            tools:text="1920 x 1080" />
+
+    </androidx.appcompat.widget.LinearLayoutCompat>
+
+    <com.google.android.material.textview.MaterialTextView
+        android:id="@+id/displayClock"
+        style="@style/Shadow"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="24dp"
+        android:layout_marginEnd="24dp"
+        android:fontFeatureSettings="tnum"
+        android:textColor="@color/white"
+        android:textSize="18sp"
+        android:visibility="gone"
+        tools:text="21:49:24"
+        tools:visibility="visible" />
+
+    <androidx.appcompat.widget.LinearLayoutCompat
+        android:id="@+id/displayBottomProgress"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|start"
+        android:layout_marginStart="24dp"
+        android:layout_marginEnd="120dp"
+        android:layout_marginBottom="24dp"
+        android:orientation="vertical"
+        android:visibility="gone"
+        tools:visibility="visible">
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/displayPosition"
+            style="@style/Shadow"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFeatureSettings="tnum"
+            android:textColor="@color/white"
+            android:textSize="16sp"
+            tools:text="13:47/47:31" />
+
+        <ProgressBar
+            android:id="@+id/displayBar"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="4dp"
+            android:layout_marginTop="8dp"
+            android:max="10000"
+            android:progress="0"
+            android:progressBackgroundTint="@color/white_40"
+            android:progressTint="#2196F3" />
+
+    </androidx.appcompat.widget.LinearLayoutCompat>
+
+    <com.google.android.material.textview.MaterialTextView
+        android:id="@+id/displayTraffic"
+        style="@style/Shadow"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="24dp"
+        android:layout_marginBottom="24dp"
+        android:fontFeatureSettings="tnum"
+        android:textColor="@color/white"
+        android:textSize="16sp"
+        android:visibility="gone"
+        tools:text="120 KB/s"
+        tools:visibility="visible" />
+
+    <ProgressBar
+        android:id="@+id/displayMini"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="3dp"
+        android:layout_gravity="bottom"
+        android:max="10000"
+        android:progress="0"
+        android:progressBackgroundTint="@android:color/transparent"
+        android:progressTint="#2196F3"
+        android:visibility="gone"
+        tools:visibility="visible" />
 
     <androidx.appcompat.widget.LinearLayoutCompat
         android:id="@+id/error"

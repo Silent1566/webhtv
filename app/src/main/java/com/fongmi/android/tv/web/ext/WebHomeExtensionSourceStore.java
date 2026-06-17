@@ -283,7 +283,8 @@ public class WebHomeExtensionSourceStore {
         object.addProperty("name", TextUtils.isEmpty(name) ? "Local extension" : name.trim());
         object.addProperty("runAt", TextUtils.isEmpty(runAt) ? WebHomeExtension.RUN_AT_END : runAt.trim());
         object.addProperty("sourceType", SOURCE_TYPE_LINK);
-        if (!TextUtils.isEmpty(match)) object.add("cspKeyRegex", App.gson().toJsonTree(List.of(match.trim())));
+        List<String> matches = matchList(match);
+        if (!matches.isEmpty()) object.add("cspKeyRegex", App.gson().toJsonTree(matches));
         if (WebHomeExtension.isScriptUrl(link)) object.add("js", App.gson().toJsonTree(List.of(link)));
         else object.addProperty("manifestUrl", link);
         return object;
@@ -295,9 +296,20 @@ public class WebHomeExtensionSourceStore {
         object.addProperty("name", TextUtils.isEmpty(name) ? "Local extension" : name.trim());
         object.addProperty("runAt", TextUtils.isEmpty(runAt) ? WebHomeExtension.RUN_AT_END : runAt.trim());
         object.addProperty("sourceType", sourceType(sourceType, null));
-        if (!TextUtils.isEmpty(match)) object.add("cspKeyRegex", App.gson().toJsonTree(List.of(match.trim())));
+        List<String> matches = matchList(match);
+        if (!matches.isEmpty()) object.add("cspKeyRegex", App.gson().toJsonTree(matches));
         object.addProperty("code", code);
         return object;
+    }
+
+    private static List<String> matchList(String match) {
+        List<String> result = new ArrayList<>();
+        if (TextUtils.isEmpty(match)) return result;
+        for (String item : match.split("\\r?\\n")) {
+            String value = item == null ? "" : item.trim();
+            if (!TextUtils.isEmpty(value) && !result.contains(value)) result.add(value);
+        }
+        return result;
     }
 
     private static String title(String raw) {

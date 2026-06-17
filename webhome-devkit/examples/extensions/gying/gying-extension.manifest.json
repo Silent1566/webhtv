@@ -1,0 +1,13 @@
+{
+  "extensions": [
+    {
+      "id": "gying-native-router",
+      "name": "Gying native router",
+      "version": "1.0.10",
+      "runAt": "document-start",
+      "js": [
+        "./gying-extension.js"
+      ]
+    }
+  ]
+}

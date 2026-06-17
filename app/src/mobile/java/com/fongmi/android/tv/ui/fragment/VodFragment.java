@@ -2,6 +2,7 @@ package com.fongmi.android.tv.ui.fragment;
 
 import android.text.TextUtils;
 import android.view.LayoutInflater;
+import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
@@ -104,6 +105,7 @@ public class VodFragment extends BaseFragment implements ConfigListener, SiteLis
         showProgress();
         setTitle();
         setLogo();
+        updateToolbarMenu();
     }
 
     @Override
@@ -155,6 +157,7 @@ public class VodFragment extends BaseFragment implements ConfigListener, SiteLis
         mAdapter.addAll(mResult = result);
         notifyPagerAdapter();
         setFabVisible(0);
+        updateToolbarMenu();
         hideProgress();
         showContent();
     }
@@ -244,7 +247,23 @@ public class VodFragment extends BaseFragment implements ConfigListener, SiteLis
         else if (item.getItemId() == R.id.search) SearchActivity.start(requireActivity());
         else if (item.getItemId() == R.id.history) HistoryActivity.start(requireActivity());
         else if (item.getItemId() == R.id.sync) OneKeySyncDialog.create().show(requireActivity());
+        else if (item.getItemId() == R.id.enhance && homeActivity() != null) homeActivity().openEnhanceFromVod();
+        else if (item.getItemId() == R.id.web_home_fullscreen) onWebHomeFullscreen();
+        else return false;
         return true;
+    }
+
+    private void onWebHomeFullscreen() {
+        if (mWeb == null || !mWeb.isVisible()) return;
+        JsonObject payload = new JsonObject();
+        payload.addProperty("mode", WebHomeChrome.EDGE);
+        setChrome(payload);
+    }
+
+    private void updateToolbarMenu() {
+        Menu menu = mBinding.toolbar.getMenu();
+        MenuItem fullscreen = menu.findItem(R.id.web_home_fullscreen);
+        if (fullscreen != null) fullscreen.setVisible(mWeb != null && mWeb.isVisible());
     }
 
     private void setSearchLongClick() {
@@ -278,6 +297,7 @@ public class VodFragment extends BaseFragment implements ConfigListener, SiteLis
         requestNormalChrome();
         showProgress();
         mBinding.homeWeb.setVisibility(View.GONE);
+        updateToolbarMenu();
         clearPagerTypes();
         mBinding.pager.setAdapter(new PageAdapter(getChildFragmentManager()));
         setFabVisible(0);
@@ -504,6 +524,7 @@ public class VodFragment extends BaseFragment implements ConfigListener, SiteLis
         mBinding.filter.setVisibility(View.GONE);
         mBinding.link.setVisibility(View.GONE);
         mBinding.top.setVisibility(View.GONE);
+        updateToolbarMenu();
     }
 
     private void showNativeContent() {
@@ -511,6 +532,7 @@ public class VodFragment extends BaseFragment implements ConfigListener, SiteLis
         mBinding.type.setVisibility(View.VISIBLE);
         mBinding.pager.setVisibility(View.VISIBLE);
         mBinding.homeWeb.setVisibility(View.GONE);
+        updateToolbarMenu();
     }
 
     public void applyWebHomeChrome(String mode) {

@@ -2,6 +2,7 @@ package com.fongmi.android.tv.ui.activity;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.view.View;
 
@@ -37,6 +38,9 @@ import com.fongmi.android.tv.web.ext.WebHomeExtensionRegistry;
 
 public class SettingEnhanceActivity extends BaseActivity {
 
+    private static final String URL_GITHUB = "https://github.com/fish2018/webhtv";
+    private static final String URL_CNB = "https://cnb.cool/fish2018/ext";
+
     private ActivitySettingEnhanceBinding mBinding;
 
     public static void start(Activity activity) {
@@ -60,6 +64,8 @@ public class SettingEnhanceActivity extends BaseActivity {
 
     @Override
     protected void initEvent() {
+        mBinding.githubRepo.setOnClickListener(view -> openRepo(URL_GITHUB));
+        mBinding.cnbRepo.setOnClickListener(view -> openRepo(URL_CNB));
         mBinding.driveCheck.setOnClickListener(this::setDriveCheck);
         mBinding.audioSource.setOnClickListener(this::setAudioSource);
         mBinding.shortDramaSource.setOnClickListener(this::setShortDramaSource);
@@ -69,6 +75,7 @@ public class SettingEnhanceActivity extends BaseActivity {
         mBinding.siteHealthSort.setOnLongClickListener(this::clearSiteHealth);
         mBinding.webHomeExtension.setOnClickListener(view -> WebHomeExtensionDialog.show(this, this::setText));
         mBinding.webHomeExtension.setOnLongClickListener(this::clearWebHomeExtension);
+        mBinding.playbackArtworkWall.setOnClickListener(this::setPlaybackArtworkWall);
         mBinding.playbackWebhook.setOnClickListener(view -> ViewingRecordSyncDialog.show(this, this::setText));
         mBinding.managePage.setOnClickListener(view -> ManagePageDialog.show(this));
         mBinding.shellProxy.setOnClickListener(view -> ShellProxyDialog.show(this, this::setText));
@@ -91,6 +98,7 @@ public class SettingEnhanceActivity extends BaseActivity {
         mBinding.siteHealthSortText.setText(getSwitch(Setting.isSiteHealthSort()));
         WebHomeExtensionRegistry.Snapshot webHomeExtension = WebHomeExtensionRegistry.get().snapshot();
         mBinding.webHomeExtensionText.setText(getSwitch(Setting.isWebHomeExtension()) + " · " + webHomeExtension.readyCount + "/" + webHomeExtension.installedCount);
+        mBinding.playbackArtworkWallText.setText(getSwitch(Setting.isPlaybackArtworkWall()));
         mBinding.playbackWebhookText.setText(ViewingRecordSyncStore.summary(this));
         mBinding.managePageText.setText(R.string.manage_page_web);
         mBinding.shellProxyText.setText(getSwitch(Setting.isShellProxy()) + " · " + getString(R.string.setting_proxy_rule_count, ProxySetting.count()));
@@ -127,6 +135,11 @@ public class SettingEnhanceActivity extends BaseActivity {
         TmdbSourceDialog.create(this).onDismiss(this::setText).show();
     }
 
+    private void setPlaybackArtworkWall(View view) {
+        Setting.putPlaybackArtworkWall(!Setting.isPlaybackArtworkWall());
+        mBinding.playbackArtworkWallText.setText(getSwitch(Setting.isPlaybackArtworkWall()));
+    }
+
     private boolean clearSiteHealth(View view) {
         SiteHealthStore.clear();
         Notify.show(R.string.site_health_clear_done);
@@ -137,6 +150,14 @@ public class SettingEnhanceActivity extends BaseActivity {
         WebHomeExtensionRegistry.get().clear();
         Notify.show(R.string.web_home_extension_clear_done);
         return true;
+    }
+
+    private void openRepo(String url) {
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+        } catch (Exception e) {
+            Notify.show(R.string.manage_page_no_browser);
+        }
     }
 
     @Override

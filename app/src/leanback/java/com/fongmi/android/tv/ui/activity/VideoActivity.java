@@ -75,6 +75,7 @@ import com.fongmi.android.tv.ui.custom.CustomMovement;
 import com.fongmi.android.tv.ui.custom.CustomSeekView;
 import com.fongmi.android.tv.ui.dialog.ContentDialog;
 import com.fongmi.android.tv.ui.dialog.DanmakuDialog;
+import com.fongmi.android.tv.ui.dialog.DisplayDialog;
 import com.fongmi.android.tv.ui.dialog.EpisodeDialog;
 import com.fongmi.android.tv.ui.dialog.SubtitleDialog;
 import com.fongmi.android.tv.ui.dialog.TitleDialog;
@@ -96,14 +97,18 @@ import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
 
 import java.io.File;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 
 public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.Listener, TrackDialog.Listener, ArrayAdapter.OnClickListener, FlagAdapter.OnClickListener, EpisodeAdapter.OnClickListener, QualityAdapter.OnClickListener, QuickAdapter.OnClickListener, ParseAdapter.OnClickListener, Clock.Callback {
 
     private static final int SHORT_DRAMA_SCALE = 4;
+    private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm:ss", Locale.getDefault());
 
     private ActivityVideoBinding mBinding;
     private ViewGroup.LayoutParams mFrameParams;
@@ -144,6 +149,8 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     private View mFocus2;
     private Result mPendingDetail;
     private Result mPendingPlayer;
+    private String mContextWallUrl;
+    private String mContextWallLockedUrl;
     private String playHealthKey;
     private long detailStartTime;
     private long playerStartTime;
@@ -167,6 +174,10 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         start(activity, key, id, name, pic, null, true, false);
     }
 
+    public static void collect(Activity activity, String key, String id, String name, String pic, String wallPic) {
+        start(activity, key, id, name, pic, null, true, false, null, wallPic);
+    }
+
     public static void start(Activity activity, String url) {
         if (dispatchToContentHandler(activity, url)) return;
         start(activity, SiteApi.PUSH, url, url);
@@ -188,13 +199,23 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         start(activity, key, id, name, pic, mark, false, false);
     }
 
+    public static void start(Activity activity, String key, String id, String name, String pic, String mark, String wallPic) {
+        start(activity, key, id, name, pic, mark, false, false, null, wallPic);
+    }
+
     public static void start(Activity activity, String key, String id, String name, String pic, String mark, boolean collect, boolean cast) {
         start(activity, key, id, name, pic, mark, collect, cast, null);
     }
 
     public static void start(Activity activity, String key, String id, String name, String pic, String mark, boolean collect, boolean cast, com.fongmi.android.tv.bean.TmdbItem tmdbItem) {
+        start(activity, key, id, name, pic, mark, collect, cast, tmdbItem, null);
+    }
+
+    public static void start(Activity activity, String key, String id, String name, String pic, String mark, boolean collect, boolean cast, com.fongmi.android.tv.bean.TmdbItem tmdbItem, String wallPic) {
         long launch = System.currentTimeMillis();
         SpiderDebug.log("video-flow", "launch request key=%s id=%s name=%s collect=%s cast=%s", key, id, name, collect, cast);
+        ImgUtil.preload(activity, pic);
+        if (Setting.isPlaybackArtworkWall() && !TextUtils.isEmpty(wallPic) && !TextUtils.equals(wallPic, pic)) ImgUtil.preload(activity, wallPic);
         if (dispatchToContentHandler(activity, key, id, name, pic, mark, cast)) {
             SpiderDebug.log("video-flow", "dispatched to content handler key=%s", key);
             return;
@@ -208,6 +229,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         intent.putExtra("mark", mark);
         intent.putExtra("name", name);
         intent.putExtra("pic", pic);
+        intent.putExtra("wallPic", wallPic);
         intent.putExtra("key", key);
         intent.putExtra("id", id);
         activity.startActivity(intent);
@@ -232,6 +254,10 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
 
     private String getPic() {
         return Objects.toString(getIntent().getStringExtra("pic"), "");
+    }
+
+    private String getWallPic() {
+        return Objects.toString(getIntent().getStringExtra("wallPic"), "");
     }
 
     private String getMark() {
@@ -399,6 +425,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         mBinding.control.action.speed.setOnClickListener(view -> onSpeed());
         mBinding.control.action.reset.setOnClickListener(view -> onReset());
         mBinding.control.action.title.setOnClickListener(view -> onTitle());
+        mBinding.control.action.display.setOnClickListener(view -> onDisplay());
         mBinding.control.action.player.setOnClickListener(view -> onChoose());
         mBinding.control.action.decode.setOnClickListener(view -> onDecode());
         mBinding.control.action.ending.setOnClickListener(view -> onEnding());
@@ -1138,12 +1165,18 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         else showControl(getFocus2());
     }
 
+    private void onDisplay() {
+        DisplayDialog.show(this, this::updateDisplaySettings);
+    }
+
     private void onEpisodes() {
         EpisodeDialog.create().episodes(mEpisodeAdapter.getItems()).reverseAction(this::onRevSort).show(this);
     }
 
     private void showProgress() {
         mBinding.progress.getRoot().setVisibility(View.VISIBLE);
+        updateProgressPanel();
+        updateDisplayPanel();
         App.post(mR3, 0);
         hideCenter();
         hideError();
@@ -1153,6 +1186,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         mBinding.progress.getRoot().setVisibility(View.GONE);
         App.removeCallbacks(mR3);
         Traffic.reset();
+        updateDisplayPanel();
     }
 
     private void showError(String text) {
@@ -1171,6 +1205,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         mBinding.widget.center.setVisibility(View.VISIBLE);
         mBinding.widget.duration.setText(player().getDurationTime());
         mBinding.widget.position.setText(player().getPositionTime(0));
+        updateDisplayPanel();
     }
 
     private void showTopInfo() {
@@ -1181,6 +1216,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     private void hideInfo() {
         mBinding.widget.top.setVisibility(View.GONE);
         mBinding.widget.center.setVisibility(View.GONE);
+        updateDisplayPanel();
     }
 
     private void showControl(View view) {
@@ -1188,12 +1224,14 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         mBinding.control.getRoot().setVisibility(View.VISIBLE);
         view.requestFocus();
         setR1Callback();
+        updateDisplayPanel();
     }
 
     private void hideControl() {
         mBinding.control.getRoot().setVisibility(View.GONE);
         if (player().isPlaying()) mBinding.widget.top.setVisibility(View.GONE);
         App.removeCallbacks(mR1);
+        updateDisplayPanel();
     }
 
     private void hideCenter() {
@@ -1203,8 +1241,61 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     }
 
     private void setTraffic() {
-        Traffic.setSpeed(mBinding.progress.traffic);
+        updateProgressPanel();
+        if (PlayerSetting.isDisplayTraffic()) Traffic.setSpeed(mBinding.progress.traffic);
         App.post(mR3, 1000);
+    }
+
+    private void updateDisplaySettings() {
+        updateProgressPanel();
+        updateDisplayPanel();
+    }
+
+    private void updateProgressPanel() {
+        boolean hasPlayer = service() != null && player() != null && !player().isEmpty();
+        boolean showTitle = PlayerSetting.isDisplayTitle() && !TextUtils.isEmpty(mBinding.widget.title.getText());
+        boolean showSize = hasPlayer && PlayerSetting.isDisplaySize() && !TextUtils.isEmpty(player().getSizeText());
+        mBinding.progress.title.setText(mBinding.widget.title.getText());
+        mBinding.progress.size.setText(showSize ? player().getSizeText() : "");
+        mBinding.progress.title.setVisibility(showTitle ? View.VISIBLE : View.GONE);
+        mBinding.progress.size.setVisibility(showSize ? View.VISIBLE : View.GONE);
+        mBinding.progress.topLeft.setVisibility(showTitle || showSize ? View.VISIBLE : View.GONE);
+        mBinding.progress.clock.setText(TIME_FORMAT.format(LocalDateTime.now()));
+        mBinding.progress.clock.setVisibility(PlayerSetting.isDisplayTime() ? View.VISIBLE : View.GONE);
+        mBinding.progress.bottomProgress.setVisibility(hasPlayer && PlayerSetting.isDisplayProgress() ? View.VISIBLE : View.GONE);
+        mBinding.progress.traffic.setVisibility(PlayerSetting.isDisplayTraffic() ? View.VISIBLE : View.GONE);
+        if (!hasPlayer) return;
+        long position = Math.max(0, player().getPosition());
+        long duration = Math.max(0, player().getDuration());
+        mBinding.progress.position.setText(player().getPositionTime(0) + "/" + player().getDurationTime());
+        mBinding.progress.bar.setProgress(duration > 0 ? (int) (position * mBinding.progress.bar.getMax() / duration) : 0);
+    }
+
+    private void updateDisplayPanel() {
+        boolean hasPlayer = service() != null && player() != null && !player().isEmpty();
+        boolean canShow = hasPlayer && isGone(mBinding.control.getRoot()) && isGone(mBinding.progress.getRoot()) && isGone(mBinding.widget.center) && isGone(mBinding.widget.error);
+        boolean showTitle = canShow && PlayerSetting.isDisplayTitle() && !TextUtils.isEmpty(mBinding.widget.title.getText());
+        boolean showSize = canShow && PlayerSetting.isDisplaySize() && !TextUtils.isEmpty(player().getSizeText());
+        boolean showProgress = canShow && PlayerSetting.isDisplayProgress() && player().getDuration() > 0;
+        boolean showMini = !showProgress && canShow && PlayerSetting.isDisplayMini() && player().getDuration() > 0;
+        mBinding.widget.displayTitle.setText(mBinding.widget.title.getText());
+        mBinding.widget.displaySize.setText(showSize ? player().getSizeText() : "");
+        mBinding.widget.displayTitle.setVisibility(showTitle ? View.VISIBLE : View.GONE);
+        mBinding.widget.displaySize.setVisibility(showSize ? View.VISIBLE : View.GONE);
+        mBinding.widget.displayTopLeft.setVisibility(showTitle || showSize ? View.VISIBLE : View.GONE);
+        mBinding.widget.displayClock.setText(TIME_FORMAT.format(LocalDateTime.now()));
+        mBinding.widget.displayClock.setVisibility(canShow && PlayerSetting.isDisplayTime() ? View.VISIBLE : View.GONE);
+        if (canShow && PlayerSetting.isDisplayTraffic()) Traffic.setSpeed(mBinding.widget.displayTraffic);
+        else mBinding.widget.displayTraffic.setVisibility(View.GONE);
+        mBinding.widget.displayBottomProgress.setVisibility(showProgress ? View.VISIBLE : View.GONE);
+        mBinding.widget.displayMini.setVisibility(showMini ? View.VISIBLE : View.GONE);
+        if (!showProgress && !showMini) return;
+        long duration = Math.max(0, player().getDuration());
+        long position = Math.max(0, Math.min(player().getPosition(), duration));
+        int progress = duration > 0 ? (int) (position * mBinding.widget.displayBar.getMax() / duration) : 0;
+        mBinding.widget.displayPosition.setText(player().getPositionTime(0) + "/" + player().getDurationTime());
+        mBinding.widget.displayBar.setProgress(progress);
+        mBinding.widget.displayMini.setProgress(progress);
     }
 
     private void setR1Callback() {
@@ -1218,11 +1309,12 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     private void setArtwork(String url) {
         if (mHistory != null) mHistory.setVodPic(url);
         loadArtwork(url);
+        setContextWall(getContextWall());
     }
 
     private void setArtwork() {
         if (mHistory == null) return;
-        loadArtwork(mHistory.getVodPic());
+        setArtwork(mHistory.getVodPic());
     }
 
     private void loadArtwork(String url) {
@@ -1237,6 +1329,66 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
                 mBinding.exo.setDefaultArtwork(errorDrawable);
             }
         });
+    }
+
+    private String getContextWall() {
+        return getWallPic();
+    }
+
+    private String lockContextWall(String url) {
+        String wall = Objects.toString(url, "");
+        if (mContextWallLockedUrl == null && !TextUtils.isEmpty(wall)) mContextWallLockedUrl = wall;
+        return mContextWallLockedUrl == null ? wall : mContextWallLockedUrl;
+    }
+
+    private void setContextWall(String url) {
+        if (!Setting.isPlaybackArtworkWall()) {
+            mContextWallUrl = "";
+            hideContextWall();
+            return;
+        }
+        String wall = lockContextWall(url);
+        if (TextUtils.isEmpty(wall)) {
+            mContextWallUrl = "";
+            hideContextWall();
+            return;
+        }
+        if (Objects.equals(mContextWallUrl, wall)) return;
+        mContextWallUrl = wall;
+        resetContextWallAlpha();
+        if (isGone(mBinding.contextWall)) {
+            mBinding.contextWall.setBackgroundColor(0xFF000000);
+            mBinding.contextWall.setVisibility(View.VISIBLE);
+        }
+        ImgUtil.load(this, wall, new CustomTarget<>() {
+            @Override
+            public void onResourceReady(@NonNull Drawable resource, @Nullable Transition<? super Drawable> transition) {
+                if (!Objects.equals(mContextWallUrl, wall)) return;
+                resetContextWallAlpha();
+                mBinding.contextWall.setBackgroundColor(0x00000000);
+                mBinding.contextWall.setImageDrawable(resource);
+                mBinding.contextWall.setVisibility(View.VISIBLE);
+            }
+
+            @Override
+            public void onLoadFailed(@Nullable Drawable errorDrawable) {
+                if (!Objects.equals(mContextWallUrl, wall)) return;
+                mContextWallUrl = "";
+                hideContextWall();
+            }
+        });
+    }
+
+    private void resetContextWallAlpha() {
+        mBinding.contextWall.animate().cancel();
+        mBinding.contextWall.setAlpha(1f);
+    }
+
+    private void hideContextWall() {
+        resetContextWallAlpha();
+        mBinding.contextWall.setImageDrawable(null);
+        mBinding.contextWall.setBackgroundColor(0x00000000);
+        mBinding.contextWall.setVisibility(View.GONE);
     }
 
     private void setPartAdapter() {
@@ -1271,13 +1423,14 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     }
 
     private boolean hasInitialPreview() {
-        return !getName().isEmpty() || !getPic().isEmpty();
+        return !getName().isEmpty() || !getPic().isEmpty() || !getWallPic().isEmpty();
     }
 
     private void showInitialPreview() {
         mBinding.progressLayout.showContent();
         mBinding.name.setText(getName());
         if (!getPic().isEmpty()) setArtwork(getPic());
+        else if (!getWallPic().isEmpty()) setContextWall(getWallPic());
         mBinding.video.requestFocus();
     }
 

@@ -33,6 +33,7 @@ import androidx.viewbinding.ViewBinding;
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.api.config.VodConfig;
+import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.databinding.DialogWebHomeExtensionBinding;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.utils.FileChooser;
@@ -56,6 +57,7 @@ import com.google.gson.JsonObject;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Pattern;
 
 public class WebHomeExtensionDialog extends BaseAlertDialog {
 
@@ -405,7 +407,8 @@ public class WebHomeExtensionDialog extends BaseAlertDialog {
     private void addSourceDetails(LinearLayoutCompat root, WebHomeExtensionSourceStore.Entry source, WebHomeExtensionRegistry.Item item) {
         FormFields fields = formFields(source);
         addDetail(root, getString(R.string.web_home_extension_source_type) + ": " + sourceTypeName(fields.sourceType));
-        if (!TextUtils.isEmpty(fields.match)) addDetail(root, getString(R.string.web_home_extension_match, fields.match));
+        String match = fields.regexMode || fields.siteKeys.isEmpty() ? fields.match : siteLabels(fields.siteKeys);
+        if (!TextUtils.isEmpty(match)) addDetail(root, getString(R.string.web_home_extension_match, match));
         if (!TextUtils.isEmpty(fields.link)) addDetail(root, getString(R.string.web_home_extension_source, shortText(fields.link)));
         else if (!TextUtils.isEmpty(fields.code)) addDetail(root, getString(R.string.web_home_extension_source, shortText(fields.code)));
         if (item != null && !TextUtils.isEmpty(item.lastLog)) addDetail(root, getString(R.string.web_home_extension_last_log, item.lastLog));
@@ -434,7 +437,19 @@ public class WebHomeExtensionDialog extends BaseAlertDialog {
         root.addView(form, params);
 
         form.addView(inputLayout(R.string.web_home_extension_name_hint, name));
-        form.addView(inputLayout(R.string.web_home_extension_match_hint, match), topMargin(8));
+        form.addView(text(getString(R.string.web_home_extension_match_mode), 12, Color.parseColor("#5F6368"), false), topMargin(8));
+        MaterialButtonToggleGroup matchGroup = toggleGroup();
+        int siteMatchId = View.generateViewId();
+        int regexMatchId = View.generateViewId();
+        matchGroup.addView(toggleButton(siteMatchId, R.string.web_home_extension_match_sites));
+        matchGroup.addView(toggleButton(regexMatchId, R.string.web_home_extension_match_regex));
+        matchGroup.check(fields.regexMode ? regexMatchId : siteMatchId);
+        form.addView(matchGroup, topMargin(4));
+        MaterialButton sitePicker = sourceActionButton(R.string.web_home_extension_choose_sites, false, false);
+        sitePicker.setGravity(Gravity.CENTER_VERTICAL);
+        form.addView(sitePicker, topMargin(8));
+        TextInputLayout matchLayout = inputLayout(R.string.web_home_extension_match_hint, match);
+        form.addView(matchLayout, topMargin(8));
         form.addView(text(getString(R.string.web_home_extension_run_at_hint), 12, Color.parseColor("#5F6368"), false), topMargin(8));
         MaterialButtonToggleGroup runAtGroup = toggleGroup();
         int startId = View.generateViewId();
@@ -472,7 +487,7 @@ public class WebHomeExtensionDialog extends BaseAlertDialog {
         form.addView(linkLayout, topMargin(8));
         form.addView(codeLayout, topMargin(8));
 
-        SourceEditor editor = new SourceEditor(source, sourceGroup, runAtGroup, fileId, linkId, codeId, startId, idleId, name, link, code, match);
+        SourceEditor editor = new SourceEditor(source, sourceGroup, runAtGroup, matchGroup, fileId, linkId, codeId, startId, idleId, siteMatchId, regexMatchId, name, link, code, match, sitePicker, new ArrayList<>(fields.siteKeys));
         editors.add(editor);
         Runnable update = () -> {
             int checked = sourceGroup.getCheckedButtonId();
@@ -480,12 +495,24 @@ public class WebHomeExtensionDialog extends BaseAlertDialog {
             linkLayout.setVisibility(linkSource ? View.VISIBLE : View.GONE);
             codeLayout.setVisibility(checked == codeId ? View.VISIBLE : View.GONE);
         };
+        Runnable updateMatch = () -> {
+            boolean regex = matchGroup.getCheckedButtonId() == regexMatchId;
+            sitePicker.setVisibility(regex ? View.GONE : View.VISIBLE);
+            matchLayout.setVisibility(regex ? View.VISIBLE : View.GONE);
+            updateSitePickerText(editor);
+        };
         sourceGroup.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
             if (!isChecked) return;
             update.run();
         });
+        matchGroup.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
+            if (!isChecked) return;
+            updateMatch.run();
+        });
         fileButton.setOnClickListener(view -> chooseFile(editor));
+        sitePicker.setOnClickListener(view -> showSitePicker(editor));
         update.run();
+        updateMatch.run();
     }
 
     private LinearLayoutCompat.LayoutParams topMargin(int value) {
@@ -537,7 +564,7 @@ public class WebHomeExtensionDialog extends BaseAlertDialog {
         object.addProperty("id", source.getId());
         object.addProperty("name", inputText(editor.name, source.getName()));
         object.addProperty("raw", formRaw(editor));
-        object.addProperty("siteKey", currentSiteKey(source));
+        object.addProperty("siteKey", source.getSiteKey());
         object.addProperty("enabled", source.isEnabled());
         object.addProperty("updatedAt", source.getUpdatedAt());
         return object;
@@ -559,7 +586,7 @@ public class WebHomeExtensionDialog extends BaseAlertDialog {
         String sourceType = sourceType(editor.sourceGroup, editor.fileId, editor.linkId);
         String name = inputText(editor.name);
         String runAt = runAt(editor.runAtGroup, editor.startId, editor.idleId);
-        String match = inputText(editor.match);
+        String match = matchValue(editor);
         try {
             if (WebHomeExtensionSourceStore.SOURCE_TYPE_LINK.equals(sourceType)) return WebHomeExtensionSourceStore.rawLink(source.getId(), name, runAt, inputText(editor.link), match);
             return WebHomeExtensionSourceStore.rawCode(source.getId(), name, runAt, match, inputText(editor.code), sourceType);
@@ -575,8 +602,9 @@ public class WebHomeExtensionDialog extends BaseAlertDialog {
     private void saveFormEditor(SourceEditor editor) {
         WebHomeExtensionSourceStore.Entry source = editor.source;
         String sourceType = sourceType(editor.sourceGroup, editor.fileId, editor.linkId);
-        if (WebHomeExtensionSourceStore.SOURCE_TYPE_LINK.equals(sourceType)) WebHomeExtensionSourceStore.saveLink(source.getId(), inputText(editor.name), runAt(editor.runAtGroup, editor.startId, editor.idleId), inputText(editor.link), inputText(editor.match), source.isEnabled(), currentSiteKey(source));
-        else WebHomeExtensionSourceStore.saveCodeMeta(source.getId(), inputText(editor.name), runAt(editor.runAtGroup, editor.startId, editor.idleId), inputText(editor.match), inputText(editor.code), source.isEnabled(), currentSiteKey(source), sourceType);
+        String match = matchValue(editor);
+        if (WebHomeExtensionSourceStore.SOURCE_TYPE_LINK.equals(sourceType)) WebHomeExtensionSourceStore.saveLink(source.getId(), inputText(editor.name), runAt(editor.runAtGroup, editor.startId, editor.idleId), inputText(editor.link), match, source.isEnabled(), "");
+        else WebHomeExtensionSourceStore.saveCodeMeta(source.getId(), inputText(editor.name), runAt(editor.runAtGroup, editor.startId, editor.idleId), match, inputText(editor.code), source.isEnabled(), "", sourceType);
     }
 
     private void saveFormFields(WebHomeExtensionSourceStore.Entry source, String sourceType, TextInputEditText name, String runAt, TextInputEditText link, TextInputEditText code, TextInputEditText match) {
@@ -637,6 +665,137 @@ public class WebHomeExtensionDialog extends BaseAlertDialog {
         if (checked == startId) return WebHomeExtension.RUN_AT_START;
         if (checked == idleId) return WebHomeExtension.RUN_AT_IDLE;
         return WebHomeExtension.RUN_AT_END;
+    }
+
+    private String matchValue(SourceEditor editor) {
+        if (editor == null) return "";
+        if (editor.matchGroup != null && editor.matchGroup.getCheckedButtonId() == editor.regexMatchId) return inputText(editor.match);
+        List<String> matches = new ArrayList<>();
+        for (String key : editor.siteKeys) {
+            if (TextUtils.isEmpty(key)) continue;
+            String regex = exactSiteRegex(key);
+            if (!matches.contains(regex)) matches.add(regex);
+        }
+        return TextUtils.join("\n", matches);
+    }
+
+    private void showSitePicker(SourceEditor editor) {
+        List<Site> sites = webHomeSites();
+        if (sites.isEmpty()) {
+            Notify.show(R.string.web_home_extension_no_webhome_sites);
+            return;
+        }
+        String[] labels = new String[sites.size()];
+        boolean[] checked = new boolean[sites.size()];
+        for (int i = 0; i < sites.size(); i++) {
+            Site site = sites.get(i);
+            labels[i] = siteLabel(site);
+            checked[i] = editor.siteKeys.contains(site.getKey());
+        }
+        new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog)
+                .setTitle(R.string.web_home_extension_choose_sites)
+                .setMultiChoiceItems(labels, checked, (dialog, which, isChecked) -> checked[which] = isChecked)
+                .setNegativeButton(R.string.dialog_negative, null)
+                .setPositiveButton(R.string.dialog_positive, (dialog, which) -> {
+                    editor.siteKeys.clear();
+                    for (int i = 0; i < sites.size(); i++) if (checked[i]) editor.siteKeys.add(sites.get(i).getKey());
+                    if (editor.siteKeys.isEmpty()) editor.siteKeys.add(VodConfig.get().getHome().getKey());
+                    updateSitePickerText(editor);
+                    syncMatchTextFromSites(editor);
+                })
+                .show();
+    }
+
+    private void syncMatchTextFromSites(SourceEditor editor) {
+        if (editor == null || editor.match == null) return;
+        List<String> matches = new ArrayList<>();
+        for (String key : editor.siteKeys) {
+            if (TextUtils.isEmpty(key)) continue;
+            String regex = exactSiteRegex(key);
+            if (!matches.contains(regex)) matches.add(regex);
+        }
+        editor.match.setText(TextUtils.join("\n", matches));
+    }
+
+    private void updateSitePickerText(SourceEditor editor) {
+        if (editor == null || editor.sitePicker == null) return;
+        List<String> labels = new ArrayList<>();
+        for (String key : editor.siteKeys) {
+            Site site = findWebHomeSite(key);
+            labels.add(site == null ? key : siteLabel(site));
+        }
+        editor.sitePicker.setText(labels.isEmpty() ? getString(R.string.web_home_extension_choose_sites) : TextUtils.join("、", labels));
+    }
+
+    private List<Site> webHomeSites() {
+        List<Site> result = new ArrayList<>();
+        for (Site site : VodConfig.get().getSites()) {
+            if (site == null || TextUtils.isEmpty(site.getKey()) || !site.hasHomePage()) continue;
+            result.add(site);
+        }
+        return result;
+    }
+
+    private Site findWebHomeSite(String key) {
+        for (Site site : webHomeSites()) if (TextUtils.equals(site.getKey(), key)) return site;
+        return null;
+    }
+
+    private String siteLabel(Site site) {
+        if (site == null) return "";
+        String name = site.getName();
+        String key = site.getKey();
+        return TextUtils.isEmpty(name) || TextUtils.equals(name, key) ? key : name + " (" + key + ")";
+    }
+
+    private String siteLabels(List<String> keys) {
+        List<String> labels = new ArrayList<>();
+        for (String key : keys) {
+            Site site = findWebHomeSite(key);
+            labels.add(site == null ? key : siteLabel(site));
+        }
+        return TextUtils.join("、", labels);
+    }
+
+    private String exactSiteRegex(String key) {
+        return TextUtils.isEmpty(key) ? "" : "^" + Pattern.quote(key) + "$";
+    }
+
+    private List<String> cspKeyRegex(JsonObject object) {
+        List<String> result = new ArrayList<>();
+        try {
+            if (!object.has("cspKeyRegex")) return result;
+            JsonElement element = object.get("cspKeyRegex");
+            if (element.isJsonArray()) {
+                for (JsonElement item : element.getAsJsonArray()) {
+                    String value = item.getAsString().trim();
+                    if (!TextUtils.isEmpty(value)) result.add(value);
+                }
+            } else if (element.isJsonPrimitive()) {
+                String value = element.getAsString().trim();
+                if (!TextUtils.isEmpty(value)) result.add(value);
+            }
+        } catch (Throwable ignored) {
+        }
+        return result;
+    }
+
+    private List<String> siteKeysFromRegex(List<String> matches) {
+        List<String> result = new ArrayList<>();
+        for (String regex : matches) {
+            String key = siteKeyFromRegex(regex);
+            if (!TextUtils.isEmpty(key) && !result.contains(key)) result.add(key);
+        }
+        return result;
+    }
+
+    private String siteKeyFromRegex(String regex) {
+        if (TextUtils.isEmpty(regex)) return "";
+        for (Site site : webHomeSites()) {
+            String key = site.getKey();
+            if (TextUtils.equals(regex, key) || TextUtils.equals(regex, exactSiteRegex(key))) return key;
+        }
+        return "";
     }
 
     private LinearLayoutCompat.LayoutParams actionLayout(int marginStart) {
@@ -704,7 +863,7 @@ public class WebHomeExtensionDialog extends BaseAlertDialog {
             pendingFileEdit = null;
             return;
         }
-        WebHomeExtensionSourceStore.saveCodeMeta(source == null ? "" : source.getId(), inputText(editor == null ? null : editor.name, name), runAt(editor == null ? null : editor.runAtGroup, editor == null ? 0 : editor.startId, editor == null ? 0 : editor.idleId), inputText(editor == null ? null : editor.match), fileCode(name, code), source == null || source.isEnabled(), currentSiteKey(source), WebHomeExtensionSourceStore.SOURCE_TYPE_FILE);
+        WebHomeExtensionSourceStore.saveCodeMeta(source == null ? "" : source.getId(), inputText(editor == null ? null : editor.name, name), runAt(editor == null ? null : editor.runAtGroup, editor == null ? 0 : editor.startId, editor == null ? 0 : editor.idleId), matchValue(editor), fileCode(name, code), source == null || source.isEnabled(), "", WebHomeExtensionSourceStore.SOURCE_TYPE_FILE);
         pendingFileEditor = null;
         pendingFileEdit = null;
         onSourceSaved();
@@ -720,7 +879,9 @@ public class WebHomeExtensionDialog extends BaseAlertDialog {
         FormFields fields = new FormFields();
         fields.sourceType = WebHomeExtensionSourceStore.SOURCE_TYPE_CODE;
         fields.runAt = WebHomeExtension.RUN_AT_END;
-        fields.match = VodConfig.get().getHome().getKey();
+        String current = VodConfig.get().getHome().getKey();
+        fields.match = exactSiteRegex(current);
+        fields.siteKeys.add(current);
         if (source == null) return fields;
         fields.name = source.getName();
         fields.sourceType = WebHomeExtensionSourceStore.sourceType(source);
@@ -737,7 +898,14 @@ public class WebHomeExtensionDialog extends BaseAlertDialog {
             fields.name = firstNonEmpty(safeString(object, "name"), source.getName());
             String value = safeString(object, "runAt");
             if (!TextUtils.isEmpty(value)) fields.runAt = value;
-            if (object.has("cspKeyRegex") && object.get("cspKeyRegex").isJsonArray() && object.getAsJsonArray("cspKeyRegex").size() > 0) fields.match = object.getAsJsonArray("cspKeyRegex").get(0).getAsString();
+            List<String> matches = cspKeyRegex(object);
+            if (!matches.isEmpty()) {
+                fields.match = TextUtils.join("\n", matches);
+                List<String> siteKeys = siteKeysFromRegex(matches);
+                fields.regexMode = siteKeys.size() != matches.size();
+                fields.siteKeys.clear();
+                fields.siteKeys.addAll(siteKeys);
+            }
         } catch (Throwable e) {
             fields.sourceType = WebHomeExtensionSourceStore.SOURCE_TYPE_LINK;
             fields.link = source.getRaw();
@@ -984,35 +1152,47 @@ public class WebHomeExtensionDialog extends BaseAlertDialog {
         private String link = "";
         private String code = "";
         private String match = "";
+        private boolean regexMode;
+        private final List<String> siteKeys = new ArrayList<>();
     }
 
     private static class SourceEditor {
         private final WebHomeExtensionSourceStore.Entry source;
         private final MaterialButtonToggleGroup sourceGroup;
         private final MaterialButtonToggleGroup runAtGroup;
+        private final MaterialButtonToggleGroup matchGroup;
         private final int fileId;
         private final int linkId;
         private final int codeId;
         private final int startId;
         private final int idleId;
+        private final int siteMatchId;
+        private final int regexMatchId;
         private final TextInputEditText name;
         private final TextInputEditText link;
         private final TextInputEditText code;
         private final TextInputEditText match;
+        private final MaterialButton sitePicker;
+        private final List<String> siteKeys;
 
-        private SourceEditor(WebHomeExtensionSourceStore.Entry source, MaterialButtonToggleGroup sourceGroup, MaterialButtonToggleGroup runAtGroup, int fileId, int linkId, int codeId, int startId, int idleId, TextInputEditText name, TextInputEditText link, TextInputEditText code, TextInputEditText match) {
+        private SourceEditor(WebHomeExtensionSourceStore.Entry source, MaterialButtonToggleGroup sourceGroup, MaterialButtonToggleGroup runAtGroup, MaterialButtonToggleGroup matchGroup, int fileId, int linkId, int codeId, int startId, int idleId, int siteMatchId, int regexMatchId, TextInputEditText name, TextInputEditText link, TextInputEditText code, TextInputEditText match, MaterialButton sitePicker, List<String> siteKeys) {
             this.source = source;
             this.sourceGroup = sourceGroup;
             this.runAtGroup = runAtGroup;
+            this.matchGroup = matchGroup;
             this.fileId = fileId;
             this.linkId = linkId;
             this.codeId = codeId;
             this.startId = startId;
             this.idleId = idleId;
+            this.siteMatchId = siteMatchId;
+            this.regexMatchId = regexMatchId;
             this.name = name;
             this.link = link;
             this.code = code;
             this.match = match;
+            this.sitePicker = sitePicker;
+            this.siteKeys = siteKeys == null ? new ArrayList<>() : siteKeys;
         }
     }
 }

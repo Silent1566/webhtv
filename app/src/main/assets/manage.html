@@ -292,6 +292,7 @@
                                 <div class="manage-card-title">代理规则</div>
                                 <div class="card-actions">
                                     <button class="md-btn md-btn-tonal md-btn-compact" onclick="showProxySuggestDialog()" type="button">自动建议</button>
+                                    <button class="md-btn md-btn-tonal md-btn-compact" onclick="showProxyRecognizeDialog()" type="button">自动识别</button>
                                     <button class="md-btn md-btn-tonal md-btn-compact" onclick="addProxyRule()" type="button">新增规则</button>
                                 </div>
                             </div>
@@ -466,6 +467,19 @@
             </div>
             <div class="md-dialog-actions">
                 <button onclick="closeDialog('proxySuggestDialog')" class="md-dialog-btn">关闭</button>
+            </div>
+        </div>
+    </div>
+    <div id="proxyRecognizeDialog" class="md-dialog-overlay">
+        <div class="md-dialog proxy-suggest-dialog proxy-recognize-dialog">
+            <div class="md-dialog-title">自动识别 Proxy</div>
+            <div class="md-dialog-body">
+                <div class="dialog-hint">粘贴完整配置、proxy 片段、规则数组或单个规则对象，识别后追加到当前规则。</div>
+                <textarea id="proxyRecognizeInput" class="code-area" spellcheck="false" placeholder="例如：&quot;proxy&quot;: [{&quot;hosts&quot;:[&quot;github.com&quot;],&quot;urls&quot;:[&quot;socks5://127.0.0.1:20172&quot;]}],"></textarea>
+            </div>
+            <div class="md-dialog-actions">
+                <button onclick="closeDialog('proxyRecognizeDialog')" class="md-dialog-btn">取消</button>
+                <button onclick="applyProxyRecognize()" class="md-dialog-btn">识别并添加</button>
             </div>
         </div>
     </div>

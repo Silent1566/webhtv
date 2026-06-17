@@ -1,0 +1,14 @@
+{
+  "name": "webhtv-remote-simple",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "check": "node --check src/index.js && node --check src/relay.js && node --check ../webhtv-remote-deno/main.js && node --check ../webhtv-remote-deno/relay.js && node --check ../webhtv-remote-vercel/api/index.js && node --check ../webhtv-remote-vercel/api/relay.js"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

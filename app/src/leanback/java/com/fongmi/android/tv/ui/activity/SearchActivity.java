@@ -70,14 +70,24 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
     }
 
     public static void start(Activity activity, String keyword, String siteKey) {
+        start(activity, keyword, siteKey, null, null);
+    }
+
+    public static void start(Activity activity, String keyword, String siteKey, String pic, String wallPic) {
         Intent intent = new Intent(activity, SearchActivity.class);
         intent.putExtra("keyword", keyword);
         intent.putExtra("siteKey", siteKey);
+        intent.putExtra("pic", pic);
+        intent.putExtra("wallPic", wallPic);
         activity.startActivity(intent);
     }
 
     public static void direct(Activity activity, String keyword) {
-        CollectActivity.start(activity, keyword, null);
+        direct(activity, keyword, null, null, null);
+    }
+
+    public static void direct(Activity activity, String keyword, String siteKey, String pic, String wallPic) {
+        CollectActivity.start(activity, keyword, siteKey, null, pic, wallPic);
     }
 
     private String getKeyword() {
@@ -92,6 +102,14 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
 
     private Site getHome() {
         return VodConfig.get().getHome();
+    }
+
+    private String getPic() {
+        return getIntent().getStringExtra("pic");
+    }
+
+    private String getWallPic() {
+        return getIntent().getStringExtra("wallPic");
     }
 
     private boolean empty() {
@@ -234,7 +252,7 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
         String keyword = mBinding.keyword.getText().toString().trim();
         App.post(() -> mRecordAdapter.add(keyword), 250);
         Util.hideKeyboard(mBinding.keyword);
-        CollectActivity.start(this, keyword, getSearchSiteKey(), mScopeGroup);
+        CollectActivity.start(this, keyword, getSearchSiteKey(), mScopeGroup, getPic(), getWallPic());
     }
 
     private String getSearchSiteKey() {

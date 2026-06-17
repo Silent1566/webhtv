@@ -1,0 +1,4273 @@
+# 应用完整开发文档
+
+本文是当前项目的唯一完整说明文档，面向 App 使用者、配置维护者、WebHome 首页开发者、爬虫开发者和后续改造 AI。本文按当前代码行为整理，包含项目结构、配置、Spider、WebHome、本地 HTTP 服务、网盘检测、特殊协议、隐藏功能、打包和安全注意事项。
+
+## 1. 项目定位
+
+这是一个基于 CatVod 生态的 Android 影音应用，包名为 `com.fongmi.android.tv`，同时支持手机端和电视端。
+
+核心能力：
+
+- 点播：多站点分类、详情、搜索、换源、站点健康排序、收藏、最近观看。
+- 直播：M3U、TXT、JSON、EPG、时移、收藏、分组。
+- 播放：ExoPlayer/Media3、FFmpeg、DRM、字幕、弹幕、倍速、缩放、画中画。
+- 扩展：Java/JAR Spider、JavaScript Spider、Python Spider、HTTP API 站点。
+- WebHome：CSP 自定义网页首页，可调用 App Native SDK。
+- Pan：`pan.check` 提供网盘有效性检测，`pan.play` 提供网盘播放语义入口并复用 `push_agent/pvideo` 链路。
+- 增强功能：集中放置网盘检测、站点健康排序、观影记录同步、管理页面、站点注入、WebHome 扩展、登录态学习、壳代理、一键同步、调试日志等能力。
+- 本地服务：局域网 HTTP 服务、管理页面、文件管理、登录态路径管理、远程推送、远程控制、多设备同步。
+- 投屏：手机端可投屏，电视端可作为 DLNA Renderer 接收投屏。
+
+## 2. 目录结构
+
+```text
+TV/
+├── app/            Android 主应用
+├── catvod/         CatVod 抽象层、Spider 接口、OkHttp、代理工具
+├── quickjs/        JavaScript Spider 运行时
+├── chaquo/         Python Spider 运行时
+├── other/          其它构建或依赖模块
+└── webhome-devkit/
+    ├── docs/应用完整开发文档.md
+    ├── examples/
+    ├── templates/
+    └── skills/
+```
+
+主要源码分层：
+
+```text
+app/src/main/       手机端和电视端共用业务逻辑
+app/src/mobile/     手机端 UI
+app/src/leanback/   电视端 UI
+app/src/main/assets 内置局域网页面和解析页
+```
+
+## 3. Flavor、包和打包
+
+当前主要 flavor：
+
+| Flavor | 场景 |
+| --- | --- |
+| `mobile` | 手机/平板端 |
+| `leanback` | Android TV/电视盒子端 |
+
+常用手机端 arm64 release 打包：
+
+```bash
+bash gradlew assembleMobileArm64_v8aRelease
+```
+
+当前项目常见 APK 输出路径：
+
+```text
+app/build/outputs/apk/mobileArm64_v8a/release/mobile-arm64_v8a.apk
+Release/apk/mobile-arm64_v8a.apk
+```
+
+实际以 Gradle 本次构建输出为准。
+
+版本更新行为：
+
+- App 启动时不会自动弹出版本更新弹窗。
+- 用户仍可在设置页手动点击版本检查。
+
+## 4. 配置总览
+
+配置是 App 的主要开放入口。Vod 配置通常是 JSON。当前代码识别的顶层字段如下：
+
+```json
+{
+  "spider": "./spider.jar",
+  "sites": [],
+  "parses": [],
+  "lives": [],
+  "doh": [],
+  "proxy": [],
+  "hosts": [],
+  "headers": [],
+  "rules": [],
+  "ads": [],
+  "flags": [],
+  "wallpaper": "",
+  "logo": "",
+  "notice": "",
+  "home": "",
+  "parse": "",
+  "urls": [],
+  "msg": ""
+}
+```
+
+顶层字段：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `spider` | string | 全局 JAR Spider 地址。站点或直播源未单独指定 `jar` 时使用 |
+| `sites` | array | 点播站点列表，元素结构见“点播站点配置” |
+| `parses` | array | 点播解析器列表，元素结构见“解析器配置” |
+| `lives` | array | 直播配置列表。点播配置内带 `lives` 时，会同步生成直播配置 |
+| `doh` | array | DNS over HTTPS 配置，元素结构见下方 `doh` 表；配置值会追加到内置 DoH 列表后生效 |
+| `proxy` | array | HTTP/HTTPS/SOCKS 代理规则，元素结构见下方 `proxy` 表 |
+| `hosts` | array | host 覆盖规则，字符串数组，格式为 `匹配规则=目标host或IP` |
+| `headers` | array | 按 host 注入请求 header，元素结构见下方 `headers` 表 |
+| `rules` | array | 嗅探规则，元素结构见下方 `rules` 表；点播和直播规则会合并进入 `RuleConfig` |
+| `ads` | array | 广告域名或正则字符串数组；命中后解析 WebView 会拦截该 host |
+| `flags` | array | 播放 flag 字符串数组，用于识别需要解析或特殊处理的播放来源 |
+| `wallpaper` | string | 壁纸配置 URL 或路径；存在时会同步生成壁纸配置 |
+| `logo` | string | 配置图标，保存到当前 Config |
+| `notice` | string | 配置公告文本，保存到当前 Config |
+| `home` | string | 默认站点 key；App 会优先选择 `sites[].key` 等于该值的站点 |
+| `parse` | string | 默认解析器名称；App 会优先选择 `parses[].name` 等于该值的解析器 |
+| `urls` | array | 配置仓库/多配置入口，元素结构为 `{ "name": "显示名", "url": "配置URL" }`；存在该字段时 App 按 depot 处理，不再按普通点播配置解析 |
+| `msg` | string | 错误消息。存在该字段时加载配置会直接抛出该消息 |
+
+`doh` 元素字段：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `name` | string | DoH 显示名 |
+| `url` | string | DoH endpoint URL，例如 `https://dns.google/dns-query` |
+| `ips` | array | bootstrap DNS IP 字符串数组；为空时使用系统 DNS 解析 DoH host |
+
+`proxy` 元素字段：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `name` | string | 代理规则名称 |
+| `hosts` | array | host 匹配字符串数组；匹配方式是 `text.contains(rule)` 或 `text.matches(rule)` |
+| `urls` | array | 代理地址数组。支持 `http://host:port`、`https://host:port`、`socks://host:port`、`socks5://host:port`；带账号密码时使用 `scheme://user:pass@host:port` |
+
+`proxy.hosts` 示例：
+
+```json
+{
+  "proxy": [
+    {
+      "name": "app",
+      "hosts": ["example.com", ".*\\.example\\.com", "*"],
+      "urls": ["socks5://127.0.0.1:7897"]
+    }
+  ]
+}
+```
+
+`proxy.hosts` 只写目标 host 匹配规则，不写 `=` 映射。`*` 表示匹配所有非本机目标 host。
+
+顶层 `hosts` 字符串规则：
+
+```json
+{
+  "hosts": [
+    "example.com=1.2.3.4",
+    ".*\\.example\\.com=cdn.example.com"
+  ]
+}
+```
+
+顶层 `hosts` 的左侧是精确 host、包含匹配片段或 Java 正则，右侧是要交给 DNS 继续解析的目标 host/IP。不要把 `example.com=1.2.3.4` 这种 DNS 写法放到 `proxy.hosts` 里。
+
+`headers` 元素字段：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `host` | string | host 匹配规则；匹配方式是 `text.contains(host)` 或 `text.matches(host)` |
+| `header` | object | 命中后注入的 header key/value；会覆盖同名请求 header |
+
+`rules` 元素字段：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `name` | string | 规则名；相同名称视为同一规则 |
+| `hosts` | array | 适用 host 匹配规则；匹配当前 URL host 和 `url` 查询参数里的 host |
+| `regex` | array | 视频 URL 识别规则；URL 包含规则字符串或匹配 Java 正则时视为可播放地址 |
+| `exclude` | array | 排除规则；URL 包含规则字符串或匹配 Java 正则时不会被当作视频地址 |
+| `script` | array | 解析 WebView 页面加载后顺序执行的 JS 脚本 |
+
+配置中的相对路径以配置文件 URL 为基准解析。`spider`、站点 `api/ext/homePage`、直播 `api/ext`、解析器 `url` 等路径会经过 `UrlUtil.convert()` 或相对 URL 解析。
+
+## 5. 点播站点配置
+
+站点字段示例：
+
+```json
+{
+  "key": "site_key",
+  "name": "站点名",
+  "type": 3,
+  "api": "csp_MySpider",
+  "jar": "./spider.jar",
+  "ext": "./ext.json",
+  "click": "document.querySelector('video').click()",
+  "playUrl": "",
+  "homePage": "./nostr.html",
+  "chromeMode": "edge",
+  "webHomeChrome": {
+    "mode": "edge",
+    "statusBarStyle": "light",
+    "navigationBarStyle": "light"
+  },
+  "hide": 0,
+  "indexs": 0,
+  "timeout": 30,
+  "searchable": 1,
+  "changeable": 1,
+  "quickSearch": 1,
+  "categories": ["电影", "剧集"],
+  "header": {
+    "User-Agent": "Mozilla/5.0"
+  },
+  "style": {
+    "type": "rect",
+    "ratio": 1.33
+  }
+}
+```
+
+字段说明：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `key` | string | 站点唯一标识。原生详情、播放、收藏、历史都会使用该值定位站点 |
+| `name` | string | 展示名 |
+| `type` | number | 站点类型，完整取值见下方站点 `type` 表；为空时按 `0` 处理 |
+| `api` | string | API 地址或 Spider 类名。`type=3` 时为 `csp_Xxx`、JS 文件 URL 或 Python 文件 URL；`type=0/1/2/4` 时为 HTTP 地址 |
+| `jar` | string | 当前站点独立 JAR，覆盖全局 `spider` |
+| `ext` | string/object | 传给 Spider `init` 的扩展参数；配置解析阶段会把 URL 或相对路径转成绝对地址，Spider 初始化前如果是远程 URL 会拉取文本 |
+| `click` | string | WebView 解析点击脚本，解析页面加载后会优先执行 |
+| `playUrl` | string | 站点级播放前缀或解析辅助。播放结果中 `playUrl` 也可用 `json:`、`parse:` 前缀指定解析器行为 |
+| `homePage` | string | 自定义 WebHome 首页 |
+| `home_page` | string | `homePage` 别名 |
+| `webHome` | string | `homePage` 别名 |
+| `web_home` | string | `homePage` 别名 |
+| `chromeMode` | string | WebHome 默认 chrome 模式。手机端支持 `normal` / `edge` / `immersive`；TV 端支持 `tv-normal` / `tv-toolbar-hidden` / `tv-overlay` / `tv-full`，跨端配置里的 `edge` 在 TV 端映射为 `tv-full` |
+| `webHomeChrome` | object/string | WebHome 默认 chrome 配置。对象可包含 `mode`、`statusBarStyle`、`navigationBarStyle`、`restoreAffordance`、`scrim`；字符串按 `mode` 处理 |
+| `hide` | number | `0` 显示，`1` 隐藏。为空时按 `0` 处理 |
+| `indexs` | number | `0` 普通站点，`1` 索引站点。索引站点条目点击进入聚合搜索 |
+| `timeout` | number | 播放超时，单位秒；为空时使用默认 15 秒，最小按 1 秒处理 |
+| `searchable` | number | `0` 永久禁用搜索，`1` 当前启用搜索，`2` 当前禁用搜索但允许 App 根据用户操作改回 `1`；为空时按 `1` 处理 |
+| `changeable` | number | `0` 永久禁用换源，`1` 当前允许换源，`2` 当前禁用换源但允许 App 根据用户操作改回 `1`；为空时按 `1` 处理 |
+| `quickSearch` | number | `0` 禁用快速搜索，`1` 启用快速搜索。为空时按 `1` 处理 |
+| `categories` | array | 字符串数组，限制分类列表；为空数组表示不限制 |
+| `header` | object | 当前站点请求 header，key/value 对象 |
+| `style` | object | 卡片样式，结构见“样式配置” |
+
+站点 `type` 取值：
+
+| type | 名称 | 行为 |
+| --- | --- | --- |
+| `0` | XML API | 首页按 XML 解析；分类/详情请求带 `ac=videolist`；播放结果走站点 `playUrl` 或默认解析逻辑 |
+| `1` | JSON API | 首页按 JSON 解析；分类/详情请求带 `ac=detail`；分类筛选参数会以 `f={json}` 传给接口 |
+| `2` | JSON API 兼容类型 | 返回按 JSON 解析；分类/详情请求带 `ac=detail`；分类筛选不会自动追加 `f` 参数 |
+| `3` | Spider | 调用 Java/JAR、JS 或 Python Spider 标准方法 |
+| `4` | HTTP API + Base64 ext | 首页请求带 `filter=true`；分类请求带 `ext={base64(extend)}`；播放请求带 `play` 和 `flag` |
+
+`homePage` 配置后，切换到该站点主页时会加载 WebHome，而不是原生推荐页。新版手机端 WebHome 默认按 `edge` 预应用，背景可画到系统栏背后但系统栏仍显示；TV 端默认按 `tv-full` 使用全屏 WebView overlay，显式 `chromeMode: "normal"` / `tv-normal` 才保留顶部 toolbar。旧页面如果尚未适配安全区，可显式设 `chromeMode: "normal"` 先保持原生顶部/底部 UI。App 会记录上一次成功加载的 WebHome 首页 chrome 配置，下一次冷启动若当前配置 URL 和首页站点 key 仍匹配，会在 Activity 首帧前预应用该 chrome，减少先显示原生顶部/底部再切换到融合模式的闪烁；配置加载后仍以真实站点配置校正，非 WebHome 或加载失败会恢复 `normal`。
+
+## 6. 解析器配置
+
+解析器字段示例：
+
+```json
+{
+  "name": "解析名",
+  "type": 1,
+  "url": "https://example.com/parse?url=",
+  "ext": {
+    "flag": ["qq", "iqiyi"],
+    "header": {
+      "User-Agent": "Mozilla/5.0"
+    }
+  },
+  "header": {},
+  "click": ""
+}
+```
+
+字段说明：
+
+| 字段 | 说明 |
+| --- | --- |
+| `name` | 解析器名称，也是 UI 中展示和 `parse:` 前缀匹配的名称 |
+| `type` | 解析器类型。完整取值见下表；为空时按 `0` 处理 |
+| `url` | 解析地址。`type=0/1` 时通常是 HTTP 地址；`type=2/3` 时是 JAR parser key；`type=4` 由 App 内置生成 |
+| `ext.flag` | 字符串数组，适用播放 flag。为空数组表示不过滤 flag |
+| `ext.header` | 解析请求 header，key/value 对象 |
+| `header` | 简写 header，会合并到 `ext.header` |
+| `click` | WebView 点击脚本 |
+
+解析器 `type` 取值：
+
+| type | 名称 | 行为 |
+| --- | --- | --- |
+| `0` | Web 解析 | 打开解析 WebView 嗅探真实播放地址 |
+| `1` | JSON 解析 | 请求 `url + webUrl`，读取返回 JSON 里的 `url` 或 `data.url` |
+| `2` | JAR Json 扩展解析 | 调用当前 JAR 中 `com.github.catvod.parser.Json{url}` 的 `parse(jxs, webUrl)` |
+| `3` | JAR Mix 扩展解析 | 调用当前 JAR 中 `com.github.catvod.parser.Mix{url}` 的 `parse(jxs, flag, parseName, webUrl)` |
+| `4` | 聚合解析 | App 内置“聚合”解析：并发尝试符合 flag 的 JSON 解析器和 Web 解析器 |
+
+当解析 URL 已带 `?` 且 `ext` 非空时，App 会追加 `cat_ext={base64(ext)}`。
+
+播放结果里的 `playUrl` 前缀：
+
+| 前缀 | 行为 |
+| --- | --- |
+| `json:{url}` | 临时使用 `type=1` JSON 解析器，解析地址为 `{url}` |
+| `parse:{name}` | 使用配置里名称等于 `{name}` 的解析器 |
+| 无前缀且非空 | 作为 `type=0` Web 解析地址 |
+
+## 7. 直播配置
+
+直播源支持传统文本、M3U 和 JSON。点播配置里的 `lives` 会同步生成直播配置，直播配置自身也可以独立加载。
+
+JSON 直播源示例：
+
+```json
+{
+  "name": "直播源",
+  "url": "https://example.com/live.m3u",
+  "api": "csp_LiveSpider",
+  "ext": "",
+  "jar": "./spider.jar",
+  "click": "",
+  "logo": "https://example.com/logo/{name}.png",
+  "epg": "https://example.com/epg.xml.gz",
+  "ua": "Mozilla/5.0",
+  "origin": "https://example.com",
+  "referer": "https://example.com/",
+  "timeZone": "Asia/Shanghai",
+  "timeout": 30,
+  "header": {},
+  "catchup": {
+    "type": "append",
+    "days": "7",
+    "regex": "/PLTV/",
+    "source": "?playseek=${(b)yyyyMMddHHmmss}-${(e)yyyyMMddHHmmss}",
+    "replace": "/PLTV/,/TVOD/"
+  },
+  "groups": [
+    {
+      "name": "央视",
+      "pass": "",
+      "channel": [
+        {
+          "name": "CCTV-1",
+          "urls": ["https://example.com/live/cctv1.m3u8"],
+          "logo": "https://example.com/logo/cctv1.png"
+        }
+      ]
+    }
+  ]
+}
+```
+
+直播源类型：
+
+| 类型 | 识别方式 | 说明 |
+| --- | --- | --- |
+| M3U | 文本包含 `#EXTM3U` 且不是 `#genre#` 文本源 | 解析 `#EXTINF`、`group-title`、`tvg-*`、`catchup-*`、`#EXTVLCOPT`、`#KODIPROP` 等字段 |
+| TXT | 文本使用 `频道名,播放地址`，分组行包含 `#genre#` | 同一频道多地址可用 `#` 分隔；单条地址可用 `url|header参数` 携带 header |
+| JSON | 文本是 JSON array | 按 `groups[].channel[]` 结构解析 |
+| Spider 直播 | `api` 非空 | 调用当前直播 Spider 的 `liveContent(url)` 返回直播文本或 JSON |
+
+直播根字段：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `name` | string | 直播源唯一名称 |
+| `type` | number | 直播源类型兼容字段；站点注入的常规直播列表 URL 使用 `0` |
+| `url` | string | 直播源 URL；`api` 为空时 App 直接请求该地址 |
+| `playerType` | number | 播放器类型兼容枚举；站点注入缺省写入 `2` |
+| `api` | string | 直播 Spider 类名或脚本地址；非空时调用 `liveContent(url)` |
+| `ext` | string/object | 传给直播 Spider 的扩展参数 |
+| `jar` | string | 当前直播源独立 JAR，覆盖全局 `spider` |
+| `click` | string | 直播解析 WebView 点击脚本 |
+| `logo` | string | 频道 logo 模板或默认 logo。支持 `{id}`、`{name}`、`{logo}` 替换 |
+| `epg` | string | EPG 地址，支持多个地址用英文逗号分隔；XMLTV 支持 `.xml` 和 `.gz` |
+| `ua` | string | 直播请求 User-Agent，会合并进频道请求 header |
+| `origin` | string | 直播请求 Origin，会合并进频道请求 header |
+| `referer` | string | 直播请求 Referer，会合并进频道请求 header |
+| `timeZone` | string | EPG 时区字符串，缺省使用系统时区 |
+| `keep` | string | App 保存的最近直播频道，配置作者通常不需要手写 |
+| `timeout` | number | 播放超时，单位秒；为空时使用默认 15 秒，最小按 1 秒处理 |
+| `header` | object | 直播源级 header，会和 `ua/origin/referer` 合并 |
+| `catchup` | object | 回看规则，字段见下方 `catchup` 表 |
+| `core` | object | TVBus/特殊内核配置，字段见下方 `core` 表 |
+| `groups` | array | JSON 直播分组，元素结构见下方 `group` 表 |
+| `boot` | boolean | App 内保存的直播启动状态，配置作者通常不需要手写 |
+| `pass` | boolean | 分组密码处理开关；为 `true` 时分组名里的 `_密码` 不会被拆成密码 |
+
+直播枚举字段：
+
+| 字段 | 值 | 含义 |
+| --- | --- | --- |
+| `type` | `0` | 常规直播列表 URL。站点注入只推荐使用这个值；其它兼容值可通过完整 Live JSON 保留，但当前注入表单不把它们作为常用配置入口 |
+| `playerType` | `0` | 系统播放器兼容值 |
+| `playerType` | `1` | IJK 播放器兼容值 |
+| `playerType` | `2` | EXO/ExoPlayer 播放器兼容值；站点注入默认使用这个值 |
+
+`group` 字段：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `name` | string | 分组名称。TXT/M3U 分组名含 `_密码` 时，默认会拆出 `pass` |
+| `pass` | string | 分组密码；非空时该分组视为隐藏分组 |
+| `channel` | array | 频道列表，元素结构见下方 `channel` 表 |
+
+`channel` 字段：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `name` | string | 频道名称 |
+| `urls` | array | 播放地址数组；每项可以是 `url` 或 `url$线路名` |
+| `number` | string | 频道号；为空时 App 按顺序生成三位编号 |
+| `logo` | string | 频道 logo |
+| `epg` | string | 频道 EPG 名或地址；直播源 `epg` 模板可用 `{epg}` 替换该值 |
+| `ua` | string | 频道级 User-Agent |
+| `click` | string | 频道级 WebView 点击脚本 |
+| `format` | string | 媒体格式/MIME；M3U 的 `mpd`、`dash` 会转为 `application/dash+xml`，`hls` 会转为 `application/x-mpegURL` |
+| `origin` | string | 频道级 Origin |
+| `referer` | string | 频道级 Referer |
+| `tvgId` | string | EPG tvg-id；为空时使用 `tvgName` |
+| `tvgName` | string | EPG tvg-name；为空时使用频道 `name` |
+| `catchup` | object | 频道级回看规则，优先级高于直播源级 `catchup` |
+| `header` | object | 频道级 header，会和 `ua/origin/referer` 合并 |
+| `parse` | number | `0` 不强制 Web 解析，`1` 强制进入解析 WebView |
+| `drm` | object | DRM 配置，字段见下方 `drm` 表 |
+
+`catchup` 字段：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `type` | string | 只有 `default` 有特殊行为：直接使用 `source` 作为回看 URL；其它字符串按追加模式处理 |
+| `days` | string | 回看天数，当前代码保存该字段，回看 URL 生成逻辑不读取该值 |
+| `regex` | string | 频道 URL 匹配规则；为空时只要 `source` 非空就认为支持回看 |
+| `source` | string | 回看 URL 模板，支持 `${(b)格式}`、`${(e)格式}`、`${utc:}`、`${utcend:}` |
+| `replace` | string | 追加模式下的 URL 替换规则，格式 `正则,替换值` |
+
+`core` 字段用于 TVBus 等特殊内核：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `auth` | string | TVBus auth 地址；如果 `resp` 非空，App 会改用本地 `/tvbus` 返回 `resp` |
+| `name` | string | TVBus name，支持 URL 文本拉取 |
+| `pass` | string | TVBus pass，支持 URL 文本拉取 |
+| `broker` | string | TVBus broker 地址 |
+| `domain` | string | TVBus domain，支持 URL 文本拉取 |
+| `resp` | string | 本地 `/tvbus` 返回内容，支持 URL 文本拉取 |
+| `sign` | string | Hook 签名，和 `pkg` 同时存在时启用 Hook |
+| `pkg` | string | Hook 包名 |
+| `so` | string | TVBus so 地址或路径 |
+| `key` | string | 当前代码保留字段，运行时未读取 |
+| `option` | array | TVBus option 数组，元素为 `{ "key": "选项名", "values": ["值"] }` |
+
+`drm` 字段：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `key` | string | License URL 或 ClearKey JSON |
+| `type` | string | 包含 `widevine`、`playready`、`clearkey` 时分别映射对应 DRM UUID；其它值映射空 UUID |
+| `forceKey` | boolean | 是否强制使用默认 license URL |
+| `header` | object | DRM license 请求 header |
+
+直播 `header` 会与 `ua`、`origin`、`referer` 合并后用于请求。频道级字段优先于直播源级字段。
+
+## 8. 样式配置
+
+`style` 可用于站点、分类结果、单个 Vod 条目。
+
+字段：
+
+```json
+{
+  "type": "rect",
+  "ratio": 1.33,
+  "land": 1,
+  "circle": 0
+}
+```
+
+说明：
+
+| 字段 | 类型 | 取值和默认值 | 说明 |
+| --- | --- | --- | --- |
+| `type` | string | `rect`、`oval`、`list`；为空时按 `rect` | 展示类型。其它字符串不会命中特殊分支，最终按 `rect` 视图处理 |
+| `ratio` | number | `rect` 默认 `0.75`，`oval` 默认 `1.0`，最大 `4` | 图片宽高比例 |
+| `land` | number | `0` 或 `1` | 单条目快捷字段。`land=1` 会生成 `type=rect`，`ratio` 为空时使用 `1.33` |
+| `circle` | number | `0` 或 `1` | 单条目快捷字段。`circle=1` 会生成 `type=oval`，`ratio` 为空时使用 `1.0` |
+
+`land/circle/ratio` 是 Vod 条目上的快捷字段；如果同时提供 `style`，以 `style` 对象为准。
+
+## 9. Spider 开发
+
+App 支持三类 Spider：
+
+- Java/JAR Spider。
+- JavaScript Spider，运行于 QuickJS。
+- Python Spider，运行于 Chaquopy。
+
+Java/JAR Spider 标准方法：
+
+```java
+void init(Context context, String extend)
+String homeContent(boolean filter)
+String homeVideoContent()
+String categoryContent(String tid, String pg, boolean filter, HashMap<String, String> extend)
+String detailContent(List<String> ids)
+String searchContent(String key, boolean quick)
+String searchContent(String key, boolean quick, String pg)
+String playerContent(String flag, String id, List<String> vipFlags)
+String liveContent(String url)
+Object[] proxy(Map<String, String> params)
+String action(String action)
+void destroy()
+```
+
+### 9.1 返回结构
+
+分类、搜索、详情返回 JSON；XML API 站点返回 RSS XML，App 会转成同等字段。
+
+```json
+{
+  "class": [
+    {
+      "type_id": "1",
+      "type_name": "电影",
+      "type_flag": "",
+      "land": 0,
+      "circle": 0,
+      "ratio": 0
+    }
+  ],
+  "filters": {
+    "1": [
+      {
+        "key": "area",
+        "name": "地区",
+        "init": "全部",
+        "value": [
+          { "n": "大陆", "v": "大陆" }
+        ]
+      }
+    ]
+  },
+  "list": [
+    {
+      "vod_id": "123",
+      "vod_name": "影片名",
+      "vod_pic": "https://example.com/poster.jpg",
+      "vod_remarks": "更新至 12 集"
+    }
+  ],
+  "page": 1,
+  "pagecount": 10,
+  "total": 200
+}
+```
+
+顶层返回字段：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `class` | array | 分类列表，元素结构见下方 `class` 表 |
+| `filters` | object | 分类筛选表；key 为 `type_id`，value 为筛选数组 |
+| `list` | array | Vod 条目列表，元素结构见下方 `vod` 表 |
+| `page` | number/string | 当前页码，App 透传给 UI 或调用方 |
+| `pagecount` | number/string | 总页数；`Result` 内部字段名是 `pagecount` |
+| `total` | number/string | 总条数，App 透传给 UI 或调用方 |
+| `url` | string/array/object | 播放结果 URL 字段，结构见下方播放结果表 |
+| `header` | object | 播放或请求 header |
+| `msg` | string | 当 `code` 为 `0` 或为空时会作为 Toast 提示 |
+| `code` | number | 结果状态码；为空时按 `0` 处理 |
+
+`class` 元素字段：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `type_id` | string | 分类 ID；也可写别名 `id` |
+| `type_name` | string | 分类名称；也可写别名 `name` |
+| `type_flag` | string | 为 `1` 时分类按文件夹/子分类入口处理 |
+| `filters` | array | 当前分类内联筛选数组；结构同 `filters[type_id]` |
+| `land` | number | 分类卡片横图快捷样式，`1` 表示横图 |
+| `circle` | number | 分类卡片圆形快捷样式，`1` 表示圆形 |
+| `ratio` | number | 分类卡片图片宽高比 |
+
+筛选字段：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `key` | string | 筛选参数名，会放入 `extend` 传给分类方法 |
+| `name` | string | 筛选显示名 |
+| `init` | string | 初始选中值 |
+| `value` | array | 筛选值数组，元素为 `{ "n": "显示名", "v": "提交值" }` |
+
+`vod` 元素字段：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `vod_id` | string | 详情 ID；XML 中对应 `<id>` |
+| `vod_name` | string | 影片/剧集名称；XML 中对应 `<name>` |
+| `type_name` | string | 类型名称；XML 中对应 `<type>` |
+| `vod_pic` | string | 海报 URL；XML 中对应 `<pic>` |
+| `vod_remarks` | string | 备注/更新信息；XML 中对应 `<note>` |
+| `vod_year` | string | 年份；XML 中对应 `<year>` |
+| `vod_area` | string | 地区；XML 中对应 `<area>` |
+| `vod_director` | string | 导演；XML 中对应 `<director>` |
+| `vod_actor` | string | 演员；XML 中对应 `<actor>` |
+| `vod_content` | string | 简介；XML 中对应 `<des>` |
+| `vod_play_from` | string | 播放线路名，多个线路用 `$$$` 分隔 |
+| `vod_play_url` | string | 播放列表，线路之间用 `$$$` 分隔；单线路内多集用 `#` 分隔；单集格式 `集名$播放地址` |
+| `vod_tag` | string | 为 `folder` 时条目作为文件夹/子分类入口 |
+| `action` | string | 点击条目时触发 Spider `action()` 或 HTTP API action，不进普通详情 |
+| `cate` | object | 子分类入口配置；存在时条目作为文件夹入口 |
+| `style` | object | 单条目覆盖样式，结构见“样式配置” |
+| `land` | number | 单条目横图快捷样式，`1` 表示横图 |
+| `circle` | number | 单条目圆形快捷样式，`1` 表示圆形 |
+| `ratio` | number | 单条目图片宽高比 |
+| `vodFlags` / XML `dl/dd` | array/XML | XML 播放线路结构；JSON 通常直接使用 `vod_play_from` 和 `vod_play_url` |
+
+详情返回通常是 `{ "list": [vod] }`。搜索返回的 `vod` 会由 App 自动补上站点信息，用于聚合搜索和换源显示。
+
+播放返回示例：
+
+```json
+{
+  "parse": 0,
+  "jx": 0,
+  "url": "https://example.com/video.m3u8",
+  "playUrl": "",
+  "header": {
+    "Referer": "https://example.com/"
+  },
+  "format": "application/x-mpegURL",
+  "subs": [
+    { "url": "https://example.com/sub.srt", "name": "中文", "lang": "zh", "format": "application/x-subrip", "flag": 1 }
+  ],
+  "danmaku": [
+    { "name": "弹幕", "url": "https://example.com/danmaku.xml" }
+  ],
+  "drm": null,
+  "position": 0,
+  "artwork": "https://example.com/art.jpg",
+  "flag": "线路名",
+  "click": "",
+  "msg": ""
+}
+```
+
+播放结果字段：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `parse` | number | `0` 不强制 Web 解析，`1` 强制进入解析 WebView；为空时按 `0` 处理 |
+| `jx` | number | `1` 时等同需要解析；为空时按 `0` 处理 |
+| `url` | string/array/object | 播放地址。字符串表示单地址；数组按 `[显示名1, 地址1, 显示名2, 地址2]` 解析；对象结构为 `{ "values": [{ "n": "显示名", "v": "地址" }], "position": 0 }` |
+| `playUrl` | string | 播放前缀。支持 `json:{url}`、`parse:{name}` 或普通 Web 解析地址 |
+| `header` | object | 播放请求 header；Cookie 会被保存到 CookieStore |
+| `format` | string | 媒体 MIME/格式，传给播放器 MediaSource |
+| `subs` | array | 字幕数组，元素字段见下方 `subs` 表 |
+| `danmaku` | array | 弹幕数组，元素字段见下方 `danmaku` 表 |
+| `drm` | object/null | DRM 配置，字段见直播 `drm` 表 |
+| `position` | number | 起播位置，毫秒 |
+| `artwork` | string | 播放器封面 URL |
+| `flag` | string | 当前播放线路名；为空时 App 会使用调用播放器时传入的 flag |
+| `click` | string | 解析 WebView 点击脚本 |
+| `msg` | string | Toast 提示；仅 `code` 为 `0` 或为空时显示 |
+| `code` | number | 播放结果状态码，空值按 `0` |
+| `jxFrom` | string | 解析来源标记 |
+| `desc` | string | 播放描述文本 |
+| `key` | string | 播放站点 key；App 内部会在部分链路写入 |
+
+`subs` 元素字段：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `url` | string | 字幕 URL 或路径 |
+| `name` | string | 字幕名称 |
+| `lang` | string | 字幕语言 |
+| `format` | string | 字幕 MIME；为空时部分本地注入链路会按扩展名推断 |
+| `flag` | number | Media3 subtitle selection flag；为空时按默认字幕处理 |
+
+`danmaku` 元素字段：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `name` | string | 弹幕名称；为空时显示 `url` |
+| `url` | string | 弹幕 URL 或路径 |
+
+### 9.2 Vod 条目特殊字段
+
+| 字段 | 说明 |
+| --- | --- |
+| `action` | 点击条目时触发 Spider `action()` 或 HTTP API action，不进普通详情 |
+| `vod_tag: "folder"` | 条目作为文件夹/子分类入口 |
+| `cate` | 条目作为子分类入口 |
+| `style` | 单条目覆盖样式 |
+| `land` / `circle` / `ratio` | 单条目样式快捷字段 |
+
+### 9.3 proxy 返回
+
+Java/JAR Spider 代理返回：
+
+```java
+new Object[]{200, "video/mp2t", inputStream, headers}
+```
+
+`Object[]` 含义：
+
+| 下标 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `0` | number 或 `NanoHTTPD.Response` | 是 | HTTP 状态码；如果直接返回 `Response`，App 原样返回 |
+| `1` | string | 是 | Content-Type |
+| `2` | InputStream | 是 | 响应流 |
+| `3` | Map<String, String> | 否 | 响应 header |
+
+JS Spider 普通模式 `proxy(params)` 返回数组：
+
+```js
+[200, "text/plain; charset=utf-8", "content", { "Cache-Control": "no-store" }, 0]
+```
+
+JS/Python proxy 数组字段：
+
+| 下标 | 类型 | 说明 |
+| --- | --- | --- |
+| `0` | number | HTTP 状态码 |
+| `1` | string | Content-Type |
+| `2` | string/bytes | 响应内容。字符串默认按 UTF-8 输出 |
+| `3` | object | 响应 header，可为空 |
+| `4` | number | `1` 表示第 2 项是 Base64；内容含 `base64,` 前缀时 App 会自动截掉前缀再解码 |
+
+CatVod 兼容 JS proxy 模式下，`proxy(segments, headers)` 返回 JSON 字符串，运行时会按 `Res` 结构转换为本地代理响应。
+
+## 10. JS Spider 运行时
+
+JS Spider 运行在 QuickJS。模块可以通过 `export default` 导出对象或工厂函数，也可以导出 CatVod 兼容的 `__jsEvalReturn()`。
+
+当前运行时实际调用的导出方法：
+
+| 方法 | 参数 | 返回 | 说明 |
+| --- | --- | --- | --- |
+| `init(ext)` | `ext` | 任意 | 初始化。普通 JS 模式下 `ext` 为字符串或对象；CatVod 兼容模式下为 `{ stype: 3, skey, ext }` |
+| `home(filter)` | `filter: boolean` | string | 返回首页分类 JSON |
+| `homeVod()` | 无 | string | 返回首页推荐 JSON |
+| `category(tid, pg, filter, extend)` | `tid: string`，`pg: string`，`filter: boolean`，`extend: object` | string | 返回分类页 JSON |
+| `detail(id)` | `id: string` | string | 返回详情 JSON。注意 JS 运行时只传 `ids[0]`，不是数组 |
+| `search(key, quick)` | `key: string`，`quick: boolean` | string | 旧搜索签名 |
+| `search(key, quick, pg)` | `key: string`，`quick: boolean`，`pg: string` | string | 分页搜索签名 |
+| `play(flag, id, flags)` | `flag: string`，`id: string`，`flags: array` | string | 返回播放 JSON |
+| `live(url)` | `url: string` | string | 返回直播内容 |
+| `sniffer()` | 无 | boolean | 是否手动嗅探，映射 Java `manualVideoCheck()` |
+| `isVideo(url)` | `url: string` | boolean | 判断 URL 是否为视频格式 |
+| `proxy(params)` | 普通模式：`params: object`；CatVod 兼容模式：`segments: array, headers: object` | array 或 string | 本地代理回调，详见 proxy 返回 |
+| `action(action)` | `action: string` | string | 处理 `Vod.action` 或外部 action |
+| `destroy()` | 无 | 任意 | 释放资源 |
+
+JS 全局工具：
+
+| 工具 | 签名 | 返回 | 说明 |
+| --- | --- | --- | --- |
+| `req` | `req(url, options)` | object | 同步 HTTP。实际等价于 `http(url, { ...options, async: false })` |
+| `http` | `http(url, options)` | Promise 或 object | 默认返回 Promise；`options.async === false` 时同步返回 object |
+| `getPort` | `getPort()` | number | 当前本地 HTTP 服务端口 |
+| `getProxy` | `getProxy(local)` | string | 当前 JS Spider 代理 URL；`local=true` 返回 `127.0.0.1`，`false` 返回局域网 IP，自动带 `?do=js` |
+| `js2Proxy` | `js2Proxy(dynamic, siteType, siteKey, url, headers)` | string | CatVod 兼容代理 URL。`dynamic=true` 时使用局域网 IP，`false` 使用 `127.0.0.1` |
+| `joinUrl` | `joinUrl(parent, child)` | string | 按 URL 规则解析相对路径 |
+| `s2t` | `s2t(text)` | string | 简转繁 |
+| `t2s` | `t2s(text)` | string | 繁转简 |
+| `md5X` | `md5X(text)` | string | MD5 并写日志 |
+| `aesX` | `aesX(mode, encrypt, input, inBase64, key, iv, outBase64)` | string | AES 工具并写日志 |
+| `rsaX` | `rsaX(mode, pub, encrypt, input, inBase64, key, outBase64)` | string | RSA 工具并写日志 |
+| `setTimeout` | `setTimeout(fn, delay)` | null | QuickJS 定时执行 |
+| `local.get` | `local.get(rule, key)` | string | 读取 Native `Prefers` 字符串 |
+| `local.set` | `local.set(rule, key, value)` | void | 写入 Native `Prefers` 字符串 |
+| `local.delete` | `local.delete(rule, key)` | void | 删除 Native `Prefers` 字符串 |
+
+JS `req/http` options：
+
+| 字段 | 类型 | 取值和默认值 | 说明 |
+| --- | --- | --- | --- |
+| `async` | boolean | `http` 默认异步；`req` 固定 `false` | `false` 时同步返回 object，其它情况 Promise 返回 object |
+| `method` | string | `get`、`post`、`header`；默认 `get` | `post` 发送 POST；`header` 发送 HEAD；其它值按 GET |
+| `headers` | object | 默认 `{}` | 请求 headers |
+| `data` | object | 默认 `undefined` | POST 数据，配合 `postType` 使用 |
+| `body` | string | 默认 `undefined` | 原始请求体。仅当 `data` 为空且 header 含 `Content-Type` 时使用 |
+| `postType` | string | `json`、`form`、`form-data`；默认 `json` | `json` 发 JSON body；`form` 发 `application/x-www-form-urlencoded`；`form-data` 发 multipart 表单 |
+| `timeout` | number | 默认 `10000` | 毫秒 |
+| `redirect` | number | `1` 跟随重定向，`0` 不跟随；默认 `1` | 传给 OkHttp client |
+| `buffer` | number | `0`、`1`、`2`、`3`；默认 `0` | `0` 返回文本；`1` 返回 byte 数组形式的 JSArray；`2` 返回 Base64 字符串；`3` 返回原始 byte[] |
+
+JS `req/http` 返回 object：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `code` | number/string | HTTP 状态码；异常时为空字符串 |
+| `headers` | object | 响应头；同名多值为数组 |
+| `content` | string/array/bytes | 响应内容，由 `buffer` 决定；异常时为空字符串 |
+
+## 11. Python Spider 运行时
+
+Python Spider 运行在 Chaquopy。Spider 类继承 `base.spider.Spider` 时，当前运行时会调用下列方法：
+
+| 方法 | 参数 | 返回 | 说明 |
+| --- | --- | --- | --- |
+| `init(self, extend="")` | `extend: string` | 任意 | 初始化。运行时会先把 `getDependence()` 返回的依赖 py 文件下载到缓存目录，再调用本方法 |
+| `homeContent(self, filter)` | `filter: bool` | string | 返回首页分类 JSON |
+| `homeVideoContent(self)` | 无 | string | 返回首页推荐 JSON |
+| `categoryContent(self, tid, pg, filter, extend)` | `tid: string`，`pg: string`，`filter: bool`，`extend: dict` | string | 返回分类页 JSON |
+| `detailContent(self, ids)` | `ids: list` | string | 返回详情 JSON |
+| `searchContent(self, key, quick, pg="1")` | `key: string`，`quick: bool`，`pg: string` | string | 返回搜索 JSON |
+| `playerContent(self, flag, id, vipFlags)` | `flag: string`，`id: string`，`vipFlags: list` | string | 返回播放 JSON |
+| `liveContent(self, url)` | `url: string` | string | 返回直播内容 |
+| `localProxy(self, param)` | `param: dict` | list | 本地代理回调，结构见 proxy 返回 |
+| `isVideoFormat(self, url)` | `url: string` | bool | 判断 URL 是否为视频格式 |
+| `manualVideoCheck(self)` | 无 | bool | 是否手动嗅探 |
+| `action(self, action)` | `action: string` | string | 处理 `Vod.action` 或外部 action |
+| `destroy(self)` | 无 | 任意 | 释放资源 |
+| `getName(self)` | 无 | string | 返回 Spider 名称；基类默认 `None` |
+| `getDependence(self)` | 无 | list | 返回依赖 py 模块名列表，不带 `.py` 后缀 |
+
+Python 基类工具：
+
+| 工具 | 签名 | 说明 |
+| --- | --- | --- |
+| `loadSpider` | `self.loadSpider(name)` | 从缓存目录加载 `{name}.py` 并返回其中的 `Spider()` |
+| `loadModule` | `self.loadModule(name)` | 从缓存目录加载 `{name}.py` 模块 |
+| `regStr` | `self.regStr(reg, src, group=1)` | 正则提取字符串 |
+| `removeHtmlTags` | `self.removeHtmlTags(src)` | 移除 HTML 标签 |
+| `cleanText` | `self.cleanText(src)` | 移除 emoji 范围字符 |
+| `fetch` | `self.fetch(url, params=None, cookies=None, headers=None, timeout=5, verify=True, stream=False, allow_redirects=True)` | `requests.get` 包装，响应编码设为 UTF-8 |
+| `post` | `self.post(url, params=None, data=None, json=None, cookies=None, headers=None, timeout=5, verify=True, stream=False, allow_redirects=True)` | `requests.post` 包装，响应编码设为 UTF-8 |
+| `html` | `self.html(content)` | `lxml.etree.HTML(content)` |
+| `str2json` | `Spider.str2json(text)` | `json.loads(text)` |
+| `json2str` | `Spider.json2str(value)` | `json.dumps(value, ensure_ascii=False)` |
+| `getProxyUrl` | `self.getProxyUrl(local=True)` | 返回 Python Spider 代理 URL，自动带 `?do=py` |
+| `log` | `self.log(msg)` | 打印日志；dict/list 会转 JSON |
+| `getCache` | `self.getCache(key)` | 通过本地 `/cache` 读取字符串或 JSON；如果 JSON 对象含 `expiresAt` 且已过期会自动删除 |
+| `setCache` | `self.setCache(key, value)` | 通过本地 `/cache` 写入字符串、数字、dict 或 list |
+| `delCache` | `self.delCache(key)` | 通过本地 `/cache` 删除 key |
+
+## 12. 播放和特殊协议
+
+App 播放输入可以来自配置、Spider、WebHome、外部 Intent、本地 HTTP 推送。
+
+支持或识别的协议/格式：
+
+| 协议/格式 | 说明 |
+| --- | --- |
+| `http://` / `https://` | 普通网络媒体 |
+| `rtsp://` / `rtmp://` / `smb://` | 外部打开和部分播放链路支持 |
+| `push://真实地址` | 让当前播放页再次打开一个新播放地址 |
+| `assets://path` | 读取 APK assets，经本地服务转换 |
+| `file://path` | 读取 App 本地路径，经本地服务转换 |
+| `proxy://query` | 转到 Spider 本地代理 |
+| `.strm` | 读取第一行作为真实播放地址 |
+| YouTube URL | 使用 NewPipe 提取播放地址；播放列表可展开成多集 |
+| `magnet:` | 迅雷内核解析 BT |
+| `.torrent` | 迅雷内核解析种子 |
+| `ed2k:` | 迅雷内核解析 |
+| `thunder:` | 详情解析阶段可展开或转换 |
+| `jianpian:` / `tvbox-xg:` / `ftp:` | 荐片/XG P2P 解析 |
+
+`UrlUtil.convert()` 会把下面伪协议转换成本地服务地址：
+
+```text
+assets://path -> http://127.0.0.1:{port}/path
+file://path   -> http://127.0.0.1:{port}/file/path
+proxy://query -> http://127.0.0.1:{port}/proxy?query
+```
+
+## 13. 本地 HTTP 服务
+
+App 启动后会启动 NanoHTTPD 服务，端口从 `9978` 到 `9998` 依次尝试，取第一个可用端口。
+
+地址：
+
+```text
+http://127.0.0.1:{port}
+http://{局域网IP}:{port}
+```
+
+`/device` 返回局域网地址、设备类型和时间。
+
+```json
+{
+  "uuid": "android-id",
+  "name": "device-name",
+  "ip": "http://192.168.1.23:9978",
+  "type": 1,
+  "time": 1710000000000
+}
+```
+
+设备类型：`0` 电视端，`1` 手机端，`2` DLNA 设备记录。
+
+### 13.1 端点总览
+
+| 路径 | 方法 | 能力 |
+| --- | --- | --- |
+| `/` | GET | 内置局域网基础管理网页 |
+| `/m` | GET | 增强管理页面，入口来自“设置 -> 增强功能 -> 管理页面” |
+| `/device` | GET/POST | 设备信息 |
+| `/media` | GET/POST | 当前播放状态 |
+| `/api/playback/current` | GET/POST/OPTIONS | 当前播放记录安全快照，供 JS/Python/PHP/Jar 等爬虫调用 |
+| `/api/playback/progress` | POST/OPTIONS | 写入单条观影进度，受“观影记录同步 -> 允许本机 API 修改”开关控制 |
+| `/api/playback/progress/batch` | POST/OPTIONS | 批量写入观影进度，支持 `{ "items": [...] }`、`records/data/list` 等常见批量外壳 |
+| `/api/playback/progress/delete` | POST/OPTIONS | 清理本地观影进度，支持按 `historyKey`、`siteKey+vodId`、站点或当前配置清理 |
+| `/action` | GET/POST | 播放控制、搜索、推送、刷新、同步、设置、投放 |
+| `/cache` | GET/POST | 字符串缓存 |
+| `/file/{path}` | GET | 浏览或下载 App 本地文件 |
+| `/upload` | POST | 上传文件；zip 自动解压 |
+| `/newFolder` | POST | 新建文件夹 |
+| `/delFolder` | POST | 删除文件夹 |
+| `/delFile` | POST | 删除文件 |
+| `/parse` | GET/POST | 内置解析 HTML |
+| `/proxy` | GET/POST | Spider 本地代理 |
+| `/webResource` | GET/POST/PUT/PATCH/DELETE/HEAD/OPTIONS | WebHome 资源网关 |
+| `/pan/check` | POST/OPTIONS | 网盘检测 |
+| `/debug/logs` | GET | 调试日志网页 |
+| `/debug/logs.txt` | GET | 下载当前调试日志 |
+| `/debug/clear` | GET | 清空调试日志 |
+| `/debug/enable` / `/debug/disable` | GET | 开启或关闭调试日志 |
+| `/debug/stream` | GET | 调试日志增量轮询接口，返回版本、行数、字节数和日志文本 |
+| `/manage/session` | GET/POST | 管理页面会话状态、保活、后台访问提示 |
+| `/manage/background/settings` | GET/POST | 尝试打开后台耗电/后台运行相关系统设置页 |
+| `/manage/devices` | GET/POST | 发现并列出同网段 App 设备 |
+| `/manage/remote/ping` | GET/POST | 检测远端 App 设备连通性 |
+| `/manage/action` | GET/POST | 转发 `/action` 到远端 App 设备 |
+| `/manage/remote/file` | GET/POST | 代理读取或下载远端 App 文件 |
+| `/manage/remote/archive` | GET/POST | 代理打包下载远端 App 文件或目录 |
+| `/manage/remote/upload` | POST | 代理上传文件到远端 App |
+| `/manage/remote/newFolder` | POST | 代理在远端 App 新建目录 |
+| `/manage/remote/delFolder` | POST | 代理删除远端 App 目录 |
+| `/manage/remote/delFile` | POST | 代理删除远端 App 文件 |
+| `/manage/sync/paths` | GET/POST | 读取或保存一键同步目录 |
+| `/manage/sync/tree` | GET/POST | 浏览外置存储目录树，用于勾选同步目录 |
+| `/manage/sync/detect` | GET/POST | 自动识别已配置接口里的本地包目录并加入同步目录 |
+| `/manage/sync/start` | POST | 从管理页面发起一键同步 |
+| `/manage/login-state` | GET/POST | 读取登录态学习状态、已确认路径、待确认路径和最近发现项 |
+| `/manage/login-state/learn` | GET/POST | 开始或完成登录态学习，参数 `action=begin/finish` |
+| `/manage/login-state/paths` | GET/POST | 保存已确认登录态路径 |
+| `/manage/login-state/tree` | GET/POST | 浏览登录态可选目录树，包含 App 私有目录和共享存储 |
+| `/manage/login-state/file` | GET/POST | 读取或写入已授权路径下的登录态文件内容 |
+| `/manage/file/archive` | GET/POST | 把一个或多个本地目录/文件打包下载 |
+| `/manage/proxy` | GET/POST | 读取或保存壳代理开关、默认代理和规则 |
+| `/manage/csp` | GET/POST | 读取或保存站点注入配置 |
+| `/manage/csp/page` | POST | 保存站点注入 WebHome 代码或链接 |
+| `/tvbus` | GET/POST | TVBus auth response |
+
+### 13.1.1 管理页面 `/m`
+
+“管理页面”是增强功能里的浏览器管理入口，不是 App 内嵌 WebView 页面。点击“设置 -> 增强功能 -> 管理页面”后，App 会启动前台管理服务并给出本机地址和局域网地址：
+
+```text
+http://127.0.0.1:{port}/m
+http://设备IP:{port}/m
+```
+
+页面能力：
+
+- 本机管理：操作当前手机或电视 App 的文件、登录态、同步目录、站点注入、接口和壳代理。
+- 远端管理：先发现并选择同网段 App 设备，再操作远端设备的文件、登录态、同步、搜索和推送。
+- 文件管理：浏览外置存储目录、上传文件、新建目录、删除、下载单文件，勾选多个文件或目录后可打包下载。
+- 一键同步：发现设备、选择推送或拉取、勾选同步内容、通过目录树选择 Jar/脚本保存数据目录，并可同步已确认登录态。
+- 登录态学习：开始/完成学习，查看已确认路径、待确认项和最近发现项，管理 App 私有目录和共享存储里的登录态文件。
+- 站点注入：启用/禁用全局注入和单条条目，新增 WebHome、通用 CSP 或直播，支持文件、代码、链接和 JSON 配置。
+- 壳代理 Proxy：启用/禁用代理，编辑默认代理地址，支持表单规则和 JSON/raw 文本规则。
+- 接口管理：查看本机或远端设备的配置入口，配合远端管理做浏览器侧维护。
+
+可用性策略：
+
+- 管理页面开启后会启动前台服务，持有局部 WakeLock 和 Wi-Fi lock，并定期保持本地 HTTP 服务运行。
+- 页面或接口访问会刷新会话时间；超过约 10 分钟没有访问会自动停止服务。
+- 手机进入后台后，如果系统厂商限制后台网络，页面会提示打开后台耗电或后台运行设置。不同品牌设置页不完全一致，无法保证直接跳到最后一级，只能按已知页面逐级降级。
+- 当前没有鉴权，只应在可信局域网内临时开启，用完后在通知或弹窗里停止管理页面。
+
+### 13.2 `/action`
+
+`/action` 支持 `GET` 和 `POST`。返回固定为 `200 OK`，大部分动作异步投递到 App 内部事件总线；参数缺失时通常直接忽略。
+
+`do` 取值：
+
+| do | 必要参数 | 可选参数 | 行为 |
+| --- | --- | --- | --- |
+| `search` | `word` | 无 | 触发 App 搜索 |
+| `push` | `url` | 无 | 推送播放地址 |
+| `setting` | `text` | `name` | 写入配置文本或配置 URL；`name` 为显示名称 |
+| `refresh` | `type` | `path`、`json` | 刷新指定模块或注入资源，`type` 取值见下表 |
+| `control` | `type` | 无 | 播放控制，`type` 取值见下表 |
+| `sync` | `type`、`mode` | `force`、`device`、`config`、`targets`、`configs` | 多设备同步，`type` 和 `mode` 取值见下表 |
+| `cast` | `config`、`device`、`history` | 无 | 投放到另一台 App |
+| `file` | `path` | 无 | 使用 App 本地文件：`.apk` 打开安装，`.srt/.ssa/.ass` 注入字幕，其它路径按配置加载 |
+
+搜索、推送、设置：
+
+```text
+GET/POST /action?do=search&word=关键词
+GET/POST /action?do=push&url=播放地址
+GET/POST /action?do=setting&text=配置内容或配置URL&name=显示名称
+```
+
+`refresh.type` 取值：
+
+| type | 额外参数 | 行为 |
+| --- | --- | --- |
+| `home` | 无 | 刷新点播首页 |
+| `live` | 无 | 刷新直播 |
+| `detail` | 无 | 刷新当前详情页 |
+| `player` | 无 | 刷新当前播放器 |
+| `category` | 无 | 刷新当前分类页 |
+| `subtitle` | `path` | 注入字幕 URL 或路径 |
+| `danmaku` | `path` | 注入弹幕 URL 或路径 |
+| `vod` | `json` | 用 `Vod` JSON 更新当前播放页关联条目 |
+
+播放控制 `control.type` 取值：
+
+| type | 行为 |
+| --- | --- |
+| `play` | 播放 |
+| `pause` | 暂停 |
+| `stop` | 停止播放服务 |
+| `prev` | 上一集/上一项 |
+| `next` | 下一集/下一项 |
+| `loop` | 切换循环行为 |
+| `replay` | 重播或刷新当前播放 |
+
+多设备同步：
+
+```text
+POST /action?do=sync&type=history&mode=0&force=false
+POST /action?do=sync&type=keep&mode=0&force=false
+POST /action?do=sync&type=backup&mode=1&force=false
+```
+
+`sync.type` 取值：
+
+| type | 说明 |
+| --- | --- |
+| `history` | 同步观看历史 |
+| `keep` | 同步收藏 |
+| `backup` | 按同步选项同步接口、Jar/脚本保存数据、登录态、WebHome 缓存、搜索记录、观看历史、收藏和设置 |
+
+`sync.mode` 取值：
+
+| mode | 说明 |
+| --- | --- |
+| `0` | 双向同步 |
+| `1` | 从远端同步到本机 |
+| `2` | 从本机发送到远端 |
+
+`sync.force` 取值：
+
+| force | 说明 |
+| --- | --- |
+| `false` | 合并同步 |
+| `true` | 同步前先清空本机对应数据再写入 |
+
+`backup` 请求使用表单字段：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `options` | JSON string | 同步选项。字段为 `config`、`spider`、`loginState`、`search`、`history`、`keep`、`webHome`、`settings`、`paths` |
+| `backup` | JSON string | `mode=1` 时由发送端携带的数据库和 SharedPreferences 备份数据 |
+| `device` | JSON string | `mode=2` 时由请求端携带的本机设备信息，远端会回传备份数据 |
+| `syncFiles` | file | 可选。`multipart/form-data` 文件字段，内容为同步目录压缩包；仅 `spider=true` 时使用 |
+| `loginStateFiles` | file | 可选。`multipart/form-data` 文件字段，内容为登录态学习已确认路径压缩包；仅 `loginState=true` 且有可同步路径时使用 |
+
+同步选项说明：
+
+| 选项 | 默认 | 说明 |
+| --- | --- | --- |
+| `config` | `true` | 接口订阅、点播/直播/壁纸配置和当前接口指针 |
+| `spider` | `true` | Jar/脚本保存数据。包含默认 SharedPreferences 中非 App 设置项，也会同步 `paths` 指定的外置存储目录 |
+| `loginState` | `true` | 登录态学习中已确认的 Cookie、Token、SharedPreferences、cache 或接口 Jar 登录状态文件 |
+| `search` | `true` | 搜索关键词和热词缓存 |
+| `history` | `true` | 观看历史 |
+| `keep` | `true` | 收藏 |
+| `webHome` | `true` | WebHome 通过 `fm.cache` 保存的数据 |
+| `settings` | `false` | App 通用设置、播放设置、弹幕设置、增强功能开关等 |
+| `paths` | `"TV\nTVBox\nTVData"` | 同步目录列表，每行一个外置存储相对路径；App 端和管理页面都支持用目录树勾选 |
+
+目录同步规则：
+
+| 项目 | 说明 |
+| --- | --- |
+| 默认目录 | `/sdcard/TV`、`/sdcard/TVBox`、`/sdcard/TVData` |
+| 自定义目录 | 在一键同步界面点击“同步目录”后用目录树勾选；管理页面“一键同步 -> 同步目录”也可勾选目录树。内部保存为外置存储相对路径，例如 `TVBox`、`TVData/cookie` |
+| 本地包识别 | 管理页面支持“自动识别本地包”。它会扫描 App 已保存的点播、直播、壁纸配置 URL；只处理 `file:`、绝对路径或相对路径形式的本地包，忽略 `http(s)`、`proxy://`、`assets://` 等在线或内置地址。若目录已被 `TV`、`TVBox`、`TVData` 等现有同步目录覆盖，不会重复添加 |
+| 传输格式 | 发送端把同步目录打成 zip，通过 `multipart/form-data` 的 `syncFiles` 字段发送；登录态路径打成单独 zip，通过 `loginStateFiles` 字段发送；接收端按各自根路径恢复 |
+| 进度显示 | 发送端在压缩阶段显示已处理文件数、原始大小和压缩速度；上传阶段显示文件数量、原始大小、压缩后大小、上传百分比、已传/总量和实时速度；同步过程中可取消 |
+| 超时策略 | 使用长传输超时，正常持续上传/接收不会按普通短请求超时处理 |
+| 恢复行为 | 文件包先恢复，再恢复 `backup` 数据；恢复后会清理 Jar/spider 加载缓存并重新加载当前接口，让新 cookie/本地包尽快生效 |
+| 当前边界 | 当前是单 zip 流式传输，不是分片并发和断点续传；后续如要支持断点，需要增加文件清单、分片 hash、临时目录、续传协商和合并校验协议 |
+
+很多接口 Jar 会把夸克、UC、阿里云盘、迅雷、115、天翼、123、PikPak、WebDAV 等账号 Cookie 或授权状态保存到 `/sdcard/TV`、`/sdcard/TVBox`、`/sdcard/TVData` 或用户自定义目录中，因此需要勾选“Jar/脚本保存数据”才能随一键同步迁移。若登录态写入 App 私有目录，例如 `shared_prefs`、`files` 或 `cache`，应先用“登录态学习”确认路径，再勾选“一键同步 -> 登录态”迁移。
+
+投放到另一台 App：
+
+```text
+POST /action?do=cast
+```
+
+`cast` 参数包含 `config`、`device`、`history`，值均为 JSON 字符串。
+
+### 13.3 `/media`
+
+返回当前播放器状态：
+
+```json
+{
+  "state": 3,
+  "speed": 1.0,
+  "duration": 3600000,
+  "position": 600000,
+  "url": "https://example.com/video.m3u8",
+  "title": "标题",
+  "artist": "",
+  "artwork": ""
+}
+```
+
+`state`：`1` 其它，`2` ready，`3` playing，`6` buffering。
+
+### 13.4 观影记录同步
+
+观影记录同步用于把 App 本地播放进度和用户自有服务、爬虫、多端 App 之间打通。它包含四条通道：
+
+- 当前播放只读 API：爬虫读取当前播放条目的安全快照。
+- 本机修改 API：爬虫或局域网工具写入、批量写入或清理本地播放进度。
+- 远端同步：App 主动从用户配置的远端 API 拉取观影记录并合并到 `History`。
+- Webhook 上报：App 在播放过程中主动把进度 POST 到用户服务器。
+
+增强功能入口为“观影记录同步”。顶层只显示总开关、本机 API 修改开关、远端同步摘要和 Webhook 摘要；远端同步源列表与 Webhook 端点列表点击后进入二级界面，新增/编辑均在独立弹窗中完成。
+
+#### 13.4.1 字段模型
+
+播放记录协议版本固定为 `webhtv.playback.v1`。时间字段均为 Unix epoch milliseconds，进度单位为毫秒。
+
+| 字段 | 类型 | 出现位置 | 说明 |
+| --- | --- | --- | --- |
+| `schema` | string | 读取、Webhook | 固定为 `webhtv.playback.v1` |
+| `event` | string | Webhook | 事件名，目前固定使用 `playback.progress` 和 `playback.ended` |
+| `eventId` | string | Webhook | 单次事件 UUID，同一次重试保持不变 |
+| `timestamp` | number | 读取、Webhook | App 生成记录的时间 |
+| `sessionId` | string | 读取、Webhook | 本次播放会话 ID，切换播放条目后更新 |
+| `dedupeKey` | string | 读取、Webhook | 播放条目去重 key，由接口、站点、影片、剧集等字段计算，不包含 token |
+| `cid` | number | 读取、写入、Webhook | 本机点播配置 id，只用于本机落库空间，跨设备不稳定 |
+| `configKey` | string | 读取、写入、远端同步、Webhook | 点播接口稳定身份，当前为点播接口 URL 的 SHA256；服务端应按 `token + configKey` 分组 |
+| `configName` | string | 读取、写入、远端同步、Webhook | 点播接口显示名，仅用于展示和排查 |
+| `historyKey` | string | 读取、写入、清理、Webhook | 本地历史主键，通常为 `siteKey@@@vodId` 或 `siteKey@@@vodId@@@cid` |
+| `siteKey` | string | 读取、写入、远端同步、Webhook | 站点 key |
+| `siteName` | string | 读取、Webhook | 站点显示名，取不到时回退为 `siteKey` |
+| `vodId` | string | 读取、写入、远端同步、Webhook | 影片 id |
+| `vodName` | string | 读取、写入、远端同步、Webhook | 影片名称 |
+| `vodPic` | string | 读取、写入、远端同步、Webhook | 封面 URL，可为空 |
+| `flag` | string | 读取、写入、远端同步、Webhook | 播放线路或来源名称 |
+| `episodeName` | string | 读取、写入、远端同步、Webhook | 当前集名称，对应 `History.vodRemarks` |
+| `episodeUrl` | string | 写入、远端同步、完整 Webhook | 当前集原始地址，用于更精确匹配剧集 |
+| `state` | string | 读取、Webhook | `idle`、`buffering`、`playing`、`paused`、`ended` |
+| `positionMs` | number | 读取、写入、远端同步、Webhook | 当前播放进度 |
+| `durationMs` | number | 读取、写入、远端同步、Webhook | 视频总时长 |
+| `progress` | number | 读取、写入、Webhook | `positionMs / durationMs`，写入时可作为 `positionMs` 的辅助计算值 |
+| `speed` | number | 读取、写入、Webhook | 播放倍速，缺省按 `1.0` 处理 |
+| `completed` | boolean | 读取、写入、Webhook | 是否完播；写入时为辅助字段，最终仍以进度和阈值校验 |
+| `updatedAt` | number | 写入、远端同步 | 远端记录最后更新时间；缺省时 App 使用当前时间 |
+| `client` | string | 标准/完整 Webhook | 客户端 flavor，例如 mobile、leanback |
+| `appVersion` | string | 标准/完整 Webhook | App 版本名 |
+| `clientKey` | string | 完整 Webhook、写入 | 设备或爬虫侧标识；基础/标准预设不默认发送 |
+
+`cid` 不能作为跨端接口身份。同一远端 URL 和 token 下，服务端仍必须按 `configKey` 区分不同点播接口；否则 A 客户端的 b 接口记录可能覆盖 B 客户端的 a 接口记录。
+
+#### 13.4.2 当前播放只读 API
+
+该接口供 JS/Python/PHP/Jar 等爬虫通过 HTTP 读取当前播放记录。接口只返回当前播放条目，不返回全局历史。调用方必须传入当前站点 `siteKey`，App 会校验它和当前播放记录一致。
+
+```text
+GET/POST /api/playback/current?siteKey=站点Key
+GET/POST /playback/current?siteKey=站点Key
+```
+
+成功返回安全字段，不包含真实播放 URL、headers、cookies、配置地址、Jar/ext、设备原始标识或其它站点历史：
+
+```json
+{
+  "schema": "webhtv.playback.v1",
+  "timestamp": 1781170000000,
+  "sessionId": "2a9d6c9f-...",
+  "dedupeKey": "8d1f...",
+  "cid": 1,
+  "configKey": "sha256(config-url)",
+  "configName": "接口名称",
+  "historyKey": "site_key@@@vod_id@@@1",
+  "siteKey": "site_key",
+  "siteName": "站点名称",
+  "vodId": "vod_id",
+  "vodName": "影片名",
+  "vodPic": "https://example.com/poster.jpg",
+  "flag": "线路1",
+  "episodeName": "第1集",
+  "state": "playing",
+  "positionMs": 123456,
+  "durationMs": 456789,
+  "progress": 0.2702,
+  "speed": 1.0,
+  "completed": false
+}
+```
+
+错误返回 JSON：`400` 缺少 `siteKey`，`404` 当前无可读记录或站点不匹配，`405` 方法不支持。
+
+#### 13.4.3 本机写入与清理 API
+
+本机修改 API 用于让爬虫或局域网工具把远端进度写回 App 本地历史，或清理误同步、已失效和测试写入的记录。调用前需要用户在“观影记录同步”中开启总开关和“允许本机 API 修改”；关闭修改开关时，只读接口仍可用。
+
+```text
+POST /api/playback/progress
+POST /api/playback/progress/batch
+POST /api/playback/progress/delete
+POST /playback/progress
+POST /playback/progress/batch
+POST /playback/progress/delete
+```
+
+请求体必须使用 JSON，建议 `Content-Type: application/json; charset=utf-8`。接口直接按 UTF-8 读取原始 body，适合 JS、Python、PHP、Jar、curl 等通用 REST 调用。本机修改 API 不定义独立 token；爬虫访问用户远端服务时应使用远端服务提供的 token，写回 App 本地历史时不需要再向 App 配置额外凭证。
+
+单条写入示例：
+
+```json
+{
+  "configKey": "sha256(config-url)",
+  "configName": "接口名称",
+  "siteKey": "site_key",
+  "vodId": "vod_id",
+  "vodName": "影片名",
+  "vodPic": "https://example.com/poster.jpg",
+  "flag": "线路1",
+  "episodeName": "第1集",
+  "episodeUrl": "https://example.com/play/1.m3u8",
+  "positionMs": 123456,
+  "durationMs": 456789,
+  "speed": 1.0,
+  "completed": false,
+  "updatedAt": 1781170000000,
+  "clientKey": "crawler-or-device-id"
+}
+```
+
+最小必填字段：
+
+| 字段 | 说明 |
+| --- | --- |
+| `siteKey` | 目标站点 key |
+| `vodId` | 目标影片 id |
+| `vodName` | 影片名称 |
+| `episodeName` | 当前集名称 |
+| `positionMs` | 当前进度，必须大于 0 |
+| `durationMs` | 总时长，必须大于 0 |
+
+可选字段：
+
+| 字段 | 说明 |
+| --- | --- |
+| `configKey` | 跨端点播接口身份。提供后 App 会映射到本机对应 `cid`；映射不到则跳过 |
+| `configUrl` | 可替代 `configKey`，App 会计算其 SHA256 |
+| `configName` | 接口显示名，仅用于响应和调试 |
+| `historyKey` | 已知本地历史 key。带 `configKey` 时仍会以本机映射后的 `cid` 重新生成 key，避免跨设备 `cid` 混用 |
+| `vodPic` | 封面 URL |
+| `flag` | 播放线路或来源 |
+| `episodeUrl` | 当前集 URL，用于优先匹配剧集 |
+| `progress` | 无 `positionMs` 时可用 `durationMs * progress` 推导 |
+| `speed` | 播放倍速，缺省为 `1.0` |
+| `completed` | 为 true 且有 `durationMs` 时，进度会按总时长处理 |
+| `updatedAt` | 远端记录更新时间，缺省为当前时间 |
+| `cid` | 本机配置 id。只在没有 `configKey` 时用于同一设备内指定落库空间 |
+
+批量写入支持直接数组或常见外壳：
+
+```json
+{
+  "items": [
+    {
+      "siteKey": "site_key",
+      "vodId": "vod_id",
+      "vodName": "影片名",
+      "episodeName": "第1集",
+      "positionMs": 123456,
+      "durationMs": 456789,
+      "updatedAt": 1781170000000
+    }
+  ]
+}
+```
+
+`items` 也可写作 `records`、`data` 或 `list`。上面的 JSON 可直接保存为 mock 文件，用于批量写入和远端同步联调。
+
+合并规则：
+
+| 规则 | 说明 |
+| --- | --- |
+| 配置空间 | 优先用 `configKey` 映射本机点播接口并确定 `cid`；没有 `configKey` 时使用请求 `cid` 或当前接口 |
+| 主定位 | 使用 `siteKey + vodId` 定位影片 |
+| 剧集匹配 | 优先比较 `episodeUrl`，其次比较 `flag + episodeName`，最后比较 `episodeName` |
+| 冲突处理 | 远端 `updatedAt` 大于本地 `History.createTime` 时才覆盖；不新于本地时返回 `skipped` |
+| 当前播放 | 写入只更新 `History`，不强行 seek 正在播放的视频 |
+
+清理请求支持单对象、直接数组或 `{ "items": [...] }`：
+
+```json
+{
+  "historyKey": "site_key@@@vod_id@@@1"
+}
+```
+
+清理定位规则：
+
+| 字段 | 说明 |
+| --- | --- |
+| `historyKey` | 精确清理一条本地历史，优先使用 |
+| `siteKey` + `vodId` | 清理同一站点同一影片下的本地历史 |
+| `siteKey` + `scope=site` | 清理同一站点下的本地历史；也可用 `confirm=true` 明确确认 |
+| `configKey` | 可选；优先用它定位本机点播接口空间 |
+| `scope=all` + `confirm=true` | 清理当前接口下的全部观影历史；可传 `configKey` 或本机 `cid` 指定配置空间 |
+
+响应字段：
+
+| 字段 | 说明 |
+| --- | --- |
+| `success` | 单条是否处理成功 |
+| `action` | `created`、`updated`、`deleted`、`skipped`、`failed` |
+| `message` | 跳过或失败原因 |
+| `historyKey` | 写入、匹配或清理的本地历史 key |
+| `configKey/siteKey/vodId/episodeName` | 调用方提交的核心定位字段 |
+| `affected` | 写入为 1；清理时为实际删除条数 |
+| `localUpdatedAt` | 本地记录更新时间 |
+| `remoteUpdatedAt` | 远端记录更新时间 |
+
+批量响应包含 `total/applied/created/updated/deleted/skipped/failed/items`。单条失败不影响其它条目。
+
+#### 13.4.4 远端同步源
+
+远端同步源是用户在 App 中配置的 HTTP API。App 按用户填写的固定 URL 发起 `GET` 请求，不额外拼接 query；返回值使用本机写入 API 的同一字段模型。
+
+```http
+GET <用户填写的远端 API>
+Accept: application/json
+X-WebHTV-Token: <服务端提供的 token>
+X-WebHTV-Config-Key: <当前点播接口 configKey>
+X-WebHTV-Config-Name: <当前点播接口显示名>
+```
+
+`X-WebHTV-Token` 可选，由用户服务端统一提供，用于鉴权和用户空间分组。App 不生成 token，也不把 token 写入本地历史主键或 `dedupeKey`。同一个远端 URL 下，同一 token 且同一 `configKey` 才表示同一套观影记录；同一 token 下不同 `configKey` 必须分别存储。
+
+远端响应示例：
+
+```json
+{
+  "items": [
+    {
+      "configKey": "sha256(config-url)",
+      "configName": "接口名称",
+      "siteKey": "site_key",
+      "vodId": "vod_id",
+      "vodName": "影片名",
+      "vodPic": "https://example.com/poster.jpg",
+      "flag": "线路1",
+      "episodeName": "第1集",
+      "episodeUrl": "https://example.com/play/1.m3u8",
+      "positionMs": 123456,
+      "durationMs": 456789,
+      "speed": 1.0,
+      "completed": false,
+      "updatedAt": 1781170000000
+    }
+  ],
+  "nextSince": 1781170000000
+}
+```
+
+响应项带 `configKey` 时，App 会先映射本机已配置的点播接口；映射不到则跳过。响应项不带 `configKey` 时按当前点播接口写入，用于兼容旧服务端。
+
+远端同步源配置项：
+
+| 字段 | 说明 |
+| --- | --- |
+| `name` | 可选；为空时 UI 使用 API URL 的 host |
+| `url` | 必填；远端 API 地址，必须以 `http` 开头 |
+| `token` | 可选；通过 `X-WebHTV-Token` 请求头发送 |
+| `siteKeys` | 可选；限制只合并指定站点 key |
+| `syncOnStartup` | App 启动后自动同步 |
+| `intervalMinutes` | 周期同步间隔，0 表示不周期同步 |
+| `maxItems` | 单次最多处理条数，上限 1000 |
+
+#### 13.4.5 Webhook 上报
+
+Webhook 上报由 App 在播放过程中主动 POST 到用户配置的端点。上报时机固定为周期进度、暂停/退出/切集前最终进度和自然完播，不在 UI 中提供多事件选择。
+
+```http
+POST <用户配置的 Webhook URL>
+Content-Type: application/json
+X-WebHTV-Timestamp: 1781170000
+X-WebHTV-Token: <服务端提供的可选 token>
+X-WebHTV-Webhook-Id: <eventId>
+X-WebHTV-Dedupe-Key: <dedupeKey>
+X-WebHTV-Config-Key: <configKey>
+X-WebHTV-Config-Name: <configName>
+Idempotency-Key: <eventId>
+```
+
+请求头说明：
+
+| 请求头 | 必填 | 说明 |
+| --- | --- | --- |
+| `Content-Type` | 是 | 固定为 `application/json` |
+| `X-WebHTV-Timestamp` | 是 | 发送请求时的秒级时间戳 |
+| `X-WebHTV-Token` | 否 | 用户服务器提供的 token，用于鉴权和用户空间分组 |
+| `X-WebHTV-Webhook-Id` | 是 | 与 payload 的 `eventId` 一致 |
+| `X-WebHTV-Dedupe-Key` | 是 | 与 payload 的 `dedupeKey` 一致 |
+| `X-WebHTV-Config-Key` | 是 | 与 payload 的 `configKey` 一致 |
+| `X-WebHTV-Config-Name` | 否 | 与 payload 的 `configName` 一致 |
+| `Idempotency-Key` | 是 | 与 `eventId` 一致，兼容常见 Webhook 幂等处理 |
+
+事件类型：
+
+| 事件 | 说明 |
+| --- | --- |
+| `playback.progress` | 周期进度；暂停、退出、切集、切线路前会补发最终进度 |
+| `playback.ended` | 自然完播 |
+
+字段预设：
+
+| 预设 | 字段 |
+| --- | --- |
+| 基础 | `schema/event/eventId/timestamp/sessionId/dedupeKey/cid/configKey/configName/historyKey/siteKey/siteName/vodId/vodName/vodPic/flag/episodeName/state/positionMs/durationMs/progress/speed/completed` |
+| 标准 | 基础 + `appVersion/client` |
+| 完整 | 标准 + `episodeUrl/episodeIndex/clientKey` |
+| 自定义 | 协议字段固定发送，其余字段由 UI 多选；每个字段在 UI 中显示简短说明 |
+
+服务端建议先按 token 确定用户空间，再按 `configKey` 区分点播接口，最后用 `dedupeKey` 合并同一播放条目，用 `eventId` 或 `Idempotency-Key` 去重同一次事件重试。
+
+### 13.5 `/cache`
+
+```text
+GET/POST /cache?do=get&rule=命名空间&key=键
+GET/POST /cache?do=set&rule=命名空间&key=键&value=值
+GET/POST /cache?do=del&rule=命名空间&key=键
+```
+
+实际存储 key：
+
+```text
+cache_ + (rule ? rule + "_" : "") + key
+```
+
+### 13.6 `/file` 和文件管理
+
+`/file/{path}`：
+
+- path 是 App 本地根目录下路径。
+- 如果是目录，返回目录 JSON。
+- 如果是文件，流式返回文件内容。
+- 支持 Range、ETag、Accept-Ranges。
+
+目录返回：
+
+```json
+{
+  "parent": "",
+  "files": [
+    {
+      "name": "subtitles",
+      "path": "/subtitles",
+      "time": "2026-05-22 12:00:00",
+      "dir": 1
+    }
+  ]
+}
+```
+
+上传：
+
+```text
+POST /upload
+```
+
+上传 zip 会自动解压到目标目录。
+
+## 14. WebHome 自定义主页
+
+WebHome 是 App 为 CSP 站点扩展的自定义网页首页能力。站点配置里声明 `homePage` 后，切换到该站点主页时优先加载网页。
+
+WebHome 用户脚本扩展的详细开发流程、加载方式、调试流程、模板和示例见第 25 章。
+
+示例：
+
+```json
+{
+  "key": "nostr_home",
+  "name": "Nostr 推荐",
+  "type": 3,
+  "api": "csp_Builtin",
+  "homePage": "./nostr.html"
+}
+```
+
+如果配置文件是在线 URL，`./nostr.html` 会相对配置文件 URL 解析。例如配置来自：
+
+```text
+https://example.com/config.json
+```
+
+则 `./nostr.html` 解析为：
+
+```text
+https://example.com/nostr.html
+```
+
+WebHome 不需要配置 `bridge: "full"`，当前默认注入完整 SDK。
+
+加载 WebHome 时会应用站点 `header`：
+
+- `User-Agent` 会覆盖 WebView 默认 UA；未配置时恢复 WebView 默认 UA。
+- `Cookie` 会写入 WebView CookieManager。
+- 其余 header 附加到首个页面请求；页面内的子资源请求不会自动携带，需要时用 `fm.res()`。
+
+## 15. WebHome 运行环境
+
+WebView 设置：
+
+| 能力 | 状态 |
+| --- | --- |
+| JavaScript | 开启 |
+| DOM Storage | 开启 |
+| Database | 开启 |
+| Cache | `LOAD_DEFAULT`；`fm.reload()` 和顶部刷新会先 `clearCache` 再加载 |
+| Mixed Content | 允许 |
+| Media Playback Requires User Gesture | 不强制 |
+| Cookie | 开启 |
+| Third-party Cookie | 开启 |
+| 背景 | Native WebView 透明 |
+| 渲染 | 硬件加速 layer，渲染进程高优先级，`offscreenPreRaster`（Android 6+） |
+| 视口 | `useWideViewPort` + `loadWithOverviewMode`，`textZoom` 固定 100，禁用缩放 |
+| 滚动 | 关闭 over-scroll 效果，滚动条 overlay 样式 |
+
+App 注入：
+
+```js
+window.fongmi
+window.fm
+```
+
+`window.fongmi` 是完整命名空间，`window.fm` 是短别名。
+
+SDK 注入后会触发：
+
+```js
+window.dispatchEvent(new CustomEvent("fmsdk"));
+```
+
+注意：SDK 默认由 Native 在页面加载完成（`onPageFinished`）后注入，页面最早执行的内联脚本可能先于 `window.fm` 运行。例外：站点配置了 `runAt: "document-start"` 的 WebHome 扩展且当前 WebView 支持 `DOCUMENT_START_SCRIPT` 特性时，SDK 会随 document-start 脚本提前注入。WebHome 如果有账号、配置、身份、同步状态等关键持久化数据，应在 `fmsdk` 后读写 `fm.cache`；如果检测到 `window.fongmiBridge` 已存在但 `window.fm` 尚未就绪，可以短暂等待 `fmsdk`，不要立刻把关键数据写入浏览器 fallback 存储。
+
+App 从后台恢复 WebHome 时会触发：
+
+```js
+window.dispatchEvent(new CustomEvent("fmresume", { detail: { time, pausedMs } }));
+```
+
+WebHome 进入后台暂停时会触发：
+
+```js
+window.dispatchEvent(new CustomEvent("fmpause", { detail: { time } }));
+```
+
+WebView 布局尺寸、安全区、系统手势区或 chrome mode 变化时，Native 会更新 `--fm-web-*`、`--fm-safe-*`、`--fm-gesture-*` 等根元素 CSS 变量，并触发：
+
+```js
+window.dispatchEvent(new CustomEvent("fmviewport", { detail }));
+```
+
+`detail` 字段见第 16 章 `fm.ui.getViewport()` 说明。页面高度建议使用 `var(--fm-web-height, 100vh)` 而不是裸 `100vh`，可以规避旧 WebView 视口高度不含工具栏的偏差。
+
+SDK 还会 hook `history.pushState` / `history.replaceState` / `popstate`，路由变化时触发：
+
+```js
+window.dispatchEvent(new CustomEvent("fmurlchange", { detail: { url } }));
+```
+
+页面可以监听这些事件重新读取配置、恢复状态、保存 UI 快照或补偿播放记录。
+
+### 15.1 WebView 版本基线
+
+App `minSdk` 为 24（Android 7.0）。Android 7.0 出厂的系统 WebView 约为 Chromium 51；系统 WebView 理论上可单独升级，但电视和盒子经常没有应用商店、无法升级，长期停留在出厂版本。实际开发应按以下基线准备：
+
+- 把 Chromium 50-70 当成必须兼容的“旧内核”，按本章红线开发。
+- Chromium 80+ 视为现代内核，`?.`、`??` 等语法只有在确认目标设备 ≥ 80 时才能使用。
+- 开启“调试日志”后，日志 tag `webview` 会输出当前设备 WebView provider 包名和版本号，真机验收前先确认目标设备内核版本。
+- 电脑浏览器预览不等于兼容验证，Chrome DevTools 无法模拟旧内核的语法支持。
+
+### 15.2 JS 语法红线
+
+语法级不兼容是最危险的一类：旧内核解析到不认识的语法会直接抛 `SyntaxError`，**整个 `<script>` 块一行都不会执行**，无法用 `try/catch` 兜底，典型表现就是整页白屏或按钮全部无响应。单文件 WebHome 通常把全部逻辑放在一个大 `<script>` 里，一处新语法就能废掉整个页面。
+
+| 语法 | 最低 Chromium | 说明 |
+| --- | --- | --- |
+| `**` 指数运算符 | 52 | 用 `Math.pow()` |
+| `async` / `await` | 55 | 可作为业务代码基线 |
+| 函数参数尾逗号 | 58 | 避免 |
+| 对象展开/剩余 `{ ...obj }` | 60 | 数组展开 `[...arr]`、调用展开 `fn(...args)` 是 46+，可用 |
+| `<script type="module">` | 61 | 单文件 WebHome 不建议使用 |
+| 正则 dotAll `s` 标志、lookbehind `(?<=)` | 62 | 旧内核在**解析正则字面量时**直接报错，等同语法错误 |
+| `for await` / async generator | 63 | 避免 |
+| 正则命名捕获组 `(?<name>)` | 64 | 同上，等同语法错误 |
+| `catch {}` 省略绑定 | 66 | 写 `catch (e) {}` |
+| BigInt 字面量 `1n` | 67 | 避免 |
+| class 公有字段 | 72 | 在 constructor 里赋值 |
+| class 私有字段 `#x`、静态字段 | 74 | 避免 |
+| 可选链 `?.` | 80 | 用 `a && a.b` |
+| 空值合并 `??` | 80 | 用 `a == null ? b : a` 或 `||`（注意 0/空串语义差异） |
+| 逻辑赋值 `&&=` `||=` `??=` | 85 | 拆开写 |
+| 数字分隔符 `1_000` | 75 | 避免 |
+
+ES2015-2016 基础语法（箭头函数、模板字符串、`let`/`const`、解构、默认参数、`class`、`for...of`、`Map`/`Set`、Promise、Symbol）在 Chromium 51 上都可用。
+
+`examples/homepages/nostr.html` 的实际策略可以直接照搬：业务代码基线 ES2017（`async/await` 及以下），全文 0 处 `?.`、`??`、逻辑赋值；头部兼容引导层本身用 ES5（`var` + `function`）书写，保证它在任何内核上都能先跑起来。
+
+### 15.3 JS API 兼容清单
+
+API 级不兼容在运行时才报错（`xxx is not a function`），只影响调用点，可以 polyfill 或特性检测。
+
+| API | 最低 Chromium | 应对（括号内为 `examples/homepages/nostr.html` 行号） |
+| --- | --- | --- |
+| `Array.from` / `Array.prototype.includes` | 45 / 47 | polyfill（52-72 / 79-83） |
+| `NodeList.forEach` / `HTMLCollection.forEach` | 51 | polyfill（73-78） |
+| `Object.values` / `Object.entries` | 54 | polyfill（42-51） |
+| `String.padStart` / `padEnd` | 57 | 基线内可用；更低目标需 polyfill |
+| `Promise.prototype.finally` | 63 | polyfill（125-134） |
+| `Array.flat` / `flatMap` | 69 | polyfill（84-107） |
+| `globalThis` | 71 | 用 `window` |
+| `Object.fromEntries` | 73 | 避免使用 |
+| `Promise.allSettled` | 76 | 避免；用 `Promise.all` + 每项自行 catch |
+| `String.replaceAll` | 85 | 用 `split/join` 或全局正则 `replace` |
+| `Element.replaceChildren` | 86 | polyfill（20-28） |
+| `structuredClone` | 98 | 用 `JSON.parse(JSON.stringify())` |
+| `IntersectionObserver` | 51（约 58 前实现不稳） | `"IntersectionObserver" in window` 检测 + 被动 `scroll` 监听兜底（7373、12666） |
+| `ResizeObserver` | 64 | 检测后可选使用 |
+| `AbortController` / fetch `signal` | 66 | 不依赖；用请求序号或 token 让旧响应失效 |
+| `requestIdleCallback` | 47 | 检测 + `setTimeout` 兜底 |
+| `navigator.clipboard` | 66 且需安全上下文 | WebHome 运行在 `http://127.0.0.1` 或 `file://`，clipboard API 大概率不可用；用 `document.execCommand("copy")` 兜底 |
+| `crypto.subtle` | 需安全上下文 | 非 https 下不可用；需要哈希/签名时引入纯 JS 实现（demo 用 nostr-tools bundle） |
+| `scrollIntoView({ behavior })` 对象参数 | 61 | 旧内核把对象参数当 boolean；统一封装滚动函数 |
+| `KeyboardEvent.key` 遥控器键值 | - | 部分盒子返回非标准 key；`keydown` 同时判断 `event.key` 和 `event.keyCode` |
+| `indexedDB` | 基线内可用 | 仍建议 `"indexedDB" in window` 防御（4982），个别内核隐私模式下为 null |
+
+### 15.4 CSS 兼容清单
+
+CSS 不兼容是静默失败：不认识的属性或值被丢弃，页面不报错但布局崩坏。两条解析语义必须先记住：
+
+- **整条声明失效**：值里有不认识的函数（如 `clamp()`、`env()`、`100dvh`），整条属性声明被丢弃，元素可能高度为 0 或完全没有该属性。
+- **整条规则失效**：选择器列表（逗号分隔）里只要有一个选择器无法解析（如 `:is()`、`:focus-visible`、`:has()`），**整条规则连同列表里其它正常选择器一起被丢弃**。现代选择器必须单独成条，不要与基础选择器混写在一个逗号列表里。
+
+| 特性 | 最低 Chromium | 失效表现 | 应对（括号内为 demo 行号） |
+| --- | --- | --- | --- |
+| CSS 变量 `var()` | 49 | 属性失效 | minSdk 24 基线内可用 |
+| `display: grid` | 57 | 布局崩 | `@supports (display: grid)` 渐进增强（493） |
+| grid `gap` | 57 | 间距消失 | 见下行 |
+| **flex `gap`** | **84** | 元素挤在一起 | `CSS.supports("gap")` 无法区分 flex gap 是否生效 → 运行时创建隐藏 flex/grid 双容器测量 `scrollHeight`（135-163），失败加 `no-layout-gap` 类，margin 兜底（3862-3971） |
+| `min()` / `max()` / `clamp()` | 79 | 整条声明失效，宽高可能为 0 | `CSS.supports` 检测（164-176），失败加 `no-css-functions` 类，固定值兜底（1836+、4046+） |
+| `aspect-ratio` | 88 | 高度塌缩为 0 | `CSS.supports` + 运行时实测渲染高度——**部分内核 `CSS.supports` 返回 true 但渲染错误**（177-208）；失败加 `no-aspect-ratio` 类，`padding-top` 百分比占位兜底（3973-4044） |
+| `backdrop-filter` | 76（实测约 87 前不稳） | 无模糊，文字直接压壁纸 | 永远配半透明纯色底色，模糊只当增强；TV 模式本就建议减少使用 |
+| `inset` | 87 | 定位失效 | 先写 `top/right/bottom/left` 兜底，再写 `inset`（demo 1162-1164 等 8 处均如此） |
+| `:is()` / `:where()` | 88 | 整条规则丢弃 | 不使用；展开写 |
+| `:focus-visible` | 86 | 整条规则丢弃 | TV 焦点样式用 `:focus` 或 JS 维护的 `.focus` 类 |
+| `:has()` | 105 | 整条规则丢弃 | 不使用；JS 加状态类 |
+| `100dvh` / `svh` | 108 | 整条声明失效 | 默认 `100vh` 或 `var(--fm-web-height)`，`@supports (height: 100dvh)` 渐进升级（245-247） |
+| `env(safe-area-inset-*)` | 69 | 整条声明失效 | 先写不带 `env()` 的同名声明兜底，下一行再写 `env()` 版本 |
+| `position: sticky` | 56 | 不吸附 | 可接受的优雅降级 |
+| `overscroll-behavior` | 63 | 无效 | 可接受降级 |
+| `scroll-behavior: smooth` | 61 | 瞬时跳转 | 可接受降级 |
+| `contain: layout style` | 52 | 无效 | 安全；`contain: paint` 会裁掉焦点光晕，慎用 |
+| `content-visibility` | 85 | 无效或裁切焦点 | 只做可选增强，真机验证后启用 |
+| `object-fit` | 32 | - | 安全 |
+| `-webkit-line-clamp` | 早期可用 | - | 必须配 `display: -webkit-box` + `-webkit-box-orient: vertical`（1465-1467） |
+| `text-wrap: balance` | 114 | 无效 | 可接受降级 |
+| `@supports` | 28 | - | 本身安全，放心用于渐进增强 |
+
+### 15.5 兼容引导层与应对策略
+
+`examples/homepages/nostr.html` 头部 8-214 行是一个可直接复用的“兼容引导层”模板，建议所有 WebHome 单文件照搬这个结构：
+
+1. **引导层是文档里第一个内联 `<script>`，并且只用 ES5 语法书写**（`var` + `function`，不用箭头函数和模板字符串），保证它在任何内核上都能先执行。
+2. 引导层做三件事：
+   - **polyfill** 库函数级缺口：`replaceChildren`、`matches`/`closest`、`Object.values/entries`、`Array.from`、`NodeList.forEach`、`Array.includes/flat/flatMap`、`String.includes/startsWith/endsWith`、`Promise.finally`。
+   - **特性检测并给 `<html>` 加降级类**：`no-layout-gap`、`no-css-functions`、`no-aspect-ratio`。检测顺序是先问 `CSS.supports`，再用隐藏元素运行时实测——`CSS.supports` 在部分内核上会“撒谎”（声称支持 `aspect-ratio` 但渲染错误），所以关键布局特性必须实测渲染结果。
+   - **标记 App 环境**：检测 `window.fongmiBridge` 加 `fm-native` 类。
+3. CSS 按“现代写法为默认 + `html.no-*` 降级覆盖”组织，不要把降级写成默认再增强。
+4. 布局关键路径还可以加第二道运行时保险：渲染后用 `getComputedStyle` 检查关键属性是否真的生效，没生效再切换 fallback 布局（demo 的 `legacy-detail-layout`，6810-6837：检测详情大屏 padding 是否生效）。
+5. 业务代码语法基线 ES2017，**绝不使用 `?.`、`??`、逻辑赋值等 Chromium 80+ 语法**——语法错误无法 try/catch，一处就白屏。代码评审和 AI 生成代码后都应专项检查这几个字符。
+6. 第三方 CDN 库的构建产物语法基线要单独确认（demo 引入的 nostr-tools bundle 见 4345 行）；库升级可能悄悄抬高语法基线，锁定版本号。
+7. 网络层不依赖浏览器兼容性：App 内统一走 `fm.req` / `fm.res`（Native OkHttp），浏览器 `fetch` 只用于电脑预览 fallback。
+8. 验收：开启调试日志确认目标设备 WebView 版本（tag `webview`），在手头最旧的盒子上完整过一遍首页、详情、搜索、焦点导航。
+
+## 16. WebHome SDK 总览
+
+短别名：
+
+```js
+window.fm = {
+  req,
+  res,
+  play,
+  vod,
+  vodInline,
+  preloadArtwork,
+  ctrl,
+  stat,
+  search,
+  openVod,
+  openLive,
+  openKeep,
+  openSetting,
+  history,
+  pan,
+  check,
+  cache,
+  ui,
+  ext,
+  device,
+  site,
+  config,
+  back,
+  reload
+};
+```
+
+对应完整接口：
+
+| `fm` | 完整接口 |
+| --- | --- |
+| `fm.req` | `fongmi.net.request` |
+| `fm.res` | `fongmi.net.resourceUrl` |
+| `fm.play` | `fongmi.player.playUrl` |
+| `fm.vod` | `fongmi.player.playVod` |
+| `fm.vodInline` | `fongmi.player.playVodInline` |
+| `fm.preloadArtwork` | `fongmi.player.preloadArtwork` |
+| `fm.ctrl` | `fongmi.player.control` |
+| `fm.stat` | `fongmi.player.status` |
+| `fm.search` | `fongmi.app.search` |
+| `fm.openVod` | `fongmi.app.openVod` |
+| `fm.openLive` | `fongmi.app.openLive` |
+| `fm.openKeep` | `fongmi.app.openKeep` |
+| `fm.openSetting` | `fongmi.app.openSetting` |
+| `fm.history` | `fongmi.app.history` |
+| `fm.pan.check` | `fongmi.pan.check` |
+| `fm.pan.play` | `fongmi.pan.play` |
+| `fm.check` | `fongmi.pan.check` 的短别名 |
+| `fm.cache` | `fongmi.cache` |
+| `fm.ui.setToolbar` | `fongmi.ui.setToolbar` |
+| `fm.ui.setChrome` | `fongmi.ui.setChrome` |
+| `fm.ui.restoreChrome` | `fongmi.ui.restoreChrome` |
+| `fm.ui.getViewport` | `fongmi.ui.getViewport` |
+| `fm.ext.info` | `fongmi.ext.info` |
+| `fm.ext.log` | `fongmi.ext.log` |
+| `fm.ext.toast` | `fongmi.ext.toast` |
+| `fm.device` | `fongmi.device.info` |
+| `fm.site` | `fongmi.site.info` |
+| `fm.config` | `fongmi.config.info` |
+| `fm.back` | `fongmi.navigation.back` |
+| `fm.reload` | `fongmi.navigation.reload` |
+
+Native bridge 对超过 12000 字符的返回会自动分片，JS SDK 会自动拉取分片并还原。Native 同时注入 `window.fongmiClient = { mode, isLeanback }`，WebHome 可用它判断当前是手机端还是 TV 端；不要只依赖屏幕宽度或 UA。
+
+`fm.ext` 主要服务于 WebHome 用户脚本扩展：`fm.ext.info()` 返回当前站点和扩展注册状态（`siteKey`、`siteName`、`homePage`、`enabled`、`matched`、`ready`），`fm.ext.log(message, data)` 写扩展日志，`fm.ext.toast(message)` 弹原生提示。扩展开发完整说明见第 25 章。
+
+`fm.ui.setToolbar(false)` 是 legacy chrome API，保留旧语义。TV 端用于切到 `tv-toolbar-hidden`；`setToolbar(true)` 会恢复当前站点的 WebHome 默认 chrome，而不是强制 `tv-normal`。手机端会进入 WebHome 沉浸模式，同时隐藏顶部操作区、底部导航和系统栏。新 WebHome 不要用它表示首页融合模式，首页融合应使用站点 `chromeMode/webHomeChrome` 预应用或运行时 `fm.ui.setChrome({ mode: "edge" })`。
+
+短别名命名规则：`app`、`navigation` 的短别名是扁平动词（如 `fm.search`、`fm.openVod`、`fm.back`），`ui` / `pan` / `cache` 保留分组（如 `fm.ui.setChrome`、`fm.pan.play`）。`fm.device`、`fm.site`、`fm.config` 是可调用函数，不要在短别名上挂 `fm.device.safeArea()` 这类子方法；安全区读取使用 `fm.ui.getViewport()`。
+
+Chrome 模式：
+
+| 模式 | 手机端行为 | TV 端行为 |
+| --- | --- | --- |
+| `normal` | 原生 AppBar / BottomNavigation 显示，WebHome 在原生内容区内 | 等同 `tv-normal` |
+| `edge` | 推荐首页模式。隐藏原生顶部/底部 UI，WebView 铺满窗口，系统栏显示且透明，交互控件由安全区变量避让 | 跨端首页融合语义，TV 端映射为 `tv-full` |
+| `immersive` | 隐藏原生 UI 和系统栏；默认显示原生恢复入口，`restoreAffordance: "none"` 时由页面自绘返回并让返回键进入 WebView history | TV 系统栏长期隐藏，映射为 `tv-full` |
+| `tv-normal` | 不适用 | 保持顶部 toolbar，WebView 在 toolbar 下方 |
+| `tv-toolbar-hidden` | 不适用 | legacy 模式。隐藏顶部 toolbar，WebView 使用全屏 overlay，`fmviewport.chromeMode` 仍如实返回 `tv-toolbar-hidden` |
+| `tv-overlay` | 不适用 | 显示顶部 toolbar，WebView 下移避让；保留该 mode 名称用于兼容旧脚本 |
+| `tv-full` | 不适用 | WebView 全屏 overlay，隐藏顶部 toolbar，由 WebHome 接管首屏 |
+
+TV 端在 `tv-full` / `tv-toolbar-hidden` 首页边界按返回键时，会先临时切到 `tv-normal` 露出顶部 toolbar，并让 WebView 避开 toolbar；WebHome 内的“关闭首页全屏”也应使用 `tv-normal`。Native 也会让 `tv-overlay` 避让 toolbar，用于兼容旧脚本或旧缓存页面。
+
+`fm.ui.setChrome(options)` 参数示例：
+
+```js
+await fm.ui.setChrome({
+  mode: "edge",
+  statusBarStyle: "light",
+  navigationBarStyle: "light",
+  restoreAffordance: "auto",
+  scrim: { top: "transparent", bottom: "transparent" },
+  startup: true
+});
+```
+
+`statusBarStyle/navigationBarStyle` 按图标颜色定义：`light` 表示浅色图标，适合深色背景；`dark` 表示深色图标，适合浅色背景；`auto` 跟随 App 深浅色主题。`restoreAffordance` 可设为 `auto` / `native` / `none`；自绘详情页已有返回按钮时用 `none`，避免 Native 叠加右上角恢复入口并允许返回键优先走 WebView history。`startup: true` 只用于 WebHome 首页 chrome 偏好，例如页面提供“首页全屏/非全屏”开关时同步给 Native，确保下次冷启动首帧不闪；Native 只会持久化 `normal` / `edge`，不会把 `immersive` 保存成启动偏好。`fm.ui.restoreChrome()` 从 `immersive` 回到进入前的模式。`fm.ui.getViewport()` 一次性返回当前视口、安全区、手势区和 `chromeMode`；持续变化会通过 `fmviewport` 事件推送。
+
+Native 会向 WebHome 注入下列 CSS 变量：
+
+```css
+:root {
+  --fm-web-width: 360px;
+  --fm-web-height: 800px;
+  --fm-safe-top: 24px;
+  --fm-safe-right: 0px;
+  --fm-safe-bottom: 24px;
+  --fm-safe-left: 0px;
+  --fm-safe-bottom-max: 24px;
+  --fm-gesture-left: 18px;
+  --fm-gesture-right: 18px;
+  --fm-gesture-bottom: 24px;
+  --fm-status-bar-height: 24px;
+  --fm-navigation-bar-height: 24px;
+  --fm-keyboard-bottom: 0px;
+  --fm-chrome-mode: edge;
+}
+```
+
+同时会派发：
+
+```js
+window.addEventListener("fmviewport", (event) => {
+  const {
+    width, height,
+    safeTop, safeRight, safeBottom, safeLeft, safeBottomMax,
+    gestureLeft, gestureRight, gestureBottom,
+    statusBarHeight, navigationBarHeight, keyboardBottom,
+    chromeMode, systemBarsHidden
+  } = event.detail;
+});
+```
+
+WebHome 模板必须声明 `viewport-fit=cover`，并把 Native 变量与浏览器 `env()` 用 `max()` 去重，不能相加：
+
+```css
+:root {
+  --safe-top: max(var(--fm-safe-top, 0px), env(safe-area-inset-top, 0px));
+  --safe-bottom: max(var(--fm-safe-bottom, 0px), env(safe-area-inset-bottom, 0px));
+}
+
+.top-controls {
+  top: calc(var(--safe-top) + 12px);
+}
+
+.bottom-actions {
+  bottom: var(--safe-bottom);
+}
+```
+
+错误写法是 `calc(var(--fm-safe-bottom) + env(safe-area-inset-bottom))`，新版 App 注入真实 `--fm-safe-bottom` 后会造成双重避让。首期 `--fm-keyboard-bottom` 固定为 `0px`，键盘避让优先交给 WebView 的 visual viewport 行为。
+
+## 17. WebHome 网络请求
+
+### 17.1 `fm.req(url, options)`
+
+通过 Native OkHttp 发起请求，不受普通浏览器 CORS 限制。该接口适合 JS 读取 API 数据；图片、视频、字幕、CSS 背景这类 DOM 资源优先用 `fm.res()`。
+
+完整调用：
+
+```js
+const response = await fm.req("https://api.example.com/data", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify({ keyword: "仙逆" }),
+  responseType: "json",
+  timeout: 30,
+  credentials: "include"
+});
+
+if (!response.ok) throw new Error(response.error || `HTTP ${response.status}`);
+console.log(response.body);
+```
+
+`options` 字段：
+
+| 字段 | 类型 | 是否必填 | 取值和默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `method` | string | 否 | 默认 `GET`；会转为大写；支持 OkHttp 可执行的方法：`GET`、`POST`、`PUT`、`PATCH`、`DELETE`、`HEAD`、`OPTIONS` | `GET` 和 `HEAD` 不带请求体，其它方法会发送 `body`，即使 `body` 为空也会发送空字符串 |
+| `headers` | object | 否 | 默认 `{}` | key/value 请求头。未提供 `User-Agent` 时，App 自动使用设置里的 UA 或播放器默认 UA；未提供 `Accept-Encoding` 时，App 自动加 `gzip` |
+| `body` | string | 否 | 默认 `""` | 请求体必须是字符串；JSON 请求需自行 `JSON.stringify()` |
+| `responseType` | string | 否 | `text`、`json`、`base64`；默认 `text` | `json` 会把响应文本解析成 JSON；`base64` 返回响应原始字节的 Base64 字符串；其它值按 `text` 处理 |
+| `timeout` | number | 否 | 默认 `30`，最小 `1` | 单位秒，同时用于 connect/read/write timeout |
+| `credentials` | string | 否 | 只有 `include` 有特殊行为 | `include` 且未手写 `Cookie` header 时，从 WebView CookieManager 读取目标 URL Cookie 并加入请求 |
+
+返回字段：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `ok` | boolean | HTTP 状态码是否为 2xx |
+| `status` | number | HTTP 状态码；Native 请求异常时为 `500` |
+| `url` | string | 最终请求 URL，可能是重定向后的 URL |
+| `headers` | object | 响应头；同名多值响应头会以数组返回，单值响应头以字符串返回 |
+| `cookies` | array | 响应里的全部 `Set-Cookie` 值 |
+| `body` | any | 由 `responseType` 决定：`text` 为字符串，`json` 为对象/数组/值，`base64` 为字符串 |
+| `error` | string | 仅请求异常时返回，内容为异常消息 |
+
+返回示例：
+
+```json
+{
+  "ok": true,
+  "status": 200,
+  "url": "https://api.example.com/data",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "cookies": [],
+  "body": {}
+}
+```
+
+编码和 Cookie 行为：
+
+- 自动处理 `gzip` 和 `deflate`；`br` 当前不支持，服务端返回 `Content-Encoding: br` 会进入异常返回。
+- 响应 `Set-Cookie` 会写入 WebView CookieManager，并 `flush()` 持久化。
+- 手写 `Cookie` header 时，`credentials: "include"` 不会覆盖开发者传入的 Cookie。
+- `fm.req()` 使用 WebHome 专用 OkHttpClient，但会接入 App 统一 DNS 和代理选择器：配置层 `hosts`、`doh`、`proxy` 以及增强功能里的壳代理规则都会生效。
+- 配置层 `headers` 不会自动注入 `fm.req()`；需要额外 Header 时必须在 `options.headers` 里显式传入。
+- `/webResource` 与 `fm.res()` 同样会走统一网络策略和壳代理选择器。
+
+### 17.2 `fm.res(url, options)`
+
+生成本地 `/webResource` 地址，适合给 `img.src`、`video.src`、字幕 URL、CSS 背景图等 DOM 资源使用。`fm.res()` 返回字符串，不是 Promise。
+
+完整调用：
+
+```js
+img.src = fm.res("https://image.tmdb.org/t/p/w500/xxx.jpg");
+video.src = fm.res(videoUrl, {
+  headers: { Referer: "https://example.com/" },
+  credentials: "include"
+});
+```
+
+`options` 字段：
+
+| 字段 | 类型 | 是否必填 | 取值和默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `headers` | object | 否 | 默认 `{}` | 会序列化到 `/webResource?headers=...`，由 Native 代发资源请求。未提供 `User-Agent` 时自动补默认 UA |
+| `credentials` | string | 否 | 只有 `include` 有特殊行为 | `include` 且未手写 `Cookie` header 时，从 WebView CookieManager 读取目标 URL Cookie 并加入资源请求 |
+
+`fm.res()` 生成的 URL 形态：
+
+```text
+http://127.0.0.1:{port}/webResource?url={encodedUrl}&headers={encodedJson}&credentials=include
+```
+
+`/webResource` 支持的请求方法：
+
+| 方法 | 说明 |
+| --- | --- |
+| `GET` | DOM 资源默认读取方式 |
+| `HEAD` | 透传为上游 `HEAD` |
+| `POST` | 透传请求体，body 来自 `body` 参数或 POST data |
+| `PUT` | 透传请求体 |
+| `PATCH` | 透传请求体 |
+| `DELETE` | 透传请求体 |
+| `OPTIONS` | 本地 CORS 预检，直接返回 204 |
+
+资源网关行为：
+
+- 只允许目标 URL 为 `http://` 或 `https://`。
+- 会透传浏览器请求中的 `Range`，适合视频、音频、字幕、大图分段读取。
+- 使用项目统一 OkHttp，会受配置层网络策略影响。
+- 会复制上游响应头，但会移除 `Connection`、`Transfer-Encoding`、`Keep-Alive`、`Content-Length`。
+- 会给本地响应加 CORS header：`Access-Control-Allow-Origin`、`Access-Control-Allow-Credentials`、`Access-Control-Allow-Methods`、`Access-Control-Allow-Headers`、`Access-Control-Expose-Headers`。
+
+`fm.req` 和 `fm.res` 区别：
+
+| 能力 | 适用 |
+| --- | --- |
+| `fm.req` | JS 读取 API 数据，返回 Promise 和结构化结果 |
+| `fm.res` | DOM 元素加载资源，返回可直接赋给 `src` 或 CSS 的本地 URL |
+
+普通 `fetch()` 仍会受浏览器 CORS 限制。WebHome 需要跨域时应使用 `fm.req` 或 `fm.res`。
+
+## 18. WebHome 播放能力
+
+播放页图片有两个独立语义：
+
+- `pic`：竖版海报/播放器默认 artwork，也会写入历史、收藏等原生数据。
+- `wallPic`：播放页背景图，推荐传横屏剧照/backdrop。App 不会自动判断横竖屏，调用方应自己把横屏图放到 `wallPic`。
+
+播放页背景只使用 `wallPic`。如果 `wallPic` 为空、加载失败或没有传，播放页不再用 `pic` 兜底，而是显示 App 默认背景/壁纸；`pic` 仍用于播放器默认 artwork、历史和收藏等原生数据。
+
+### 18.1 播放直链 `fm.play(url, title, options)`
+
+```js
+await fm.play("https://example.com/video.m3u8", "标题", {
+  pic: "https://example.com/poster.jpg",
+  wallPic: "https://example.com/backdrop.jpg",
+  headers: { Referer: "https://example.com/" },
+  credentials: "include"
+});
+```
+
+参数：
+
+| 参数 | 类型 | 是否必填 | 说明 |
+| --- | --- | --- | --- |
+| `url` | string | 是 | 播放地址。可以是普通媒体 URL，也可以是 App 可识别的特殊协议地址 |
+| `title` | string | 否 | 播放页标题；为空时使用最终播放 URL |
+| `options.pic` | string | 否 | 播放页海报/默认 artwork |
+| `options.wallPic` | string | 否 | 播放页背景图；为空时使用 App 默认背景/壁纸，不用 `pic` 兜底 |
+| `options.headers` | object | 否 | 播放请求头；传入后 SDK 会把播放 URL 转成 `/webResource` 本地网关地址 |
+| `options.credentials` | string | 否 | 传 `include` 时 SDK 会把播放 URL 转成 `/webResource` 本地网关地址，并让网关自动带 Cookie |
+
+行为：
+
+- 内部调用 `VideoActivity.start(activity, SiteApi.PUSH, playUrl, title, pic, null, wallPic)`。
+- 如果传了 `headers` 或 `credentials: "include"`，SDK 自动调用 `fm.res()` 生成本地资源地址再播放。
+- 返回值为 `{}`；播放是否最终成功取决于播放器和后续解析链路。
+
+### 18.2 播放 CSP 影片 `fm.vod(siteKey, vodId, title, pic, options)`
+
+```js
+await fm.vod("site_key", "vod_id", "影片名", "https://example.com/poster.jpg", {
+  wallPic: "https://example.com/backdrop.jpg"
+});
+```
+
+参数：
+
+| 参数 | 类型 | 是否必填 | 说明 |
+| --- | --- | --- | --- |
+| `siteKey` | string | 是 | 配置里 `sites[].key` |
+| `vodId` | string | 是 | 目标站点详情 ID，即 Spider/API 的 `vod_id` |
+| `title` | string | 否 | 播放/详情标题 |
+| `pic` | string | 否 | 海报 URL |
+| `options.wallPic` | string | 否 | 播放页背景图；为空时使用 App 默认背景/壁纸，不用 `pic` 兜底 |
+
+行为：
+
+- 内部调用 `VideoActivity.start(activity, siteKey, vodId, title, pic, null, wallPic)`。
+- 进入原生详情/播放链路，后续由对应站点 Spider/API 解析详情和播放地址。
+
+### 18.3 播放临时多集/按集解析 `fm.vodInline(payload)`
+
+```js
+await fm.vodInline({
+  vod_id: "webhome-demo",
+  vod_name: "影片名",
+  vod_pic: "https://example.com/poster.webp",
+  wallPic: "https://example.com/backdrop.webp",
+  vod_play_from: "WebHome",
+  mark: "02",
+  headers: { Referer: location.href },
+  episodes: [
+    { name: "01", url: "https://example.com/01.m3u8" },
+    { name: "02", url: "https://example.com/02.m3u8" }
+  ]
+});
+```
+
+参数：
+
+| 参数 | 类型 | 是否必填 | 说明 |
+| --- | --- | --- | --- |
+| `vod_id` | string | 否 | 临时 VOD ID；为空时 Native 自动生成 |
+| `vod_name` / `title` | string | 否 | 播放页标题 |
+| `vod_pic` / `pic` | string | 否 | 海报 URL |
+| `wallPic` | string | 否 | 播放页背景图；为空时使用 App 默认背景/壁纸，不用 `vod_pic` / `pic` 兜底 |
+| `vod_play_from` | string | 否 | 播放线路名，默认 `WebHome` |
+| `mark` | string | 否 | 默认选中的集名，例如 `02` |
+| `headers` | object | 否 | 播放直链请求头，会传给播放器 |
+| `episodes` | array | 是 | `{ name, url }` 数组；`url` 可以是直链，也可以是集数页面链接 |
+| `episodes[].resolve` | boolean | 否 | 为 `true` 时，播放页点击该集才回调扩展解析真实播放地址 |
+| `episodes[].pageUrl` | string | 否 | 集数页面地址；按集解析时建议填写 |
+
+行为：
+
+- Native 把 payload 注册为内存级临时 VOD，再打开 `VideoActivity`。
+- `vod_pic` / `pic` 用作海报和播放器默认 artwork，`wallPic` 用作播放页背景图；没有 `wallPic` 时背景使用 App 默认背景/壁纸。
+- 原生播放页会按 `episodes` 显示集数、上一集、下一集和更多集数弹窗。
+- 如果 `episodes[].resolve` 为 `true`，Native 不会在进入播放页前批量请求所有播放地址，而是在用户点击某一集时调用 `window.__fmWebHomeInlineResolver(episode)`，resolver 返回 `{ url, format, headers, credentials }` 后即时播放。
+- 适合 WebHome 扩展已解析出多集直链，或只拿到集数页面但不想实现完整 CSP Spider 的场景。
+
+### 18.4 播放页图片预热 `fm.preloadArtwork(pic, wallPic)`
+
+```js
+await fm.preloadArtwork("https://example.com/poster.jpg", "https://example.com/backdrop.jpg");
+```
+
+行为：
+
+- 只把 `pic` 和 `wallPic` 提交给原生 Glide 后台预热，返回 `{}`。
+- 不等待图片下载完成，也不阻塞后续 `fm.vod` / `fm.play` / `fm.vodInline` 跳转。
+- 推荐在 WebHome 详情页拿到海报和横屏剧照后立即调用；用户点击"继续观看"或"播放"时直接跳转，不要点击后再等待预热。
+- WebView 自己加载过的图片缓存不等于原生 Glide 缓存。原生搜索结果页通常已经通过原生列表图片完成预热；WebHome 详情页如果希望播放页首帧更稳，应显式调用这个接口。
+
+### 18.5 播放控制 `fm.ctrl(action)`
+
+```js
+await fm.ctrl("play");
+await fm.ctrl("pause");
+await fm.ctrl("stop");
+await fm.ctrl("prev");
+await fm.ctrl("next");
+await fm.ctrl("loop");
+await fm.ctrl("replay");
+```
+
+`action` 取值：
+
+| action | 行为 |
+| --- | --- |
+| `play` | 当前播放器执行播放 |
+| `pause` | 当前播放器执行暂停 |
+| `stop` | 停止播放服务 |
+| `prev` | 切换上一集/上一项 |
+| `next` | 切换下一集/下一项 |
+| `loop` | 切换循环/单集循环行为，具体表现跟当前播放页状态一致 |
+| `replay` | 重播或刷新当前播放，具体表现跟播放页“重播/刷新”按钮一致 |
+
+如果当前没有 PlaybackService，接口直接返回 `{}`，不会抛错。
+
+### 18.6 播放状态 `fm.stat()`
+
+```js
+const status = await fm.stat();
+```
+
+返回字段：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `state` | number | 播放状态枚举，见下表 |
+| `speed` | number | 当前播放倍速 |
+| `duration` | number | 总时长，毫秒；未知时可能为负值或 0 |
+| `position` | number | 当前播放位置，毫秒；未知时可能为负值或 0 |
+| `url` | string | 当前播放器实际 URL |
+| `title` | string | 当前媒体标题 |
+| `artist` | string | 当前媒体 artist 元数据 |
+| `artwork` | string | 当前媒体封面 URL |
+
+`state` 取值：
+
+| state | 说明 |
+| --- | --- |
+| `1` | 其它状态：未初始化、空闲、结束、未知 |
+| `2` | ready，播放器已准备好但不一定正在播放 |
+| `3` | playing，正在播放 |
+| `6` | buffering，缓冲中 |
+
+没有播放服务时，`fm.stat()` 返回 `{}`。
+
+## 19. WebHome App 能力
+
+### 19.1 搜索 `fm.search(keyword, options)`
+
+```js
+await fm.search("仙逆", {
+  direct: true,
+  pic: "https://example.com/poster.jpg",
+  wallPic: "https://example.com/backdrop.jpg"
+});
+```
+
+参数：
+
+| 参数 | 类型 | 是否必填 | 取值和默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `keyword` | string | 是 | 非空字符串 | 搜索关键词 |
+| `options.direct` | boolean | 否 | 默认 `false` | `true` 时调用 `SearchActivity.direct()`，尽量直接进入搜索结果列表，减少 WebHome 到原生搜索页之间的返回层级；`false` 时调用普通搜索入口 |
+| `options.pic` | string | 否 | 默认 `""` | 从 WebHome 详情页传给原生搜索结果后续播放链路的海报/默认 artwork；搜索结果自身有海报时优先用结果海报 |
+| `options.wallPic` | string | 否 | 默认 `""` | 从 WebHome 详情页传给原生搜索结果后续播放链路的播放页背景图 |
+
+返回值为 `{}`。搜索页是否有结果由当前配置站点决定。WebHome 详情页的“搜索播放”如果希望用户从原生搜索结果进入播放器后仍看到同一张横屏背景，应传 `wallPic`；如果没有 `wallPic`，播放页不会用搜索结果海报作为背景兜底。
+
+### 19.2 点播、收藏、直播和设置入口
+
+```js
+await fm.openVod();
+await fm.openKeep();
+await fm.openLive();
+await fm.openSetting();
+```
+
+行为：
+
+| 接口 | 行为 |
+| --- | --- |
+| `fm.openVod()` | 退出 WebHome chrome，回到原生点播首页 |
+| `fm.openKeep()` | 打开原生收藏页 |
+| `fm.openLive()` | 打开原生直播页 |
+| `fm.openSetting()` | 打开原生设置页；手机端切到设置页，TV 端打开设置 Activity |
+
+返回值均为 `{}`。
+
+### 19.3 最近观看 `fm.history()`
+
+```js
+const history = await fm.history();
+```
+
+返回当前点播配置下 60 天内的最近观看列表。该接口可用于 WebHome 从原生播放页返回后补偿识别播放进度。
+
+返回数组元素字段：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `key` | string | 历史唯一键，内部由 `siteKey` 和 `vodId` 组合生成 |
+| `vodPic` | string | 海报 URL |
+| `vodName` | string | 影片/剧集名称 |
+| `vodFlag` | string | 当前线路 flag |
+| `vodRemarks` | string | 当前集/备注 |
+| `episodeUrl` | string | 当前集播放地址或 episode 标识 |
+| `revSort` | boolean | 是否倒序显示选集 |
+| `revPlay` | boolean | 是否倒序播放 |
+| `createTime` | number | 最近更新时间，毫秒时间戳 |
+| `opening` | number | 片头跳过点，毫秒；未设置时为负值 |
+| `ending` | number | 片尾跳过点，毫秒；未设置时为负值 |
+| `position` | number | 最近播放位置，毫秒；未知时为负值 |
+| `duration` | number | 总时长，毫秒；未知时为负值 |
+| `speed` | number | 历史保存的播放倍速 |
+| `scale` | number | 历史保存的画面比例索引；未设置时为 `-1` |
+| `cid` | number | 所属点播配置 ID |
+
+### 19.4 返回和刷新
+
+```js
+await fm.back();
+await fm.reload();
+```
+
+行为：
+
+| 接口 | 返回值 | 行为 |
+| --- | --- | --- |
+| `fm.back()` | `{}` | App 侧执行 WebHome 返回，遵循下方返回边界规则 |
+| `fm.reload()` | `{}` | 清 WebView 缓存，并给当前 URL 追加 `_fm_reload={timestamp}` 后重新加载 |
+
+WebHome 返回边界规则（物理返回键和 `fm.back()` 一致）：
+
+- WebView 有 history 且上一条记录与当前页面同协议、同 host、同端口时，执行 `goBack()`。
+- 当前已经回到 WebHome 主页（忽略 `_fm_reload`、`_fm_restore` 参数）时，不再 `goBack()`，交给原生返回逻辑。
+- 上一条 history 跨站点时不 `goBack()`，直接交给原生返回逻辑，避免返回键把用户带回站外跳转页。
+
+移动端 WebHome 可见时，顶部刷新按钮也会触发 WebHome reload。
+
+## 20. WebHome 信息和缓存
+
+### 20.1 设备信息 `fm.device()`
+
+```js
+const device = await fm.device();
+```
+
+返回 `/device` 结果：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `uuid` | string | Android ID 或 DLNA UDN |
+| `name` | string | 设备名称 |
+| `ip` | string | 本机 HTTP 服务地址，包含协议、局域网 IP 和端口 |
+| `type` | number | 设备类型枚举，见下表 |
+| `serial` | string | 设备序列号，可能为空 |
+| `eth` | string | 有线网卡 MAC，可能为空 |
+| `wlan` | string | 无线网卡 MAC，可能为空 |
+| `time` | number | 当前时间戳，毫秒 |
+
+`type` 取值：
+
+| type | 说明 |
+| --- | --- |
+| `0` | 电视端/Leanback |
+| `1` | 手机端/Mobile |
+| `2` | DLNA 设备记录 |
+
+### 20.2 当前站点 `fm.site()`
+
+```js
+const site = await fm.site();
+```
+
+返回字段：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `key` | string | 当前站点 `sites[].key` |
+| `name` | string | 当前站点展示名 |
+| `homePage` | string | 当前 WebHome URL 或配置里的首页地址 |
+| `type` | number | 当前站点类型；`0` XML，`1` JSON，`2` JSON API 兼容类型，`3` Spider，`4` HTTP API + Base64 ext |
+| `header` | object | 当前站点请求 header |
+
+### 20.3 当前配置 `fm.config()`
+
+```js
+const config = await fm.config();
+```
+
+返回字段：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `id` | number | 当前点播配置 ID |
+| `url` | string | 当前点播配置 URL 或本地配置标识 |
+| `desc` | string | 当前点播配置显示描述；优先配置名，其次 URL |
+| `driveCheck` | boolean | App“增强功能”页里的“网盘检测”开关状态，默认 `true` |
+
+WebHome 做网盘检测前必须先读取 `driveCheck`，关闭时不要提交检测任务。
+
+### 20.4 缓存 `fm.cache`
+
+```js
+await fm.cache.set("key", "value", "rule");
+const value = await fm.cache.get("key", "rule");
+await fm.cache.del("key", "rule");
+```
+
+接口：
+
+| 接口 | 参数 | 返回值 | 说明 |
+| --- | --- | --- | --- |
+| `fm.cache.get(key, rule)` | `key: string`，`rule?: string` | string | 读取字符串；不存在时返回空字符串 |
+| `fm.cache.set(key, value, rule)` | `key: string`，`value: string`，`rule?: string` | `{}` | 写入字符串 |
+| `fm.cache.del(key, rule)` | `key: string`，`rule?: string` | `{}` | 删除字符串 |
+
+实际 Native 存储 key：
+
+```text
+cache_ + (rule ? rule + "_" : "") + key
+```
+
+注意：
+
+- 只存字符串；对象需要自行 `JSON.stringify()` 和 `JSON.parse()`。
+- `fm.cache` 走 App Native `Prefers`，不依赖网页 origin，适合保存 WebHome 配置、账号、同步身份、UI 偏好等需要跨 App 重启保留的数据。
+- 普通 `localStorage` 已启用，仍可保存临时或浏览器预览数据，但它按 WebView origin 隔离，并且和 `fm.cache` 不是同一个存储源。
+- 开发 WebHome 时建议封装统一存储层：App 内等待 `fmsdk` 后使用 `fm.cache`，电脑浏览器预览时再 fallback 到 `localStorage`。
+
+## 21. 网盘能力
+
+### 21.1 网盘检测 `fm.pan.check(items)`
+
+`fm.pan.check(items)` 调用 App 内置网盘分享链接有效性检测。`fm.check(items)` 是短别名。该能力受“增强功能 -> 网盘检测”开关控制，开关默认开启。
+
+完整调用：
+
+```js
+const config = await fm.config();
+if (config.driveCheck) {
+  const result = await fm.pan.check([
+    {
+      type: "quark",
+      url: "https://pan.quark.cn/s/xxxx",
+      password: ""
+    }
+  ]);
+}
+```
+
+等价完整接口：
+
+```js
+await fongmi.pan.check(items);
+```
+
+请求项字段：
+
+| 字段 | 类型 | 是否必填 | 说明 |
+| --- | --- | --- | --- |
+| `type` | string | 是 | 网盘类型。必须使用下方“检测支持的 type”表里的主值或别名 |
+| `url` | string | 是 | 网盘分享链接。App 会 trim 并做基础规范化 |
+| `password` | string | 否 | 提取码/访问码。`baidu`、`quark`、`uc` 会在规范化 URL 时补成 `pwd=` 查询参数；其它网盘按检测逻辑使用 |
+
+检测支持的 `type` 主值：
+
+| type | 网盘 | 当前检测方式 | 支持的链接特征 |
+| --- | --- | --- | --- |
+| `aliyun` | 阿里云盘/阿里云盘分享 | 匿名分享信息接口 | 链接路径最后一段作为 `share_id` |
+| `quark` | 夸克网盘 | sharepage token + detail 接口 | `pan.quark.cn/s/{id}`，提取码可来自 `pwd` 或 `password` |
+| `uc` | UC 网盘 | 页面文本探测 | UC 分享页 URL，提取码可来自 `pwd` 或 `password` |
+| `baidu` | 百度网盘 | share verify + share list 接口 | `/s/{shareId}` 或 `/share/init?surl={id}`，提取码可来自 `pwd` 或 `password` |
+| `tianyi` | 天翼云盘 | `getShareInfoByCodeV2` 接口 | `cloud.189.cn/t/{code}` 或 URL 查询参数 `code`，也识别文本里的 `（访问码：xxxx）` |
+| `123` | 123 云盘 | `api/share/info` 接口 | `123pan.com/s/{shareKey}`、`123pan.cn/s/{shareKey}`、`123684/123685/123912/123592/123865.com/s/{shareKey}` |
+| `xunlei` | 迅雷云盘 | 迅雷分享接口 + captcha token | `pan.xunlei.com/s/{shareId}`，提取码来自 `pwd` 或 `password` |
+| `115` | 115 网盘 | `115cdn.com/webapi/share/snap` 接口 | 分享路径最后一段作为 `share_code`；必须提供 `password` 或 URL 查询参数 `password` |
+| `mobile` | 中国移动云盘/和彩云 | 移动云分享接口，内置加解密 | `yun.139.com/shareweb/#/w/i/{id}`、`caiyun.139.com/w/i/{id}`、`caiyun.139.com/m/i?...`、`caiyun.feixin.10086.cn/{id}` |
+
+检测 `type` 别名：
+
+| 别名 | 等价主值 |
+| --- | --- |
+| `ali` | `aliyun` |
+| `alipan` | `aliyun` |
+| `123pan` | `123` |
+| `139` | `mobile` |
+| `caiyun` | `mobile` |
+
+不在上表内的 `type` 会返回 `unsupported`，不会执行平台检测请求。磁力、电驴、`thunder`、`jianpian` 不是网盘有效性检测类型，不要提交给 `fm.pan.check()`。
+
+返回结构：
+
+```json
+{
+  "results": [
+    {
+      "type": "quark",
+      "url": "https://pan.quark.cn/s/xxxx",
+      "normalized_url": "https://pan.quark.cn/s/xxxx",
+      "state": "ok",
+      "cache_hit": false,
+      "checked_at": 1710000000000,
+      "expires_at": 1710003600000,
+      "summary": "链接有效"
+    }
+  ]
+}
+```
+
+结果字段：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `results` | array | 与请求 `items` 顺序一一对应 |
+| `type` | string | 规范化后的网盘类型主值；非法或空值可能为空字符串 |
+| `url` | string | 原始请求 URL trim 后的值 |
+| `normalized_url` | string | App 规范化后的 URL，用于缓存 key 和去重 |
+| `state` | string | 检测状态枚举，见下表 |
+| `cache_hit` | boolean | 是否命中缓存 |
+| `checked_at` | number | 检测时间，毫秒时间戳 |
+| `expires_at` | number | 缓存过期时间，毫秒时间戳 |
+| `summary` | string | 面向用户或调试的简短说明 |
+
+`state` 取值：
+
+| state | 说明 | UI 建议 |
+| --- | --- | --- |
+| `ok` | 链接有效 | 可上浮，绿色圆点 |
+| `bad` | 链接失效、为空、被取消、过期、违规不可用 | 下沉，红色圆点 |
+| `locked` | 需要提取码、访问码缺失或错误 | 可保留在有效结果附近，黄色圆点 |
+| `unsupported` | 当前 App 不支持该 `type` 检测 | 不检测或灰色圆点 |
+| `uncertain` | 风控、请求失败、响应异常、平台接口变化或无法确认 | 保持原顺序，灰色/蓝灰圆点 |
+
+并发、缓存和错误行为：
+
+- 一次可提交多条。
+- App 内部每批最多 10 条并发检测。
+- 超过 10 条会自动拆成多批顺序执行。
+- 返回顺序与请求顺序一致。
+- 同一进程内同链接并发去重；相同 `type + normalized_url` 同时检测时只跑一次平台请求。
+- 缓存最多保留 300 条。
+- `ok` 缓存 1 小时。
+- `unsupported` 缓存 24 小时。
+- `bad` 缓存 6 小时。
+- `locked` 缓存 12 小时。
+- `uncertain` 缓存 30 分钟。
+- 网络异常不写缓存。
+- `items` 为空时 SDK reject，HTTP API 返回 400。
+- “增强功能 -> 网盘检测”关闭时 SDK reject，HTTP API 返回 403。
+
+本地 HTTP API：
+
+```http
+POST http://127.0.0.1:{port}/pan/check
+Content-Type: application/json
+
+{
+  "items": [
+    {
+      "type": "quark",
+      "url": "https://pan.quark.cn/s/xxxx",
+      "password": ""
+    }
+  ]
+}
+```
+
+HTTP API 只支持 `POST` 和 `OPTIONS`。`OPTIONS` 用于 CORS 预检，返回 204。错误响应：
+
+```json
+{
+  "code": 403,
+  "message": "网盘检测未开启"
+}
+```
+
+WebHome 列表最佳实践：
+
+- 先渲染搜索结果，再异步检测，不要阻塞首屏。
+- 只检测上表支持的网盘类型，不要把磁力、电驴、光鸭、普通网页链接提交给检测接口。
+- 使用 `IntersectionObserver` 只检测可见范围。
+- 每次提交给 App 的 `items` 建议不超过 10 条；超过也能处理，但会被内部拆批。
+- 检测状态用轻量圆点展示，不要用大段文字挤占结果列表。
+- 有效和需要提取码优先，失效下沉，同状态保持原始顺序。
+- `config.driveCheck === false` 时不要调用 `fm.pan.check()`，避免用户关闭检测后仍出现请求和列表跳动。
+
+### 21.2 网盘/推送播放 `fm.pan.play(payload)`
+
+`fm.pan.play({ type, url, password, title, pic, wallPic })` 是 WebHome 的网盘播放语义入口。当前实现不做 App 自研网盘目录枚举或直链解析，而是统一进入 App 已有的 `SiteApi.PUSH` / `push_agent` / `pvideo` 链路。因此它可以承接网盘分享链接，也可以承接磁力、电驴、`thunder`、`jianpian` 等需要推送解析的地址。
+
+参数：
+
+| 字段 | 类型 | 是否必填 | 取值和默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `url` | string | 是 | 非空字符串 | 网盘分享链接、磁力、电驴、`thunder`、`jianpian`、普通播放地址。可传原始链接，也可传 `push://真实地址`；App 会自动去掉开头的 `push://` |
+| `type` | string | 否 | 推荐使用下表主值；默认 `""` | 只用于日志和调用语义，不参与路由选择，不限制播放能力 |
+| `password` | string | 否 | 默认 `""` | 当前 Native `pan.play` 不读取该字段；底层 `push_agent`、JAR 或 pvideo 如果需要提取码，需要从 URL 或自身逻辑中处理 |
+| `title` | string | 否 | 默认使用 `url` | 原生播放页标题 |
+| `pic` | string | 否 | 默认 `""` | 播放页海报/默认 artwork，推荐传详情页竖版海报 |
+| `wallPic` | string | 否 | 默认 `""` | 播放页背景图，推荐传详情页横屏剧照/backdrop；为空时使用 App 默认背景/壁纸 |
+
+推荐 `type` 主值：
+
+| type | 场景 |
+| --- | --- |
+| `aliyun` | 阿里云盘分享 |
+| `quark` | 夸克网盘分享 |
+| `uc` | UC 网盘分享 |
+| `baidu` | 百度网盘分享 |
+| `tianyi` | 天翼云盘分享 |
+| `123` | 123 云盘分享 |
+| `xunlei` | 迅雷云盘分享 |
+| `115` | 115 网盘分享 |
+| `mobile` | 中国移动云盘/和彩云分享 |
+| `magnet` | `magnet:?xt=...` |
+| `ed2k` | `ed2k://...` |
+| `thunder` | `thunder://...` |
+| `jianpian` | `jianpian:` 或 `tvbox-xg:` 相关地址 |
+| `http` | 普通 `http://` 或 `https://` 播放/分享地址且无法归类到上面类型 |
+
+示例：
+
+```js
+await fm.pan.play({
+  type: "quark",
+  url: "https://pan.quark.cn/s/xxxx",
+  password: "",
+  title: "影片名",
+  pic: "https://example.com/poster.jpg",
+  wallPic: "https://example.com/backdrop.jpg"
+});
+
+await fm.pan.play({
+  type: "magnet",
+  url: "magnet:?xt=urn:btih:...",
+  title: "磁力资源"
+});
+```
+
+行为：
+
+- 内部路由到 `SiteApi.PUSH`，也就是 `push_agent`。
+- `pic` / `wallPic` 只随 `VideoActivity` 启动参数传给原生播放页，用于播放页海报和背景图；不参与网盘分享解析、pvideo 解析或直链嗅探。
+- 后续播放解析交给 App 既有 `Source.get().fetch(result)`、JAR/pvideo、WebView 嗅探和播放器链路。
+- 和直接使用 `push://` 的性能基本一致，额外开销只有一次 WebHome bridge 方法分发。
+- `pan.play` 不受“网盘检测”开关影响，因为它是用户主动点击播放行为。
+- 如果对应链接最终无法被 JAR/pvideo/WebView 嗅探解析，仍可能播放失败；WebHome 应保留错误反馈或备用打开方式。
+
+推荐 WebHome 统一使用 `fm.pan.play()` 播放盘搜结果、磁力、电驴、`thunder`、`jianpian` 等需要进入 push 解析链路的地址，不再自行拼 `push://`。这样 API 语义更清晰，后续 App 内部如果调整播放策略，HTML 侧无需改动。
+
+## 22. WebHome 界面、体验与性能最佳实践
+
+本章集中 WebHome 的 UI/UX 与性能实践：22.1-22.4 透明背景，22.5 电视端遥控器 UX，22.6-22.7 性能，22.8 设备形态判定与自适应，22.9 手机端体验，22.10 影视内容信息架构与视觉设计。
+
+Native WebView 已支持透明背景。WebHome 可以让 App 壁纸透出，但 HTML 侧必须把“页面透明”和“内容可读”分开处理：页面底层透明，卡片和控件使用半透明背景承载文字。
+
+### 22.1 基础页面背景
+
+App 环境下不要给 `html`、`body`、主页容器写死不透明背景。浏览器调试环境可以保留兜底背景，避免直接打开 HTML 时一片透明。
+
+推荐 CSS：
+
+```css
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: transparent;
+}
+
+html:not(.fm-native),
+html:not(.fm-native) body {
+  background: #303840;
+}
+
+.app {
+  min-height: 100vh;
+  background: transparent;
+}
+```
+
+App 环境识别可以在页面初始化时加类：
+
+```js
+if (window.fongmiBridge || window.fm || window.fongmi) {
+  document.documentElement.classList.add("fm-native");
+}
+```
+
+### 22.2 半透明内容层
+
+不要让文字直接压在复杂壁纸上。卡片、按钮、输入框、Tab、状态面板应使用统一的半透明面板色。
+
+推荐抽成 CSS 变量，避免每个模块各写一套近似颜色：
+
+```css
+:root {
+  --panel-rgb: 76, 88, 98;
+  --panel: rgba(var(--panel-rgb), .58);
+  --panel-soft: rgba(var(--panel-rgb), .44);
+  --panel-strong: rgba(var(--panel-rgb), .82);
+  --line: rgba(255, 255, 255, .2);
+}
+
+.card {
+  background: var(--panel-soft);
+  border: 1px solid var(--line);
+}
+
+.card-body,
+.episode-card,
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+}
+```
+
+透明背景不是越透明越好。影视卡片文字区、分集剧情、搜索建议、状态面板这类承载文字的区域，要保证在亮壁纸和复杂壁纸上都能读清。
+
+### 22.3 透明浮层的层级隔离
+
+全屏浮层如果直接设为 `background: transparent`，底下的页面内容会一起透出来，容易出现主页卡片、详情页、弹层三层内容叠在一起的情况。
+
+正确做法是：透明浮层打开时，临时隐藏它下面的 WebHome 页面层，只让 App 壁纸透出。
+
+详情页透明时隐藏主页：
+
+```css
+body.detail-active .app {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.sheet {
+  position: fixed;
+  inset: 0;
+  background: transparent;
+  backdrop-filter: none;
+}
+```
+
+```js
+function openDetail() {
+  document.body.classList.add("detail-active");
+  detailSheet.classList.add("active");
+}
+
+function closeDetail() {
+  document.body.classList.remove("detail-active");
+  detailSheet.classList.remove("active");
+}
+```
+
+单集剧情这类从详情页继续打开的二级透明浮层，需要再隐藏详情页本体：
+
+```css
+body.episode-active #detailSheet {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.image-viewer.episode-mode {
+  background: transparent;
+  backdrop-filter: none;
+}
+```
+
+```js
+function openEpisodeView() {
+  document.body.classList.add("episode-active");
+  imageViewer.classList.add("episode-mode", "active");
+}
+
+function closeEpisodeView() {
+  document.body.classList.remove("episode-active");
+  imageViewer.classList.remove("episode-mode", "active");
+}
+```
+
+普通图片预览不一定要透明。图片预览通常可以保留深色半透明背景和轻微模糊，让图片更沉浸；剧情文本页则更适合透明背景加半透明内容面板。
+
+### 22.4 实现建议
+
+- 页面级背景透明。
+- 非 App 浏览器环境提供兜底背景。
+- 卡片、按钮、输入框、Tab 使用统一的中性半透明背景变量。
+- 不要让文字直接压在复杂壁纸上。
+- 焦点样式要柔和，不要使用突兀的高饱和边框。
+- 透明全屏浮层打开时，隐藏底层 WebHome 页面，避免界面叠加。
+- 透明浮层关闭时必须清理 `body` 状态类，避免底层页面无法恢复。
+- 图片、海报、剧照本身不要叠加灰色遮罩，除非明确需要压暗文字背景。
+- 图片预览可以保留沉浸式深色背景；剧情、详情这类信息页可以透明背景加半透明内容面板。
+
+### 22.5 电视端遥控器 UX 最佳实践
+
+电视端 WebHome 不能只依赖浏览器默认 Tab 顺序或普通点击事件。遥控器实际是“当前焦点 + 上下左右 + OK + 返回”的交互模型，页面需要显式维护焦点域、返回语义和输入态。
+
+核心原则：
+
+- 默认焦点不要放在搜索框、账号输入框等文本输入控件上。首页冷启动建议聚焦在第一个内容 Tab 或第一个可浏览内容，例如“推荐”入口，避免一打开就弹输入法。
+- 所有可人工操作元素都要是稳定的可聚焦目标，例如按钮、卡片、Tab、结果项、开关、checkbox、关闭按钮、返回按钮。固定尺寸控件应有稳定的宽高、间距和 `data-*` key，动态内容变化时不要让布局跳动。
+- 浮层、下拉框、状态面板、搜索建议、网盘结果列表等打开后，应把方向键限制在当前焦点域内。不能让全局“找最近元素”的逻辑穿透到下面的卡片。
+- 进入局部焦点域后，返回键应先执行局部返回：建议下拉框关闭并回到搜索框，网盘结果列表返回网盘类型 Tab，状态面板关闭并回到状态按钮，剧情滚动页先滚到顶部或回到局部返回按钮；只有局部状态处理完，才交给 WebView history 或 App 返回。
+- 对于打开后会覆盖后续内容的区域，应临时禁用下面区域的焦点。可以给下方区域设置 `aria-hidden="true"`，并把内部 `.focusable`、`button`、`input`、`textarea` 的 `tabindex` 改为 `-1`，关闭后恢复原值。
+- 文本输入框在电视端应区分“焦点态”和“编辑态”。默认 `readonly`，允许遥控器聚焦但不弹输入法；用户按 OK、鼠标点击或触摸点击时才解除 `readonly` 进入编辑态；失焦或返回键退出编辑态时恢复 `readonly`。
+- checkbox、开关和网盘类型这类二态控件应支持 OK 直接切换。部分 Android WebView 对合成 `MouseEvent("click")` 兼容不稳定，遥控器 OK 处理里可以优先调用元素原生 `.click()`，并同步标记 dirty 状态。
+- 搜索建议只应由真实输入触发，不要在搜索框重新获得焦点时自动弹出上一次建议。异步建议请求应带请求序号或 abort 逻辑，用户关闭建议后，旧请求返回不能重新渲染下拉框。
+- 动态列表刷新要保存焦点 key 和滚动位置。列表项使用稳定 `data-key`，渲染时先判断 keys 是否真的变化；未变化时不要整列表替换，变化时也要在 `requestAnimationFrame` 后恢复原焦点或合理 fallback。
+- 盘搜、搜索结果等异步区域不要每次刷新先清空再重建，否则电视端会出现闪烁、焦点丢失和页面滚到顶部。应保留旧结果直到新结果可渲染，或给区域稳定 `min-height` 和局部 loading 状态。
+- 焦点移动时使用 `focus({ preventScroll: true })`，然后只把当前区域滚到可视范围。列表内部移动优先滚动列表容器，不要让整页回到顶部。
+- 当焦点元素被重渲染移除、WebView 恢复或系统吞掉焦点时，应有焦点兜底：如果当前 `document.activeElement` 不是可见可操作元素，下一次方向键先恢复到当前弹层按钮、当前 Tab、当前列表项或首页默认焦点。
+- 焦点样式要能清楚看出当前项，但不要用突兀的粗白描边或强阴影。电视端更适合轻微背景提亮、柔和边框、轻微位移或缩放；结果列表这种密集区域可以用内描边和背景变化，避免最左侧加粗导致排版抖动。
+- 从原生播放页返回 WebHome 时，若用户是从某个网盘结果或搜索结果点播，应恢复到原列表、原分类、原结果项和原滚动位置，方便用户继续切换下一个链接。正常冷启动则仍应回到主页。
+
+实现上建议封装这些基础函数：
+
+- `isVisibleFocusable(el)`：统一判断元素是否可见、未禁用、没有 `tabindex=-1`，且不在 `aria-hidden=true` 的祖先内。
+- `nearestFocusable(key, scope)`：只在当前焦点域内按几何位置寻找下一个焦点，不要跨弹层、跨下拉框、跨隐藏区域。
+- `focusRemoteTarget(el)`：统一 `preventScroll` 聚焦和可视区域修正。
+- `trapDirectionalKey(scope, key, event)`：当前弹层或列表打开时优先拦截方向键。
+- `handleLocalBack(event)`：按当前局部状态处理返回键，处理成功后 `preventDefault()` 和 `stopImmediatePropagation()`。
+
+这些规则比单纯给元素加 `tabindex` 更重要。电视端体验问题通常不是“某个按钮不能点”，而是焦点域没有边界、动态渲染替换了当前焦点、输入控件把遥控焦点误当成编辑焦点、返回键没有局部语义。
+
+### 22.6 WebHome 性能最佳实践
+
+电视端 WebView 的性能目标不是单纯追求首屏跑分，而是让遥控器每次按键都能在一帧内完成焦点计算、样式更新、必要滚动和少量 DOM 追加。方向键、滚动、搜索建议、网盘检测和 relay 同步都属于高频路径，必须按低成本路径设计。
+
+遥控器和焦点性能：
+
+- 规则区域优先使用确定性导航。海报 grid、横向 rail、Tab、单列结果列表都可以通过当前索引、列数和相邻节点直接算目标；只有复杂或不规则区域才退回几何距离搜索。
+- 首页 grid 卡片建议写入稳定 `data-card-index`，方向键下移用 `index + columns`，左右用 `index +/- 1`，上移用 `index - columns`。不要在每次按键时全局 `querySelectorAll()` 后逐个读 `getBoundingClientRect()`。
+- `gridTemplateColumns` 这类样式读取要缓存。缓存 key 至少包含视口宽度和 TV/Web 模式，避免每次方向键都触发布局计算。
+- `focus()` 后的滚动修正放进 `requestAnimationFrame`，同一帧多次焦点变更只处理最后一个目标。长按方向键时不要同步连续 `scrollIntoView()`。
+- 高频 keydown 中尽量只读当前区域的相邻节点、已缓存索引和已缓存列数。必须调用 `getComputedStyle()`、`offsetParent`、`getClientRects()`、`getBoundingClientRect()` 时，把范围限制在当前焦点域。
+- `isVisibleFocusable()` 作为兜底判断即可，不要让它成为规则 grid、Tab、单列列表的常规移动路径。
+- 焦点移动后靠近已渲染 grid 末尾时可以追加下一批卡片，但追加操作应合并到 `requestAnimationFrame`，不要在按键处理里同步创建大量节点。
+
+渲染和 DOM 更新：
+
+- 列表、grid、Tab、盘搜结果都要有稳定 key。渲染前比较 key 和 render key，内容未变时只更新 active、数量、健康状态等小字段，不整块替换。
+- 大列表首屏只渲染够看的几行，后续通过 `IntersectionObserver`、焦点接近末尾或滚动接近底部再追加。没有 `IntersectionObserver` 时用被动 scroll 监听加小延迟兜底。
+- 批量创建节点使用 `DocumentFragment` 或 `replaceChildren(...nodes)`。不要在循环里交替读写布局。
+- 异步区域不要先清空再等请求返回。搜索结果、盘搜结果、推荐区、最近观看等应保留旧内容或展示局部稳定 loading，避免闪烁、焦点丢失和页面滚动回顶部。
+- 对会频繁刷新但结构相同的列表，优先 patch 节点和重排节点。只有 key 集合变化过大或缺少现有节点时再整列表重建。
+- 页面滚动期间延迟非关键重渲染。可以维护 `scrollingUntil`，滚动结束后再执行推荐榜刷新、状态刷新等不影响当前操作的渲染。
+- 图片使用固定 `aspect-ratio` 和稳定容器尺寸，避免海报、剧照加载后撑开布局。首屏少量图片可 `loading="eager"` 和 `fetchpriority="high"`，其它图片使用 `loading="lazy" decoding="async"`。
+
+CSS 和视觉性能：
+
+- grid、卡片等自包含区域可使用 `contain: layout style`，减少布局和样式影响范围。
+- `content-visibility: auto` 只能作为可选增强。部分 Android TV WebView 对焦点、滚动和可访问性支持不稳定，必须在目标设备验证后再启用。
+- TV 模式优先稳定帧率。减少 `backdrop-filter`、大面积 blur、复杂阴影、图片 filter 和高成本透明叠层；焦点反馈优先使用 border、outline、轻量 transform 和背景提亮。
+- 半透明视觉使用少量统一变量，不要每个组件单独写一套近似颜色。控件和文字承载层要保证亮壁纸、暗壁纸、复杂壁纸都可读。
+- TV 焦点可以比手机/浏览器更明确，但不要依赖高成本阴影堆叠。海报卡片可用轻微上移缩放加清晰边框，密集列表用内描边或背景色变化。
+
+网络、缓存和异步任务：
+
+- 首屏不要被远端接口阻塞。先渲染导航、状态、缓存热榜或占位，再按需加载 TMDB 列表、最近观看、盘搜结果和 relay 数据。
+- 大数据索引使用 IndexedDB，不要把热榜、历史游标、几百条结果长期塞进 `localStorage`。`fm.cache` 适合配置、短期 UI 快照、少量状态和跨 WebView 持久化。
+- 大量事件写入要串行队列化并合批，避免多个 IndexedDB 事务互相抢占。数据落库后用延迟刷新合并多次 UI 更新。
+- 网络请求都要有超时和过期结果保护。搜索建议、盘搜轮询、详情加载、relay 查询应使用请求序号、token 或当前选中项校验，旧请求返回不能覆盖新视图。
+- 可见范围检测类任务必须限流。网盘检测、图片预加载、relay 回填都应限制批大小和并发，不要一次性把全部结果丢给 Native 或网络。
+- 后台恢复、锁屏恢复、播放页返回时只刷新必要区域。正常冷启动保持回主页；只有 `_fm_restore=1` 这类恢复信号才还原详情页、图片页、盘搜列表等深层状态。
+
+### 22.7 WebHome 性能改造落地经验
+
+`examples/homepages/nostr.html` 的优化过程说明：电视端 WebView 卡顿通常不是某一个 CSS 或某一次网络请求造成的，而是“遥控器高频按键 + 全局焦点搜索 + 大列表重渲染 + 高成本透明效果 + 异步结果反复覆盖”叠加产生的。推荐按小步验证方式改造，不要一次性替换整套焦点算法。
+
+推荐改造顺序：
+
+1. 先做低风险 CSS 和布局隔离：TV 模式关闭大部分 `backdrop-filter`、复杂阴影和图片 `filter`；卡片、分集卡、人物卡、盘搜结果项加 `contain: layout style`；不要默认使用 `contain: paint` 或 `content-visibility`，这两者可能裁切焦点高亮或影响可聚焦性。
+2. 再做焦点滚动合帧：统一封装 `focusRemoteTarget()`，内部只做 `focus({ preventScroll: true })`，把滚动修正合并到一个 `requestAnimationFrame`。长按方向键时只处理最后一个滚动目标，避免连续同步 `scrollIntoView()`。
+3. 再做规则区域快速导航：首页规则 grid、横向 rail、chips、单列结果列表优先用当前索引、相邻兄弟节点和缓存列数计算目标。复杂详情块、跨区域跳转、兜底场景再使用几何搜索。
+4. 最后才做方向键节流和更激进优化。节流只应作用在 TV 模式、根焦点域、方向键路径，不能影响搜索建议、状态面板、盘搜结果等局部焦点域，也不能影响输入框编辑态。
+
+焦点算法不要“全局替换”：
+
+- `nearestFocusable()` 只能作为兜底。规则 grid 每次按键都全局 `querySelectorAll()` 并读取所有候选 `getBoundingClientRect()`，在低端电视上会明显卡顿。
+- 快速路径必须收窄范围。例如同一 grid 内左右/上下移动可以走 `data-card-index`，同一 rail 内左右移动可以走兄弟节点；不要让 chips 向下直跳任意内容、grid 首行向上直跳 chips 这类跨区域路径抢走搜索结果、状态按钮或弹层焦点。
+- 每个焦点域都要有边界。搜索建议、连接状态面板、盘搜结果、图片页、剧情页打开时，方向键优先在局部处理；局部状态处理完，才交给全局焦点或 App 返回。
+- 遥控器 OK/Enter 的长按功能要接入全局按键模型。如果全局 `keydown` 已经会把 OK 转成 `.click()`，按钮自身的 `keydown`/`keyup` 往往抢不到时机。长按搜索、长按屏蔽这类能力应在全局 `keydown` 启动计时并阻止立即点击，在 `keyup` 决定短按或长按。
+
+渲染策略：
+
+- `renderAll()` 不应每次重建首页内容。可先同步刷新 chips、状态和轻量结构，内容区用双 `requestAnimationFrame` 延后到首帧之后，降低启动和后台恢复时的首帧压力。
+- grid 首批只渲染几行，后续靠近底部、焦点接近已渲染末尾或 sentinel 进入视口时追加。追加节点放进 `requestAnimationFrame`，批量创建使用 `DocumentFragment`。
+- `fillGrid()` 需要保存 `source`、`sourceLength`、`rendered`、`total`、`itemKeys`、`renderKeys`。key 前缀和已渲染内容没变时复用 DOM，只追加新增卡片；不要因为状态数字变化就 `replaceChildren()` 整个 grid。
+- 横向 rail 也要保存 `scrollLeft`，重新填充后在下一帧恢复。否则详情页、演员表、相关推荐等区域会在刷新后跳回开头。
+- 异步区域保留旧内容直到新内容可渲染。搜索结果、盘搜结果、Nostr 推荐、最近观看不要先清空再等待网络，否则用户会看到闪烁、焦点丢失和页面跳顶。
+- 滚动期间延迟非关键重渲染。可以维护 `scrollingUntil`，滚动结束后再执行推荐榜刷新、状态刷新等任务。
+
+可见范围和后台任务：
+
+- `IntersectionObserver` 适合无限加载和网盘可见项检测；不支持时用被动 `scroll` 监听加短延迟兜底。
+- 网盘检测、relay 回填、图片预加载都要限批和限并发。例如可见项检测每次只检查当前列表附近的少量结果，不要把所有结果一次丢给 `pan.check`。
+- relay 订阅和回填应分阶段：先订阅近 7 天窗口快速出结果，再后台回填历史页。每页要有 `limit`、超时、退避和页数上限。事件写入 IndexedDB 后合并 UI 刷新，不要每收到一条事件就重渲染。
+- 手动刷新这类动作要用 token 使旧 WebSocket、旧回填、旧定时器失效，避免旧请求继续写入新索引。状态面板要显示阶段、连接数、订阅事件数、回填页数和当前榜单数量，用户才能判断是正在刷新还是确实无数据。
+
+CSS 和焦点视觉：
+
+- 焦点状态不要改变 `width`、`height`、`margin`、`padding`、`border-width`、`top/left`。需要边框时预留原始边框宽度，或用 `outline` / 伪元素 / 背景提亮，不触发布局抖动。
+- TV 卡片可以轻微 `transform: translateY(-1px) scale(1.02~1.04)`，但不要叠加大范围发光和多层阴影。密集列表、按钮、Tab 使用更轻的背景提亮和细边框。
+- `will-change` 只给少量真的会动画的元素使用，不要全页面滥用。大量提升为独立图层会增加显存压力，低端盒子反而更卡。
+- 图片必须有稳定容器尺寸和 `aspect-ratio`。首屏少数图片可 `loading="eager"` / `fetchpriority="high"`，其它图片用 `loading="lazy"`、`decoding="async"`。
+
+输入态和恢复：
+
+- TV 输入框默认 `readonly`，按 OK、鼠标点击或触摸点击才进入编辑态；失焦或返回后恢复只读。否则方向键经过输入框时容易误弹输入法。
+- 进入详情页前保存 `homeReturn`：当前分类、卡片 key、卡片 index、所在 grid/rail、页面 `scrollY`。关闭详情页时分阶段恢复焦点和滚动，第一次用 `preventScroll` 聚焦，随后再恢复滚动位置。
+- 从原生播放页返回时，如果用户从盘搜结果播放，保存详情滚动、盘搜列表滚动、active 网盘类型、focus key 和结果项。恢复后让焦点回到原结果，方便继续试下一个链接。
+
+验收建议：
+
+- 在真实低端 Android TV 或电视盒子上长按方向键，从分类 Tab、首页卡片、搜索 rail、状态按钮之间移动，不应出现明显停顿、焦点丢失、页面跳顶。
+- 打开搜索建议、状态面板、盘搜结果、图片页、剧情页后，方向键不能穿透到底层首页。
+- 进入详情页、返回首页、进入原生播放页再返回，焦点和滚动位置应恢复到用户刚才操作的位置。
+- 搜索结果、盘搜结果、relay 推荐刷新时，旧内容不应闪空，焦点不应被重置到页面顶部。
+- 焦点在 3 米外观看距离下必须清楚，但不应靠高成本阴影、模糊和布局尺寸变化实现。
+
+### 22.8 设备形态判定与自适应布局
+
+WebHome 同一份 HTML 要在三种形态下工作：App 手机端、App TV 端、电脑浏览器预览。判定优先级：
+
+1. **优先用 `window.fongmiClient`**：`mode` 区分 flavor，`isLeanback` 区分 TV。它由 Native 注入，最可靠。
+2. Native 信号不存在（浏览器预览）时，再用视口 + 指针特征兜底：`examples/homepages/nostr.html` 的 `isPhoneViewport()` / `isBrowserPhoneClient()`（6795-6809 行）组合判断 `宽度 < 720`、`(pointer: coarse)`、UA 关键词、横竖比。
+3. 不要只看屏幕宽度或 UA：1080p 电视的 CSS 视口宽度可能和平板接近，盒子 UA 千奇百怪。
+
+自适应布局原则：
+
+- 判定结果落到 `<html>` 状态类（如 `tv-mode`、`mobile-mode`），CSS 和 JS 都从类读取，不要在每个函数里重复判定。
+- 同一组件三形态共用 DOM，只切换类和少量布局参数（列数、卡片尺寸、详情页大屏/紧凑布局），不要维护两套页面。
+- 列数按容器宽度计算并缓存，视口变化、模式变化时失效重算（参考 25.3 `gridColumns()` 规则）。
+- 交互模型按形态切换：TV = 焦点 + 方向键 + OK + 返回；手机 = 触摸 + 滚动 + 系统返回手势；浏览器 = 鼠标 + 键盘。同一动作（如打开详情）入口统一，事件层分开。
+- 详情页等复杂视图按形态切换布局：TV/leanback 用横向大屏布局（剧照背景 + 左信息右操作），手机用纵向紧凑滚动布局（参考 25.4）。
+
+### 22.9 手机端体验最佳实践
+
+触控与可达性：
+
+- 可点目标最小约 44x44 CSS px，海报卡片天然够大，但圆点、关闭按钮、Tab 要刻意放大热区（padding 扩大热区，视觉尺寸可以更小）。
+- 高频操作放在屏幕下半部拇指可达区：底部导航、详情页主操作按钮、播放入口。顶部只放低频的状态和设置入口。
+- 底部导航控制在 4-5 项以内；WebHome 内部多级页面用 History API 推栈，让系统返回手势可用（见第 23 章）。
+- 屏幕左右边缘约 24dp 是系统返回手势区，不要把横向滑动交互（轮播、横向 rail 的边缘项）和关键按钮贴边放置。
+- 利用 `max(var(--fm-safe-bottom), env(safe-area-inset-bottom))` 去重后的安全区变量避开手势条；吸底操作栏要加安全区内边距，不能把 `--fm-safe-bottom` 与 `env()` 相加。
+
+布局与滚动：
+
+- 手机端以纵向滚动为主轴：顶部搜索/状态、横向“继续观看”rail、纵向海报 grid（2-3 列）。横向 rail 不要嵌套过深，一屏最多两三条。
+- 横向 rail 用 `overflow-x: auto` + 惯性滚动，卡片宽度用百分比或固定值露出半张卡提示可滑动。
+- 首页融合模式：优先通过站点 `chromeMode: "edge"` 或 `fm.ui.setChrome({ mode: "edge" })` 隐藏原生顶部/底部 UI，但保留系统栏并用安全区变量避让交互控件。页面如果提供“首页全屏”开关，保存偏好时应调用 `fm.ui.setChrome({ mode: enabled ? "edge" : "normal", startup: true })`，让 Native 下次冷启动首帧直接使用用户选择；这个开关只影响首页 `normal/edge`，不改变详情页沉浸设置。
+- 沉浸模式：详情页可调用 `fm.ui.setChrome({ mode: "immersive", restoreAffordance: "none" })` 隐藏原生工具栏、底部导航和系统栏，由页面自绘返回按钮；如果页面没有自绘返回兜底，才使用 `restoreAffordance: "native"`。关闭详情时调用 `fm.ui.restoreChrome()` 或 `fm.ui.setChrome({ mode: "edge" })`。`fm.ui.setToolbar(false)` 仍兼容旧页面，但新页面不应再用它表示首页融合。
+- 弹层（详情、剧情、图片预览）打开时锁定背景滚动（`body` 加 `overflow: hidden` 类），关闭时恢复滚动位置。
+
+输入与反馈：
+
+- 搜索框聚焦弹出输入法会压缩视口，监听 `fmviewport` 或 `resize` 调整建议列表高度，不要让建议被输入法盖住。
+- 点击反馈用 `:active` 背景变化或轻量 transform，100ms 内可感知；不要依赖 hover。
+- 异步操作（搜索、盘搜、检测）给按钮局部 loading 态，禁止重复提交。
+
+### 22.10 影视内容信息架构与视觉设计
+
+行序与首屏（手机和 TV 通用）：
+
+- 首页前三行决定绝大多数点击。推荐顺序：继续观看/最近观看（有数据时）→ 热门推荐 → 分类榜单。继续观看不要埋到折叠以下。
+- 只看了几秒的记录不要进“继续观看”，用播放位置阈值过滤，避免误触记录霸占首屏。
+- 从首页到开始播放控制在 3 次确认以内：卡片 → 详情 → 播放。搜索结果项支持直接播放或一键进详情。
+
+海报与卡片：
+
+- 竖版海报固定 2:3，横版剧照/集卡固定 16:9，比例由容器锁定（`aspect-ratio` + `no-aspect-ratio` 降级，见 15.4），图片加载前后布局零位移。
+- 卡片信息密度克制：海报 + 标题一行 + 一行元信息（年份/评分/集数角标）。其余信息留给详情页。
+- 标题超长用 `-webkit-line-clamp` 截断；角标（更新集数、评分、网盘状态圆点）放海报角落，用半透明深色底保证可读。
+- 图片统一经 `fm.res()` 与 TMDB 尺寸参数（列表 w300/w500，详情大图再加载原图），不要在列表里加载原图。
+- 占位策略：固定比例容器 + 中性底色 + 可选骨架微光；加载失败显示标题首字或通用占位图，不要留空白洞。
+
+TV 大屏视觉（10-foot UI）：
+
+- 观看距离按 3 米设计：正文不小于 24px，次要信息不小于 20px，对比度比手机端更高。
+- 内容安全区：四周保留约 5% 边距（约 48dp 左右、27dp 上下），关键按钮和文字不要贴屏幕边缘，老电视有 overscan 裁切。
+- 大面积高饱和色在电视上会过曝刺眼，优先低饱和、冷色调和半透明中性面板（与 22.2 的面板变量一致）。
+- 海报墙每行 5-7 张为宜，焦点卡片放大后不应遮挡相邻行标题。
+- 详情页大屏布局：剧照做背景（压暗保证文字对比），左侧标题/元信息/剧情，操作按钮不超过 2-3 个主按钮，次要功能收进“更多”。
+
+状态与空态：
+
+- 每个异步区域设计四态：加载、有数据、空、失败。空态和失败给一句话说明加重试入口，不要只留空白。
+- 状态面板（连接数、同步进度、检测进度）用轻量文字和圆点，诊断细节收进面板内，不挤占内容区。
+
+## 23. WebHome 路由和返回
+
+页面内多层视图应使用 History API。
+
+```js
+function navigate(route, data) {
+  history.pushState({ route, data }, "", "#" + route);
+  render(route, data);
+}
+
+window.addEventListener("popstate", event => {
+  const state = event.state || { route: "home" };
+  render(state.route, state.data);
+});
+```
+
+App 物理返回键规则：
+
+- WebHome 可见、WebView 有 history、且上一条记录与当前页面同站点（同协议、host、端口）时，优先 `webView.goBack()`。
+- 已经回到 WebHome 主页（忽略 `_fm_reload`、`_fm_restore` 参数比较 URL）时，不再 `goBack()`，执行 App 原生返回逻辑。
+- 上一条 history 跨站点时也交给原生返回逻辑。
+
+页面可以保存短期 UI 快照来处理后台恢复、锁屏恢复或 WebView 渲染进程重建。但正常冷启动应默认回到 WebHome 主页，避免用户关闭 App 后再次打开仍停留在上一次详情页或弹层。当前 Native 在 WebView 渲染进程恢复时会给 URL 追加 `_fm_restore=1`，WebHome 可以只在检测到这个参数时恢复详情页、图片查看器、同步面板等深层 UI；普通打开时建议忽略深层 UI 快照，最多恢复首页列表位置或直接清理快照。
+
+## 24. WebHome PanSou 集成
+
+详情页可以集成 PanSou 类网盘搜索服务。
+
+推荐配置项：
+
+```js
+const panConfig = {
+  apiBase: "https://so.252035.xyz",
+  diskTypes: ["quark", "aliyun", "baidu", "uc", "tianyi", "xunlei", "123", "115", "mobile"],
+  channels: [],
+  username: "",
+  password: "",
+  token: "",
+  tokenExpiresAt: 0
+};
+```
+
+搜索接口：
+
+```http
+POST /api/search
+```
+
+请求体：
+
+```json
+{
+  "kw": "片名",
+  "res": "merge",
+  "src": "all",
+  "cloud_types": ["quark", "aliyun"],
+  "channels": ["channelName"]
+}
+```
+
+认证接口：
+
+```http
+POST /api/auth/login
+```
+
+拿到 token 后：
+
+```http
+Authorization: Bearer token
+```
+
+结果处理：
+
+- 读取 `data.merged_by_type`。
+- 只保留用户选择的网盘类型。
+- 按 `diskType + normalizedUrl` 去重。
+- 按网盘类型生成 Tab。
+- 搜索结果列表设置最大高度，内部滚动。
+- PanSou 结果可能异步补充，首次搜索后应轮询几次并合并新增结果。
+- 只对 App 支持的网盘类型执行 `fm.pan.check()`。
+- 点击结果时调用 `fm.pan.play({ type, url, password, title, pic, wallPic })`，由 App 复用 `push_agent/pvideo` 链路处理播放，并把详情页海报/剧照带给原生播放页。
+
+播放示例：
+
+```js
+await fm.pan.play({
+  type: item.type,
+  url: item.url,
+  password: item.password,
+  title: item.title,
+  pic: detail.poster,
+  wallPic: detail.backdrop
+});
+```
+
+115 提取码参数通常用 `password`，其它常规网盘通常用 `pwd`。
+
+## 25. WebHome 扩展脚本开发
+
+WebHome 扩展是在真实网站页面里注入的用户脚本。它不替代原网站，而是在 App WebView 已能正常加载网站的前提下，补充 App 播放按钮、网盘/磁力路由、页面清理、播放地址解析、`fm.vodInline` 临时剧集、TV 焦点和调试能力。
+
+适用场景：
+
+- 网站已有在线播放、网盘、磁力、推送或分集按钮，希望增加“App 播放”入口。
+- 页面里有直链、HLS、DASH、播放页 URL、API 返回或播放器运行时媒体请求，需要转给 App 原生播放器。
+- 网页本身搜索、登录、筛选、分页、详情页体验较完整，只需要增强播放和遥控器体验。
+- 网站有弹窗、滚动锁、遮挡层或移动端固定顶部按钮，需要轻量清理和安全区适配。
+- 需要先在 App WebView 或浏览器中抓包、查看 DOM、观察按钮点击后的真实请求，再决定解析策略。
+
+不适用场景：
+
+- 网站在 App WebView 内也无法通过登录、验证或人工交互正常打开。
+- 需要绕过 Cloudflare、盾、验证码、签名风控或账号权限。
+- 目标能力更适合完整 CSP Spider、后端代理或自定义 WebHome 首页实现。
+
+### 25.1 扩展来源和加载顺序
+
+扩展可以来自三类配置：
+
+1. 根级 `webHomeExtensions`：全局扩展源，通常需要写 `cspKeyRegex` 限定站点。
+2. 单站点 `sites[].extensions`：只随当前站点加载，一般不需要再写 `cspKeyRegex`。
+3. 用户在 App 内新增：设置 -> 增强功能 -> WebHome 扩展，支持文件、链接/Manifest、代码、表单或 JSON 来源。
+
+加载顺序：
+
+- 全局扩展 -> 站点扩展 -> 用户扩展。
+- 同 `id` 去重时，后加载的覆盖先加载的。
+- `enabled: false` 或 `disabled: true` 的扩展不加载。
+- `cspKeyRegex` 命中当前 WebHome `site.key` 才加载；`excludeCspKeyRegex` 命中时排除。
+- `depends` 会先加载依赖扩展；依赖缺失时应在调试报告中能看到原因。
+
+运行时机：
+
+| runAt | 说明 |
+| --- | --- |
+| `document-start` | 用于早期 hook，例如 `window.open`、`fetch`、`XMLHttpRequest`、播放器构造函数、history 路由。必须能容忍降级到 document-end。 |
+| `document-end` | 默认推荐。DOM 主体可读，适合注入按钮、扫描资源、清理弹窗。 |
+| `document-idle` | 页面稳定后再运行，适合低优先级增强或统计。 |
+
+站点级示例：
+
+```json
+{
+  "key": "pomo",
+  "name": "Pomo",
+  "type": 3,
+  "api": "csp_Builtin",
+  "homePage": "https://example.com",
+  "extensions": [
+    {
+      "id": "pomo-native-router",
+      "name": "Pomo App 播放",
+      "version": "1.0.0",
+      "runAt": "document-end",
+      "js": ["./pomo.js"]
+    }
+  ]
+}
+```
+
+根级示例：
+
+```json
+{
+  "webHomeExtensions": [
+    {
+      "id": "gying-native-router",
+      "name": "Gying App 播放",
+      "version": "1.0.0",
+      "enabled": true,
+      "runAt": "document-end",
+      "cspKeyRegex": ["^gying$"],
+      "js": ["./gying.js"]
+    }
+  ]
+}
+```
+
+Manifest 字段：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `id` | string | 稳定唯一 ID，建议 `站点名-能力名`，例如 `gying-native-router`。 |
+| `name` | string | 展示名称。 |
+| `version` | string | 版本号；修改已发布扩展时递增。 |
+| `runAt` | string | `document-start` / `document-end` / `document-idle`。 |
+| `cspKeyRegex` | array/string | 匹配 WebHome 站点 key。 |
+| `excludeCspKeyRegex` | array/string | 排除 WebHome 站点 key。 |
+| `js` | array/string | JS 文件 URL；相对路径按 Manifest 或配置文件 URL 解析。 |
+| `code` | string | 内联 JS 代码。 |
+| `depends` | array | 依赖扩展 ID。 |
+| `updateUrl` | string | 可选更新地址。 |
+| `enabled` | boolean | 是否默认启用。 |
+| `disabled` | boolean | 是否禁用，优先级高于 `enabled`。 |
+| `extensions` | array | 嵌套扩展列表，适合一个 Manifest 承载多个扩展。 |
+
+### 25.2 脚本运行环境和 API
+
+扩展脚本在页面主框架执行，建议只在 top frame 工作：
+
+```js
+(function () {
+  "use strict";
+  if (window.top !== window.self) return;
+
+  var CONFIG = {
+    id: "site-native-router",
+    buttonText: "App 播放"
+  };
+
+  function log(message, data) {
+    if (typeof GM_log === "function") {
+      GM_log(message, data || {});
+    } else if (window.console && console.log) {
+      console.log("[WebHomeExt]", message, data || "");
+    }
+  }
+
+  function whenFm() {
+    if (window.fm) return Promise.resolve(window.fm);
+    return new Promise(function (resolve) {
+      window.addEventListener("fmsdk", function () {
+        resolve(window.fm);
+      }, { once: true });
+    });
+  }
+})();
+```
+
+可用 GM 辅助：
+
+| API | 说明 |
+| --- | --- |
+| `GM_log(message, data)` | 写扩展日志，调试工作台和 App 日志可查看。 |
+| `GM_addStyle(css)` | 注入样式。 |
+| `GM_getValue(key, defaultValue)` | 读取扩展持久值。 |
+| `GM_setValue(key, value)` | 写入扩展持久值。 |
+
+可用 `fm.ext`：
+
+| API | 说明 |
+| --- | --- |
+| `fm.ext.info()` | 返回当前站点、扩展注册和匹配状态，例如 `siteKey/siteName/homePage/enabled/matched/ready`。 |
+| `fm.ext.log(message, data)` | 写扩展日志。 |
+| `fm.ext.toast(message)` | 显示原生提示。验证/盾页面不建议再叠加自定义弹窗提示，避免遮挡人工操作。 |
+
+所有异步 SDK 调用都要 `await` 或 `.catch()`。扩展失败不应阻断原网页继续使用。
+
+### 25.3 策略选择
+
+优先选择影响最小、证据最充分的策略：
+
+| 策略 | 适用场景 |
+| --- | --- |
+| `auto-resource-router` | 页面已有真实资源链接，点击时转 App 播放。 |
+| `inject-play-buttons` | 保留原按钮，在资源行或播放按钮旁新增“App 播放”。 |
+| `pan-link-router` | 页面有夸克、阿里、百度、UC、123、115、磁力、电驴等链接。 |
+| `inline-episodes` | 多集播放页可按集解析，但不值得实现完整 CSP Spider。 |
+| `media-sniffer` | 媒体 URL 只在播放器运行时出现，用于分析阶段抓请求。 |
+| `site-cleanup` | 清理广告弹窗、遮挡层、滚动锁。 |
+| `site-enhance-skeleton` | 综合增强，包括路由监听、按钮注入、移动/TV 适配。 |
+| `tv-focus-helper` | 共享 TV 遥控器焦点辅助，作为依赖扩展。 |
+
+不要一上来拦截所有 `a[href]`。先确认资源区域、按钮角色、URL 类型和用户预期，保留复制按钮、站内导航、登录、筛选和分页行为。
+
+### 25.4 播放和资源路由规则
+
+资源分类建议：
+
+| 类型 | 识别特征 | 推荐调用 |
+| --- | --- | --- |
+| 直链视频/音频 | `.mp4`、`.mkv`、`.mp3`、`.flv` 等 | `fm.play(url, title, options)` |
+| HLS/DASH | `.m3u8`、`.mpd` | `fm.play(url, title, { format: "hls" })` 或 `{ format: "dash" }` |
+| 需要 Header/Cookie 的媒体 | 防盗链、登录态、Referer 校验 | `fm.play(url, title, { headers, credentials: "include" })` |
+| CSP 详情或播放 | 已知站点 ID 和 vodId | `fm.vod(siteKey, vodId, title, pic, { wallPic })` |
+| 临时多集 | 页面可解析出 episodes | `fm.vodInline(payload)` |
+| 网盘/磁力/电驴/Thunder/荐片 | 分享链接、`magnet:`、`ed2k:`、`thunder:`、`jianpian:` | `fm.pan.play(payload)` |
+
+公开 `.m3u8` / `.mpd` 不要默认加 headers 或 `credentials`。一旦携带 headers/cookies，WebHome 可能会把播放 URL 转成 `/webResource` 网关地址，某些相对分片播放列表会因此失效。只有确认必须防盗链或登录态时才加。
+
+直链示例：
+
+```js
+async function playDirect(url, title, artwork) {
+  var fm = await whenFm();
+  var options = {};
+  if (/\.m3u8(\?|$)/i.test(url)) options.format = "hls";
+  if (/\.mpd(\?|$)/i.test(url)) options.format = "dash";
+  if (artwork && artwork.pic) options.pic = artwork.pic;
+  if (artwork && artwork.wallPic) options.wallPic = artwork.wallPic;
+  await fm.play(url, title || document.title, options);
+}
+```
+
+网盘和推送示例：
+
+```js
+async function playPan(item) {
+  var fm = await whenFm();
+  await fm.pan.play({
+    type: item.type || "http",
+    url: item.url,
+    password: item.password || "",
+    title: item.title || document.title,
+    pic: item.pic || "",
+    wallPic: item.wallPic || ""
+  });
+}
+```
+
+`pic` 是播放页海报或默认 artwork，通常取竖版封面；`wallPic` 是播放页背景，优先取横屏剧照/backdrop。播放页背景不会用 `pic` 兜底。详情页能拿到图片时，可以先调用 `fm.preloadArtwork(pic, wallPic)`，但不要在用户点击播放时等待预加载完成。
+
+### 25.5 在线播放按钮和动态页面
+
+很多站点的“在线播放”区域会随线路、集数、分页、登录态、播放器初始化而动态变化。扩展必须把按钮绑定到当下真实来源，不能只在首次扫描时缓存一个 URL。
+
+规则：
+
+- 注入“App 播放”时，按钮放在用户自然操作的位置，例如在线播放按钮组的右端，和网盘、磁力等操作区位置统一。
+- 每次 debounced scan 都要刷新已有按钮的 `data-fm-*` 数据，而不是发现按钮已存在就跳过。
+- 点击时再次读取同一行、同一兄弟按钮或当前选中线路的实时 `href`、`data-*`、`onclick`、文本或页面状态。
+- 如果页面先跳到播放页再加载播放器，App 按钮应传递正确播放页 URL 或调用 resolver 获取最终媒体 URL，不要把列表页旧 URL 传给 App。
+- 线路按钮、集数按钮和播放按钮分离时，必须记录当前选中的线路和集数；不要默认取第一个线路。
+- SPA 路由和异步渲染要监听 `MutationObserver`、`fmurlchange`、`popstate`，并用 `data-fm-ext-id` 防止重复注入。
+
+当电脑浏览器正常播放、App 播放失败时，优先比较四类证据：
+
+1. 用户实际点击的播放页 URL 是否一致。
+2. 最终媒体 URL 是否一致。
+3. 媒体请求状态码、Content-Type、响应体开头是否一致。
+4. 域名、Referer、Cookie、线路参数、清晰度参数是否一致。
+
+这类问题常见根因是按钮数据陈旧、绑定错线路、解析了上一集、把页面 URL 当媒体 URL、或错误使用 `/webResource` 包裹公开 HLS，而不一定是播放器本身失败。
+
+### 25.6 `fm.vodInline` 临时多集
+
+当页面能解析出多集，但没有现成 CSP Spider 时，可以用 `fm.vodInline()` 进入 App 原生详情/播放链路。
+
+基本结构：
+
+```js
+await fm.vodInline({
+  vod_name: "影片名",
+  vod_pic: "https://example.com/poster.jpg",
+  wallPic: "https://example.com/backdrop.jpg",
+  episodes: [
+    {
+      name: "第 1 集",
+      url: "https://example.com/play/1",
+      ext: { line: "量子" }
+    }
+  ]
+});
+```
+
+如果单集 URL 不是最终媒体，可以先注册页面级 resolver：
+
+```js
+window.__fmWebHomeInlineResolver = async function (episode) {
+  var playPage = episode.url;
+  var html = await fm.req(playPage);
+  return parseMediaUrlFromHtml(html);
+};
+```
+
+resolver 必须可重复调用、错误可读、不会依赖已被销毁的 DOM 节点。能拿到 `vod_pic` 和 `wallPic` 时都传入，原生播放页会更完整。
+
+### 25.7 移动端安全区和 TV 焦点
+
+移动端顶部固定/粘性操作区如果处在全屏、融合或沉浸 chrome 中，必须避让状态栏；退出全屏恢复普通 App chrome 后，不应继续预留顶部空白。
+
+推荐规则：
+
+- 只在 `chromeMode` 为 `edge`、`immersive`、`tv-full`、`tv-toolbar-hidden` 或页面确实全屏接管时启用顶部安全区。
+- 正常 `normal` / `tv-normal` chrome 下移除顶部安全区，避免出现一条空白区域。
+- 使用 `max(var(--fm-safe-top, 0px), env(safe-area-inset-top, 0px))`，不要把 Native `--fm-safe-top` 和浏览器 `env()` 相加。
+- CSS 先写不含 `env()` 的兜底声明，再写增强声明，兼容旧 WebView。
+- 监听 `fmviewport`，并在 `fm.ui.getViewport()` 可用时按真实 `chromeMode` 更新根 class。
+
+示例：
+
+```css
+:root {
+  --fm-ext-safe-top: 0px;
+}
+
+html.fm-ext-fullscreen {
+  --fm-ext-safe-top: var(--fm-safe-top, 0px);
+  --fm-ext-safe-top: max(var(--fm-safe-top, 0px), env(safe-area-inset-top, 0px));
+}
+
+.fm-ext-top-actions {
+  top: 0;
+  padding-top: var(--fm-ext-safe-top, 0px);
+}
+```
+
+```js
+function applyViewport(detail) {
+  var mode = detail && detail.chromeMode || "";
+  var full = /^(edge|immersive|tv-full|tv-toolbar-hidden)$/.test(mode);
+  document.documentElement.classList.toggle("fm-ext-fullscreen", full);
+}
+
+whenFm().then(function (fm) {
+  if (fm.ui && fm.ui.getViewport) {
+    fm.ui.getViewport().then(applyViewport).catch(function () {});
+  }
+});
+window.addEventListener("fmviewport", function (event) {
+  applyViewport(event.detail || {});
+});
+```
+
+TV 端规则：
+
+- 所有可操作元素必须可聚焦，使用稳定尺寸和稳定 `data-key`。
+- 自定义按钮要支持 OK/Enter 调用原生 `.click()`。
+- 焦点样式不要改变布局尺寸；用 outline、box-shadow、背景或轻微 transform。
+- 文本输入默认 `readonly`，用户确认后才进入编辑态，避免遥控器误弹输入法。
+- 弹层、下拉框、结果列表打开后要限制焦点域，返回键先关闭局部状态。
+
+### 25.8 验证、盾、登录和抓包
+
+遇到登录、验证、盾或动态签名时，先判断页面在 App WebView 或普通浏览器中是否能通过人工交互正常使用。
+
+推荐流程：
+
+1. 用浏览器或 App WebView 打开目标页，让用户完成登录、验证或授权。
+2. 通过 DevTools、CDP、Playwright、App WebView 调试、调试工作台 Network/Console/Elements 观察真实 DOM 和请求。
+3. 记录用户点击前后的 URL、请求、响应、播放器构造参数、脚本 initiator、线路/集数状态。
+4. 只复用页面自然暴露的参数、DOM、API 或媒体请求，不写绕过验证、破解签名、模拟指纹、采集 clearance cookie 的逻辑。
+5. 如果直接 `curl`、`fm.req` 或探测脚本被拦截，但 App WebView 人工操作可正常打开，应优先写注入扩展，而不是后端抓取。
+6. 如果 App WebView 也无法打开，需要站点授权 API、用户提供 HAR/HTML，或改用合法代理能力；不要把绕盾逻辑写进扩展。
+
+验证页面上不要弹出扩展自己的大提示层。额外弹窗容易遮挡验证码、登录按钮或盾页面交互。必要提示使用日志或轻量 toast，并允许原页面自然完成验证。
+
+### 25.9 调试和验收
+
+App 内入口：
+
+- 设置 -> 增强功能 -> WebHome 扩展：新增、编辑、启用/禁用、刷新订阅、清缓存、查看来源和匹配状态。
+- WebHome 扩展调试工作台：Web 预览、Console、Network、Elements、代码保存预览。
+- 设置 -> 增强功能 -> 调试日志：查看 `webhome`、`webhome-console`、`webview`、`播放`、`网盘`、`服务` 等日志。
+
+调试建议：
+
+- 首次加载确认 `fm.ext.info()` 里的 `siteKey`、`matched`、`ready`。
+- Console 中确认没有 `SyntaxError`、未捕获 Promise、重复注入。
+- Network 中确认播放页请求、媒体请求、Referer/Cookie 是否符合预期。
+- 点击原网页播放和点击“App 播放”各跑一遍，对比最终媒体 URL。
+- 移动端检查顶部固定按钮在全屏时可点、退出全屏后没有空白安全区。
+- TV 端检查方向键、OK、返回、焦点恢复和播放页返回后的滚动位置。
+- 验证/盾页面检查扩展不遮挡、不阻断用户人工交互。
+
+### 25.10 模板、示例和目录
+
+当前目录约定：
+
+```text
+templates/
+  extensions/
+    auto-resource-router.js
+    inject-play-buttons.js
+    inline-episodes.js
+    media-sniffer.js
+    pan-link-router.js
+    site-cleanup.js
+    site-enhance-skeleton.js
+    tv-focus-helper.js
+  homepages/
+    basic-homepage.html
+    app-capabilities-showcase.html
+
+examples/
+  extensions/
+    pomo/
+    dm-xueximeng/
+    ymvid/
+    gying/
+  homepages/
+    nostr.html
+```
+
+选模板时按策略选择，不要从空文件手写所有基础设施。站点脚本应固定 `id/name/version/runAt`，站点 key 用精确正则，例如 `^gying$`。新增扩展从 `1.0.0` 开始，修改已发布扩展时递增版本。
+
+### 25.11 兼容和上线检查
+
+JavaScript 基线为 ES2017 及以下。禁止使用：
+
+- 可选链 `?.`、空值合并 `??`、逻辑赋值 `&&=` / `||=` / `??=`。
+- class 字段、私有字段、`catch {}` 省略绑定。
+- 正则 lookbehind、命名捕获组、dotAll `s` 字面量。
+- `replaceAll`、`Promise.allSettled`、`Object.fromEntries`、`Array.flat/flatMap`、`structuredClone`、未检测的 `AbortController`。
+
+CSS 注意：
+
+- 不用 `:is()`、`:where()`、`:has()`、`:focus-visible`。
+- flex `gap`、`aspect-ratio`、`clamp()`、`inset`、`backdrop-filter`、`100dvh`、`env()` 都要有兜底。
+- 扩展注入面板不要依赖改变尺寸的焦点样式。
+- 全屏 overlay 高度优先用 `var(--fm-web-height, 100vh)`。
+
+上线前检查：
+
+- 没有广泛拦截所有链接。
+- 不破坏复制、登录、筛选、分页、站内导航。
+- SPA 路由和 DOM 重渲染不会重复生成按钮。
+- 空页面、验证页、错误页不会出现孤立 App 按钮。
+- 播放调用传入正确 `pic` / `wallPic`。
+- 公开 HLS/DASH 不被错误包成 `/webResource`。
+- 所有 Promise 有错误处理。
+- 无账号、Cookie、私密 URL 外传。
+- 无绕盾、验证码、clearance、指纹伪装、签名破解逻辑。
+- 移动端安全区只在全屏/融合 chrome 生效，退出全屏后不留空白。
+- TV 端焦点、OK、返回和播放页返回路径可用。
+
+## 26. Nostr 推荐首页实现要点
+
+当前 `examples/homepages/nostr.html` 是单文件推荐首页，核心能力包括：
+
+- TMDB 榜单、搜索、详情、剧照、演员、季集信息。
+- Nostr 去中心化偏好热榜。
+- App SDK 搜索播放；从详情页跳转时调用 `fm.search(title, { direct: true, pic, wallPic })`，让原生搜索结果进入播放器后仍可使用 WebHome 详情页的 `wallPic`。
+- 播放时长采样和最近观看补偿。
+- 透明背景和半透明控件。
+- 状态面板、身份管理、数据删除；状态面板提供“高清剧照”开关，开启后播放页 `wallPic` 使用 TMDB `original` 横屏图，关闭时使用常规尺寸图。
+- TMDB Key、盘搜地址、TG 频道、账号、密码和网盘类型配置。
+- TV 大屏详情布局、剧情概要、演职员、相关推荐和推荐屏蔽。
+- PanSou 搜索、认证、TG 频道、网盘检测、`fm.pan.play` 播放。
+- 播放页背景只从 `wallPic` 取图；没有横屏剧照/backdrop 时不使用海报 `pic` 兜底，保留 App 默认背景/壁纸。
+- 旧 WebView 兼容引导层：ES5 书写的头部 polyfill、特性检测和 `no-layout-gap` / `no-css-functions` / `no-aspect-ratio` 降级类（8-214 行），详见 15.1-15.5。
+
+Nostr 使用：
+
+```js
+kind = 30078
+HOT_VECTOR_D = "heat:user:90d:v2"
+HOT_VECTOR_VERSION = 5
+```
+
+### 26.1 热度和数据模型
+
+- 同一用户对同一影片/剧集只贡献 1 人。
+- 播放超过 10 分钟才发布观看热度。
+- 点击和搜索只是观看意图，不单独增加热度。
+- 发布前检查本机是否已发布过该媒体，避免重复。
+- 多设备导入同一 nsec 时属于同一用户身份。
+- 每个用户发布一个紧凑偏好向量，而不是每部影片一条事件。向量里只保留媒体类型、TMDB ID、日期、标题和压缩后的海报路径，控制 relay 流量和本地存储体积。
+- 偏好向量带 `expiration` 标签，热度窗口按 90 天维护。过期向量和过期条目要从本地索引中裁剪，避免历史数据长期影响榜单。
+- 本地索引用 IndexedDB，推荐 store 分为 `media`、`userVector`、`relayCursor`。运行时用 Map 承接热榜聚合，落库只保存必要字段。
+- `media` 记录保存媒体 key、标题、类型、TMDB ID、海报、贡献人数和最近贡献时间；`userVector` 保存用户 key、事件时间、过期日、下次裁剪日和媒体条目列表。
+- 同一用户向量更新时要按 diff 修改媒体人数：旧向量有而新向量没有的媒体人数减 1，新向量新增的媒体人数加 1。不要每次全量重算所有用户向量。
+- 本机删除数据后要写本地 tombstone，短时间内阻止再次发布，并过滤删除 cutoff 前的本机事件，避免 relay 删除未完全生效时旧数据被重新吃进榜单。
+- 海报 URL 应压缩为 TMDB path 或短路径，渲染时再还原为具体尺寸地址。热榜索引里不要长期存完整大图 URL。
+
+### 26.2 Relay 同步和兜底
+
+- 启动时先读取本地 IndexedDB 热榜索引并渲染，再连接 relay。已有缓存时用户能立即看到推荐，不必等 WebSocket。
+- relay 订阅先取近 7 天备份窗口，限制 `limit`，收到 `EVENT` 后进入内存队列，按短延迟合批写入索引。不要每条事件都立刻刷新 UI。
+- 收到 `EOSE` 或超时后结束首轮订阅，关闭订阅连接，并启动回填。连接状态、订阅完成数和 relay 结果要展示在状态面板，方便定位网络问题。
+- 回填分 recent 和 history 两段：recent 补齐本地 cursor 之后的新事件，history 从历史游标向 90 天窗口回查。非主 relay 可只补近 7 天，主 relay 承担完整历史回填。
+- 主回填 relay 按连接成功和首轮事件数量选择。每个 relay 的游标保存在 `relayCursor`，包括最新同步点、recent 目标、history 游标、失败次数和下次重试时间。
+- 回填分页必须有上限和超时。单页使用 `limit`，每轮限制 recent/history 页数；失败时指数退避，成功后清除退避。
+- relay 数据迟迟未到时，按短延迟预取 TMDB 兜底，再在展示阈值后切换到兜底推荐。只要 Nostr 热榜后来有数据，应立即切回 Nostr 推荐并取消兜底定时器。
+- 发布偏好事件时向所有 relay 并发发送，每个连接设置超时，状态显示成功数、完成数和 relay 文本。不要因为一个 relay 慢而阻塞其它 relay。
+- 删除数据应先清本机缓存和索引，再查询本身份 90 天窗口内的远端事件，发布 `kind: 5` 删除事件。文案要明确 relay 是否真正删除取决于 relay 策略。
+
+### 26.3 渲染性能
+
+- 首页推荐 grid 使用分批渲染：首批只渲染约 3 行，后续每批约 2 行。靠近底部、焦点接近已渲染末尾或 sentinel 进入视口时再追加。
+- `fillGrid()` 要保存每个 grid 的 render 状态：源数组、总数、已渲染数、item keys、render keys。key 前缀没变时复用已有 DOM，只追加新增卡片。
+- 活跃列表未变化、已渲染数量足够时直接返回，不重建 grid。推荐榜、分类榜、最近观看、搜索结果都应遵循这个规则。
+- `renderAll()` 可以只同步刷新 chips、状态和轻量结构，首页内容用双 `requestAnimationFrame` 延后到首帧之后渲染，减少启动和恢复时的卡顿。
+- 滚动期间不做非关键重渲染。`scheduleRender()` 可根据 `scrollingUntil` 延迟执行，避免用户滚动时热榜刷新导致掉帧。
+- `IntersectionObserver` 用于无限加载和网盘可见检测；不支持时用被动 scroll 监听和短延迟兜底。
+- 图片属性统一由 helper 输出，首屏少数卡片 eager/high，其它 lazy/async。详情页大剧照先预加载成功再切换，避免空白闪烁。
+- 详情页、搜索建议、状态面板、盘搜结果等局部区域独立更新。不要因为一个状态文本变化重渲染整个主页。
+- 电视端方向键优先走规则快速路径。首页 Tab、规则 grid、搜索 rail、直播入口等区域应通过相邻节点、`data-card-index` 和缓存列数确定目标；只有详情页复杂块或兜底场景才使用几何搜索。
+- `mediaCard()` 必须写入稳定 `data-card-index`，`maybeAppendGridForFocus()` 应优先 O(1) 读取索引，不能每次聚焦都扫描整个 grid。
+- `gridColumns()` 的列数读取必须缓存，并在视口变化、TV/Web 模式变化或布局关键 class 改变后失效。
+- `focusRemoteTarget()` 只负责 `focus({ preventScroll: true })` 和状态更新，滚动修正必须通过 `requestAnimationFrame` 合并；长按方向键时只滚动最后一个目标。
+- 高频 `keydown` 中不要做全页面 `querySelectorAll()`、全量 `getBoundingClientRect()` 或同步 `scrollIntoView()`。
+
+### 26.4 TV 用户体验和样式
+
+- 页面整体保持透明背景，让 App 壁纸透出；承载文字的卡片、按钮、输入框、状态面板使用中性半透明底色。不要使用高饱和大面积渐变。
+- TV 模式下焦点样式要更清楚，但仍要低成本。推荐卡片可使用轻微上移缩放和清晰边框；盘搜结果用背景提亮和细边框；避免多层大阴影和大面积 blur。
+- 首页海报/横图卡片的焦点可以比普通按钮更强，允许使用贴合卡片图片边缘的白色边框、轻微上移和轻微缩放；不要额外叠加大范围外发光、模糊阴影或造成图片与边框中间出现空心缝隙。
+- 分类 Tab、详情页按钮、状态面板按钮这类密集控件应使用更细的边框和背景提亮，不要套用主页海报卡片的强焦点样式。
+- 焦点样式应尽量使用已有 border、outline、轻量 transform 和背景色变化。避免通过改变元素尺寸产生重排；需要明显边框时应预留原始 border 宽度或使用不改变布局的 outline。
+- TV 模式应减少 `backdrop-filter`，grid 和卡片使用 `contain: layout style`。详情大屏布局可以保留沉浸式剧照背景，但文字内容区必须有足够暗度和对比度。
+- 详情页根据设备模式切换大屏布局。TV/leanback 优先展示横向剧照、评分、元信息、剧情概要和两个主要操作按钮；手机端保持紧凑滚动布局。
+- 详情页需要专注模式且页面已自绘返回按钮时优先调用 `fm.ui.setChrome({ mode: "immersive", restoreAffordance: "none" })`，关闭详情或返回主页时 `fm.ui.restoreChrome()` 或 `fm.ui.setChrome({ mode: "edge" })` 恢复首页融合。只有缺少自绘返回兜底时才用 `restoreAffordance: "native"`。TV 端 `edge` / `immersive` 会映射到 `tv-full`；`fm.ui.setToolbar(false)` 仅作为旧脚本兼容，TV 端会切到 `tv-toolbar-hidden`。
+- 搜索框和状态面板里的配置输入在 TV 上默认 `readonly`。按 OK 或触摸/鼠标点击才进入编辑态，失焦或返回后恢复只读，避免误弹输入法。
+- 状态面板要同时承担诊断和配置入口：展示 SDK、TMDB、Nostr、盘搜、发布、身份、relays 状态，并提供 TMDB Key、盘搜地址、TG 频道、账号密码、网盘类型和身份同步。
+- 推荐屏蔽适合做成长按进入选择模式。选择模式中 OK 切换屏蔽，返回退出；退出后正常推荐过滤被屏蔽项，选择模式内仍显示全部项并标记屏蔽状态。
+- 搜索建议只由真实输入触发，返回键关闭建议并回到搜索框；搜索结果清空后焦点回首页内容，不让用户停在隐藏区域。
+
+电视端性能和焦点验收建议：
+
+- 遥控器长按方向键在分类 Tab、首页卡片、搜索 rail 之间移动时，不应出现明显停顿、焦点丢失或页面跳顶。
+- 从详情页、图片页、盘搜结果、原生播放页返回后，应恢复原焦点和滚动位置。
+- 主页卡片焦点在 3 米外电视观看距离下必须清晰可见；分类按钮和详情页按钮则保持较细边框。
+- 低端 Android TV WebView 上验证 `backdrop-filter`、复杂阴影、`content-visibility` 不影响焦点和滚动后，才允许扩大使用范围。
+
+### 26.5 盘搜和网盘检测
+
+- PanSou 搜索读取 `data.merged_by_type`，只保留用户勾选的网盘类型，按 `diskType + normalizedUrl` 去重，并按网盘类型生成 Tab。
+- 盘搜服务可能异步补充结果，首次搜索后可按配置的间隔轮询几次。每次轮询只合并新增或更新结果，不清空现有列表。
+- 盘搜请求和轮询必须带 view token 和当前详情项校验，旧详情页的响应不能覆盖新详情页。
+- Tab 渲染使用 `type:count` key，数量和 active 状态没变时只更新文本和 active 类。结果列表使用 pan key 和健康状态 key，优先 patch 节点和重排节点。
+- 结果列表打开后要把后续详情块设为 `aria-hidden` 并临时 `tabindex=-1`，方向键限制在盘搜 Tab 和结果列表之间，返回键先从结果回到 Tab。
+- 网盘检测只检测 App 支持的类型。使用 `IntersectionObserver` 检测可见结果，按小批量入队，单次 `fm.pan.check()` 建议最多约 10 条。
+- 检测状态按优先级排序：有效、需要提取码、检测中、未检测、暂不支持、不确定、失效。用户更容易先看到可播放资源。
+- 播放盘搜结果前保存详情滚动、列表滚动、active 类型、focus key 和结果项。原生播放返回后恢复原列表和焦点，方便继续试下一个链接。
+- 播放统一调用 `fm.pan.play({ type, url, password, title, pic, wallPic })`，不要手工拼 `push://`；`pic` 取详情页海报，`wallPic` 取详情页横屏剧照/backdrop。115 提取码常用 `password` 参数，其它常见网盘常用 `pwd` 参数。
+
+### 26.6 播放偏好采样和恢复
+
+- 从详情搜索播放、盘搜播放、最近观看播放进入原生播放前，先记录 watch intent，并把 pending watch 存入 `fm.cache`。页面被杀或播放页返回后仍可补偿发布。
+- App 环境下定时调用 `fm.stat()` 采样播放位置和总时长，记录最大观看位置。达到 10 分钟且未发布过该媒体时生成偏好事件。
+- 如果播放期间 WebView 暂停或被回收，恢复时读取最近观看历史进行补偿：按标题、TMDB ID、创建时间窗口匹配播放记录，满足 10 分钟阈值再发布。
+- 采样完成、观看接近结束或成功发布后清理 pending watch。不要让一次观看意图在后续启动中重复发布。
+- UI 快照只保存短期状态，TTL 建议 2 小时。只在 `_fm_restore=1`、`fmresume`、`pageshow` 等恢复场景还原详情页、图片页、盘搜列表和滚动位置；正常冷启动回主页。
+
+删除数据：
+
+- 清本机 IndexedDB 和缓存。
+- 发布 Nostr `kind: 5` 删除事件。
+- Relay 是否真正删除取决于 relay 策略。
+- 正式上线前如果测试数据无法清干净，最干净的方式是更换 `tag`、缓存 key 或生成新身份。
+
+## 27. 隐藏功能与使用技巧
+
+本节整理 App 已开放但入口不明显的能力，适合普通使用者、配置维护者和二次开发者快速掌握完整行为。
+
+### 27.1 手机端播放手势
+
+点播和直播通用：
+
+- 长按播放画面：临时加速播放，松手恢复原倍速。临时速度来自设置里的 `speed`，范围 2x 到 5x。
+- 左右滑动：快退或快进，滑动距离会换算为进度偏移。
+- 左半屏上下滑：调节亮度。
+- 右半屏上下滑：调节音量。
+- 双指捏合：缩放视频画面，范围 1x 到 5x。
+- 单击画面：显示或隐藏控制栏。
+- 双击画面：点播非全屏时进入全屏，全屏时切换播放或暂停；直播中双击会切换控制栏显示。
+- 画面边缘约 24dp 区域会避开手势识别，减少系统返回手势误触。
+- 锁定播放界面后，手势调节、临时倍速、缩放等会被禁用。
+
+点播专属：
+
+- 全屏时上下快速滑动：切上一集或下一集。
+- 如果当前只有一集，上下快速滑动会刷新当前播放。
+- 左右滑动过程中只显示目标时间，手指松开后才真正 seek。
+
+直播专属：
+
+- 上下快速滑动：切换频道，方向受直播控制里的“反转”开关影响。
+- 非时移直播不响应左右 seek。
+
+### 27.2 播放控制栏
+
+倍速：
+
+- 点“倍速”：按预设倍速递增。
+- 长按“倍速”：切换倍速模式。
+- 长按画面触发的临时倍速不会永久覆盖当前影片保存的倍速。
+
+片头片尾：
+
+- 点“片头”：把当前播放位置记录为跳过片头点。
+- 点“片尾”：把当前距离结尾的时间记录为跳过片尾点。
+- 长按“片头”：清除片头跳过点。
+- 长按“片尾”：清除片尾跳过点。
+- 片头、片尾会保存在当前影片历史中，下次打开同一影片会恢复。
+
+字幕、轨道和弹幕：
+
+- 点文字、音频、视频轨道按钮：打开对应轨道选择。
+- 长按文字轨道按钮：如果当前有字幕轨，会直接进入字幕调节。
+- 点弹幕按钮：打开弹幕设置。
+- 播放页也可以通过局域网 HTTP API 注入字幕或弹幕。
+
+播放行为和信息：
+
+- 点“重播/刷新”：按当前模式重播或刷新当前播放。
+- 长按“重播/刷新”：切换重播/刷新行为。
+- 点“解码”：切换解码方式。
+- 点“信息”：显示当前播放标题、播放 URL 和请求 headers。
+- 点 URL：分享当前播放地址。
+- 长按 URL：复制播放地址。
+- 长按 headers：复制 headers。
+
+### 27.3 详情页
+
+- 点影片标题：用当前标题发起快搜。
+- 长按影片标题：进入换源或搜索匹配逻辑。
+- 长按播放控制栏标题：同样进入换源或搜索匹配逻辑。
+- 点演员、导演、简介：展开或收起长文本。
+- 长按简介：复制简介文本。
+- 点倒序按钮：切换选集正序或倒序，并保存到观看历史。
+- 点更多选集：打开完整选集列表。
+- 收藏、选集、线路、画质、倍速、画面比例、片头片尾、播放进度都会随历史记录保存。
+- 无痕模式开启时，播放历史不会保存。
+
+### 27.4 电视遥控器
+
+首页：
+
+- 首页标题获得焦点后，遥控器左/右键可以切换上一个或下一个站点。
+- 首页标题获得焦点后，按上键刷新当前首页，带 3 秒冷却。
+- 点击首页标题会打开站点选择弹窗。
+- 首页顶部“直播、设置”等按钮在同一行内支持左右循环聚焦，按到末尾会回到第一个按钮。
+
+点播播放：
+
+- 全屏且控制栏隐藏时，左/右键快退或快进，每次 10 秒，按住会连续累加。
+- 左/右键松开后才执行 seek。
+- 长按上键：临时加速播放，松开恢复历史记录里的倍速。
+- 上键：打开控制栏并聚焦片头；如果已经接近片尾区域，会聚焦片尾。
+- 下键：打开控制栏或进入下方控制区域。
+- 确认键：显示控制栏或播放/暂停。
+- 媒体快进/快退键：直接快进或快退。
+
+直播播放：
+
+- 数字键输入频道号，最多 4 位，2 秒后跳转。
+- 菜单键或长按确认键：打开菜单。
+- 上/下键：切换频道或打开频道列表。
+- 左/右键：时移直播可 seek。
+- 媒体上一首/下一首、频道加减、PageUp/PageDown 会映射为上/下频道。
+
+### 27.5 设置页
+
+- 长按“点播配置”：进入点播配置编辑模式。
+- 长按“直播配置”：进入直播配置编辑模式。
+- 长按“壁纸配置”：进入壁纸配置编辑模式。
+- 点击“壁纸默认”：在内置壁纸间循环。
+- 点击“壁纸刷新”：重新加载壁纸源。
+- 长按“壁纸刷新”：打开壁纸历史。
+- 点击“增强功能”：进入增强功能页。手机端和电视端都是独立页面，不使用弹窗。
+- 增强功能页集中放置“网盘检测”“站点健康排序”“观影记录同步”“管理页面”“站点注入”“WebHome 扩展”“登录态学习”“Proxy 壳代理”“一键同步”“调试日志”等能力。其中“观影记录同步”用于用户自有服务、爬虫或多端 App 同步观看进度，“WebHome 扩展”位于“站点注入”附近，方便给 WebHome 站点绑定脚本。
+- “网盘检测”默认开启，只控制显式 `pan.check` 能力，不会自动检测 App 原生搜索结果列表。
+- “站点健康排序”默认开启，点击后打开设置弹窗，可切换“启用站点健康排序”和“站点弹窗排序”。其中“站点弹窗排序”默认关闭，避免打乱用户在配置中手动维护的站点顺序。
+- 长按“站点健康排序”：清空当前已学习的站点健康记录。
+- “观影记录同步”当前用于管理用户本地 Webhook 端点和当前播放只读 API。界面分为“开关”“远端同步”“Webhook 上报”三块：顶层只显示总开关、本机 API 修改开关和状态摘要；远端同步源列表与 Webhook 端点列表点击后进入二级界面，新增/编辑都在独立表单中完成。Webhook 上报时机固定为进度更新、退出/暂停/切集前最终进度和自然完播，不再让用户选择；字段预设为“基础/标准/完整/自定义”，自定义字段使用带说明的多选列表。Webhook 和远端同步 token 均由用户服务端统一提供，App 只负责保存并随请求发送。协议字段、远端同步源和本机修改 API 规范见 13.4。
+- “管理页面”会启动浏览器页面 `/m`，用于本机或远端管理文件、登录态、同步目录、站点注入、接口、壳代理、搜索和推送。页面运行期间 App 会启动前台服务保活，空闲一段时间后自动停止。
+- “站点注入”会在当前点播配置加载完成后，把用户维护的 WebHome 或通用 CSP 站点插入 `sites` 列表。主界面只显示条目摘要、启用状态和常用操作；新增/修改在独立表单中完成。WebHome 扩展依赖站点 `key`、`homePage` 和站点级 `extensions`，因此入口放在增强功能页内站点注入附近。WebHome 站点级扩展支持直接填写扩展 URL / JSON，也支持选择本地 JS/CSS/JSON 后自动生成配置。
+- “WebHome 扩展”用于给真实 WebHome 网页注入用户脚本。主界面只显示扩展源摘要、匹配状态和常用操作；新增/修改在独立表单中配置文件、链接/manifest、代码、表单或 JSON 来源，可编辑启用状态、匹配范围、运行时机和依赖，并提供调试工作台用于 Web 预览、Console、Network、Elements 和代码保存预览。匹配范围默认从当前点播配置的 WebHome 站点列表弹窗多选，正则模式作为高级方式保留。
+- “登录态学习”默认不启动。用户手动开启后，App 会学习 Cookie、Token、SharedPreferences、cache 或接口 Jar 产生的登录状态文件路径；待确认项可以在“管理路径”里查看、勾选、编辑，确认后参与一键同步。
+- “Proxy 壳代理”是 App 级代理开关和规则编辑入口。开启后，配置的默认代理地址和规则会通过 `OkHttp.selector()` 应用到 App 网络请求、WebHome `fm.req()` 和 `/webResource` 等统一 OkHttp 链路。
+- Proxy 规则支持纯文本和 JSON raw 两种输入，也支持 UI 编辑；UI 编辑可新增、删除、排序规则。规则顺序会影响命中结果，靠前规则优先。
+- Proxy 自动建议会从所选 CSP 站点字段、本地 WebHome HTML 和近期调试日志中的 URL 提取 host，用默认代理地址生成规则；已存在的 host 不会重复加入。
+- Proxy 测试会临时应用当前弹窗内尚未保存的规则，先确认目标 host 命中代理，再短超时尝试访问 `https://host/` 和 `http://host/`，测试结束后恢复已保存代理配置。
+- “一键同步”用于局域网设备发现、推送/拉取同步、选择同步内容和同步目录，适合迁移接口、Jar 配置中心保存数据、登录态、WebHome 缓存、搜索记录、观看历史、收藏和设置。同步目录使用目录树勾选；默认包含 `TV`、`TVBox`、`TVData`。
+- “调试日志”默认关闭，开启后会打开日志网页；关闭时不弹提示并清空当前进程内日志。
+- 点击“版本”：手动触发版本检查。
+- 手机端长按底部“直播”导航：把直播入口添加到桌面快捷方式。
+
+站点健康排序使用方式：
+
+1. 入口：设置 -> 增强功能 -> 站点健康排序。
+2. 默认行为：站点健康排序开启；站点弹窗排序关闭。
+3. 学习数据：App 会记录站点搜索成功/失败、搜索结果数量、搜索耗时、详情成功/失败、详情耗时、播放成功/失败、最近成功时间和最近失败时间。
+4. 搜索优先级：开启后，聚合搜索和播放页快速换源会优先调度健康度更高的站点。
+5. 结果显示时机：搜索仍是站点级并发，哪个站点先返回就先显示，不会等待高分但慢的站点统一排完再展示。
+6. 换源优先级：自动换源时会从候选结果中优先选择最近成功率更高的站点。
+7. 站点弹窗：站点列表会显示健康状态点，绿色表示近期可用，黄色表示一般或信息不足，红色表示近期失败较多，灰色表示未知。只有开启“站点弹窗排序”时，弹窗才会按健康度重排；默认保持配置顺序。
+8. 数据保存：健康记录在搜索、详情或播放结果更新后异步延迟落盘，属于一次性保存动作，不会在后台持续轮询；记录保留约 90 天，长按入口可清空。
+9. 功能边界：当前不会自动隐藏失效站点，也不会改写用户配置；排序只影响运行时的搜索、换源和可选的站点弹窗展示。
+
+Proxy 壳代理使用方式：
+
+1. 入口：设置 -> 增强功能 -> Proxy 壳代理 -> 开启。
+2. 默认代理地址：本机 Clash/sing-box 常用 `socks5://127.0.0.1:7897`。代理在另一台设备时，把 `127.0.0.1` 换成那台设备的局域网 IP。
+3. 不确定域名时先用“自动建议”选择当前 CSP 站点生成候选规则，再按需删除或排序。
+4. 规则为空：所有非本机目标 host 走默认代理。
+5. 只代理指定域名：在“文本”里填 JSON raw，格式如下。
+
+```json
+{
+  "proxy": [
+    {
+      "name": "video",
+      "hosts": ["example.com", ".*\\.example\\.com"],
+      "urls": ["socks5://127.0.0.1:7897"]
+    },
+    {
+      "name": "default",
+      "hosts": ["*"]
+    }
+  ]
+}
+```
+
+字段：
+
+| 字段 | 说明 |
+| --- | --- |
+| `hosts` | 目标 host 匹配规则；支持包含匹配、Java 正则；`*` 表示所有非本机目标 host |
+| `urls` | 可选；不写时使用上方默认代理地址；支持 `http://`、`https://`、`socks://`、`socks5://` |
+
+调试：开启“调试日志”，过滤“代理”或“播放”。看到“壳代理已启用”“请求命中壳代理”“播放器通过壳代理连接”表示已生效；看到“本机服务直连”通常是正常的本地请求跳过代理。
+
+站点注入使用方式：
+
+1. 入口：设置 -> 增强功能 -> 站点注入。管理页面 `/m` 里也提供同等配置能力。
+2. 全局开关关闭时，不会修改当前接口；单条条目关闭时，该条不会插入。
+3. 主列表只显示名称、类型、核心地址、Key、启用/可用状态和常用操作。点击“新增”或“修改”进入独立表单，取消不会写入草稿，保存后才刷新列表。
+4. 顶部“识别”用于粘贴单个或多个松散站点 JSON 片段，例如 `{...}, {...}` 或结尾带逗号的单个对象。识别结果会复用同一套配置解析逻辑，自动归类为 WebHome、通用 CSP 或直播，并追加到当前 UI 列表；如果当前在 JSON 文本模式，会同步追加到 JSON 文本。
+5. 插入位置限制在 `sites`/`lives` 前 10 位内。界面显示为 1 到 10，显示“1”表示插入到列表第 0 位前面。
+6. WebHome 类型只需要维护名称、Key、WebHome 地址和可选站点级扩展；适合把本地 HTML 文件、手写 HTML 代码或在线链接作为网页首页。新增条目的默认 Key 会根据名称生成稳定值，便于 WebHome 扩展使用 `cspKeyRegex` 匹配；手动修改 Key 后会保留用户填写值。
+7. WebHome 行的 Key 下方有“扩展”开关，默认关闭。打开后输入框显示为“扩展 URL / JSON”，最简单只填一个 JS URL，例如 `https://example.com/site.js`。表单也兼容 `extensions` 数组或单个扩展对象，保存时会包装为数组；也可以点“文件”选择本地 `.js`、`.css` 或 `.json`，本地 JS 会生成内联 `code` 扩展对象，CSS 会生成 `GM_addStyle(...)`，JSON 会规范化为数组。站点级 `extensions` 默认绑定当前站点 `key`，通常不需要再写 `cspKeyRegex`。
+8. 通用 CSP 类型会显示 `type`、`api`、`ext`、`jar`、`click`、`playUrl`、`hide`、`searchable`、`changeable`、`quickSearch`、`indexs`、`timeout`、`categories`、`header`、`style` 等站点参数，也支持直接编辑完整 Site JSON。
+9. 直播类型只生成注入到 `lives` 列表的 Live 条目，不额外创建独立直播接口或独立 CSP 加载方式。常用参数优先显示 `name`、`url`、`ua`、`epg`、`logo`，其中 `ua` 新增时默认 `okhttp`；`type` 和 `playerType` 不在界面展示，保存时默认写入 `type: 0`、`playerType: 2`。`header`、`timeout`、`groups`、`catchup`、`core`、`boot`、`pass` 等低频参数收在高级区，也支持直接编辑完整 Live JSON。
+10. JSON raw 支持完整 registry、`sites`/`lives` 数组、单个 site object 或单个 live object；单个 live object 保存后会作为 `lives` 注入项处理。保存后会自动刷新当前点播配置和直播配置，让注入结果立即生效。
+11. 站点注入文件存放在 `/sdcard/TV/CustomCsp/`。默认一键同步目录包含 `TV`，因此开启“Jar/脚本保存数据”并保留 `TV` 目录时会同步这些注入文件；如果用户从同步目录中移除了 `TV`，则不会自动同步。
+
+站点注入配置文件示例：
+
+```json
+{
+  "enabled": true,
+  "insertIndex": 0,
+  "homeKey": "__custom_csp_local",
+  "items": [
+    {
+      "enabled": true,
+      "kind": "webHome",
+      "key": "__custom_csp_local",
+      "name": "本地 WebHome",
+      "type": 3,
+      "api": "csp_Builtin",
+      "homePage": "file://TV/CustomCsp/local/index.html",
+      "extensions": [
+        {
+          "id": "local-webhome-router",
+          "name": "Local WebHome router",
+          "runAt": "document-end",
+          "js": ["https://example.com/webhome/local-router.js"]
+        }
+      ]
+    },
+    {
+      "enabled": true,
+      "webHome": false,
+      "key": "demo_csp",
+      "name": "Demo CSP",
+      "type": 3,
+      "api": "csp_Demo",
+      "ext": "",
+      "jar": "./spider.jar",
+      "searchable": 1,
+      "quickSearch": 1
+    },
+    {
+      "enabled": true,
+      "kind": "live",
+      "live": {
+        "name": "develop202",
+        "type": 0,
+        "url": "https://example.com/interface.txt",
+        "playerType": 2,
+        "epg": "http://diyp5.112114.xyz/?ch={name}&date={date}",
+        "logo": "https://epg.112114.xyz/logo/{name}.png",
+        "ua": "okhttp"
+      }
+    }
+  ]
+}
+```
+
+WebHome 扩展使用方式：
+
+1. 入口：设置 -> 增强功能 -> WebHome 扩展。入口位于“站点注入”附近，但用户扩展源和站点注入配置分开保存。
+2. 主列表只显示扩展源名称、ID、运行状态、匹配范围、来源摘要和常用操作。点击“新增”或“修改”进入独立表单，取消不会写入草稿，保存后才刷新预览。
+3. 普通用户新增扩展可选文件、链接/JSON、代码或表单；匹配范围默认通过弹窗勾选一个或多个 WebHome 站点，保存为精确 `cspKeyRegex`，也可切换到正则模式手写 CSP key 正则；配置作者仍可在站点 `extensions` 或根级 `webHomeExtensions` 中批量下发。
+4. 站点级 `extensions` 默认绑定当前站点 `key`；全局扩展应填写 `cspKeyRegex` 或 `excludeCspKeyRegex`，避免误注入到不相关站点。
+5. 调试工作台用于开发和排查扩展：Web 页签预览当前页面，Console/Network/Elements 查看页面运行信息，代码页保存后会重新解析扩展并刷新预览。
+6. 扩展脚本可以调用 `fm` SDK、`GM_*` 辅助函数和 `fm.ext.log()`；不要在未确认用户动作的情况下批量打开播放页，也不要泛拦截所有站内链接。
+
+登录态学习使用方式：
+
+1. 入口：设置 -> 增强功能 -> 登录态学习，也可在管理页面 `/m` 的“登录态”视图操作。
+2. 点击“开始学习”后再执行登录、扫码、网盘授权或站点播放等动作；点击“完成学习”后，App 会汇总已确认路径、待确认路径和最近发现项。
+3. “管理路径”同时展示 App 私有目录和共享存储，用户可勾选目录或文件。目录被勾选时会覆盖其下级路径，避免重复同步。
+4. 点击文件可查看/编辑内容。登录态通常包含 Cookie、Token 或接口 Jar 保存的凭据，调试和分享日志时不要输出原值。
+5. 一键同步里的“登录态”只同步已确认路径；待确认项不会自动同步，避免把临时缓存或无关敏感文件带到另一台设备。
+
+### 27.6 搜索、收藏和分类
+
+- 分类页长按影片卡片：直接用该影片名进入全局搜索结果。
+- 对 `indexs=1` 的索引站点，点击条目会进入聚合搜索，而不是普通详情。
+- 搜索结果左侧站点分组可以快速切换来源。
+- 搜索结果页标题点击可回到搜索编辑状态。
+- 收藏和历史支持多设备同步。
+
+### 27.7 外部 App 联动
+
+App 在 Android Manifest 中开放了多种系统入口：
+
+- 系统分享文本到 App：会当作播放地址推送播放。
+- 系统搜索 `ACTION_SEARCH`：直接打开 App 搜索页。
+- 用系统“打开方式”打开视频、音频、本地文件：进入播放。
+- 打开 `.m3u` 或 `text/plain` 文件：作为直播配置加载。
+- 打开 `.torrent`、`magnet:`、`ed2k:`、`thunder:`、`jianpian:`：进入对应解析或播放链路。
+- 打开 `http`、`https`、`rtsp`、`rtmp`、`smb` 且媒体类型是视频或音频：进入播放。
+
+示例：
+
+```bash
+adb shell am start -a android.intent.action.SEARCH --es query "仙逆" com.fongmi.android.tv
+adb shell am start -a android.intent.action.VIEW -d "magnet:?xt=urn:btih:..."
+```
+
+包名和 Activity 名以实际构建产物为准。
+
+### 27.8 局域网管理页面
+
+App 启动后会开启本地 HTTP 服务，端口从 `9978` 到 `9998` 依次尝试，取第一个可用端口。访问：
+
+```text
+http://设备IP:端口/
+```
+
+会打开基础管理网页。增强功能里的“管理页面”会打开更完整的浏览器页面：
+
+```text
+http://设备IP:端口/m
+```
+
+管理页面提供：
+
+- 文件：浏览当前目标设备外置存储目录，上传文件、新建目录、删除、下载，勾选多个文件或目录后打包下载。
+- 同步：发现同网段 App 设备，选择推送或拉取，勾选接口、Jar/脚本保存数据、登录态、WebHome、搜索记录、观看历史、收藏和设置；同步目录使用目录树勾选。
+- 登录态：开始/完成学习，查看已确认路径、待确认项和最近发现项；管理 App 私有目录和共享存储中的登录态路径，并可查看/编辑具体文件。
+- 站点：维护站点注入配置，支持 WebHome 和通用 CSP，支持文件、代码、链接和 JSON。
+- Proxy：维护壳代理启用状态、默认代理地址和代理规则。
+- 接口：查看和管理当前点播/直播等配置入口，便于在浏览器侧做远端维护。
+- 搜索/推送：仅远端管理模式显示，用于让选中远端设备搜索或播放指定地址。
+- 本机/远端：本机管理操作当前设备；远端管理需要先发现并选择同网段 App 设备。
+
+本地文件页技巧：
+
+- 上传 `.zip`：自动解压到目标目录。
+- 点文件后选择“使用”：根据文件类型执行动作。例如 `.apk` 打开安装，字幕文件注入播放器，配置文件加载为配置。
+- 在管理页面勾选目录后可打包下载，适合一次取回站点注入文件、本地接口包或 Cookie 目录。
+
+后台访问说明：
+
+- 管理页面只在用户手动打开后运行；运行期间有前台通知，可从通知或入口弹窗停止。
+- 手机切到浏览器后 App 会进入后台，部分系统会限制后台网络。若页面提示后台访问受限，需要按提示允许后台高耗电或后台运行。
+- 如果没有浏览器，电视端可复制或展示局域网地址，在同网段手机或电脑浏览器中打开。
+
+注意：当前本地 HTTP 服务没有鉴权。局域网地址只应暴露在可信网络中。
+
+### 27.9 局域网 HTTP 快捷能力
+
+以下能力可由浏览器、脚本、WebHome 或同网段设备调用。端口从 `/device` 的 `ip` 字段读取，不要写死 `9978`。
+
+搜索、推送、设置、使用本地文件：
+
+```text
+GET/POST /action?do=search&word=关键词
+GET/POST /action?do=push&url=播放地址
+GET/POST /action?do=setting&text=配置内容或配置URL&name=显示名称
+GET/POST /action?do=file&path=本地相对路径
+```
+
+刷新和注入资源：
+
+```text
+GET/POST /action?do=refresh&type=home
+GET/POST /action?do=refresh&type=live
+GET/POST /action?do=refresh&type=detail
+GET/POST /action?do=refresh&type=player
+GET/POST /action?do=refresh&type=category
+GET/POST /action?do=refresh&type=subtitle&path=字幕URL
+GET/POST /action?do=refresh&type=danmaku&path=弹幕URL
+GET/POST /action?do=refresh&type=vod&json=Vod_JSON
+```
+
+播放控制：
+
+```text
+GET/POST /action?do=control&type=play
+GET/POST /action?do=control&type=pause
+GET/POST /action?do=control&type=stop
+GET/POST /action?do=control&type=prev
+GET/POST /action?do=control&type=next
+GET/POST /action?do=control&type=loop
+GET/POST /action?do=control&type=replay
+```
+
+播放状态：
+
+```text
+GET/POST /media
+```
+
+`/media` 返回字段：
+
+| 字段 | 说明 |
+| --- | --- |
+| `state` | `1` 其它，`2` ready，`3` playing，`6` buffering |
+| `speed` | 倍速 |
+| `duration` | 总时长，毫秒 |
+| `position` | 当前位置，毫秒 |
+| `url` | 当前播放 URL |
+| `title` | 当前媒体标题 |
+| `artist` | 当前媒体 artist 元数据 |
+| `artwork` | 当前媒体封面 URL |
+
+当前播放记录安全快照：
+
+```text
+GET/POST /api/playback/current?siteKey=站点Key
+```
+
+该接口供 JS/Python/PHP/Jar 等爬虫读取当前播放记录。成功返回 `schema/timestamp/sessionId/dedupeKey/configKey/siteKey/vodId/vodName/episodeName/state/positionMs/durationMs/progress/completed` 等安全字段；缺少 `siteKey` 返回 400，当前无记录或站点不匹配返回 404。完整字段说明见 13.4。
+
+观影进度写入 API：
+
+```text
+POST /api/playback/progress
+POST /api/playback/progress/batch
+POST /api/playback/progress/delete
+```
+
+用于让爬虫或局域网工具写入单条/批量观影进度，或清理误同步记录。写入字段以 `configKey/siteKey/vodId/episodeName/positionMs/durationMs/updatedAt` 为核心；清理支持 `historyKey` 精确删除或 `siteKey+vodId` 范围删除。`configKey` 是跨端接口身份，`cid` 仅是本机配置空间 id。接口已实现，需用户在“观影记录同步”中开启本机 API 修改后调用。
+
+缓存接口：
+
+```text
+GET/POST /cache?do=get&rule=命名空间&key=键
+GET/POST /cache?do=set&rule=命名空间&key=键&value=值
+GET/POST /cache?do=del&rule=命名空间&key=键
+```
+
+网盘检测 HTTP API：
+
+```text
+POST /pan/check
+OPTIONS /pan/check
+```
+
+请求体和 `type/state` 枚举见“网盘检测 `fm.pan.check(items)`”。未开启增强功能里的“网盘检测”时返回 403。
+
+WebHome 资源网关：
+
+```text
+GET/POST/PUT/PATCH/DELETE/HEAD/OPTIONS /webResource?url=目标URL
+```
+
+只允许目标 URL 为 `http://` 或 `https://`，支持 headers、credentials 和 Range 透传，详细行为见 `fm.res()`。
+
+调试日志：
+
+```text
+GET /debug/logs
+GET /debug/logs.txt
+GET /debug/clear
+GET /debug/enable
+GET /debug/disable
+GET /debug/stream
+```
+
+文件管理：
+
+```text
+GET /file/{path}
+POST /upload
+POST /newFolder
+POST /delFolder
+POST /delFile
+```
+
+`/file` 支持 Range 请求，可用于本地媒体分段播放。上传 `.zip` 会自动解压。
+
+管理页面：
+
+```text
+GET /m
+GET/POST /manage/session
+GET/POST /manage/background/settings
+GET/POST /manage/devices?scan=true
+GET/POST /manage/remote/ping?target=http://远端IP:端口
+GET/POST /manage/action?target=http://远端IP:端口&do=search&word=关键词
+GET/POST /manage/remote/file?target=http://远端IP:端口&path=TV/a.txt
+GET/POST /manage/remote/archive?target=http://远端IP:端口&paths=TV
+POST /manage/remote/upload
+GET/POST /manage/sync/paths
+GET/POST /manage/sync/tree?path=TV
+GET/POST /manage/sync/detect
+POST /manage/sync/start
+GET/POST /manage/login-state
+GET/POST /manage/login-state/learn?action=begin
+GET/POST /manage/login-state/learn?action=finish
+GET/POST /manage/login-state/paths
+GET/POST /manage/login-state/tree?path=app
+GET/POST /manage/login-state/file?path=app/shared_prefs/spUtils.xml
+GET/POST /manage/file/archive
+GET/POST /manage/proxy
+GET/POST /manage/csp
+POST /manage/csp/page
+```
+
+`/manage/*` 在本机管理时操作当前设备；带 `target=http://远端IP:端口` 时，部分接口会转发到远端设备。远端设备也需要运行同版本附近的 App，至少要支持对应的 `/manage/*` 或基础 `/action`、`/file` 接口。
+
+### 27.10 投屏和多设备同步
+
+- 投屏设备列表支持 DLNA 设备，也支持另一台同 App 设备。
+- 手机端投屏和同步弹窗支持扫码绑定设备。
+- 点击普通 App 设备投屏时，会调用对方设备的 `/action?do=cast`。
+- 点击 DLNA 设备投屏时，走 DLNA cast。
+- 多设备同步支持观看历史和收藏。
+- 同步弹窗的模式按钮可以切换同步方向。
+- 在非默认同步模式下长按设备，可执行强制同步或先清本机再同步。
+- 电视端会启动 DLNA Renderer，可被局域网 DLNA 控制器发现并控制播放、暂停、停止、Seek、音量和静音。
+
+### 27.11 配置里的隐藏能力
+
+站点字段：
+
+- `hide: 1`：站点不显示在列表中，但仍存在于配置中。
+- `searchable: 0`：禁用该站点搜索。
+- `changeable: 0`：禁用该站点换源。
+- `quickSearch: 0`：排除快速搜索。
+- `indexs: 1`：将站点作为索引源，条目点击进入聚合搜索。
+- `timeout`：单站点播放超时，单位秒。
+- `style`：控制站点或条目卡片样式。
+- `homePage` / `home_page` / `webHome` / `web_home`：自定义 WebHome 首页。
+- `click`：给解析 WebView 注入点击脚本，可自动点播放按钮或关闭弹窗。
+- `header`：给该站点请求追加 headers。
+- `jar`：当前站点单独指定 Spider JAR，覆盖全局 spider。
+
+Vod 条目字段：
+
+- `action`：条目点击后触发 Spider `action()` 或 HTTP API action，不进入普通详情。
+- `vod_tag: "folder"`：条目作为文件夹或子分类入口。
+- `cate`：条目作为子分类入口。
+- `style` / `land` / `circle` / `ratio`：单条目覆盖展示样式。
+
+播放结果字段：
+
+- `header`：播放请求 headers。
+- `subs`：字幕列表。
+- `danmaku`：弹幕源。
+- `drm`：DRM license 配置。
+- `artwork`：播放器封面。
+- `position`：起播位置。
+- `click`：解析 WebView 点击脚本。
+- `msg`：Toast 提示。
+
+### 27.12 特殊播放协议
+
+- `push://真实地址`：当前播放中再次打开一个新播放地址。
+- `assets://path`：读取 APK assets。
+- `file://path`：读取 App 本地路径。
+- `proxy://query`：走 Spider 本地代理。
+- `.strm`：读取文件第一行作为真实播放地址。
+- YouTube 链接：用 NewPipe 提取播放地址；播放列表可展开为多集。
+- `magnet:` / `.torrent` / `ed2k:`：走迅雷内核解析。
+- `jianpian:` / `tvbox-xg:` / `ftp:`：走荐片/XG P2P 解析。
+- `thunder:`：详情解析阶段可展开或转换。
+
+### 27.13 WebHome 相关技巧
+
+- WebHome 页面可调用 `fm.search(keyword, { direct: true, pic, wallPic })`，减少返回层级，并把详情页图片带入搜索结果后续播放链路。
+- WebHome 可调用 `fm.history()` 读取最近观看，用于补偿网页在播放页后台时漏掉的播放进度。
+- WebHome 可通过 `fm.config().driveCheck` 判断网盘检测开关。
+- WebHome 可用 `fm.res(url, { headers })` 给图片、字幕、视频资源生成本地网关地址，处理跨域和 headers。
+- WebHome 可用 `fm.req(url, options)` 走 Native OkHttp 请求，绕开普通浏览器 fetch 的 CORS 限制。
+- WebHome 使用透明背景时，App 壁纸可以透出，适合做沉浸式主页。
+
+### 27.14 调试日志
+
+调试日志用于临时排查 WebHome、SDK、爬虫请求、网盘检测和播放链路问题。
+
+入口：
+
+- App 内：设置 -> 增强功能 -> 调试日志。
+- HTTP 页面：`http://127.0.0.1:{port}/debug/logs`。
+- 下载文本：`http://127.0.0.1:{port}/debug/logs.txt`。
+- 清空日志：`http://127.0.0.1:{port}/debug/clear`。
+- 开启或关闭：`/debug/enable`、`/debug/disable`。
+- 实时拉取：`/debug/stream`，返回 `{ enabled, size, bytes, version, text }`。请求带 `v=version` 且版本未变化时，`text` 返回 `null`，日志页约 1.5 秒轮询一次。
+
+行为：
+
+- 默认关闭，不长期收集。
+- 开启后记录当前进程内日志，最多保留最近 2000 行；缓存文件超过约 1 MB 时会截断保留尾部内容；单条消息超过约 12000 字符会截断。
+- 关闭时清空当前进程内日志，不显示 toast。
+- 日志页会展示本机地址和局域网地址；局域网设备需要使用局域网地址访问。
+- 日志页提供“全部、代理、播放、WebHome、Console、WebView、站源、网盘、服务、同步、启动、错误”等过滤按钮，也支持关键词过滤和解释模式。
+- 覆盖范围包括 Android 系统版本、设备型号、WebView provider 版本、WebHome SDK 调用、WebHome 页面 `console.log/warn/error`、JS 异常、WebView 主框架/资源加载错误、RenderProcess 崩溃、`fm.req`、资源网关、`pan.check`、`pan.play`、本地 HTTP 服务、全局 OkHttp 请求响应、SpiderDebug、push/pvideo 和播放器状态。
+
+### 27.15 安全提醒
+
+这些能力是“已开放入口”，不是安全隔离边界：
+
+- 局域网 HTTP 服务没有鉴权。
+- `/upload`、`/delFile`、`/delFolder`、`/action?do=setting` 有明显副作用。
+- WebHome 页面一旦配置到站点，就能调用 App 注入 SDK，应只加载可信页面。
+- 爬虫、配置、WebHome、局域网工具都可以触发播放、搜索、缓存和部分设置行为。
+
+## 28. Android 外部 Intent
+
+App 对系统开放：
+
+| Intent | 行为 |
+| --- | --- |
+| `ACTION_MAIN` | 启动 App |
+| `ACTION_SEARCH` | 读取 `SearchManager.QUERY` 并打开搜索 |
+| `ACTION_SEND` + `text/plain` | 读取 `Intent.EXTRA_TEXT` 并推送播放 |
+| `ACTION_VIEW` + `content/file` + `video/*` / `audio/*` | 推送播放 URI |
+| `ACTION_VIEW` + `content/file` + `text/plain` 或 `.m3u` | 作为直播配置加载 |
+| `ACTION_VIEW` + `application/x-bittorrent` | 推送播放/解析 |
+| `ACTION_VIEW` + `smb/rtmp/rtsp/http/https` + video/audio | 推送播放 |
+| `ACTION_VIEW` + `ed2k/magnet/thunder/jianpian` | 推送播放/解析 |
+
+示例：
+
+```bash
+adb shell am start -a android.intent.action.SEARCH --es query "仙逆" com.fongmi.android.tv
+adb shell am start -a android.intent.action.VIEW -d "magnet:?xt=urn:btih:..."
+```
+
+## 29. DLNA 和 MediaSession
+
+电视端：
+
+- 启动 DLNA Renderer。
+- 支持投屏播放、暂停、停止、Seek、下一条、音量、静音。
+
+MediaSession：
+
+- 系统媒体控件可控制播放、暂停、停止、上一集/下一集、Seek。
+- 媒体浏览可暴露点播历史和直播频道。
+
+## 30. CORS、Cookie 和网络策略
+
+WebHome：
+
+- API 数据请求优先用 `fm.req`。
+- 图片、视频、字幕等 DOM 资源优先用 `fm.res`。
+- `fm.req` 使用 WebHome 专用 OkHttpClient，但会接入 App 统一 DNS 和代理选择器，会继承配置里的 `hosts`、`doh`、`proxy` 和增强功能里的壳代理规则。
+- `fm.req` 不自动继承配置里的 `headers`；需要 Header 时用 `options.headers` 显式传入。
+- `/webResource` 使用项目统一 OkHttp，会受配置网络策略和壳代理规则影响。
+- 普通浏览器 CORS 不能被网页禁用，只能通过 Native 请求或本地网关绕开。
+
+配置层网络策略：
+
+- `headers` 可按 host 注入 header。
+- `proxy` 可按 host 正则选择代理。
+- `hosts` 可覆盖 DNS。
+- `doh` 可配置 DNS over HTTPS。
+- `ads` 可拦截广告域名。
+
+## 31. 安全和限制
+
+重要限制：
+
+- 局域网 HTTP 服务当前没有鉴权。
+- `/upload`、`/delFile`、`/delFolder`、`/action?do=setting` 有明显副作用。
+- WebHome 页面一旦配置到站点，就能调用 App SDK，应只加载可信页面。
+- 爬虫、配置、WebHome、局域网工具都可以触发播放、搜索、缓存和部分设置行为。
+- 网盘检测过大批量可能触发平台风控。
+- 调试日志可能包含请求 URL、Header、Cookie、播放地址等敏感信息，只应在临时排查时开启，分享日志前自行确认内容。
+- Nostr 删除事件是否生效取决于 relay。
+- WebView 透明背景在少数旧设备或特殊 WebView 版本上可能有兼容差异。
+
+## 32. 常见问题
+
+### 32.1 为什么 WebHome 在电脑正常、App 不正常
+
+检查：
+
+- 是否等待 `window.fm` 注入。
+- 是否使用普通 `fetch` 请求跨域 API。
+- 是否需要用 `fm.req` 或 `fm.res`。
+- 是否依赖了电脑浏览器才有的调试插件或关闭 CORS 设置。
+- 是否给 `html/body` 写了不透明背景，导致透明 WebView 无效。
+- 是否用了旧 WebView 不支持的语法或 CSS（见 15.2-15.4）。电脑 Chrome 是新内核，无法暴露这类问题。
+
+### 32.2 为什么 WebHome 在部分电视盒子上白屏或布局错乱
+
+白屏几乎都是 JS 语法级不兼容：旧内核解析到 `?.`、`??`、`||=`、命名捕获组正则等新语法直接 `SyntaxError`，整个脚本块不执行。排查：
+
+- 开启“调试日志”，看 `webhome-console` 是否有 `SyntaxError`，看 `webview` tag 确认设备内核版本。
+- 全文搜索 `?.`、`??`、`||=`、`&&=`、`??=`、`(?<`、`replaceAll`、`allSettled` 等高危用法（见 15.2、15.3 清单）。
+- 布局错乱（间距消失、海报高度塌缩、整块样式失效）对照 15.4 的 CSS 清单：flex `gap`、`aspect-ratio`、`clamp()`、`:is()`/`:focus-visible` 混写选择器是最常见的四个来源。
+- 确认页面带了兼容引导层和 `no-*` 降级样式（见 15.5）。
+
+### 32.3 为什么网盘检测不执行
+
+检查：
+
+- App 是否安装了支持 `config.driveCheck` 的版本。
+- 设置 -> 增强功能 -> “网盘检测”是否开启。该开关默认开启，但用户可以关闭。
+- WebHome 是否读取了 `fm.config().driveCheck`。
+- 是否只检测了支持的网盘类型。
+- 是否可见范围监听没有触发。
+
+### 32.4 为什么播放时长统计不准
+
+WebHome 在原生播放页期间可能暂停定时器。推荐：
+
+- 播放前记录观看意图。
+- 播放中用 `fm.stat()` 采样。
+- 返回后用 `fm.history()` 补偿。
+- 发布热度前去重。
+
+### 32.5 为什么局域网端口不是 9978
+
+端口不是固定值。App 从 `9978` 到 `9998` 依次尝试。如果 `9978` 被占用，会使用后续端口。
+
+### 32.6 修改什么需要重新打包
+
+不需要重新打包：
+
+- 只修改线上 WebHome HTML/CSS/JS。
+- 修改远程配置。
+- 修改远程 Spider JAR、JS、Python 文件。
+
+需要重新打包：
+
+- 修改 Android 原生代码。
+- 修改 WebView 容器行为。
+- 修改 App SDK 注入能力。
+- 修改本地 HTTP 服务实现。
+- 修改内置资源或 assets。
+
+## 33. 给 AI 开发 WebHome 的要求
+
+如果让 AI 基于本文生成 WebHome 首页或扩展，建议要求：
+
+1. 单文件 HTML，除必要第三方库外不引入构建流程。
+2. App 内优先使用 `fm.req` 请求 API，避免 CORS。
+3. 图片和资源优先使用 `fm.res`。
+4. 搜索播放使用 `fm.search(keyword, { direct: true, pic, wallPic })`，其中 `wallPic` 取横屏剧照/backdrop；没有 `wallPic` 时不要期望播放页用海报当背景。
+5. 多层页面使用 History API。
+6. 移动端优先，电视端保证遥控器焦点可用。
+7. 透明背景不要给 `html/body` 写死纯色背景，App 环境保持页面级透明。
+8. 透明详情页、剧情页等全屏浮层打开时，要临时隐藏底层 WebHome 页面，避免主页/详情/弹层内容叠加。
+9. 卡片、按钮、输入框、Tab、剧情文本等承载文字的区域要使用统一半透明面板色，不要让文字直接压在壁纸上。
+10. 网盘检测必须先读 `fm.config().driveCheck`。
+11. PanSou 搜索结果只检测可见范围内支持类型。
+12. 所有 SDK Promise 都要捕获异常。
+13. 不依赖固定端口。
+14. 不加载不可信远程脚本。
+15. JS 语法基线 ES2017：禁止可选链 `?.`、空值合并 `??`、逻辑赋值 `||=`/`&&=`/`??=`、class 字段、正则命名捕获组/lookbehind、`replaceAll`、`Promise.allSettled`、`Object.fromEntries`、`structuredClone`（完整清单见 15.2、15.3）。生成后专项自查这些用法。
+16. 页面头部必须带 ES5 书写的兼容引导层：polyfill + 特性检测 + `no-layout-gap`/`no-css-functions`/`no-aspect-ratio` 降级类（模板见 15.5）。
+17. CSS 禁用 `:is()`/`:where()`/`:has()`/`:focus-visible`；flex `gap`、`aspect-ratio`、`clamp()`、`backdrop-filter`、`100dvh`、`env()`、`inset` 必须按 15.4 提供降级或兜底声明；现代选择器不与基础选择器混写在同一条逗号列表。
+18. 设备判定优先 `window.fongmiClient`，浏览器预览才用视口/指针特征兜底；TV 焦点样式用 `:focus` 或 JS 维护的类，不用 `:focus-visible`。
+19. 生成扩展脚本时按第 25 章选择策略，优先保留原网站登录、搜索、筛选、分页、复制和站内导航，只增强 App 播放、网盘/磁力路由、清理或焦点能力。
+20. 扩展必须输出固定 `id/name/version/runAt` 和 Manifest 或 `sites[].extensions` 配置；根级扩展必须用精确 `cspKeyRegex` 限定站点。
+21. 不要广泛拦截所有链接；只处理已分类的资源按钮、播放按钮、网盘链接、磁力链接或明确的媒体 URL。
+22. 动态在线播放区域要在每次扫描时刷新按钮数据，点击时重新读取当前线路、当前集数和同一行真实来源，不能只使用首次扫描缓存。
+23. 移动端顶部操作区只在 `edge`、`immersive` 等全屏/融合 chrome 状态预留安全区，退出全屏恢复普通 chrome 后必须移除顶部空白。
+24. 遇到验证、盾、登录或签名问题时，应使用浏览器/App WebView 人工交互和调试工作台抓取真实 DOM/Network 证据，不生成绕盾、验证码、clearance、指纹伪装或账号令牌采集逻辑。

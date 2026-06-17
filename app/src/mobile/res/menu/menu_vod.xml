@@ -10,30 +10,46 @@
         app:showAsAction="always" />
 
     <item
-        android:id="@+id/refresh"
-        android:icon="@drawable/ic_action_refresh"
-        android:title="@string/live_refresh"
-        app:showAsAction="always" />
-
-    <item
-        android:id="@+id/keep"
-        android:icon="@drawable/ic_action_keep"
-        android:title="@string/app_keep"
+        android:id="@+id/web_home_fullscreen"
+        android:icon="@drawable/ic_control_fullscreen"
+        android:title="@string/play_fullscreen"
+        android:visible="false"
         app:iconTint="@color/white"
         app:showAsAction="always" />
 
     <item
-        android:id="@+id/history"
-        android:icon="@drawable/ic_action_history"
-        android:title="@string/app_history"
+        android:id="@+id/more_actions"
+        android:icon="@drawable/ic_action_more_vert"
+        android:title="@string/control_other"
         app:iconTint="@color/white"
-        app:showAsAction="always" />
+        app:showAsAction="always">
 
-    <item
-        android:id="@+id/sync"
-        android:icon="@drawable/ic_action_sync"
-        android:title="@string/setting_one_key_sync"
-        app:iconTint="@color/white"
-        app:showAsAction="always" />
+        <menu>
+            <item
+                android:id="@+id/refresh"
+                android:icon="@drawable/ic_popup_refresh"
+                android:title="@string/live_refresh" />
+
+            <item
+                android:id="@+id/keep"
+                android:icon="@drawable/ic_popup_keep"
+                android:title="@string/app_keep" />
+
+            <item
+                android:id="@+id/history"
+                android:icon="@drawable/ic_popup_history"
+                android:title="@string/app_history" />
+
+            <item
+                android:id="@+id/sync"
+                android:icon="@drawable/ic_popup_sync"
+                android:title="@string/setting_one_key_sync" />
+
+            <item
+                android:id="@+id/enhance"
+                android:icon="@drawable/ic_popup_enhance"
+                android:title="@string/setting_enhance" />
+        </menu>
+    </item>
 
 </menu>

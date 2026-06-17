@@ -19,7 +19,8 @@
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
             app:layout_scrollFlags="scroll|enterAlways"
-            app:menu="@menu/menu_vod">
+            app:menu="@menu/menu_vod"
+            app:popupTheme="@style/ToolbarPopupTheme">
 
             <androidx.appcompat.widget.AppCompatImageView
                 android:id="@+id/logo"

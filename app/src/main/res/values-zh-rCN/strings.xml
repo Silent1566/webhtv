@@ -141,6 +141,8 @@
     <string name="setting_home_history">首页最近观看</string>
     <string name="setting_search_ui">搜索布局</string>
     <string name="setting_search_column">搜索结果列数</string>
+    <string name="repo_github">GitHub 仓库</string>
+    <string name="repo_cnb">CNB 仓库</string>
     <string name="setting_debug_log">调试日志</string>
     <string name="setting_manage_page">管理页面</string>
     <string name="setting_login_state">登录态学习</string>
@@ -149,6 +151,7 @@
     <string name="setting_site_health_dialog_sort">站点弹窗排序</string>
     <string name="site_health_clear_done">站点健康记录已清空</string>
     <string name="setting_web_home_extension">WebHome 扩展</string>
+    <string name="setting_playback_artwork_wall">播放界面剧照</string>
     <string name="setting_viewing_record_sync">观影记录同步</string>
     <string name="viewing_record_sync_entry_summary">%1$s · 远端 %2$d/%3$d · Webhook %4$d/%5$d</string>
     <string name="viewing_record_sync_switches">开关</string>
@@ -267,6 +270,11 @@
     <string name="web_home_extension_run_at_start_short">开始</string>
     <string name="web_home_extension_run_at_end_short">结束</string>
     <string name="web_home_extension_run_at_idle_short">空闲</string>
+    <string name="web_home_extension_match_mode">匹配方式</string>
+    <string name="web_home_extension_match_sites">选择</string>
+    <string name="web_home_extension_match_regex">正则</string>
+    <string name="web_home_extension_choose_sites">选择站点</string>
+    <string name="web_home_extension_no_webhome_sites">当前点播配置没有 WebHome 站点</string>
     <string name="web_home_extension_match_hint">站点 key 或正则</string>
     <string name="web_home_extension_code_hint">JavaScript / CSS 注入代码</string>
     <string name="web_home_extension_local_code_default">本地扩展 %1$d</string>
@@ -319,6 +327,13 @@
     <string name="setting_shell_proxy_config">Proxy</string>
     <string name="setting_custom_csp">站点注入</string>
     <string name="setting_custom_csp_add">新增</string>
+    <string name="setting_custom_csp_insert_short">位置</string>
+    <string name="setting_custom_csp_recognize">识别</string>
+    <string name="setting_custom_csp_recognize_title">自动识别</string>
+    <string name="setting_custom_csp_recognize_hint">粘贴站点 JSON 片段</string>
+    <string name="setting_custom_csp_recognize_empty">请先粘贴站点 JSON</string>
+    <string name="setting_custom_csp_recognize_invalid">未识别到有效站点 JSON</string>
+    <string name="setting_custom_csp_recognize_done">已添加 %1$d 个条目</string>
     <string name="setting_custom_csp_count">%1$d/%2$d 可用</string>
     <string name="setting_custom_csp_api">API / CSP 类名</string>
     <string name="setting_custom_csp_code">代码</string>
@@ -328,7 +343,9 @@
     <string name="setting_custom_csp_home_page">WebHome 地址</string>
     <string name="setting_custom_csp_home_page_optional">WebHome 地址（可选）</string>
     <string name="setting_custom_csp_extensions_toggle">扩展</string>
-    <string name="setting_custom_csp_extensions">extensions 数组</string>
+    <string name="setting_custom_csp_extensions">扩展 URL / JSON</string>
+    <string name="setting_custom_csp_extensions_file">文件</string>
+    <string name="setting_custom_csp_extensions_example">https://example.com/site.js</string>
     <string name="setting_custom_csp_extensions_invalid">extensions JSON 格式无效</string>
     <string name="setting_custom_csp_permission_required">站点注入需要文件访问权限。</string>
     <string name="setting_custom_csp_save_failed">站点注入保存失败：%1$s</string>
@@ -381,6 +398,11 @@
     <string name="setting_proxy_rule_count">%1$d 条规则</string>
     <string name="setting_proxy_invalid">代理地址无效</string>
     <string name="setting_proxy_suggest">自动建议</string>
+    <string name="setting_proxy_recognize">自动识别</string>
+    <string name="setting_proxy_recognize_hint">粘贴完整配置、proxy 片段、规则数组或单个规则对象</string>
+    <string name="setting_proxy_recognize_empty">请先粘贴 Proxy 规则</string>
+    <string name="setting_proxy_recognize_failed">未识别到 Proxy 规则</string>
+    <string name="setting_proxy_recognize_done">已识别 %1$d 条 Proxy 规则</string>
     <string name="setting_proxy_test">测试代理</string>
     <string name="setting_proxy_select_site">选择站点</string>
     <string name="setting_proxy_no_site">暂无可选站点</string>

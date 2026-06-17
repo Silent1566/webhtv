@@ -126,6 +126,12 @@
             tools:visibility="visible" />
 
         <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/display"
+            style="@style/Control"
+            android:layout_marginEnd="12dp"
+            android:text="@string/control_display" />
+
+        <com.google.android.material.textview.MaterialTextView
             android:id="@+id/repeat"
             style="@style/Control"
             android:nextFocusRight="@id/next"

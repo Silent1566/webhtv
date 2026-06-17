@@ -63,6 +63,15 @@ public class ImgUtil {
         }
     }
 
+    public static void preload(Context context, String url) {
+        if (TextUtils.isEmpty(url)) return;
+        try {
+            Glide.with(context).load(getUrl(url)).override(ResUtil.getScreenWidth(), ResUtil.getScreenHeight()).preload();
+        } catch (Throwable e) {
+            e.printStackTrace();
+        }
+    }
+
     public static void load(String text, String url, ImageView view) {
         load(text, url, view, true);
     }

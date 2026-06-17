@@ -123,6 +123,8 @@
     <string name="setting_player">播放設定</string>
     <string name="setting_danmaku">彈幕設定</string>
     <string name="setting_enhance">增強功能</string>
+    <string name="repo_github">GitHub 倉庫</string>
+    <string name="repo_cnb">CNB 倉庫</string>
     <string name="setting_debug_log">調試日誌</string>
     <string name="setting_manage_page">管理頁面</string>
     <string name="setting_login_state">登入狀態學習</string>
@@ -131,6 +133,7 @@
     <string name="setting_site_health_dialog_sort">站點彈窗排序</string>
     <string name="site_health_clear_done">站點健康記錄已清空</string>
     <string name="setting_web_home_extension">WebHome 擴展</string>
+    <string name="setting_playback_artwork_wall">播放介面劇照</string>
     <string name="setting_viewing_record_sync">觀影記錄同步</string>
     <string name="viewing_record_sync_entry_summary">%1$s · 遠端 %2$d/%3$d · Webhook %4$d/%5$d</string>
     <string name="viewing_record_sync_switches">開關</string>
@@ -249,6 +252,11 @@
     <string name="web_home_extension_run_at_start_short">開始</string>
     <string name="web_home_extension_run_at_end_short">結束</string>
     <string name="web_home_extension_run_at_idle_short">空閒</string>
+    <string name="web_home_extension_match_mode">匹配方式</string>
+    <string name="web_home_extension_match_sites">選擇</string>
+    <string name="web_home_extension_match_regex">正則</string>
+    <string name="web_home_extension_choose_sites">選擇站點</string>
+    <string name="web_home_extension_no_webhome_sites">目前點播配置沒有 WebHome 站點</string>
     <string name="web_home_extension_match_hint">站點 key 或正則</string>
     <string name="web_home_extension_code_hint">JavaScript / CSS 注入代碼</string>
     <string name="web_home_extension_local_code_default">本地擴展 %1$d</string>
@@ -301,6 +309,13 @@
     <string name="setting_shell_proxy_config">Proxy</string>
     <string name="setting_custom_csp">站點注入</string>
     <string name="setting_custom_csp_add">新增</string>
+    <string name="setting_custom_csp_insert_short">位置</string>
+    <string name="setting_custom_csp_recognize">識別</string>
+    <string name="setting_custom_csp_recognize_title">自動識別</string>
+    <string name="setting_custom_csp_recognize_hint">貼上站點 JSON 片段</string>
+    <string name="setting_custom_csp_recognize_empty">請先貼上站點 JSON</string>
+    <string name="setting_custom_csp_recognize_invalid">未識別到有效站點 JSON</string>
+    <string name="setting_custom_csp_recognize_done">已加入 %1$d 個條目</string>
     <string name="setting_custom_csp_count">%1$d/%2$d 可用</string>
     <string name="setting_custom_csp_api">API / CSP 類名</string>
     <string name="setting_custom_csp_code">代碼</string>
@@ -310,7 +325,9 @@
     <string name="setting_custom_csp_home_page">WebHome 位址</string>
     <string name="setting_custom_csp_home_page_optional">WebHome 位址（可選）</string>
     <string name="setting_custom_csp_extensions_toggle">擴展</string>
-    <string name="setting_custom_csp_extensions">extensions 陣列</string>
+    <string name="setting_custom_csp_extensions">擴展 URL / JSON</string>
+    <string name="setting_custom_csp_extensions_file">檔案</string>
+    <string name="setting_custom_csp_extensions_example">https://example.com/site.js</string>
     <string name="setting_custom_csp_extensions_invalid">extensions JSON 格式無效</string>
     <string name="setting_custom_csp_permission_required">站點注入需要檔案存取權限。</string>
     <string name="setting_custom_csp_save_failed">站點注入保存失敗：%1$s</string>

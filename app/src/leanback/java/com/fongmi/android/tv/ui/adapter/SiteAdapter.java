@@ -1,6 +1,7 @@
 package com.fongmi.android.tv.ui.adapter;
 
 import android.content.res.ColorStateList;
+import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -45,10 +46,16 @@ public class SiteAdapter extends RecyclerView.Adapter<SiteAdapter.ViewHolder> {
         notifyDataSetChanged();
     }
 
-    public void filter(String keyword) {
+    public void filter(String group, String keyword) {
+        String tag = group == null ? "" : group.trim();
         String text = keyword == null ? "" : keyword.trim().toLowerCase(Locale.getDefault());
         mItems.clear();
-        for (Site site : allItems) if (text.isEmpty() || site.getName().toLowerCase(Locale.getDefault()).contains(text) || site.getKey().toLowerCase(Locale.getDefault()).contains(text)) mItems.add(site);
+        for (Site site : allItems) {
+            String name = site.getName();
+            boolean matchGroup = TextUtils.isEmpty(tag) || name.contains(tag);
+            boolean matchKeyword = TextUtils.isEmpty(text) || name.toLowerCase(Locale.getDefault()).contains(text) || site.getKey().toLowerCase(Locale.getDefault()).contains(text);
+            if (matchGroup && matchKeyword) mItems.add(site);
+        }
         notifyDataSetChanged();
     }
 

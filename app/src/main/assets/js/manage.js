@@ -1484,7 +1484,7 @@ function buildLiveFields(item) {
     return `<div class="field-row compact live-common-row">${buildLiveTextField('url', '直播地址', item.url, 'http(s):// 或本地路径', true, 'URL/分组至少一项')}</div><div class="field-row compact">${buildLiveTextField('ua', 'UA', item.ua, 'okhttp')}${buildLiveTextField('epg', 'EPG', item.epg, 'http://...{name}...')}${buildLiveTextField('logo', 'Logo', item.logo, 'https://.../{name}.png')}</div>${buildAdvancedLiveFields(item)}`;
 }
 function buildAdvancedSiteFields(item, wrap = true) {
-    const field = `<label class="form-label">完整 Site JSON</label><textarea class="code-area csp-field compact-code" data-key="siteText" spellcheck="false" placeholder="完整站点 JSON，可填写 docs/应用完整开发文档.md 里的其它字段">${escHtml(item.siteText)}</textarea>`;
+    const field = `<label class="form-label">完整 Site JSON</label><textarea class="code-area csp-field compact-code" data-key="siteText" spellcheck="false" placeholder="完整站点 JSON，可参考 webhome-devkit/docs/应用完整开发文档.md 里的其它字段">${escHtml(item.siteText)}</textarea>`;
     return wrap ? `<details class="advanced-panel"><summary>高级 Site JSON</summary>${field}</details>` : field;
 }
 function buildAdvancedLiveFields(item) {
@@ -1809,6 +1809,28 @@ function applyProxySuggest(key, all) {
         warnToast(`已新增 ${added} 个域名，共 ${countProxyHosts()} 个`);
     }, '自动建议失败');
 }
+function showProxyRecognizeDialog() {
+    $('#proxyRecognizeInput').val('');
+    openDialog('proxyRecognizeDialog');
+}
+function applyProxyRecognize() {
+    const text = $('#proxyRecognizeInput').val();
+    const items = parseProxyDetectedRules(text, true);
+    if (!items.length) { warnToast('未识别到 Proxy 规则'); return; }
+    if (proxyMode === 'text') proxyRules = parseProxyRules($('#proxyRules').val());
+    else syncProxyRulesFromForm();
+    const before = proxyRules.filter(rule => rule.hosts || rule.url).length;
+    proxyRules = mergeProxyRules(proxyRules, items);
+    const added = proxyRules.filter(rule => rule.hosts || rule.url).length - before;
+    const firstUrl = firstProxyRuleUrl(items);
+    if (!cleanProxyUrl($('#proxyUrl').val()) && firstUrl) $('#proxyUrl').val(firstUrl);
+    proxyEnabled = true;
+    proxyMode = 'form';
+    $('#proxyRules').val(formatProxyRules(proxyRules));
+    renderProxyManage({ count: proxyRules.filter(rule => rule.hosts || rule.url).length });
+    closeDialog('proxyRecognizeDialog');
+    warnToast(`已识别 ${items.length} 条，新增 ${Math.max(added, 0)} 条`);
+}
 function ensureProxyDefaultUrl() {
     if (isValidProxyUrl(cleanProxyUrl($('#proxyUrl').val()))) return true;
     warnToast('请先填写默认代理地址');
@@ -1868,7 +1890,9 @@ function moveProxyRule(index, delta) {
 function parseProxyRules(text) {
     const raw = String(text || '').trim();
     if (!raw) return [];
-    if (raw[0] === '{' || raw[0] === '[') return parseProxyJson(raw);
+    const detected = parseProxyDetectedRules(raw, raw[0] === '{' || raw[0] === '[');
+    if (detected.length) return detected;
+    if (raw[0] === '{' || raw[0] === '[' || raw.includes('"proxy"')) return [];
     const rows = [];
     raw.split(/\r?\n/).forEach(line => {
         const value = line.trim();
@@ -1879,15 +1903,123 @@ function parseProxyRules(text) {
     });
     return rows;
 }
-function parseProxyJson(text) {
+function parseProxyDetectedRules(text, notifyInvalid = false) {
+    const raw = String(text || '').trim();
+    if (!raw) return [];
+    let items = parseProxyJson(raw, false);
+    if (items.length) return items;
+    const proxyArray = extractNamedJsonArray(raw, 'proxy');
+    if (proxyArray) {
+        items = parseProxyJson(`{"proxy":${proxyArray}}`, false);
+        if (items.length) return items;
+    }
+    const array = extractFirstJsonArray(raw);
+    if (array && /"hosts"|"urls"/.test(array)) {
+        items = parseProxyJson(array, false);
+        if (items.length) return items;
+    }
+    const objects = extractProxyJsonObjects(raw);
+    if (objects.length) {
+        items = parseProxyJson(`[${objects.join(',')}]`, false);
+        if (items.length) return items;
+    }
+    if (notifyInvalid && (raw[0] === '{' || raw[0] === '[' || raw.includes('"proxy"'))) warnToast('Proxy JSON 格式无效');
+    return [];
+}
+function parseProxyJson(text, notifyInvalid = true) {
     try {
-        const root = JSON.parse(text);
+        const root = JSON.parse(trimJsonTrailingComma(text));
         const array = Array.isArray(root) ? root : (Array.isArray(root.proxy) ? root.proxy : [root]);
         return array.map(item => proxyRule(joinProxyValue(item.hosts), joinProxyValue(item.urls))).filter(item => item.hosts || item.url);
     } catch (e) {
-        warnToast('Proxy JSON 格式无效');
+        if (notifyInvalid) warnToast('Proxy JSON 格式无效');
         return [];
     }
+}
+function trimJsonTrailingComma(text) {
+    let value = String(text || '').trim();
+    while (value.endsWith(',')) value = value.slice(0, -1).trim();
+    return value;
+}
+function extractNamedJsonArray(text, key) {
+    const marker = `"${key}"`;
+    let search = 0;
+    while (search >= 0 && search < text.length) {
+        const index = text.indexOf(marker, search);
+        if (index < 0) return '';
+        const colon = text.indexOf(':', index + marker.length);
+        if (colon < 0) return '';
+        const start = nextNonSpaceIndex(text, colon + 1);
+        if (start >= 0 && text[start] === '[') {
+            const end = findJsonClosing(text, start, '[', ']');
+            return end > start ? text.slice(start, end + 1) : '';
+        }
+        search = colon + 1;
+    }
+    return '';
+}
+function extractFirstJsonArray(text) {
+    let start = text.indexOf('[');
+    while (start >= 0) {
+        const end = findJsonClosing(text, start, '[', ']');
+        if (end > start) return text.slice(start, end + 1);
+        start = text.indexOf('[', start + 1);
+    }
+    return '';
+}
+function extractProxyJsonObjects(text) {
+    const objects = [];
+    let start = text.indexOf('{');
+    while (start >= 0) {
+        const end = findJsonClosing(text, start, '{', '}');
+        if (end <= start) break;
+        const object = text.slice(start, end + 1);
+        if (/"hosts"|"urls"/.test(object)) objects.push(object);
+        start = text.indexOf('{', end + 1);
+    }
+    return objects;
+}
+function nextNonSpaceIndex(text, start) {
+    for (let i = start; i < text.length; i++) if (!/\s/.test(text[i])) return i;
+    return -1;
+}
+function findJsonClosing(text, start, open, close) {
+    let inString = false, escaped = false, depth = 0;
+    for (let i = start; i < text.length; i++) {
+        const c = text[i];
+        if (inString) {
+            if (escaped) escaped = false;
+            else if (c === '\\') escaped = true;
+            else if (c === '"') inString = false;
+            continue;
+        }
+        if (c === '"') { inString = true; continue; }
+        if (c === open) depth++;
+        else if (c === close && --depth === 0) return i;
+    }
+    return -1;
+}
+function mergeProxyRules(current, incoming) {
+    const result = (current || []).filter(rule => rule.hosts || rule.url);
+    const exists = new Set(result.map(proxyRuleKey));
+    incoming.forEach(rule => {
+        const item = proxyRule(rule.hosts, rule.url);
+        const key = proxyRuleKey(item);
+        if (!item.hosts && !item.url || exists.has(key)) return;
+        result.push(item);
+        exists.add(key);
+    });
+    return result.length ? result : [proxyRule('', '')];
+}
+function proxyRuleKey(rule) {
+    return `${splitProxyValue(rule.hosts).map(normalizeProxyHost).join('|')}=>${splitProxyValue(rule.url).join('|')}`;
+}
+function firstProxyRuleUrl(items) {
+    for (const item of items || []) {
+        const urls = splitProxyValue(item.url);
+        if (urls.length) return urls[0];
+    }
+    return '';
 }
 function joinProxyValue(value) {
     if (Array.isArray(value)) return value.map(item => String(item).trim()).filter(Boolean).join(',');

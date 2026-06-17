@@ -1,0 +1,4 @@
+interface:
+  display_name: "WebHome Extension Builder"
+  short_description: "Build WebHome extensions with JS/WAF analysis"
+  default_prompt: "Use $webhome-extension-builder to build a WebHome extension for a target site URL, including JS/API reverse analysis and WAF feasibility checks when needed."

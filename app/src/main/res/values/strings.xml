@@ -142,6 +142,8 @@
     <string name="setting_home_history">Home recent history</string>
     <string name="setting_search_ui">Search layout</string>
     <string name="setting_search_column">Search results per row</string>
+    <string name="repo_github">GitHub repository</string>
+    <string name="repo_cnb">CNB repository</string>
     <string name="setting_debug_log">Debug log</string>
     <string name="setting_manage_page">Management page</string>
     <string name="setting_login_state">Login state learning</string>
@@ -150,6 +152,7 @@
     <string name="setting_site_health_dialog_sort">Sort site dialog</string>
     <string name="site_health_clear_done">Site health data cleared</string>
     <string name="setting_web_home_extension">WebHome extensions</string>
+    <string name="setting_playback_artwork_wall">Playback stills</string>
     <string name="setting_viewing_record_sync">Viewing record sync</string>
     <string name="viewing_record_sync_entry_summary">%1$s · Remote %2$d/%3$d · Webhook %4$d/%5$d</string>
     <string name="viewing_record_sync_switches">Switches</string>
@@ -268,6 +271,11 @@
     <string name="web_home_extension_run_at_start_short">Start</string>
     <string name="web_home_extension_run_at_end_short">End</string>
     <string name="web_home_extension_run_at_idle_short">Idle</string>
+    <string name="web_home_extension_match_mode">Match mode</string>
+    <string name="web_home_extension_match_sites">Select</string>
+    <string name="web_home_extension_match_regex">Regex</string>
+    <string name="web_home_extension_choose_sites">Choose sites</string>
+    <string name="web_home_extension_no_webhome_sites">No WebHome sites in current VOD config</string>
     <string name="web_home_extension_match_hint">Site key or regex</string>
     <string name="web_home_extension_code_hint">JavaScript / CSS injector code</string>
     <string name="web_home_extension_local_code_default">Local extension %1$d</string>
@@ -320,6 +328,13 @@
     <string name="setting_shell_proxy_config">Proxy</string>
     <string name="setting_custom_csp">Site Injection</string>
     <string name="setting_custom_csp_add">Add</string>
+    <string name="setting_custom_csp_insert_short">Pos</string>
+    <string name="setting_custom_csp_recognize">Detect</string>
+    <string name="setting_custom_csp_recognize_title">Detect sites</string>
+    <string name="setting_custom_csp_recognize_hint">Paste site JSON snippets</string>
+    <string name="setting_custom_csp_recognize_empty">Paste site JSON first</string>
+    <string name="setting_custom_csp_recognize_invalid">No valid site JSON detected</string>
+    <string name="setting_custom_csp_recognize_done">Added %1$d items</string>
     <string name="setting_custom_csp_count">%1$d/%2$d active</string>
     <string name="setting_custom_csp_api">API / csp class</string>
     <string name="setting_custom_csp_code">Code</string>
@@ -329,7 +344,9 @@
     <string name="setting_custom_csp_home_page">WebHome URL</string>
     <string name="setting_custom_csp_home_page_optional">WebHome URL (optional)</string>
     <string name="setting_custom_csp_extensions_toggle">Extensions</string>
-    <string name="setting_custom_csp_extensions">extensions array</string>
+    <string name="setting_custom_csp_extensions">Extension URL / JSON</string>
+    <string name="setting_custom_csp_extensions_file">File</string>
+    <string name="setting_custom_csp_extensions_example">https://example.com/site.js</string>
     <string name="setting_custom_csp_extensions_invalid">Invalid extensions JSON</string>
     <string name="setting_custom_csp_permission_required">Site injection needs file access permission.</string>
     <string name="setting_custom_csp_save_failed">Site injection save failed: %1$s</string>
@@ -382,6 +399,11 @@
     <string name="setting_proxy_rule_count">%1$d rules</string>
     <string name="setting_proxy_invalid">Invalid proxy URL</string>
     <string name="setting_proxy_suggest">Auto suggest</string>
+    <string name="setting_proxy_recognize">Auto detect</string>
+    <string name="setting_proxy_recognize_hint">Paste full config, proxy snippet, rule array, or one rule object</string>
+    <string name="setting_proxy_recognize_empty">Paste proxy rules first</string>
+    <string name="setting_proxy_recognize_failed">No proxy rule detected</string>
+    <string name="setting_proxy_recognize_done">Detected %1$d proxy rules</string>
     <string name="setting_proxy_test">Test proxy</string>
     <string name="setting_proxy_select_site">Select source</string>
     <string name="setting_proxy_no_site">No source available</string>

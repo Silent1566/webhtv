@@ -1,0 +1,13 @@
+{
+  "extensions": [
+    {
+      "id": "ymvid-native-router",
+      "name": "Ymvid native router",
+      "version": "1.0.0",
+      "runAt": "document-end",
+      "js": [
+        "./ymvid.com.js"
+      ]
+    }
+  ]
+}

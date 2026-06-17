@@ -4,6 +4,7 @@ import android.app.Dialog;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
+import android.text.TextUtils;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
@@ -11,12 +12,15 @@ import android.view.WindowManager;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.widget.LinearLayoutCompat;
+import androidx.core.content.ContextCompat;
 import androidx.fragment.app.FragmentActivity;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.App;
+import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.api.config.LiveConfig;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Config;
@@ -28,7 +32,11 @@ import com.fongmi.android.tv.ui.adapter.SiteAdapter;
 import com.fongmi.android.tv.ui.custom.SpaceItemDecoration;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
+import com.google.android.material.button.MaterialButton;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class SiteDialog extends BaseAlertDialog implements SiteAdapter.OnClickListener {
 
@@ -38,12 +46,15 @@ public class SiteDialog extends BaseAlertDialog implements SiteAdapter.OnClickLi
     private static final int ITEM_SPACE = 12;
     private static final int MAX_HEIGHT = 344;
 
+    private static String selectedGroup = "";
+
     private RecyclerView.ItemDecoration decoration;
     private DialogSiteBinding binding;
     private FragmentActivity activity;
     private Dialog directDialog;
     private SiteListener listener;
     private SiteAdapter adapter;
+    private List<String> groups;
     private long showStart;
     private boolean action;
     private int type;
@@ -122,6 +133,7 @@ public class SiteDialog extends BaseAlertDialog implements SiteAdapter.OnClickLi
     @Override
     protected void initView() {
         adapter = new SiteAdapter(this);
+        groups = getGroups();
         setRootWidth();
         setRecyclerHeight();
         binding.keyword.setVisibility(View.GONE);
@@ -134,6 +146,7 @@ public class SiteDialog extends BaseAlertDialog implements SiteAdapter.OnClickLi
         setType(type);
         setRecyclerView();
         setMode();
+        setGroupView();
     }
 
     @Override
@@ -151,7 +164,7 @@ public class SiteDialog extends BaseAlertDialog implements SiteAdapter.OnClickLi
         binding.keyword.addTextChangedListener(new com.fongmi.android.tv.ui.custom.CustomTextListener() {
             @Override
             public void onTextChanged(CharSequence s, int start, int before, int count) {
-                adapter.filter(s.toString());
+                adapter.filter(selectedGroup, s.toString());
                 setRecyclerView();
                 setMode();
                 setWidth();
@@ -258,5 +271,83 @@ public class SiteDialog extends BaseAlertDialog implements SiteAdapter.OnClickLi
         Window window = getDialog() == null ? null : getDialog().getWindow();
         applyWindow(window);
         if (adapter.getItemCount() == 0) dismiss();
+    }
+
+    private List<String> getGroups() {
+        return new ArrayList<>(Site.getGroups(VodConfig.get().getSites()));
+    }
+
+    private void setGroupView() {
+        if (groups.isEmpty()) {
+            selectedGroup = "";
+            binding.groupScroll.setVisibility(View.GONE);
+            return;
+        }
+        if (!TextUtils.isEmpty(selectedGroup) && !groups.contains(selectedGroup)) selectedGroup = "";
+        binding.groupScroll.setVisibility(View.VISIBLE);
+        binding.groupList.removeAllViews();
+        for (String group : groups) binding.groupList.addView(getGroupView(group));
+        updateGroupView();
+        // 让第一个分组按钮获取焦点
+        binding.groupList.post(() -> {
+            if (binding.groupList.getChildCount() > 0) {
+                binding.groupList.getChildAt(0).requestFocus();
+            }
+        });
+    }
+
+    private androidx.appcompat.widget.AppCompatTextView getGroupView(String group) {
+        androidx.appcompat.widget.AppCompatTextView button = new androidx.appcompat.widget.AppCompatTextView(getDialogActivity());
+        LinearLayoutCompat.LayoutParams params = new LinearLayoutCompat.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.setMarginEnd(ResUtil.dp2px(12));
+        button.setLayoutParams(params);
+        button.setText(group);
+        button.setSingleLine(true);
+        button.setAllCaps(false);
+        button.setGravity(android.view.Gravity.CENTER);
+        button.setPadding(ResUtil.dp2px(16), ResUtil.dp2px(8), ResUtil.dp2px(16), ResUtil.dp2px(8));
+        button.setTextColor(ContextCompat.getColorStateList(getDialogActivity(), R.color.selector_group_text));
+        button.setBackgroundResource(R.drawable.selector_group_button);
+        button.setFocusable(true);
+        button.setClickable(true);
+        button.setNextFocusDownId(binding.recycler.getId());
+        // 焦点监听：获取焦点时自动切换分组
+        button.setOnFocusChangeListener((v, hasFocus) -> {
+            if (hasFocus) onGroupFocus(group, button);
+        });
+        return button;
+    }
+
+    private void onGroupFocus(String group, View view) {
+        // 如果已经是当前选中的分组，不需要重复处理
+        if (group.equals(selectedGroup)) return;
+        selectedGroup = group;
+        updateGroupView();
+        adapter.filter(selectedGroup, "");
+        // 临时阻止 RecyclerView 的子 View 获取焦点
+        int oldDescendantFocusability = binding.recycler.getDescendantFocusability();
+        binding.recycler.setDescendantFocusability(ViewGroup.FOCUS_BLOCK_DESCENDANTS);
+        adapter.notifyDataSetChanged();
+        setRecyclerHeight();
+        binding.recycler.scrollToPosition(0);
+        // 延迟恢复焦点行为和请求焦点
+        view.postDelayed(() -> {
+            binding.recycler.setDescendantFocusability(oldDescendantFocusability);
+            view.requestFocus();
+        }, 50);
+        if (!TextUtils.isEmpty(selectedGroup)) centerGroup(view);
+    }
+
+    private void updateGroupView() {
+        for (int i = 0; i < binding.groupList.getChildCount(); i++) {
+            View view = binding.groupList.getChildAt(i);
+            String groupText = ((androidx.appcompat.widget.AppCompatTextView) view).getText().toString();
+            boolean selected = !TextUtils.isEmpty(selectedGroup) && groupText.equals(selectedGroup);
+            view.setSelected(selected);
+        }
+    }
+
+    private void centerGroup(View view) {
+        binding.groupScroll.post(() -> binding.groupScroll.smoothScrollTo(Math.max(0, view.getLeft() + view.getWidth() / 2 - binding.groupScroll.getWidth() / 2), 0));
     }
 }

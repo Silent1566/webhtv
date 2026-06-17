@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <item
+        android:id="@+id/githubRepo"
+        android:icon="@drawable/ic_repo_github"
+        android:title="@string/repo_github"
+        app:showAsAction="always" />
+
+    <item
+        android:id="@+id/cnbRepo"
+        android:icon="@drawable/ic_repo_cnb"
+        android:title="@string/repo_cnb"
+        app:showAsAction="always" />
+
+</menu>

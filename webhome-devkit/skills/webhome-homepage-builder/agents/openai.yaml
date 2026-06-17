@@ -1,0 +1,4 @@
+interface:
+  display_name: "WebHome Homepage Builder"
+  short_description: "Build compatible WebHome homepages with JS/WAF analysis"
+  default_prompt: "Use $webhome-homepage-builder to build a WebHome single-file homepage for the App, including JS/API reverse analysis and WAF feasibility checks when needed."

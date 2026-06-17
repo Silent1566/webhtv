@@ -33,4 +33,30 @@
         <item name="titleTextColor">@color/white</item>
     </style>
 
+    <style name="ToolbarPopupTheme" parent="ThemeOverlay.Material3.Light">
+        <item name="android:popupBackground">@drawable/shape_toolbar_popup</item>
+        <item name="android:textColorPrimary">#18333A</item>
+        <item name="android:textColorSecondary">#5D7278</item>
+        <item name="android:colorControlNormal">#2D4C55</item>
+        <item name="colorControlNormal">#2D4C55</item>
+        <item name="colorSurface">#F2FFFFFF</item>
+        <item name="colorOnSurface">#18333A</item>
+        <item name="colorOnSurfaceVariant">#5D7278</item>
+        <item name="popupMenuStyle">@style/ToolbarPopupMenu</item>
+        <item name="android:popupMenuStyle">@style/ToolbarPopupMenu</item>
+        <item name="textAppearanceLargePopupMenu">@style/ToolbarPopupTextAppearance</item>
+        <item name="textAppearanceSmallPopupMenu">@style/ToolbarPopupTextAppearance</item>
+        <item name="android:textAppearanceLargePopupMenu">@style/ToolbarPopupTextAppearance</item>
+        <item name="android:textAppearanceSmallPopupMenu">@style/ToolbarPopupTextAppearance</item>
+    </style>
+
+    <style name="ToolbarPopupMenu" parent="Widget.AppCompat.PopupMenu.Overflow">
+        <item name="android:popupBackground">@drawable/shape_toolbar_popup</item>
+    </style>
+
+    <style name="ToolbarPopupTextAppearance" parent="TextAppearance.AppCompat.Widget.PopupMenu.Large">
+        <item name="android:textColor">#18333A</item>
+        <item name="android:textSize">15sp</item>
+    </style>
+
 </resources>

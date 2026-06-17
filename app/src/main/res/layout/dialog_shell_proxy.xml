@@ -105,6 +105,21 @@
                     app:backgroundTint="@color/dialog_tonal_button_bg" />
 
                 <com.google.android.material.button.MaterialButton
+                    android:id="@+id/recognizeRule"
+                    style="@style/Widget.Material3.Button.TonalButton"
+                    android:layout_width="0dp"
+                    android:layout_height="40dp"
+                    android:layout_marginStart="8dp"
+                    android:layout_weight="1"
+                    android:minHeight="40dp"
+                    android:minWidth="0dp"
+                    android:paddingStart="4dp"
+                    android:paddingEnd="4dp"
+                    android:text="@string/setting_proxy_recognize"
+                    android:textColor="@color/dialog_tonal_button_text"
+                    app:backgroundTint="@color/dialog_tonal_button_bg" />
+
+                <com.google.android.material.button.MaterialButton
                     android:id="@+id/testRule"
                     style="@style/Widget.Material3.Button.OutlinedButton"
                     android:layout_width="0dp"
@@ -205,6 +220,36 @@
                         android:overScrollMode="never" />
 
                 </androidx.appcompat.widget.LinearLayoutCompat>
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/recognizeLayout"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:visibility="gone"
+                    app:boxBackgroundColor="@color/white"
+                    app:boxCollapsedPaddingTop="0dp"
+                    app:boxStrokeColor="@color/dialog_outlined_button_stroke"
+                    app:hintEnabled="true"
+                    app:hintTextColor="#5F6368">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/recognizeInput"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:fontFamily="monospace"
+                        android:gravity="start|top"
+                        android:hint="@string/setting_proxy_recognize_hint"
+                        android:imeOptions="actionDone"
+                        android:importantForAutofill="no"
+                        android:inputType="textMultiLine|textNoSuggestions"
+                        android:minLines="6"
+                        android:scrollHorizontally="true"
+                        android:selectAllOnFocus="false"
+                        android:singleLine="false"
+                        android:textColor="@color/black"
+                        android:textColorHint="#666666" />
+
+                </com.google.android.material.textfield.TextInputLayout>
 
             </FrameLayout>
 

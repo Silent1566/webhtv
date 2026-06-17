@@ -1,0 +1,1316 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>WebHome App Capabilities</title>
+  <script>
+    (function () {
+      if (!Array.prototype.forEach) {
+        Array.prototype.forEach = function (fn, thisArg) {
+          for (var i = 0; i < this.length; i += 1) {
+            if (i in this) fn.call(thisArg, this[i], i, this);
+          }
+        };
+      }
+      if (!Array.prototype.map) {
+        Array.prototype.map = function (fn, thisArg) {
+          var out = [];
+          for (var i = 0; i < this.length; i += 1) {
+            if (i in this) out.push(fn.call(thisArg, this[i], i, this));
+          }
+          return out;
+        };
+      }
+      if (!Element.prototype.matches) {
+        Element.prototype.matches = Element.prototype.msMatchesSelector || Element.prototype.webkitMatchesSelector;
+      }
+      if (!Element.prototype.closest) {
+        Element.prototype.closest = function (selector) {
+          var node = this;
+          while (node && node.nodeType === 1) {
+            if (node.matches && node.matches(selector)) return node;
+            node = node.parentElement;
+          }
+          return null;
+        };
+      }
+      if (!Element.prototype.replaceChildren) {
+        Element.prototype.replaceChildren = function () {
+          while (this.firstChild) this.removeChild(this.firstChild);
+          for (var i = 0; i < arguments.length; i += 1) this.appendChild(arguments[i]);
+        };
+      }
+      var cls = " webhome-ready";
+      if (!("gap" in document.documentElement.style)) cls += " no-layout-gap";
+      if (!window.CSS || !CSS.supports || !CSS.supports("top", "calc(1px + 1px)")) cls += " no-css-functions";
+      if (!("aspectRatio" in document.documentElement.style)) cls += " no-aspect-ratio";
+      document.documentElement.className += cls;
+    })();
+  </script>
+  <style>
+    :root {
+      --fm-web-height: 100vh;
+      --fm-safe-top: 0px;
+      --fm-safe-right: 0px;
+      --fm-safe-bottom: 0px;
+      --fm-safe-left: 0px;
+      --fm-status-bar-height: 0px;
+      --safe-top: var(--fm-safe-top, 0px);
+      --safe-bottom: var(--fm-safe-bottom, 0px);
+      --active-safe-top: 0px;
+      --bg: #0f1720;
+      --panel: rgba(34, 46, 58, 0.82);
+      --panel-soft: rgba(34, 46, 58, 0.56);
+      --line: rgba(255, 255, 255, 0.16);
+      --text: #f8fafc;
+      --muted: #aab7c4;
+      --accent: #22c55e;
+      --accent-2: #38bdf8;
+      --warn: #f59e0b;
+    }
+    @supports (top: max(0px, 1px)) {
+      :root {
+        --safe-top: max(var(--fm-safe-top, 0px), env(safe-area-inset-top, 0px));
+        --safe-bottom: max(var(--fm-safe-bottom, 0px), env(safe-area-inset-bottom, 0px));
+      }
+    }
+    html.safe-top-active {
+      --active-safe-top: var(--safe-top);
+    }
+    html,
+    body {
+      min-height: var(--fm-web-height, 100vh);
+      margin: 0;
+      background: transparent;
+      color: var(--text);
+      font: 15px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    html:not(.fm-native) body {
+      background: var(--bg);
+    }
+    button,
+    input,
+    textarea {
+      font: inherit;
+    }
+    button {
+      min-height: 38px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text);
+      padding: 8px 10px;
+    }
+    button.primary {
+      border-color: rgba(34, 197, 94, 0.55);
+      background: rgba(34, 197, 94, 0.18);
+    }
+    button:focus,
+    input:focus,
+    textarea:focus {
+      outline: 2px solid rgba(56, 189, 248, 0.95);
+      outline-offset: 2px;
+    }
+    input,
+    textarea {
+      box-sizing: border-box;
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text);
+      padding: 9px 10px;
+    }
+    textarea {
+      min-height: 72px;
+      resize: vertical;
+    }
+    .app {
+      min-height: var(--fm-web-height, 100vh);
+      box-sizing: border-box;
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 16px 14px calc(22px + var(--safe-bottom));
+      padding: max(16px, var(--active-safe-top)) 14px calc(22px + var(--safe-bottom));
+    }
+    .topbar {
+      position: sticky;
+      top: var(--active-safe-top);
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 48px;
+      margin: 0 -14px 12px;
+      padding: 8px 14px;
+      background: rgba(15, 23, 32, 0.88);
+      border-bottom: 1px solid var(--line);
+    }
+    .topbar h1 {
+      margin: 0;
+      font-size: 18px;
+      letter-spacing: 0;
+    }
+    .status {
+      display: flex;
+      flex-wrap: wrap;
+      margin: -4px;
+    }
+    .chip {
+      margin: 4px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 4px 8px;
+      color: var(--muted);
+      background: rgba(255, 255, 255, 0.06);
+      white-space: nowrap;
+    }
+    .chip.ok {
+      color: #bbf7d0;
+      border-color: rgba(34, 197, 94, 0.5);
+    }
+    .hero {
+      display: flex;
+      flex-wrap: wrap;
+      margin: -6px -6px 10px;
+    }
+    .hero-media,
+    .hero-copy {
+      box-sizing: border-box;
+      width: 100%;
+      padding: 6px;
+    }
+    .hero-card,
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+    .hero-card {
+      overflow: hidden;
+    }
+    .hero-media .hero-card {
+      height: 148px;
+    }
+    .hero-card img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+      object-fit: cover;
+      object-position: center;
+      background: rgba(255, 255, 255, 0.08);
+    }
+    .hero-copy-inner {
+      min-height: 100%;
+      box-sizing: border-box;
+      padding: 14px;
+    }
+    .hero-copy h2,
+    .panel h2 {
+      margin: 0 0 8px;
+      font-size: 17px;
+      letter-spacing: 0;
+    }
+    .hero-copy p,
+    .panel p {
+      margin: 0 0 10px;
+      color: var(--muted);
+    }
+    .grid {
+      display: flex;
+      flex-wrap: wrap;
+      margin: -6px;
+    }
+    .panel-wrap {
+      box-sizing: border-box;
+      width: 100%;
+      padding: 6px;
+    }
+    .panel {
+      min-height: 100%;
+      box-sizing: border-box;
+      padding: 12px;
+    }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      margin: -4px;
+    }
+    .actions button,
+    .actions input {
+      margin: 4px;
+    }
+    .actions input {
+      width: 190px;
+      min-height: 38px;
+    }
+    .preview-video {
+      display: block;
+      width: 100%;
+      max-height: 220px;
+      margin-top: 10px;
+      border-radius: 8px;
+      background: #000;
+    }
+    .two {
+      display: flex;
+      flex-wrap: wrap;
+      margin: -5px;
+    }
+    .field {
+      box-sizing: border-box;
+      width: 100%;
+      padding: 5px;
+    }
+    .field label {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .result-list {
+      margin-top: 10px;
+      max-height: 280px;
+      overflow: auto;
+      border-top: 1px solid var(--line);
+    }
+    .mini-metrics {
+      display: flex;
+      flex-wrap: wrap;
+      margin: 8px -4px 0;
+    }
+    .metric-small {
+      min-width: 88px;
+      margin: 4px;
+      padding: 7px 8px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .metric-small b {
+      display: block;
+      color: var(--text);
+      font-size: 15px;
+    }
+    .result-item {
+      padding: 10px 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .result-title {
+      font-weight: 700;
+    }
+    .result-url {
+      overflow-wrap: anywhere;
+      color: var(--muted);
+      font-size: 12px;
+      margin: 4px 0 8px;
+    }
+    .result-head {
+      display: flex;
+      align-items: flex-start;
+    }
+    .result-head input {
+      flex: 0 0 auto;
+      width: 18px;
+      height: 18px;
+      margin: 2px 8px 0 0;
+      accent-color: var(--accent-2);
+    }
+    .result-main {
+      min-width: 0;
+      flex: 1 1 auto;
+    }
+    .badge {
+      display: inline-block;
+      min-width: 56px;
+      border-radius: 999px;
+      padding: 3px 8px;
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--muted);
+      font-size: 12px;
+      text-align: center;
+    }
+    .badge.ok { color: #bbf7d0; background: rgba(34, 197, 94, 0.15); }
+    .badge.bad,
+    .badge.error { color: #fecaca; background: rgba(239, 68, 68, 0.15); }
+    .badge.locked { color: #fde68a; background: rgba(245, 158, 11, 0.15); }
+    .badge.uncertain,
+    .badge.preview { color: #bae6fd; background: rgba(56, 189, 248, 0.15); }
+    .badge.unsupported,
+    .badge.idle { color: #ddd6fe; background: rgba(139, 92, 246, 0.15); }
+    .log {
+      height: 280px;
+      overflow: auto;
+      margin: 0;
+      padding: 10px;
+      border-radius: 8px;
+      background: rgba(0, 0, 0, 0.28);
+      color: #dbeafe;
+      font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .note {
+      color: var(--muted);
+      font-size: 12px;
+    }
+    @media (min-width: 760px) {
+      .hero-media {
+        width: 32%;
+      }
+      .hero-copy {
+        width: 68%;
+      }
+      .hero-media .hero-card {
+        height: 180px;
+      }
+      .panel-wrap {
+        width: 50%;
+      }
+      .panel-wrap.wide {
+        width: 100%;
+      }
+      .field {
+        width: 50%;
+      }
+    }
+    @media (min-width: 1120px) {
+      .hero-media {
+        width: 28%;
+      }
+      .hero-copy {
+        width: 72%;
+      }
+      .hero-media .hero-card {
+        height: 196px;
+      }
+      .panel-wrap {
+        width: 33.3333%;
+      }
+      .panel-wrap.wide {
+        width: 66.6666%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <h1>WebHome SDK 能力测试台</h1>
+      <div class="status" id="statusChips"></div>
+    </header>
+
+    <section class="hero">
+      <div class="hero-media">
+        <div class="hero-card">
+          <img id="coverImage" alt="Sample cover">
+        </div>
+      </div>
+      <div class="hero-copy">
+        <div class="hero-copy-inner hero-card">
+          <h2>真实资源与 App SDK 调用样例</h2>
+          <p>此页用于开发者在 App WebHome 内直接测试开放能力。素材使用公开测试源；网盘结果通过 PanSou API 实时搜索并可交给 App 检测/播放。</p>
+          <div class="actions">
+            <button class="primary" data-action="init">刷新 SDK 状态</button>
+            <button data-action="toast">Native Toast</button>
+            <button data-action="ext-info">扩展/站点信息</button>
+            <button data-action="device">设备信息</button>
+            <button data-action="site">当前站点</button>
+            <button data-action="config">当前配置</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="grid">
+      <div class="panel-wrap">
+        <div class="panel">
+          <h2>网络与资源</h2>
+          <p>演示 `fm.req()` 读取远端数据，`fm.res()` 为 DOM 图片/视频生成本地资源网关地址。</p>
+          <div class="actions">
+            <button data-action="req-json">fm.req JSON</button>
+            <button data-action="req-text">fm.req Text</button>
+            <button data-action="res-image">fm.res 图片</button>
+            <button data-action="res-video">fm.res 视频预览</button>
+          </div>
+          <video id="previewVideo" class="preview-video" controls playsinline></video>
+        </div>
+      </div>
+
+      <div class="panel-wrap">
+        <div class="panel">
+          <h2>原生播放</h2>
+          <p>演示 MP4、HLS、直播 HLS、临时多集和 artwork 预热。公开 HLS 不额外传 headers/cookies。</p>
+          <div class="actions">
+            <button class="primary" data-action="play-mp4">播放 MP4</button>
+            <button data-action="play-hls">播放 HLS</button>
+            <button data-action="play-live">播放直播 HLS</button>
+            <button data-action="vod-inline">vodInline 多集</button>
+            <button data-action="preload-art">预热图片</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel-wrap">
+        <div class="panel">
+          <h2>播放控制</h2>
+          <p>控制当前 PlaybackService；没有播放服务时 Native 会安全返回空结果。</p>
+          <div class="actions">
+            <button data-action="stat">播放状态</button>
+            <button data-ctrl="play">play</button>
+            <button data-ctrl="pause">pause</button>
+            <button data-ctrl="stop">stop</button>
+            <button data-ctrl="prev">prev</button>
+            <button data-ctrl="next">next</button>
+            <button data-ctrl="loop">loop</button>
+            <button data-ctrl="replay">replay</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel-wrap wide">
+        <div class="panel">
+          <h2>网盘搜索、检测与播放</h2>
+          <p>默认搜索主文档示例关键词；也可载入内置网盘检测矩阵，覆盖 ok/bad/locked/unsupported 等状态样本。</p>
+          <div class="two">
+            <div class="field">
+              <label for="panKeyword">关键词</label>
+              <input id="panKeyword" value="仙逆">
+            </div>
+            <div class="field">
+              <label for="panTypes">网盘类型</label>
+              <input id="panTypes" value="quark,aliyun,uc">
+            </div>
+            <div class="field">
+              <label for="panConcurrency">并发</label>
+              <input id="panConcurrency" value="5">
+            </div>
+            <div class="field">
+              <label for="panRounds">轮数</label>
+              <input id="panRounds" value="1">
+            </div>
+          </div>
+          <div class="actions">
+            <button class="primary" data-action="pan-search">搜索网盘</button>
+            <button data-action="pan-load-matrix">载入内置矩阵</button>
+            <button data-action="pan-check-visible">检测当前结果</button>
+            <button data-action="pan-check-selected">检测选中</button>
+            <button data-action="pan-stop">停止检测</button>
+            <button data-action="pan-play-first">播放第一条</button>
+            <button data-action="pan-export">导出结果</button>
+          </div>
+          <div class="mini-metrics" id="panMetrics"></div>
+          <div class="result-list" id="panResults"></div>
+        </div>
+      </div>
+
+      <div class="panel-wrap">
+        <div class="panel">
+          <h2>App 入口</h2>
+          <p>演示搜索、点播、收藏、直播、设置、历史记录、返回和刷新。</p>
+          <div class="field">
+            <label for="searchKeyword">搜索关键词</label>
+            <input id="searchKeyword" value="仙逆">
+          </div>
+          <div class="actions">
+            <button data-action="app-search">搜索</button>
+            <button data-action="open-vod">点播</button>
+            <button data-action="open-keep">收藏</button>
+            <button data-action="open-live">直播</button>
+            <button data-action="open-setting">设置</button>
+            <button data-action="history">观看历史</button>
+            <button data-action="back">返回</button>
+            <button data-action="reload">刷新</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel-wrap">
+        <div class="panel">
+          <h2>Chrome 与安全区</h2>
+          <p>顶部安全区只在 edge/immersive/fullscreen 等融合状态启用，恢复 normal 后移除。</p>
+          <div class="actions">
+            <button data-action="chrome-edge">edge</button>
+            <button data-action="chrome-normal">normal</button>
+            <button data-action="chrome-immersive">immersive</button>
+            <button data-action="chrome-restore">restore</button>
+            <button data-action="toolbar-hide">legacy hide</button>
+            <button data-action="toolbar-show">legacy show</button>
+            <button data-action="viewport">getViewport</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel-wrap">
+        <div class="panel">
+          <h2>缓存</h2>
+          <p>App 内使用 `fm.cache`；浏览器预览使用 localStorage fallback。</p>
+          <div class="field">
+            <label for="cacheValue">缓存值</label>
+            <input id="cacheValue" value="hello webhome">
+          </div>
+          <div class="actions">
+            <button data-action="cache-set">set</button>
+            <button data-action="cache-get">get</button>
+            <button data-action="cache-del">del</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel-wrap wide">
+        <div class="panel">
+          <h2>CSP VOD 调用</h2>
+          <p>`fm.vod(siteKey, vodId, title, pic, { wallPic })` 依赖当前配置里的真实站点 key 和 vodId；这里保留可编辑字段。</p>
+          <div class="two">
+            <div class="field">
+              <label for="vodSiteKey">siteKey</label>
+              <input id="vodSiteKey" value="">
+            </div>
+            <div class="field">
+              <label for="vodId">vodId</label>
+              <input id="vodId" value="">
+            </div>
+            <div class="field">
+              <label for="vodTitle">title</label>
+              <input id="vodTitle" value="WebHome VOD Demo">
+            </div>
+          </div>
+          <div class="actions">
+            <button data-action="vod">调用 fm.vod</button>
+          </div>
+          <p class="note">如果不确定 vodId，可先用原生站点搜索进入详情，再从调试日志或站点 API 获取。</p>
+        </div>
+      </div>
+
+      <div class="panel-wrap wide">
+        <div class="panel">
+          <h2>调用日志</h2>
+          <pre class="log" id="log"></pre>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      var TEST = {
+        apiJson: "https://so.252035.xyz/api/search",
+        apiText: "https://sf1-cdn-tos.huoshanstatic.com/obj/media-fe/xgplayer_doc_video/hls/xgplayer-demo.m3u8",
+        mp4: "https://sf1-cdn-tos.huoshanstatic.com/obj/media-fe/xgplayer_doc_video/mp4/xgplayer-demo-720p.mp4",
+        hls: "https://sf1-cdn-tos.huoshanstatic.com/obj/media-fe/xgplayer_doc_video/hls/xgplayer-demo.m3u8",
+        liveHls: "https://sf1-cdn-tos.huoshanstatic.com/obj/media-fe/xgplayer_doc_video/hls/xgplayer-demo.m3u8",
+        hlsAlt: "https://sf1-cdn-tos.huoshanstatic.com/obj/media-fe/xgplayer_doc_video/hls/xgplayer-demo.m3u8",
+        poster: "https://puui.qpic.cn/vcover_vt_pic/0/mzc00200aaogpgh1695600088596/0",
+        backdrop: "https://vcover-vt-pic.puui.qpic.cn/vcover_vt_pic/0/mzc00200aaogpgh1695600088596/0",
+        panApi: "https://so.252035.xyz/api/search",
+        fallbackPan: [
+          { group: "PanSou", type: "quark", url: "https://pan.quark.cn/s/ce7cdc572efb", password: "", title: "PanSou sample quark" },
+          { group: "PanSou", type: "aliyun", url: "https://www.alipan.com/s/hLG6Zkmvtip", password: "", title: "PanSou sample aliyun" },
+          { group: "PanSou", type: "uc", url: "https://drive.uc.cn/s/e47cb865729f4", password: "", title: "PanSou sample uc" }
+        ],
+        panMatrix: [
+          { group: "UC网盘", type: "uc", url: "https://drive.uc.cn/s/e1ebe95d144c4?public=1", title: "UC 公开分享" },
+          { group: "UC网盘", type: "uc", url: "https://drive.uc.cn/s/m7and23e132a1?public=1", title: "UC 无效样本" },
+          { group: "阿里云", type: "aliyun", url: "https://www.aliyundrive.com/s/hz1HHxhahsE", title: "aliyundrive 公开分享" },
+          { group: "阿里云", type: "aliyun", url: "https://www.alipan.com/s/QbaHJ71QjV1", title: "alipan 公开分享" },
+          { group: "阿里云", type: "aliyun", url: "https://www.alipan.com/s/GMrv1QCZhNB", title: "alipan 带提取码" },
+          { group: "115", type: "115", url: "https://115cdn.com/s/swh88n13z72?password=r9b2#", password: "r9b2", title: "115 带访问码" },
+          { group: "115", type: "115", url: "https://115.com/s/sw313r03zx1", title: "115 失效/违规样本" },
+          { group: "夸克", type: "quark", url: "https://pan.quark.cn/s/9803af406f13", title: "夸克公开分享" },
+          { group: "夸克", type: "quark", url: "https://pan.quark.cn/s/f161a5364657", title: "夸克提取码样本" },
+          { group: "夸克", type: "quark", url: "https://pan.quark.cn/s/9803af406f15", title: "夸克不存在样本" },
+          { group: "123", type: "123", url: "https://www.123pan.com/s/i4uaTd-WHn0", title: "123pan 公开分享" },
+          { group: "123", type: "123", url: "https://www.123912.com/s/U8f2Td-ZeOX", title: "123912 域名" },
+          { group: "123", type: "123", url: "https://www.123pan.com/s/A6cA-AKH11", title: "123 外链不存在样本" },
+          { group: "天翼", type: "tianyi", url: "https://cloud.189.cn/t/viy2quQzMBne", title: "天翼公开分享" },
+          { group: "天翼", type: "tianyi", url: "https://cloud.189.cn/web/share?code=UfUjiiFRbymq", title: "天翼带密码长链接" },
+          { group: "天翼", type: "tianyi", url: "https://cloud.189.cn/t/notexist", title: "天翼不存在样本" },
+          { group: "百度", type: "baidu", url: "https://pan.baidu.com/s/1rIcc6X7D3rVzNSqivsRejw?pwd=0w0j", password: "0w0j", title: "百度带提取码分享" },
+          { group: "百度", type: "baidu", url: "https://pan.baidu.com/s/1TMhfQ5yNnlPPSGbw4RQ-LA?pwd=6j77", password: "6j77", title: "百度提取码样本" },
+          { group: "百度", type: "baidu", url: "https://pan.baidu.com/s/1notexist", title: "百度不存在样本" }
+        ]
+      };
+      var root = document.documentElement;
+      var state = {
+        chromeMode: "",
+        systemBarsHidden: false,
+        panResults: [],
+        panRunning: false,
+        panAbort: false,
+        panTotal: 0,
+        panDone: 0,
+        panStartedAt: 0,
+        panLastExport: null
+      };
+
+      function $(id) {
+        return document.getElementById(id);
+      }
+
+      function text(value) {
+        if (value == null) return "";
+        return String(value);
+      }
+
+      function short(value, length) {
+        value = text(value);
+        length = length || 700;
+        return value.length > length ? value.slice(0, length) + "...(" + value.length + " chars)" : value;
+      }
+
+      function json(value) {
+        try {
+          return JSON.stringify(value, null, 2);
+        } catch (e) {
+          return String(value);
+        }
+      }
+
+      function log(name, value) {
+        var el = $("log");
+        var line = "[" + new Date().toLocaleTimeString() + "] " + name + "\n" + short(typeof value === "string" ? value : json(value), 2200) + "\n\n";
+        el.textContent = line + el.textContent;
+      }
+
+      function localHeaders(headers) {
+        var out = {};
+        if (!headers || !headers.forEach) return out;
+        headers.forEach(function (value, key) {
+          out[key] = value;
+        });
+        return out;
+      }
+
+      function browserSdk() {
+        return {
+          req: function (url, options) {
+            options = options || {};
+            if (!window.fetch) {
+              return Promise.resolve({ ok: false, status: 0, url: url, headers: {}, body: "", error: "fetch unavailable" });
+            }
+            return fetch(url, {
+              method: options.method || "GET",
+              headers: options.headers || {},
+              body: options.body || undefined
+            }).then(function (response) {
+              var type = options.responseType || "text";
+              var bodyPromise = type === "json" ? response.json() : response.text();
+              return bodyPromise.then(function (body) {
+                return { ok: response.ok, status: response.status, url: response.url, headers: localHeaders(response.headers), body: body };
+              });
+            }).catch(function (e) {
+              return { ok: false, status: 0, url: url, headers: {}, body: "", error: e && e.message ? e.message : String(e) };
+            });
+          },
+          res: function (url) { return url; },
+          play: function (url, title, options) {
+            $("previewVideo").src = url;
+            $("previewVideo").play().catch(function () {});
+            return Promise.resolve({ preview: true, url: url, title: title, options: options || {} });
+          },
+          vod: function (siteKey, vodId, title, pic, options) {
+            return Promise.resolve({ preview: true, siteKey: siteKey, vodId: vodId, title: title, pic: pic, options: options || {} });
+          },
+          vodInline: function (payload) { return Promise.resolve({ preview: true, payload: payload }); },
+          preloadArtwork: function (pic, wallPic) {
+            var img1 = new Image();
+            var img2 = new Image();
+            img1.src = pic;
+            img2.src = wallPic;
+            return Promise.resolve({ preview: true, pic: pic, wallPic: wallPic });
+          },
+          ctrl: function (action) { return Promise.resolve({ preview: true, action: action }); },
+          stat: function () { return Promise.resolve({ preview: true, state: 1 }); },
+          search: function (keyword, options) { return Promise.resolve({ preview: true, keyword: keyword, options: options || {} }); },
+          openVod: function () { return Promise.resolve({ preview: true, open: "vod" }); },
+          openLive: function () { return Promise.resolve({ preview: true, open: "live" }); },
+          openKeep: function () { return Promise.resolve({ preview: true, open: "keep" }); },
+          openSetting: function () { return Promise.resolve({ preview: true, open: "setting" }); },
+          history: function () { return Promise.resolve([]); },
+          pan: {
+            check: function (items) {
+              return Promise.resolve(items.map(function (item) {
+                return { type: item.type, url: item.url, state: "preview" };
+              }));
+            },
+            play: function (item) { return Promise.resolve({ preview: true, item: item }); }
+          },
+          check: function (items) { return this.pan.check(items); },
+          cache: {
+            get: function (key, rule) { return Promise.resolve(localStorage.getItem("fm-demo:" + (rule || "") + ":" + key) || ""); },
+            set: function (key, value, rule) { localStorage.setItem("fm-demo:" + (rule || "") + ":" + key, value); return Promise.resolve({}); },
+            del: function (key, rule) { localStorage.removeItem("fm-demo:" + (rule || "") + ":" + key); return Promise.resolve({}); }
+          },
+          ui: {
+            setToolbar: function (visible) { return Promise.resolve({ preview: true, toolbar: visible }); },
+            setChrome: function (options) { updateSafeAreaMode({ chromeMode: options && options.mode ? options.mode : "normal", systemBarsHidden: false }); return Promise.resolve({ preview: true, chrome: options }); },
+            restoreChrome: function () { updateSafeAreaMode({ chromeMode: "edge", systemBarsHidden: false }); return Promise.resolve({ preview: true, restore: true }); },
+            getViewport: function () { return Promise.resolve({ width: innerWidth, height: innerHeight, safeTop: 0, safeBottom: 0, chromeMode: state.chromeMode || "browser", systemBarsHidden: false }); }
+          },
+          ext: {
+            info: function () { return Promise.resolve({ preview: true, enabled: false }); },
+            log: function (message, data) { log("fm.ext.log preview", { message: message, data: data }); return Promise.resolve({}); },
+            toast: function (message) { log("toast preview", message); return Promise.resolve({}); }
+          },
+          device: function () { return Promise.resolve({ name: navigator.userAgent, ip: location.origin, type: -1, time: Date.now() }); },
+          site: function () { return Promise.resolve({ key: "browser-preview", name: "Browser Preview", homePage: location.href, type: 3 }); },
+          config: function () { return Promise.resolve({ id: 0, url: location.href, desc: "Browser Preview", driveCheck: true }); },
+          back: function () { history.back(); return Promise.resolve({ preview: true }); },
+          reload: function () { location.reload(); return Promise.resolve({ preview: true }); }
+        };
+      }
+
+      function sdk() {
+        return window.fm || browserSdk();
+      }
+
+      function call(name, fn) {
+        var started = Date.now();
+        log(name + " start", {});
+        try {
+          return Promise.resolve(fn(sdk())).then(function (value) {
+            log(name + " ok (" + (Date.now() - started) + "ms)", value == null ? {} : value);
+            refreshStatus();
+            return value;
+          }).catch(function (e) {
+            log(name + " error", e && e.stack ? e.stack : e);
+          });
+        } catch (e) {
+          log(name + " error", e && e.stack ? e.stack : e);
+          return Promise.resolve();
+        }
+      }
+
+      function readRootPixel(name) {
+        var value = getComputedStyle(root).getPropertyValue(name);
+        var numberValue = parseFloat(value || "0");
+        return isNaN(numberValue) ? 0 : numberValue;
+      }
+
+      function shouldUseTopSafeArea(detail) {
+        detail = detail || {};
+        var mode = String(detail.chromeMode || state.chromeMode || "").toLowerCase();
+        var hidden = typeof detail.systemBarsHidden === "undefined" ? state.systemBarsHidden : !!detail.systemBarsHidden;
+        var safeTop = Number(detail.safeTop);
+        var statusBarHeight = Number(detail.statusBarHeight);
+        if (isNaN(safeTop)) safeTop = readRootPixel("--fm-safe-top");
+        if (isNaN(statusBarHeight)) statusBarHeight = readRootPixel("--fm-status-bar-height");
+        if (hidden && safeTop <= 0 && statusBarHeight <= 0) return false;
+        return mode === "edge" || mode === "immersive" || mode === "fullscreen" || hidden;
+      }
+
+      function updateSafeAreaMode(detail) {
+        detail = detail || {};
+        if (detail.chromeMode) state.chromeMode = String(detail.chromeMode).toLowerCase();
+        if (typeof detail.systemBarsHidden !== "undefined") state.systemBarsHidden = !!detail.systemBarsHidden;
+        root.classList.toggle("safe-top-active", shouldUseTopSafeArea(detail));
+        refreshStatus();
+      }
+
+      function refreshSafeAreaMode() {
+        if (!window.fm || !fm.ui || !fm.ui.getViewport) {
+          updateSafeAreaMode({});
+          return Promise.resolve({});
+        }
+        return Promise.resolve(fm.ui.getViewport()).then(function (detail) {
+          updateSafeAreaMode(detail || {});
+          return detail;
+        }).catch(function () {
+          updateSafeAreaMode({});
+          return {};
+        });
+      }
+
+      function refreshStatus() {
+        var chips = [
+          { text: window.fm ? "SDK: native" : "SDK: browser", ok: !!window.fm },
+          { text: "mode: " + (state.chromeMode || "unknown"), ok: root.classList.contains("safe-top-active") },
+          { text: "safeTop: " + readRootPixel("--fm-safe-top") + "px", ok: readRootPixel("--fm-safe-top") > 0 }
+        ];
+        $("statusChips").innerHTML = chips.map(function (chip) {
+          return '<span class="chip ' + (chip.ok ? "ok" : "") + '">' + escapeHtml(chip.text) + '</span>';
+        }).join("");
+      }
+
+      function escapeHtml(value) {
+        return text(value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+      }
+
+      function mediaOptions(format) {
+        return {
+          pic: TEST.poster,
+          wallPic: TEST.backdrop,
+          format: format || undefined
+        };
+      }
+
+      function normalizePanItem(item, index) {
+        item = item || {};
+        return {
+          id: item.id || ("pan-" + index + "-" + Math.random()),
+          group: item.group || "PanSou",
+          type: item.type || "quark",
+          url: item.url || "",
+          password: item.password || item.pwd || "",
+          title: item.title || item.note || item.name || item.url || "pan resource",
+          pic: item.pic || TEST.poster,
+          wallPic: item.wallPic || TEST.backdrop,
+          selected: item.selected !== false,
+          state: item.state || "idle",
+          summary: item.summary || "",
+          cache_hit: !!item.cache_hit,
+          elapsed: item.elapsed || 0,
+          raw: item.raw || null,
+          error: item.error || ""
+        };
+      }
+
+      function renderPanResults(items) {
+        state.panResults = (items || []).map(function (item, index) {
+          return normalizePanItem(item, index);
+        });
+        updatePanMetrics();
+        if (!state.panResults.length) {
+          $("panResults").innerHTML = '<div class="result-item"><div class="note">暂无结果</div></div>';
+          return;
+        }
+        $("panResults").innerHTML = state.panResults.map(function (item, index) {
+          return '<div class="result-item" data-index="' + index + '">'
+            + '<div class="result-head">'
+            + '<input type="checkbox" data-pan-select="' + index + '"' + (item.selected ? " checked" : "") + '>'
+            + '<div class="result-main">'
+            + '<div class="result-title">' + escapeHtml(item.title || item.note || item.url) + '</div>'
+            + '<div class="result-url">' + escapeHtml(item.group + " | " + item.type + " | " + item.url + (item.password ? " | pwd: " + item.password : "")) + '</div>'
+            + '<span class="badge ' + escapeHtml(item.state) + '">' + escapeHtml(item.state) + '</span> '
+            + '<span class="note">' + escapeHtml((item.cache_hit ? "cache hit · " : "") + (item.elapsed ? item.elapsed + "ms · " : "") + (item.error || item.summary || "")) + '</span>'
+            + '<div class="actions">'
+            + '<button data-pan-check="' + index + '">检测</button>'
+            + '<button class="primary" data-pan-play="' + index + '">播放</button>'
+            + '</div>'
+            + '</div>'
+            + '</div>'
+            + '</div>';
+        }).join("");
+      }
+
+      function updatePanRow(index) {
+        var item = state.panResults[index];
+        var row = document.querySelector('[data-index="' + index + '"]');
+        if (!item || !row) {
+          updatePanMetrics();
+          return;
+        }
+        var badge = row.querySelector(".badge");
+        var note = row.querySelector(".note");
+        if (badge) {
+          badge.className = "badge " + item.state;
+          badge.textContent = item.state;
+        }
+        if (note) {
+          note.textContent = (item.cache_hit ? "cache hit · " : "") + (item.elapsed ? item.elapsed + "ms · " : "") + (item.error || item.summary || "");
+        }
+        updatePanMetrics();
+      }
+
+      function updatePanMetrics() {
+        var items = state.panResults || [];
+        var counts = {};
+        var done = 0;
+        var cache = 0;
+        items.forEach(function (item) {
+          counts[item.state] = (counts[item.state] || 0) + 1;
+          if (item.state !== "idle" && item.state !== "running") done += 1;
+          if (item.cache_hit) cache += 1;
+        });
+        $("panMetrics").innerHTML = [
+          ["完成", state.panRunning ? state.panDone + "/" + state.panTotal : done + "/" + items.length],
+          ["ok/bad/locked", (counts.ok || 0) + "/" + (counts.bad || 0) + "/" + (counts.locked || 0)],
+          ["uncertain/error", ((counts.uncertain || 0) + (counts.unsupported || 0)) + "/" + (counts.error || 0)],
+          ["缓存命中", cache],
+          ["耗时", state.panStartedAt ? (Date.now() - state.panStartedAt) + "ms" : "0ms"]
+        ].map(function (metric) {
+          return '<span class="metric-small"><b>' + escapeHtml(metric[1]) + '</b>' + escapeHtml(metric[0]) + '</span>';
+        }).join("");
+      }
+
+      function normalizePanResults(body) {
+        var data = body && body.data ? body.data : body;
+        var merged = data && data.merged_by_type ? data.merged_by_type : {};
+        var out = [];
+        Object.keys(merged).forEach(function (type) {
+          var list = merged[type] || [];
+          list.slice(0, 5).forEach(function (item) {
+            out.push({
+              group: "PanSou",
+              type: type,
+              url: item.url,
+              password: item.password || item.pwd || "",
+              title: item.note || item.name || type + " resource",
+              pic: item.images && item.images[0] ? item.images[0] : TEST.poster,
+              wallPic: TEST.backdrop
+            });
+          });
+        });
+        return out.slice(0, 18);
+      }
+
+      function panSearch(api) {
+        var keyword = $("panKeyword").value || "仙逆";
+        var types = ($("panTypes").value || "quark,aliyun,uc").split(",");
+        var cleanTypes = [];
+        types.forEach(function (item) {
+          item = item.replace(/^\s+|\s+$/g, "");
+          if (item) cleanTypes.push(item);
+        });
+        return api.req(TEST.panApi, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ kw: keyword, res: "merge", src: "all", cloud_types: cleanTypes }),
+          responseType: "json",
+          timeout: 30
+        }).then(function (response) {
+          if (!response || !response.ok) {
+            renderPanResults(TEST.fallbackPan);
+            return { response: response, fallback: TEST.fallbackPan };
+          }
+          var items = normalizePanResults(response.body);
+          if (!items.length) items = TEST.fallbackPan;
+          renderPanResults(items);
+          return { total: items.length, items: items.slice(0, 5) };
+        });
+      }
+
+      function panCheckItems(api, items) {
+        return api.config().then(function (config) {
+          if (config && config.driveCheck === false) return { skipped: "driveCheck disabled" };
+          return api.pan.check(items.map(function (item) {
+            return { type: item.type, url: item.url, password: item.password || item.pwd || "" };
+          }));
+        });
+      }
+
+      function panResultList(response) {
+        if (!response) return [];
+        if (response.results && response.results.length) return response.results;
+        if (response.length) return response;
+        if (response.skipped) return [{ state: "unsupported", summary: response.skipped }];
+        return [];
+      }
+
+      function applyPanResult(index, result, elapsed) {
+        var item = state.panResults[index];
+        if (!item) return;
+        result = result || {};
+        item.raw = result;
+        item.state = result.state || "uncertain";
+        item.summary = result.summary || result.message || "无返回说明";
+        item.cache_hit = !!result.cache_hit;
+        item.elapsed = elapsed || 0;
+        item.error = "";
+        updatePanRow(index);
+      }
+
+      function applyPanError(index, error, elapsed) {
+        var item = state.panResults[index];
+        if (!item) return;
+        item.raw = null;
+        item.state = "error";
+        item.summary = "";
+        item.cache_hit = false;
+        item.elapsed = elapsed || 0;
+        item.error = error && error.message ? error.message : String(error || "检测失败");
+        updatePanRow(index);
+      }
+
+      function panSelectedIndexes(limitAll) {
+        var indexes = [];
+        state.panResults.forEach(function (item, index) {
+          if (limitAll || item.selected) indexes.push(index);
+        });
+        return indexes;
+      }
+
+      function numberInput(id, min, max, fallback) {
+        var value = Number($(id).value || fallback);
+        if (isNaN(value)) value = fallback;
+        return Math.max(min, Math.min(max, value));
+      }
+
+      function runPanBatch(api, indexes) {
+        if (!indexes.length || state.panRunning) return Promise.resolve({ skipped: "no items" });
+        var started = Date.now();
+        state.panRunning = true;
+        state.panAbort = false;
+        state.panTotal = indexes.length;
+        state.panDone = 0;
+        state.panStartedAt = started;
+        indexes.forEach(function (index) {
+          state.panResults[index].state = "running";
+          state.panResults[index].error = "";
+          state.panResults[index].elapsed = 0;
+          updatePanRow(index);
+        });
+        return panCheckItems(api, indexes.map(function (index) { return state.panResults[index]; })).then(function (response) {
+          var results = panResultList(response);
+          indexes.forEach(function (index, offset) {
+            applyPanResult(index, results[offset] || results[0], Date.now() - started);
+          });
+          state.panDone = indexes.length;
+          return { count: indexes.length, elapsed: Date.now() - started, response: response };
+        }).catch(function (e) {
+          indexes.forEach(function (index) { applyPanError(index, e, Date.now() - started); });
+          return { error: e && e.message ? e.message : String(e) };
+        }).then(function (result) {
+          state.panRunning = false;
+          updatePanMetrics();
+          return result;
+        });
+      }
+
+      function runPanConcurrent(api, indexes) {
+        if (!indexes.length || state.panRunning) return Promise.resolve({ skipped: "no items" });
+        var concurrency = numberInput("panConcurrency", 1, 20, 5);
+        var rounds = numberInput("panRounds", 1, 20, 1);
+        var jobs = [];
+        var cursor = 0;
+        var started = Date.now();
+        var workers = [];
+        indexes.forEach(function (index) {
+          for (var i = 0; i < rounds; i += 1) jobs.push({ index: index, round: i });
+        });
+        state.panRunning = true;
+        state.panAbort = false;
+        state.panTotal = jobs.length;
+        state.panDone = 0;
+        state.panStartedAt = started;
+        function nextJob() {
+          if (state.panAbort) return Promise.resolve();
+          var job = jobs[cursor];
+          cursor += 1;
+          if (!job) return Promise.resolve();
+          var item = state.panResults[job.index];
+          var itemStart = Date.now();
+          item.state = "running";
+          item.error = "";
+          updatePanRow(job.index);
+          return panCheckItems(api, [item]).then(function (response) {
+            var results = panResultList(response);
+            applyPanResult(job.index, results[0], Date.now() - itemStart);
+            if (job.round > 0) item.summary = (item.summary || "") + " · round " + (job.round + 1);
+            updatePanRow(job.index);
+          }).catch(function (e) {
+            applyPanError(job.index, e, Date.now() - itemStart);
+          }).then(function () {
+            state.panDone += 1;
+            updatePanMetrics();
+            return nextJob();
+          });
+        }
+        for (var w = 0; w < Math.min(concurrency, jobs.length); w += 1) workers.push(nextJob());
+        return Promise.all(workers).then(function () {
+          state.panRunning = false;
+          updatePanMetrics();
+          return { jobs: jobs.length, done: state.panDone, concurrency: concurrency, rounds: rounds, elapsed: Date.now() - started };
+        });
+      }
+
+      function panPlay(api, item) {
+        return api.pan.play({
+          type: item.type,
+          url: item.url,
+          password: item.password || "",
+          title: item.title || item.url,
+          pic: item.pic || TEST.poster,
+          wallPic: item.wallPic || TEST.backdrop
+        });
+      }
+
+      var actions = {
+        init: function () { return refreshSafeAreaMode(); },
+        toast: function (api) { return api.ext && api.ext.toast ? api.ext.toast("WebHome SDK toast") : {}; },
+        "ext-info": function (api) { return api.ext && api.ext.info ? api.ext.info() : {}; },
+        device: function (api) { return api.device(); },
+        site: function (api) { return api.site(); },
+        config: function (api) { return api.config(); },
+        "req-json": function (api) {
+          return api.req(TEST.apiJson, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ kw: "仙逆", res: "merge", src: "all", cloud_types: ["quark"] }),
+            responseType: "json",
+            timeout: 15
+          });
+        },
+        "req-text": function (api) { return api.req(TEST.apiText, { responseType: "text", timeout: 15 }); },
+        "res-image": function (api) {
+          $("coverImage").src = api.res(TEST.backdrop);
+          return { src: $("coverImage").src };
+        },
+        "res-video": function (api) {
+          $("previewVideo").src = api.res(TEST.mp4);
+          return { src: $("previewVideo").src };
+        },
+        "play-mp4": function (api) { return api.play(TEST.mp4, "XGPlayer domestic MP4", mediaOptions()); },
+        "play-hls": function (api) { return api.play(TEST.hls, "XGPlayer domestic HLS", mediaOptions("application/x-mpegURL")); },
+        "play-live": function (api) { return api.play(TEST.liveHls, "Domestic HLS live-style demo", mediaOptions("application/x-mpegURL")); },
+        "vod-inline": function (api) {
+          window.__fmWebHomeInlineResolver = function (episode) {
+            if (episode && episode.name === "Resolver HLS") {
+              return Promise.resolve({ url: TEST.hlsAlt, format: "application/x-mpegURL" });
+            }
+            return Promise.resolve({ url: TEST.mp4 });
+          };
+          return api.vodInline({
+            vod_id: "webhome-sdk-showcase",
+            vod_name: "WebHome SDK Showcase",
+            vod_pic: TEST.poster,
+            wallPic: TEST.backdrop,
+            vod_play_from: "WebHome Demo",
+            mark: "MP4",
+            episodes: [
+              { name: "MP4", url: TEST.mp4 },
+              { name: "HLS", url: TEST.hls, format: "application/x-mpegURL" },
+              { name: "Live HLS", url: TEST.liveHls, format: "application/x-mpegURL" },
+              { name: "Resolver HLS", pageUrl: location.href + "#resolver", resolve: true }
+            ]
+          });
+        },
+        "preload-art": function (api) { return api.preloadArtwork(TEST.poster, TEST.backdrop); },
+        stat: function (api) { return api.stat(); },
+        "pan-search": panSearch,
+        "pan-load-matrix": function () {
+          renderPanResults(TEST.panMatrix);
+          return { count: TEST.panMatrix.length };
+        },
+        "pan-check-visible": function (api) {
+          if (!state.panResults.length) renderPanResults(TEST.fallbackPan);
+          return runPanBatch(api, panSelectedIndexes(true).slice(0, 10));
+        },
+        "pan-check-selected": function (api) {
+          if (!state.panResults.length) renderPanResults(TEST.fallbackPan);
+          return runPanConcurrent(api, panSelectedIndexes(false));
+        },
+        "pan-stop": function () {
+          state.panAbort = true;
+          return { stopping: true, done: state.panDone, total: state.panTotal };
+        },
+        "pan-play-first": function (api) {
+          var item = state.panResults[0] || TEST.fallbackPan[0];
+          return panPlay(api, item);
+        },
+        "pan-export": function () {
+          state.panLastExport = {
+            exported_at: new Date().toISOString(),
+            results: state.panResults.map(function (item) {
+              return {
+                group: item.group,
+                type: item.type,
+                url: item.url,
+                password: item.password,
+                title: item.title,
+                state: item.state,
+                summary: item.summary,
+                cache_hit: item.cache_hit,
+                elapsed: item.elapsed,
+                error: item.error,
+                raw: item.raw
+              };
+            })
+          };
+          return state.panLastExport;
+        },
+        "app-search": function (api) { return api.search($("searchKeyword").value || "仙逆", { direct: true }); },
+        "open-vod": function (api) { return api.openVod(); },
+        "open-keep": function (api) { return api.openKeep(); },
+        "open-live": function (api) { return api.openLive(); },
+        "open-setting": function (api) { return api.openSetting(); },
+        history: function (api) { return api.history(); },
+        back: function (api) { return api.back(); },
+        reload: function (api) { return api.reload(); },
+        "chrome-edge": function (api) { return api.ui.setChrome({ mode: "edge", statusBarStyle: "light", navigationBarStyle: "light", restoreAffordance: "auto", startup: true }); },
+        "chrome-normal": function (api) { return api.ui.setChrome({ mode: "normal", statusBarStyle: "auto", navigationBarStyle: "auto", startup: true }); },
+        "chrome-immersive": function (api) { return api.ui.setChrome({ mode: "immersive", statusBarStyle: "light", navigationBarStyle: "light", restoreAffordance: "native" }); },
+        "chrome-restore": function (api) { return api.ui.restoreChrome(); },
+        "toolbar-hide": function (api) { return api.ui.setToolbar(false); },
+        "toolbar-show": function (api) { return api.ui.setToolbar(true); },
+        viewport: function (api) { return api.ui.getViewport().then(function (detail) { updateSafeAreaMode(detail || {}); return detail; }); },
+        "cache-set": function (api) { return api.cache.set("capability-demo", $("cacheValue").value || "", "webhome"); },
+        "cache-get": function (api) { return api.cache.get("capability-demo", "webhome"); },
+        "cache-del": function (api) { return api.cache.del("capability-demo", "webhome"); },
+        vod: function (api) {
+          return api.vod($("vodSiteKey").value, $("vodId").value, $("vodTitle").value, TEST.poster, { wallPic: TEST.backdrop });
+        }
+      };
+
+      document.addEventListener("click", function (event) {
+        var select = event.target.closest("[data-pan-select]");
+        if (select) {
+          var selectIndex = Number(select.getAttribute("data-pan-select"));
+          if (state.panResults[selectIndex]) state.panResults[selectIndex].selected = !!select.checked;
+          updatePanMetrics();
+          return;
+        }
+        var ctrl = event.target.closest("[data-ctrl]");
+        if (ctrl) {
+          call("fm.ctrl " + ctrl.getAttribute("data-ctrl"), function (api) {
+            return api.ctrl(ctrl.getAttribute("data-ctrl"));
+          });
+          return;
+        }
+        var check = event.target.closest("[data-pan-check]");
+        if (check) {
+          call("fm.pan.check one", function (api) {
+            var index = Number(check.getAttribute("data-pan-check"));
+            return runPanBatch(api, state.panResults[index] ? [index] : []);
+          });
+          return;
+        }
+        var play = event.target.closest("[data-pan-play]");
+        if (play) {
+          call("fm.pan.play one", function (api) {
+            var item = state.panResults[Number(play.getAttribute("data-pan-play"))];
+            return item ? panPlay(api, item) : {};
+          });
+          return;
+        }
+        var button = event.target.closest("[data-action]");
+        if (!button) return;
+        var action = button.getAttribute("data-action");
+        if (!actions[action]) return;
+        call(action, actions[action]);
+      });
+
+      window.addEventListener("fmviewport", function (event) {
+        updateSafeAreaMode(event && event.detail ? event.detail : {});
+      });
+      window.addEventListener("fmsdk", function () {
+        root.classList.add("fm-native");
+        call("fmsdk", function () { return refreshSafeAreaMode(); });
+      });
+      window.addEventListener("fmresume", function () {
+        call("fmresume viewport", function () { return refreshSafeAreaMode(); });
+      });
+
+      $("coverImage").src = TEST.backdrop;
+      renderPanResults(TEST.fallbackPan);
+      refreshStatus();
+      refreshSafeAreaMode();
+      log("resource check", {
+        mp4: TEST.mp4,
+        hls: TEST.hls,
+        liveHls: TEST.liveHls,
+        image: TEST.backdrop,
+        panApi: TEST.panApi
+      });
+    })();
+  </script>
+</body>
+</html>

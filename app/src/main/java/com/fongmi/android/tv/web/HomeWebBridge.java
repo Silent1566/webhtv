@@ -19,6 +19,7 @@ import com.fongmi.android.tv.ui.activity.KeepActivity;
 import com.fongmi.android.tv.ui.activity.LiveActivity;
 import com.fongmi.android.tv.ui.activity.SearchActivity;
 import com.fongmi.android.tv.ui.activity.VideoActivity;
+import com.fongmi.android.tv.utils.ImgUtil;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.Task;
 import com.fongmi.android.tv.web.ext.WebHomeExtensionRegistry;
@@ -115,6 +116,7 @@ public class HomeWebBridge {
                 case "player.playUrl" -> playUrl(payload);
                 case "player.playVod" -> playVod(payload);
                 case "player.playVodInline" -> playVodInline(payload);
+                case "player.preloadArtwork" -> preloadArtwork(payload);
                 case "player.control" -> control(payload);
                 case "player.status" -> WebCall.request(statusPayload());
                 case "app.search" -> search(payload);
@@ -151,11 +153,15 @@ public class HomeWebBridge {
     private String playUrl(JsonObject payload) {
         String url = Json.safeString(payload, "url");
         String title = Json.safeString(payload, "title");
+        String pic = Json.safeString(payload, "pic");
+        String wall = wallPic(payload);
         if (payload.has("headers") || "include".equals(Json.safeString(payload, "credentials"))) url = resourceUrl(url, payload.toString());
         final String playUrl = url;
         final String playTitle = TextUtils.isEmpty(title) ? playUrl : title;
+        final String playPic = pic;
+        final String playWall = wall;
         SpiderDebug.log("webhome", "player.playUrl title=%s url=%s", playTitle, playUrl);
-        App.post(() -> VideoActivity.start(activity, SiteApi.PUSH, playUrl, playTitle));
+        App.post(() -> VideoActivity.start(activity, SiteApi.PUSH, playUrl, playTitle, playPic, null, playWall));
         return "{}";
     }
 
@@ -164,7 +170,8 @@ public class HomeWebBridge {
         String vodId = Json.safeString(payload, "vodId");
         String title = Json.safeString(payload, "title");
         String pic = Json.safeString(payload, "pic");
-        App.post(() -> VideoActivity.start(activity, siteKey, vodId, title, pic));
+        String wall = wallPic(payload);
+        App.post(() -> VideoActivity.start(activity, siteKey, vodId, title, pic, null, wall));
         return "{}";
     }
 
@@ -176,15 +183,31 @@ public class HomeWebBridge {
         String pic = Json.safeString(payload, "pic");
         if (TextUtils.isEmpty(pic)) pic = Json.safeString(payload, "vod_pic");
         String mark = Json.safeString(payload, "mark");
+        String wall = wallPic(payload);
         final String playTitle = TextUtils.isEmpty(title) ? vodId : title;
         final String playPic = pic;
         final String playMark = mark;
+        final String playWall = wall;
         SpiderDebug.log("webhome", "player.playVodInline title=%s id=%s mark=%s", playTitle, vodId, playMark);
-        App.post(() -> VideoActivity.start(activity, WebHomeInlineVodStore.KEY, vodId, playTitle, playPic, playMark));
+        App.post(() -> VideoActivity.start(activity, WebHomeInlineVodStore.KEY, vodId, playTitle, playPic, playMark, playWall));
         JsonObject result = new JsonObject();
         result.addProperty("siteKey", WebHomeInlineVodStore.KEY);
         result.addProperty("vodId", vodId);
         return result.toString();
+    }
+
+    private String preloadArtwork(JsonObject payload) {
+        String pic = Json.safeString(payload, "pic");
+        String wall = wallPic(payload);
+        App.post(() -> {
+            ImgUtil.preload(activity, pic);
+            if (!TextUtils.isEmpty(wall) && !TextUtils.equals(wall, pic)) ImgUtil.preload(activity, wall);
+        });
+        return "{}";
+    }
+
+    private String wallPic(JsonObject payload) {
+        return Json.safeString(payload, "wallPic");
     }
 
     private void preResolveInlineCurrent(JsonObject payload) {
@@ -303,10 +326,12 @@ public class HomeWebBridge {
 
     private String search(JsonObject payload) {
         String keyword = Json.safeString(payload, "keyword");
+        String pic = Json.safeString(payload, "pic");
+        String wall = wallPic(payload);
         boolean direct = payload.has("direct") && payload.get("direct").getAsBoolean();
         App.post(() -> {
-            if (direct) SearchActivity.direct(activity, keyword);
-            else SearchActivity.start(activity, keyword);
+            if (direct) SearchActivity.direct(activity, keyword, null, pic, wall);
+            else SearchActivity.start(activity, keyword, null, pic, wall);
         });
         return "{}";
     }
@@ -347,11 +372,15 @@ public class HomeWebBridge {
         String url = Json.safeString(payload, "url");
         String title = Json.safeString(payload, "title");
         String type = Json.safeString(payload, "type");
+        String pic = Json.safeString(payload, "pic");
+        String wall = wallPic(payload);
         if (TextUtils.isEmpty(url)) throw new IllegalArgumentException("url不能为空");
         final String playUrl = stripPush(url.trim());
         final String playTitle = TextUtils.isEmpty(title) ? playUrl : title;
+        final String playPic = pic;
+        final String playWall = wall;
         SpiderDebug.log("webhome", "pan.play route=%s type=%s title=%s url=%s", SiteApi.PUSH, type, playTitle, playUrl);
-        App.post(() -> VideoActivity.start(activity, SiteApi.PUSH, playUrl, playTitle));
+        App.post(() -> VideoActivity.start(activity, SiteApi.PUSH, playUrl, playTitle, playPic, null, playWall));
         return "{}";
     }
 

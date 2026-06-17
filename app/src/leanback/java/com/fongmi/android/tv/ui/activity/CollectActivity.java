@@ -57,14 +57,20 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
     }
 
     public static void start(Activity activity, String keyword, String siteKey) {
-        start(activity, keyword, siteKey, null);
+        start(activity, keyword, siteKey, null, null, null);
     }
 
     public static void start(Activity activity, String keyword, String siteKey, String group) {
+        start(activity, keyword, siteKey, group, null, null);
+    }
+
+    public static void start(Activity activity, String keyword, String siteKey, String group, String pic, String wallPic) {
         Intent intent = new Intent(activity, CollectActivity.class);
         intent.putExtra("keyword", keyword);
         intent.putExtra("siteKey", siteKey);
         intent.putExtra("group", group);
+        intent.putExtra("pic", pic);
+        intent.putExtra("wallPic", wallPic);
         activity.startActivity(intent);
     }
 
@@ -78,6 +84,14 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
 
     private String getGroup() {
         return Objects.toString(getIntent().getStringExtra("group"), "");
+    }
+
+    private String getPic() {
+        return Objects.toString(getIntent().getStringExtra("pic"), "");
+    }
+
+    private String getWallPic() {
+        return Objects.toString(getIntent().getStringExtra("wallPic"), "");
     }
 
     @Override
@@ -313,7 +327,8 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
         if (item.isFolder()) {
             VodActivity.start(this, item.getSiteKey(), Result.folder(item));
         } else {
-            VideoActivity.collect(this, item.getSiteKey(), item.getId(), item.getName(), item.getPic());
+            String pic = item.getPic().isEmpty() ? getPic() : item.getPic();
+            VideoActivity.collect(this, item.getSiteKey(), item.getId(), item.getName(), pic, getWallPic());
         }
         SpiderDebug.log("collect-flow", "activity launch requested cost=%dms", System.currentTimeMillis() - start);
         App.post(() -> {

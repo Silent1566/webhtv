@@ -2354,6 +2354,16 @@ body.manage-page {
     max-width: 420px;
 }
 
+.proxy-recognize-dialog {
+    width: min(640px, calc(100vw - 32px));
+    max-width: 640px;
+}
+
+.proxy-suggest-dialog #proxyRecognizeInput {
+    min-height: 220px;
+    margin-top: 10px;
+}
+
 .dialog-hint {
     margin-bottom: 12px;
     color: var(--md-on-surface-variant);

@@ -1,5 +1,7 @@
 package com.fongmi.android.tv.ui.fragment;
 
+import android.content.Intent;
+import android.net.Uri;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -38,6 +40,9 @@ import com.fongmi.android.tv.web.ext.WebHomeExtensionRegistry;
 
 public class SettingEnhanceFragment extends BaseFragment {
 
+    private static final String URL_GITHUB = "https://github.com/fish2018/webhtv";
+    private static final String URL_CNB = "https://cnb.cool/fish2018/ext";
+
     private FragmentSettingEnhanceBinding mBinding;
 
     public static SettingEnhanceFragment newInstance() {
@@ -60,6 +65,17 @@ public class SettingEnhanceFragment extends BaseFragment {
 
     @Override
     protected void initEvent() {
+        mBinding.toolbar.setOnMenuItemClickListener(item -> {
+            if (item.getItemId() == R.id.githubRepo) {
+                openRepo(URL_GITHUB);
+                return true;
+            }
+            if (item.getItemId() == R.id.cnbRepo) {
+                openRepo(URL_CNB);
+                return true;
+            }
+            return false;
+        });
         mBinding.driveCheck.setOnClickListener(this::setDriveCheck);
         mBinding.audioSource.setOnClickListener(this::setAudioSource);
         mBinding.shortDramaSource.setOnClickListener(this::setShortDramaSource);
@@ -69,6 +85,7 @@ public class SettingEnhanceFragment extends BaseFragment {
         mBinding.siteHealthSort.setOnLongClickListener(this::clearSiteHealth);
         mBinding.webHomeExtension.setOnClickListener(view -> WebHomeExtensionDialog.show(this, this::setText));
         mBinding.webHomeExtension.setOnLongClickListener(this::clearWebHomeExtension);
+        mBinding.playbackArtworkWall.setOnClickListener(this::setPlaybackArtworkWall);
         mBinding.playbackWebhook.setOnClickListener(view -> ViewingRecordSyncDialog.show(this, this::setText));
         mBinding.managePage.setOnClickListener(view -> ManagePageDialog.show(this));
         mBinding.shellProxy.setOnClickListener(view -> ShellProxyDialog.show(this, this::setText));
@@ -91,6 +108,7 @@ public class SettingEnhanceFragment extends BaseFragment {
         mBinding.siteHealthSortText.setText(getSwitch(Setting.isSiteHealthSort()));
         WebHomeExtensionRegistry.Snapshot webHomeExtension = WebHomeExtensionRegistry.get().snapshot();
         mBinding.webHomeExtensionText.setText(getSwitch(Setting.isWebHomeExtension()) + " · " + webHomeExtension.readyCount + "/" + webHomeExtension.installedCount);
+        mBinding.playbackArtworkWallText.setText(getSwitch(Setting.isPlaybackArtworkWall()));
         mBinding.playbackWebhookText.setText(ViewingRecordSyncStore.summary(requireContext()));
         mBinding.managePageText.setText(R.string.manage_page_web);
         mBinding.shellProxyText.setText(getSwitch(Setting.isShellProxy()) + " · " + getString(R.string.setting_proxy_rule_count, ProxySetting.count()));
@@ -127,6 +145,11 @@ public class SettingEnhanceFragment extends BaseFragment {
         com.fongmi.android.tv.ui.dialog.TmdbSourceDialog.create(requireActivity()).onDismiss(this::setText).show();
     }
 
+    private void setPlaybackArtworkWall(View view) {
+        Setting.putPlaybackArtworkWall(!Setting.isPlaybackArtworkWall());
+        mBinding.playbackArtworkWallText.setText(getSwitch(Setting.isPlaybackArtworkWall()));
+    }
+
     private boolean clearSiteHealth(View view) {
         SiteHealthStore.clear();
         Notify.show(R.string.site_health_clear_done);
@@ -137,6 +160,14 @@ public class SettingEnhanceFragment extends BaseFragment {
         WebHomeExtensionRegistry.get().clear();
         Notify.show(R.string.web_home_extension_clear_done);
         return true;
+    }
+
+    private void openRepo(String url) {
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+        } catch (Exception e) {
+            Notify.show(R.string.manage_page_no_browser);
+        }
     }
 
     @Override

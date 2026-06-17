@@ -65,6 +65,8 @@ public class ShellProxyDialog extends BaseAlertDialog {
     private boolean syncing;
     private boolean proxyEnabled;
     private boolean textMode = true;
+    private boolean recognizeMode;
+    private boolean beforeRecognizeTextMode = true;
     private boolean saved;
     private boolean testing;
 
@@ -137,6 +139,7 @@ public class ShellProxyDialog extends BaseAlertDialog {
         binding.rules.setSelection(binding.rules.length());
         setupEditableText(binding.defaultUrl, false);
         setupEditableText(binding.rules, true);
+        setupEditableText(binding.recognizeInput, true);
         binding.ruleRecycler.setLayoutManager(new LinearLayoutManager(requireContext()));
         binding.ruleRecycler.setItemAnimator(null);
         binding.ruleRecycler.setAdapter(adapter);
@@ -163,6 +166,10 @@ public class ShellProxyDialog extends BaseAlertDialog {
             if (actionId == EditorInfo.IME_ACTION_DONE) onPositive();
             return true;
         });
+        binding.recognizeInput.setOnEditorActionListener((textView, actionId, event) -> {
+            if (actionId == EditorInfo.IME_ACTION_DONE) onPositive();
+            return true;
+        });
         binding.rules.addTextChangedListener(new CustomTextListener() {
             @Override
             public void afterTextChanged(Editable editable) {
@@ -174,7 +181,10 @@ public class ShellProxyDialog extends BaseAlertDialog {
             if (checkedId == R.id.textMode) showTextMode(true);
             if (checkedId == R.id.uiMode) showTextMode(false);
         });
-        binding.negative.setOnClickListener(view -> dismiss());
+        binding.negative.setOnClickListener(view -> {
+            if (recognizeMode) showRecognizeMode(false);
+            else dismiss();
+        });
         binding.positive.setOnClickListener(view -> onPositive());
         binding.addRule.setOnClickListener(view -> {
             adapter.add(new Rule("", ""));
@@ -182,6 +192,7 @@ public class ShellProxyDialog extends BaseAlertDialog {
             binding.ruleRecycler.scrollToPosition(adapter.getItemCount() - 1);
         });
         binding.suggestRule.setOnClickListener(view -> showSuggestSiteDialog());
+        binding.recognizeRule.setOnClickListener(view -> showRecognizeMode(true));
         binding.testRule.setOnClickListener(view -> testProxy());
     }
 
@@ -240,15 +251,46 @@ public class ShellProxyDialog extends BaseAlertDialog {
     }
 
     private void showTextMode(boolean text) {
+        if (recognizeMode) return;
         textMode = text;
         if (textMode) syncTextFromRules();
         else {
             updateRulesFromText();
             if (adapter.getItemCount() == 0) adapter.add(new Rule("", ""));
         }
+        updateModeVisibility();
+    }
+
+    private void showRecognizeMode(boolean show) {
+        if (show) {
+            syncTextFromRulesIfNeeded();
+            beforeRecognizeTextMode = textMode;
+            recognizeMode = true;
+            binding.recognizeInput.setText("");
+            binding.negative.setText(R.string.playback_webhook_back);
+            binding.positive.setText(R.string.dialog_positive);
+            updateModeVisibility();
+            binding.contentScroll.scrollTo(0, 0);
+            binding.recognizeInput.requestFocus();
+            return;
+        }
+        recognizeMode = false;
+        binding.negative.setText(R.string.dialog_negative);
+        binding.positive.setText(R.string.dialog_positive);
+        showTextMode(beforeRecognizeTextMode);
+    }
+
+    private void updateModeVisibility() {
         binding.rulesLayout.setVisibility(textMode ? View.VISIBLE : View.GONE);
         binding.ruleEditor.setVisibility(textMode ? View.GONE : View.VISIBLE);
-        binding.addRule.setVisibility(textMode ? View.GONE : View.VISIBLE);
+        binding.recognizeLayout.setVisibility(recognizeMode ? View.VISIBLE : View.GONE);
+        binding.rulesLayout.setVisibility(!recognizeMode && textMode ? View.VISIBLE : View.GONE);
+        binding.ruleEditor.setVisibility(!recognizeMode && !textMode ? View.VISIBLE : View.GONE);
+        binding.modeGroup.setVisibility(recognizeMode ? View.GONE : View.VISIBLE);
+        binding.addRule.setVisibility(recognizeMode || textMode ? View.GONE : View.VISIBLE);
+        binding.suggestRule.setVisibility(recognizeMode ? View.GONE : View.VISIBLE);
+        binding.recognizeRule.setVisibility(recognizeMode ? View.GONE : View.VISIBLE);
+        binding.testRule.setVisibility(recognizeMode ? View.GONE : View.VISIBLE);
         binding.modePanel.requestLayout();
         binding.modePanel.invalidate();
     }
@@ -348,6 +390,47 @@ public class ShellProxyDialog extends BaseAlertDialog {
         Notify.show(ResUtil.getString(R.string.setting_proxy_suggest_added, added, hosts.size()));
     }
 
+    private boolean saveRecognizedRules() {
+        String text = binding.recognizeInput.getText() == null ? "" : binding.recognizeInput.getText().toString();
+        if (TextUtils.isEmpty(text.trim())) {
+            Notify.show(R.string.setting_proxy_recognize_empty);
+            return false;
+        }
+        List<Rule> items = Rule.parseDetected(text);
+        if (items.isEmpty()) {
+            Notify.show(R.string.setting_proxy_recognize_failed);
+            return false;
+        }
+        List<Rule> next = mergeRules(adapter.getItems(), items);
+        adapter.setItems(next);
+        proxyEnabled = true;
+        updateProxyEnabledText();
+        syncTextFromRules();
+        showRecognizeMode(false);
+        Notify.show(ResUtil.getString(R.string.setting_proxy_recognize_done, items.size()));
+        return true;
+    }
+
+    private List<Rule> mergeRules(List<Rule> current, List<Rule> incoming) {
+        List<Rule> result = new ArrayList<>();
+        Set<String> exists = new LinkedHashSet<>();
+        for (Rule item : current) addRuleIfAbsent(result, exists, item);
+        for (Rule item : incoming) addRuleIfAbsent(result, exists, item);
+        if (result.isEmpty()) result.add(new Rule("", ""));
+        return result;
+    }
+
+    private void addRuleIfAbsent(List<Rule> result, Set<String> exists, Rule item) {
+        if (item == null) return;
+        String hosts = item.hosts == null ? "" : item.hosts.trim();
+        String url = item.url == null ? "" : item.url.trim();
+        if (hosts.isEmpty() && url.isEmpty()) return;
+        String key = hosts.toLowerCase(Locale.ROOT) + "=>" + url;
+        if (exists.contains(key)) return;
+        result.add(new Rule(hosts, url));
+        exists.add(key);
+    }
+
     private Set<String> getHosts(List<Rule> items) {
         Set<String> hosts = new LinkedHashSet<>();
         for (Rule item : items) {
@@ -433,6 +516,10 @@ public class ShellProxyDialog extends BaseAlertDialog {
     }
 
     private void onPositive() {
+        if (recognizeMode) {
+            saveRecognizedRules();
+            return;
+        }
         if (save(true)) dismiss();
     }
 
@@ -467,7 +554,8 @@ public class ShellProxyDialog extends BaseAlertDialog {
         }
 
         static List<Rule> parse(String text) {
-            if (Json.isObj(text) || Json.isArray(text)) return parseJson(text);
+            List<Rule> detected = parseDetected(text);
+            if (!detected.isEmpty()) return detected;
             List<Rule> items = new ArrayList<>();
             for (String raw : text.split("\\r?\\n")) {
                 String line = raw.trim();
@@ -478,11 +566,37 @@ public class ShellProxyDialog extends BaseAlertDialog {
             return items;
         }
 
+        static List<Rule> parseDetected(String text) {
+            String raw = text == null ? "" : text.trim();
+            if (TextUtils.isEmpty(raw)) return Collections.emptyList();
+            List<Rule> items = parseJson(raw);
+            if (!items.isEmpty()) return items;
+            String proxyArray = extractNamedArray(raw, "proxy");
+            if (!TextUtils.isEmpty(proxyArray)) {
+                items = parseJson("{\"proxy\":" + proxyArray + "}");
+                if (!items.isEmpty()) return items;
+            }
+            String array = extractFirstArray(raw);
+            if (!TextUtils.isEmpty(array) && (array.contains("\"hosts\"") || array.contains("\"urls\""))) {
+                items = parseJson(array);
+                if (!items.isEmpty()) return items;
+            }
+            String objects = extractObjects(raw);
+            return TextUtils.isEmpty(objects) ? Collections.emptyList() : parseJson("[" + objects + "]");
+        }
+
         static List<Rule> parseJson(String text) {
             List<Rule> items = new ArrayList<>();
             try {
-                JsonElement element = Json.parse(text);
-                JsonArray array = element.isJsonObject() && element.getAsJsonObject().has("proxy") ? element.getAsJsonObject().getAsJsonArray("proxy") : element.getAsJsonArray();
+                JsonElement element = Json.parse(trimTrailingComma(text));
+                JsonArray array = new JsonArray();
+                if (element.isJsonObject() && element.getAsJsonObject().has("proxy") && element.getAsJsonObject().get("proxy").isJsonArray()) {
+                    array = element.getAsJsonObject().getAsJsonArray("proxy");
+                } else if (element.isJsonObject()) {
+                    array.add(element);
+                } else if (element.isJsonArray()) {
+                    array = element.getAsJsonArray();
+                }
                 for (JsonElement item : array) {
                     if (!item.isJsonObject()) continue;
                     JsonObject object = item.getAsJsonObject();
@@ -495,8 +609,84 @@ public class ShellProxyDialog extends BaseAlertDialog {
             return items;
         }
 
+        static String trimTrailingComma(String text) {
+            String value = text == null ? "" : text.trim();
+            while (value.endsWith(",")) value = value.substring(0, value.length() - 1).trim();
+            return value;
+        }
+
+        static String extractNamedArray(String text, String key) {
+            String marker = "\"" + key + "\"";
+            int search = 0;
+            while (search >= 0 && search < text.length()) {
+                int index = text.indexOf(marker, search);
+                if (index < 0) return "";
+                int colon = text.indexOf(':', index + marker.length());
+                if (colon < 0) return "";
+                int start = nextNonSpace(text, colon + 1);
+                if (start >= 0 && start < text.length() && text.charAt(start) == '[') {
+                    int end = findClosing(text, start, '[', ']');
+                    return end > start ? text.substring(start, end + 1) : "";
+                }
+                search = colon + 1;
+            }
+            return "";
+        }
+
+        static String extractFirstArray(String text) {
+            int start = text.indexOf('[');
+            while (start >= 0) {
+                int end = findClosing(text, start, '[', ']');
+                if (end > start) return text.substring(start, end + 1);
+                start = text.indexOf('[', start + 1);
+            }
+            return "";
+        }
+
+        static String extractObjects(String text) {
+            List<String> objects = new ArrayList<>();
+            int start = text.indexOf('{');
+            while (start >= 0) {
+                int end = findClosing(text, start, '{', '}');
+                if (end <= start) break;
+                String object = text.substring(start, end + 1);
+                if (object.contains("\"hosts\"") || object.contains("\"urls\"")) objects.add(object);
+                start = text.indexOf('{', end + 1);
+            }
+            return TextUtils.join(",", objects);
+        }
+
+        static int nextNonSpace(String text, int start) {
+            for (int i = start; i < text.length(); i++) if (!Character.isWhitespace(text.charAt(i))) return i;
+            return -1;
+        }
+
+        static int findClosing(String text, int start, char open, char close) {
+            boolean inString = false;
+            boolean escaped = false;
+            int depth = 0;
+            for (int i = start; i < text.length(); i++) {
+                char c = text.charAt(i);
+                if (inString) {
+                    if (escaped) escaped = false;
+                    else if (c == '\\') escaped = true;
+                    else if (c == '"') inString = false;
+                    continue;
+                }
+                if (c == '"') {
+                    inString = true;
+                    continue;
+                }
+                if (c == open) depth++;
+                else if (c == close && --depth == 0) return i;
+            }
+            return -1;
+        }
+
         static String join(JsonObject object, String key) {
-            if (!object.has(key) || !object.get(key).isJsonArray()) return "";
+            if (!object.has(key)) return "";
+            if (object.get(key).isJsonPrimitive()) return object.get(key).getAsString();
+            if (!object.get(key).isJsonArray()) return "";
             List<String> result = new ArrayList<>();
             for (JsonElement element : object.getAsJsonArray(key)) if (element.isJsonPrimitive()) result.add(element.getAsString());
             return TextUtils.join(",", result);

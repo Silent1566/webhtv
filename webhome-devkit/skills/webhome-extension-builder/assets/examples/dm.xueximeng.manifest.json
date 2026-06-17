@@ -1,0 +1,13 @@
+{
+  "extensions": [
+    {
+      "id": "dm-xueximeng-native-router",
+      "name": "Xueximeng DM native router",
+      "version": "1.0.0",
+      "runAt": "document-end",
+      "js": [
+        "./dm.xueximeng.com.js"
+      ]
+    }
+  ]
+}

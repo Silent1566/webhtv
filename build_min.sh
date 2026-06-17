@@ -2,8 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
-INPUT="${1:-demo/nostr.html}"
-OUTPUT="${2:-demo/nostr.min.html}"
+INPUT="${1:-webhome-devkit/examples/homepages/nostr.html}"
+OUTPUT="${2:-webhome-devkit/examples/homepages/nostr.min.html}"
 CACHE_DIR="${NPM_CONFIG_CACHE:-/tmp/npm-cache}"
 
 abs_path() {

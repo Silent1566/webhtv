@@ -493,6 +493,20 @@
             android:textColor="@color/dialog_tonal_button_text"
             app:backgroundTint="@color/dialog_tonal_button_bg" />
 
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/extensionsFile"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:layout_marginTop="6dp"
+            android:minHeight="40dp"
+            android:minWidth="76dp"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:text="@string/setting_custom_csp_extensions_file"
+            android:textColor="@color/dialog_outlined_button_text"
+            app:strokeColor="@color/dialog_outlined_button_stroke" />
+
         <com.google.android.material.textfield.TextInputLayout
             android:id="@+id/extensionsLayout"
             android:layout_width="match_parent"
@@ -501,7 +515,9 @@
             android:hint="@string/setting_custom_csp_extensions"
             app:boxBackgroundColor="@color/white"
             app:boxStrokeColor="@color/dialog_outlined_button_stroke"
-            app:hintTextColor="#5F6368">
+            app:hintTextColor="#5F6368"
+            app:placeholderText="@string/setting_custom_csp_extensions_example"
+            app:placeholderTextColor="#666666">
 
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/extensions"
@@ -511,10 +527,10 @@
                 android:imeOptions="flagNoExtractUi"
                 android:importantForAutofill="no"
                 android:inputType="textMultiLine|textNoSuggestions"
-                android:maxLines="5"
-                android:minLines="2"
-                android:scrollHorizontally="true"
-                android:scrollbars="horizontal|vertical"
+                android:maxLines="6"
+                android:minLines="3"
+                android:scrollHorizontally="false"
+                android:scrollbars="vertical"
                 android:singleLine="false"
                 android:textColor="@color/black"
                 android:textColorHint="#666666" />

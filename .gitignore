@@ -20,6 +20,8 @@ nostr_副本*.html
 *.min.html
 *.tmp
 *.log
+__pycache__/
+*.pyc
 third_party/sources/
 app/signing/
 .gradle-user-home/

@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>WebHome</title>
+  <script>
+    (function () {
+      if (!Array.prototype.forEach) {
+        Array.prototype.forEach = function (fn, thisArg) {
+          for (var i = 0; i < this.length; i += 1) {
+            if (i in this) fn.call(thisArg, this[i], i, this);
+          }
+        };
+      }
+      if (!Element.prototype.closest) {
+        Element.prototype.closest = function (selector) {
+          var node = this;
+          while (node && node.nodeType === 1) {
+            if (node.matches && node.matches(selector)) return node;
+            node = node.parentElement;
+          }
+          return null;
+        };
+      }
+      if (!Element.prototype.replaceChildren) {
+        Element.prototype.replaceChildren = function () {
+          while (this.firstChild) this.removeChild(this.firstChild);
+          for (var i = 0; i < arguments.length; i += 1) {
+            this.appendChild(arguments[i]);
+          }
+        };
+      }
+      var cls = " webhome-ready";
+      if (!("gap" in document.documentElement.style)) cls += " no-layout-gap";
+      if (!window.CSS || !CSS.supports || !CSS.supports("top", "calc(1px + 1px)")) cls += " no-css-functions";
+      if (!("aspectRatio" in document.documentElement.style)) cls += " no-aspect-ratio";
+      document.documentElement.className += cls;
+    })();
+  </script>
+  <style>
+    :root {
+      --fm-web-height: 100vh;
+      --fm-safe-top: 0px;
+      --fm-safe-bottom: 0px;
+      --safe-top: var(--fm-safe-top, 0px);
+      --safe-bottom: var(--fm-safe-bottom, 0px);
+      --active-safe-top: 0px;
+      color-scheme: dark;
+    }
+    @supports (top: max(0px, 1px)) {
+      :root {
+        --safe-top: max(var(--fm-safe-top, 0px), env(safe-area-inset-top, 0px));
+        --safe-bottom: max(var(--fm-safe-bottom, 0px), env(safe-area-inset-bottom, 0px));
+      }
+    }
+    html.safe-top-active {
+      --active-safe-top: var(--safe-top);
+    }
+    html,
+    body {
+      min-height: var(--fm-web-height, 100vh);
+      margin: 0;
+      background: transparent;
+      color: #f8fafc;
+      font: 16px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    html:not(.fm-native) body {
+      background: #101820;
+    }
+    .app {
+      min-height: var(--fm-web-height, 100vh);
+      box-sizing: border-box;
+      padding: 16px 16px calc(20px + var(--safe-bottom));
+      padding: max(16px, var(--active-safe-top)) 16px calc(20px + var(--safe-bottom));
+    }
+    .toolbar {
+      position: sticky;
+      top: var(--active-safe-top);
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 44px;
+      padding: 8px 0;
+      background: rgba(16, 24, 32, 0.82);
+    }
+    .title {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: 0;
+    }
+    .grid {
+      display: flex;
+      flex-wrap: wrap;
+      margin: 12px -6px 0;
+    }
+    .card {
+      box-sizing: border-box;
+      width: 50%;
+      padding: 6px;
+    }
+    .card button {
+      display: block;
+      width: 100%;
+      min-height: 72px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.08);
+      color: inherit;
+      text-align: left;
+    }
+    @media (min-width: 720px) {
+      .card {
+        width: 25%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="toolbar">
+      <h1 class="title">WebHome</h1>
+    </header>
+    <section class="grid" id="grid"></section>
+  </main>
+  <script>
+    (function () {
+      var root = document.documentElement;
+      var state = { chromeMode: "", systemBarsHidden: false };
+
+      function readRootPixel(name) {
+        var value = getComputedStyle(root).getPropertyValue(name);
+        var numberValue = parseFloat(value || "0");
+        return isNaN(numberValue) ? 0 : numberValue;
+      }
+
+      function shouldUseTopSafeArea(detail) {
+        detail = detail || {};
+        var mode = String(detail.chromeMode || state.chromeMode || "").toLowerCase();
+        var hidden = typeof detail.systemBarsHidden === "undefined" ? state.systemBarsHidden : !!detail.systemBarsHidden;
+        var safeTop = Number(detail.safeTop);
+        var statusBarHeight = Number(detail.statusBarHeight);
+        if (isNaN(safeTop)) safeTop = readRootPixel("--fm-safe-top");
+        if (isNaN(statusBarHeight)) statusBarHeight = readRootPixel("--fm-status-bar-height");
+        if (hidden && safeTop <= 0 && statusBarHeight <= 0) return false;
+        return mode === "edge" || mode === "immersive" || mode === "fullscreen" || hidden;
+      }
+
+      function updateSafeAreaMode(detail) {
+        detail = detail || {};
+        if (detail.chromeMode) state.chromeMode = String(detail.chromeMode).toLowerCase();
+        if (typeof detail.systemBarsHidden !== "undefined") state.systemBarsHidden = !!detail.systemBarsHidden;
+        root.classList.toggle("safe-top-active", shouldUseTopSafeArea(detail));
+      }
+
+      function refreshSafeAreaMode() {
+        if (!window.fm || !fm.ui || !fm.ui.getViewport) {
+          updateSafeAreaMode({});
+          return;
+        }
+        Promise.resolve(fm.ui.getViewport()).then(updateSafeAreaMode).catch(function () {
+          updateSafeAreaMode({});
+        });
+      }
+
+      function render() {
+        var grid = document.getElementById("grid");
+        var html = "";
+        for (var i = 1; i <= 8; i += 1) {
+          html += '<article class="card"><button type="button">Item ' + i + '</button></article>';
+        }
+        grid.innerHTML = html;
+      }
+
+      window.addEventListener("fmviewport", function (event) {
+        updateSafeAreaMode(event && event.detail ? event.detail : {});
+      });
+      window.addEventListener("fmsdk", function () {
+        root.classList.add("fm-native");
+        refreshSafeAreaMode();
+      });
+      window.addEventListener("fmresume", refreshSafeAreaMode);
+      render();
+      refreshSafeAreaMode();
+    })();
+  </script>
+</body>
+</html>

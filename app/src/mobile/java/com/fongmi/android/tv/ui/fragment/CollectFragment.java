@@ -75,14 +75,20 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
     }
 
     public static CollectFragment newInstance(String keyword, String siteKey) {
-        return newInstance(keyword, siteKey, "");
+        return newInstance(keyword, siteKey, "", null, null);
     }
 
     public static CollectFragment newInstance(String keyword, String siteKey, String group) {
+        return newInstance(keyword, siteKey, group, null, null);
+    }
+
+    public static CollectFragment newInstance(String keyword, String siteKey, String group, String pic, String wallPic) {
         Bundle args = new Bundle();
         args.putString("keyword", keyword);
         args.putString("siteKey", siteKey);
         args.putString("group", group);
+        args.putString("pic", pic);
+        args.putString("wallPic", wallPic);
         CollectFragment fragment = new CollectFragment();
         fragment.setArguments(args);
         return fragment;
@@ -107,6 +113,14 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
 
     private boolean isGroupSearch() {
         return !TextUtils.isEmpty(getSearchGroup());
+    }
+
+    private String getPic() {
+        return getArguments().getString("pic");
+    }
+
+    private String getWallPic() {
+        return getArguments().getString("wallPic");
     }
 
     @Override
@@ -259,7 +273,10 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
     @Override
     public void onItemClick(Vod item) {
         if (item.isFolder()) FolderActivity.start(requireActivity(), item.getSiteKey(), Result.folder(item));
-        else VideoActivity.collect(requireActivity(), item.getSiteKey(), item.getId(), item.getName(), item.getPic());
+        else {
+            String pic = item.getPic().isEmpty() ? getPic() : item.getPic();
+            VideoActivity.collect(requireActivity(), item.getSiteKey(), item.getId(), item.getName(), pic, getWallPic());
+        }
     }
 
     @Override
