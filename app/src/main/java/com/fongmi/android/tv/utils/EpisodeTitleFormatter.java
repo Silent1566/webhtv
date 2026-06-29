@@ -31,6 +31,13 @@ public final class EpisodeTitleFormatter {
         return fileSize + " " + title;
     }
 
+    public static String buildPlaybackTitle(String name, String episode) {
+        name = safe(name);
+        episode = safe(episode);
+        if (isEmpty(episode) || equals(name, episode)) return name;
+        return isEmpty(name) ? episode : name + " " + episode;
+    }
+
     public static String extractFileSize(String value) {
         if (isEmpty(value)) return "";
         Matcher matcher = FILE_SIZE.matcher(value);
@@ -51,6 +58,10 @@ public final class EpisodeTitleFormatter {
 
     private static boolean isEmpty(String value) {
         return value == null || value.isEmpty();
+    }
+
+    private static String safe(String value) {
+        return value == null ? "" : value;
     }
 
     private static boolean equals(String first, String second) {

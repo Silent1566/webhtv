@@ -7,6 +7,7 @@
     android:scrollbars="none">
 
     <LinearLayout
+        android:id="@+id/container"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
@@ -29,7 +30,7 @@
             android:id="@+id/episodes"
             style="@style/Control"
             android:layout_marginEnd="12dp"
-            android:text="@string/detail_episode"
+            android:text="@string/play_episodes"
             android:visibility="gone"
             tools:visibility="visible" />
 

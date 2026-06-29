@@ -8,7 +8,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.viewbinding.ViewBinding;
 
-import com.fongmi.android.tv.BuildConfig;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.Updater;
 import com.fongmi.android.tv.api.config.LiveConfig;
@@ -36,6 +35,7 @@ import com.fongmi.android.tv.ui.dialog.LiveDialog;
 import com.fongmi.android.tv.ui.dialog.RestoreDialog;
 import com.fongmi.android.tv.ui.dialog.SiteDialog;
 import com.fongmi.android.tv.ui.dialog.ThemeDialog;
+import com.fongmi.android.tv.utils.AppVersion;
 import com.fongmi.android.tv.utils.FileUtil;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.PermissionUtil;
@@ -96,7 +96,7 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
         mBinding.vodUrl.setText(VodConfig.getDesc());
         mBinding.liveUrl.setText(LiveConfig.getDesc());
         setWallText();
-        mBinding.versionText.setText(BuildConfig.VERSION_NAME);
+        mBinding.versionText.setText(AppVersion.fullName());
         setOtherText();
         setCacheText();
     }
@@ -106,7 +106,7 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
         mBinding.dohText.setText(getDohList()[getDohIndex()]);
         mBinding.incognitoText.setText(getSwitch(Setting.isIncognito()));
         mBinding.sizeText.setText((size = ResUtil.getStringArray(R.array.select_size))[PlayerSetting.getSize()]);
-        mBinding.uiScaleText.setText((uiScale = ResUtil.getStringArray(R.array.select_ui_scale))[Setting.getUiScale()]);
+        mBinding.uiScaleText.setText((uiScale = ResUtil.getStringArray(R.array.select_ui_scale))[Setting.getUiScaleIndex()]);
     }
 
     private void setCacheText() {
@@ -132,6 +132,7 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
         mBinding.personal.setOnClickListener(this::onPersonal);
         mBinding.player.setOnClickListener(this::onPlayer);
         mBinding.danmaku.setOnClickListener(this::onDanmaku);
+        mBinding.subtitle.setOnClickListener(this::onSubtitle);
         mBinding.restore.setOnClickListener(this::onRestore);
         mBinding.version.setOnClickListener(this::onVersion);
         mBinding.vod.setOnLongClickListener(this::onVodEdit);
@@ -260,6 +261,10 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
         getRoot().change(4);
     }
 
+    private void onSubtitle(View view) {
+        getRoot().change(6);
+    }
+
     private void onEnhance(View view) {
         getRoot().change(3);
     }
@@ -309,9 +314,9 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
     }
 
     private void setUiScale(View view) {
-        new MaterialAlertDialogBuilder(requireActivity()).setTitle(R.string.setting_ui_scale).setNegativeButton(R.string.dialog_negative, null).setSingleChoiceItems(uiScale, Setting.getUiScale(), (dialog, which) -> {
+        new MaterialAlertDialogBuilder(requireActivity()).setTitle(R.string.setting_ui_scale).setNegativeButton(R.string.dialog_negative, null).setSingleChoiceItems(uiScale, Setting.getUiScaleIndex(), (dialog, which) -> {
             mBinding.uiScaleText.setText(uiScale[which]);
-            Setting.putUiScale(which);
+            Setting.putUiScaleIndex(which);
             dialog.dismiss();
             requireActivity().recreate();
         }).show();

@@ -53,6 +53,7 @@ public class HomeWebController {
 
     private static final String BRIDGE = "fongmiBridge";
     private static final int SLOW_KEY_MS = 24;
+    private static final long LOAD_TIMEOUT_MS = 15000;
     private static final long EXTENSION_RELOAD_MIN_INTERVAL_MS = 5000;
     private static HomeWebController active;
     private static boolean extensionReloadRequested;
@@ -69,6 +70,7 @@ public class HomeWebController {
     private String documentStartKey;
     private String defaultUserAgent;
     private String homePage;
+    private String lastPageUrl;
     private WebHomeRawAdapter rawAdapter;
     private WebHomeViewport viewport = WebHomeViewport.EMPTY;
     private String lastViewportKey;
@@ -76,6 +78,8 @@ public class HomeWebController {
     private long lastKeyAt;
     private long lastExtensionReloadAt;
     private int inlineEvaluationCount;
+    private int loadToken;
+    private int loadTimeoutRecoveries;
     private boolean sdkReady;
     private boolean paused;
 
@@ -164,9 +168,25 @@ public class HomeWebController {
         if (!TextUtils.isEmpty(userAgent)) webView.getSettings().setUserAgentString(userAgent);
         else if (!TextUtils.isEmpty(defaultUserAgent)) webView.getSettings().setUserAgentString(defaultUserAgent);
         Map<String, String> requestHeaders = requestHeaders(url, headers);
+        lastPageUrl = url;
+        int token = ++loadToken;
         SpiderDebug.log("webhome-webview", "load url=%s ua=%s headers=%s", url, !TextUtils.isEmpty(userAgent), requestHeaders.keySet());
         if (requestHeaders.isEmpty()) webView.loadUrl(url);
         else webView.loadUrl(url, requestHeaders);
+        webView.postDelayed(() -> handleLoadTimeout(token, url), LOAD_TIMEOUT_MS);
+    }
+
+    private void handleLoadTimeout(int token, String url) {
+        if (token != loadToken || !isVisible() || activity.isFinishing() || activity.isDestroyed()) return;
+        SpiderDebug.log("webhome-webview", "load timeout url=%s current=%s title=%s recoveries=%s", url, webView.getUrl(), webView.getTitle(), loadTimeoutRecoveries);
+        if (TextUtils.isEmpty(homePage) || loadTimeoutRecoveries++ > 0) {
+            listener.onWebError();
+            return;
+        }
+        String target = !TextUtils.isEmpty(lastPageUrl) && !isEmptyDocumentUrl(lastPageUrl) ? lastPageUrl : homePage;
+        recreateWebView();
+        listener.onWebLoading();
+        loadUrl(reloadUrl(target, true));
     }
 
     private Map<String, String> requestHeaders(String url, Map<String, String> headers) {
@@ -454,6 +474,7 @@ public class HomeWebController {
 
     private void recoverAfterResume() {
         if (!isVisible()) return;
+        if (recoverEmptyDocument()) return;
         webView.setBackgroundColor(Color.TRANSPARENT);
         focusWebView("resume");
         webView.requestLayout();
@@ -463,6 +484,23 @@ public class HomeWebController {
         dispatchResume(0);
         dispatchResume(80);
         dispatchResume(260);
+    }
+
+    private boolean recoverEmptyDocument() {
+        String current = webView.getUrl();
+        if (!isEmptyDocumentUrl(current) || TextUtils.isEmpty(homePage)) return false;
+        String target = !TextUtils.isEmpty(lastPageUrl) && !isEmptyDocumentUrl(lastPageUrl) ? lastPageUrl : homePage;
+        SpiderDebug.log("webhome-webview", "restore reload reason=empty-url current=%s target=%s", current, target);
+        listener.onWebLoading();
+        sdkReady = false;
+        lastViewportKey = "";
+        injectedExtensions.clear();
+        loadUrl(reloadUrl(target, true));
+        return true;
+    }
+
+    private boolean isEmptyDocumentUrl(String url) {
+        return TextUtils.isEmpty(url) || "about:blank".equalsIgnoreCase(url);
     }
 
     private void dispatchResume(long delay) {
@@ -529,6 +567,7 @@ public class HomeWebController {
                 super.onPageStarted(view, url, favicon);
                 SpiderDebug.log("webhome-webview", "page started url=%s", url);
                 listener.onWebRequest("PAGE", url, true);
+                lastPageUrl = url;
                 sdkReady = false;
                 lastViewportKey = "";
                 injectedExtensions.clear();
@@ -540,6 +579,9 @@ public class HomeWebController {
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
                 SpiderDebug.log("webhome-webview", "page finished url=%s title=%s", url, view.getTitle());
+                loadToken++;
+                loadTimeoutRecoveries = 0;
+                lastPageUrl = url;
                 injectSdk();
                 focusWebView("page-finished");
                 listener.onWebReady();
@@ -551,6 +593,7 @@ public class HomeWebController {
                 SpiderDebug.log("webhome-webview", "resource error main=%s code=%s desc=%s url=%s", request.isForMainFrame(), error.getErrorCode(), error.getDescription(), request.getUrl());
                 listener.onWebConsole("ERROR " + error.getErrorCode() + " " + error.getDescription() + " " + request.getUrl());
                 if (request.isForMainFrame()) {
+                    loadToken++;
                     homePage = null;
                     rawAdapter = null;
                     Notify.show(error.getDescription().toString());

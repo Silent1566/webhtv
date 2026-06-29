@@ -1,12 +1,15 @@
 package com.fongmi.android.tv.ui.dialog;
 
+import android.content.Context;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
+import android.text.InputType;
 import android.view.Gravity;
 import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
-import android.view.ViewGroup;
 
 import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.FragmentActivity;
@@ -14,9 +17,12 @@ import androidx.fragment.app.FragmentActivity;
 import com.fongmi.android.tv.BuildConfig;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.databinding.DialogAboutBinding;
+import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.utils.AppVersion;
+import com.fongmi.android.tv.utils.GithubProxy;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.google.android.material.textfield.TextInputEditText;
 
 public final class AboutDialog {
 
@@ -25,7 +31,7 @@ public final class AboutDialog {
 
     public static void show(FragmentActivity activity, Runnable updateAction) {
         DialogAboutBinding binding = DialogAboutBinding.inflate(LayoutInflater.from(activity));
-        binding.version.setText(activity.getString(R.string.about_version, AppVersion.fullName(), BuildConfig.VERSION_CODE, BuildConfig.FLAVOR_mode, BuildConfig.FLAVOR_abi));
+        binding.version.setText(activity.getString(R.string.about_version, AppVersion.fullName(), BuildConfig.FLAVOR_mode, BuildConfig.FLAVOR_abi));
         configureContentHeight(activity, binding);
 
         AlertDialog dialog = new MaterialAlertDialogBuilder(activity, R.style.ThemeOverlay_WebHTV_LightDialog)
@@ -36,12 +42,32 @@ public final class AboutDialog {
             dialog.dismiss();
             if (updateAction != null) updateAction.run();
         });
+        binding.githubProxy.setOnClickListener(v -> showGithubProxy(activity));
         dialog.setCanceledOnTouchOutside(false);
         dialog.setOnShowListener(d -> {
             configureWindow(activity, dialog);
             binding.confirm.requestFocus();
         });
         dialog.show();
+    }
+
+    private static void showGithubProxy(FragmentActivity activity) {
+        MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(activity, R.style.Theme_WebHTV_LightDialog);
+        Context context = builder.getContext();
+        View view = LayoutInflater.from(context).inflate(R.layout.dialog_github_proxy, null);
+        TextInputEditText input = view.findViewById(R.id.githubProxyInput);
+        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        input.setText(Setting.getGithubProxy());
+
+        AlertDialog githubDialog = builder
+                .setTitle(R.string.setting_github_proxy)
+                .setView(view)
+                .setNegativeButton(R.string.dialog_negative, null)
+                .setNeutralButton(R.string.setting_reset, (dialog, which) -> Setting.putGithubProxy(GithubProxy.defaultSources()))
+                .setPositiveButton(R.string.dialog_positive, (dialog, which) -> Setting.putGithubProxy(String.valueOf(input.getText())))
+                .create();
+        githubDialog.show();
+        LightDialog.apply(githubDialog);
     }
 
     private static void configureContentHeight(FragmentActivity activity, DialogAboutBinding binding) {

@@ -35,7 +35,7 @@ public class RecordAdapter extends RecyclerView.Adapter<RecordAdapter.ViewHolder
 
     private List<String> getItems() {
         if (Setting.getKeyword().isEmpty()) return new ArrayList<>();
-        return App.gson().fromJson(Setting.getKeyword(), new TypeToken<List<String>>() {}.getType());
+        return App.gson().fromJson(Setting.getKeyword(), TypeToken.getParameterized(List.class, String.class).getType());
     }
 
     private void checkToAdd(String item) {

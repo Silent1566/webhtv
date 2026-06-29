@@ -54,7 +54,6 @@ public class SettingPersonalActivity extends BaseActivity {
         mBinding.fullscreenMenuKey.setOnClickListener(this::setFullscreenMenuKey);
         mBinding.homeMenuKey.setOnClickListener(this::setHomeMenuKey);
         mBinding.playBackToDetail.setOnClickListener(this::setPlayBackToDetail);
-        mBinding.autoSkipIntroOutro.setOnClickListener(this::setAutoSkipIntroOutro);
         mBinding.tmdbMatchMode.setOnClickListener(this::setTmdbMatchMode);
         mBinding.personalRecommendation.setOnClickListener(this::setPersonalRecommendation);
         mBinding.homeHistory.setOnClickListener(this::setHomeHistory);
@@ -70,7 +69,6 @@ public class SettingPersonalActivity extends BaseActivity {
         mBinding.fullscreenMenuKeyText.setText((fullscreenMenuKey = getResources().getStringArray(R.array.select_fullscreen_menu_key))[Setting.getFullscreenMenuKey()]);
         mBinding.homeMenuKeyText.setText((homeMenuKey = getResources().getStringArray(R.array.select_home_menu_key))[Setting.getHomeMenuKey()]);
         mBinding.playBackToDetailText.setText(getSwitch(Setting.isPlayBackToDetail()));
-        mBinding.autoSkipIntroOutroText.setText(getSwitch(Setting.isAutoSkipIntroOutro()));
         mBinding.tmdbMatchModeText.setText((tmdbMatchMode = getResources().getStringArray(R.array.select_tmdb_match_mode))[Setting.getTmdbMatchMode()]);
         mBinding.personalRecommendationText.setText(getSwitch(Setting.isPersonalRecommendation()));
         mBinding.homeHistoryText.setText(getSwitch(Setting.isHomeHistory()));
@@ -109,11 +107,6 @@ public class SettingPersonalActivity extends BaseActivity {
 
     private void setPlayBackToDetail(View view) {
         Setting.putPlayBackToDetail(!Setting.isPlayBackToDetail());
-        setText();
-    }
-
-    private void setAutoSkipIntroOutro(View view) {
-        Setting.putAutoSkipIntroOutro(!Setting.isAutoSkipIntroOutro());
         setText();
     }
 

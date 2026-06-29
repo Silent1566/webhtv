@@ -104,7 +104,7 @@
                     android:maxWidth="220dp"
                     android:textColor="#9912202D"
                     android:textSize="12sp"
-                    tools:text="当前站源：荐片[APP]" />
+                    tools:text="站源：荐片[APP]" />
 
                 <com.google.android.material.textview.MaterialTextView
                     android:id="@+id/tmdbFusionOverview"
@@ -330,7 +330,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="40dp"
                 android:layout_marginStart="10dp"
-                android:minWidth="88dp"
+                android:minWidth="72dp"
                 android:text="@string/detail_tmdb_rematch"
                 android:textAllCaps="false"
                 android:textColor="@color/tmdb_action_button_text"

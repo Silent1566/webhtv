@@ -10,6 +10,7 @@ import com.fongmi.android.tv.bean.Style;
 import com.fongmi.android.tv.gson.ExtAdapter;
 import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.utils.UrlUtil;
+import com.github.catvod.crawler.SpiderDebug;
 import com.github.catvod.utils.Path;
 import com.github.catvod.utils.Util;
 import com.google.gson.annotations.JsonAdapter;
@@ -43,6 +44,7 @@ public class CustomCspSetting {
     private static final String KIND_LIVE = "live";
     private static final String KIND_OTHER = "other";
     private static final String API_BUILTIN = "csp_Builtin";
+    private static final long MAX_SUMMARY_REGISTRY_SIZE = 8L * 1024 * 1024;
     private static final Set<String> ROOT_SKIP_FIELDS = Set.of("enabled", "insertIndex", "homeKey", "items", "sites", "lives", "proxy");
     private static final List<String> ROOT_OTHER_FIELD_LIST = List.of("spider", "parses", "doh", "hosts", "headers", "rules", "ads", "flags", "wallpaper", "logo", "notice", "home", "parse", "urls", "msg");
     private static final Set<String> ROOT_OTHER_FIELDS = new HashSet<>(ROOT_OTHER_FIELD_LIST);
@@ -348,7 +350,11 @@ public class CustomCspSetting {
     }
 
     public static Count count() {
-        Registry registry = load();
+        return count(load());
+    }
+
+    public static Count count(Registry registry) {
+        if (registry == null) registry = new Registry();
         int enabled = 0;
         int active = 0;
         for (Item item : registry.getItems()) {
@@ -357,6 +363,21 @@ public class CustomCspSetting {
             if (registry.isEnabled() && item.isInjectable()) active++;
         }
         return new Count(active, enabled);
+    }
+
+    public static Status status() {
+        try {
+            File file = registryFile();
+            if (file.isFile() && file.length() > MAX_SUMMARY_REGISTRY_SIZE) {
+                SpiderDebug.log("custom-csp", "summary skipped registry too large size=%d", file.length());
+                return Status.unavailable();
+            }
+            Registry registry = load();
+            return new Status(true, registry.isEnabled(), count(registry));
+        } catch (Throwable e) {
+            SpiderDebug.log("custom-csp", "summary failed error=%s", e.toString());
+            return Status.unavailable();
+        }
     }
 
     public static Item createDefaultItem() {
@@ -396,6 +417,13 @@ public class CustomCspSetting {
     }
 
     public record Count(int active, int enabled) {
+    }
+
+    public record Status(boolean available, boolean enabled, Count count) {
+
+        public static Status unavailable() {
+            return new Status(false, false, new Count(0, 0));
+        }
     }
 
     private static File registryFile() {

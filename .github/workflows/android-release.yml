@@ -4,9 +4,18 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "Release tag, blank = v<versionName>-sdk28-yyyyMMddHHmm"
+        description: "Release tag, blank = v<versionName>-yyyyMMddHHmm or v<versionName>-beta-yyyyMMddHHmm"
         required: false
         type: string
+      release_channel:
+        description: "Release channel, auto uses beta on fongmi-sync"
+        required: false
+        default: auto
+        type: choice
+        options:
+          - auto
+          - stable
+          - beta
       release_notes:
         description: "Release notes"
         required: false
@@ -72,12 +81,31 @@ jobs:
         run: |
           VERSION_NAME="$(sed -n 's/^[[:space:]]*versionName[[:space:]]*"\([^"]*\)".*/\1/p' app/build.gradle | head -1)"
           VERSION_CODE="$(sed -n 's/^[[:space:]]*versionCode[[:space:]]*\([0-9][0-9]*\).*/\1/p' app/build.gradle | head -1)"
+          CHANNEL="${{ inputs.release_channel }}"
+          if [ "$CHANNEL" = "auto" ] || [ -z "$CHANNEL" ]; then
+            if [ "${{ github.ref_name }}" = "fongmi-sync" ]; then
+              CHANNEL="beta"
+            else
+              CHANNEL="stable"
+            fi
+          fi
+          if [ "$CHANNEL" = "beta" ]; then
+            APK_SUFFIX="-beta"
+            TAG_PATTERN="^v${VERSION_NAME}-beta-[0-9]{12}$"
+            TAG_DEFAULT="v${VERSION_NAME}-beta-$(date +%Y%m%d%H%M)"
+            TAG_EXPECT="v${VERSION_NAME}-beta-yyyyMMddHHmm"
+          else
+            APK_SUFFIX=""
+            TAG_PATTERN="^v${VERSION_NAME}-[0-9]{12}$"
+            TAG_DEFAULT="v${VERSION_NAME}-$(date +%Y%m%d%H%M)"
+            TAG_EXPECT="v${VERSION_NAME}-yyyyMMddHHmm"
+          fi
           TAG="${{ inputs.release_tag }}"
           if [ -z "$TAG" ]; then
-            TAG="v${VERSION_NAME}-sdk28-$(date +%Y%m%d%H%M)"
+            TAG="$TAG_DEFAULT"
           fi
-          if ! printf '%s' "$TAG" | grep -Eq "^v${VERSION_NAME}-sdk28-[0-9]{12}$"; then
-            echo "::error title=Invalid release tag::Expected v${VERSION_NAME}-sdk28-yyyyMMddHHmm, got: $TAG"
+          if ! printf '%s' "$TAG" | grep -Eq "$TAG_PATTERN"; then
+            echo "::error title=Invalid release tag::Expected $TAG_EXPECT, got: $TAG"
             exit 1
           fi
           if git rev-parse "$TAG" >/dev/null 2>&1; then
@@ -90,6 +118,8 @@ jobs:
             echo "version_name=$VERSION_NAME"
             echo "version_code=$VERSION_CODE"
             echo "short_sha=$(git rev-parse --short=7 HEAD)"
+            echo "channel=$CHANNEL"
+            echo "apk_suffix=$APK_SUFFIX"
           } >> "$GITHUB_OUTPUT"
 
       - name: Configure release signing
@@ -123,8 +153,10 @@ jobs:
       - name: Build four release APKs
         env:
           WEBHTV_RELEASE_TAG: ${{ steps.meta.outputs.tag }}
+          WEBHTV_APK_SUFFIX: ${{ steps.meta.outputs.apk_suffix }}
         run: |
           chmod +x ./gradlew
+          rm -rf Release/apk
           ./gradlew \
             :app:assembleMobileArm64_v8aRelease \
             :app:assembleMobileArmeabi_v7aRelease \
@@ -140,22 +172,36 @@ jobs:
           ls -lh dist/
 
       - name: Generate update manifests
+        env:
+          RELEASE_NOTES: ${{ inputs.release_notes }}
         run: |
-          for apk in dist/*.apk; do
-            base="$(basename "$apk" .apk)"
-            size="$(wc -c < "$apk" | tr -d ' ')"
-            sha256="$(sha256sum "$apk" | awk '{print $1}')"
-            cat > "dist/${base}.json" << JSON
-          {
-            "name": "${{ steps.meta.outputs.tag }}",
-            "desc": "${{ steps.meta.outputs.tag }} - ${{ steps.meta.outputs.short_sha }}",
-            "code": ${{ steps.meta.outputs.version_code }},
-            "apk": "${base}.apk",
-            "size": $size,
-            "sha256": "$sha256"
-          }
-          JSON
-          done
+          python3 - <<'PY'
+          import glob
+          import hashlib
+          import json
+          import os
+
+          tag = "${{ steps.meta.outputs.tag }}"
+          notes = os.environ.get("RELEASE_NOTES", "").strip()
+          for apk in glob.glob("dist/*.apk"):
+              base = os.path.splitext(os.path.basename(apk))[0]
+              with open(apk, "rb") as fh:
+                  content = fh.read()
+              data = {
+                  "name": tag,
+                  "desc": f"{tag} - ${{ steps.meta.outputs.short_sha }}",
+                  "channel": "${{ steps.meta.outputs.channel }}",
+                  "code": int("${{ steps.meta.outputs.version_code }}"),
+                  "apk": f"{base}.apk",
+                  "size": len(content),
+                  "sha256": hashlib.sha256(content).hexdigest(),
+              }
+              if notes:
+                  data["notes"] = notes
+              with open(f"dist/{base}.json", "w", encoding="utf-8") as fh:
+                  json.dump(data, fh, ensure_ascii=False, indent=2)
+                  fh.write("\n")
+          PY
           ls -lh dist/
 
       - name: Write release notes
@@ -171,19 +217,21 @@ jobs:
               echo "手动触发 GitHub Actions 构建发布。"
             fi
             echo
+            echo "### 发布通道"
+            echo
+            echo "- ${{ steps.meta.outputs.channel }}"
+            echo
             echo "### APK"
             echo
-            echo "- mobile-arm64_v8a.apk"
-            echo "- mobile-armeabi_v7a.apk"
-            echo "- leanback-arm64_v8a.apk"
-            echo "- leanback-armeabi_v7a.apk"
+            for apk in dist/*.apk; do
+              echo "- $(basename "$apk")"
+            done
             echo
             echo "### 更新清单"
             echo
-            echo "- mobile-arm64_v8a.json"
-            echo "- mobile-armeabi_v7a.json"
-            echo "- leanback-arm64_v8a.json"
-            echo "- leanback-armeabi_v7a.json"
+            for manifest in dist/*.json; do
+              echo "- $(basename "$manifest")"
+            done
           } > dist/release-notes.md
 
       - name: Create GitHub Release
@@ -191,7 +239,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           PRERELEASE_FLAG=""
-          if [ "${{ inputs.prerelease }}" = "true" ]; then
+          if [ "${{ inputs.prerelease }}" = "true" ] || [ "${{ steps.meta.outputs.channel }}" = "beta" ]; then
             PRERELEASE_FLAG="--prerelease"
           fi
           gh release create "${{ steps.meta.outputs.tag }}" \
@@ -212,8 +260,26 @@ jobs:
             exit 0
           fi
           AUTH_REPO="$(printf '%s' "$CNB_REPO_URL" | sed "s#^https://#https://cnb:${CNB_TOKEN}@#")"
-          rm -rf cnb-mirror
-          git clone --depth 1 "$AUTH_REPO" cnb-mirror
+          clone_cnb() {
+            local attempt max_attempts delay
+            max_attempts=4
+            delay=15
+            for attempt in $(seq 1 "$max_attempts"); do
+              echo "CNB clone attempt ${attempt}/${max_attempts}"
+              rm -rf cnb-mirror
+              if timeout 180s git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=60 clone --depth 1 "$AUTH_REPO" cnb-mirror; then
+                return 0
+              fi
+              if [ "$attempt" -lt "$max_attempts" ]; then
+                echo "::warning title=CNB clone retry::Clone failed, retrying in ${delay}s."
+                sleep "$delay"
+                delay=$((delay * 2))
+              fi
+            done
+            echo "::error title=CNB clone failed::Cannot connect to CNB from this GitHub runner after ${max_attempts} attempts. If the CNB repository is reachable in a browser, this is likely runner-to-CNB network blocking or timeout."
+            return 1
+          }
+          clone_cnb
           mkdir -p cnb-mirror/apk
           cp dist/*.apk dist/*.json cnb-mirror/apk/
           cd cnb-mirror

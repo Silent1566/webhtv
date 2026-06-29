@@ -47,6 +47,52 @@ public class TmdbHeaderViewLayoutTest {
                 source.contains("if (itemView.hasFocus() && focusListener != null) focusListener.onItemFocus(item, true);"));
     }
 
+    @Test
+    public void fusionPlaybackControlsRethemeMovedTextAndIcons() throws Exception {
+        Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "custom", "TmdbHeaderView.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int refreshMethod = source.indexOf("public void refreshTheme()");
+        int tintMethod = source.indexOf("private void tintTree(View view, int color)");
+
+        assertTrue("Header view must expose a theme refresh for playback controls moved in later", refreshMethod >= 0);
+        assertTrue("refreshTheme must re-run the current header theme", source.indexOf("applyTheme();", refreshMethod) > refreshMethod);
+        assertTrue(sourcePath + " is missing tintTree", tintMethod >= 0);
+        assertTrue("Tinting moved playback labels must clear old white text shadows",
+                source.indexOf("clearTextShadow(textView);", tintMethod) > tintMethod);
+        assertTrue("Tinting moved playback controls must recolor image buttons",
+                source.indexOf("imageView.setColorFilter(color)", tintMethod) > tintMethod);
+        assertTrue("Non-fusion cinema playback controls must match section title color after header theme refresh",
+                source.contains("styleTmdbPlaybackControls(primary);"));
+        assertTrue("Non-fusion playback control styling must tint moved labels and icons",
+                source.contains("private void styleTmdbPlaybackControls(int textColor)")
+                        && source.contains("tintTree(controls, textColor);"));
+        assertTrue("Playback controls must follow the actual detail chrome, not only the dark/light theme value",
+                source.contains("return isLightDetailChrome();"));
+        assertTrue("Non-fusion translucent profile playback titles should match the profile section title color",
+                source.contains("return isCurrentDetailLightTheme() ? 0xFF15222B : COLOR_FUSION_BACKDROP_TEXT;"));
+    }
+
+    @Test
+    public void cinemaLightPlaybackActionsUseReadableLightPalette() throws Exception {
+        Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "custom", "TmdbHeaderView.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int tintMethod = source.indexOf("private void tintAction(int id, int style)");
+        int lightCinemaBranch = source.indexOf("if (cinema && resolveLightTheme())", tintMethod);
+
+        assertTrue(sourcePath + " is missing tintAction", tintMethod >= 0);
+        assertTrue("Light cinema playback actions need their own high-contrast branch", lightCinemaBranch > tintMethod);
+        assertTrue("Light cinema playback actions should use the cinema light palette",
+                source.indexOf("TmdbCinemaTheme.palette(true)", lightCinemaBranch) > lightCinemaBranch);
+        assertTrue("Light cinema playback actions should use dark text",
+                source.indexOf("button.setTextColor(palette.primary());", lightCinemaBranch) > lightCinemaBranch);
+        assertTrue("Light cinema playback actions need a visible border on light backgrounds",
+                source.indexOf("button.setStrokeColor(ColorStateList.valueOf(palette.lineStrong()));", lightCinemaBranch) > lightCinemaBranch);
+        assertTrue("Light cinema playback actions need a solid readable surface",
+                source.indexOf("button.setBackgroundTintList(ColorStateList.valueOf(palette.card()));", lightCinemaBranch) > lightCinemaBranch);
+        assertTrue("Playback action buttons should not inherit a translucent state",
+                source.indexOf("button.setAlpha(1f);", tintMethod) > tintMethod);
+    }
+
     private static Path findMainJavaPath() {
         Path moduleRelative = Path.of("src", "main", "java");
         if (Files.exists(moduleRelative)) return moduleRelative;

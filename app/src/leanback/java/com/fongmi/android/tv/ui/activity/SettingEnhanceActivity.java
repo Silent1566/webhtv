@@ -6,6 +6,7 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.TextView;
 
 import androidx.appcompat.app.AlertDialog;
 import androidx.viewbinding.ViewBinding;
@@ -43,6 +44,7 @@ import com.fongmi.android.tv.ui.dialog.WebHomeExtensionDialog;
 import com.fongmi.android.tv.utils.LoginStateSync;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.PermissionUtil;
+import com.github.catvod.crawler.SpiderDebug;
 import com.fongmi.android.tv.web.ext.WebHomeExtensionRegistry;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
@@ -143,33 +145,87 @@ public class SettingEnhanceActivity extends BaseActivity {
     }
 
     private void setText() {
-        mBinding.driveCheckText.setText(getSwitch(Setting.isDriveCheck()));
-        mBinding.audioSourceText.setText(getSwitch(!AudioConfig.objectFrom(Setting.getAudioConfig()).getDisplayRules().isEmpty()));
-        mBinding.shortDramaSourceText.setText(getSwitch(!ShortDramaConfig.objectFrom(Setting.getShortDramaConfig()).getDisplayRules().isEmpty()));
-        mBinding.tmdbSourceText.setText(Setting.isTmdbReady() ? R.string.setting_configured : R.string.setting_unconfigured);
-        mBinding.aiRecommendationText.setText(getAiRecommendationText());
-        mBinding.detailInteractionModeText.setText(getDetailOpenModeText());
-        mBinding.detailThemeMode.setVisibility(Setting.isTmdbMode(Setting.getDetailOpenMode()) ? View.VISIBLE : View.GONE);
-        mBinding.detailThemeModeText.setText(getDetailThemeModeText());
-        mBinding.debugLogText.setText(getSwitch(Setting.isDebugLog()));
-        mBinding.siteHealthSortText.setText(getSwitch(Setting.isSiteHealthSort()));
-        WebHomeExtensionRegistry.Snapshot webHomeExtension = WebHomeExtensionRegistry.get().snapshot();
-        mBinding.webHomeExtensionText.setText(getSwitch(Setting.isWebHomeExtension()) + " · " + webHomeExtension.readyCount + "/" + webHomeExtension.installedCount);
-        mBinding.webHomeFullscreenText.setText(getSwitch(Setting.isWebHomeFullscreen()));
-        mBinding.cspWarmupText.setText(getSwitch(Setting.isCspWarmup()));
-        mBinding.playbackArtworkWallText.setText(getSwitch(Setting.isPlaybackArtworkWall()));
-        mBinding.playbackWebhookText.setText(ViewingRecordSyncStore.summary(this));
-        mBinding.managePageText.setText(R.string.manage_page_web);
-        mBinding.remoteTrustText.setText(RemoteStore.summary(this));
-        mBinding.gitCloudText.setText(getString(R.string.git_cloud_account_count, GitCloudAccountStore.list().size()));
-        mBinding.shellProxyText.setText(getSwitch(Setting.isShellProxy()) + " · " + getString(R.string.setting_proxy_rule_count, ProxySetting.count()));
-        mBinding.shellProxyConfigText.setText(getString(R.string.setting_proxy_rule_count, ProxySetting.count()));
-        CustomCspSetting.Registry registry = CustomCspSetting.load();
-        CustomCspSetting.Count count = CustomCspSetting.count();
-        mBinding.customCspText.setText(getSwitch(registry.isEnabled()) + " · " + getString(R.string.setting_custom_csp_count, count.active(), count.enabled()));
-        int learned = LoginStateSync.learnedCount();
-        int pending = LoginStateSync.pendingPaths().size();
-        mBinding.loginStateText.setText(getString(LoginStateSync.hasLearningSnapshot() ? R.string.login_state_learning_count : R.string.login_state_count, learned, pending));
+        if (!canSetText()) return;
+        safeSet("driveCheck", mBinding.driveCheckText, () -> getSwitch(Setting.isDriveCheck()));
+        safeSet("audioSource", mBinding.audioSourceText, () -> getSwitch(!AudioConfig.objectFrom(Setting.getAudioConfig()).getDisplayRules().isEmpty()));
+        safeSet("shortDramaSource", mBinding.shortDramaSourceText, () -> getSwitch(!ShortDramaConfig.objectFrom(Setting.getShortDramaConfig()).getDisplayRules().isEmpty()));
+        safeSet("tmdbSource", mBinding.tmdbSourceText, () -> getString(Setting.isTmdbReady() ? R.string.setting_configured : R.string.setting_unconfigured));
+        safeSet("aiRecommendation", mBinding.aiRecommendationText, this::getAiRecommendationText);
+        safeSet("detailInteractionMode", mBinding.detailInteractionModeText, this::getDetailOpenModeText);
+        safeRun("detailThemeModeVisibility", () -> mBinding.detailThemeMode.setVisibility(Setting.isTmdbMode(Setting.getDetailOpenMode()) ? View.VISIBLE : View.GONE), null);
+        safeSet("detailThemeMode", mBinding.detailThemeModeText, this::getDetailThemeModeText);
+        safeSet("debugLog", mBinding.debugLogText, () -> getSwitch(Setting.isDebugLog()));
+        safeSet("siteHealthSort", mBinding.siteHealthSortText, () -> getSwitch(Setting.isSiteHealthSort()));
+        safeSet("webHomeExtension", mBinding.webHomeExtensionText, () -> {
+            WebHomeExtensionRegistry.Snapshot webHomeExtension = WebHomeExtensionRegistry.get().snapshot();
+            return getSwitch(Setting.isWebHomeExtension()) + " · " + webHomeExtension.readyCount + "/" + webHomeExtension.installedCount;
+        });
+        safeSet("webHomeFullscreen", mBinding.webHomeFullscreenText, () -> getSwitch(Setting.isWebHomeFullscreen()));
+        safeSet("cspWarmup", mBinding.cspWarmupText, () -> getSwitch(Setting.isCspWarmup()));
+        safeSet("playbackArtworkWall", mBinding.playbackArtworkWallText, () -> getSwitch(Setting.isPlaybackArtworkWall()));
+        safeSet("playbackWebhook", mBinding.playbackWebhookText, () -> ViewingRecordSyncStore.summary(this));
+        safeSet("managePage", mBinding.managePageText, () -> getString(R.string.manage_page_web));
+        safeSet("remoteTrust", mBinding.remoteTrustText, () -> RemoteStore.summary(this));
+        safeSet("gitCloud", mBinding.gitCloudText, () -> getString(R.string.git_cloud_account_count, GitCloudAccountStore.list().size()));
+        setShellProxyText();
+        setCustomCspText();
+        safeSet("loginState", mBinding.loginStateText, () -> {
+            int learned = LoginStateSync.learnedCount();
+            int pending = LoginStateSync.pendingPaths().size();
+            return getString(LoginStateSync.hasLearningSnapshot() ? R.string.login_state_learning_count : R.string.login_state_count, learned, pending);
+        });
+    }
+
+    private boolean canSetText() {
+        return mBinding != null && !isFinishing() && !isDestroyed();
+    }
+
+    private void setShellProxyText() {
+        safeRun("shellProxy", () -> {
+            int count = ProxySetting.count();
+            mBinding.shellProxyText.setText(getSwitch(Setting.isShellProxy()) + " · " + getString(R.string.setting_proxy_rule_count, count));
+            mBinding.shellProxyConfigText.setText(getString(R.string.setting_proxy_rule_count, count));
+        }, () -> {
+            setError(mBinding.shellProxyText);
+            setError(mBinding.shellProxyConfigText);
+        });
+    }
+
+    private void setCustomCspText() {
+        safeRun("customCsp", () -> {
+            CustomCspSetting.Status status = CustomCspSetting.status();
+            if (!status.available()) {
+                setError(mBinding.customCspText);
+                return;
+            }
+            CustomCspSetting.Count count = status.count();
+            mBinding.customCspText.setText(getSwitch(status.enabled()) + " · " + getString(R.string.setting_custom_csp_count, count.active(), count.enabled()));
+        }, () -> setError(mBinding.customCspText));
+    }
+
+    private void safeSet(String name, TextView view, TextSupplier supplier) {
+        safeRun(name, () -> view.setText(supplier.get()), () -> setError(view));
+    }
+
+    private void safeRun(String name, Runnable action, Runnable fallback) {
+        try {
+            action.run();
+        } catch (Throwable e) {
+            SpiderDebug.log("enhance", "summary failed item=%s error=%s", name, e.toString());
+            if (fallback == null) return;
+            try {
+                fallback.run();
+            } catch (Throwable ignored) {
+            }
+        }
+    }
+
+    private void setError(TextView view) {
+        if (view != null) view.setText(R.string.error_config_get);
+    }
+
+    private interface TextSupplier {
+        CharSequence get();
     }
 
     private void setDriveCheck(View view) {

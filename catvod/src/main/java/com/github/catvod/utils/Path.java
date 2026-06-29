@@ -74,6 +74,10 @@ public class Path {
         return mkdir(new File(cache() + File.separator + "exo"));
     }
 
+    public static File exoCache() {
+        return exo();
+    }
+
     public static File epg() {
         return mkdir(new File(cache() + File.separator + "epg"));
     }

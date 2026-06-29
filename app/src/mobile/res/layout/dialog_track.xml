@@ -36,6 +36,18 @@
             tools:visibility="visible" />
 
         <androidx.appcompat.widget.AppCompatImageView
+            android:id="@+id/search"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/subtitle_manual_search"
+            android:src="@drawable/ic_action_search"
+            app:tint="@color/white_90"
+            android:visibility="gone"
+            tools:visibility="visible" />
+
+        <androidx.appcompat.widget.AppCompatImageView
             android:id="@+id/subtitle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"

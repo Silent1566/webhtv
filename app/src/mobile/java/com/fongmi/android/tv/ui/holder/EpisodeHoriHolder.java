@@ -47,14 +47,12 @@ public class EpisodeHoriHolder extends BaseEpisodeHolder {
         TmdbEpisode tmdbEpisode = item.getTmdbEpisode();
 
         if (useTmdbCard && tmdbEpisode != null) {
-            // TMDB 模式：显示卡片，隐藏文本
             binding.text.setVisibility(View.GONE);
             binding.card.setVisibility(View.VISIBLE);
 
             binding.card.setSelected(item.isSelected());
             bindCardActions(item, binding.getRoot(), binding.card, binding.still, binding.cardTitle, binding.overview);
 
-            // 标题
             binding.cardTitle.setText(EpisodeAdapter.getTitle(item));
             binding.cardTitle.setSelected(item.isSelected());
 
@@ -64,7 +62,6 @@ public class EpisodeHoriHolder extends BaseEpisodeHolder {
             binding.still.setVisibility(View.VISIBLE);
             ImgUtil.load(EpisodeAdapter.getTitle(item), stillUrl, errorStillUrl, binding.still, true, 0, 0);
 
-            // 简介
             if (!TextUtils.isEmpty(tmdbEpisode.getOverview())) {
                 binding.overview.setVisibility(View.VISIBLE);
                 binding.overview.setText(tmdbEpisode.getOverview());
@@ -72,7 +69,6 @@ public class EpisodeHoriHolder extends BaseEpisodeHolder {
                 binding.overview.setVisibility(View.GONE);
             }
 
-            // 评分
             if (tmdbEpisode.getVoteAverage() > 0) {
                 binding.rating.setVisibility(View.VISIBLE);
                 binding.rating.setText(String.format(java.util.Locale.US, "★%.1f", tmdbEpisode.getVoteAverage()));
@@ -80,7 +76,6 @@ public class EpisodeHoriHolder extends BaseEpisodeHolder {
                 binding.rating.setVisibility(View.GONE);
             }
         } else {
-            // 非 TMDB 模式：显示文本，隐藏卡片
             binding.text.setVisibility(View.VISIBLE);
             binding.card.setVisibility(View.GONE);
 

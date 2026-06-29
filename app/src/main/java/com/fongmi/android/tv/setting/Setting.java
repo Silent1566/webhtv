@@ -21,6 +21,7 @@ import com.fongmi.android.tv.bean.AudioConfig;
 import com.fongmi.android.tv.bean.ShortDramaConfig;
 import com.fongmi.android.tv.bean.TmdbConfig;
 import com.fongmi.android.tv.bean.TmdbMatchCache;
+import com.fongmi.android.tv.bean.Update;
 import com.fongmi.android.tv.utils.WebViewUtil;
 import com.github.catvod.crawler.DebugLogStore;
 import com.github.catvod.crawler.SpiderDebug;
@@ -49,6 +50,9 @@ public class Setting {
     public static final int UI_SCALE_STANDARD = 1;
     public static final int UI_SCALE_COMPACT = 2;
     public static final int UI_SCALE_SMALLER = 3;
+    public static final int UI_SCALE_MILD_COMPACT = 4;
+    public static final int UI_SCALE_MORE_COMPACT = 5;
+    private static final int[] UI_SCALE_OPTIONS = {UI_SCALE_FOLLOW_SYSTEM, UI_SCALE_STANDARD, UI_SCALE_MILD_COMPACT, UI_SCALE_COMPACT, UI_SCALE_MORE_COMPACT, UI_SCALE_SMALLER};
 
     public static final int WALL_CINEMA = 5;
     public static final int WALL_CINEMA_WARM = 6;
@@ -341,11 +345,26 @@ public class Setting {
 
     public static int getUiScale() {
         int scale = Prefers.getInt("ui_scale", UI_SCALE_FOLLOW_SYSTEM);
-        return scale >= UI_SCALE_FOLLOW_SYSTEM && scale <= UI_SCALE_SMALLER ? scale : UI_SCALE_FOLLOW_SYSTEM;
+        return isUiScale(scale) ? scale : UI_SCALE_FOLLOW_SYSTEM;
     }
 
     public static void putUiScale(int scale) {
-        Prefers.put("ui_scale", scale >= UI_SCALE_FOLLOW_SYSTEM && scale <= UI_SCALE_SMALLER ? scale : UI_SCALE_FOLLOW_SYSTEM);
+        Prefers.put("ui_scale", isUiScale(scale) ? scale : UI_SCALE_FOLLOW_SYSTEM);
+    }
+
+    public static int getUiScaleIndex() {
+        int scale = getUiScale();
+        for (int i = 0; i < UI_SCALE_OPTIONS.length; i++) if (UI_SCALE_OPTIONS[i] == scale) return i;
+        return UI_SCALE_FOLLOW_SYSTEM;
+    }
+
+    public static void putUiScaleIndex(int index) {
+        putUiScale(index >= 0 && index < UI_SCALE_OPTIONS.length ? UI_SCALE_OPTIONS[index] : UI_SCALE_FOLLOW_SYSTEM);
+    }
+
+    private static boolean isUiScale(int scale) {
+        for (int option : UI_SCALE_OPTIONS) if (option == scale) return true;
+        return false;
     }
 
     public static Context wrapUiScale(Context context) {
@@ -367,7 +386,9 @@ public class Setting {
     private static float getUiScaleFactor(int scale) {
         return switch (scale) {
             case UI_SCALE_STANDARD -> 0.9f;
+            case UI_SCALE_MILD_COMPACT -> 0.85f;
             case UI_SCALE_COMPACT -> 0.8f;
+            case UI_SCALE_MORE_COMPACT -> 0.75f;
             case UI_SCALE_SMALLER -> 0.7f;
             default -> 1.0f;
         };
@@ -395,6 +416,14 @@ public class Setting {
 
     private static int clampSiteColumn(int column) {
         return column == 2 ? 2 : 1;
+    }
+
+    public static boolean isCompactEpisodeTitle() {
+        return Prefers.getBoolean("compact_episode_title");
+    }
+
+    public static void putCompactEpisodeTitle(boolean compact) {
+        Prefers.put("compact_episode_title", compact);
     }
 
     public static boolean isSiteHealthSort() {
@@ -525,6 +554,23 @@ public class Setting {
 
     public static void putUpdate(boolean update) {
         Prefers.put("update", update);
+    }
+
+    public static String getUpdateChannel() {
+        String channel = Prefers.getString("update_channel", Update.CHANNEL_STABLE);
+        return Update.CHANNEL_BETA.equals(channel) ? Update.CHANNEL_BETA : Update.CHANNEL_STABLE;
+    }
+
+    public static void putUpdateChannel(String channel) {
+        Prefers.put("update_channel", Update.CHANNEL_BETA.equals(channel) ? Update.CHANNEL_BETA : Update.CHANNEL_STABLE);
+    }
+
+    public static String getGithubProxy() {
+        return Prefers.getString("github_proxy", com.fongmi.android.tv.utils.GithubProxy.defaultSources());
+    }
+
+    public static void putGithubProxy(String value) {
+        Prefers.put("github_proxy", com.fongmi.android.tv.utils.GithubProxy.normalizeConfig(value));
     }
 
     public static boolean isAdblock() {
@@ -951,8 +997,32 @@ public class Setting {
         Prefers.put("play_back_to_detail", backToDetail);
     }
 
+    public static boolean isSubtitleAutoMatchEnabled() {
+        return Prefers.getBoolean("subtitle_auto_match", false);
+    }
+
+    public static void putSubtitleAutoMatchEnabled(boolean enabled) {
+        Prefers.put("subtitle_auto_match", enabled);
+    }
+
+    public static String getSubtitlePreferredLanguage() {
+        return Prefers.getString("subtitle_preferred_language", "zh");
+    }
+
+    public static void putSubtitlePreferredLanguage(String language) {
+        Prefers.put("subtitle_preferred_language", language == null || language.isEmpty() ? "zh" : language);
+    }
+
+    public static String getSubtitleAssrtToken() {
+        return Prefers.getString("subtitle_assrt_token");
+    }
+
+    public static void putSubtitleAssrtToken(String token) {
+        Prefers.put("subtitle_assrt_token", token);
+    }
+
     public static boolean isAutoSkipIntroOutro() {
-        return Prefers.getBoolean("auto_skip_intro_outro", true);
+        return Prefers.getBoolean("auto_skip_intro_outro", false);
     }
 
     public static void putAutoSkipIntroOutro(boolean enabled) {

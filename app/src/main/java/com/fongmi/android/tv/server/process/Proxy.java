@@ -8,17 +8,21 @@ import com.github.catvod.crawler.SpiderDebug;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 import fi.iki.elonen.NanoHTTPD;
 import fi.iki.elonen.NanoHTTPD.IHTTPSession;
 import fi.iki.elonen.NanoHTTPD.Response;
+import fi.iki.elonen.NanoHTTPD.Response.IStatus;
 import fi.iki.elonen.NanoHTTPD.Response.Status;
 
 public class Proxy implements Process {
 
+    private static final String INVALID_RESPONSE = "Invalid proxy response";
     private static final AtomicLong STREAM_ID = new AtomicLong();
     private static final long PROGRESS_INTERVAL_NS = TimeUnit.SECONDS.toNanos(5);
 
@@ -34,25 +38,55 @@ public class Proxy implements Process {
             params.putAll(session.getHeaders());
             params.putAll(files);
             SpiderDebug.log("proxy", "request uri=%s method=%s do=%s params=%s", url, session.getMethod(), params.get("do"), params);
-            Object[] rs = BaseLoader.get().proxy(params);
-            if (rs == null) {
-                SpiderDebug.log("proxy", "response null do=%s uri=%s", params.get("do"), url);
-                return Nano.error("Proxy response is null");
-            }
-            if (rs[0] instanceof Response) {
-                SpiderDebug.log("proxy", "response object do=%s type=%s", params.get("do"), rs[0].getClass().getName());
-                return (Response) rs[0];
-            }
-            SpiderDebug.log("proxy", "response do=%s status=%s mime=%s body=%s headers=%s", params.get("do"), rs.length > 0 ? rs[0] : null, rs.length > 1 ? rs[1] : null, rs.length > 2 && rs[2] != null ? rs[2].getClass().getName() : null, rs.length > 3 ? rs[3] : null);
-            Map<String, String> headers = headers(rs);
-            InputStream stream = wrapStream(params, headers, (InputStream) rs[2]);
-            Response response = NanoHTTPD.newChunkedResponse(Status.lookup((Integer) rs[0]), (String) rs[1], stream);
-            if (headers != null) for (Map.Entry<String, String> entry : headers.entrySet()) response.addHeader(entry.getKey(), entry.getValue());
-            return response;
+            return createResponse(params, url, BaseLoader.get().proxy(params));
         } catch (Throwable e) {
             e.printStackTrace();
             SpiderDebug.log("proxy", e);
-            return Nano.error(e.getMessage());
+            return Nano.error(Objects.toString(e.getMessage(), e.toString()));
+        }
+    }
+
+    private Response createResponse(Map<String, String> params, String url, Object[] rs) {
+        if (rs == null || rs.length == 0) {
+            SpiderDebug.log("proxy", "response invalid do=%s uri=%s reason=null_or_empty", params.get("do"), url);
+            return Nano.error(INVALID_RESPONSE);
+        }
+        if (rs[0] instanceof Response response) {
+            SpiderDebug.log("proxy", "response object do=%s type=%s", params.get("do"), rs[0].getClass().getName());
+            return response;
+        }
+        if (rs.length < 3 || !(rs[0] instanceof Integer code) || !(rs[2] instanceof InputStream stream)) {
+            SpiderDebug.log("proxy", "response invalid do=%s status=%s mime=%s body=%s headers=%s", params.get("do"), rs.length > 0 ? rs[0] : null, rs.length > 1 ? rs[1] : null, rs.length > 2 ? rs[2] : null, rs.length > 3 ? rs[3] : null);
+            return Nano.error(INVALID_RESPONSE);
+        }
+        SpiderDebug.log("proxy", "response do=%s status=%s mime=%s body=%s headers=%s", params.get("do"), code, rs[1], stream.getClass().getName(), rs.length > 3 ? rs[3] : null);
+        Map<String, String> headers = headers(rs.length > 3 ? rs[3] : null);
+        stream = wrapStream(params, headers, stream);
+        Response response = NanoHTTPD.newChunkedResponse(toStatus(code), Objects.toString(rs[1], null), stream);
+        addHeaders(response, headers);
+        return response;
+    }
+
+    private static void addHeaders(Response response, Map<String, String> headers) {
+        if (headers == null) return;
+        for (Map.Entry<String, String> entry : headers.entrySet()) response.addHeader(entry.getKey(), entry.getValue());
+    }
+
+    private static IStatus toStatus(int code) {
+        Status status = Status.lookup(code);
+        return status != null ? status : code >= 100 && code <= 599 ? new ProxyStatus(code) : Status.INTERNAL_ERROR;
+    }
+
+    private record ProxyStatus(int code) implements IStatus {
+
+        @Override
+        public String getDescription() {
+            return code + " Proxy Status";
+        }
+
+        @Override
+        public int getRequestStatus() {
+            return code;
         }
     }
 
@@ -67,9 +101,14 @@ public class Proxy implements Process {
         return new DebugInputStream(stream, id, label);
     }
 
-    @SuppressWarnings("unchecked")
-    private static Map<String, String> headers(Object[] rs) {
-        return rs.length > 3 && rs[3] instanceof Map ? (Map<String, String>) rs[3] : null;
+    private static Map<String, String> headers(Object headers) {
+        if (!(headers instanceof Map<?, ?> map)) return null;
+        Map<String, String> result = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : map.entrySet()) {
+            if (entry.getKey() == null || entry.getValue() == null) continue;
+            result.put(entry.getKey().toString(), entry.getValue().toString());
+        }
+        return result;
     }
 
     private static String label(Map<String, String> params) {

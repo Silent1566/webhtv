@@ -39,7 +39,7 @@ public class Rule {
     }
 
     public static List<Rule> arrayFrom(JsonElement element) {
-        Type listType = new TypeToken<List<Rule>>() {}.getType();
+        Type listType = TypeToken.getParameterized(List.class, Rule.class).getType();
         List<Rule> items = App.gson().fromJson(element, listType);
         return items == null ? Collections.emptyList() : items;
     }

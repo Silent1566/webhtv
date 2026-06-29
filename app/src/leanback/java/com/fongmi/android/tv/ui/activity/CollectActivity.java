@@ -201,7 +201,7 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
     }
 
     private void saveKeyword() {
-        List<String> items = Setting.getKeyword().isEmpty() ? new ArrayList<>() : App.gson().fromJson(Setting.getKeyword(), new TypeToken<List<String>>() {}.getType());
+        List<String> items = Setting.getKeyword().isEmpty() ? new ArrayList<>() : App.gson().fromJson(Setting.getKeyword(), TypeToken.getParameterized(List.class, String.class).getType());
         items.remove(getKeyword());
         items.add(0, getKeyword());
         if (items.size() > 9) items.remove(9);

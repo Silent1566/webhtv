@@ -76,8 +76,19 @@ public class CustomRecyclerView extends RecyclerView {
         return finalSize;
     }
 
+    private int getConstrainedMeasureSpec(int measureSpec, int maxSize) {
+        if (maxSize <= 0) return measureSpec;
+        int mode = View.MeasureSpec.getMode(measureSpec);
+        int size = View.MeasureSpec.getSize(measureSpec);
+        if (mode == View.MeasureSpec.UNSPECIFIED) return View.MeasureSpec.makeMeasureSpec(maxSize, View.MeasureSpec.AT_MOST);
+        if (mode == View.MeasureSpec.AT_MOST && size > maxSize) return View.MeasureSpec.makeMeasureSpec(maxSize, View.MeasureSpec.AT_MOST);
+        return measureSpec;
+    }
+
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        widthMeasureSpec = getConstrainedMeasureSpec(widthMeasureSpec, maxWidth);
+        heightMeasureSpec = getConstrainedMeasureSpec(heightMeasureSpec, maxHeight);
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
         int finalWidth = getConstrainedSize(getMeasuredWidth(), minWidth, maxWidth);
         int finalHeight = getConstrainedSize(getMeasuredHeight(), minHeight, maxHeight);

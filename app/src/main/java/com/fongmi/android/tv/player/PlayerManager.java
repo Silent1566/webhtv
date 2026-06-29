@@ -65,7 +65,7 @@ public class PlayerManager implements ParseCallback {
     private static final int LOCAL_PROXY_MAX_RETRY = 2;
     private static final int[] PLAYER_FALLBACK_ORDER = new int[]{PlayerSetting.EXO, PlayerSetting.IJK, PlayerSetting.SYSTEM};
     private static final int LUT_WARMUP_RECOVERED_ERROR_REFRESH_THRESHOLD = 3;
-    private static final float[] SPEED_PRESETS = new float[]{0.5f, 0.75f, 1f, 1.2f, 1.5f, 2f, 3f, 5f};
+    private static final float[] SPEED_PRESETS = new float[]{0.5f, 0.75f, 1f, 1.2f, 1.25f, 1.5f, 1.75f, 2f, 2.5f, 3f, 5f};
     private static final DecimalFormat SPEED_FORMAT = new DecimalFormat("0.##x");
 
     private final Runnable runnable;
@@ -262,6 +262,10 @@ public class PlayerManager implements ParseCallback {
         return player.getCurrentPosition();
     }
 
+    public long getBufferedDuration() {
+        return Math.max(0, player.getBufferedPosition() - getPosition());
+    }
+
     public String getSizeText() {
         return (getVideoWidth() == 0 && getVideoHeight() == 0) ? "" : getVideoWidth() + " x " + getVideoHeight();
     }
@@ -286,6 +290,10 @@ public class PlayerManager implements ParseCallback {
         append(builder, "倍速", getSpeedText());
         append(builder, "时长", getDurationTime());
         return builder.toString();
+    }
+
+    public Format getVideoFormat() {
+        return engine.getVideoFormat();
     }
 
     public String getSpeedText() {
@@ -372,8 +380,11 @@ public class PlayerManager implements ParseCallback {
     }
 
     public void setSub(Sub sub) {
-        if (spec != null) spec.setSub(sub);
-        setMediaItem();
+        if (sub == null || spec == null) return;
+        Track.delete(getKey(), C.TRACK_TYPE_TEXT);
+        engine.resetTrack(C.TRACK_TYPE_TEXT);
+        spec.setSub(sub);
+        restartCurrentItemWithState();
     }
 
     public void setFormat(String format) {
@@ -456,7 +467,7 @@ public class PlayerManager implements ParseCallback {
     }
 
     public void stop() {
-        player.stop();
+        engine.stop();
         stopParse();
     }
 
@@ -658,6 +669,25 @@ public class PlayerManager implements ParseCallback {
             return;
         }
         setMediaItemNow(timeout, true);
+    }
+
+    private void restartCurrentItemWithState() {
+        if (spec == null || spec.getUrl() == null || engine == null || player == null) return;
+        if (player.getCurrentMediaItem() == null || player.getPlaybackState() == Player.STATE_IDLE) {
+            setMediaItem();
+            return;
+        }
+        if (!ensurePlayerAvailableForPlayback()) return;
+        long position = Math.max(0, player.getCurrentPosition());
+        boolean playWhenReady = player.getPlayWhenReady();
+        if (SpiderDebug.isEnabled()) SpiderDebug.log("player", "restart media item for subtitle position=%d play=%s spec=%s", position, playWhenReady, debugSpec());
+        App.removeCallbacks(runnable);
+        currentDanmakuUrl = null;
+        setDanmakus(spec.getDanmakus());
+        initTrack = false;
+        waitingLutBeforePlay = false;
+        engine.restart(spec.checkUa(), position, playWhenReady);
+        App.post(runnable, Constant.TIMEOUT_PLAY);
     }
 
     private void awaitLocalProxyAndSetMediaItem(int seq, long timeout) {

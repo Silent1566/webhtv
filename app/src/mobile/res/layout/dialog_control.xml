@@ -275,11 +275,10 @@
                     style="@style/ControlSheetButton"
                     android:text="@string/control_episode_column_double" />
 
-                <Space
-                    android:layout_width="0dp"
-                    android:layout_height="34dp"
-                    android:layout_marginEnd="7dp"
-                    android:layout_weight="1" />
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/compactEpisodeTitle"
+                    style="@style/ControlSheetButton"
+                    android:text="@string/control_compact_episode_title" />
 
                 <Space
                     android:layout_width="0dp"

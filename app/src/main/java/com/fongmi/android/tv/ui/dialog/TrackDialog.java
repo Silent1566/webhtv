@@ -43,6 +43,7 @@ public final class TrackDialog extends BaseBottomSheetDialog implements TrackAda
     private final TrackAdapter adapter;
     private DialogTrackBinding binding;
     private PlayerManager player;
+    private Runnable searchAction;
     private int type;
 
     public static TrackDialog create() {
@@ -64,6 +65,11 @@ public final class TrackDialog extends BaseBottomSheetDialog implements TrackAda
         return this;
     }
 
+    public TrackDialog search(Runnable searchAction) {
+        this.searchAction = searchAction;
+        return this;
+    }
+
     public void show(FragmentActivity activity) {
         for (Fragment f : activity.getSupportFragmentManager().getFragments()) if (f instanceof TrackDialog) return;
         show(activity.getSupportFragmentManager(), null);
@@ -79,6 +85,10 @@ public final class TrackDialog extends BaseBottomSheetDialog implements TrackAda
 
     private boolean hasAudio() {
         return type == C.TRACK_TYPE_AUDIO && player.haveTrack(type);
+    }
+
+    private boolean hasSearch() {
+        return type == C.TRACK_TYPE_TEXT && searchAction != null;
     }
 
     @Override
@@ -97,6 +107,7 @@ public final class TrackDialog extends BaseBottomSheetDialog implements TrackAda
         binding.recycler.setVisibility(adapter.getItemCount() == 0 ? View.GONE : View.VISIBLE);
         binding.offset.setVisibility(hasText() || hasAudio() ? View.VISIBLE : View.GONE);
         binding.choose.setVisibility(hasChoose() ? View.VISIBLE : View.GONE);
+        binding.search.setVisibility(hasSearch() ? View.VISIBLE : View.GONE);
         binding.subtitle.setVisibility(hasText() ? View.VISIBLE : View.GONE);
     }
 
@@ -104,6 +115,7 @@ public final class TrackDialog extends BaseBottomSheetDialog implements TrackAda
     protected void initEvent() {
         binding.offset.setOnClickListener(this::onOffset);
         binding.choose.setOnClickListener(this::onChoose);
+        binding.search.setOnClickListener(this::onSearch);
         binding.subtitle.setOnClickListener(this::onSubtitle);
     }
 
@@ -114,6 +126,12 @@ public final class TrackDialog extends BaseBottomSheetDialog implements TrackAda
     private void onChoose(View view) {
         FileChooser.from(launcher).show(new String[]{MimeTypes.APPLICATION_SUBRIP, MimeTypes.TEXT_SSA, MimeTypes.TEXT_VTT, MimeTypes.APPLICATION_TTML, "audio/*", "text/*", "application/octet-stream"});
         player.pause();
+    }
+
+    private void onSearch(View view) {
+        if (searchAction == null) return;
+        App.post(searchAction::run, 100);
+        dismiss();
     }
 
     private void onSubtitle(View view) {

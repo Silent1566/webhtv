@@ -1,6 +1,7 @@
 package com.fongmi.android.tv.ui.adapter;
 
 import android.view.LayoutInflater;
+import android.view.View;
 import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
@@ -19,6 +20,7 @@ public class FlagAdapter extends RecyclerView.Adapter<FlagAdapter.ViewHolder> {
 
     private final OnClickListener mListener;
     private final List<Flag> mItems;
+    private View.OnKeyListener keyListener;
     private int nextFocusDown;
 
     public FlagAdapter(OnClickListener listener) {
@@ -92,6 +94,11 @@ public class FlagAdapter extends RecyclerView.Adapter<FlagAdapter.ViewHolder> {
         return getItemCount() == 0;
     }
 
+    public void setOnKeyListener(View.OnKeyListener keyListener) {
+        this.keyListener = keyListener;
+        notifyDataSetChanged();
+    }
+
     @Override
     public int getItemCount() {
         return mItems.size();
@@ -109,6 +116,7 @@ public class FlagAdapter extends RecyclerView.Adapter<FlagAdapter.ViewHolder> {
         holder.binding.text.setText(item.getShow());
         holder.binding.text.setSelected(item.isSelected());
         holder.binding.text.setNextFocusDownId(nextFocusDown);
+        holder.binding.text.setOnKeyListener(keyListener);
         holder.binding.getRoot().setOnClickListener(v -> mListener.onItemClick(item));
     }
 

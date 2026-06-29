@@ -19,6 +19,13 @@
             android:layout_height="match_parent"
             android:visibility="gone" />
 
+        <com.fongmi.android.tv.ui.custom.ContextWallImageView
+            android:id="@+id/contextWall"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:importantForAccessibility="no"
+            android:visibility="gone" />
+
         <!-- 渐变遮罩 -->
         <View
             android:id="@+id/backdropMask"
@@ -27,13 +34,6 @@
             android:background="@drawable/bg_backdrop_gradient" />
 
     </FrameLayout>
-
-    <com.fongmi.android.tv.ui.custom.ContextWallImageView
-        android:id="@+id/contextWall"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:importantForAccessibility="no"
-        android:visibility="gone" />
 
     <FrameLayout
         android:id="@+id/video"
@@ -240,6 +240,7 @@
             android:focusable="true"
             android:focusableInTouchMode="true"
             android:gravity="center"
+            android:minWidth="96dp"
             android:nextFocusUp="@id/actor"
             android:nextFocusDown="@id/tmdbCast"
             android:singleLine="true"
@@ -247,6 +248,25 @@
             android:textColor="@color/white"
             android:textSize="16sp"
             app:drawableStartCompat="@drawable/ic_detail_desc" />
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/shortDisplay"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="16dp"
+            android:background="@drawable/selector_video_item"
+            android:drawablePadding="6dp"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:gravity="center"
+            android:minWidth="96dp"
+            android:nextFocusUp="@id/actor"
+            android:nextFocusDown="@id/flag"
+            android:singleLine="true"
+            android:text="@string/play_short_display"
+            android:textColor="@color/white"
+            android:textSize="16sp"
+            app:drawableStartCompat="@drawable/ic_detail_short_display" />
 
         <com.google.android.material.textview.MaterialTextView
             android:id="@+id/search"
@@ -258,6 +278,7 @@
             android:focusable="true"
             android:focusableInTouchMode="true"
             android:gravity="center"
+            android:minWidth="96dp"
             android:nextFocusUp="@id/actor"
             android:nextFocusDown="@id/flag"
             android:singleLine="true"
@@ -276,6 +297,7 @@
             android:focusable="true"
             android:focusableInTouchMode="true"
             android:gravity="center"
+            android:minWidth="96dp"
             android:nextFocusUp="@id/actor"
             android:nextFocusDown="@id/tmdbCast"
             android:singleLine="true"
@@ -294,6 +316,7 @@
             android:focusable="true"
             android:focusableInTouchMode="true"
             android:gravity="center"
+            android:minWidth="96dp"
             android:nextFocusRight="@id/tmdbRematch"
             android:nextFocusUp="@id/actor"
             android:nextFocusDown="@id/tmdbCast"
@@ -312,6 +335,7 @@
             android:focusable="true"
             android:focusableInTouchMode="true"
             android:gravity="center"
+            android:minWidth="96dp"
             android:nextFocusRight="@id/tmdbRematch"
             android:nextFocusUp="@id/actor"
             android:nextFocusDown="@id/tmdbCast"

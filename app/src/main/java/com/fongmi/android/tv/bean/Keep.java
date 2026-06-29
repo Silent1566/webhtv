@@ -38,7 +38,7 @@ public class Keep implements Diffable<Keep> {
     private int cid;
 
     public static List<Keep> arrayFrom(String str) {
-        Type listType = new TypeToken<List<Keep>>() {}.getType();
+        Type listType = TypeToken.getParameterized(List.class, Keep.class).getType();
         List<Keep> items = App.gson().fromJson(str, listType);
         return items == null ? Collections.emptyList() : items;
     }

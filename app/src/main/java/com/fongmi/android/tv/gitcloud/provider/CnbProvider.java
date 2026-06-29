@@ -75,6 +75,7 @@ public class CnbProvider extends BaseGitProvider {
     @Override
     public List<GitRepo> searchRepos(GitAccount account, String token, String keyword) throws GitCloudException {
         if (TextUtils.isEmpty(keyword)) throw new GitCloudException("搜索关键词为空");
+        if (TextUtils.isEmpty(token)) throw new GitCloudException("CNB 暂不支持匿名全网搜索，请输入完整仓库地址打开");
         List<GitRepo> result = new ArrayList<>();
         String needle = keyword.toLowerCase();
         for (GitRepo item : listRepos(account, token)) {

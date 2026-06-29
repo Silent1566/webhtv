@@ -89,13 +89,39 @@ public class Flag implements Parcelable, Diffable<Flag> {
     }
 
     public void setEpisodes(String url) {
-        String[] urls = url.contains("#") ? url.split("#") : new String[]{url};
+        String[] urls = splitEpisodes(url);
         for (int i = 0; i < urls.length; i++) {
             String[] split = urls[i].split("\\$", 2);
             String number = String.format(Locale.getDefault(), "%02d", i + 1);
             Episode episode = split.length > 1 ? Episode.create(split[0].isEmpty() ? number : split[0].trim(), split[1]) : Episode.create(number, urls[i]);
             if (!getEpisodes().contains(episode)) getEpisodes().add(episode);
         }
+    }
+
+    private String[] splitEpisodes(String url) {
+        if (!url.contains("#")) return new String[]{url};
+        List<String> items = new ArrayList<>();
+        int start = 0;
+        int depth = 0;
+        for (int i = 0; i < url.length(); i++) {
+            char c = url.charAt(i);
+            if (isOpenBracket(c)) depth++;
+            else if (isCloseBracket(c) && depth > 0) depth--;
+            else if (c == '#' && depth == 0) {
+                items.add(url.substring(start, i));
+                start = i + 1;
+            }
+        }
+        if (start < url.length()) items.add(url.substring(start));
+        return items.toArray(new String[0]);
+    }
+
+    private boolean isOpenBracket(char c) {
+        return c == '[' || c == '(' || c == '（' || c == '【' || c == '《';
+    }
+
+    private boolean isCloseBracket(char c) {
+        return c == ']' || c == ')' || c == '）' || c == '】' || c == '》';
     }
 
     public boolean isSelected() {

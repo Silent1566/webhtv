@@ -9,7 +9,7 @@ public final class AppVersion {
 
     public static String fullName() {
         String tag = BuildConfig.BUILD_TAG == null ? "" : BuildConfig.BUILD_TAG.trim();
-        if (tag.isEmpty()) tag = BuildConfig.VERSION_NAME + "-sdk28-" + BuildConfig.BUILD_TIME;
+        if (tag.isEmpty()) tag = BuildConfig.VERSION_NAME + "-" + BuildConfig.BUILD_TIME;
         return stripPrefix(tag);
     }
 
@@ -17,7 +17,7 @@ public final class AppVersion {
         return stripPrefix(name).equals(stripPrefix(fullName()));
     }
 
-    private static String stripPrefix(String value) {
+    public static String stripPrefix(String value) {
         if (value == null) return "";
         value = value.trim();
         return value.startsWith("v") && value.length() > 1 && Character.isDigit(value.charAt(1)) ? value.substring(1) : value;

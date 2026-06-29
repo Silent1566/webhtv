@@ -27,11 +27,16 @@
 -keep class okio.** { *; }
 -keep class okhttp3.** { *; }
 
+# Kotlin
+-keeppackagenames kotlin.**
+-keep class kotlin.** { *; }
+
 # JGit
 -dontwarn java.lang.ProcessHandle
 -dontwarn java.lang.management.ManagementFactory
 -dontwarn org.eclipse.jgit.**
 -keep class org.eclipse.jgit.** { *; }
+-keeppackagenames org.slf4j.**
 -keep class org.slf4j.** { *; }
 
 # CatVod

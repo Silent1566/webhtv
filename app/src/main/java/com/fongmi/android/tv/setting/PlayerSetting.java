@@ -12,6 +12,9 @@ public class PlayerSetting {
     public static final int IJK = 1;
     public static final int SYSTEM = 2;
     public static final int NONE = -1;
+    public static final int RENDER_SURFACE = 0;
+    public static final int RENDER_TEXTURE = 1;
+    private static final int DEFAULT_PLAY_CACHE_OPTION = 0;
     private static final String KEY_DISPLAY_TIME = "display_time";
     private static final String KEY_DISPLAY_TRAFFIC = "display_traffic";
     private static final String KEY_DISPLAY_SIZE = "display_size";
@@ -57,7 +60,7 @@ public class PlayerSetting {
     }
 
     public static int getRender() {
-        return Prefers.getInt("render", 0);
+        return Math.min(Math.max(Prefers.getInt("render", RENDER_SURFACE), RENDER_SURFACE), RENDER_TEXTURE);
     }
 
     public static int getRender(int player) {
@@ -69,7 +72,10 @@ public class PlayerSetting {
     }
 
     public static void putRender(int render) {
-        Prefers.put("render", render);
+        int value = Math.min(Math.max(render, RENDER_SURFACE), RENDER_TEXTURE);
+        Prefers.put("render", value);
+        if (isTunnel() && value == RENDER_TEXTURE) Prefers.put("tunnel", false);
+        if (isExoEnhanced() && value == RENDER_TEXTURE) Prefers.put("exo_4k_compat", false);
     }
 
     public static int getSize() {
@@ -139,7 +145,7 @@ public class PlayerSetting {
     }
 
     public static int getPlayCacheOption() {
-        return Math.min(Math.max(Prefers.getInt("play_cache"), 0), 4);
+        return Math.min(Math.max(Prefers.getInt("play_cache", DEFAULT_PLAY_CACHE_OPTION), 0), 4);
     }
 
     public static void putPlayCacheOption(int option) {
@@ -148,11 +154,11 @@ public class PlayerSetting {
 
     public static long getPlayCacheSize() {
         return switch (getPlayCacheOption()) {
-            case 1 -> 100L * 1024 * 1024;
-            case 2 -> 500L * 1024 * 1024;
+            case 1 -> 256L * 1024 * 1024;
+            case 2 -> 512L * 1024 * 1024;
             case 3 -> 1024L * 1024 * 1024;
             case 4 -> 2L * 1024 * 1024 * 1024;
-            default -> 0L;
+            default -> 128L * 1024 * 1024;
         };
     }
 
@@ -271,7 +277,7 @@ public class PlayerSetting {
     }
 
     public static boolean[] getDisplayChecked() {
-        return new boolean[]{isDisplayTime(), isDisplayTraffic(), isDisplaySize(), isDisplayProgress(), isDisplayMini(), isDisplayTitle()};
+        return new boolean[]{isDisplayTime(), isDisplayTraffic(), isDisplaySize(), isDisplayProgress(), isDisplayMini(), isDisplayTitle(), isOsdDiagnostics()};
     }
 
     public static void putDisplayChecked(boolean[] checked) {
@@ -281,6 +287,7 @@ public class PlayerSetting {
         putDisplayProgress(valueAt(checked, 3, isDisplayProgress()));
         putDisplayMini(valueAt(checked, 4, isDisplayMini()));
         putDisplayTitle(valueAt(checked, 5, isDisplayTitle()));
+        putOsdDiagnostics(valueAt(checked, 6, isOsdDiagnostics()));
     }
 
     public static boolean isCaption() {
@@ -301,6 +308,28 @@ public class PlayerSetting {
 
     public static void putTunnel(boolean tunnel) {
         Prefers.put("tunnel", tunnel);
+        if (tunnel) Prefers.put("render", RENDER_SURFACE);
+    }
+
+    public static boolean isTunnelingEnabled() {
+        return isTunnel() && getRender() == RENDER_SURFACE;
+    }
+
+    public static boolean isExo4KCompat() {
+        return isExoEnhanced();
+    }
+
+    public static boolean isExoEnhanced() {
+        return Prefers.getBoolean("exo_4k_compat");
+    }
+
+    public static void putExo4KCompat(boolean value) {
+        putExoEnhanced(value);
+    }
+
+    public static void putExoEnhanced(boolean value) {
+        Prefers.put("exo_4k_compat", value);
+        if (value) Prefers.put("render", RENDER_SURFACE);
     }
 
     public static boolean isAudioPrefer() {
@@ -309,6 +338,14 @@ public class PlayerSetting {
 
     public static void putAudioPrefer(boolean audioPrefer) {
         Prefers.put("audio_prefer", audioPrefer);
+    }
+
+    public static boolean isAudioPassThrough() {
+        return Prefers.getBoolean("audio_pass_through", true);
+    }
+
+    public static void putAudioPassThrough(boolean audioPassThrough) {
+        Prefers.put("audio_pass_through", audioPassThrough);
     }
 
     public static boolean isVideoPrefer() {
@@ -391,8 +428,16 @@ public class PlayerSetting {
         putDisplaySize(value);
     }
 
+    public static boolean isOsdDiagnostics() {
+        return Prefers.getBoolean("player_osd_diagnostics");
+    }
+
+    public static void putOsdDiagnostics(boolean value) {
+        Prefers.put("player_osd_diagnostics", value);
+    }
+
     public static boolean isOsdEnabled() {
-        return isOsdTitle() || isOsdTime() || isOsdSize() || isOsdProgress() || isOsdTraffic() || isOsdMini();
+        return isOsdTitle() || isOsdTime() || isOsdSize() || isOsdProgress() || isOsdTraffic() || isOsdMini() || isOsdDiagnostics();
     }
 
     private static boolean valueAt(boolean[] checked, int index, boolean fallback) {

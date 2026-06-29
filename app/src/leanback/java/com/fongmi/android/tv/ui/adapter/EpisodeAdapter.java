@@ -19,6 +19,7 @@ import com.fongmi.android.tv.bean.TmdbEpisode;
 import com.fongmi.android.tv.databinding.AdapterEpisodeBinding;
 import com.fongmi.android.tv.databinding.AdapterEpisodeCardBinding;
 import com.fongmi.android.tv.setting.Setting;
+import com.fongmi.android.tv.utils.EpisodeTitleCompact;
 import com.fongmi.android.tv.utils.EpisodeTitleFormatter;
 import com.fongmi.android.tv.utils.ImgUtil;
 import com.fongmi.android.tv.utils.ResUtil;
@@ -44,6 +45,7 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
     private final List<Episode> mItems;
     private final int maxWidth;
     private final int spacing;
+    private View.OnKeyListener keyListener;
     private int nextFocusDown;
     private int nextFocusUp;
     private int column;
@@ -53,19 +55,28 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
     private String fallbackStillUrl = "";
 
     public EpisodeAdapter(OnClickListener listener) {
-        this(listener, null);
+        this(listener, null, ResUtil.getScreenWidth() - ResUtil.dp2px(48));
     }
 
     public EpisodeAdapter(OnClickListener listener, OnLongClickListener longClickListener) {
+        this(listener, longClickListener, ResUtil.getScreenWidth() - ResUtil.dp2px(48));
+    }
+
+    public EpisodeAdapter(OnClickListener listener, int maxWidth) {
+        this(listener, null, maxWidth);
+    }
+
+    public EpisodeAdapter(OnClickListener listener, OnLongClickListener longClickListener, int maxWidth) {
         mListener = listener;
         mLongClickListener = longClickListener;
         mItems = new ArrayList<>();
-        maxWidth = ResUtil.getScreenWidth() - ResUtil.dp2px(48);
+        this.maxWidth = Math.max(ResUtil.dp2px(240), maxWidth);
         spacing = ResUtil.dp2px(8);
         column = 1;
     }
 
     public void addAll(List<Episode> items) {
+        EpisodeTitleCompact.apply(items);
         mItems.clear();
         mItems.addAll(items);
         column = useTmdbCard ? 1 : getColumn(items);
@@ -159,6 +170,11 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
         notifyDataSetChanged();
     }
 
+    public void setOnKeyListener(View.OnKeyListener keyListener) {
+        this.keyListener = keyListener;
+        notifyDataSetChanged();
+    }
+
     public void setColumn(int column) {
         column = Math.max(1, column);
         if (this.column == column) return;
@@ -166,14 +182,25 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
         notifyDataSetChanged();
     }
 
+    public int getColumn() {
+        return column;
+    }
+
     public static int getColumn(List<Episode> items) {
-        int max = 1;
-        for (Episode item : items) max = Math.max(max, item.getName().length());
-        if (max <= 1) return 8;
-        if (max <= 3) return 6;
-        if (max <= 5) return 5;
-        if (max <= 8) return 4;
-        if (max <= 14) return 3;
+        return getColumn(items, ResUtil.getScreenWidth() - ResUtil.dp2px(48));
+    }
+
+    public static int getColumn(List<Episode> items, int maxWidth) {
+        int maxTextWidth = 0;
+        maxWidth = Math.max(ResUtil.dp2px(240), maxWidth);
+        int spacing = ResUtil.dp2px(8);
+        int padding = ResUtil.dp2px(40);
+        EpisodeTitleCompact.apply(items);
+        for (Episode item : items) maxTextWidth = Math.max(maxTextWidth, ResUtil.getTextWidth(item.getDisplayName(), 16) + padding);
+        for (int candidate : new int[]{8, 6, 5, 4, 3, 2}) {
+            int width = (maxWidth - spacing * (candidate - 1)) / candidate;
+            if (maxTextWidth <= width) return candidate;
+        }
         return 2;
     }
 
@@ -242,6 +269,7 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
         textView.setNextFocusDownId(isBottomEdge(position) && nextFocusDown != 0 ? nextFocusDown : View.NO_ID);
         textView.setSelected(item.isSelected());
         textView.setText(getTitle(item));
+        textView.setOnKeyListener(keyListener);
         textView.setOnClickListener(v -> mListener.onItemClick(item));
         if (mLongClickListener != null) {
             textView.setOnLongClickListener(v -> {
@@ -264,6 +292,7 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
         binding.cardContainer.setSelected(item.isSelected());
         binding.cardContainer.setNextFocusUpId(isTopEdge(position) && nextFocusUp != 0 ? nextFocusUp : View.NO_ID);
         binding.cardContainer.setNextFocusDownId(isBottomEdge(position) && nextFocusDown != 0 ? nextFocusDown : View.NO_ID);
+        binding.cardContainer.setOnKeyListener(keyListener);
 
         // 设置焦点边框效果
         binding.cardContainer.setForeground(binding.cardContainer.getContext().getDrawable(R.drawable.selector_episode_card));
@@ -282,19 +311,15 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
         // 设置标题
         binding.cardTitle.setText(cardTitle);
 
-        // 网格模式展示更多元信息，列表模式保持干净的横向剧照条
-        if (gridMode && !tmdbEpisode.getDate().isEmpty()) {
-            binding.dateBadge.setText(tmdbEpisode.getDate());
+        // 网格模式展示手机版原生增强同款的日期 / 时长徽标，列表模式保持干净的横向剧照条
+        String meta = getMeta(tmdbEpisode);
+        if (gridMode && !TextUtils.isEmpty(meta)) {
+            binding.dateBadge.setText(meta);
             binding.dateBadge.setVisibility(View.VISIBLE);
         } else {
             binding.dateBadge.setVisibility(View.GONE);
         }
-        if (gridMode && tmdbEpisode.getRuntime() > 0) {
-            binding.runtimeBadge.setText(String.format(Locale.US, "%dm", tmdbEpisode.getRuntime()));
-            binding.runtimeBadge.setVisibility(View.VISIBLE);
-        } else {
-            binding.runtimeBadge.setVisibility(View.GONE);
-        }
+        binding.runtimeBadge.setVisibility(View.GONE);
 
         // 设置简介
         if (gridMode && !tmdbEpisode.getOverview().isEmpty()) {
@@ -405,6 +430,13 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
         String title = EpisodeTitleFormatter.formatTmdbTitle(tmdbEpisode.getNumber(), tmdbEpisode.getTitle());
         if (title.isEmpty()) title = tmdbEpisode.getDisplayTitle();
         return EpisodeTitleFormatter.withSourceFileSize(item.getName(), title, Setting.isTmdbEpisodeFileSize());
+    }
+
+    private String getMeta(TmdbEpisode tmdbEpisode) {
+        List<String> values = new ArrayList<>();
+        if (!TextUtils.isEmpty(tmdbEpisode.getDate())) values.add(tmdbEpisode.getDate());
+        if (tmdbEpisode.getRuntime() > 0) values.add(String.format(Locale.US, "%dm", tmdbEpisode.getRuntime()));
+        return TextUtils.join(" / ", values);
     }
 
     private boolean isTopEdge(int position) {

@@ -45,6 +45,11 @@ public class Track {
         AppDatabase.get().getTrackDao().delete(key);
     }
 
+    public static void delete(String key, int type) {
+        if (TextUtils.isEmpty(key)) return;
+        AppDatabase.get().getTrackDao().delete(key, type);
+    }
+
     public int getId() {
         return id;
     }

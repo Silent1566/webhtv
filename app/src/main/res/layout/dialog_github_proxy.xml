@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.appcompat.widget.LinearLayoutCompat xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@color/white"
+    android:orientation="vertical"
+    android:paddingStart="16dp"
+    android:paddingTop="8dp"
+    android:paddingEnd="16dp"
+    android:paddingBottom="4dp">
+
+    <com.google.android.material.textview.MaterialTextView
+        style="@style/Widget.WebHTV.LightDialog.Helper"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingBottom="16dp"
+        android:text="@string/setting_github_proxy_message" />
+
+    <com.google.android.material.textview.MaterialTextView
+        style="@style/Widget.WebHTV.LightDialog.Label"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingBottom="8dp"
+        android:text="@string/setting_github_proxy_hint" />
+
+    <com.google.android.material.textfield.TextInputEditText
+        android:id="@+id/githubProxyInput"
+        style="@style/Widget.WebHTV.LightDialog.Input"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="start|top"
+        android:hint="@string/setting_github_proxy_hint"
+        android:inputType="textMultiLine|textNoSuggestions"
+        android:maxLines="8"
+        android:minLines="5"
+        android:overScrollMode="ifContentScrolls"
+        android:paddingStart="12dp"
+        android:paddingTop="10dp"
+        android:paddingEnd="12dp"
+        android:paddingBottom="10dp"
+        android:scrollbars="vertical" />
+
+</androidx.appcompat.widget.LinearLayoutCompat>

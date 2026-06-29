@@ -26,8 +26,6 @@ import com.fongmi.android.tv.web.ext.WebHomeExtensionRegistry;
 import com.github.catvod.crawler.SpiderDebug;
 import com.github.catvod.utils.Json;
 import com.github.catvod.utils.Prefers;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
 import java.net.URLEncoder;
@@ -155,13 +153,15 @@ public class HomeWebBridge {
         String title = Json.safeString(payload, "title");
         String pic = Json.safeString(payload, "pic");
         String wall = wallPic(payload);
+        String content = content(payload);
         if (payload.has("headers") || "include".equals(Json.safeString(payload, "credentials"))) url = resourceUrl(url, payload.toString());
         final String playUrl = url;
         final String playTitle = TextUtils.isEmpty(title) ? playUrl : title;
         final String playPic = pic;
         final String playWall = wall;
+        final String playContent = content;
         SpiderDebug.log("webhome", "player.playUrl title=%s url=%s", playTitle, playUrl);
-        App.post(() -> VideoActivity.start(activity, SiteApi.PUSH, playUrl, playTitle, playPic, null, playWall));
+        App.post(() -> VideoActivity.start(activity, SiteApi.PUSH, playUrl, playTitle, playPic, null, playWall, playContent));
         return "{}";
     }
 
@@ -171,12 +171,12 @@ public class HomeWebBridge {
         String title = Json.safeString(payload, "title");
         String pic = Json.safeString(payload, "pic");
         String wall = wallPic(payload);
-        App.post(() -> VideoActivity.start(activity, siteKey, vodId, title, pic, null, wall));
+        String content = content(payload);
+        App.post(() -> VideoActivity.start(activity, siteKey, vodId, title, pic, null, wall, content));
         return "{}";
     }
 
     private String playVodInline(JsonObject payload) {
-        preResolveInlineCurrent(payload);
         String vodId = WebHomeInlineVodStore.put(payload, this::resolveInlineEpisode);
         String title = Json.safeString(payload, "title");
         if (TextUtils.isEmpty(title)) title = Json.safeString(payload, "vod_name");
@@ -184,12 +184,14 @@ public class HomeWebBridge {
         if (TextUtils.isEmpty(pic)) pic = Json.safeString(payload, "vod_pic");
         String mark = Json.safeString(payload, "mark");
         String wall = wallPic(payload);
+        String content = content(payload);
         final String playTitle = TextUtils.isEmpty(title) ? vodId : title;
         final String playPic = pic;
         final String playMark = mark;
         final String playWall = wall;
+        final String playContent = content;
         SpiderDebug.log("webhome", "player.playVodInline title=%s id=%s mark=%s", playTitle, vodId, playMark);
-        App.post(() -> VideoActivity.start(activity, WebHomeInlineVodStore.KEY, vodId, playTitle, playPic, playMark, playWall));
+        App.post(() -> VideoActivity.start(activity, WebHomeInlineVodStore.KEY, vodId, playTitle, playPic, playMark, playWall, playContent));
         JsonObject result = new JsonObject();
         result.addProperty("siteKey", WebHomeInlineVodStore.KEY);
         result.addProperty("vodId", vodId);
@@ -210,40 +212,12 @@ public class HomeWebBridge {
         return Json.safeString(payload, "wallPic");
     }
 
-    private void preResolveInlineCurrent(JsonObject payload) {
-        JsonObject episode = currentInlineEpisode(payload);
-        if (episode == null || !TextUtils.isEmpty(Json.safeString(episode, "mediaUrl"))) return;
-        String pageUrl = Json.safeString(episode, "pageUrl");
-        long start = System.currentTimeMillis();
-        try {
-            SpiderDebug.log("webhome-inline", "pre-resolve current start mark=%s page=%s", Json.safeString(payload, "mark"), pageUrl);
-            JsonObject resolved = resolveInlineEpisode(episode.deepCopy());
-            String url = Json.safeString(resolved, "url");
-            if (TextUtils.isEmpty(url)) throw new IllegalStateException("empty resolved url");
-            episode.addProperty("mediaUrl", url);
-            if (resolved.has("format")) episode.add("format", resolved.get("format"));
-            if (resolved.has("headers")) episode.add("headers", resolved.get("headers"));
-            if (resolved.has("credentials")) episode.add("credentials", resolved.get("credentials"));
-            if (resolved.has("referer")) episode.add("referer", resolved.get("referer"));
-            SpiderDebug.log("webhome-inline", "pre-resolve current ok cost=%sms url=%s", System.currentTimeMillis() - start, url);
-        } catch (Throwable e) {
-            SpiderDebug.log("webhome-inline", "pre-resolve current failed cost=%sms page=%s error=%s", System.currentTimeMillis() - start, pageUrl, e.getMessage());
-        }
-    }
-
-    private JsonObject currentInlineEpisode(JsonObject payload) {
-        if (payload == null || !payload.has("episodes") || !payload.get("episodes").isJsonArray()) return null;
-        JsonArray episodes = payload.getAsJsonArray("episodes");
-        String mark = Json.safeString(payload, "mark");
-        JsonObject fallback = null;
-        for (JsonElement element : episodes) {
-            if (element == null || !element.isJsonObject()) continue;
-            JsonObject episode = element.getAsJsonObject();
-            if (fallback == null) fallback = episode;
-            if (episode.has("active") && bool(episode, "active")) return episode;
-            if (!TextUtils.isEmpty(mark) && (mark.equals(Json.safeString(episode, "name")) || mark.equals(Json.safeString(episode, "label")) || mark.equals(Json.safeString(episode, "title")))) return episode;
-        }
-        return fallback;
+    private String content(JsonObject payload) {
+        String content = Json.safeString(payload, "content");
+        if (TextUtils.isEmpty(content)) content = Json.safeString(payload, "vod_content");
+        if (TextUtils.isEmpty(content)) content = Json.safeString(payload, "desc");
+        if (TextUtils.isEmpty(content)) content = Json.safeString(payload, "description");
+        return content;
     }
 
     private JsonObject resolveInlineEpisode(JsonObject payload) throws Exception {
@@ -290,14 +264,6 @@ public class HomeWebBridge {
         } finally {
             inlineResults.remove(id);
             controller.endInlineEvaluation(lease);
-        }
-    }
-
-    private static boolean bool(JsonObject object, String name) {
-        try {
-            return object != null && object.has(name) && object.get(name).getAsBoolean();
-        } catch (Throwable e) {
-            return false;
         }
     }
 
@@ -374,13 +340,15 @@ public class HomeWebBridge {
         String type = Json.safeString(payload, "type");
         String pic = Json.safeString(payload, "pic");
         String wall = wallPic(payload);
+        String content = content(payload);
         if (TextUtils.isEmpty(url)) throw new IllegalArgumentException("url不能为空");
         final String playUrl = stripPush(url.trim());
         final String playTitle = TextUtils.isEmpty(title) ? playUrl : title;
         final String playPic = pic;
         final String playWall = wall;
+        final String playContent = content;
         SpiderDebug.log("webhome", "pan.play route=%s type=%s title=%s url=%s", SiteApi.PUSH, type, playTitle, playUrl);
-        App.post(() -> VideoActivity.start(activity, SiteApi.PUSH, playUrl, playTitle, playPic, null, playWall));
+        App.post(() -> VideoActivity.start(activity, SiteApi.PUSH, playUrl, playTitle, playPic, null, playWall, playContent));
         return "{}";
     }
 

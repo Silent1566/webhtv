@@ -14,13 +14,17 @@ import com.fongmi.android.tv.impl.BufferListener;
 import com.fongmi.android.tv.impl.SpeedListener;
 import com.fongmi.android.tv.impl.UaListener;
 import com.fongmi.android.tv.player.lut.LutSetting;
+import com.fongmi.android.tv.setting.PlayerButtonSetting;
 import com.fongmi.android.tv.setting.PlayerSetting;
+import com.fongmi.android.tv.setting.PreloadSetting;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.dialog.BufferDialog;
 import com.fongmi.android.tv.ui.dialog.LutDialog;
+import com.fongmi.android.tv.ui.dialog.PlayerButtonConfigDialog;
 import com.fongmi.android.tv.ui.dialog.SpeedDialog;
 import com.fongmi.android.tv.ui.dialog.UaDialog;
+import com.fongmi.android.tv.utils.FileUtil;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
@@ -60,13 +64,17 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
         mBinding.uaText.setText(Setting.getUa());
         mBinding.aacText.setText(getSwitch(PlayerSetting.isPreferAAC()));
         mBinding.tunnelText.setText(getSwitch(PlayerSetting.isTunnel()));
+        mBinding.exo4kCompatText.setText(getSwitch(PlayerSetting.isExoEnhanced()));
+        setPlayerButtonsText();
         mBinding.adblockText.setText(getSwitch(Setting.isAdblock()));
         mBinding.speedText.setText(format.format(PlayerSetting.getSpeed()));
         mBinding.bufferText.setText(String.valueOf(PlayerSetting.getBuffer()));
         mBinding.bufferBytesText.setText((bufferBytes = ResUtil.getStringArray(R.array.select_buffer_bytes))[PlayerSetting.getBufferBytesOption()]);
         mBinding.backBufferText.setText((backBuffer = ResUtil.getStringArray(R.array.select_back_buffer))[PlayerSetting.getBackBufferOption()]);
         mBinding.playCacheText.setText((playCache = ResUtil.getStringArray(R.array.select_play_cache))[PlayerSetting.getPlayCacheOption()]);
+        setPreloadText();
         mBinding.autoChangeText.setText(getSwitch(PlayerSetting.isAutoChange()));
+        mBinding.autoSkipIntroOutroText.setText(getSwitch(Setting.isAutoSkipIntroOutro()));
         mBinding.backgroundText.setText(getSwitch(PlayerSetting.isBackgroundOn()));
         mBinding.musicNotificationText.setText(getSwitch(PlayerSetting.isMusicNotification()));
         mBinding.audioBookNotificationText.setText(getSwitch(PlayerSetting.isAudioBookNotification()));
@@ -88,14 +96,21 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
         mBinding.scale.setOnClickListener(this::setScale);
         mBinding.lut.setOnClickListener(this::onLut);
         mBinding.osd.setOnClickListener(this::onOsd);
+        mBinding.playerButtons.setOnClickListener(view -> PlayerButtonConfigDialog.show(this, this::setPlayerButtonsText));
         mBinding.speed.setOnClickListener(this::onSpeed);
         mBinding.buffer.setOnClickListener(this::onBuffer);
         mBinding.bufferBytes.setOnClickListener(this::setBufferBytes);
         mBinding.backBuffer.setOnClickListener(this::setBackBuffer);
         mBinding.playCache.setOnClickListener(this::setPlayCache);
+        mBinding.preload.setOnClickListener(this::setPreload);
+        mBinding.preloadThread.setOnClickListener(this::setPreloadThread);
+        mBinding.preloadSize.setOnClickListener(this::setPreloadSize);
+        mBinding.preloadTime.setOnClickListener(this::setPreloadTime);
         mBinding.autoChange.setOnClickListener(this::setAutoChange);
+        mBinding.autoSkipIntroOutro.setOnClickListener(this::setAutoSkipIntroOutro);
         mBinding.render.setOnClickListener(this::setRender);
         mBinding.tunnel.setOnClickListener(this::setTunnel);
+        mBinding.exo4kCompat.setOnClickListener(this::setExo4KCompat);
         mBinding.caption.setOnClickListener(this::setCaption);
         mBinding.adblock.setOnClickListener(this::setAdblock);
         mBinding.caption.setOnLongClickListener(this::onCaption);
@@ -148,6 +163,10 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
             setOsdChecked(checked);
             mBinding.osdText.setText(getOsdText(osd));
         }).setMultiChoiceItems(osd, checked, (dialog, which, isChecked) -> checked[which] = isChecked).show();
+    }
+
+    private void setPlayerButtonsText() {
+        mBinding.playerButtonsText.setText(getString(R.string.player_button_config_summary, PlayerButtonSetting.getVisibleCount(), PlayerButtonSetting.getTotalCount()));
     }
 
     private boolean[] getOsdChecked() {
@@ -207,9 +226,51 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
         PlayerSetting.putPlayCacheOption(index);
     }
 
+    private void setPreload(View view) {
+        PreloadSetting.putPreload(!PreloadSetting.isPreload());
+        setPreloadText();
+    }
+
+    private void setPreloadThread(View view) {
+        int value = PreloadSetting.getPreloadThreads() + 1;
+        if (value > PreloadSetting.MAX_THREADS) value = PreloadSetting.MIN_THREADS;
+        PreloadSetting.putPreloadThreads(value);
+        setPreloadText();
+    }
+
+    private void setPreloadSize(View view) {
+        int value = PreloadSetting.getPreloadSizeMb() + PreloadSetting.STEP_SIZE_MB;
+        if (value > PreloadSetting.MAX_SIZE_MB) value = PreloadSetting.MIN_SIZE_MB;
+        PreloadSetting.putPreloadSizeMb(value);
+        setPreloadText();
+    }
+
+    private void setPreloadTime(View view) {
+        int value = PreloadSetting.getPreloadTimeSeconds() + PreloadSetting.STEP_TIME_SECONDS;
+        if (value > PreloadSetting.MAX_TIME_SECONDS) value = PreloadSetting.MIN_TIME_SECONDS;
+        PreloadSetting.putPreloadTimeSeconds(value);
+        setPreloadText();
+    }
+
+    private void setPreloadText() {
+        boolean preload = PreloadSetting.isPreload();
+        mBinding.preloadText.setText(getSwitch(preload));
+        mBinding.preloadThread.setVisibility(preload ? View.VISIBLE : View.GONE);
+        mBinding.preloadSize.setVisibility(preload ? View.VISIBLE : View.GONE);
+        mBinding.preloadTime.setVisibility(preload ? View.VISIBLE : View.GONE);
+        mBinding.preloadThreadText.setText(getString(R.string.player_preload_threads_value, PreloadSetting.getPreloadThreads()));
+        mBinding.preloadSizeText.setText(FileUtil.byteCountToDisplaySize(PreloadSetting.getPreloadSizeBytes()));
+        mBinding.preloadTimeText.setText(getString(R.string.player_preload_time_value, PreloadSetting.getPreloadTimeSeconds()));
+    }
+
     private void setAutoChange(View view) {
         PlayerSetting.putAutoChange(!PlayerSetting.isAutoChange());
         mBinding.autoChangeText.setText(getSwitch(PlayerSetting.isAutoChange()));
+    }
+
+    private void setAutoSkipIntroOutro(View view) {
+        Setting.putAutoSkipIntroOutro(!Setting.isAutoSkipIntroOutro());
+        mBinding.autoSkipIntroOutroText.setText(getSwitch(Setting.isAutoSkipIntroOutro()));
     }
 
     private void setRender(View view) {
@@ -217,12 +278,19 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
         int index = (PlayerSetting.getRender() + 1) % render.length;
         mBinding.renderText.setText(render[index]);
         PlayerSetting.putRender(index);
+        mBinding.exo4kCompatText.setText(getSwitch(PlayerSetting.isExoEnhanced()));
     }
 
     private void setTunnel(View view) {
         PlayerSetting.putTunnel(!PlayerSetting.isTunnel());
         mBinding.tunnelText.setText(getSwitch(PlayerSetting.isTunnel()));
         if (PlayerSetting.isTunnel() && PlayerSetting.getRender() == 1) setRender(view);
+    }
+
+    private void setExo4KCompat(View view) {
+        PlayerSetting.putExoEnhanced(!PlayerSetting.isExoEnhanced());
+        mBinding.exo4kCompatText.setText(getSwitch(PlayerSetting.isExoEnhanced()));
+        mBinding.renderText.setText(render[PlayerSetting.getRender()]);
     }
 
     private void setCaption(View view) {
@@ -264,4 +332,5 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
         PlayerSetting.putBackground(PlayerSetting.isBackgroundOn() ? 0 : 1);
         mBinding.backgroundText.setText(getSwitch(PlayerSetting.isBackgroundOn()));
     }
+
 }

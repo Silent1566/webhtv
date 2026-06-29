@@ -7,6 +7,7 @@
     <string name="live_pass">Pass</string>
     <string name="live_refresh">Refresh</string>
     <string name="live_line">Line <xliff:g name="name">%s</xliff:g></string>
+    <string name="live_control_source">Live source</string>
     <string name="live_no_epg">00:00 - 23:59 暂无节目信息</string>
 
     <!-- Detail -->
@@ -54,6 +55,7 @@
     <string name="play_config">Config</string>
     <string name="play_cast">Cast</string>
     <string name="play_change">Change</string>
+    <string name="play_short_display">Short</string>
     <string name="play_search">Search</string>
     <string name="play_fullscreen">Fullscreen</string>
     <string name="play_exit_fullscreen">Exit full</string>
@@ -136,6 +138,7 @@
     <string name="setting_builtin_wall">Built-in wallpapers</string>
     <string name="setting_player">Player setting</string>
     <string name="setting_danmaku">Danmaku setting</string>
+    <string name="setting_subtitle">Subtitle setting</string>
     <string name="setting_enhance">Enhancements</string>
     <string name="setting_personal">Personal</string>
     <string name="setting_home_vod_auto_load">Auto-load VOD</string>
@@ -667,6 +670,7 @@
     <string name="setting_about">About</string>
     <string name="setting_version">Version</string>
     <string name="setting_choose">Choose</string>
+    <string name="setting_reset">Reset</string>
     <string name="setting_delete">Delete</string>
     <string name="setting_disable">Disable</string>
     <string name="setting_enable">Enable</string>
@@ -678,10 +682,14 @@
     <!-- About -->
     <string name="about_title">About WebHomeTV</string>
     <string name="about_free_badge">Free</string>
-    <string name="about_version">Version %1$s (%2$d) · %3$s/%4$s</string>
+    <string name="about_version">Version %1$s · %2$s/%3$s</string>
     <string name="about_disclaimer">WebHomeTV is a technical learning and research project based on open source ecosystems. The software itself is completely free and does not provide paid services, video content, live sources, API sources, resource storage, or content distribution.\n\nThis software is only for technical learning, research, and personal testing. Please uninstall it within 24 hours after downloading, installing, or trying it. All behavior and consequences arising from continued use are borne by the user.\n\nThis software does not embed, sell, or distribute any video resources, and is not responsible for interfaces, sources, plugins, scripts, links, cloud-drive resources, or third-party service content added by users. Users must comply with local laws and regulations, respect the rights of copyright owners and content providers, and must not use this software for infringement, piracy, illegal content distribution, or other illegal purposes.\n\nAny individual or organization is strictly prohibited from selling, traffic diversion, paid maintenance, membership services, advertising monetization, box preinstallation, TV box bundle sales, or any other form of profit-making in the name of this software. The project clearly opposes and condemns selling or promoting this software as part of TV boxes, set-top boxes, paid packages, or commercial services.\n\nIf you do not agree with this statement, please stop using and uninstall this software immediately.</string>
     <string name="about_check_update">Check updates</string>
     <string name="about_acknowledge">I understand</string>
+    <string name="setting_github_proxy">GitHub acceleration sources</string>
+    <string name="setting_github_proxy_short">Accelerate</string>
+    <string name="setting_github_proxy_hint">One source per line</string>
+    <string name="setting_github_proxy_message">The first valid source is used for GitHub Raw/Release downloads.</string>
 
     <!-- Backup & Restore -->
     <string name="restore_select">Select backup</string>
@@ -792,6 +800,12 @@
     <string name="player">Player</string>
     <string name="player_default">Default player</string>
     <string name="player_render">Render</string>
+    <string name="player_button_config">Player buttons</string>
+    <string name="player_button_config_summary">%1$d/%2$d shown</string>
+    <string name="player_button_up">Up</string>
+    <string name="player_button_down">Down</string>
+    <string name="play_episodes">Episodes</string>
+    <string name="player_exo_4k_compat">EXO enhanced mode</string>
     <string name="player_kernel">Player engine</string>
     <string name="player_scale">Scale</string>
     <string name="player_lut">LUT color</string>
@@ -809,10 +823,34 @@
     <string name="player_buffer_bytes">Buffer size</string>
     <string name="player_back_buffer">Back buffer</string>
     <string name="player_cache">Playback cache</string>
+    <string name="player_preload">Preload</string>
+    <string name="player_preload_threads">Preload threads</string>
+    <string name="player_preload_threads_value">%1$d threads</string>
+    <string name="player_preload_size">Preload size</string>
+    <string name="player_preload_time">Preload time</string>
+    <string name="player_preload_time_value">%1$d seconds</string>
     <string name="player_auto_change">Auto source change</string>
     <string name="player_speed">Press speed</string>
     <string name="player_ua">User-Agent</string>
     <string name="player_osd">On-screen display</string>
+    <string name="player_subtitle_auto_match">Auto subtitle match</string>
+    <string name="player_subtitle_language">Preferred subtitle language</string>
+    <string name="player_subtitle_assrt_token">ASSRT token</string>
+    <string name="subtitle_auto_match_hit">Subtitle matched: %1$s</string>
+    <string name="subtitle_auto_match_hit_not_applied">Subtitle found but not applied: %1$s</string>
+    <string name="subtitle_auto_match_empty">No matching subtitle found</string>
+    <string name="subtitle_auto_match_provider_unavailable">Configure a subtitle source first</string>
+    <string name="subtitle_auto_match_failed">Subtitle match failed: %1$s</string>
+    <string name="subtitle_auto_match_unknown_reason">unknown error</string>
+    <string name="subtitle_manual_search">Search subtitles</string>
+    <string name="subtitle_manual_searching">Searching subtitles...</string>
+    <string name="subtitle_manual_select_title">Select subtitle (%1$d)</string>
+    <string name="subtitle_manual_search_empty">No subtitles found</string>
+    <string name="subtitle_manual_search_failed">Subtitle search failed</string>
+    <string name="subtitle_manual_resolving">Loading subtitle...</string>
+    <string name="subtitle_manual_applied">Subtitle applied: %1$s</string>
+    <string name="subtitle_manual_apply_failed">Subtitle found but could not be applied</string>
+    <string name="subtitle_manual_inactive">Start playback before searching subtitles</string>
     <string name="lut_original">Original</string>
     <string name="lut_missing">Preset missing</string>
     <string name="lut_summary">%1$s · %2$d%%</string>
@@ -865,6 +903,9 @@
     <string name="search_hot_tv">TV</string>
     <string name="search_hot_movie">Movie</string>
     <string name="search_hot_variety">Variety</string>
+    <string name="search_loading">Searching...</string>
+    <string name="search_progress">(%1$d/%2$d)</string>
+    <string name="search_no_result">No results</string>
 
     <!-- Dialog -->
     <string name="dialog_edit">Edit</string>
@@ -886,6 +927,8 @@
     <string name="dialog_short_drama_add">添加</string>
 
     <string name="dialog_reset">Reset</string>
+    <string name="setting_show">Show</string>
+    <string name="setting_hide">Hide</string>
     <string name="dialog_select_title">Select chapter</string>
     <string name="dialog_config_hint">Please enter the config…</string>
     <string name="dialog_config_name">Please enter the name…</string>
@@ -909,12 +952,33 @@
 
     <!-- Update -->
     <string name="update_version">New version <xliff:g name="name">%s</xliff:g></string>
+    <string name="update_title">Version update</string>
+    <string name="update_hint">Choose a version to view release notes and update.</string>
     <string name="update_check">Checking for updates…</string>
     <string name="update_latest">Already on the latest version</string>
     <string name="update_failed">Update check failed</string>
     <string name="update_downloading">Downloading %1$d%%</string>
     <string name="update_downloading_unknown">Downloading…</string>
+    <string name="update_downloading_detail">Downloading %1$d%% · %2$s/s · %3$s elapsed</string>
+    <string name="update_downloading_detail_remaining">Downloading %1$d%% · %2$s/s · %3$s left · %4$s elapsed</string>
+    <string name="update_downloading_detail_unknown">Downloading · %1$s/s · %2$s elapsed</string>
+    <string name="update_download_incomplete">The update package was not fully downloaded. Please try again.</string>
+    <string name="update_download_checksum">The update package failed verification. Please try again.</string>
+    <string name="update_download_invalid">The update package is invalid. Please try again.</string>
     <string name="update_confirm">Update</string>
+    <string name="update_confirm_channel">Update %1$s</string>
+    <string name="update_cancel">Cancel update</string>
+    <string name="update_canceled">Update canceled</string>
+    <string name="update_channel_stable">Stable</string>
+    <string name="update_channel_beta">Beta</string>
+    <string name="update_channel_latest">This channel is already up to date.</string>
+    <string name="update_channel_unavailable">No update manifest is available for this channel.</string>
+    <string name="update_no_notes">No release notes.</string>
+    <string name="update_status_available">Available</string>
+    <string name="update_status_latest">Latest</string>
+    <string name="update_status_unavailable">Unavailable</string>
+    <string name="update_expand">Expand</string>
+    <string name="update_collapse">Collapse</string>
 
     <!-- Crash -->
     <string name="crash_info">An unexpected error occurred.\nSorry for the inconvenience.</string>
@@ -1002,9 +1066,9 @@
         <item>60s</item>
     </string-array>
     <string-array name="select_play_cache">
-        <item>Off</item>
-        <item>100MB</item>
-        <item>500MB</item>
+        <item>128MB</item>
+        <item>256MB</item>
+        <item>512MB</item>
         <item>1GB</item>
         <item>2GB</item>
     </string-array>
@@ -1060,7 +1124,9 @@
     <string-array name="select_ui_scale">
         <item>Follow system</item>
         <item>Standard</item>
+        <item>Mild compact</item>
         <item>Compact</item>
+        <item>More compact</item>
         <item>Smaller</item>
     </string-array>
 
@@ -1082,6 +1148,26 @@
         <item>System</item>
     </string-array>
 
+    <string-array name="select_subtitle_language">
+        <item>Chinese first</item>
+        <item>Simplified Chinese</item>
+        <item>Traditional Chinese</item>
+        <item>English</item>
+        <item>Japanese</item>
+        <item>Korean</item>
+        <item>No preference</item>
+    </string-array>
+
+    <string-array name="select_subtitle_language_value">
+        <item>zh</item>
+        <item>zh-Hans</item>
+        <item>zh-Hant</item>
+        <item>en</item>
+        <item>ja</item>
+        <item>ko</item>
+        <item>any</item>
+    </string-array>
+
     <string-array name="select_player_osd">
         <item>@string/display_time</item>
         <item>@string/display_traffic</item>
@@ -1089,6 +1175,7 @@
         <item>@string/display_progress</item>
         <item>@string/display_mini</item>
         <item>@string/display_title</item>
+        <item>Playback params</item>
     </string-array>
 
     <string-array name="select_track">

@@ -4,9 +4,11 @@ import android.app.Activity;
 import android.content.res.Configuration;
 import android.content.res.ColorStateList;
 import android.text.TextUtils;
+import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.widget.ImageView;
 import android.widget.TextView;
 
@@ -143,6 +145,19 @@ public class TmdbHeaderView {
         applyTheme();
     }
 
+    public void refreshTheme() {
+        applyTheme();
+    }
+
+    public boolean isCurrentDetailLightTheme() {
+        return isLightDetailChrome();
+    }
+
+    public int getFusionSectionTitleColor() {
+        if (Setting.isFusionDetailPage()) return isCurrentDetailLightTheme() ? 0xFF12202D : COLOR_FUSION_BACKDROP_TEXT;
+        return isCurrentDetailLightTheme() ? 0xFF15222B : COLOR_FUSION_BACKDROP_TEXT;
+    }
+
     /**
      * 获取头部根视图
      */
@@ -169,6 +184,7 @@ public class TmdbHeaderView {
         headerRoot.setVisibility(View.GONE);
         setupRecyclerViews();
         setupActions();
+        updateOriginalEnhancedActionVisibility();
         applyTheme();
     }
 
@@ -492,6 +508,13 @@ public class TmdbHeaderView {
         });
     }
 
+    private void updateOriginalEnhancedActionVisibility() {
+        if (headerRoot == null) return;
+        View changeSource = headerRoot.findViewById(R.id.tmdbChangeSource);
+        if (changeSource == null) return;
+        changeSource.setVisibility(Setting.isOriginalEnhancedDetailPage() ? View.GONE : View.VISIBLE);
+    }
+
     /**
      * 点击剧照：使用 PhotoViewerDialog 查看。
      */
@@ -555,7 +578,7 @@ public class TmdbHeaderView {
         TextView source = headerRoot.findViewById(R.id.tmdbFusionSource);
         if (source != null) {
             String siteName = currentSite() == null ? "" : currentSite().getName();
-            source.setText(TextUtils.isEmpty(siteName) ? "" : "当前站源： " + siteName);
+            source.setText(TextUtils.isEmpty(siteName) ? "" : "站源： " + siteName);
             source.setVisibility(TextUtils.isEmpty(siteName) ? View.GONE : View.VISIBLE);
         }
         FlexboxLayout meta = headerRoot.findViewById(R.id.tmdbFusionMeta);
@@ -1303,6 +1326,7 @@ public class TmdbHeaderView {
         if (powered != null) powered.setTextColor(watermark);
         clearBackdropTextShadows();
         clearFusionActionStyling();
+        styleTmdbPlaybackControls(primary);
         tintActions(style);
     }
 
@@ -1350,11 +1374,29 @@ public class TmdbHeaderView {
         styleFusionExternalLinks(dark);
         styleFusionMetaChips(dark);
         styleFusionPlaybackControls(panel, line, primary);
-        setTextColor(R.id.tmdbFusionSource, muted);
+        styleFusionSource(primary, muted);
         styleFusionSpacing();
         TextView powered = findPoweredBy();
         if (powered != null) styleFusionBackdropText(powered, COLOR_FUSION_BACKDROP_WATERMARK);
         tintActions(dark ? Setting.DETAIL_STYLE_CINEMA : Setting.DETAIL_STYLE_PROFILE);
+    }
+
+    private void styleFusionSource(int titleColor, int mutedColor) {
+        TextView source = headerRoot.findViewById(R.id.tmdbFusionSource);
+        if (source == null) return;
+        boolean inPlaybackControls = isDescendantOf(headerRoot.findViewById(R.id.tmdbPlaybackControls), source);
+        source.setTextColor(inPlaybackControls ? titleColor : mutedColor);
+        source.setTextSize(inPlaybackControls ? 16 : 12);
+        source.setGravity(inPlaybackControls ? Gravity.CENTER_VERTICAL | Gravity.END : Gravity.END);
+        source.setMaxWidth(ResUtil.dp2px(inPlaybackControls ? 260 : 220));
+    }
+
+    private boolean isDescendantOf(View ancestor, View child) {
+        if (ancestor == null || child == null) return false;
+        for (ViewParent parent = child.getParent(); parent instanceof View; parent = parent.getParent()) {
+            if (parent == ancestor) return true;
+        }
+        return false;
     }
 
     private boolean isDarkDetailTheme() {
@@ -1458,6 +1500,18 @@ public class TmdbHeaderView {
         ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) controls.getLayoutParams();
         params.setMargins(ResUtil.dp2px(16), ResUtil.dp2px(22), ResUtil.dp2px(16), ResUtil.dp2px(20));
         controls.setLayoutParams(params);
+        tintTree(controls, textColor);
+    }
+
+    private void styleTmdbPlaybackControls(int textColor) {
+        ViewGroup controls = headerRoot.findViewById(R.id.tmdbPlaybackControls);
+        if (controls == null) return;
+        controls.setBackground(null);
+        controls.setPadding(0, 0, 0, 0);
+        if (controls.getLayoutParams() instanceof ViewGroup.MarginLayoutParams params) {
+            params.setMargins(0, ResUtil.dp2px(16), 0, 0);
+            controls.setLayoutParams(params);
+        }
         tintTree(controls, textColor);
     }
 
@@ -1694,7 +1748,10 @@ public class TmdbHeaderView {
 
     private void tintTree(View view, int color) {
         if (view instanceof RecyclerView) return;
-        if (view instanceof TextView textView) textView.setTextColor(color);
+        if (view instanceof TextView textView) {
+            textView.setTextColor(color);
+            clearTextShadow(textView);
+        }
         if (view instanceof ImageView imageView) imageView.setColorFilter(color);
         if (!(view instanceof ViewGroup group)) return;
         for (int i = 0; i < group.getChildCount(); i++) tintTree(group.getChildAt(i), color);
@@ -1728,6 +1785,7 @@ public class TmdbHeaderView {
     private void tintAction(int id, int style) {
         MaterialButton button = headerRoot.findViewById(id);
         if (button == null) return;
+        button.setAlpha(1f);
         if (Setting.isFusionDetailPage()) {
             boolean dark = style == Setting.DETAIL_STYLE_CINEMA;
             button.setTextColor(0xFFFFFFFF);
@@ -1742,6 +1800,13 @@ public class TmdbHeaderView {
             return;
         }
         boolean cinema = style == Setting.DETAIL_STYLE_CINEMA;
+        if (cinema && resolveLightTheme()) {
+            TmdbCinemaTheme.Palette palette = TmdbCinemaTheme.palette(true);
+            button.setTextColor(palette.primary());
+            button.setStrokeColor(ColorStateList.valueOf(palette.lineStrong()));
+            button.setBackgroundTintList(ColorStateList.valueOf(palette.card()));
+            return;
+        }
         button.setTextColor(cinema ? 0xFFE9F0F5 : 0xFF16372F);
         button.setStrokeColor(ColorStateList.valueOf(cinema ? 0x66FFFFFF : 0x663C7D6B));
         button.setBackgroundTintList(ColorStateList.valueOf(cinema ? 0x26FFFFFF : 0xD9FFFFFF));

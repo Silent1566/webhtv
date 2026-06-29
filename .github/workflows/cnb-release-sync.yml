@@ -63,8 +63,26 @@ jobs:
             exit 1
           fi
           AUTH_REPO="$(printf '%s' "$CNB_REPO_URL" | sed "s#^https://#https://cnb:${CNB_TOKEN}@#")"
-          rm -rf cnb-mirror
-          git clone --depth 1 "$AUTH_REPO" cnb-mirror
+          clone_cnb() {
+            local attempt max_attempts delay
+            max_attempts=4
+            delay=15
+            for attempt in $(seq 1 "$max_attempts"); do
+              echo "CNB clone attempt ${attempt}/${max_attempts}"
+              rm -rf cnb-mirror
+              if timeout 180s git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=60 clone --depth 1 "$AUTH_REPO" cnb-mirror; then
+                return 0
+              fi
+              if [ "$attempt" -lt "$max_attempts" ]; then
+                echo "::warning title=CNB clone retry::Clone failed, retrying in ${delay}s."
+                sleep "$delay"
+                delay=$((delay * 2))
+              fi
+            done
+            echo "::error title=CNB clone failed::Cannot connect to CNB from this GitHub runner after ${max_attempts} attempts. If the CNB repository is reachable in a browser, this is likely runner-to-CNB network blocking or timeout."
+            return 1
+          }
+          clone_cnb
           mkdir -p cnb-mirror/apk
           cp dist/*.apk dist/*.json cnb-mirror/apk/
           cd cnb-mirror

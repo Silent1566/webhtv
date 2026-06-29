@@ -22,8 +22,10 @@ public class ArrayAdapter extends RecyclerView.Adapter<ArrayAdapter.ViewHolder> 
     private final String backward;
     private final String forward;
     private final String reverse;
+    private View.OnKeyListener keyListener;
     private int nextFocusDown;
     private int nextFocusUp;
+    private int segmentSize;
 
     public ArrayAdapter(OnClickListener listener) {
         mListener = listener;
@@ -33,6 +35,7 @@ public class ArrayAdapter extends RecyclerView.Adapter<ArrayAdapter.ViewHolder> 
         backward = ResUtil.getString(R.string.play_backward);
         nextFocusUp = R.id.flag;
         nextFocusDown = R.id.episode;
+        segmentSize = 40;
     }
 
     public void addAll(List<String> items) {
@@ -54,16 +57,25 @@ public class ArrayAdapter extends RecyclerView.Adapter<ArrayAdapter.ViewHolder> 
         try {
             int start = Integer.parseInt(text.substring(0, index));
             int end = Integer.parseInt(text.substring(index + 1));
-            return Math.max(0, start <= end ? start - 1 : (position - 2) * 40);
+            return Math.max(0, start <= end ? start - 1 : (position - 2) * segmentSize);
         } catch (Exception e) {
             return 0;
         }
+    }
+
+    public void setSegmentSize(int segmentSize) {
+        this.segmentSize = Math.max(1, segmentSize);
     }
 
     public void setNextFocus(int nextFocusUp, int nextFocusDown) {
         if (this.nextFocusUp == nextFocusUp && this.nextFocusDown == nextFocusDown) return;
         this.nextFocusUp = nextFocusUp;
         this.nextFocusDown = nextFocusDown;
+        notifyDataSetChanged();
+    }
+
+    public void setOnKeyListener(View.OnKeyListener keyListener) {
+        this.keyListener = keyListener;
         notifyDataSetChanged();
     }
 
@@ -84,6 +96,7 @@ public class ArrayAdapter extends RecyclerView.Adapter<ArrayAdapter.ViewHolder> 
         holder.binding.text.setText(text);
         holder.binding.text.setNextFocusUpId(nextFocusUp == 0 ? View.NO_ID : nextFocusUp);
         holder.binding.text.setNextFocusDownId(nextFocusDown == 0 ? View.NO_ID : nextFocusDown);
+        holder.binding.text.setOnKeyListener(keyListener);
         if (text.equals(reverse)) holder.binding.getRoot().setOnClickListener(view -> mListener.onRevSort());
         else if (text.equals(backward) || text.equals(forward)) holder.binding.getRoot().setOnClickListener(view -> mListener.onRevPlay(holder.binding.text));
         else holder.binding.getRoot().setOnClickListener(null);

@@ -17,6 +17,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.fragment.app.FragmentActivity;
 import androidx.viewbinding.ViewBinding;
 
+import com.fongmi.android.tv.Updater;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.audio.AudioMiniPlayer;
 import com.fongmi.android.tv.ui.custom.CustomWallView;
@@ -143,6 +144,7 @@ public abstract class BaseActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         if (audioMiniPlayer != null) audioMiniPlayer.onResume();
+        Updater.create().resume(this);
     }
 
     @Override

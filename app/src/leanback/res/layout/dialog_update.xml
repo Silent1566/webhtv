@@ -1,42 +1,278 @@
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.appcompat.widget.LinearLayoutCompat xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:background="@drawable/shape_shell_proxy_dialog"
     android:orientation="vertical"
-    android:padding="24dp">
+    android:paddingStart="24dp"
+    android:paddingTop="20dp"
+    android:paddingEnd="24dp"
+    android:paddingBottom="18dp">
 
-    <com.google.android.material.textview.MaterialTextView
-        android:id="@+id/version"
-        android:layout_width="wrap_content"
+    <androidx.appcompat.widget.LinearLayoutCompat
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:letterSpacing="0.02"
-        android:textColor="@color/white"
-        android:textSize="18sp"
-        tools:text="@string/update_version" />
-
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:layout_marginTop="16dp"
-        android:layout_marginBottom="16dp"
-        android:background="?attr/colorOutlineVariant" />
-
-    <androidx.core.widget.NestedScrollView
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_marginBottom="16dp"
-        android:layout_weight="1">
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
 
         <com.google.android.material.textview.MaterialTextView
-            android:id="@+id/desc"
-            android:layout_width="wrap_content"
+            android:id="@+id/title"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:letterSpacing="0.02"
-            android:lineSpacingExtra="8dp"
-            android:textColor="@color/white"
-            android:textSize="16sp"
-            tools:text="1. 新增 ffmpeg 音頻軟解\n2. 詳情頁新增分詞快搜\n3. 修復搜尋閃退問題\n4. 設定支援渲染切換" />
+            android:layout_weight="1"
+            android:text="@string/update_title"
+            android:textColor="#202124"
+            android:textSize="22sp"
+            android:textStyle="bold" />
+
+        <androidx.appcompat.widget.AppCompatImageButton
+            android:id="@+id/close"
+            android:layout_width="46dp"
+            android:layout_height="46dp"
+            android:background="@drawable/selector_dialog_step_button"
+            android:contentDescription="@string/lut_close"
+            android:focusable="true"
+            android:nextFocusDown="@id/stableItem"
+            android:padding="10dp"
+            android:src="@drawable/ic_dialog_close"
+            app:tint="#5F6368" />
+
+    </androidx.appcompat.widget.LinearLayoutCompat>
+
+    <com.google.android.material.textview.MaterialTextView
+        android:id="@+id/hint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:text="@string/update_hint"
+        android:textColor="#5F6368"
+        android:textSize="14sp" />
+
+    <androidx.core.widget.NestedScrollView
+        android:id="@+id/listScroll"
+        android:layout_width="match_parent"
+        android:layout_height="320dp"
+        android:layout_marginTop="16dp"
+        android:clipToPadding="false"
+        android:fadeScrollbars="false"
+        android:overScrollMode="never"
+        android:scrollbarStyle="outsideOverlay">
+
+        <androidx.appcompat.widget.LinearLayoutCompat
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <androidx.appcompat.widget.LinearLayoutCompat
+                android:id="@+id/stableItem"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/selector_update_version_item"
+                android:clickable="true"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:nextFocusDown="@id/stableConfirm"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <androidx.appcompat.widget.LinearLayoutCompat
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.textview.MaterialTextView
+                        android:id="@+id/stableName"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/update_channel_stable"
+                        android:textColor="#202124"
+                        android:textSize="18sp"
+                        android:textStyle="bold" />
+
+                    <com.google.android.material.textview.MaterialTextView
+                        android:id="@+id/stableStatus"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="12dp"
+                        android:background="@drawable/shape_sync_direction"
+                        android:includeFontPadding="false"
+                        android:paddingStart="9dp"
+                        android:paddingTop="5dp"
+                        android:paddingEnd="9dp"
+                        android:paddingBottom="5dp"
+                        android:textColor="#174EA6"
+                        android:textSize="13sp"
+                        tools:text="可更新" />
+
+                    <com.google.android.material.textview.MaterialTextView
+                        android:id="@+id/stableExpand"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="12dp"
+                        android:layout_weight="1"
+                        android:gravity="end"
+                        android:textColor="#174EA6"
+                        android:textSize="14sp"
+                        tools:text="收起" />
+
+                </androidx.appcompat.widget.LinearLayoutCompat>
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/stableVersion"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:maxLines="2"
+                    android:textColor="#5F6368"
+                    android:textSize="14sp"
+                    tools:text="5.5.5-202606281200" />
+
+                <androidx.appcompat.widget.LinearLayoutCompat
+                    android:id="@+id/stableContent"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:orientation="vertical"
+                    tools:visibility="visible">
+
+                    <com.google.android.material.textview.MaterialTextView
+                        android:id="@+id/stableDesc"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:lineSpacingExtra="3dp"
+                        android:textColor="#303134"
+                        android:textSize="16sp"
+                        tools:text="### 更新内容&#10;&#10;- 稳定版更新说明" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/stableConfirm"
+                        style="@style/Widget.Material3.Button"
+                        android:layout_width="match_parent"
+                        android:layout_height="46dp"
+                        android:layout_marginTop="14dp"
+                        android:focusable="true"
+                        android:focusableInTouchMode="true"
+                        android:minHeight="46dp"
+                        android:nextFocusDown="@id/betaItem"
+                        android:nextFocusUp="@id/stableItem"
+                        android:text="@string/update_confirm"
+                        android:textColor="@color/dialog_primary_button_text"
+                        android:textSize="15sp"
+                        app:backgroundTint="@color/dialog_primary_button_bg"
+                        app:cornerRadius="8dp" />
+
+                </androidx.appcompat.widget.LinearLayoutCompat>
+
+            </androidx.appcompat.widget.LinearLayoutCompat>
+
+            <androidx.appcompat.widget.LinearLayoutCompat
+                android:id="@+id/betaItem"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/selector_update_version_item"
+                android:clickable="true"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:nextFocusDown="@id/cancel"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <androidx.appcompat.widget.LinearLayoutCompat
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.textview.MaterialTextView
+                        android:id="@+id/betaName"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/update_channel_beta"
+                        android:textColor="#202124"
+                        android:textSize="18sp"
+                        android:textStyle="bold" />
+
+                    <com.google.android.material.textview.MaterialTextView
+                        android:id="@+id/betaStatus"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="12dp"
+                        android:background="@drawable/shape_sync_direction"
+                        android:includeFontPadding="false"
+                        android:paddingStart="9dp"
+                        android:paddingTop="5dp"
+                        android:paddingEnd="9dp"
+                        android:paddingBottom="5dp"
+                        android:textColor="#174EA6"
+                        android:textSize="13sp"
+                        tools:text="可更新" />
+
+                    <com.google.android.material.textview.MaterialTextView
+                        android:id="@+id/betaExpand"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="12dp"
+                        android:layout_weight="1"
+                        android:gravity="end"
+                        android:textColor="#174EA6"
+                        android:textSize="14sp"
+                        tools:text="展开" />
+
+                </androidx.appcompat.widget.LinearLayoutCompat>
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/betaVersion"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:maxLines="2"
+                    android:textColor="#5F6368"
+                    android:textSize="14sp"
+                    tools:text="5.5.5-beta-202606281200" />
+
+                <androidx.appcompat.widget.LinearLayoutCompat
+                    android:id="@+id/betaContent"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:orientation="vertical"
+                    tools:visibility="gone">
+
+                    <com.google.android.material.textview.MaterialTextView
+                        android:id="@+id/betaDesc"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:lineSpacingExtra="3dp"
+                        android:textColor="#303134"
+                        android:textSize="16sp"
+                        tools:text="### 更新内容&#10;&#10;- 测试版更新说明" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/betaConfirm"
+                        style="@style/Widget.Material3.Button"
+                        android:layout_width="match_parent"
+                        android:layout_height="46dp"
+                        android:layout_marginTop="14dp"
+                        android:focusable="true"
+                        android:focusableInTouchMode="true"
+                        android:minHeight="46dp"
+                        android:nextFocusDown="@id/cancel"
+                        android:nextFocusUp="@id/betaItem"
+                        android:text="@string/update_confirm"
+                        android:textColor="@color/dialog_primary_button_text"
+                        android:textSize="15sp"
+                        app:backgroundTint="@color/dialog_primary_button_bg"
+                        app:cornerRadius="8dp" />
+
+                </androidx.appcompat.widget.LinearLayoutCompat>
+
+            </androidx.appcompat.widget.LinearLayoutCompat>
+
+        </androidx.appcompat.widget.LinearLayoutCompat>
 
     </androidx.core.widget.NestedScrollView>
 
@@ -44,7 +280,7 @@
         android:id="@+id/progressPanel"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="16dp"
+        android:layout_marginTop="14dp"
         android:orientation="vertical"
         android:visibility="gone"
         tools:visibility="visible">
@@ -53,9 +289,9 @@
             android:id="@+id/progressText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="@color/white"
+            android:textColor="#5F6368"
             android:textSize="14sp"
-            tools:text="正在下载 46%" />
+            tools:text="正在下载 46% · 3.2 MB/s · 已用 00:12" />
 
         <ProgressBar
             android:id="@+id/progress"
@@ -69,35 +305,20 @@
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 
-    <androidx.appcompat.widget.LinearLayoutCompat
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/cancel"
+        style="@style/Widget.Material3.Button"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal">
+        android:layout_height="46dp"
+        android:layout_marginTop="18dp"
+        android:focusable="true"
+        android:focusableInTouchMode="true"
+        android:minHeight="46dp"
+        android:nextFocusUp="@id/betaItem"
+        android:text="@string/about_acknowledge"
+        android:textColor="@color/dialog_primary_button_text"
+        android:textSize="15sp"
+        app:backgroundTint="@color/dialog_primary_button_bg"
+        app:cornerRadius="8dp" />
 
-        <com.google.android.material.textview.MaterialTextView
-            android:id="@+id/confirm"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginEnd="16dp"
-            android:layout_weight="1"
-            android:background="@drawable/selector_button"
-            android:focusable="true"
-            android:focusableInTouchMode="true"
-            android:gravity="center"
-            android:text="@string/update_confirm"
-            android:textColor="@color/white" />
-
-        <com.google.android.material.textview.MaterialTextView
-            android:id="@+id/cancel"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:background="@drawable/selector_button"
-            android:focusable="true"
-            android:focusableInTouchMode="true"
-            android:gravity="center"
-            android:text="@string/dialog_negative"
-            android:textColor="@color/white" />
-
-    </androidx.appcompat.widget.LinearLayoutCompat>
 </androidx.appcompat.widget.LinearLayoutCompat>

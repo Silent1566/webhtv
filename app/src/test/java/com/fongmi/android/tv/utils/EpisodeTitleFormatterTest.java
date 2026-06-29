@@ -43,4 +43,12 @@ public class EpisodeTitleFormatterTest {
         assertEquals("1. 相遇", EpisodeTitleFormatter.withSourceFileSize("[5.37G] 01.mkv", "1. 相遇", false));
         assertEquals("[5.37G] 1. 相遇", EpisodeTitleFormatter.withSourceFileSize("[5.37G] 01.mkv", "[5.37G] 1. 相遇", true));
     }
+
+    @Test
+    public void buildPlaybackTitleAppendsCurrentEpisode() {
+        assertEquals("三体 第2集", EpisodeTitleFormatter.buildPlaybackTitle("三体", "第2集"));
+        assertEquals("第2集", EpisodeTitleFormatter.buildPlaybackTitle("", "第2集"));
+        assertEquals("三体", EpisodeTitleFormatter.buildPlaybackTitle("三体", ""));
+        assertEquals("三体", EpisodeTitleFormatter.buildPlaybackTitle("三体", "三体"));
+    }
 }

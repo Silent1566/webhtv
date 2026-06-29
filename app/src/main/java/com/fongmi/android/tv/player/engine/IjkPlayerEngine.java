@@ -1,5 +1,6 @@
 package com.fongmi.android.tv.player.engine;
 
+import androidx.media3.common.C;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.MediaMetadata;
 import androidx.media3.common.PlaybackException;
@@ -68,11 +69,32 @@ public class IjkPlayerEngine implements PlayerEngine {
 
     @Override
     public void start(PlaySpec spec) {
+        start(spec, C.TIME_UNSET, true);
+    }
+
+    @Override
+    public void start(PlaySpec spec, boolean playWhenReady) {
+        start(spec, C.TIME_UNSET, playWhenReady);
+    }
+
+    @Override
+    public void start(PlaySpec spec, long position, boolean playWhenReady) {
         this.spec = spec;
-        SpiderDebug.log("player-engine", "start ijk decode=%d url=%s headers=%s", decode, spec.getUrl(), spec.getHeaders());
-        player.setMediaItem(ExoUtil.getMediaItem(spec, decode));
+        SpiderDebug.log("player-engine", "start ijk decode=%d position=%d play=%s url=%s headers=%s", decode, position, playWhenReady, spec.getUrl(), spec.getHeaders());
+        player.setMediaItem(ExoUtil.getMediaItem(spec, decode), position);
         player.prepare();
-        player.play();
+        if (playWhenReady) player.play();
+        else player.pause();
+    }
+
+    @Override
+    public void restart(PlaySpec spec, long position, boolean playWhenReady) {
+        start(spec, position, playWhenReady);
+    }
+
+    @Override
+    public void stop() {
+        player.stop();
     }
 
     @Override

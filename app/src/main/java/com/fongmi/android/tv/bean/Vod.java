@@ -118,7 +118,7 @@ public class Vod implements Parcelable, Diffable<Vod> {
     }
 
     public static List<Vod> arrayFrom(String str) {
-        Type listType = new TypeToken<List<Vod>>() {}.getType();
+        Type listType = TypeToken.getParameterized(List.class, Vod.class).getType();
         List<Vod> items = App.gson().fromJson(str, listType);
         return items == null ? Collections.emptyList() : items;
     }
@@ -301,6 +301,10 @@ public class Vod implements Parcelable, Diffable<Vod> {
 
     public void checkName(String name) {
         if (getName().isEmpty()) setName(name);
+    }
+
+    public void checkContent(String content) {
+        if (getContent().isEmpty()) setContent(content);
     }
 
     public Style getStyle(Style style) {

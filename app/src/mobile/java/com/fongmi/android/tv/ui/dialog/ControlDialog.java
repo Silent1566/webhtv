@@ -28,6 +28,7 @@ import com.fongmi.android.tv.databinding.DialogControlBinding;
 import com.fongmi.android.tv.player.PlayerManager;
 import com.fongmi.android.tv.player.lut.LutPreset;
 import com.fongmi.android.tv.setting.PlayerSetting;
+import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.adapter.ParseAdapter;
 import com.fongmi.android.tv.ui.base.ViewType;
 import com.fongmi.android.tv.ui.custom.SpaceItemDecoration;
@@ -155,6 +156,7 @@ public class ControlDialog extends BaseBottomSheetDialog implements ParseAdapter
         binding.video.setOnClickListener(v -> onTrack(binding.video));
         binding.episodeColumn1.setOnClickListener(v -> setEpisodeColumn(1));
         binding.episodeColumn2.setOnClickListener(v -> setEpisodeColumn(2));
+        binding.compactEpisodeTitle.setOnClickListener(v -> setCompactEpisodeTitle());
         binding.title.setOnClickListener(v -> ((Listener) requireActivity()).onTitlePanel());
         binding.player.setOnClickListener(v -> click(binding.player, parent.control.action.player));
         binding.danmaku.setOnClickListener(v -> ((Listener) requireActivity()).onDanmakuPanel());
@@ -232,9 +234,16 @@ public class ControlDialog extends BaseBottomSheetDialog implements ParseAdapter
         int column = PlayerSetting.getEpisodeColumn();
         binding.episodeColumn1.setSelected(column == 1);
         binding.episodeColumn2.setSelected(column == 2);
+        binding.compactEpisodeTitle.setSelected(Setting.isCompactEpisodeTitle());
         boolean visible = parent.control.action.episodes.getVisibility() == View.VISIBLE;
         binding.episodeColumnText.setVisibility(visible ? View.VISIBLE : View.GONE);
         binding.episodeColumnRow.setVisibility(visible ? View.VISIBLE : View.GONE);
+    }
+
+    private void setCompactEpisodeTitle() {
+        Setting.putCompactEpisodeTitle(!Setting.isCompactEpisodeTitle());
+        binding.compactEpisodeTitle.setSelected(Setting.isCompactEpisodeTitle());
+        ((Listener) requireActivity()).onCompactEpisodeTitleChanged();
     }
 
     private void active(View view, TextView target) {
@@ -376,6 +385,8 @@ public class ControlDialog extends BaseBottomSheetDialog implements ParseAdapter
         void onScale(int tag);
 
         void onEpisodeColumn(int column);
+
+        void onCompactEpisodeTitleChanged();
 
         void onParse(Parse item);
 

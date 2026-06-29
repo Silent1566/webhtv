@@ -7,6 +7,7 @@ import android.content.ServiceConnection;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.view.SurfaceView;
 import android.view.View;
 import android.view.ViewTreeObserver;
 import android.view.WindowManager;
@@ -304,10 +305,25 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
         }
         if (getExoView().getPlayer() == null) {
             getExoView().setPlayer(player().getPlayer());
+            syncVideoSurfaceSize(null);
             syncShutter();
             if (player().useNativeVideoOutput()) getExoView().post(this::syncShutter);
         }
         onSurfaceAttached();
+    }
+
+    private void syncVideoSurfaceSize(VideoSize size) {
+        if (mService == null) return;
+        View surface = getExoView().getVideoSurfaceView();
+        if (!(surface instanceof SurfaceView surfaceView)) return;
+        if (!PlayerSetting.isExoEnhanced() || getRender() != PlayerSetting.RENDER_SURFACE || player().isIjk()) {
+            surfaceView.getHolder().setSizeFromLayout();
+            return;
+        }
+        int width = size != null && size.width > 0 ? size.width : player().getVideoWidth();
+        int height = size != null && size.height > 0 ? size.height : player().getVideoHeight();
+        if (width <= 0 || height <= 0) return;
+        surfaceView.getHolder().setFixedSize(width, height);
     }
 
     private void syncShutter() {
@@ -470,6 +486,7 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
     public void onVideoSizeChanged(@NonNull VideoSize size) {
         if (!isOwner()) return;
         syncShutter();
+        syncVideoSurfaceSize(size);
         onSizeChanged(size);
     }
 

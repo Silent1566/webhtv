@@ -44,7 +44,7 @@ public class Filter implements Parcelable {
     }
 
     public static List<Filter> arrayFrom(String result) {
-        Type listType = new TypeToken<List<Filter>>() {}.getType();
+        Type listType = TypeToken.getParameterized(List.class, Filter.class).getType();
         List<Filter> items = App.gson().fromJson(result, listType);
         return items == null ? Collections.emptyList() : items;
     }

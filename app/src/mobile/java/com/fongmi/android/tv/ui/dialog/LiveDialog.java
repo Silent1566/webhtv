@@ -3,6 +3,7 @@ package com.fongmi.android.tv.ui.dialog;
 import android.app.Dialog;
 import android.content.Context;
 import android.os.Bundle;
+import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.ViewGroup;
 import android.view.Window;
@@ -11,6 +12,7 @@ import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.widget.LinearLayoutCompat;
 import androidx.core.view.WindowCompat;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
@@ -31,9 +33,16 @@ import com.google.android.material.bottomsheet.BottomSheetDialog;
 
 public class LiveDialog extends BaseBottomSheetDialog implements LiveAdapter.OnClickListener {
 
+    private static final int DRAWER_COLOR = 0xFF28282A;
+
     private DialogLiveBinding binding;
     private LiveListener listener;
     private LiveAdapter adapter;
+    private boolean drawer;
+
+    public static LiveDialog create() {
+        return new LiveDialog();
+    }
 
     public static void show(FragmentActivity activity) {
         if (activity == null || activity.isFinishing() || activity.isDestroyed() || activity.getSupportFragmentManager().isStateSaved()) return;
@@ -43,6 +52,11 @@ public class LiveDialog extends BaseBottomSheetDialog implements LiveAdapter.OnC
     public static void show(Fragment fragment) {
         if (fragment == null || !fragment.isAdded() || fragment.isStateSaved() || fragment.getActivity() == null || fragment.getChildFragmentManager().isStateSaved()) return;
         new LiveDialog().show(fragment.getChildFragmentManager(), null);
+    }
+
+    public LiveDialog drawer() {
+        drawer = true;
+        return this;
     }
 
     private boolean isFull() {
@@ -82,9 +96,10 @@ public class LiveDialog extends BaseBottomSheetDialog implements LiveAdapter.OnC
         binding.recycler.setAdapter(adapter);
         binding.recycler.setItemAnimator(null);
         binding.recycler.setHasFixedSize(true);
-        binding.recycler.setLayoutManager(isFull() ? new GridLayoutManager(requireContext(), 2) : new LinearLayoutManager(requireContext()));
-        binding.recycler.addItemDecoration(new SpaceItemDecoration(isFull() ? 2 : 1, 12));
-        binding.recycler.setMaxHeight(ResUtil.getScreenHeight(requireContext()) * (ResUtil.isLand(requireContext()) ? 72 : 48) / 100);
+        if (drawer) fillDrawer();
+        binding.recycler.setLayoutManager(isFull() && !drawer ? new GridLayoutManager(requireContext(), 2) : new LinearLayoutManager(requireContext()));
+        binding.recycler.addItemDecoration(new SpaceItemDecoration(isFull() && !drawer ? 2 : 1, 12));
+        binding.recycler.setMaxHeight(drawer ? ResUtil.getScreenHeight(requireContext()) : ResUtil.getScreenHeight(requireContext()) * (ResUtil.isLand(requireContext()) ? 72 : 48) / 100);
         binding.recycler.post(() -> binding.recycler.scrollToPosition(LiveConfig.getHomeIndex()));
     }
 
@@ -128,6 +143,14 @@ public class LiveDialog extends BaseBottomSheetDialog implements LiveAdapter.OnC
         window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND | WindowManager.LayoutParams.FLAG_FULLSCREEN);
         window.setDimAmount(0f);
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING);
+        if (drawer) {
+            WindowManager.LayoutParams params = window.getAttributes();
+            params.gravity = Gravity.END | Gravity.TOP;
+            params.width = getPanelWidth();
+            params.height = WindowManager.LayoutParams.MATCH_PARENT;
+            window.setAttributes(params);
+            window.setLayout(getPanelWidth(), WindowManager.LayoutParams.MATCH_PARENT);
+        }
         WindowCompat.setDecorFitsSystemWindows(window, true);
     }
 
@@ -146,15 +169,33 @@ public class LiveDialog extends BaseBottomSheetDialog implements LiveAdapter.OnC
         FrameLayout sheet = dialog.findViewById(com.google.android.material.R.id.design_bottom_sheet);
         if (sheet == null) return;
         sheet.setBackgroundColor(ResUtil.getColor(R.color.transparent));
-        int height = getPanelHeight();
+        int height = drawer ? WindowManager.LayoutParams.MATCH_PARENT : getPanelHeight();
         ViewGroup.LayoutParams params = sheet.getLayoutParams();
+        params.width = drawer ? ViewGroup.LayoutParams.MATCH_PARENT : params.width;
         params.height = height;
         sheet.setLayoutParams(params);
         BottomSheetBehavior<FrameLayout> behavior = BottomSheetBehavior.from(sheet);
-        behavior.setPeekHeight(height);
+        behavior.setPeekHeight(drawer ? ResUtil.getScreenHeight(requireContext()) : height);
         behavior.setState(BottomSheetBehavior.STATE_EXPANDED);
         behavior.setSkipCollapsed(true);
         behavior.setDraggable(false);
+    }
+
+    private void fillDrawer() {
+        binding.getRoot().setBackgroundColor(DRAWER_COLOR);
+        binding.getRoot().getChildAt(0).setBackgroundColor(DRAWER_COLOR);
+        ViewGroup.LayoutParams params = binding.recycler.getLayoutParams();
+        if (params instanceof LinearLayoutCompat.LayoutParams layoutParams) {
+            layoutParams.height = 0;
+            layoutParams.weight = 1;
+            binding.recycler.setLayoutParams(layoutParams);
+        }
+    }
+
+    private int getPanelWidth() {
+        int screen = ResUtil.getScreenWidth(requireContext());
+        if (ResUtil.isLand(requireContext())) return Math.max(ResUtil.dp2px(320), Math.min(ResUtil.dp2px(430), Math.round(screen * 0.36f)));
+        return screen;
     }
 
     private int getPanelHeight() {

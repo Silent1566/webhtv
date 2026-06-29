@@ -50,7 +50,7 @@ public class Config {
     private String danmaku;
 
     public static List<Config> arrayFrom(String str) {
-        Type listType = new TypeToken<List<Config>>() {}.getType();
+        Type listType = TypeToken.getParameterized(List.class, Config.class).getType();
         List<Config> items = App.gson().fromJson(str, listType);
         return items == null ? Collections.emptyList() : items;
     }

@@ -35,6 +35,7 @@ public class InlineEpisodeAdapter extends RecyclerView.Adapter<InlineEpisodeAdap
     private final List<Episode> items = new ArrayList<>();
     private final Map<Episode, String> titles = new HashMap<>();
     private Episode selected;
+    private boolean light;
 
     public InlineEpisodeAdapter(Listener listener) {
         this.listener = listener;
@@ -50,6 +51,12 @@ public class InlineEpisodeAdapter extends RecyclerView.Adapter<InlineEpisodeAdap
         this.titles.clear();
         if (titles != null) this.titles.putAll(titles);
         this.selected = selected;
+        notifyDataSetChanged();
+    }
+
+    public void setLight(boolean light) {
+        if (this.light == light) return;
+        this.light = light;
         notifyDataSetChanged();
     }
 
@@ -87,9 +94,17 @@ public class InlineEpisodeAdapter extends RecyclerView.Adapter<InlineEpisodeAdap
 
     private void applyState(MaterialButton button, boolean active, boolean focused) {
         button.setSelected(active || focused);
-        button.setTextColor(active ? 0xFFFFFFFF : focused ? COLOR_FOCUS_TEXT : COLOR_TEXT);
-        button.setBackgroundTintList(ColorStateList.valueOf(active ? COLOR_ACTIVE : focused ? COLOR_FOCUS_BG : COLOR_NORMAL));
-        button.setStrokeColor(ColorStateList.valueOf(active ? 0xFF2AA46B : focused ? COLOR_FOCUS : 0x44FFFFFF));
+        int normalText = light ? 0xFF1E2A36 : COLOR_TEXT;
+        int activeText = light ? 0xFF0F1D2A : 0xFFFFFFFF;
+        int focusText = COLOR_FOCUS_TEXT;
+        int normalBg = light ? 0xFFF1F5F9 : COLOR_NORMAL;
+        int activeBg = light ? 0xFFDCF5E6 : COLOR_ACTIVE;
+        int focusBg = light ? 0xFFD8E7FF : COLOR_FOCUS_BG;
+        int normalStroke = light ? 0x33556778 : 0x44FFFFFF;
+        int activeStroke = light ? 0xFF1D8F5A : 0xFF2AA46B;
+        button.setTextColor(active ? activeText : focused ? focusText : normalText);
+        button.setBackgroundTintList(ColorStateList.valueOf(active ? activeBg : focused ? focusBg : normalBg));
+        button.setStrokeColor(ColorStateList.valueOf(active ? activeStroke : focused ? COLOR_FOCUS : normalStroke));
         button.setStrokeWidth(ResUtil.dp2px(active || focused ? 2 : 1));
     }
 

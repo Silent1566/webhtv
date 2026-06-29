@@ -6,7 +6,6 @@
     android:background="@drawable/selector_video_item"
     android:focusable="true"
     android:focusableInTouchMode="true"
-    android:nextFocusUp="@id/part"
     android:orientation="vertical">
 
     <com.google.android.material.textview.MaterialTextView

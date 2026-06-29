@@ -127,6 +127,7 @@ public class GitCloudDialog extends BaseAlertDialog {
     private Runnable callback;
     private GitProviderType providerType = GitProviderType.GITHUB;
     private GitAccount account;
+    private GitAccount anonymousAccount;
     private GitRepo repo;
     private String currentPath = "";
     private boolean busy;
@@ -198,10 +199,12 @@ public class GitCloudDialog extends BaseAlertDialog {
     protected void initView() {
         account = GitCloudAccountStore.first();
         if (account != null) providerType = account.providerType;
-        editingAccount = account == null;
+        editingAccount = false;
+        repoMode = account == null ? REPO_MODE_FAVORITE : REPO_MODE_MINE;
         populateAccountForm(account);
         render();
         if (account != null) refreshRepos();
+        else renderRepoList();
     }
 
     @Override
@@ -215,7 +218,9 @@ public class GitCloudDialog extends BaseAlertDialog {
         binding.save.setOnClickListener(view -> saveAccount(true));
         binding.repoMine.setOnClickListener(view -> switchRepoMode(REPO_MODE_MINE));
         binding.repoFavorite.setOnClickListener(view -> switchRepoMode(REPO_MODE_FAVORITE));
-        binding.createRepo.setOnClickListener(view -> showCreateRepoDialog());
+        binding.createRepo.setOnClickListener(view -> {
+            if (requireAccount("创建仓库需要先添加账号")) showCreateRepoDialog();
+        });
         binding.refresh.setOnClickListener(view -> refreshRepoMode());
         binding.searchRemote.setOnClickListener(view -> handleRepoSearch());
         binding.removeAccount.setOnClickListener(view -> removeAccount());
@@ -434,18 +439,18 @@ public class GitCloudDialog extends BaseAlertDialog {
     private void render() {
         if (binding == null) return;
         boolean connected = account != null && account.providerType == providerType;
-        boolean mainVisible = connected && !editingAccount;
+        boolean mainVisible = !editingAccount;
         binding.github.setChecked(providerType == GitProviderType.GITHUB);
         binding.cnb.setChecked(providerType == GitProviderType.CNB);
         binding.baseUrl.layout.setVisibility(View.GONE);
         binding.accountSummary.setText(accountSummary());
         binding.accountCard.setVisibility(connected && editingAccount ? View.VISIBLE : View.GONE);
-        binding.loginForm.setVisibility(!connected ? View.VISIBLE : View.GONE);
+        binding.loginForm.setVisibility(editingAccount ? View.VISIBLE : View.GONE);
         binding.repoPanel.setVisibility(mainVisible && repo == null ? View.VISIBLE : View.GONE);
         binding.filePanel.setVisibility(mainVisible && repo != null ? View.VISIBLE : View.GONE);
         binding.repoMine.setChecked(repoMode == REPO_MODE_MINE);
         binding.repoFavorite.setChecked(repoMode == REPO_MODE_FAVORITE);
-        binding.refresh.setText("刷新");
+        binding.refresh.setText(repoMode == REPO_MODE_FAVORITE ? "刷新显示" : "刷新");
         binding.refresh.setEnabled(mainVisible && !busy);
         binding.searchRemote.setEnabled(mainVisible && !busy);
         binding.repoMine.setEnabled(mainVisible && !busy);
@@ -490,8 +495,9 @@ public class GitCloudDialog extends BaseAlertDialog {
     private void switchProvider(GitProviderType type) {
         providerType = type;
         account = GitCloudAccountStore.first(type);
+        anonymousAccount = null;
         repo = null;
-        repoMode = REPO_MODE_MINE;
+        repoMode = account == null ? REPO_MODE_FAVORITE : REPO_MODE_MINE;
         repoSearchOwner = "";
         currentPath = "";
         repos.clear();
@@ -500,10 +506,11 @@ public class GitCloudDialog extends BaseAlertDialog {
         selectedFiles.clear();
         expandedPaths.clear();
         reposAccountId = null;
-        editingAccount = account == null;
+        editingAccount = false;
         populateAccountForm(account);
         render();
         if (account != null) refreshRepos();
+        else renderRepoList();
     }
 
     private void toggleAccountManager() {
@@ -557,7 +564,7 @@ public class GitCloudDialog extends BaseAlertDialog {
 
     private void refreshRepos() {
         if (account == null) {
-            saveAccount(true);
+            showAccountForm("读取我的仓库需要先添加账号");
             return;
         }
         run("读取仓库中", () -> {
@@ -574,6 +581,7 @@ public class GitCloudDialog extends BaseAlertDialog {
     }
 
     private void switchRepoMode(int mode) {
+        if (mode == REPO_MODE_MINE && !requireAccount("查看我的仓库需要先添加账号")) return;
         repoMode = mode;
         if (mode != REPO_MODE_SEARCH) repoSearchOwner = "";
         renderRepoList();
@@ -648,14 +656,16 @@ public class GitCloudDialog extends BaseAlertDialog {
         LinearLayoutCompat.LayoutParams favoriteParams = new LinearLayoutCompat.LayoutParams(0, dp(34), 1);
         favoriteParams.leftMargin = dp(6);
         actions.addView(favorite, favoriteParams);
-        if (providerType == GitProviderType.GITHUB && !isOwnRepo(item)) {
+        if (providerType == GitProviderType.GITHUB && hasAccountToken() && !isOwnRepo(item)) {
             MaterialButton fork = outline("Fork");
-            fork.setOnClickListener(view -> forkRepo(item));
+            fork.setOnClickListener(view -> {
+                if (requireAccountToken("Fork 仓库需要先添加账号")) forkRepo(item);
+            });
             LinearLayoutCompat.LayoutParams forkParams = new LinearLayoutCompat.LayoutParams(dp(66), dp(34));
             forkParams.leftMargin = dp(6);
             actions.addView(fork, forkParams);
         }
-        if (containsRepo(repos, item)) {
+        if (account != null && containsRepo(repos, item)) {
             MaterialButton delete = outline("删");
             delete.setOnClickListener(view -> confirmDeleteRepo(item));
             LinearLayoutCompat.LayoutParams deleteParams = new LinearLayoutCompat.LayoutParams(dp(52), dp(34));
@@ -720,13 +730,15 @@ public class GitCloudDialog extends BaseAlertDialog {
         }
         String fullName = parseRepoFullName(keyword);
         if (isRepoAddress(keyword, fullName)) {
+            if (providerType == GitProviderType.CNB && !requireAccountToken("CNB 浏览仓库需要先添加账号")) return;
             openRepoByFullName(fullName);
             return;
         }
+        if (providerType == GitProviderType.CNB && !requireAccountToken("CNB 搜索需要先添加账号")) return;
         repoMode = REPO_MODE_SEARCH;
         repoSearchOwner = "";
         run("搜索仓库中", () -> {
-            List<GitRepo> items = provider().searchRepos(account, token(), keyword);
+            List<GitRepo> items = provider().searchRepos(activeAccount(), token(), keyword);
             App.post(() -> {
                 searchResults.clear();
                 searchResults.addAll(items);
@@ -743,7 +755,7 @@ public class GitCloudDialog extends BaseAlertDialog {
         repoMode = REPO_MODE_SEARCH;
         repoSearchOwner = "";
         run("读取仓库中", () -> {
-            GitRepo found = provider().getRepo(account, token(), fullName);
+            GitRepo found = provider().getRepo(activeAccount(), token(), fullName);
             GitRepo result = found;
             App.post(() -> {
                 openRepo(result);
@@ -756,7 +768,7 @@ public class GitCloudDialog extends BaseAlertDialog {
         repoMode = REPO_MODE_SEARCH;
         repoSearchOwner = owner;
         run("读取用户仓库中", () -> {
-            List<GitRepo> items = provider().listUserRepos(account, token(), owner);
+            List<GitRepo> items = provider().listUserRepos(activeAccount(), token(), owner);
             App.post(() -> {
                 searchResults.clear();
                 searchResults.addAll(items);
@@ -866,6 +878,7 @@ public class GitCloudDialog extends BaseAlertDialog {
     }
 
     private void openRepo(GitRepo item) {
+        if (providerType == GitProviderType.CNB && !requireAccountToken("CNB 浏览仓库需要先添加账号")) return;
         repo = item;
         currentPath = "";
         fileTree.clear();
@@ -882,7 +895,7 @@ public class GitCloudDialog extends BaseAlertDialog {
         expandedPaths.add(currentPath);
         render();
         run("读取文件中", () -> {
-            List<GitFile> files = provider().listFiles(account, token(), target, target.defaultBranch, currentPath);
+            List<GitFile> files = provider().listFiles(activeAccount(), token(), target, target.defaultBranch, currentPath);
             App.post(() -> showFiles(currentPath, files));
         });
     }
@@ -991,6 +1004,7 @@ public class GitCloudDialog extends BaseAlertDialog {
     }
 
     private void editSelectedFile() {
+        if (!requireAccount("编辑文件需要先添加账号")) return;
         GitFile file = selectedEditableFile();
         if (file == null) {
             Notify.show(selectedFiles.size() == 1 ? "请选择文本文件" : "请选择一个文本文件");
@@ -1028,6 +1042,7 @@ public class GitCloudDialog extends BaseAlertDialog {
     }
 
     private void saveEditedText(String path, String content, String sha) {
+        if (!requireAccount("保存文件需要先添加账号")) return;
         run("保存文件中", () -> {
             ProviderCapabilities capabilities = provider().capabilities();
             if (capabilities.contentsWrite) {
@@ -1155,6 +1170,7 @@ public class GitCloudDialog extends BaseAlertDialog {
     }
 
     private void showUploadText() {
+        if (!requireAccount("新建文件需要先添加账号")) return;
         LinearLayoutCompat root = new LinearLayoutCompat(requireContext());
         root.setOrientation(LinearLayoutCompat.VERTICAL);
         TextInput editPath = input("远端路径", false);
@@ -1178,6 +1194,7 @@ public class GitCloudDialog extends BaseAlertDialog {
     }
 
     private void showUploadChooser() {
+        if (!requireAccount("上传文件需要先添加账号")) return;
         new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog)
                 .setItems(new String[]{"文件", "目录"}, (dialog, which) -> {
                     if (which == 0) chooseUploadFile();
@@ -1421,6 +1438,7 @@ public class GitCloudDialog extends BaseAlertDialog {
     }
 
     private void deleteSelected() {
+        if (!requireAccount("删除文件需要先添加账号")) return;
         if (selectedFiles.isEmpty()) {
             Notify.show("未选择文件");
             return;
@@ -1585,6 +1603,7 @@ public class GitCloudDialog extends BaseAlertDialog {
     }
 
     private void handleFileUri(Uri uri) {
+        if (!requireAccount("上传文件需要先添加账号")) return;
         if (uri == null || repo == null) return;
         run("读取文件中", () -> {
             String name = displayName(uri, "upload.bin");
@@ -1595,6 +1614,7 @@ public class GitCloudDialog extends BaseAlertDialog {
     }
 
     private void handleTreeUri(Uri uri) {
+        if (!requireAccount("上传目录需要先添加账号")) return;
         if (uri == null || repo == null) return;
         try {
             requireContext().getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
@@ -1764,6 +1784,7 @@ public class GitCloudDialog extends BaseAlertDialog {
     }
 
     private void backup() {
+        if (!requireAccount("备份需要先添加账号")) return;
         if (repo == null || !repo.privateRepo) return;
         run("生成备份中", () -> {
             SyncFiles.Archive archive = SyncFiles.createArchive(SyncFiles.getPaths(SyncFiles.DEFAULT_PATHS));
@@ -1787,6 +1808,7 @@ public class GitCloudDialog extends BaseAlertDialog {
     }
 
     private void confirmRestore() {
+        if (!requireAccount("恢复备份需要先添加账号")) return;
         if (repo == null || !repo.privateRepo) return;
         new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog)
                 .setTitle("恢复备份")
@@ -1867,6 +1889,7 @@ public class GitCloudDialog extends BaseAlertDialog {
     }
 
     private void clearCache() {
+        if (!requireAccount("清理写入缓存需要先添加账号")) return;
         if (account == null || repo == null) return;
         run("清理缓存中", () -> {
             Path.clear(GitCloudPaths.worktree(account, repo));
@@ -1890,6 +1913,7 @@ public class GitCloudDialog extends BaseAlertDialog {
         GitCloudTokenStore.remove(account.tokenKey);
         GitCloudAccountStore.remove(account);
         account = null;
+        anonymousAccount = null;
         repo = null;
         repoSearchOwner = "";
         currentPath = "";
@@ -1899,9 +1923,11 @@ public class GitCloudDialog extends BaseAlertDialog {
         selectedFiles.clear();
         expandedPaths.clear();
         reposAccountId = null;
-        editingAccount = true;
+        repoMode = REPO_MODE_FAVORITE;
+        editingAccount = false;
         populateAccountForm(null);
         render();
+        renderRepoList();
     }
 
     private void changeRepo() {
@@ -1912,7 +1938,8 @@ public class GitCloudDialog extends BaseAlertDialog {
         expandedPaths.clear();
         render();
         if (account != null && !TextUtils.equals(reposAccountId, account.id)) refreshRepos();
-        else showRepos(new ArrayList<>(repos));
+        else if (account != null) showRepos(new ArrayList<>(repos));
+        else renderRepoList();
     }
 
     private void reloadTree() {
@@ -1984,9 +2011,38 @@ public class GitCloudDialog extends BaseAlertDialog {
 
     private String statusText() {
         if (busy) return binding.status == null ? "" : binding.status.getText().toString();
-        if (account == null || editingAccount) return label(providerType) + " · 未连接";
-        if (repo == null) return account.displayName() + " · 请选择仓库";
-        return account.displayName() + " · " + repo.displayName();
+        if (editingAccount) return label(providerType) + " · 添加账号";
+        String name = account == null ? label(providerType) + " · 匿名浏览" : account.displayName();
+        if (repo == null) return name + " · 请选择仓库";
+        return name + " · " + repo.displayName();
+    }
+
+    private boolean requireAccount(String message) {
+        if (account != null && account.providerType == providerType) return true;
+        showAccountForm(message);
+        return false;
+    }
+
+    private boolean requireAccountToken(String message) {
+        if (hasAccountToken()) return true;
+        showAccountForm(message);
+        return false;
+    }
+
+    private boolean hasAccountToken() {
+        if (account == null || account.providerType != providerType) return false;
+        try {
+            return !TextUtils.isEmpty(GitCloudTokenStore.get(account.tokenKey));
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private void showAccountForm(String message) {
+        if (!TextUtils.isEmpty(message)) Notify.show(message);
+        editingAccount = true;
+        populateAccountForm(account);
+        render();
     }
 
     private String pathLabel() {
@@ -2025,6 +2081,15 @@ public class GitCloudDialog extends BaseAlertDialog {
 
     private GitCloudProvider provider() {
         return GitCloudProviders.get(providerType);
+    }
+
+    private GitAccount activeAccount() {
+        if (account != null && account.providerType == providerType) return account;
+        if (anonymousAccount == null || anonymousAccount.providerType != providerType) {
+            anonymousAccount = GitAccount.create(providerType, defaultBaseUrl(providerType), "");
+            anonymousAccount.username = "";
+        }
+        return anonymousAccount;
     }
 
     private String token() throws Exception {

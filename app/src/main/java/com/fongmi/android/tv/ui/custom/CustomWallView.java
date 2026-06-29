@@ -5,8 +5,10 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.BitmapDrawable;
 import android.net.Uri;
 import android.util.AttributeSet;
+import android.util.DisplayMetrics;
 import android.view.LayoutInflater;
 import android.widget.FrameLayout;
 
@@ -42,6 +44,7 @@ public class CustomWallView extends FrameLayout implements DefaultLifecycleObser
 
     private static final int DEFAULT_WALL_COLOR = Setting.getBuiltInWallColor(Setting.WALL_DREAM_PURPLE);
     private static final int GREEN_WALL_COLOR = 0xFF40C090;
+    private static final int MAX_WALL_BITMAP_SIDE = 1920;
     private static final int TYPE_RES = 0;
     private static final int TYPE_GIF = 1;
     private static final int TYPE_VIDEO = 2;
@@ -229,7 +232,34 @@ public class CustomWallView extends FrameLayout implements DefaultLifecycleObser
 
     private Drawable cache() {
         File file = FileUtil.getWallCache();
-        return file.exists() ? Drawable.createFromPath(file.getAbsolutePath()) : null;
+        Bitmap bitmap = file.exists() ? decodeWallBitmap(file) : null;
+        return bitmap == null ? null : new BitmapDrawable(getResources(), bitmap);
+    }
+
+    private Bitmap decodeWallBitmap(File file) {
+        try {
+            BitmapFactory.Options bounds = new BitmapFactory.Options();
+            bounds.inJustDecodeBounds = true;
+            BitmapFactory.decodeFile(file.getAbsolutePath(), bounds);
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null;
+            BitmapFactory.Options options = new BitmapFactory.Options();
+            options.inSampleSize = getWallSampleSize(bounds);
+            options.inPreferredConfig = Bitmap.Config.RGB_565;
+            options.inDither = true;
+            return BitmapFactory.decodeFile(file.getAbsolutePath(), options);
+        } catch (OutOfMemoryError | RuntimeException e) {
+            SpiderDebug.log("startup", "wall bitmap decode fallback file=%s error=%s", file.getName(), e.getClass().getSimpleName());
+            return null;
+        }
+    }
+
+    private int getWallSampleSize(BitmapFactory.Options bounds) {
+        DisplayMetrics metrics = getResources().getDisplayMetrics();
+        int reqWidth = Math.max(1, Math.min(metrics.widthPixels, MAX_WALL_BITMAP_SIDE));
+        int reqHeight = Math.max(1, Math.min(metrics.heightPixels, MAX_WALL_BITMAP_SIDE));
+        int sampleSize = 1;
+        while (bounds.outWidth / sampleSize > reqWidth || bounds.outHeight / sampleSize > reqHeight) sampleSize *= 2;
+        return sampleSize;
     }
 
     private GifDrawable gif(File file) {

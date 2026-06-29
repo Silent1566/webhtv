@@ -18,7 +18,7 @@ public class Depot {
     private String name;
 
     public static List<Depot> arrayFrom(String str) {
-        Type listType = new TypeToken<List<Depot>>() {}.getType();
+        Type listType = TypeToken.getParameterized(List.class, Depot.class).getType();
         List<Depot> items = App.gson().fromJson(str, listType);
         return items == null ? Collections.emptyList() : items;
     }

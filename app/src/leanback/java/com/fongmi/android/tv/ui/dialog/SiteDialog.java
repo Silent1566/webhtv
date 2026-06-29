@@ -46,7 +46,7 @@ public class SiteDialog extends BaseAlertDialog implements SiteAdapter.OnClickLi
     private static final int ITEM_HEIGHT = 46;
     private static final int ITEM_SPACE = 16;
     private static final int MAX_VISIBLE_ROWS = 6;
-    private static final int HORIZONTAL_SAFE_SPACE = 160;
+    private static final int HORIZONTAL_SAFE_SPACE = 240;
     private static final int VERTICAL_SAFE_SPACE = 240;
     private static final int INITIAL_BATCH = 48;
 
@@ -345,6 +345,7 @@ public class SiteDialog extends BaseAlertDialog implements SiteAdapter.OnClickLi
         params.width = getDialogWidth();
         params.height = WindowManager.LayoutParams.WRAP_CONTENT;
         window.setAttributes(params);
+        window.setLayout(params.width, params.height);
     }
 
     private void runAfterFirstPreDraw(String label, Runnable action) {

@@ -38,6 +38,7 @@
     <string name="control_episode_column">長標題列數</string>
     <string name="control_episode_column_single">單列</string>
     <string name="control_episode_column_double">雙列</string>
+    <string name="control_compact_episode_title">精簡標題</string>
     <string name="control_track">軌道</string>
     <string name="control_other">其它</string>
     <string name="live_control_play">來源</string>

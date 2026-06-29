@@ -30,6 +30,7 @@ public final class RemoteStore {
 
     private static final String KEY_STORE = "remote_trust_store";
     private static final String FILE_STORE = "WebHTV/RemoteTrust/profile.json";
+    private static final long MAX_STORE_FILE_SIZE = 2L * 1024 * 1024;
 
     private static RemoteStoreFile cache;
     private static boolean loaded;
@@ -48,8 +49,12 @@ public final class RemoteStore {
         if (Setting.hasFileAccess()) {
             File file = file();
             if (file.exists() && file.length() > 0) {
-                store = parse(Path.read(file));
-                if (store != null) Prefers.put(KEY_STORE, App.gson().toJson(ensure(store)));
+                if (file.length() <= MAX_STORE_FILE_SIZE) {
+                    store = parse(Path.read(file));
+                    if (store != null) Prefers.put(KEY_STORE, App.gson().toJson(ensure(store)));
+                } else {
+                    SpiderDebug.log("remote", "skip oversized profile file size=%d", file.length());
+                }
             }
         }
         if (store == null) store = parse(Prefers.getString(KEY_STORE));

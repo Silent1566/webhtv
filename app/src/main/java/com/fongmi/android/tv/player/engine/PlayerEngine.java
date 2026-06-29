@@ -46,6 +46,10 @@ public interface PlayerEngine {
         start(spec, position, playWhenReady);
     }
 
+    default void stop() {
+        getPlayer().stop();
+    }
+
     void setMetadata(MediaMetadata data);
 
     boolean isLive();
@@ -55,6 +59,10 @@ public interface PlayerEngine {
     void setTrack(List<Track> tracks);
 
     void resetTrack();
+
+    default void resetTrack(int type) {
+        resetTrack();
+    }
 
     boolean haveTrack(int type);
 

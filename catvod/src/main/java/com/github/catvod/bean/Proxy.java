@@ -29,7 +29,7 @@ public class Proxy implements Comparable<Proxy> {
 
     public static List<Proxy> arrayFrom(JsonElement element) {
         try {
-            Type listType = new TypeToken<List<Proxy>>() {}.getType();
+            Type listType = TypeToken.getParameterized(List.class, Proxy.class).getType();
             List<Proxy> items = new Gson().fromJson(element, listType);
             return items == null ? Collections.emptyList() : items;
         } catch (Exception e) {

@@ -15,6 +15,7 @@ import androidx.fragment.app.FragmentActivity;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewbinding.ViewBinding;
 
+import com.fongmi.android.tv.Updater;
 import com.fongmi.android.tv.ui.custom.CustomWallView;
 import com.fongmi.android.tv.utils.Util;
 
@@ -117,6 +118,12 @@ public abstract class BaseActivity extends AppCompatActivity {
 
     protected void onBackInvoked() {
         finish();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        Updater.create().resume(this);
     }
 
     @Override

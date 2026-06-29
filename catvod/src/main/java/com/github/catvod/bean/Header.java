@@ -20,7 +20,7 @@ public class Header {
 
     public static List<Header> arrayFrom(JsonElement element) {
         try {
-            Type listType = new TypeToken<List<Header>>() {}.getType();
+            Type listType = TypeToken.getParameterized(List.class, Header.class).getType();
             List<Header> items = new Gson().fromJson(element, listType);
             return items == null ? Collections.emptyList() : items;
         } catch (Exception e) {

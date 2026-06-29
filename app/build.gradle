@@ -13,6 +13,7 @@ def hasReleaseSigning = localProps['storeFile'] && localProps['keyAlias'] && loc
 def releaseKeyPassword = localProps['keyPassword'] ?: localProps['storePassword']
 def buildTime = new Date().format('yyyyMMddHHmm', TimeZone.getTimeZone('Asia/Shanghai'))
 def releaseTag = (System.getenv('WEBHTV_RELEASE_TAG') ?: '').replace('\\', '\\\\').replace('"', '\\"')
+def apkSuffix = (System.getenv('WEBHTV_APK_SUFFIX') ?: '').replaceAll('[^A-Za-z0-9._-]', '')
 
 android {
     namespace = 'com.fongmi.android.tv'
@@ -111,7 +112,7 @@ androidComponents {
         def mode = flavors['mode'] ?: 'mode'
         def abi = flavors['abi'] ?: 'abi'
         variant.outputs.each { output ->
-            output.outputFileName.set("${mode}-${abi}.apk")
+            output.outputFileName.set("${mode}-${abi}${apkSuffix}.apk")
         }
     }
 }

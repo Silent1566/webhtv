@@ -38,6 +38,7 @@
     <string name="control_episode_column">Long title columns</string>
     <string name="control_episode_column_single">Single</string>
     <string name="control_episode_column_double">Double</string>
+    <string name="control_compact_episode_title">Compact title</string>
     <string name="control_track">Track</string>
     <string name="control_other">Other</string>
     <string name="live_control_play">Sources</string>

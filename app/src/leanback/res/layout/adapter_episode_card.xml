@@ -46,7 +46,7 @@
             android:gravity="center"
             android:includeFontPadding="false"
             android:maxLines="1"
-            android:minWidth="92dp"
+            android:minWidth="124dp"
             android:paddingStart="10dp"
             android:paddingEnd="10dp"
             android:textColor="@color/white"

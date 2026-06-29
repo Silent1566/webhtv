@@ -106,7 +106,7 @@ public class DLNAAvTransportImpl extends AbstractAVTransportService {
     private Map<String, String> parseHeaders(String metaData) {
         try {
             DIDLContent content = new DIDLParser().parse(metaData);
-            return content.getItems().stream().flatMap(item -> item.getProperties().stream()).filter(p -> p instanceof DIDLObject.Property.DC.DESCRIPTION).findFirst().map(p -> App.gson().<Map<String, String>>fromJson(p.getValue().toString(), new TypeToken<Map<String, String>>() {}.getType())).orElse(new HashMap<>());
+            return content.getItems().stream().flatMap(item -> item.getProperties().stream()).filter(p -> p instanceof DIDLObject.Property.DC.DESCRIPTION).findFirst().map(p -> App.gson().<Map<String, String>>fromJson(p.getValue().toString(), TypeToken.getParameterized(Map.class, String.class, String.class).getType())).orElse(new HashMap<>());
         } catch (Exception ignored) {
             return new HashMap<>();
         }

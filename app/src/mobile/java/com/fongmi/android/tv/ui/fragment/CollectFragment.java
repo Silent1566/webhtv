@@ -59,6 +59,7 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
     private static final int GROUP_POPUP_ITEM_HEIGHT = 44;
     private static final int GROUP_POPUP_MAX_ITEMS = 8;
     private static final int GRID_ITEM_MARGIN_DP = 4;
+    private static final int GRID_TOP_PADDING_DP = 8;
     private static final int RESULT_END_PADDING_DP = 8;
 
     private FragmentCollectBinding mBinding;
@@ -248,8 +249,14 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
         setWidth();
         int count = getCount();
         ((GridLayoutManager) (mBinding.recycler.getLayoutManager())).setSpanCount(count);
+        setResultPadding();
         mSearchAdapter.setGrid(isGrid(), getGridSize());
         if (scrollTop) mBinding.recycler.scrollToPosition(0);
+    }
+
+    private void setResultPadding() {
+        int top = isGrid() ? ResUtil.dp2px(GRID_TOP_PADDING_DP) : 0;
+        mBinding.recycler.setPadding(mBinding.recycler.getPaddingStart(), top, mBinding.recycler.getPaddingEnd(), mBinding.recycler.getPaddingBottom());
     }
 
     private void onColumnToggle() {

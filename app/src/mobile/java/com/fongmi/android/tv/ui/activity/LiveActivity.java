@@ -20,7 +20,9 @@ import android.widget.FrameLayout;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.widget.LinearLayoutCompat;
+import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.Observer;
@@ -134,6 +136,9 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
     private boolean playbackCatchup;
     private boolean liveMenuOverlay;
     private VideoSize videoSize;
+    private int groupBasePaddingBottom;
+    private int channelBasePaddingBottom;
+    private int epgBasePaddingBottom;
 
     public static void start(Context context) {
         context.startActivity(new Intent(context, LiveActivity.class).putExtra("empty", LiveConfig.isEmpty()));
@@ -229,6 +234,8 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
     protected void initView(Bundle savedInstanceState) {
         super.initView(savedInstanceState);
         mKeyDown = CustomKeyDown.create(this, mBinding.exo);
+        captureLiveListBasePadding();
+        setupWindowInsets();
         updateControlInsets();
         updateLiveMenuInsets();
         mObserveEpg = this::setEpg;
@@ -239,7 +246,7 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
         mR3 = this::hideInfo;
         mPiP = new PiP();
         setRecyclerView();
-        mOsd = new PlayerOsdController(mBinding.osd.getRoot(), mBinding.osd.osdTopLeft, mBinding.osd.osdTopRight, mBinding.osd.osdBottomLeft, mBinding.osd.osdBottomRight, mBinding.osd.osdMiniProgress, new PlayerOsdController.Source() {
+        mOsd = new PlayerOsdController(mBinding.osd.getRoot(), mBinding.osd.osdTopLeft, mBinding.osd.osdTopRight, mBinding.osd.osdBottomLeft, mBinding.osd.osdBottomRight, mBinding.osd.osdDiagnostics, mBinding.osd.osdMiniProgress, new PlayerOsdController.Source() {
             @Override
             public PlayerManager getPlayer() {
                 return service() == null ? null : player();
@@ -269,7 +276,7 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
         mBinding.control.action.text.setOnClickListener(this::onTrack);
         mBinding.control.action.audio.setOnClickListener(this::onTrack);
         mBinding.control.action.video.setOnClickListener(this::onTrack);
-        mBinding.control.action.home.setOnClickListener(view -> onHome());
+        mBinding.control.action.source.setOnClickListener(view -> onFullscreenLiveSource());
         mBinding.control.action.line.setOnClickListener(view -> onLine());
         mBinding.control.action.scale.setOnClickListener(view -> onScale());
         mBinding.control.action.speed.setOnClickListener(view -> onSpeed());
@@ -320,6 +327,20 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
             }
         });
         mBinding.epgData.setAdapter(mEpgDataAdapter = new EpgDataAdapter(this));
+    }
+
+    private void captureLiveListBasePadding() {
+        groupBasePaddingBottom = mBinding.group.getPaddingBottom();
+        channelBasePaddingBottom = mBinding.channel.getPaddingBottom();
+        epgBasePaddingBottom = mBinding.epgData.getPaddingBottom();
+    }
+
+    private void setupWindowInsets() {
+        ViewCompat.setOnApplyWindowInsetsListener(mBinding.getRoot(), (view, insets) -> {
+            updateLiveListBottomInset(insets);
+            return insets;
+        });
+        ViewCompat.requestApplyInsets(mBinding.getRoot());
     }
 
     private void setVideoView() {
@@ -432,7 +453,6 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
     }
 
     private void getLive() {
-        mBinding.control.action.home.setText(LiveConfig.isOnly() ? getString(R.string.live_refresh) : getHome().getName());
         renderLive(getHome());
         mViewModel.parse(getHome());
         showProgress();
@@ -586,6 +606,13 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
     private void onLiveSource() {
         refreshInjectedLives();
         LiveDialog.show(this);
+        hideControl();
+        hideInfo();
+    }
+
+    private void onFullscreenLiveSource() {
+        refreshInjectedLives();
+        LiveDialog.create().drawer().show(getSupportFragmentManager(), null);
         hideControl();
         hideInfo();
     }
@@ -1832,11 +1859,25 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
     private void updateLiveMenuInsets() {
         if (isEmbeddedLiveUi()) noPadding(mBinding.recycler);
         else setPadding(mBinding.recycler, true);
+        updateLiveListBottomInset(ViewCompat.getRootWindowInsets(mBinding.getRoot()));
     }
 
     private void updateControlInsets() {
         if (isEmbeddedLiveUi()) noPadding(mBinding.control.getRoot());
         else setPadding(mBinding.control.getRoot());
+    }
+
+    private void updateLiveListBottomInset(@Nullable WindowInsetsCompat insets) {
+        int bottom = isEmbeddedLiveUi() && insets != null ? insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom : 0;
+        int extra = isEmbeddedLiveUi() ? bottom + ResUtil.dp2px(6) : 0;
+        setRecyclerBottomPadding(mBinding.group, groupBasePaddingBottom + extra);
+        setRecyclerBottomPadding(mBinding.channel, channelBasePaddingBottom + extra);
+        setRecyclerBottomPadding(mBinding.epgData, epgBasePaddingBottom + extra);
+    }
+
+    private void setRecyclerBottomPadding(RecyclerView view, int bottom) {
+        if (view.getPaddingBottom() == bottom) return;
+        view.setPaddingRelative(view.getPaddingStart(), view.getPaddingTop(), view.getPaddingEnd(), bottom);
     }
 
     private void updateVideoHeight(VideoSize size) {

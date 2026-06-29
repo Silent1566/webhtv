@@ -4,6 +4,7 @@ import android.app.Dialog;
 import android.content.DialogInterface;
 import android.os.Bundle;
 import android.text.TextUtils;
+import android.widget.ListView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -60,9 +61,20 @@ public class LutDialog extends DialogFragment {
         super.onStart();
         AlertDialog dialog = (AlertDialog) getDialog();
         if (dialog == null) return;
+        focusList(dialog);
         dialog.getButton(DialogInterface.BUTTON_NEUTRAL).setOnClickListener(view -> {
             LutSetting.putStrength(nextStrength());
             applyChange();
+        });
+    }
+
+    private void focusList(AlertDialog dialog) {
+        ListView list = dialog.getListView();
+        if (list == null) return;
+        int checked = Math.max(0, getCheckedIndex());
+        list.post(() -> {
+            list.setSelection(checked);
+            list.requestFocus();
         });
     }
 

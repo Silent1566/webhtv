@@ -30,6 +30,7 @@ import com.fongmi.android.tv.ui.adapter.EpisodeGroupAdapter;
 import com.fongmi.android.tv.ui.adapter.FlagAdapter;
 import com.fongmi.android.tv.ui.base.ViewType;
 import com.fongmi.android.tv.ui.custom.SpaceItemDecoration;
+import com.fongmi.android.tv.utils.EpisodeTitleCompact;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.Util;
 
@@ -188,8 +189,9 @@ public class EpisodeListDialog extends AppCompatDialogFragment implements FlagAd
 
     private int getEpisodeSpan(List<Episode> episodes) {
         if (tmdbCard) return 2;
+        EpisodeTitleCompact.apply(episodes);
         int maxLen = 0;
-        for (Episode item : episodes) maxLen = Math.max(maxLen, item.getDesc().concat(item.getName()).length());
+        for (Episode item : episodes) maxLen = Math.max(maxLen, item.getDisplayName().length());
         if (maxLen >= 12) return PlayerSetting.getEpisodeColumn();
         int ideal = maxLen >= 10 ? 130 : maxLen >= 7 ? 104 : 80;
         int available = Math.max(ResUtil.dp2px(240), getWidth() - ResUtil.dp2px(28));

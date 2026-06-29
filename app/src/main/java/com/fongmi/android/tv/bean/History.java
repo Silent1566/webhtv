@@ -110,8 +110,7 @@ public class History implements Diffable<History> {
     }
 
     public static List<History> arrayFrom(String str) {
-        Type listType = new TypeToken<List<History>>() {
-        }.getType();
+        Type listType = TypeToken.getParameterized(List.class, History.class).getType();
         List<History> items = App.gson().fromJson(str, listType);
         return items == null ? Collections.emptyList() : items;
     }

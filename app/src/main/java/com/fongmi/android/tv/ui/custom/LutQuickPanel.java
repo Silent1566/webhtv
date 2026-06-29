@@ -94,6 +94,7 @@ public class LutQuickPanel extends FrameLayout {
         empty.setText(favoriteOnly ? R.string.lut_empty_favorites : R.string.lut_empty_presets);
         empty.setVisibility(items.isEmpty() || (!favoriteOnly && items.size() <= 1) ? VISIBLE : GONE);
         adapter.setItems(items);
+        if (getVisibility() == VISIBLE && shouldFocusSelectedEntry()) recycler.post(this::focusSelectedEntry);
         delay.setText(ResUtil.getString(R.string.lut_preview_delay_value, LutSetting.getPreviewSeconds()));
         updateAllButton();
         updateFavoriteButton();
@@ -113,6 +114,16 @@ public class LutQuickPanel extends FrameLayout {
         return true;
     }
 
+    public boolean focusSelectedEntry() {
+        int selected = adapter.getSelectedPosition();
+        return focusEntry(selected == RecyclerView.NO_POSITION ? 0 : selected);
+    }
+
+    private boolean shouldFocusSelectedEntry() {
+        View focus = findFocus();
+        return focus == null || focus == recycler || isChildOf(recycler, focus);
+    }
+
     private void show() {
         setVisibility(VISIBLE);
         refreshList(true);
@@ -120,7 +131,7 @@ public class LutQuickPanel extends FrameLayout {
         panel.post(() -> {
             panel.setTranslationX(panel.getWidth());
             panel.animate().translationX(0).setDuration(180).start();
-            recycler.requestFocus();
+            focusSelectedEntry();
         });
     }
 
@@ -150,20 +161,21 @@ public class LutQuickPanel extends FrameLayout {
     private void notifyChanged() {
         if (refresh != null) refresh.run();
         adapter.notifyDataSetChanged();
+        recycler.post(this::focusSelectedEntry);
     }
 
     private void toggleFavoriteOnly() {
         favoriteOnly = !favoriteOnly;
         resetClickTracking();
         refreshList();
-        recycler.requestFocus();
+        recycler.post(this::focusSelectedEntry);
     }
 
     private void showAll() {
         favoriteOnly = false;
         resetClickTracking();
         refreshList();
-        recycler.requestFocus();
+        recycler.post(this::focusSelectedEntry);
     }
 
     private void onEntryClick(Entry entry) {
@@ -288,6 +300,41 @@ public class LutQuickPanel extends FrameLayout {
         panel.setLayoutParams(params);
     }
 
+    private boolean focusEntry(int position) {
+        if (recycler == null || recycler.getVisibility() != View.VISIBLE || position < 0 || position >= adapter.getItemCount()) return false;
+        recycler.scrollToPosition(position);
+        RecyclerView.ViewHolder holder = recycler.findViewHolderForAdapterPosition(position);
+        if (holder != null && holder.itemView.requestFocus()) return true;
+        for (int i = 0; i < recycler.getChildCount(); i++) {
+            View child = recycler.getChildAt(i);
+            if (recycler.getChildAdapterPosition(child) == position && child.requestFocus()) return true;
+        }
+        recycler.post(() -> {
+            RecyclerView.ViewHolder next = recycler.findViewHolderForAdapterPosition(position);
+            if (next != null) {
+                next.itemView.requestFocus();
+                return;
+            }
+            for (int i = 0; i < recycler.getChildCount(); i++) {
+                View child = recycler.getChildAt(i);
+                if (recycler.getChildAdapterPosition(child) == position) {
+                    child.requestFocus();
+                    return;
+                }
+            }
+        });
+        return true;
+    }
+
+    private boolean isChildOf(ViewGroup parent, View child) {
+        for (View view = child; view != null; ) {
+            if (view == parent) return true;
+            if (!(view.getParent() instanceof View next)) return false;
+            view = next;
+        }
+        return false;
+    }
+
     private void cycleDelay() {
         int current = LutSetting.getPreviewSeconds();
         int next = current < 2 ? 2 : current < 3 ? 3 : current < 5 ? 5 : current < 8 ? 8 : 1;
@@ -399,6 +446,13 @@ public class LutQuickPanel extends FrameLayout {
         @Override
         public int getItemCount() {
             return items.size();
+        }
+
+        int getSelectedPosition() {
+            for (int i = 0; i < items.size(); i++) {
+                if (items.get(i).isSelected()) return i;
+            }
+            return RecyclerView.NO_POSITION;
         }
 
         private class ViewHolder extends RecyclerView.ViewHolder {

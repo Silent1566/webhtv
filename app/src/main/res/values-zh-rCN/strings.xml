@@ -7,6 +7,7 @@
     <string name="live_pass">密码</string>
     <string name="live_refresh">刷新</string>
     <string name="live_line">线路 <xliff:g name="name">%s</xliff:g></string>
+    <string name="live_control_source">直播源</string>
 
     <!-- Detail -->
     <string name="detail_title"><xliff:g name="name">%s</xliff:g>：<xliff:g name="name">%s</xliff:g></string>
@@ -53,6 +54,7 @@
     <string name="play_config">配置</string>
     <string name="play_cast">投屏</string>
     <string name="play_change">换源</string>
+    <string name="play_short_display">短显</string>
     <string name="play_search">搜索</string>
     <string name="play_fullscreen">全屏</string>
     <string name="play_exit_fullscreen">退出全屏</string>
@@ -134,6 +136,7 @@
     <string name="setting_builtin_wall">内置壁纸</string>
     <string name="setting_player">播放设置</string>
     <string name="setting_danmaku">弹幕设置</string>
+    <string name="setting_subtitle">字幕设置</string>
     <string name="setting_enhance">增强功能</string>
     <string name="setting_personal">个性设置</string>
     <string name="setting_home_vod_auto_load">默认加载点播</string>
@@ -665,6 +668,7 @@
     <string name="setting_about">关于</string>
     <string name="setting_version">版本</string>
     <string name="setting_choose">选择</string>
+    <string name="setting_reset">重置</string>
     <string name="setting_delete">删除</string>
     <string name="setting_disable">禁用</string>
     <string name="setting_enable">启用</string>
@@ -676,10 +680,14 @@
     <!-- About -->
     <string name="about_title">关于 WebHomeTV</string>
     <string name="about_free_badge">完全免费</string>
-    <string name="about_version">版本 %1$s (%2$d) · %3$s/%4$s</string>
+    <string name="about_version">版本 %1$s · %2$s/%3$s</string>
     <string name="about_disclaimer">WebHomeTV 是基于开源生态二次开发的技术学习与研究项目，软件本体完全免费，不提供任何付费服务、影视内容、直播源、接口源、资源存储或内容分发能力。\n\n本软件仅供技术学习、研究和个人测试使用，请在下载、安装或试用后 24 小时内自行卸载。继续使用本软件所产生的一切行为及后果，由使用者自行承担。\n\n本软件不内置、不售卖、不传播任何影视资源，不对用户自行添加的接口、站源、插件、脚本、链接、网盘资源或第三方服务内容负责。使用者应遵守所在地法律法规，尊重版权方和内容提供方的合法权益，不得将本软件用于任何侵权、盗版、传播非法内容或其他违法违规用途。\n\n严禁任何个人或组织以本软件名义进行售卖、引流、收费维护、会员服务、广告变现、盒子预装、电视盒子捆绑销售或其他任何形式的获益行为。对于将本软件内置于电视盒子、机顶盒、付费套餐或商业服务中进行销售、推广的行为，项目方明确反对并予以谴责。\n\n如你不同意以上声明，请立即停止使用并卸载本软件。</string>
     <string name="about_check_update">检查更新</string>
     <string name="about_acknowledge">我已知悉</string>
+    <string name="setting_github_proxy">GitHub 加速源</string>
+    <string name="setting_github_proxy_short">加速源</string>
+    <string name="setting_github_proxy_hint">一行一个加速源</string>
+    <string name="setting_github_proxy_message">GitHub Raw/Release 下载会使用第一个有效加速源。</string>
 
     <!-- Backup & Restore -->
     <string name="restore_select">选择备份</string>
@@ -790,6 +798,12 @@
     <string name="player">播放核心</string>
     <string name="player_default">默认播放核心</string>
     <string name="player_render">渲染方式</string>
+    <string name="player_button_config">播放器按钮</string>
+    <string name="player_button_config_summary">显示 %1$d/%2$d</string>
+    <string name="player_button_up">上移</string>
+    <string name="player_button_down">下移</string>
+    <string name="play_episodes">选集</string>
+    <string name="player_exo_4k_compat">EXO增强模式</string>
     <string name="player_kernel">播放器内核</string>
     <string name="player_scale">缩放比例</string>
     <string name="player_lut">LUT 调色</string>
@@ -807,10 +821,34 @@
     <string name="player_buffer_bytes">缓冲容量</string>
     <string name="player_back_buffer">回退缓冲</string>
     <string name="player_cache">播放缓存</string>
+    <string name="player_preload">预载</string>
+    <string name="player_preload_threads">预载线程</string>
+    <string name="player_preload_threads_value">%1$d 条</string>
+    <string name="player_preload_size">预载容量</string>
+    <string name="player_preload_time">预载时间</string>
+    <string name="player_preload_time_value">%1$d 秒</string>
     <string name="player_auto_change">自动换源</string>
     <string name="player_speed">长按倍速</string>
     <string name="player_ua">User-Agent</string>
     <string name="player_osd">屏显设置</string>
+    <string name="player_subtitle_auto_match">自动匹配字幕</string>
+    <string name="player_subtitle_language">字幕偏好语言</string>
+    <string name="player_subtitle_assrt_token">射手网 Token</string>
+    <string name="subtitle_auto_match_hit">已自动匹配字幕：%1$s</string>
+    <string name="subtitle_auto_match_hit_not_applied">已找到字幕但未应用：%1$s</string>
+    <string name="subtitle_auto_match_empty">未找到匹配字幕</string>
+    <string name="subtitle_auto_match_provider_unavailable">请先配置字幕源</string>
+    <string name="subtitle_auto_match_failed">字幕匹配失败：%1$s</string>
+    <string name="subtitle_auto_match_unknown_reason">未知错误</string>
+    <string name="subtitle_manual_search">搜索字幕</string>
+    <string name="subtitle_manual_searching">正在搜索字幕...</string>
+    <string name="subtitle_manual_select_title">选择字幕（%1$d）</string>
+    <string name="subtitle_manual_search_empty">未搜索到字幕</string>
+    <string name="subtitle_manual_search_failed">字幕搜索失败</string>
+    <string name="subtitle_manual_resolving">正在加载字幕...</string>
+    <string name="subtitle_manual_applied">已应用字幕：%1$s</string>
+    <string name="subtitle_manual_apply_failed">已找到字幕但无法应用</string>
+    <string name="subtitle_manual_inactive">请先开始播放再搜索字幕</string>
     <string name="lut_original">原色</string>
     <string name="lut_missing">预设不存在</string>
     <string name="lut_summary">%1$s · %2$d%%</string>
@@ -862,6 +900,9 @@
     <string name="search_hot_tv">电视榜</string>
     <string name="search_hot_movie">电影榜</string>
     <string name="search_hot_variety">综艺榜</string>
+    <string name="search_loading">搜索中...</string>
+    <string name="search_progress">(%1$d/%2$d)</string>
+    <string name="search_no_result">没有搜到</string>
 
     <!-- Dialog -->
     <string name="dialog_edit">修改</string>
@@ -874,6 +915,8 @@
     <string name="dialog_short_drama_site_manage">选择短剧源</string>
     <string name="dialog_short_drama_site_default">默认 [短]/短剧</string>
     <string name="dialog_reset">重置</string>
+    <string name="setting_show">显示</string>
+    <string name="setting_hide">隐藏</string>
     <string name="dialog_select_title">选择章节</string>
     <string name="dialog_config_hint">请输入配置…</string>
     <string name="dialog_config_name">请输入名称…</string>
@@ -897,12 +940,33 @@
 
     <!-- Update -->
     <string name="update_version">发现新版本 <xliff:g name="name">%s</xliff:g></string>
+    <string name="update_title">版本更新</string>
+    <string name="update_hint">选择版本查看更新内容并安装。</string>
     <string name="update_check">正在检测更新…</string>
     <string name="update_latest">已是最新版本</string>
     <string name="update_failed">检测更新失败</string>
     <string name="update_downloading">正在下载 %1$d%%</string>
     <string name="update_downloading_unknown">正在下载…</string>
+    <string name="update_downloading_detail">正在下载 %1$d%% · %2$s/s · 已用 %3$s</string>
+    <string name="update_downloading_detail_remaining">正在下载 %1$d%% · %2$s/s · 剩余 %3$s · 已用 %4$s</string>
+    <string name="update_downloading_detail_unknown">正在下载 · %1$s/s · 已用 %2$s</string>
+    <string name="update_download_incomplete">更新包下载不完整，请重试。</string>
+    <string name="update_download_checksum">更新包校验失败，请重试。</string>
+    <string name="update_download_invalid">更新包无效，请重试。</string>
     <string name="update_confirm">更新</string>
+    <string name="update_confirm_channel">更新%1$s</string>
+    <string name="update_cancel">取消更新</string>
+    <string name="update_canceled">更新已取消</string>
+    <string name="update_channel_stable">稳定版</string>
+    <string name="update_channel_beta">测试版</string>
+    <string name="update_channel_latest">当前通道已是最新版本。</string>
+    <string name="update_channel_unavailable">当前通道暂无可用更新清单。</string>
+    <string name="update_no_notes">暂无更新日志。</string>
+    <string name="update_status_available">可更新</string>
+    <string name="update_status_latest">已最新</string>
+    <string name="update_status_unavailable">暂无</string>
+    <string name="update_expand">展开</string>
+    <string name="update_collapse">收起</string>
 
     <!-- Crash -->
     <string name="crash_info">发生意外错误\n抱歉给您带来不便</string>
@@ -985,9 +1049,9 @@
         <item>60秒</item>
     </string-array>
     <string-array name="select_play_cache">
-        <item>关闭</item>
-        <item>100MB</item>
-        <item>500MB</item>
+        <item>128MB</item>
+        <item>256MB</item>
+        <item>512MB</item>
         <item>1GB</item>
         <item>2GB</item>
     </string-array>
@@ -1043,7 +1107,9 @@
     <string-array name="select_ui_scale">
         <item>跟随系统</item>
         <item>标准</item>
+        <item>较紧凑</item>
         <item>紧凑</item>
+        <item>更紧凑</item>
         <item>更小</item>
     </string-array>
 
@@ -1065,6 +1131,26 @@
         <item>系统</item>
     </string-array>
 
+    <string-array name="select_subtitle_language">
+        <item>中文优先</item>
+        <item>简体中文</item>
+        <item>繁体中文</item>
+        <item>英语</item>
+        <item>日语</item>
+        <item>韩语</item>
+        <item>不限制</item>
+    </string-array>
+
+    <string-array name="select_subtitle_language_value">
+        <item>zh</item>
+        <item>zh-Hans</item>
+        <item>zh-Hant</item>
+        <item>en</item>
+        <item>ja</item>
+        <item>ko</item>
+        <item>any</item>
+    </string-array>
+
     <string-array name="select_player_osd">
         <item>@string/display_time</item>
         <item>@string/display_traffic</item>
@@ -1072,6 +1158,7 @@
         <item>@string/display_progress</item>
         <item>@string/display_mini</item>
         <item>@string/display_title</item>
+        <item>播放参数</item>
     </string-array>
 
     <string-array name="select_track">
@@ -1210,7 +1297,7 @@
     <string name="detail_media_movie">电影</string>
     <string name="detail_media_tv">剧集</string>
     <string name="detail_media_unknown">详情</string>
-    <string name="detail_source_current">当前站源：%1$s</string>
+    <string name="detail_source_current">站源：%1$s</string>
     <string name="detail_source_empty">暂无可用站源</string>
     <string name="detail_source_episode_empty">暂无可用选集或站源</string>
     <string name="detail_source_searching">正在搜索站源...</string>

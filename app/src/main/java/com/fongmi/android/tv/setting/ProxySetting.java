@@ -309,7 +309,12 @@ public class ProxySetting {
     }
 
     public static int count() {
-        return getRules().size();
+        try {
+            return getRules().size();
+        } catch (Throwable e) {
+            SpiderDebug.log("proxy", "count failed error=%s", e.toString());
+            return 0;
+        }
     }
 
     public record Suggestion(List<String> hosts, List<String> urls) {

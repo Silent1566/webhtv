@@ -7,6 +7,7 @@ import android.view.ViewGroup;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.bean.Collect;
 import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.databinding.AdapterTypeBinding;
@@ -64,8 +65,15 @@ public class CollectAdapter extends RecyclerView.Adapter<CollectAdapter.ViewHold
         int old = getPosition();
         if (old == position) return;
         for (int i = 0; i < mItems.size(); i++) mItems.get(i).setSelected(i == position);
-        if (old >= 0) notifyItemChanged(old);
-        notifyItemChanged(position);
+        notifyChanged(old);
+        notifyChanged(position);
+    }
+
+    private void notifyChanged(int position) {
+        if (position < 0 || position >= getItemCount()) return;
+        App.post(() -> {
+            if (position >= 0 && position < getItemCount()) notifyItemChanged(position);
+        });
     }
 
     @Override

@@ -16,7 +16,7 @@ public class ExoUtilTest {
     }
 
     @Test
-    public void getRenderMode_keepsPlatformRendererFirstForSoftDecode() {
-        assertEquals(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON, ExoUtil.getRenderMode(PlayerEngine.SOFT));
+    public void getRenderMode_prefersExtensionRendererForSoftDecode() {
+        assertEquals(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER, ExoUtil.getRenderMode(PlayerEngine.SOFT));
     }
 }
