@@ -69,10 +69,10 @@
           "name": "media3-common-1.10.1-fongmi.aar",
           "url": "media3-common-1.10.1-fongmi.aar",
           "size": 611760,
-          "sha512": "d234b0a9073f18a9afe4d46a5799efb49ca802369784522bdf9605d4624f48c4a70703d55d5a40b04868350137a6043b793172e92f067e9eb33427ab01db5204",
-          "sha256": "934a11879a6454036cc09609a763fe87d99fae59d1df419fcfbe67380953665b",
-          "sha1": "e67557e00445058b08d678bc6d242fe52367c536",
-          "md5": "8537888d30c94bef04862a4b034f6d42"
+          "sha512": "de8044543a9f21c5c6ffd1f243a72a4a60cf36da4f8265dbe51dc7d5068d1e596fa05763295df3ce74774c5a9225a9fad299737da9f7772bc14d70df9cda9cc4",
+          "sha256": "234b8879339d7c3c71cf7c41bc3168a4a413e9effff6896dc8e130a7e32c5383",
+          "sha1": "9386e7cd1f4669ddec5fbbcdfb2d3612800f11c8",
+          "md5": "3823b43550a426496a31dbb7037a828d"
         }
       ]
     },
@@ -375,10 +375,10 @@
           "name": "media3-common-1.10.1-fongmi.aar",
           "url": "media3-common-1.10.1-fongmi.aar",
           "size": 611760,
-          "sha512": "d234b0a9073f18a9afe4d46a5799efb49ca802369784522bdf9605d4624f48c4a70703d55d5a40b04868350137a6043b793172e92f067e9eb33427ab01db5204",
-          "sha256": "934a11879a6454036cc09609a763fe87d99fae59d1df419fcfbe67380953665b",
-          "sha1": "e67557e00445058b08d678bc6d242fe52367c536",
-          "md5": "8537888d30c94bef04862a4b034f6d42"
+          "sha512": "de8044543a9f21c5c6ffd1f243a72a4a60cf36da4f8265dbe51dc7d5068d1e596fa05763295df3ce74774c5a9225a9fad299737da9f7772bc14d70df9cda9cc4",
+          "sha256": "234b8879339d7c3c71cf7c41bc3168a4a413e9effff6896dc8e130a7e32c5383",
+          "sha1": "9386e7cd1f4669ddec5fbbcdfb2d3612800f11c8",
+          "md5": "3823b43550a426496a31dbb7037a828d"
         }
       ]
     },

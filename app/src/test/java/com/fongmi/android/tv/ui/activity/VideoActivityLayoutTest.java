@@ -101,6 +101,25 @@ public class VideoActivityLayoutTest {
     }
 
     @Test
+    public void mobileVideoRefreshesDanmakuControlsAfterLateDanmakuLoad() throws Exception {
+        Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int method = source.indexOf("private void refreshDanmakuControls()");
+        int action = source.indexOf("mBinding.control.action.danmaku.setVisibility", method);
+        int quick = source.indexOf("mBinding.control.danmaku.setVisibility", method);
+        int apiSearch = source.indexOf("DanmakuApi.search");
+        int apiRefresh = source.indexOf("refreshDanmakuControls();", apiSearch);
+        int event = source.indexOf("RefreshEvent.Type.DANMAKU");
+        int eventRefresh = source.indexOf("refreshDanmakuControls();", event);
+
+        assertTrue(sourcePath + " is missing refreshDanmakuControls", method >= 0);
+        assertTrue("late danmaku refresh must update the fullscreen action button", action > method);
+        assertTrue("late danmaku refresh must update the quick toggle button", quick > method);
+        assertTrue("auto danmaku search must refresh controls after loading", apiRefresh > apiSearch);
+        assertTrue("manual danmaku refresh event must refresh controls after loading", eventRefresh > event);
+    }
+
+    @Test
     public void mobileVideoTmdbMovableViewsKeepQualityBetweenFlagsAndEpisodes() throws Exception {
         Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
@@ -221,6 +240,25 @@ public class VideoActivityLayoutTest {
         assertTrue("fusion playback controls must update visibility before final theme sync", updateVisibility > method);
         assertTrue("fusion playback controls must refresh header theme after all source and episode views are moved", refreshHeader > updateVisibility);
         assertTrue("fusion playback surface must sync after header playback controls are re-themed", refreshSurface > refreshHeader);
+    }
+
+    @Test
+    public void mobileVideoFusionUsesNativePlayerActionButtons() throws Exception {
+        Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int move = source.indexOf("private void moveFusionPlayerActionsToTmdb");
+        int actionRoot = source.indexOf("mBinding.control.action.getRoot()", move);
+        int settings = source.indexOf("applyActionButtonSettings();", actionRoot);
+        int layoutParams = source.indexOf("new LinearLayoutCompat.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)", actionRoot);
+        int docked = source.indexOf("private boolean isFusionPlayerActionsDocked()");
+
+        assertTrue(sourcePath + " is missing moveFusionPlayerActionsToTmdb", move >= 0);
+        assertTrue("fusion must reuse the native player action root", actionRoot > move);
+        assertTrue("fusion reused player buttons must honor player button order and visibility settings", settings > actionRoot);
+        assertTrue("fusion reused player action row must fill the TMDB playback controls width on narrow screens", layoutParams > actionRoot);
+        assertTrue("showControl must keep docked fusion player buttons visible", docked > move);
+        assertTrue("fusion player button text should share the moved playback control theme",
+                source.indexOf("tintFusionPlaybackTextTree(mBinding.control.action.getRoot()", source.indexOf("private void applyTmdbPlaybackControlColors()")) > 0);
     }
 
     @Test

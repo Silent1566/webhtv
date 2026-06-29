@@ -34,6 +34,62 @@ public class TmdbDetailActivityLayoutTest {
     }
 
     @Test
+    public void fusionInlinePlayerButtonsUsePlayerButtonSettings() throws Exception {
+        Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int method = source.indexOf("private void applyInlinePlayerButtonSettings()");
+        int update = source.indexOf("private void updateInlineButtons(boolean playing)");
+        int call = source.indexOf("applyInlinePlayerButtonSettings();", update);
+
+        assertTrue(sourcePath + " is missing applyInlinePlayerButtonSettings", method >= 0);
+        assertTrue("inline player buttons must apply settings after dynamic visibility is recalculated", call > update);
+        assertTrue("wide fusion buttons must use PlayerButtonSetting order and visibility",
+                source.indexOf("PlayerButtonSetting.applyOrder((ViewGroup) binding.playerActionRow.getChildAt(0)", method) > method);
+        assertTrue("fusion fullscreen button must be mapped to player button settings",
+                source.indexOf("buttons.put(PlayerButtonSetting.FULLSCREEN, binding.playerFullscreenAction)", method) > method);
+        assertTrue("fusion refresh button must be mapped so hiding reset hides refresh",
+                source.indexOf("buttons.put(PlayerButtonSetting.RESET, binding.playerRefresh)", method) > method);
+        assertTrue("fusion source button must be mapped to the change setting",
+                source.indexOf("buttons.put(PlayerButtonSetting.CHANGE, binding.playerChangeSource)", method) > method);
+    }
+
+    @Test
+    public void mobileFusionInlinePlayerActionLayoutExposesConfigContainer() throws Exception {
+        Path layoutPath = findMainResPath().resolve(Path.of("layout", "view_control_vod_action_tmdb.xml"));
+        String layout = new String(Files.readAllBytes(layoutPath), StandardCharsets.UTF_8);
+
+        assertTrue("mobile fusion action row must expose @id/container for PlayerButtonSetting.applyOrder",
+                layout.contains("android:id=\"@+id/container\""));
+    }
+
+    @Test
+    public void mobileFusionDetailDocksInlinePlayerActionsBelowPlayer() throws Exception {
+        Path layoutPath = findMainResPath().resolve(Path.of("layout", "activity_tmdb_detail.xml"));
+        String layout = new String(Files.readAllBytes(layoutPath), StandardCharsets.UTF_8);
+        int player = layout.indexOf("android:id=\"@+id/playerPanel\"");
+        int dock = layout.indexOf("android:id=\"@+id/mobileFusionPlayerActionDock\"");
+        int fusionActions = layout.indexOf("android:id=\"@+id/fusionActions\"");
+
+        assertTrue("mobile fusion detail must expose a dock for the shared player action row", dock >= 0);
+        assertTrue("mobile fusion player action dock must sit between player and detail actions", player < dock && dock < fusionActions);
+
+        Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int update = source.indexOf("private void updateMobileInlineButtons(boolean playing");
+        int dockMethod = source.indexOf("private boolean updateMobileFusionPlayerActionDock(boolean show)");
+        int restoreMethod = source.indexOf("private void restoreMobileInlinePlayerAction()");
+
+        assertTrue(sourcePath + " is missing updateMobileFusionPlayerActionDock", dockMethod >= 0);
+        assertTrue(sourcePath + " is missing restoreMobileInlinePlayerAction", restoreMethod >= 0);
+        assertTrue("mobile inline buttons must dock the action row before falling back to fullscreen visibility",
+                source.indexOf("boolean docked = updateMobileFusionPlayerActionDock(hasPlayer && !locked);", update) > update);
+        assertTrue("non-fullscreen fusion detail must move the shared action row into the visible dock",
+                source.indexOf("binding.mobileFusionPlayerActionDock.addView(detailActionRoot", dockMethod) > dockMethod);
+        assertTrue("fullscreen and non-fusion modes must restore the action row to the control overlay",
+                source.indexOf("restoreMobileInlinePlayerAction();", dockMethod) > dockMethod);
+    }
+
+    @Test
     public void fusionDetailBackdropCropsToFillScreen() throws Exception {
         Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);

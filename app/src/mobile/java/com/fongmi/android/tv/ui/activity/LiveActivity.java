@@ -917,12 +917,18 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
     @Override
     public void onItemClick(Group item) {
         mGroupAdapter.setSelected(mGroup = item);
-        mChannelAdapter.addAll(item.getChannel(), item.getPosition());
+        mChannelAdapter.addAll(item.getChannel(), getCurrentChannelPosition(item));
         scrollToChannelPosition(Math.max(item.getPosition(), 0));
         if (!item.isKeep() || ++count < 5 || mHides.isEmpty()) return;
         if (Biometric.enable()) Biometric.show(this);
         else PassDialog.create().show(this);
         resetPass();
+    }
+
+    private int getCurrentChannelPosition(Group group) {
+        if (mChannel == null || mChannel.getGroup() == null || !group.equals(mChannel.getGroup())) return -1;
+        for (int i = 0; i < group.getChannel().size(); i++) if (group.getChannel().get(i) == mChannel) return i;
+        return group.getChannel().indexOf(mChannel);
     }
 
     @Override

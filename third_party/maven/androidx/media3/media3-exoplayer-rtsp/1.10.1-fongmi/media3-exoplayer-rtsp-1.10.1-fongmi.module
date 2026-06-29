@@ -36,10 +36,10 @@
           "name": "media3-exoplayer-rtsp-1.10.1-fongmi.aar",
           "url": "media3-exoplayer-rtsp-1.10.1-fongmi.aar",
           "size": 165020,
-          "sha512": "dbac8e215ca9f7691334d89892ac0242d08561fc4ce633dc6d1b4cb2f88c3a5ab5f7153464f362a4bc07d79339553ebeca7b929d291415e3fad07d5c6d9afd14",
-          "sha256": "680ba4f7c5a73d093b28242622684235c24497e65a3a39268c9cf6dd030fe2c8",
-          "sha1": "c45998e4e4b23eacc212621da21939218f9e98cb",
-          "md5": "2d38d3eb3d75f12b71e630d00744abd5"
+          "sha512": "a7690e9f59ec20afdd04c2ee6daf4ee89122c12c6e67cfdddea24f90ef792ab4b505428b88ba508ae04a0667662d7509a2fc4ba2139b6417fcbdd60b4781389a",
+          "sha256": "cfd0a1f207fc33c30eb67c883f86b8243e8f9c0af60c52257f92094454b9a8a6",
+          "sha1": "270d14d7b1669ea63c234c261525a33f4272cdf6",
+          "md5": "1dc0b9883e846ccba6ca08cf8c4d0e4e"
         }
       ]
     },
@@ -72,10 +72,10 @@
           "name": "media3-exoplayer-rtsp-1.10.1-fongmi.aar",
           "url": "media3-exoplayer-rtsp-1.10.1-fongmi.aar",
           "size": 165020,
-          "sha512": "dbac8e215ca9f7691334d89892ac0242d08561fc4ce633dc6d1b4cb2f88c3a5ab5f7153464f362a4bc07d79339553ebeca7b929d291415e3fad07d5c6d9afd14",
-          "sha256": "680ba4f7c5a73d093b28242622684235c24497e65a3a39268c9cf6dd030fe2c8",
-          "sha1": "c45998e4e4b23eacc212621da21939218f9e98cb",
-          "md5": "2d38d3eb3d75f12b71e630d00744abd5"
+          "sha512": "a7690e9f59ec20afdd04c2ee6daf4ee89122c12c6e67cfdddea24f90ef792ab4b505428b88ba508ae04a0667662d7509a2fc4ba2139b6417fcbdd60b4781389a",
+          "sha256": "cfd0a1f207fc33c30eb67c883f86b8243e8f9c0af60c52257f92094454b9a8a6",
+          "sha1": "270d14d7b1669ea63c234c261525a33f4272cdf6",
+          "md5": "1dc0b9883e846ccba6ca08cf8c4d0e4e"
         }
       ]
     },

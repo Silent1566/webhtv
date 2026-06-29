@@ -667,6 +667,15 @@
                     android:visibility="gone" />
             </com.google.android.material.card.MaterialCardView>
 
+            <FrameLayout
+                android:id="@+id/mobileFusionPlayerActionDock"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="16dp"
+                android:layout_marginEnd="16dp"
+                android:layout_marginBottom="12dp"
+                android:visibility="gone" />
+
             <com.google.android.flexbox.FlexboxLayout
                 android:id="@+id/fusionActions"
                 android:layout_width="match_parent"

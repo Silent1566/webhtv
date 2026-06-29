@@ -52,8 +52,8 @@ public class LiveParser {
     }
 
     private static boolean isPlayableUrl(String url) {
-        String text = url == null ? "" : url.trim().toLowerCase(Locale.ROOT);
-        return text.startsWith("http") || text.startsWith("rtsp") || text.startsWith("rtmp");
+        String text = url == null ? "" : url.trim();
+        return text.contains("://");
     }
 
     public static void start(Live live) throws Exception {

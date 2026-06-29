@@ -81,6 +81,7 @@ import com.fongmi.android.tv.service.IntroSkipService;
 import com.fongmi.android.tv.service.PlaybackService;
 import com.fongmi.android.tv.service.TmdbService;
 import com.fongmi.android.tv.setting.DanmakuSetting;
+import com.fongmi.android.tv.setting.PlayerButtonSetting;
 import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.subtitle.SubtitlePlaybackSession;
@@ -251,6 +252,9 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private ViewGroup.LayoutParams inlinePiPLayoutParams;
     private View detailControlRoot;
     private View detailActionRoot;
+    private ViewGroup detailActionParent;
+    private ViewGroup.LayoutParams detailActionLayoutParams;
+    private int detailActionIndex;
     private View inlineControlFocus;
     private long lastInlineControlInteraction;
     private long inlineDisplaySuppressUntil;
@@ -747,6 +751,9 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         binding.detailControlHost.removeAllViews();
         binding.detailControlHost.addView(detailControlRoot);
         detailActionRoot = detailControlRoot.findViewById(R.id.action);
+        detailActionParent = (ViewGroup) detailActionRoot.getParent();
+        detailActionLayoutParams = detailActionRoot.getLayoutParams();
+        detailActionIndex = detailActionParent.indexOfChild(detailActionRoot);
     }
 
     private <T extends View> T detailControlView(int id, Class<T> type) {
@@ -3990,7 +3997,56 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         binding.playerRepeat.setSelected(hasPlayer && player().isRepeatOne());
         setInlineFullscreenIcon();
         updateMobileInlineButtons(playing, hasPlayer, hasPrev, hasNext, hasTitle);
+        applyInlinePlayerButtonSettings();
         updateInlineDisplayPanel();
+    }
+
+    private void applyInlinePlayerButtonSettings() {
+        PlayerButtonSetting.applyOrder((ViewGroup) binding.playerActionRow.getChildAt(0), inlinePlayerButtonMap());
+        if (!Util.isMobile() || detailActionRoot == null) return;
+        PlayerButtonSetting.applyOrder(detailActionRoot.findViewById(R.id.container), mobileInlinePlayerButtonMap());
+    }
+
+    private Map<String, View> inlinePlayerButtonMap() {
+        Map<String, View> buttons = new LinkedHashMap<>();
+        buttons.put(PlayerButtonSetting.FULLSCREEN, binding.playerFullscreenAction);
+        buttons.put(PlayerButtonSetting.NEXT, binding.playerNext);
+        buttons.put(PlayerButtonSetting.PREV, binding.playerPrev);
+        buttons.put(PlayerButtonSetting.EPISODES, binding.playerEpisodes);
+        buttons.put(PlayerButtonSetting.RESET, binding.playerRefresh);
+        buttons.put(PlayerButtonSetting.CHANGE, binding.playerChangeSource);
+        buttons.put(PlayerButtonSetting.PLAYER, binding.playerExternal);
+        buttons.put(PlayerButtonSetting.DECODE, binding.playerDecode);
+        buttons.put(PlayerButtonSetting.SPEED, binding.playerSpeed);
+        buttons.put(PlayerButtonSetting.SCALE, binding.playerScale);
+        buttons.put(PlayerButtonSetting.TEXT, binding.playerTextTrack);
+        buttons.put(PlayerButtonSetting.AUDIO, binding.playerAudioTrack);
+        buttons.put(PlayerButtonSetting.VIDEO, binding.playerVideoTrack);
+        buttons.put(PlayerButtonSetting.OPENING, binding.playerOpening);
+        buttons.put(PlayerButtonSetting.ENDING, binding.playerEnding);
+        buttons.put(PlayerButtonSetting.DANMAKU, binding.playerDanmaku);
+        buttons.put(PlayerButtonSetting.TITLE, binding.playerChapter);
+        buttons.put(PlayerButtonSetting.REPEAT, binding.playerRepeat);
+        return buttons;
+    }
+
+    private Map<String, View> mobileInlinePlayerButtonMap() {
+        Map<String, View> buttons = new LinkedHashMap<>();
+        buttons.put(PlayerButtonSetting.PLAYER, detailActionView(R.id.player, View.class));
+        buttons.put(PlayerButtonSetting.DECODE, detailActionView(R.id.decode, View.class));
+        buttons.put(PlayerButtonSetting.SPEED, detailActionView(R.id.speed, View.class));
+        buttons.put(PlayerButtonSetting.SCALE, detailActionView(R.id.scale, View.class));
+        buttons.put(PlayerButtonSetting.RESET, detailActionView(R.id.reset, View.class));
+        buttons.put(PlayerButtonSetting.REPEAT, detailActionView(R.id.repeat, View.class));
+        buttons.put(PlayerButtonSetting.TEXT, detailActionView(R.id.text, View.class));
+        buttons.put(PlayerButtonSetting.AUDIO, detailActionView(R.id.audio, View.class));
+        buttons.put(PlayerButtonSetting.VIDEO, detailActionView(R.id.video, View.class));
+        buttons.put(PlayerButtonSetting.OPENING, detailActionView(R.id.opening, View.class));
+        buttons.put(PlayerButtonSetting.ENDING, detailActionView(R.id.ending, View.class));
+        buttons.put(PlayerButtonSetting.DANMAKU, detailActionView(R.id.danmaku, View.class));
+        buttons.put(PlayerButtonSetting.TITLE, detailActionView(R.id.chapter, View.class));
+        buttons.put(PlayerButtonSetting.EPISODES, detailActionView(R.id.episodes, View.class));
+        return buttons;
     }
 
     private void updateMobileInlineButtons(boolean playing, boolean hasPlayer, boolean hasPrev, boolean hasNext, boolean hasTitle) {
@@ -4063,8 +4119,33 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         detailActionView(R.id.chapter, View.class).setVisibility(hasTitle ? View.VISIBLE : View.GONE);
         detailActionView(R.id.actionQuality, View.class).setVisibility(inlineQuality ? View.VISIBLE : View.GONE);
         detailActionView(R.id.repeat, View.class).setSelected(hasPlayer && player().isRepeatOne());
-        action.setVisibility(inlineFullscreen && !locked ? View.VISIBLE : View.GONE);
+        boolean docked = updateMobileFusionPlayerActionDock(hasPlayer && !locked);
+        if (!docked) action.setVisibility(inlineFullscreen && !locked ? View.VISIBLE : View.GONE);
         inlineControlController.updateDanmakuState();
+    }
+
+    private boolean updateMobileFusionPlayerActionDock(boolean show) {
+        if (!Util.isMobile() || detailActionRoot == null || binding.mobileFusionPlayerActionDock == null) return false;
+        if (!isFusionMode() || inlineFullscreen || inlinePiPLayout || !show) {
+            restoreMobileInlinePlayerAction();
+            binding.mobileFusionPlayerActionDock.setVisibility(View.GONE);
+            return false;
+        }
+        if (detailActionRoot.getParent() != binding.mobileFusionPlayerActionDock) {
+            if (detailActionRoot.getParent() instanceof ViewGroup parent) parent.removeView(detailActionRoot);
+            FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            binding.mobileFusionPlayerActionDock.addView(detailActionRoot, params);
+        }
+        binding.mobileFusionPlayerActionDock.setVisibility(View.VISIBLE);
+        detailActionRoot.setVisibility(View.VISIBLE);
+        return true;
+    }
+
+    private void restoreMobileInlinePlayerAction() {
+        if (detailActionRoot == null || detailActionParent == null || detailActionRoot.getParent() == detailActionParent) return;
+        if (detailActionRoot.getParent() instanceof ViewGroup parent) parent.removeView(detailActionRoot);
+        int index = Math.min(Math.max(detailActionIndex, 0), detailActionParent.getChildCount());
+        detailActionParent.addView(detailActionRoot, index, detailActionLayoutParams);
     }
 
     private CharSequence inlineDecodeText(boolean hasPlayer) {

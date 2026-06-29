@@ -199,6 +199,18 @@ patch_media_pom_workaround() {
   add_media_jar_dependency "org.brotli:dec"
 }
 
+apply_media_patches() {
+  local patch_dir="$THIRD_PARTY_DIR/patches"
+  local patch_file
+  [[ -d "$patch_dir" ]] || return 0
+  for patch_file in "$patch_dir"/media3-*.patch; do
+    [[ -f "$patch_file" ]] || continue
+    echo "Applying Media3 patch $(basename "$patch_file")"
+    git -C "$MEDIA_DIR" apply --check "$patch_file"
+    git -C "$MEDIA_DIR" apply "$patch_file"
+  done
+}
+
 prepare_android_env() {
   ANDROID_HOME="$(resolve_android_sdk)"
   export ANDROID_HOME
@@ -251,6 +263,7 @@ publish_media() {
   require_value fongmi_media.version "$media_version"
 
   clone_or_update "$media_repo" "$media_branch" "$media_commit" "$MEDIA_DIR"
+  apply_media_patches
   patch_media_release_version "$media_version"
   patch_media_pom_workaround
   prepare_media_compile_sdk

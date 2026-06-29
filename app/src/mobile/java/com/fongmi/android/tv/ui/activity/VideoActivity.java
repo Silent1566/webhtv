@@ -994,7 +994,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         addActionButton(PlayerButtonSetting.PREV, mBinding.control.action.prev);
         addActionButton(PlayerButtonSetting.NEXT, mBinding.control.action.next);
         addActionButton(PlayerButtonSetting.EPISODES, mBinding.control.action.episodes);
-        PlayerButtonSetting.applyOrder(mBinding.control.action.container, mActionButtons);
+        applyActionButtonSettings();
     }
 
     private void addActionButton(String id, View view) {
@@ -1003,6 +1003,10 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
 
     private void applyActionButtonVisibility() {
         if (mActionButtons != null) PlayerButtonSetting.applyVisibility(mActionButtons);
+    }
+
+    private void applyActionButtonSettings() {
+        if (mActionButtons != null) PlayerButtonSetting.applyOrder(mBinding.control.action.container, mActionButtons);
     }
 
     private void setVideoView(boolean isInPictureInPictureMode) {
@@ -1409,6 +1413,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         if (DanmakuApi.canSearch()) DanmakuApi.search(mHistory.getVodName(), getEpisode().getName(), danmaku -> {
             if (DanmakuSetting.isSpiderFirst() && !result.getDanmaku().isEmpty()) player().addDanmaku(danmaku);
             else player().setDanmaku(danmaku);
+            refreshDanmakuControls();
         });
     }
 
@@ -1820,7 +1825,12 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
     private void onBack() {
         if (isFullscreen() && isShortDramaSource()) finishShortDrama();
         else if (isFullscreen()) exitFullscreen();
-        else finishPlayback();
+        else finishVideoPlayback();
+    }
+
+    private void finishVideoPlayback() {
+        saveHistory(true);
+        finishPlayback();
     }
 
     private void onCast() {
@@ -2251,6 +2261,12 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         player().setDanmakuEnabled(false);
     }
 
+    private void refreshDanmakuControls() {
+        mBinding.control.action.danmaku.setVisibility(DanmakuSetting.isLoad() ? View.VISIBLE : View.GONE);
+        applyActionButtonVisibility();
+        if (mBinding.control.getRoot().getVisibility() == View.VISIBLE) mBinding.control.danmaku.setVisibility(isLock() || !player().haveDanmaku() ? View.GONE : View.VISIBLE);
+    }
+
     private void showControl() {
         if (service() == null || isInPictureInPictureMode()) return;
         setOsdSuppressed(true);
@@ -2265,7 +2281,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         mBinding.control.osdDiagnostics.setVisibility(PlayerSetting.isOsdDiagnostics() && !player().isEmpty() ? View.VISIBLE : View.GONE);
         mBinding.control.osdDiagnostics.setAlpha(mOsd != null && mOsd.isDiagnosticsVisible() ? 1f : 0.72f);
         mBinding.control.parse.setVisibility(isFullscreen() && isUseParse() ? View.VISIBLE : View.GONE);
-        mBinding.control.action.getRoot().setVisibility(isFullscreen() ? View.VISIBLE : View.GONE);
+        mBinding.control.action.getRoot().setVisibility(isFullscreen() || isFusionPlayerActionsDocked() ? View.VISIBLE : View.GONE);
         mBinding.control.right.lock.setVisibility(isFullscreen() ? View.VISIBLE : View.GONE);
         mBinding.control.info.setVisibility(player().isEmpty() ? View.GONE : View.VISIBLE);
         mBinding.control.cast.setVisibility(isFullscreen() && mHistory != null && !player().isEmpty() ? View.VISIBLE : View.GONE);
@@ -2553,7 +2569,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
             " canSave=" + (mHistory != null ? mHistory.canSave() : "null") +
             " incognito=" + Setting.isIncognito());
         if (mHistory == null || Setting.isIncognito()) return;
-        if (exit && isOwner()) {
+        if (service() != null && isOwner()) {
             updatePlaybackHistoryPosition();
             mHistory.setCreateTime(System.currentTimeMillis());
         }
@@ -2561,7 +2577,8 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         if (!mHistory.canSave()) return;
         History history = mHistory.copy();
         Task.execute(() -> {
-            history.merge().save();
+            if (history.getDuration() > 0) history.merge().save();
+            else history.save();
             android.util.Log.d("VideoActivity", "saveHistory: saved! key=" + history.getKey());
             if (exit) RefreshEvent.history();
         });
@@ -2574,7 +2591,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
     }
 
     private void updateHistory(Episode item) {
-        boolean sameEpisode = item.matches(mHistory.getEpisode());
+        boolean sameEpisode = item.matchesName(mHistory.getEpisode());
         boolean sameFlag = TextUtils.equals(mHistory.getVodFlag(), getFlag().getFlag());
         if (!sameEpisode || !sameFlag) mIntroSkipPlayback.reset();
         if ((!sameEpisode || !sameFlag) && service() != null) {
@@ -2852,9 +2869,9 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         if (mHistory == null) return;
         long position = player().getPosition();
         long duration = player().getDuration();
-        if (position <= 0 || duration <= 0) return;
-        mHistory.setPosition(position);
-        mHistory.setDuration(duration);
+        if (position > 0) mHistory.setPosition(position);
+        if (duration > 0) mHistory.setDuration(duration);
+        else if (mHistory.getDuration() < 0) mHistory.setDuration(0);
         PlaybackEventCollector.get().updateHistory(mHistory);
     }
 
@@ -2872,7 +2889,10 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         else if (event.getType() == RefreshEvent.Type.VOD) updateVod(event.getVod());
         else if (event.getType() == RefreshEvent.Type.HISTORY) refreshPersonalRecommendationsForHistory();
         else if (event.getType() == RefreshEvent.Type.SUBTITLE) player().setSub(Sub.from(event.getPath()));
-        else if (event.getType() == RefreshEvent.Type.DANMAKU) player().setDanmaku(Danmaku.from(event.getPath()));
+        else if (event.getType() == RefreshEvent.Type.DANMAKU) {
+            player().setDanmaku(Danmaku.from(event.getPath()));
+            refreshDanmakuControls();
+        }
     }
 
     private void requestIntroSkipPlan() {
@@ -2920,7 +2940,14 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
     }
 
     private void setPosition() {
-        if (mHistory != null) player().seekTo(Math.max(mHistory.getOpening(), mHistory.getPosition()));
+        if (mHistory == null) return;
+        if (mHistory.isNearEnding()) {
+            SpiderDebug.log("video-flow", "reset near-end history position=%d duration=%d key=%s", mHistory.getPosition(), mHistory.getDuration(), getHistoryKey());
+            mHistory.resetPlaybackPosition();
+            syncHistory();
+        }
+        long position = Math.max(mHistory.getOpening(), mHistory.getPosition());
+        if (position > 0) player().seekTo(position);
     }
 
     private void checkOrientation() {
@@ -3346,6 +3373,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         tintFusionPlaybackIcon(mBinding.reverse, color);
         tintFusionPlaybackIcon(mBinding.episodeViewMode, color);
         tintFusionPlaybackIcon(mBinding.more, color);
+        tintFusionPlaybackTextTree(mBinding.control.action.getRoot(), color, light);
     }
 
     private boolean isTmdbPlaybackLightTheme() {
@@ -3686,6 +3714,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
             if (parent != null) parent.removeView(view);
             playbackControls.addView(view);
         }
+        moveFusionPlayerActionsToTmdb(playbackControls);
         mTmdbControlsMoved = true;
         updateEpisodeGroupVisibility();
         mTmdbHeaderView.refreshTheme();
@@ -3750,6 +3779,21 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         if (view == null) return;
         for (TmdbMovedView item : mTmdbMovedViews) if (item.view == view) return;
         if (view.getParent() instanceof ViewGroup) mTmdbMovedViews.add(new TmdbMovedView(view));
+    }
+
+    private void moveFusionPlayerActionsToTmdb(ViewGroup playbackControls) {
+        if (!Setting.isFusionDetailPage()) return;
+        View actions = mBinding.control.action.getRoot();
+        rememberTmdbMovedView(actions);
+        if (actions.getParent() instanceof ViewGroup parent) parent.removeView(actions);
+        actions.setLayoutParams(new LinearLayoutCompat.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        playbackControls.addView(actions);
+        actions.setVisibility(View.VISIBLE);
+        applyActionButtonSettings();
+    }
+
+    private boolean isFusionPlayerActionsDocked() {
+        return Setting.isFusionDetailPage() && mBinding.control.action.getRoot().getParent() != mBinding.control.bottom;
     }
 
     private View[] getTmdbMovableViews() {
@@ -4151,6 +4195,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
             exitFullscreen();
         } else if (!isLock()) {
             mViewModel.stopSearch();
+            saveHistory(true);
             markPlaybackExiting();
             stopPlayback();
             if (isTaskRoot()) startActivity(new Intent(this, HomeActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP));

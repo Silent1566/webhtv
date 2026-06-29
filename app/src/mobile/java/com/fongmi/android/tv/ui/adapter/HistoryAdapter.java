@@ -72,8 +72,10 @@ public class HistoryAdapter extends BaseDiffAdapter<History, HistoryAdapter.View
         holder.binding.site.setText(item.getSiteName());
         holder.binding.remark.setText(item.getVodRemarks());
         holder.binding.site.setVisibility(item.getSiteVisible());
-        holder.binding.progress.setMax((int) item.getDuration());
-        holder.binding.progress.setProgress((int) item.getPosition(), animate);
+        int duration = (int) Math.min(Integer.MAX_VALUE, Math.max(0, item.getDuration()));
+        int progress = (int) Math.min(Integer.MAX_VALUE, Math.max(0, item.getPosition()));
+        holder.binding.progress.setMax(duration > 0 ? duration : 1);
+        holder.binding.progress.setProgress(duration > 0 ? Math.min(progress, duration) : 0, animate);
         holder.binding.delete.setVisibility(!delete ? View.GONE : View.VISIBLE);
         holder.binding.remark.setVisibility(delete || same ? View.GONE : View.VISIBLE);
         ImgUtil.load(item.getVodName(), item.getVodPic(), holder.binding.image);
