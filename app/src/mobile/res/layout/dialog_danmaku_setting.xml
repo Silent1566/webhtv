@@ -3,7 +3,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/shape_player_child_sheet_panel"
+    android:background="@drawable/shape_danmaku_setting_panel"
     android:orientation="vertical">
 
     <androidx.appcompat.widget.LinearLayoutCompat
@@ -54,7 +54,7 @@
             android:layout_weight="1"
             android:background="@drawable/selector_control_sheet_button"
             android:gravity="center"
-            android:text="@string/danmaku_section_appearance"
+            android:text="@string/danmaku_section_display"
             android:textColor="@color/selector_control_sheet_text"
             android:textSize="14sp" />
 
@@ -62,34 +62,10 @@
             android:id="@+id/tabTiming"
             android:layout_width="0dp"
             android:layout_height="match_parent"
-            android:layout_marginEnd="7dp"
             android:layout_weight="1"
             android:background="@drawable/selector_control_sheet_button"
             android:gravity="center"
             android:text="@string/danmaku_section_timing"
-            android:textColor="@color/selector_control_sheet_text"
-            android:textSize="14sp" />
-
-        <com.google.android.material.textview.MaterialTextView
-            android:id="@+id/tabDensity"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_marginEnd="7dp"
-            android:layout_weight="1"
-            android:background="@drawable/selector_control_sheet_button"
-            android:gravity="center"
-            android:text="@string/danmaku_section_density"
-            android:textColor="@color/selector_control_sheet_text"
-            android:textSize="14sp" />
-
-        <com.google.android.material.textview.MaterialTextView
-            android:id="@+id/tabDisplay"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:background="@drawable/selector_control_sheet_button"
-            android:gravity="center"
-            android:text="@string/danmaku_section_display"
             android:textColor="@color/selector_control_sheet_text"
             android:textSize="14sp" />
 
@@ -117,20 +93,6 @@
             <include
                 android:id="@+id/timing"
                 layout="@layout/view_danmaku_timing"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:visibility="gone" />
-
-            <include
-                android:id="@+id/density"
-                layout="@layout/view_danmaku_density"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:visibility="gone" />
-
-            <include
-                android:id="@+id/display"
-                layout="@layout/view_danmaku_display"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:visibility="gone" />

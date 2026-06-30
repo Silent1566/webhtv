@@ -267,7 +267,16 @@ public class PlayerManager implements ParseCallback {
     }
 
     public String getSizeText() {
-        return (getVideoWidth() == 0 && getVideoHeight() == 0) ? "" : getVideoWidth() + " x " + getVideoHeight();
+        int width = getVideoWidth();
+        int height = getVideoHeight();
+        if (width <= 0 || height <= 0) {
+            Format format = getVideoFormat();
+            if (format != null) {
+                if (width <= 0) width = format.width;
+                if (height <= 0) height = format.height;
+            }
+        }
+        return width <= 0 || height <= 0 ? "" : width + " x " + height;
     }
 
     public String getVideoParamsText() {
@@ -1071,13 +1080,18 @@ public class PlayerManager implements ParseCallback {
         if (danmakuController == null) return;
         if (spec != null) spec.setDanmaku(item);
         if (item.isEmpty()) {
+            if (SpiderDebug.isEnabled()) SpiderDebug.log("danmaku", "clear current=%s", summarizeUrl(currentDanmakuUrl));
             if (currentDanmakuUrl != null) danmakuController.clearItems();
             currentDanmakuUrl = null;
             return;
         }
         String url = item.getRealUrl();
-        if (TextUtils.equals(currentDanmakuUrl, url)) return;
+        if (TextUtils.equals(currentDanmakuUrl, url)) {
+            if (SpiderDebug.isEnabled()) SpiderDebug.log("danmaku", "skip same url=%s", summarizeUrl(url));
+            return;
+        }
         currentDanmakuUrl = url;
+        if (SpiderDebug.isEnabled()) SpiderDebug.log("danmaku", "load name=%s url=%s", item.getName(), summarizeUrl(url));
         danmakuController.setDataSource(Uri.parse(url));
     }
 

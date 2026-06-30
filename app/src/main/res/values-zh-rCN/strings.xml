@@ -106,6 +106,14 @@
     <string name="danmaku_max_scroll_lines">最大滚动行数</string>
     <string name="danmaku_max_top_lines">最大顶部行数</string>
     <string name="danmaku_max_bottom_lines">最大底部行数</string>
+    <string name="danmaku_top_rows">顶部行数</string>
+    <string name="danmaku_bottom_rows">底部行数</string>
+    <string name="danmaku_display_rows">显示行数</string>
+    <string name="danmaku_rows_1">1行</string>
+    <string name="danmaku_rows_2">2行</string>
+    <string name="danmaku_rows_3">3行</string>
+    <string name="danmaku_rows_4">4行</string>
+    <string name="danmaku_rows_5">5行</string>
     <string name="danmaku_line_spacing">垂直间距</string>
     <string name="danmaku_scroll_gap_ratio">水平间距</string>
     <string name="danmaku_show_scroll">滚动弹幕</string>

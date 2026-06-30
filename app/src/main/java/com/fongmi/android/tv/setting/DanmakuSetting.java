@@ -179,19 +179,41 @@ public class DanmakuSetting {
     }
 
     public static int getMaxTopLines() {
-        return Prefers.getInt("danmaku_max_top_lines", 0);
+        return clampFixedLines(Prefers.getInt("danmaku_max_top_lines", 0));
     }
 
     public static void putMaxTopLines(int value) {
-        Prefers.put("danmaku_max_top_lines", value);
+        Prefers.put("danmaku_max_top_lines", clampFixedLines(value));
     }
 
     public static int getMaxBottomLines() {
-        return Prefers.getInt("danmaku_max_bottom_lines", 0);
+        return clampFixedLines(Prefers.getInt("danmaku_max_bottom_lines", 0));
     }
 
     public static void putMaxBottomLines(int value) {
-        Prefers.put("danmaku_max_bottom_lines", value);
+        Prefers.put("danmaku_max_bottom_lines", clampFixedLines(value));
+    }
+
+    public static int getDisplayLines() {
+        int scroll = getMaxScrollLines();
+        if (scroll > 0) return clampDisplayLines(scroll);
+        int legacy = Math.max(getMaxTopLines(), getMaxBottomLines());
+        return legacy > 0 ? clampDisplayLines(legacy) : 3;
+    }
+
+    public static void putDisplayLines(int value) {
+        value = clampDisplayLines(value);
+        putMaxScrollLines(value);
+        putMaxTopLines(value);
+        putMaxBottomLines(value);
+    }
+
+    private static int clampFixedLines(int value) {
+        return Math.max(0, Math.min(5, value));
+    }
+
+    private static int clampDisplayLines(int value) {
+        return Math.max(1, Math.min(5, value));
     }
 
     public static float getLineSpacing() {
@@ -326,17 +348,11 @@ public class DanmakuSetting {
     }
 
     public static void resetDisplay() {
-        DanmakuConfig config = DanmakuConfig.DEFAULT;
-        putShowScroll(config.showScroll);
-        putShowTop(config.showTop);
-        putShowBottom(config.showBottom);
-        putShowReverse(config.showReverse);
-        putShowPositioned(config.showPositioned);
-        putShowSubtitle(config.showSubtitle);
-        putShowSpecial(config.showSpecial);
+        putDisplayLines(3);
     }
 
     public static DanmakuConfig getConfig() {
+        DanmakuConfig defaults = DanmakuConfig.DEFAULT;
         return new DanmakuConfig.Builder()
                 .setTextScale(getTextScale())
                 .setTransparency(getTransparency())
@@ -351,20 +367,20 @@ public class DanmakuSetting {
                 .setDurationMs(getDurationMs())
                 .setFixedDurationMs(getFixedDurationMs())
                 .setTimeOffsetMs(getTimeOffsetMs())
-                .setMaxOnScreen(getMaxOnScreen())
-                .setScrollAreaRatio(getScrollAreaRatio())
-                .setScrollGapRatio(getScrollGapRatio())
-                .setLineSpacing(getLineSpacing())
-                .setMaxScrollLines(getMaxScrollLines())
-                .setMaxTopLines(getMaxTopLines())
-                .setMaxBottomLines(getMaxBottomLines())
-                .setShowScroll(isShowScroll())
-                .setShowTop(isShowTop())
-                .setShowBottom(isShowBottom())
-                .setShowReverse(isShowReverse())
-                .setShowPositioned(isShowPositioned())
-                .setShowSubtitle(isShowSubtitle())
-                .setShowSpecial(isShowSpecial())
+                .setMaxOnScreen(defaults.maxOnScreen)
+                .setScrollAreaRatio(defaults.scrollAreaRatio)
+                .setScrollGapRatio(defaults.scrollGapRatio)
+                .setLineSpacing(defaults.lineSpacing)
+                .setMaxScrollLines(getDisplayLines())
+                .setMaxTopLines(getDisplayLines())
+                .setMaxBottomLines(getDisplayLines())
+                .setShowScroll(defaults.showScroll)
+                .setShowTop(defaults.showTop)
+                .setShowBottom(defaults.showBottom)
+                .setShowReverse(defaults.showReverse)
+                .setShowPositioned(defaults.showPositioned)
+                .setShowSubtitle(defaults.showSubtitle)
+                .setShowSpecial(defaults.showSpecial)
                 .build();
     }
 }

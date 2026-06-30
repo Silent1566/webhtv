@@ -53,6 +53,7 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
     private int gridSpanCount = 2;
     private String fallbackStillUrl = "";
     private View.OnKeyListener keyListener;
+    private View.OnFocusChangeListener focusChangeListener;
 
     public TmdbEpisodeAdapter(Listener listener) {
         this.listener = listener;
@@ -115,6 +116,10 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
         this.keyListener = keyListener;
     }
 
+    public void setOnFocusChangeListener(View.OnFocusChangeListener focusChangeListener) {
+        this.focusChangeListener = focusChangeListener;
+    }
+
     public void setNativeEnhanced(boolean nativeEnhanced) {
         if (this.nativeEnhanced == nativeEnhanced) return;
         this.nativeEnhanced = nativeEnhanced;
@@ -153,8 +158,9 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
 
         applyCardSize(holder, compact);
         if (isNativeEnhanced()) {
-            holder.binding.index.setText(title);
-            holder.binding.index.setTextSize(18f);
+            boolean phoneWidth = isPhoneWidth(holder.itemView);
+            holder.binding.index.setText(nativeEnhancedIndexTitle(title, cleanTitle, phoneWidth, mode));
+            holder.binding.index.setTextSize(nativeEnhancedIndexTextSize(phoneWidth, mode));
             holder.binding.fileSize.setVisibility(View.GONE);
             holder.binding.title.setVisibility(View.GONE);
             holder.binding.date.setText(nativeEnhancedMeta(tmdbEpisode));
@@ -220,7 +226,7 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
         ViewGroup.LayoutParams params = holder.binding.getRoot().getLayoutParams();
         if (isNativeEnhanced()) {
             params.width = mode == Mode.GRID ? ViewGroup.LayoutParams.MATCH_PARENT : dp(holder.itemView, 280);
-            params.height = dp(holder.itemView, mode == Mode.GRID ? 248 : 160);
+            params.height = dp(holder.itemView, mode == Mode.GRID ? nativeEnhancedGridCardHeight(holder.itemView) : 160);
         } else if (mode == Mode.GRID) {
             params.width = ViewGroup.LayoutParams.MATCH_PARENT;
             params.height = dp(holder.itemView, 118);
@@ -235,13 +241,24 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
             holder.binding.getRoot().setLayoutParams(marginParams);
         }
         ViewGroup.LayoutParams scrimParams = holder.binding.scrim.getLayoutParams();
-        scrimParams.height = dp(holder.itemView, isNativeEnhanced() ? mode == Mode.GRID ? 148 : 104 : 96);
+        scrimParams.height = dp(holder.itemView, isNativeEnhanced() ? mode == Mode.GRID ? nativeEnhancedGridScrimHeight(holder.itemView) : 104 : 96);
         holder.binding.scrim.setLayoutParams(scrimParams);
-        holder.binding.textPanel.setPadding(
-                dp(holder.itemView, isNativeEnhanced() ? 12 : 10),
-                dp(holder.itemView, isNativeEnhanced() ? 0 : 18),
-                dp(holder.itemView, isNativeEnhanced() ? 12 : 10),
-                dp(holder.itemView, isNativeEnhanced() ? mode == Mode.GRID ? 14 : 12 : 10));
+        int horizontal = nativeEnhancedMobileGrid(holder.itemView) ? 10 : isNativeEnhanced() ? 12 : 10;
+        int top = nativeEnhancedMobileGrid(holder.itemView) ? 18 : isNativeEnhanced() ? 0 : 18;
+        int bottom = nativeEnhancedMobileGrid(holder.itemView) ? 10 : isNativeEnhanced() ? mode == Mode.GRID ? 14 : 12 : 10;
+        holder.binding.textPanel.setPadding(dp(holder.itemView, horizontal), dp(holder.itemView, top), dp(holder.itemView, horizontal), dp(holder.itemView, bottom));
+    }
+
+    private boolean nativeEnhancedMobileGrid(View view) {
+        return isNativeEnhanced() && mode == Mode.GRID && isPhoneWidth(view);
+    }
+
+    private int nativeEnhancedGridCardHeight(View view) {
+        return TmdbEpisodeGridPolicy.nativeGridCardHeightDp(isPhoneWidth(view));
+    }
+
+    private int nativeEnhancedGridScrimHeight(View view) {
+        return TmdbEpisodeGridPolicy.nativeGridScrimHeightDp(isPhoneWidth(view));
     }
 
     private int listCardWidth(View view) {
@@ -273,7 +290,7 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
         if (height > 0) return height;
         ViewGroup.LayoutParams params = holder.binding.getRoot().getLayoutParams();
         if (params != null && params.height > 0) return params.height;
-        if (isNativeEnhanced()) return ResUtil.dp2px(mode == Mode.GRID ? 248 : 160);
+        if (isNativeEnhanced()) return ResUtil.dp2px(mode == Mode.GRID ? nativeEnhancedGridCardHeight(holder.itemView) : 160);
         return ResUtil.dp2px(mode == Mode.GRID ? TmdbEpisodeGridPolicy.GRID_CARD_HEIGHT_DP : (isPhoneWidth(holder.itemView) ? 172 : 190));
     }
 
@@ -298,17 +315,29 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
             holder.binding.getRoot().setStrokeWidth(0);
             holder.binding.getRoot().setCardElevation(0);
             holder.binding.getRoot().setTranslationZ(0);
+            holder.binding.getRoot().setOnFocusChangeListener(focusChangeListener);
             return;
         }
         TmdbCardFocusHelper.bind(
                 holder.binding.getRoot(),
                 activated ? (light ? 0xFFE5F7EC : 0x6630A86B) : (light ? 0xEEFFFFFF : 0xCC16202A),
                 activated ? activeStrokeColor : (light ? 0x33647480 : 0x33FFFFFF),
-                activated ? 2 : 1);
+                activated ? 2 : 1,
+                focused -> {
+                    if (focusChangeListener != null) focusChangeListener.onFocusChange(holder.binding.getRoot(), focused);
+                });
     }
 
     private boolean isNativeEnhanced() {
-        return nativeEnhanced && !Util.isMobile();
+        return nativeEnhanced;
+    }
+
+    static String nativeEnhancedIndexTitle(String title, String cleanTitle, boolean phoneWidth, Mode mode) {
+        return phoneWidth && mode == Mode.GRID ? cleanTitle : title;
+    }
+
+    static float nativeEnhancedIndexTextSize(boolean phoneWidth, Mode mode) {
+        return phoneWidth && mode == Mode.GRID ? 14f : phoneWidth ? 12f : 18f;
     }
 
     public static String getTitle(Episode episode, int number, String tmdbTitle) {

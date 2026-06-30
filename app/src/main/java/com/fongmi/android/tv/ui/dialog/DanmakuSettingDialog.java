@@ -1,8 +1,12 @@
 package com.fongmi.android.tv.ui.dialog;
 
 import android.app.Dialog;
+import android.content.DialogInterface;
+import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
 import android.view.LayoutInflater;
+import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
@@ -27,6 +31,7 @@ import com.google.android.material.bottomsheet.BottomSheetDialog;
 public final class DanmakuSettingDialog {
 
     private PlayerManager player;
+    private boolean restoreParent;
 
     public static DanmakuSettingDialog create() {
         return new DanmakuSettingDialog();
@@ -37,11 +42,16 @@ public final class DanmakuSettingDialog {
         return this;
     }
 
+    public DanmakuSettingDialog restoreParent(boolean restoreParent) {
+        this.restoreParent = restoreParent;
+        return this;
+    }
+
     public void show(FragmentActivity activity) {
         FragmentManager manager = activity.getSupportFragmentManager();
         for (Fragment fragment : manager.getFragments()) if (fragment instanceof BottomSheet || fragment instanceof SideSheet) return;
-        if (Util.isFullscreenLand(activity) || Util.isLeanback()) new SideSheet(player).show(manager, null);
-        else new BottomSheet(player).show(manager, null);
+        if (Util.isFullscreenLand(activity) || Util.isLeanback()) new SideSheet(player, restoreParent).show(manager, null);
+        else new BottomSheet(player, restoreParent).show(manager, null);
     }
 
     private static DialogDanmakuSettingBinding inflate(LayoutInflater inflater, ViewGroup container) {
@@ -52,9 +62,11 @@ public final class DanmakuSettingDialog {
 
         private DialogDanmakuSettingBinding binding;
         private final PlayerManager player;
+        private final boolean restoreParent;
 
-        BottomSheet(PlayerManager player) {
+        BottomSheet(PlayerManager player, boolean restoreParent) {
             this.player = player;
+            this.restoreParent = restoreParent;
         }
 
         @NonNull
@@ -82,6 +94,12 @@ public final class DanmakuSettingDialog {
         }
 
         @Override
+        public void onDismiss(@NonNull DialogInterface dialog) {
+            super.onDismiss(dialog);
+            DanmakuSettingDialog.restoreParent(this, player, restoreParent);
+        }
+
+        @Override
         protected boolean transparent() {
             return true;
         }
@@ -95,7 +113,7 @@ public final class DanmakuSettingDialog {
         protected void setBehavior(BottomSheetDialog dialog) {
             FrameLayout sheet = dialog.findViewById(com.google.android.material.R.id.design_bottom_sheet);
             if (sheet == null) return;
-            sheet.setBackgroundColor(ResUtil.getColor(R.color.transparent));
+            clearBackground(sheet);
             int height = getPanelHeight();
             ViewGroup.LayoutParams params = sheet.getLayoutParams();
             params.height = height;
@@ -112,8 +130,15 @@ public final class DanmakuSettingDialog {
             Window window = dialog.getWindow();
             window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND | WindowManager.LayoutParams.FLAG_FULLSCREEN);
             window.setDimAmount(0f);
+            window.setBackgroundDrawableResource(android.R.color.transparent);
             window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING);
             WindowCompat.setDecorFitsSystemWindows(window, true);
+        }
+
+        private void clearBackground(FrameLayout sheet) {
+            int color = ResUtil.getColor(R.color.transparent);
+            sheet.setBackgroundColor(color);
+            if (sheet.getParent() instanceof View) ((View) sheet.getParent()).setBackgroundColor(color);
         }
 
         private int getPanelHeight() {
@@ -127,9 +152,11 @@ public final class DanmakuSettingDialog {
 
         private DialogDanmakuSettingBinding binding;
         private final PlayerManager player;
+        private final boolean restoreParent;
 
-        SideSheet(PlayerManager player) {
+        SideSheet(PlayerManager player, boolean restoreParent) {
             this.player = player;
+            this.restoreParent = restoreParent;
         }
 
         @Override
@@ -146,5 +173,31 @@ public final class DanmakuSettingDialog {
         protected void initView() {
             new DanmakuSettingPanel(binding, player).bind();
         }
+
+        @Override
+        public void onDismiss(@NonNull DialogInterface dialog) {
+            super.onDismiss(dialog);
+            DanmakuSettingDialog.restoreParent(this, player, restoreParent);
+        }
+
+        @Override
+        public void onStart() {
+            super.onStart();
+            Dialog dialog = getDialog();
+            Window window = dialog == null ? null : dialog.getWindow();
+            if (window != null) window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            FrameLayout sheet = dialog == null ? null : dialog.findViewById(com.google.android.material.R.id.m3_side_sheet);
+            if (sheet != null) {
+                int color = ResUtil.getColor(R.color.transparent);
+                sheet.setBackgroundColor(color);
+                if (sheet.getParent() instanceof View) ((View) sheet.getParent()).setBackgroundColor(color);
+            }
+        }
+    }
+
+    private static void restoreParent(Fragment fragment, PlayerManager player, boolean restoreParent) {
+        FragmentActivity activity = fragment.getActivity();
+        if (!restoreParent || activity == null || activity.isFinishing()) return;
+        DanmakuDialog.create().player(player).show(activity);
     }
 }

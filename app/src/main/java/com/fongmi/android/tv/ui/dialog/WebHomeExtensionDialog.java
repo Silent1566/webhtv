@@ -7,7 +7,9 @@ import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.StateListDrawable;
 import android.text.InputType;
 import android.text.TextUtils;
 import android.view.Gravity;
@@ -160,6 +162,7 @@ public class WebHomeExtensionDialog extends BaseAlertDialog {
         binding.enabled.setOnClickListener(view -> {
             enabled = !enabled;
             updateEnabledText();
+            render();
         });
         binding.reverse.setOnClickListener(view -> {
             reverseOrder = !reverseOrder;
@@ -323,7 +326,7 @@ public class WebHomeExtensionDialog extends BaseAlertDialog {
         LinearLayoutCompat root = new LinearLayoutCompat(requireContext());
         root.setOrientation(LinearLayoutCompat.VERTICAL);
         root.setPadding(dp(10), dp(8), dp(10), dp(8));
-        root.setBackground(rowBackground());
+        root.setBackground(rowBackground(false));
         binding.list.addView(root, new LinearLayoutCompat.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         LinearLayoutCompat header = new LinearLayoutCompat(requireContext());
         header.setGravity(Gravity.CENTER_VERTICAL);
@@ -388,26 +391,27 @@ public class WebHomeExtensionDialog extends BaseAlertDialog {
         LinearLayoutCompat root = new LinearLayoutCompat(requireContext());
         root.setOrientation(LinearLayoutCompat.VERTICAL);
         root.setPadding(dp(10), dp(8), dp(10), dp(8));
-        root.setBackground(rowBackground());
+        boolean rowEnabled = model.enabled();
+        root.setBackground(rowBackground(!rowEnabled));
         root.setFocusable(true);
         root.setFocusableInTouchMode(true);
         LinearLayoutCompat.LayoutParams rootParams = new LinearLayoutCompat.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         rootParams.topMargin = dp(8);
         root.setLayoutParams(rootParams);
 
-        MaterialTextView title = text((position + 1) + ". " + model.name(), 15, Color.BLACK, true);
+        MaterialTextView title = text((position + 1) + ". " + model.name(), 15, titleColor(rowEnabled), true);
         root.addView(title);
         MaterialTextView status = text(model.status(), 12, statusColor(model.statusKey()), false);
         root.addView(status);
-        if (source == null) addDetail(root, getString(R.string.web_home_extension_source, shortText(model.source())));
+        if (source == null) addDetail(root, getString(R.string.web_home_extension_source, shortText(model.source())), !rowEnabled);
         if (source == null && item != null) {
-            addDetail(root, getString(R.string.web_home_extension_match, empty(item.matchText)));
-            if (!TextUtils.isEmpty(item.excludeText)) addDetail(root, getString(R.string.web_home_extension_exclude, item.excludeText));
-            if (!TextUtils.isEmpty(item.dependsText)) addDetail(root, getString(R.string.web_home_extension_depends, item.dependsText));
-            if (!TextUtils.isEmpty(item.reason)) addDetail(root, item.reason);
-            if (!TextUtils.isEmpty(item.lastLog)) addDetail(root, getString(R.string.web_home_extension_last_log, item.lastLog));
+            addDetail(root, getString(R.string.web_home_extension_match, empty(item.matchText)), !rowEnabled);
+            if (!TextUtils.isEmpty(item.excludeText)) addDetail(root, getString(R.string.web_home_extension_exclude, item.excludeText), !rowEnabled);
+            if (!TextUtils.isEmpty(item.dependsText)) addDetail(root, getString(R.string.web_home_extension_depends, item.dependsText), !rowEnabled);
+            if (!TextUtils.isEmpty(item.reason)) addDetail(root, item.reason, !rowEnabled);
+            if (!TextUtils.isEmpty(item.lastLog)) addDetail(root, getString(R.string.web_home_extension_last_log, item.lastLog), !rowEnabled);
         }
-        if (source != null) addSourceDetails(root, source, item);
+        if (source != null) addSourceDetails(root, source, item, !rowEnabled);
 
         LinearLayoutCompat actions = new LinearLayoutCompat(requireContext());
         actions.setGravity(Gravity.CENTER_VERTICAL);
@@ -416,8 +420,9 @@ public class WebHomeExtensionDialog extends BaseAlertDialog {
         actionParams.topMargin = dp(7);
         root.addView(actions, actionParams);
 
-        boolean rowEnabled = model.enabled();
-        MaterialButton toggle = sourceActionButton(rowEnabled ? R.string.setting_disable : R.string.setting_enable, !rowEnabled, false);
+        MaterialButton toggle = sourceActionButton(rowEnabled ? R.string.setting_enable : R.string.setting_disable, rowEnabled, false);
+        toggle.setEnabled(enabled);
+        toggle.setAlpha(enabled ? 1.0f : 0.55f);
         toggle.setOnClickListener(view -> {
             if (source != null) {
                 WebHomeExtensionSourceStore.setEnabled(source.getId(), !source.isEnabled());
@@ -440,14 +445,14 @@ public class WebHomeExtensionDialog extends BaseAlertDialog {
         return root;
     }
 
-    private void addSourceDetails(LinearLayoutCompat root, WebHomeExtensionSourceStore.Entry source, WebHomeExtensionRegistry.Item item) {
+    private void addSourceDetails(LinearLayoutCompat root, WebHomeExtensionSourceStore.Entry source, WebHomeExtensionRegistry.Item item, boolean disabled) {
         FormFields fields = formFields(source);
-        addDetail(root, getString(R.string.web_home_extension_source_type) + ": " + sourceTypeName(fields.sourceType));
+        addDetail(root, getString(R.string.web_home_extension_source_type) + ": " + sourceTypeName(fields.sourceType), disabled);
         String match = fields.regexMode || fields.siteKeys.isEmpty() ? fields.match : siteLabels(fields.siteKeys);
-        if (!TextUtils.isEmpty(match)) addDetail(root, getString(R.string.web_home_extension_match, match));
-        if (!TextUtils.isEmpty(fields.link)) addDetail(root, getString(R.string.web_home_extension_source, shortText(fields.link)));
-        else if (!TextUtils.isEmpty(fields.code)) addDetail(root, getString(R.string.web_home_extension_source, shortText(fields.code)));
-        if (item != null && !TextUtils.isEmpty(item.lastLog)) addDetail(root, getString(R.string.web_home_extension_last_log, item.lastLog));
+        if (!TextUtils.isEmpty(match)) addDetail(root, getString(R.string.web_home_extension_match, match), disabled);
+        if (!TextUtils.isEmpty(fields.link)) addDetail(root, getString(R.string.web_home_extension_source, shortText(fields.link)), disabled);
+        else if (!TextUtils.isEmpty(fields.code)) addDetail(root, getString(R.string.web_home_extension_source, shortText(fields.code)), disabled);
+        if (item != null && !TextUtils.isEmpty(item.lastLog)) addDetail(root, getString(R.string.web_home_extension_last_log, item.lastLog), disabled);
     }
 
     private void addSourceForm(LinearLayoutCompat root, WebHomeExtensionSourceStore.Entry source) {
@@ -1100,7 +1105,11 @@ public class WebHomeExtensionDialog extends BaseAlertDialog {
     }
 
     private void addDetail(LinearLayoutCompat root, String value) {
-        MaterialTextView view = text(value, 12, Color.parseColor("#5F6368"), false);
+        addDetail(root, value, false);
+    }
+
+    private void addDetail(LinearLayoutCompat root, String value, boolean disabled) {
+        MaterialTextView view = text(value, 12, detailColor(disabled), false);
         LinearLayoutCompat.LayoutParams params = new LinearLayoutCompat.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         params.topMargin = dp(3);
         root.addView(view, params);
@@ -1116,11 +1125,28 @@ public class WebHomeExtensionDialog extends BaseAlertDialog {
         return view;
     }
 
-    private GradientDrawable rowBackground() {
-        GradientDrawable drawable = new GradientDrawable();
-        drawable.setColor(Color.parseColor("#F5F6F7"));
-        drawable.setCornerRadius(dp(6));
+    private Drawable rowBackground(boolean disabled) {
+        StateListDrawable drawable = new StateListDrawable();
+        drawable.addState(new int[]{android.R.attr.state_focused}, rowShape("#E8F0FE", "#1A73E8", 2, 8));
+        drawable.addState(new int[]{android.R.attr.state_pressed}, rowShape("#E8F0FE", "#1A73E8", 2, 8));
+        drawable.addState(new int[]{}, rowShape(disabled ? "#ECEFF1" : "#F5F6F7", disabled ? "#D5D9DE" : "#F5F6F7", disabled ? 1 : 0, 6));
         return drawable;
+    }
+
+    private GradientDrawable rowShape(String color, String stroke, int strokeDp, int radiusDp) {
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setColor(Color.parseColor(color));
+        if (strokeDp > 0) drawable.setStroke(dp(strokeDp), Color.parseColor(stroke));
+        drawable.setCornerRadius(dp(radiusDp));
+        return drawable;
+    }
+
+    private int titleColor(boolean enabled) {
+        return Color.parseColor(enabled ? "#202124" : "#8A8D91");
+    }
+
+    private int detailColor(boolean disabled) {
+        return Color.parseColor(disabled ? "#9AA0A6" : "#5F6368");
     }
 
     private String statusText(WebHomeExtensionRegistry.Item item) {
@@ -1177,13 +1203,14 @@ public class WebHomeExtensionDialog extends BaseAlertDialog {
         }
 
         private String status() {
-            String state = item != null ? statusText(item) : (source != null && source.isEnabled() ? getString(R.string.setting_enable) : getString(R.string.setting_disable));
+            String state = !enabled || !sourceEnabled() ? getString(R.string.setting_disable) : item != null ? statusText(item) : getString(R.string.setting_enable);
             String id = item != null ? item.id : source == null ? "" : source.getId();
             String runAt = item == null ? "" : " · " + item.runAt;
             return id + runAt + " · " + state;
         }
 
         private String statusKey() {
+            if (!enabled || !sourceEnabled()) return "disabled";
             if (item != null) return item.status;
             return source != null && source.isEnabled() ? "matched" : "disabled";
         }
@@ -1194,6 +1221,10 @@ public class WebHomeExtensionDialog extends BaseAlertDialog {
         }
 
         private boolean enabled() {
+            return WebHomeExtensionDialog.this.enabled && sourceEnabled();
+        }
+
+        private boolean sourceEnabled() {
             if (source != null) return source.isEnabled();
             return item != null && item.enabled;
         }

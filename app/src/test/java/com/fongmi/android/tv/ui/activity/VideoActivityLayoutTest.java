@@ -143,7 +143,7 @@ public class VideoActivityLayoutTest {
     }
 
     @Test
-    public void mobileOriginalEnhancedHidesShortDisplayButKeepsDetailActionRow() throws Exception {
+    public void mobileOriginalEnhancedHidesOriginalDetailActionRow() throws Exception {
         Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
         int method = source.indexOf("private void setNativeDetailInfoVisible(boolean visible)");
@@ -152,11 +152,11 @@ public class VideoActivityLayoutTest {
         int visibilityMethod = source.indexOf("private void setOriginalEnhancedActionVisibility(boolean hide)");
 
         assertTrue(sourcePath + " is missing setNativeDetailInfoVisible", method >= 0);
-        assertTrue("native enhanced mode must not hide the whole detail action row",
+        assertTrue("native detail info visibility must not control the detail action row",
                 !methodBody.contains("mBinding.actionRow.setVisibility(visibility)"));
         assertTrue(sourcePath + " is missing setOriginalEnhancedActionVisibility", visibilityMethod >= 0);
-        assertTrue("native enhanced mode must hide the short display button",
-                source.indexOf("mBinding.shortDisplay.setVisibility(hide ? View.GONE : View.VISIBLE)", visibilityMethod) > visibilityMethod);
+        assertTrue("native enhanced mode must hide the original detail action row",
+                source.indexOf("mBinding.actionRow.setVisibility(hide ? View.GONE : View.VISIBLE)", visibilityMethod) > visibilityMethod);
     }
 
     @Test
@@ -170,6 +170,99 @@ public class VideoActivityLayoutTest {
                 source.indexOf("mBinding.shortDisplay.setVisibility(hide ? View.GONE : View.VISIBLE)", method) > method);
         assertTrue("native enhanced mode must hide the source change button",
                 source.indexOf("mBinding.change1.setVisibility(hide ? View.GONE : View.VISIBLE)", method) > method);
+    }
+
+    @Test
+    public void leanbackTmdbEpisodeDialogUsesFullscreenAdaptiveCards() throws Exception {
+        Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "dialog", "EpisodeListDialog.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int init = source.indexOf("protected void initView()");
+        int width = source.indexOf("private int getPanelWidth()");
+        int column = source.indexOf("private int getTmdbCardColumn()");
+        int start = source.indexOf("public void onStart()");
+
+        assertTrue(sourcePath + " is missing tmdb episode dialog hooks", init >= 0 && width > init && column > width && start > column);
+        assertTrue("TMDB episode dialog must use the full screen instead of the old right-side panel",
+                source.indexOf("if (tmdbCard) return screen;", width) > width
+                        && source.indexOf("int width = tmdbCard ? WindowManager.LayoutParams.MATCH_PARENT : panelWidth;", start) > start
+                        && source.indexOf("int gravity = tmdbCard ? Gravity.CENTER : Gravity.END | Gravity.BOTTOM;", start) > start);
+        assertTrue("TMDB episode dialog must use the same adaptive TV card columns as TMDB detail",
+                source.indexOf("return TmdbEpisodeGridPolicy.tvAdaptiveSpanCount(getResources().getConfiguration().screenWidthDp);", column) > column);
+        assertTrue("TMDB episode dialog should drop the side-sheet chrome in card mode",
+                source.indexOf("binding.getRoot().setBackgroundColor(0x66111820);", init) > init
+                        && source.indexOf("binding.getRoot().setPadding(ResUtil.dp2px(48), ResUtil.dp2px(34), ResUtil.dp2px(48), ResUtil.dp2px(26));", init) > init);
+
+        Path activityPath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String activity = new String(Files.readAllBytes(activityPath), StandardCharsets.UTF_8);
+        int span = activity.indexOf("private int getEpisodeGridSpanCount()");
+        int setEpisode = activity.indexOf("private void setEpisodeAdapter(List<Episode> items, boolean scrollToCurrent)");
+        int toggle = activity.indexOf("private void toggleEpisodeViewMode()");
+        assertTrue("native enhanced playback page episode grid must use the shared adaptive TV card columns",
+                span >= 0
+                        && activity.indexOf("return TmdbEpisodeGridPolicy.tvAdaptiveSpanCount(getResources().getConfiguration().screenWidthDp);", span) > span
+                        && setEpisode >= 0
+                        && activity.indexOf("if (showTmdbEpisodeChrome && hasMultiple) episodeGridMode = true;", setEpisode) > setEpisode
+                        && activity.indexOf("mBinding.episodeViewMode.setVisibility(View.GONE);", setEpisode) > setEpisode
+                        && toggle >= 0
+                        && activity.indexOf("if (isTmdbSourceEnabled()) return;", toggle) > toggle);
+    }
+
+    @Test
+    public void leanbackFullscreenExitRestoresEmbeddedVideoLayout() throws Exception {
+        Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int exit = source.indexOf("private void exitFullscreen()");
+        int restore = source.indexOf("private void restoreEmbeddedVideoLayoutAfterFullscreen()");
+        int next = source.indexOf("private void onContent()", restore);
+
+        assertTrue(sourcePath + " is missing exitFullscreen", exit >= 0);
+        assertTrue(sourcePath + " is missing restoreEmbeddedVideoLayoutAfterFullscreen", restore >= 0 && next > restore);
+
+        String exitBody = source.substring(exit, restore);
+        String restoreBody = source.substring(restore, next);
+        assertTrue("leanback fullscreen exit should reuse the embedded native player restore path",
+                exitBody.contains("mBinding.video.setLayoutParams(mFrameParams);")
+                        && exitBody.contains("restoreEmbeddedVideoLayoutAfterFullscreen();"));
+        assertTrue("embedded native player restore must invalidate stale fullscreen layout measurements",
+                restoreBody.contains("mBinding.video.forceLayout();")
+                        && restoreBody.contains("mBinding.video.requestLayout();")
+                        && restoreBody.contains("mBinding.exo.forceLayout();")
+                        && restoreBody.contains("mBinding.exo.requestLayout();")
+                        && restoreBody.contains("mBinding.scroll.forceLayout();")
+                        && restoreBody.contains("mBinding.scroll.requestLayout();")
+                        && restoreBody.contains("mBinding.progressLayout.requestLayout();")
+                        && restoreBody.contains("mBinding.video.post(() -> {")
+                        && restoreBody.contains("mBinding.progressLayout.postDelayed(() -> {")
+                        && restoreBody.contains("}, 180);"));
+    }
+
+    @Test
+    public void mobileFullscreenExitRestoresEmbeddedVideoLayout() throws Exception {
+        Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int exit = source.indexOf("private void exitFullscreen()");
+        int restore = source.indexOf("private void restoreEmbeddedVideoLayoutAfterFullscreen()");
+        int next = source.indexOf("private void setTransition()", restore);
+
+        assertTrue(sourcePath + " is missing exitFullscreen", exit >= 0);
+        assertTrue(sourcePath + " is missing restoreEmbeddedVideoLayoutAfterFullscreen", restore >= 0 && next > restore);
+
+        String exitBody = source.substring(exit, restore);
+        String restoreBody = source.substring(restore, next);
+        assertTrue("mobile fullscreen exit should reuse the embedded native player restore path",
+                exitBody.contains("mBinding.video.setLayoutParams(mFrameParams);")
+                        && exitBody.contains("restoreEmbeddedVideoLayoutAfterFullscreen();"));
+        assertTrue("mobile embedded native player restore must invalidate stale fullscreen layout measurements",
+                restoreBody.contains("mBinding.video.forceLayout();")
+                        && restoreBody.contains("mBinding.video.requestLayout();")
+                        && restoreBody.contains("mBinding.exo.forceLayout();")
+                        && restoreBody.contains("mBinding.exo.requestLayout();")
+                        && restoreBody.contains("mBinding.scroll.forceLayout();")
+                        && restoreBody.contains("mBinding.scroll.requestLayout();")
+                        && restoreBody.contains("mBinding.progressLayout.requestLayout();")
+                        && restoreBody.contains("mBinding.video.post(() -> {")
+                        && restoreBody.contains("mBinding.progressLayout.postDelayed(() -> {")
+                        && restoreBody.contains("}, 180);"));
     }
 
     @Test
@@ -348,6 +441,30 @@ public class VideoActivityLayoutTest {
                     "match_parent".equals(scrim.getAttribute("android:layout_width"))
                             && "match_parent".equals(scrim.getAttribute("android:layout_height")));
         }
+    }
+
+    @Test
+    public void mobileTmdbFallbackUsesAppWallpaperSurface() throws Exception {
+        Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int fallback = source.indexOf("private void showNativeDetailFallback(Vod item)");
+        int surface = source.indexOf("private void applyNativeFallbackWallpaperSurface()");
+        int theme = source.indexOf("private void applyFusionThemeSurface()");
+        int scrim = source.indexOf("private void applyContextWallScrimTheme()");
+
+        assertTrue(sourcePath + " is missing showNativeDetailFallback", fallback >= 0);
+        assertTrue(sourcePath + " is missing applyNativeFallbackWallpaperSurface", surface >= 0);
+        assertTrue("unmatched TMDB fallback must switch to the app wallpaper surface before native rows draw",
+                source.indexOf("applyNativeFallbackWallpaperSurface();", fallback) > fallback);
+        assertTrue("unmatched TMDB fallback must clear the opaque root background",
+                source.indexOf("mBinding.getRoot().setBackgroundColor(Color.TRANSPARENT);", surface) > surface);
+        assertTrue("unmatched TMDB fallback must clear the old TMDB scroll background",
+                source.indexOf("mBinding.scroll.setBackgroundColor(Color.TRANSPARENT);", surface) > surface);
+        assertTrue("unmatched TMDB fallback must keep a readable dark scrim over the app wallpaper",
+                source.indexOf("mBinding.videoContextScrim.setBackgroundResource(R.drawable.shape_video_context_scrim);", scrim) > scrim
+                        && source.indexOf("mBinding.videoContextScrim.setVisibility(View.VISIBLE);", scrim) > scrim);
+        assertTrue("fusion theme refresh must not cover unmatched fallback with a solid color",
+                source.indexOf("mBinding.getRoot().setBackgroundColor(mTmdbFallbackToNative ? Color.TRANSPARENT", theme) > theme);
     }
 
     @Test

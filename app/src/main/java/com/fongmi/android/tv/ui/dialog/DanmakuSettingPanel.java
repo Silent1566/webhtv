@@ -20,7 +20,6 @@ import java.util.Locale;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.IntConsumer;
-import java.util.function.IntFunction;
 import java.util.function.IntUnaryOperator;
 import java.util.function.LongConsumer;
 
@@ -38,8 +37,6 @@ final class DanmakuSettingPanel {
     void bind() {
         bindAppearance();
         bindTiming();
-        bindDensity();
-        bindDisplay();
         bindTabs();
         applySheetColors();
         showTab(0);
@@ -57,6 +54,7 @@ final class DanmakuSettingPanel {
         setupFloat(appearance.projectionOffsetXSlider, appearance.projectionOffsetXValue, DanmakuSetting.getProjectionOffsetX(), "%.2f", DanmakuSetting::putProjectionOffsetX);
         setupFloat(appearance.projectionOffsetYSlider, appearance.projectionOffsetYValue, DanmakuSetting.getProjectionOffsetY(), "%.2f", DanmakuSetting::putProjectionOffsetY);
         setupFloat(appearance.projectionAlphaSlider, appearance.projectionAlphaValue, DanmakuSetting.getProjectionTransparency(), "%.2f", DanmakuSetting::putProjectionTransparency);
+        setupSlider(appearance.lineCountSlider, appearance.lineCountValue, DanmakuSetting.getDisplayLines(), value -> lineCountText(value.intValue()), value -> DanmakuSetting.putDisplayLines(value.intValue()));
         setupChoice(DanmakuSetting.getStyleMode(), this::styleChipForMode, this::styleModeForChip, this::onStyleModeChanged, appearance.styleNone, appearance.styleShadow, appearance.styleStroke, appearance.styleProjection);
         setupChoice(DanmakuSetting.getColorMode(), this::colorChipForMode, this::colorModeForChip, this::onColorModeChanged, appearance.colorDefault, appearance.colorColorful, appearance.colorGradient);
         updateStyleSubSettings(DanmakuSetting.getStyleMode());
@@ -70,31 +68,8 @@ final class DanmakuSettingPanel {
         setupMs(timing.fixedDurationSlider, timing.fixedDurationValue, DanmakuSetting.getFixedDurationMs(), DanmakuSetting::putFixedDurationMs);
     }
 
-    private void bindDensity() {
-        var density = binding.density;
-        setupInt(density.maxOnScreenSlider, density.maxOnScreenValue, DanmakuSetting.getMaxOnScreen(), String::valueOf, DanmakuSetting::putMaxOnScreen);
-        setupFloat(density.scrollAreaSlider, density.scrollAreaValue, DanmakuSetting.getScrollAreaRatio(), "%.2f", DanmakuSetting::putScrollAreaRatio);
-        setupFloat(density.scrollGapSlider, density.scrollGapValue, DanmakuSetting.getScrollGapRatio(), "%.1f", DanmakuSetting::putScrollGapRatio);
-        setupFloat(density.lineSpacingSlider, density.lineSpacingValue, DanmakuSetting.getLineSpacing(), "%.1f", DanmakuSetting::putLineSpacing);
-        setupInt(density.maxScrollLinesSlider, density.maxScrollLinesValue, DanmakuSetting.getMaxScrollLines(), this::linesText, DanmakuSetting::putMaxScrollLines);
-        setupInt(density.maxTopLinesSlider, density.maxTopLinesValue, DanmakuSetting.getMaxTopLines(), this::linesText, DanmakuSetting::putMaxTopLines);
-        setupInt(density.maxBottomLinesSlider, density.maxBottomLinesValue, DanmakuSetting.getMaxBottomLines(), this::linesText, DanmakuSetting::putMaxBottomLines);
-        updateDependentControls();
-    }
-
-    private void bindDisplay() {
-        var display = binding.display;
-        setupSwitch(display.showScrollSwitch, DanmakuSetting.isShowScroll(), DanmakuSetting::putShowScroll, this::updateDependentControls);
-        setupSwitch(display.showTopSwitch, DanmakuSetting.isShowTop(), DanmakuSetting::putShowTop, this::updateDependentControls);
-        setupSwitch(display.showBottomSwitch, DanmakuSetting.isShowBottom(), DanmakuSetting::putShowBottom, this::updateDependentControls);
-        setupSwitch(display.showReverseSwitch, DanmakuSetting.isShowReverse(), DanmakuSetting::putShowReverse, this::updateDependentControls);
-        setupSwitch(display.showPositionedSwitch, DanmakuSetting.isShowPositioned(), DanmakuSetting::putShowPositioned, null);
-        setupSwitch(display.showSubtitleSwitch, DanmakuSetting.isShowSubtitle(), DanmakuSetting::putShowSubtitle, null);
-        setupSwitch(display.showSpecialSwitch, DanmakuSetting.isShowSpecial(), DanmakuSetting::putShowSpecial, null);
-    }
-
     private void bindTabs() {
-        TextView[] tabs = {binding.tabAppearance, binding.tabTiming, binding.tabDensity, binding.tabDisplay};
+        TextView[] tabs = {binding.tabAppearance, binding.tabTiming};
         for (TextView tab : tabs) {
             checkOnFocus(tab);
         }
@@ -113,20 +88,14 @@ final class DanmakuSettingPanel {
         tintSlider(binding.appearance.projectionOffsetXSlider);
         tintSlider(binding.appearance.projectionOffsetYSlider);
         tintSlider(binding.appearance.projectionAlphaSlider);
+        tintSlider(binding.appearance.lineCountSlider);
         tintSlider(binding.timing.timeOffsetSlider);
         tintSlider(binding.timing.durationSlider);
         tintSlider(binding.timing.fixedDurationSlider);
-        tintSlider(binding.density.maxOnScreenSlider);
-        tintSlider(binding.density.scrollAreaSlider);
-        tintSlider(binding.density.scrollGapSlider);
-        tintSlider(binding.density.lineSpacingSlider);
-        tintSlider(binding.density.maxScrollLinesSlider);
-        tintSlider(binding.density.maxTopLinesSlider);
-        tintSlider(binding.density.maxBottomLinesSlider);
     }
 
     private void tintText(View view) {
-        if (view == binding.reset || view == binding.tabAppearance || view == binding.tabTiming || view == binding.tabDensity || view == binding.tabDisplay) return;
+        if (view == binding.reset || view == binding.tabAppearance || view == binding.tabTiming) return;
         if (view instanceof MaterialButton) return;
         if (view instanceof TextView) ((TextView) view).setTextColor(ResUtil.getColor(R.color.white_90));
         if (view instanceof ViewGroup) {
@@ -148,8 +117,6 @@ final class DanmakuSettingPanel {
             if (!focused) return;
             if (button == binding.tabAppearance) showTab(0);
             else if (button == binding.tabTiming) showTab(1);
-            else if (button == binding.tabDensity) showTab(2);
-            else if (button == binding.tabDisplay) showTab(3);
         });
     }
 
@@ -157,6 +124,7 @@ final class DanmakuSettingPanel {
         switch (currentTab) {
             case 0:
                 DanmakuSetting.resetAppearance();
+                DanmakuSetting.resetDisplay();
                 bindAppearance();
                 applyConfig();
                 break;
@@ -165,23 +133,12 @@ final class DanmakuSettingPanel {
                 bindTiming();
                 applyConfig();
                 break;
-            case 2:
-                DanmakuSetting.resetDensity();
-                bindDensity();
-                applyConfig();
-                break;
-            case 3:
-                DanmakuSetting.resetDisplay();
-                bindDisplay();
-                updateDependentControls();
-                applyConfig();
-                break;
         }
     }
 
     private void showTab(int index) {
-        View[] roots = {binding.appearance.getRoot(), binding.timing.getRoot(), binding.density.getRoot(), binding.display.getRoot()};
-        TextView[] tabs = {binding.tabAppearance, binding.tabTiming, binding.tabDensity, binding.tabDisplay};
+        View[] roots = {binding.appearance.getRoot(), binding.timing.getRoot()};
+        TextView[] tabs = {binding.tabAppearance, binding.tabTiming};
         for (int i = 0; i < roots.length; i++) roots[i].setVisibility(visibleIf(index == i));
         for (int i = 0; i < tabs.length; i++) tabs[i].setSelected(index == i);
         binding.reset.setNextFocusDownId(tabs[currentTab = index].getId());
@@ -211,18 +168,6 @@ final class DanmakuSettingPanel {
     private void onColorModeChanged(int mode) {
         DanmakuSetting.putColorMode(mode);
         updateColorOverrideHint(mode);
-    }
-
-    private void updateDependentControls() {
-        var density = binding.density;
-        applyEnabled(density.maxScrollLinesRow, density.maxScrollLinesSlider, DanmakuSetting.isShowScroll());
-        applyEnabled(density.maxTopLinesRow, density.maxTopLinesSlider, DanmakuSetting.isShowTop());
-        applyEnabled(density.maxBottomLinesRow, density.maxBottomLinesSlider, DanmakuSetting.isShowBottom());
-    }
-
-    private void applyEnabled(View row, Slider slider, boolean enabled) {
-        row.setAlpha(enabled ? 1f : 0.38f);
-        slider.setEnabled(enabled);
     }
 
     private void applyConfig() {
@@ -263,10 +208,6 @@ final class DanmakuSettingPanel {
         setupSlider(slider, label, value, sliderValue -> String.format(Locale.getDefault(), format, sliderValue), setter::set);
     }
 
-    private void setupInt(Slider slider, TextView label, int value, IntFunction<String> formatter, IntConsumer setter) {
-        setupSlider(slider, label, value, sliderValue -> formatter.apply(sliderValue.intValue()), sliderValue -> setter.accept(sliderValue.intValue()));
-    }
-
     private void setupMs(Slider slider, TextView label, long valueMs, LongConsumer setter) {
         setupSlider(slider, label, valueMs, sliderValue -> String.format(Locale.getDefault(), "%.1fs", sliderValue / 1000f), sliderValue -> setter.accept(sliderValue.longValue()));
     }
@@ -302,17 +243,28 @@ final class DanmakuSettingPanel {
     private void setupChoice(int initialMode, IntUnaryOperator viewForMode, IntUnaryOperator modeForView, IntConsumer onChange, TextView... choices) {
         int selectedId = viewForMode.applyAsInt(initialMode);
         for (TextView choice : choices) {
-            choice.setSelected(choice.getId() == selectedId);
+            setChoiceSelected(choice, choice.getId() == selectedId);
             choice.setOnClickListener(view -> {
-                for (TextView item : choices) item.setSelected(item == view);
+                for (TextView item : choices) setChoiceSelected(item, item == view);
                 onChange.accept(modeForView.applyAsInt(view.getId()));
                 applyConfig();
             });
         }
     }
 
-    private String linesText(int value) {
-        return value == 0 ? binding.getRoot().getContext().getString(R.string.danmaku_auto) : String.valueOf(value);
+    private void setChoiceSelected(TextView choice, boolean selected) {
+        choice.setSelected(selected);
+        if (choice instanceof CompoundButton button) button.setChecked(selected);
+    }
+
+    private String lineCountText(int value) {
+        return switch (Math.max(1, Math.min(5, value))) {
+            case 1 -> binding.getRoot().getContext().getString(R.string.danmaku_rows_1);
+            case 2 -> binding.getRoot().getContext().getString(R.string.danmaku_rows_2);
+            case 3 -> binding.getRoot().getContext().getString(R.string.danmaku_rows_3);
+            case 4 -> binding.getRoot().getContext().getString(R.string.danmaku_rows_4);
+            default -> binding.getRoot().getContext().getString(R.string.danmaku_rows_5);
+        };
     }
 
     private int visibleIf(boolean condition) {

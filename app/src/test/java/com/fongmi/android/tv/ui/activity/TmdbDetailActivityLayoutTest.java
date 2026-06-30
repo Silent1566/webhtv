@@ -63,29 +63,31 @@ public class TmdbDetailActivityLayoutTest {
     }
 
     @Test
-    public void mobileFusionDetailDocksInlinePlayerActionsBelowPlayer() throws Exception {
+    public void mobileFusionDetailKeepsInlinePlayerActionsInsideOverlay() throws Exception {
         Path layoutPath = findMainResPath().resolve(Path.of("layout", "activity_tmdb_detail.xml"));
         String layout = new String(Files.readAllBytes(layoutPath), StandardCharsets.UTF_8);
         int player = layout.indexOf("android:id=\"@+id/playerPanel\"");
         int dock = layout.indexOf("android:id=\"@+id/mobileFusionPlayerActionDock\"");
         int fusionActions = layout.indexOf("android:id=\"@+id/fusionActions\"");
 
-        assertTrue("mobile fusion detail must expose a dock for the shared player action row", dock >= 0);
-        assertTrue("mobile fusion player action dock must sit between player and detail actions", player < dock && dock < fusionActions);
+        assertTrue("mobile fusion detail may keep a hidden legacy action dock for binding compatibility", dock >= 0);
+        assertTrue("mobile fusion player action dock must remain hidden between player and detail actions", player < dock && dock < fusionActions);
 
         Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
         int update = source.indexOf("private void updateMobileInlineButtons(boolean playing");
-        int dockMethod = source.indexOf("private boolean updateMobileFusionPlayerActionDock(boolean show)");
+        int dockMethod = source.indexOf("private void hideMobileFusionPlayerActionDock()");
         int restoreMethod = source.indexOf("private void restoreMobileInlinePlayerAction()");
 
-        assertTrue(sourcePath + " is missing updateMobileFusionPlayerActionDock", dockMethod >= 0);
+        assertTrue(sourcePath + " is missing hideMobileFusionPlayerActionDock", dockMethod >= 0);
         assertTrue(sourcePath + " is missing restoreMobileInlinePlayerAction", restoreMethod >= 0);
-        assertTrue("mobile inline buttons must dock the action row before falling back to fullscreen visibility",
-                source.indexOf("boolean docked = updateMobileFusionPlayerActionDock(hasPlayer && !locked);", update) > update);
-        assertTrue("non-fullscreen fusion detail must move the shared action row into the visible dock",
-                source.indexOf("binding.mobileFusionPlayerActionDock.addView(detailActionRoot", dockMethod) > dockMethod);
-        assertTrue("fullscreen and non-fusion modes must restore the action row to the control overlay",
+        assertTrue("mobile inline buttons must hide the below-player action dock before choosing overlay visibility",
+                source.indexOf("hideMobileFusionPlayerActionDock();", update) > update);
+        assertTrue("non-fullscreen fusion detail must not move the shared action row into a visible below-player dock",
+                !source.contains("binding.mobileFusionPlayerActionDock.addView(detailActionRoot"));
+        assertTrue("source switches must restore the action row to the control overlay and hide the dock",
+                source.indexOf("hideMobileFusionPlayerActionDock();", source.indexOf("private void resetDetailState()")) > source.indexOf("private void resetDetailState()"));
+        assertTrue("fullscreen and non-fusion modes must keep the action row in the control overlay",
                 source.indexOf("restoreMobileInlinePlayerAction();", dockMethod) > dockMethod);
     }
 
@@ -100,6 +102,27 @@ public class TmdbDetailActivityLayoutTest {
         String body = source.substring(method, methodEnd);
         assertTrue("Fusion detail must center-crop artwork so portrait screens do not show top/bottom background bars",
                 body.contains("return true;"));
+    }
+
+    @Test
+    public void unmatchedTmdbDetailUsesAppWallpaperBackdrop() throws Exception {
+        Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int bind = source.indexOf("private void bindBackdrop()");
+        int surface = source.indexOf("private void applyBackdropSurface(ThemeColors colors)");
+        int wallpaper = source.indexOf("private boolean useAppWallpaperBackdrop()");
+
+        assertTrue(sourcePath + " is missing bindBackdrop", bind >= 0);
+        assertTrue(sourcePath + " is missing applyBackdropSurface", surface >= 0);
+        assertTrue(sourcePath + " is missing useAppWallpaperBackdrop", wallpaper >= 0);
+        assertTrue("unmatched TMDB detail must not use the source poster as the large backdrop fallback",
+                source.indexOf("bindBackdropImage(vod.getName(), wallpaperBackdrop ? \"\" : tmdbBackdropUrl(), wallpaperBackdrop ? \"\" : vod.getPic());", bind) > bind);
+        assertTrue("unmatched TMDB detail must keep the hero layer visible so the wallpaper can be shaded",
+                source.indexOf("TextUtils.isEmpty(image) && !useAppWallpaperBackdrop() ? View.GONE : View.VISIBLE") > bind);
+        assertTrue("unmatched TMDB detail must make the detail background transparent over the app wallpaper",
+                source.indexOf("useAppWallpaperBackdrop() ? Color.TRANSPARENT : backdropFallbackBackground(colors)", surface) > surface);
+        assertTrue("wallpaper fallback must only apply after source detail has loaded and no TMDB detail matched",
+                source.indexOf("return vod != null && matchedTmdbDetail == null;", wallpaper) > wallpaper);
     }
 
     @Test
@@ -202,32 +225,111 @@ public class TmdbDetailActivityLayoutTest {
     }
 
     @Test
-    public void inlineEpisodeDialogKeepsTallViewportAndReadableLightThemeStates() throws Exception {
+    public void inlineEpisodesReuseSharedNativeEnhancedAdaptivePanel() throws Exception {
         Path activityPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
         String activity = new String(Files.readAllBytes(activityPath), StandardCharsets.UTF_8);
-        Path adapterPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "adapter", "InlineEpisodeAdapter.java"));
+        Path adapterPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "adapter", "TmdbEpisodeAdapter.java"));
         String adapter = new String(Files.readAllBytes(adapterPath), StandardCharsets.UTF_8);
+        Path policyPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "helper", "TmdbEpisodeGridPolicy.java"));
+        String policy = new String(Files.readAllBytes(policyPath), StandardCharsets.UTF_8);
 
         int method = activity.indexOf("private void showInlineEpisodes()");
-        int nextMethod = activity.indexOf("private void showTvInlineEpisodes()", method);
-        String body = activity.substring(method, nextMethod);
+        int sharedMethod = activity.indexOf("private void showNativeEnhancedInlineEpisodes()", method);
+        int sharedMethodEnd = activity.indexOf("private TextView createNativeEnhancedInlineSectionTitle", sharedMethod);
 
         assertTrue(activityPath + " is missing showInlineEpisodes", method >= 0);
-        assertTrue("mobile inline episode dialog should reserve a taller viewport so paged grids do not collapse",
-                body.contains("ResUtil.dp2px(620)") && body.contains("0.78f"));
-        assertTrue("mobile inline episode dialog should tint its container from the resolved detail theme",
-                body.contains("ThemeColors colors = lightTheme ? ThemeColors.light() : ThemeColors.dark();")
-                        && body.contains("content.setBackground(background);")
-                        && body.contains("title.setTextColor(colors.primary);")
-                        && body.contains("adapter.setLight(lightTheme);"));
-        assertTrue("inline episode page chips should stay readable in light theme",
-                activity.contains("button.setTextColor(lightTheme ? colors.secondary : 0xFFC6D0D9);")
-                        && activity.contains("background.setColor(lightTheme ? 0x1F20B866 : 0x332196F3);")
-                        && activity.contains("button.setTextColor(lightTheme ? colors.accent : 0xFF85C7FF);"));
-        assertTrue("inline episode adapter should expose a light-theme palette for playable items",
-                adapter.contains("public void setLight(boolean light)")
-                        && adapter.contains("int normalText = light ? 0xFF1E2A36 : COLOR_TEXT;")
-                        && adapter.contains("int normalBg = light ? 0xFFF1F5F9 : COLOR_NORMAL;"));
+        assertTrue(activityPath + " is missing showNativeEnhancedInlineEpisodes", sharedMethod >= 0 && sharedMethodEnd > sharedMethod);
+
+        String dispatchBody = activity.substring(method, sharedMethod);
+        String panelBody = activity.substring(sharedMethod, sharedMethodEnd);
+
+        assertTrue("mobile standalone TMDB detail modes should use the shared native-enhanced episode panel",
+                dispatchBody.contains("if (!Util.isMobile() || Setting.isStandaloneTmdbDetailMode(getDetailMode()))")
+                        && dispatchBody.contains("showNativeEnhancedInlineEpisodes();"));
+        assertTrue("native-enhanced inline episode panel should include line chips, page chips, and TMDB episode cards",
+                panelBody.contains("createNativeEnhancedInlineChipButton(flag.getShow())")
+                        && panelBody.contains("createNativeEnhancedInlineChipButton(ranges.get(i).label())")
+                        && panelBody.contains("new TmdbEpisodeAdapter")
+                        && panelBody.contains("adapter.setNativeEnhanced(true);"));
+        assertTrue("native-enhanced inline episode panel should use one responsive layout policy instead of forked dialogs",
+                panelBody.contains("NativeEnhancedInlineEpisodeLayout layout = nativeEnhancedInlineEpisodeLayout();")
+                        && panelBody.contains("NestedScrollView scroll = new NestedScrollView(this);")
+                        && panelBody.contains("scroll.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));")
+                        && panelBody.contains("scroll.addView(panel, new NestedScrollView.LayoutParams")
+                        && panelBody.contains("recycler.setNestedScrollingEnabled(false);")
+                        && panelBody.contains("updateNativeEnhancedInlineEpisodeLayoutManager(recycler, layout.spanCount())")
+                        && panelBody.contains("adapter.setGridSpanCount(layout.spanCount())")
+                        && panelBody.contains("new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)")
+                        && panelBody.contains("setView(scroll)")
+                        && panelBody.contains("window.getDecorView().setPadding(0, 0, 0, 0)")
+                        && panelBody.contains("window.setGravity(layout.gravity())")
+                        && panelBody.contains("window.setLayout(layout.windowWidth(), WindowManager.LayoutParams.MATCH_PARENT)"));
+        assertTrue("native-enhanced inline episode panel should move focus by whole grid rows so remote down never lands on a clipped row",
+                panelBody.contains("int target = position + layout.spanCount();")
+                        && panelBody.contains("position - layout.spanCount()")
+                        && activity.contains("private void alignNativeEnhancedInlineEpisodeRow(NestedScrollView scroll, RecyclerView recycler, int position, int spanCount)")
+                        && activity.contains("int rowStart = Math.max(0, position - position % span);")
+                        && activity.contains("scroll.scrollTo(0, Math.max(0, targetY));"));
+        assertTrue("native-enhanced inline episode chips should use the shared original enhanced video chip treatment",
+                activity.contains("private TextView createNativeEnhancedInlineChipButton(String text)")
+                        && activity.contains("new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ResUtil.dp2px(34))")
+                        && activity.contains("button.setMinWidth(ResUtil.dp2px(64));")
+                        && activity.contains("button.setBackgroundResource(R.drawable.shape_video_item);")
+                        && activity.contains("ContextCompat.getColorStateList(this, R.color.selector_video_text);")
+                        && activity.contains("button.setActivated(selected);"));
+        assertTrue("native-enhanced inline episodes should keep mobile native columns and adaptive TV columns",
+                activity.contains("private int nativeEnhancedInlineEpisodeSpanCount()")
+                        && activity.contains("TmdbEpisodeGridPolicy.nativeEnhancedSpanCount(Util.isMobile(), ResUtil.isPad(), ResUtil.isLand(this), getResources().getConfiguration().screenWidthDp)")
+                        && policy.contains("public static int nativeEnhancedSpanCount(boolean mobile, boolean pad, boolean landscape, int screenWidthDp)")
+                        && policy.contains("if (mobile) return pad ? landscape ? 4 : 3 : landscape ? 3 : 2;")
+                        && policy.contains("public static int tvAdaptiveSpanCount(int screenWidthDp)")
+                        && policy.contains("if (screenWidthDp >= 1600) return 5;")
+                        && policy.contains("if (screenWidthDp >= 1200) return 4;")
+                        && policy.contains("return 3;")
+                        && activity.contains("WindowManager.LayoutParams.MATCH_PARENT")
+                        && !activity.contains("Gravity.END | Gravity.CENTER_VERTICAL")
+                        && !activity.contains("0.50f"));
+        assertTrue("detail-page episode cards should use the same native-enhanced adaptive card mechanism",
+                activity.contains("episodeAdapter.setNativeEnhanced(true);")
+                        && activity.contains("private int episodeSpanCount()")
+                        && activity.contains("return nativeEnhancedInlineEpisodeSpanCount();")
+                        && activity.contains("private boolean shouldForceAdaptiveEpisodeGrid()")
+                        && activity.contains("return !Util.isMobile();")
+                        && activity.contains("if (shouldForceAdaptiveEpisodeGrid()) episodeGridMode = true;")
+                        && activity.contains("if (shouldForceAdaptiveEpisodeGrid()) return;")
+                        && activity.contains("private int nativeEnhancedEpisodeCardHeightDp()")
+                        && activity.contains("TmdbEpisodeGridPolicy.nativeGridCardHeightDp(getResources().getConfiguration().smallestScreenWidthDp < 600)")
+                        && activity.contains("TmdbEpisodeGridPolicy.NATIVE_GRID_CARD_BOTTOM_MARGIN_DP"));
+        assertTrue("native-enhanced card styling must not be disabled on mobile fusion overlays",
+                adapter.contains("private boolean isNativeEnhanced()")
+                        && adapter.contains("return nativeEnhanced;")
+                        && !adapter.contains("return nativeEnhanced && !Util.isMobile();"));
+        assertTrue("mobile native-enhanced cards should use the same compact TMDB card proportions as original enhanced",
+                adapter.contains("private int nativeEnhancedGridCardHeight(View view)")
+                        && adapter.contains("return TmdbEpisodeGridPolicy.nativeGridCardHeightDp(isPhoneWidth(view));")
+                        && adapter.contains("private int nativeEnhancedGridScrimHeight(View view)")
+                        && adapter.contains("return TmdbEpisodeGridPolicy.nativeGridScrimHeightDp(isPhoneWidth(view));")
+                        && policy.contains("public static final int NATIVE_GRID_CARD_HEIGHT_DP = 248;")
+                        && policy.contains("public static final int NATIVE_MOBILE_GRID_CARD_HEIGHT_DP = 190;")
+                        && policy.contains("public static final int NATIVE_GRID_SCRIM_HEIGHT_DP = 148;")
+                        && policy.contains("public static final int NATIVE_MOBILE_GRID_SCRIM_HEIGHT_DP = 104;"));
+        assertTrue("detail-page episode cards should align the focused grid row inside the outer scroll view",
+                activity.contains("episodeAdapter.setOnFocusChangeListener(this::onDetailEpisodeFocusChange);")
+                        && activity.contains("episodeAdapter.setOnKeyListener(this::onDetailEpisodeKey);")
+                        && activity.contains("button.setOnKeyListener((view, keyCode, event) -> onDetailFlagKey(keyCode, event));")
+                        && activity.contains("button.setOnKeyListener((view, keyCode, event) -> onDetailEpisodeRangeKey(keyCode, event));")
+                        && activity.contains("private boolean onDetailEpisodeKey(View view, int keyCode, KeyEvent event)")
+                        && activity.contains("return focusDetailEpisode(position - span);")
+                        && activity.contains("int target = position + span;")
+                        && activity.contains("private boolean focusDetailEpisodeRangeButton()")
+                        && activity.contains("private boolean focusDetailEpisode(int position)")
+                        && activity.contains("private void alignDetailEpisodeFocusedRow(View focusedView, int position)")
+                        && activity.contains("binding.episodeContainer.findViewHolderForAdapterPosition(rowStart)")
+                        && activity.contains("binding.scroll.scrollTo(0, Math.max(0, targetY));")
+                        && adapter.contains("private View.OnFocusChangeListener focusChangeListener;")
+                        && adapter.contains("public void setOnFocusChangeListener(View.OnFocusChangeListener focusChangeListener)")
+                        && adapter.contains("holder.binding.getRoot().setOnFocusChangeListener(focusChangeListener);")
+                        && adapter.contains("if (focusChangeListener != null) focusChangeListener.onFocusChange(holder.binding.getRoot(), focused);"));
     }
 
     @Test
@@ -237,19 +339,131 @@ public class TmdbDetailActivityLayoutTest {
 
         int mobileMethod = activity.indexOf("private MaterialButton createInlineEpisodeModeButton()");
         int mobileMethodEnd = activity.indexOf("private void updateInlineEpisodeModeButton(MaterialButton button)", mobileMethod);
-        int tvMethod = activity.indexOf("private void showTvInlineEpisodes()");
-        int tvMethodEnd = activity.indexOf("private boolean moveEpisodeDialogPageFocus(", tvMethod);
+        int sharedMethod = activity.indexOf("private void showNativeEnhancedInlineEpisodes()");
+        int sharedMethodEnd = activity.indexOf("private boolean moveEpisodeDialogPageFocus(", sharedMethod);
 
         assertTrue(activityPath + " is missing createInlineEpisodeModeButton", mobileMethod >= 0 && mobileMethodEnd > mobileMethod);
-        assertTrue(activityPath + " is missing showTvInlineEpisodes", tvMethod >= 0 && tvMethodEnd > tvMethod);
+        assertTrue(activityPath + " is missing showNativeEnhancedInlineEpisodes", sharedMethod >= 0 && sharedMethodEnd > sharedMethod);
 
         String mobileBody = activity.substring(mobileMethod, mobileMethodEnd);
-        String tvBody = activity.substring(tvMethod, tvMethodEnd);
+        String sharedBody = activity.substring(sharedMethod, sharedMethodEnd);
 
         assertTrue("mobile inline episode mode toggle should switch on the first tap instead of becoming touch-focusable",
                 !mobileBody.contains("button.setFocusableInTouchMode(true);"));
-        assertTrue("TV inline episode mode toggle should stay touch-focusable for remote-driven focus navigation",
-                tvBody.contains("mode.setFocusableInTouchMode(true);"));
+        assertTrue("native-enhanced inline episode panel should keep remote-driven focus navigation",
+                sharedBody.contains("button.setOnKeyListener(flagKeyListener);")
+                        && sharedBody.contains("adapter.setOnKeyListener")
+                        && sharedBody.contains("focusNativeEnhancedInlineEpisode(scroll, recycler, adapter, layout.spanCount())"));
+    }
+
+    @Test
+    public void inlineFullscreenExitRestoresEmbeddedPlayerLayout() throws Exception {
+        Path activityPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
+        String activity = new String(Files.readAllBytes(activityPath), StandardCharsets.UTF_8);
+
+        int restore = activity.indexOf("private void restoreInlinePlayerPanelAfterOverlay()");
+        int exitFullscreen = activity.indexOf("private void exitInlineFullscreen()");
+        int exitPiP = activity.indexOf("private void exitInlinePiPLayout()");
+        int enterFullscreen = activity.indexOf("private void enterInlineFullscreen()");
+        int enterPiP = activity.indexOf("private void enterInlinePiPLayout()");
+        int focusPlayerPanel = activity.indexOf("private void focusInlinePlayerPanel()");
+        int backFromFullscreen = activity.indexOf("private void backFromInlineFullscreen()");
+        int handleInlineKey = activity.indexOf("private boolean handleInlineKey(KeyEvent event)");
+        int onBackInvoked = activity.indexOf("protected void onBackInvoked()");
+
+        assertTrue(activityPath + " is missing restoreInlinePlayerPanelAfterOverlay", restore >= 0);
+        assertTrue(activityPath + " is missing exitInlineFullscreen", exitFullscreen >= 0);
+        assertTrue(activityPath + " is missing exitInlinePiPLayout", exitPiP >= 0);
+        assertTrue(activityPath + " is missing enterInlineFullscreen", enterFullscreen >= 0);
+        assertTrue(activityPath + " is missing enterInlinePiPLayout", enterPiP >= 0);
+        assertTrue(activityPath + " is missing focusInlinePlayerPanel", focusPlayerPanel >= 0);
+        assertTrue(activityPath + " is missing backFromInlineFullscreen", backFromFullscreen >= 0);
+        assertTrue(activityPath + " is missing handleInlineKey", handleInlineKey >= 0);
+        assertTrue(activityPath + " is missing onBackInvoked", onBackInvoked >= 0);
+
+        String restoreBody = activity.substring(restore, exitFullscreen);
+        String focusBody = activity.substring(focusPlayerPanel, activity.indexOf("private void setDetailActionButton", focusPlayerPanel));
+        String enterFullscreenBody = activity.substring(enterFullscreen, activity.indexOf("private void applyInlineShortDramaMode()", enterFullscreen));
+        String fullscreenBody = activity.substring(exitFullscreen, exitPiP);
+        String backFromFullscreenBody = activity.substring(backFromFullscreen, activity.indexOf("private void finishPlaybackToHome()", backFromFullscreen));
+        String enterPiPBody = activity.substring(enterPiP, exitPiP);
+        String pipBody = activity.substring(exitPiP, activity.indexOf("private void scheduleMobileInlineSideControlMarginUpdate()", exitPiP));
+        String keyBody = activity.substring(handleInlineKey, activity.indexOf("private boolean handleInlineSeekKey", handleInlineKey));
+        String backBody = activity.substring(onBackInvoked, activity.indexOf("private void saveInlineHistory()", onBackInvoked));
+
+        assertTrue("fullscreen/PiP exits must reset the player surface back to embedded match-parent sizing",
+                restoreBody.contains("setInlineVideoFrame(binding.exo, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);")
+                        && restoreBody.contains("setInlineVideoFrame(binding.danmaku, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);")
+                        && restoreBody.contains("binding.playerPanel.setTranslationZ(0f);")
+                        && restoreBody.contains("setPlayerCard(lightTheme ? ThemeColors.light() : ThemeColors.dark());"));
+        assertTrue("embedded player restore must force a layout pass for the PlayerView, SurfaceView, danmaku, and detail scroll",
+                restoreBody.contains("binding.playerPanel.requestLayout();")
+                        && restoreBody.contains("binding.exo.requestLayout();")
+                        && restoreBody.contains("View surface = binding.exo.getVideoSurfaceView();")
+                        && restoreBody.contains("if (surface != null) surface.requestLayout();")
+                        && restoreBody.contains("binding.danmaku.requestLayout();")
+                        && restoreBody.contains("binding.scroll.requestLayout();"));
+        assertTrue("embedded player restore must invalidate stale fullscreen measurements on the whole detail hierarchy",
+                activity.contains("private void requestEmbeddedInlinePlayerLayout(ViewGroup parent)")
+                        && activity.contains("binding.playerPanel.forceLayout();")
+                        && activity.contains("binding.exo.forceLayout();")
+                        && activity.contains("binding.danmaku.forceLayout();")
+                        && activity.contains("parent.forceLayout();")
+                        && activity.contains("parent.requestLayout();")
+                        && activity.contains("binding.pageContent.forceLayout();")
+                        && activity.contains("binding.pageContent.requestLayout();")
+                        && activity.contains("binding.scroll.forceLayout();")
+                        && activity.contains("binding.scroll.requestLayout();")
+                        && activity.contains("binding.root.requestLayout();"));
+        assertTrue("embedded player restore must synchronously remeasure the detail content when Android keeps the stale fullscreen layout",
+                activity.contains("private void layoutEmbeddedInlinePageContent(ViewGroup parent)")
+                        && activity.contains("if (parent != binding.pageContent || binding.scroll.getWidth() <= 0) return;")
+                        && activity.contains("View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY)")
+                        && activity.contains("View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)")
+                        && activity.contains("binding.pageContent.measure(widthSpec, heightSpec);")
+                        && activity.contains("int height = Math.max(binding.pageContent.getMeasuredHeight(), binding.scroll.getHeight());")
+                        && activity.contains("binding.pageContent.layout(0, 0, width, height);"));
+        assertTrue("fullscreen/PiP entry must keep a defensive copy of embedded layout params",
+                activity.contains("private ViewGroup.LayoutParams copyInlinePlayerLayoutParams(ViewGroup.LayoutParams params)")
+                        && activity.contains("private ViewGroup.LayoutParams embeddedInlinePlayerLayoutParams(ViewGroup parent, ViewGroup.LayoutParams fallback)")
+                        && activity.contains("private void restoreEmbeddedInlinePlayerLayout()")
+                        && activity.contains("private void restoreInlineDetailScrollAfterOverlay()")
+                        && activity.contains("if (binding == null || !isInlinePlayerMode()) return;")
+                        && activity.contains("new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ResUtil.dp2px(252))")
+                        && activity.contains("params.setMargins(ResUtil.dp2px(16), ResUtil.dp2px(isFusionMode() ? 22 : 14), ResUtil.dp2px(16), ResUtil.dp2px(isFusionMode() ? 20 : 16));")
+                        && activity.contains("params.height = ResUtil.dp2px(252);")
+                        && activity.contains("binding.playerPanel.setLayoutParams(params);")
+                        && activity.contains("binding.scroll.scrollTo(0, 0);")
+                        && enterFullscreenBody.contains("playerLayoutParams = copyInlinePlayerLayoutParams(binding.playerPanel.getLayoutParams());")
+                        && enterPiPBody.contains("inlinePiPLayoutParams = copyInlinePlayerLayoutParams(binding.playerPanel.getLayoutParams());"));
+        assertTrue("fullscreen exit should reuse the embedded player restore path after reattaching the shared player panel",
+                fullscreenBody.contains("playerParent.addView(binding.playerPanel, index, embeddedInlinePlayerLayoutParams(playerParent, playerLayoutParams));")
+                        && fullscreenBody.contains("binding.playerPanel.setLayoutParams(embeddedInlinePlayerLayoutParams(playerParent, playerLayoutParams));")
+                        && fullscreenBody.contains("resetInlineShortDramaMode();")
+                        && fullscreenBody.contains("restoreInlinePlayerPanelAfterOverlay();")
+                        && !fullscreenBody.contains("closeDetailFullscreenPlayer();")
+                        && fullscreenBody.contains("scheduleInlinePlayerPanelRestoreAfterOverlay();")
+                        && activity.contains("private void scheduleInlinePlayerPanelRestoreAfterOverlay()")
+                        && activity.contains("binding.playerPanel.post(() -> {")
+                        && activity.contains("binding.root.postDelayed(() -> {")
+                        && activity.contains("}, 180);"));
+        assertTrue("native enhanced/detail-player fullscreen Back must use the same embedded-player exit path as fusion",
+                backFromFullscreenBody.contains("exitInlineFullscreen();")
+                        && !backFromFullscreenBody.contains("finishPlaybackToHome();")
+                        && !backFromFullscreenBody.contains("Setting.isPlayBackToDetail()")
+                        && focusBody.contains("if (!isInlinePlayerMode()) return;")
+                        && !focusBody.contains("if (!isFusionMode()) return;"));
+        assertTrue("PiP layout exit should reuse the same embedded player restore path",
+                pipBody.contains("inlinePiPParent.addView(binding.playerPanel, index, embeddedInlinePlayerLayoutParams(inlinePiPParent, inlinePiPLayoutParams));")
+                        && pipBody.contains("binding.playerPanel.setLayoutParams(embeddedInlinePlayerLayoutParams(inlinePiPParent, inlinePiPLayoutParams));")
+                        && pipBody.contains("restoreInlinePlayerPanelAfterOverlay();"));
+        assertTrue("leanback fullscreen Back should exit fullscreen before the generic hide-controls branch can consume it",
+                keyBody.indexOf("KeyUtil.isBackKey(event) && Util.isLeanback() && inlineFullscreen") >= 0
+                        && keyBody.indexOf("KeyUtil.isBackKey(event) && isInlineControlsVisible()") > keyBody.indexOf("KeyUtil.isBackKey(event) && Util.isLeanback() && inlineFullscreen")
+                        && keyBody.contains("if (KeyUtil.isActionUp(event)) backFromInlineFullscreen();")
+                        && backBody.indexOf("if (Util.isLeanback() && inlineFullscreen)") >= 0
+                        && backBody.indexOf("if (isInlineControlsVisible())") > backBody.indexOf("if (Util.isLeanback() && inlineFullscreen)")
+                        && backBody.contains("backFromInlineFullscreen();"));
     }
 
     private static Path findMainJavaPath() {

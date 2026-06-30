@@ -190,6 +190,7 @@ public class CustomCspDialog extends BaseAlertDialog {
             enabled = !enabled;
             markJsonDirty();
             updateEnabledText();
+            adapter.notifyDataSetChanged();
         });
         binding.reverse.setOnClickListener(view -> {
             reverseOrder = !reverseOrder;
@@ -1059,11 +1060,12 @@ public class CustomCspDialog extends BaseAlertDialog {
     }
 
     private String meta(CustomCspSetting.Item item) {
-        String status = item.isEnabled() ? getString(item.isValid() ? R.string.playback_webhook_active : R.string.playback_webhook_incomplete) : getString(R.string.setting_disable);
+        boolean effective = effectiveEnabled(item);
+        String status = effective ? getString(item.isValid() ? R.string.playback_webhook_active : R.string.playback_webhook_incomplete) : getString(R.string.setting_disable);
         if (item.isWebHome() && item.hasInvalidExtensions()) status += " · " + getString(R.string.setting_custom_csp_extensions_invalid);
         if (item.isOther()) return status + " · " + item.getOtherKey();
         if (item.isLive()) return status + " · " + getString(R.string.setting_custom_csp_player_type) + " " + empty(String.valueOf(item.getPlayerType()));
-        if (item.isWebHome()) return status + " · " + getString(R.string.setting_custom_csp_extensions_toggle) + " " + (TextUtils.isEmpty(item.getExtensionsText()) ? getString(R.string.none) : getString(R.string.setting_enable));
+        if (item.isWebHome()) return status + " · " + getString(R.string.setting_custom_csp_extensions_toggle) + " " + (TextUtils.isEmpty(item.getExtensionsText()) ? getString(R.string.none) : getString(effective ? R.string.setting_enable : R.string.setting_disable));
         return status + " · " + getString(R.string.setting_custom_csp_type) + " " + item.getType();
     }
 
@@ -1081,16 +1083,17 @@ public class CustomCspDialog extends BaseAlertDialog {
     }
 
     private int statusColor(CustomCspSetting.Item item) {
-        if (!item.isEnabled()) return Color.parseColor("#6F7378");
+        if (!effectiveEnabled(item)) return Color.parseColor("#6F7378");
         return item.isValid() && !item.hasInvalidExtensions() ? Color.parseColor("#137333") : Color.parseColor("#B3261E");
     }
 
     private Drawable rowBackground(CustomCspSetting.Item item) {
+        boolean disabled = !effectiveEnabled(item);
         StateListDrawable drawable = new StateListDrawable();
         drawable.addState(new int[]{android.R.attr.state_focused}, rowShape("#E8F0FE", "#1A73E8", 2, 8));
         drawable.addState(new int[]{android.R.attr.state_pressed}, rowShape("#E8F0FE", "#1A73E8", 2, 8));
         drawable.addState(new int[]{android.R.attr.state_activated}, rowShape("#E8F0FE", "#1A73E8", 2, 8));
-        drawable.addState(new int[]{}, rowShape(item.isValid() ? "#F5F6F7" : "#FFF7F7", item.isValid() ? "#DADCE0" : "#F1C9C6", 1, 6));
+        drawable.addState(new int[]{}, rowShape(disabled ? "#ECEFF1" : item.isValid() ? "#F5F6F7" : "#FFF7F7", disabled ? "#D5D9DE" : item.isValid() ? "#DADCE0" : "#F1C9C6", 1, 6));
         return drawable;
     }
 
@@ -1125,9 +1128,25 @@ public class CustomCspDialog extends BaseAlertDialog {
         return view;
     }
 
+    private boolean effectiveEnabled(CustomCspSetting.Item item) {
+        return enabled && item.isEnabled();
+    }
+
+    private int titleColor(boolean enabled) {
+        return Color.parseColor(enabled ? "#202124" : "#8A8D91");
+    }
+
+    private int detailColor(boolean disabled) {
+        return Color.parseColor(disabled ? "#9AA0A6" : "#5F6368");
+    }
+
     private void addDetail(LinearLayoutCompat root, String value) {
+        addDetail(root, value, false);
+    }
+
+    private void addDetail(LinearLayoutCompat root, String value, boolean disabled) {
         if (TextUtils.isEmpty(value)) return;
-        MaterialTextView view = text(value, 12, Color.parseColor("#5F6368"), false);
+        MaterialTextView view = text(value, 12, detailColor(disabled), false);
         LinearLayoutCompat.LayoutParams params = new LinearLayoutCompat.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         params.topMargin = dp(3);
         root.addView(view, params);
@@ -1321,6 +1340,7 @@ public class CustomCspDialog extends BaseAlertDialog {
 
             void bind(CustomCspSetting.Item item, int position) {
                 this.item = item;
+                boolean effective = effectiveEnabled(item);
                 root.removeAllViews();
                 root.setBackground(rowBackground(item));
                 root.setFocusable(true);
@@ -1335,7 +1355,7 @@ public class CustomCspDialog extends BaseAlertDialog {
                 header.setOrientation(LinearLayoutCompat.HORIZONTAL);
                 root.addView(header, new LinearLayoutCompat.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-                MaterialTextView title = text((position + 1) + ". " + item.getName(), 15, Color.BLACK, true);
+                MaterialTextView title = text((position + 1) + ". " + item.getName(), 15, titleColor(effective), true);
                 header.addView(title, new LinearLayoutCompat.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
                 header.addView(badge(kindName(item), statusColor(item)));
                 if (sortMode) {
@@ -1360,9 +1380,9 @@ public class CustomCspDialog extends BaseAlertDialog {
                     header.addView(down, iconLayout(4));
                 }
 
-                addDetail(root, primaryDetail(item));
-                if (!item.isLive() && !item.isOther()) addDetail(root, getString(R.string.setting_custom_csp_key) + ": " + item.getKey());
-                addDetail(root, meta(item));
+                addDetail(root, primaryDetail(item), !effective);
+                if (!item.isLive() && !item.isOther()) addDetail(root, getString(R.string.setting_custom_csp_key) + ": " + item.getKey(), !effective);
+                addDetail(root, meta(item), !effective);
 
                 if (sortMode) return;
 
@@ -1373,7 +1393,9 @@ public class CustomCspDialog extends BaseAlertDialog {
                 actionParams.topMargin = dp(7);
                 root.addView(actions, actionParams);
 
-                MaterialButton toggle = actionButton(item.isEnabled() ? R.string.setting_disable : R.string.setting_enable, !item.isEnabled(), false);
+                MaterialButton toggle = actionButton(effective ? R.string.setting_enable : R.string.setting_disable, effective, false);
+                toggle.setEnabled(enabled);
+                toggle.setAlpha(enabled ? 1.0f : 0.55f);
                 linkCardFocus(root, toggle);
                 toggle.setOnClickListener(view -> {
                     int adapterPosition = getBindingAdapterPosition();

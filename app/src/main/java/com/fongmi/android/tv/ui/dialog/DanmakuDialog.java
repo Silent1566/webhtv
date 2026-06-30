@@ -29,6 +29,11 @@ public final class DanmakuDialog extends BaseBottomSheetDialog implements Danmak
     private DialogDanmakuBinding binding;
     private PlayerManager player;
 
+    public interface Host {
+
+        boolean isDanmakuFullscreen();
+    }
+
     public static DanmakuDialog create() {
         return new DanmakuDialog();
     }
@@ -71,7 +76,15 @@ public final class DanmakuDialog extends BaseBottomSheetDialog implements Danmak
     }
 
     private void onSearch(View view) {
-        DanmakuSearchDialog.create().player(player).show(getActivity());
+        FragmentActivity activity = getActivity();
+        if (activity == null) return;
+        dismissAllowingStateLoss();
+        if (shouldUseInputDialog(activity)) DanmakuSearchInputDialog.create().player(player).restoreParent(true).show(activity);
+        else DanmakuSearchDialog.create().player(player).restoreParent(true).show(activity);
+    }
+
+    private boolean shouldUseInputDialog(FragmentActivity activity) {
+        return Util.isMobile() && (!(activity instanceof Host) || !((Host) activity).isDanmakuFullscreen());
     }
 
     public void refresh() {
@@ -88,7 +101,10 @@ public final class DanmakuDialog extends BaseBottomSheetDialog implements Danmak
     }
 
     private void onSetting(View view) {
-        DanmakuSettingDialog.create().player(player).show(getActivity());
+        FragmentActivity activity = getActivity();
+        if (activity == null) return;
+        dismissAllowingStateLoss();
+        DanmakuSettingDialog.create().player(player).restoreParent(true).show(activity);
     }
 
     @Override
@@ -99,12 +115,12 @@ public final class DanmakuDialog extends BaseBottomSheetDialog implements Danmak
 
     @Override
     protected boolean transparent() {
-        return !Util.isLeanback();
+        return true;
     }
 
     @Override
     protected boolean stableOverlay() {
-        return !Util.isLeanback();
+        return true;
     }
 
     private final ActivityResultLauncher<Intent> launcher = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {

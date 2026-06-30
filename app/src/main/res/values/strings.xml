@@ -107,6 +107,14 @@
     <string name="danmaku_max_scroll_lines">Max scroll rows</string>
     <string name="danmaku_max_top_lines">Max top rows</string>
     <string name="danmaku_max_bottom_lines">Max bottom rows</string>
+    <string name="danmaku_top_rows">Top rows</string>
+    <string name="danmaku_bottom_rows">Bottom rows</string>
+    <string name="danmaku_display_rows">Display rows</string>
+    <string name="danmaku_rows_1">1 row</string>
+    <string name="danmaku_rows_2">2 rows</string>
+    <string name="danmaku_rows_3">3 rows</string>
+    <string name="danmaku_rows_4">4 rows</string>
+    <string name="danmaku_rows_5">5 rows</string>
     <string name="danmaku_line_spacing">Line gap</string>
     <string name="danmaku_scroll_gap_ratio">Row gap</string>
     <string name="danmaku_show_scroll">Scrolling</string>

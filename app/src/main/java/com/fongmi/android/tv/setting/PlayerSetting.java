@@ -22,6 +22,7 @@ public class PlayerSetting {
     private static final String KEY_DISPLAY_MINI = "display_mini";
     private static final String KEY_DISPLAY_TITLE = "display_title";
     private static final String KEY_OSD_TITLE = "player_osd_title";
+    private static final String KEY_OSD_RESOLUTION = "player_osd_resolution";
     private static final String KEY_OSD_TIME = "player_osd_time";
     private static final String KEY_OSD_PROGRESS = "player_osd_progress";
     private static final String KEY_OSD_TRAFFIC = "player_osd_traffic";
@@ -388,6 +389,14 @@ public class PlayerSetting {
         putDisplayTitle(value);
     }
 
+    public static boolean isOsdResolution() {
+        return isDisplaySize();
+    }
+
+    public static void putOsdResolution(boolean value) {
+        putDisplaySize(value);
+    }
+
     public static boolean isOsdTime() {
         return isDisplayTime();
     }
@@ -448,9 +457,10 @@ public class PlayerSetting {
         if (legacyOsdMigrated) return;
         legacyOsdMigrated = true;
         if (hasAny(KEY_DISPLAY_TIME, KEY_DISPLAY_TRAFFIC, KEY_DISPLAY_SIZE, KEY_DISPLAY_PROGRESS, KEY_DISPLAY_MINI, KEY_DISPLAY_TITLE)) return;
-        if (!hasAny(KEY_OSD_TITLE, KEY_OSD_TIME, KEY_OSD_PROGRESS, KEY_OSD_TRAFFIC, KEY_OSD_MINI)) return;
+        if (!hasAny(KEY_OSD_TITLE, KEY_OSD_RESOLUTION, KEY_OSD_TIME, KEY_OSD_PROGRESS, KEY_OSD_TRAFFIC, KEY_OSD_MINI)) return;
         putDisplayTime(Prefers.getBoolean(KEY_OSD_TIME));
         putDisplayTraffic(Prefers.getBoolean(KEY_OSD_TRAFFIC));
+        putDisplaySize(Prefers.getPrefers().contains(KEY_OSD_RESOLUTION) ? Prefers.getBoolean(KEY_OSD_RESOLUTION) : Prefers.getBoolean(KEY_OSD_TITLE));
         putDisplayProgress(Prefers.getBoolean(KEY_OSD_PROGRESS));
         putDisplayMini(Prefers.getBoolean(KEY_OSD_MINI));
         putDisplayTitle(Prefers.getBoolean(KEY_OSD_TITLE));

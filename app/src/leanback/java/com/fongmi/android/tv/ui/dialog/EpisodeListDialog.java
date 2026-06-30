@@ -28,6 +28,7 @@ import com.fongmi.android.tv.ui.adapter.ArrayAdapter;
 import com.fongmi.android.tv.ui.adapter.EpisodeAdapter;
 import com.fongmi.android.tv.ui.adapter.FlagAdapter;
 import com.fongmi.android.tv.ui.helper.EpisodeRangePolicy;
+import com.fongmi.android.tv.ui.helper.TmdbEpisodeGridPolicy;
 import com.fongmi.android.tv.utils.KeyUtil;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
@@ -94,6 +95,10 @@ public class EpisodeListDialog extends BaseAlertDialog implements FlagAdapter.On
     @Override
     protected void initView() {
         panelWidth = getPanelWidth();
+        if (tmdbCard) {
+            binding.getRoot().setBackgroundColor(0x66111820);
+            binding.getRoot().setPadding(ResUtil.dp2px(48), ResUtil.dp2px(34), ResUtil.dp2px(48), ResUtil.dp2px(26));
+        }
         setRecyclerView();
         flagAdapter.addAll(flags == null ? new ArrayList<>() : flags);
         setEpisodes(getSelectedFlag());
@@ -128,6 +133,7 @@ public class EpisodeListDialog extends BaseAlertDialog implements FlagAdapter.On
 
     private int getPanelWidth() {
         int screen = ResUtil.getScreenWidth(requireContext());
+        if (tmdbCard) return screen;
         return Math.max(ResUtil.dp2px(420), Math.min(ResUtil.dp2px(680), Math.round(screen * 0.42f)));
     }
 
@@ -308,9 +314,7 @@ public class EpisodeListDialog extends BaseAlertDialog implements FlagAdapter.On
     }
 
     private int getTmdbCardColumn() {
-        int minCardWidth = ResUtil.dp2px(260);
-        int column = getEpisodeContentWidth() / minCardWidth;
-        return Math.max(1, Math.min(2, column));
+        return TmdbEpisodeGridPolicy.tvAdaptiveSpanCount(getResources().getConfiguration().screenWidthDp);
     }
 
     private void scrollToSelectedEpisode() {
@@ -394,18 +398,20 @@ public class EpisodeListDialog extends BaseAlertDialog implements FlagAdapter.On
         if (window == null || binding == null) return;
         window.getDecorView().setPadding(0, 0, 0, 0);
         clearParentPaddingAndFillHeight();
-        window.setGravity(Gravity.END | Gravity.BOTTOM);
+        int gravity = tmdbCard ? Gravity.CENTER : Gravity.END | Gravity.BOTTOM;
+        int width = tmdbCard ? WindowManager.LayoutParams.MATCH_PARENT : panelWidth;
+        window.setGravity(gravity);
         WindowManager.LayoutParams params = window.getAttributes();
-        params.width = panelWidth;
+        params.width = width;
         params.height = WindowManager.LayoutParams.MATCH_PARENT;
-        params.gravity = Gravity.END | Gravity.BOTTOM;
+        params.gravity = gravity;
         params.x = 0;
         params.y = 0;
         window.setAttributes(params);
-        window.setLayout(panelWidth, WindowManager.LayoutParams.MATCH_PARENT);
+        window.setLayout(width, WindowManager.LayoutParams.MATCH_PARENT);
         binding.getRoot().post(() -> {
             clearParentPaddingAndFillHeight();
-            window.setLayout(panelWidth, WindowManager.LayoutParams.MATCH_PARENT);
+            window.setLayout(width, WindowManager.LayoutParams.MATCH_PARENT);
         });
     }
 

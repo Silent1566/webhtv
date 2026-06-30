@@ -1,39 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.appcompat.widget.LinearLayoutCompat xmlns:android="http://schemas.android.com/apk/res/android"
+<com.google.android.material.textview.MaterialTextView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/text"
     android:layout_width="match_parent"
-    android:layout_height="48dp"
-    android:background="@drawable/selector_danmaku_result_item"
+    android:layout_height="wrap_content"
+    android:background="@drawable/selector_player_child_sheet_button"
     android:clickable="true"
-    android:gravity="center_vertical"
-    android:orientation="horizontal"
-    android:paddingStart="12dp"
-    android:paddingEnd="12dp">
-
-    <com.google.android.material.textview.MaterialTextView
-        android:id="@+id/source"
-        android:layout_width="66dp"
-        android:layout_height="28dp"
-        android:background="@drawable/shape_danmaku_source_badge"
-        android:ellipsize="end"
-        android:gravity="center"
-        android:singleLine="true"
-        android:textColor="@color/white"
-        android:textSize="11sp"
-        android:textStyle="bold"
-        tools:text="YOUKU" />
-
-    <com.google.android.material.textview.MaterialTextView
-        android:id="@+id/text"
-        android:layout_width="0dp"
-        android:layout_height="match_parent"
-        android:layout_marginStart="10dp"
-        android:layout_weight="1"
-        android:ellipsize="marquee"
-        android:gravity="center_vertical"
-        android:singleLine="true"
-        android:textColor="@color/selector_control_sheet_text"
-        android:textSize="14sp"
-        tools:text="你是迟来的欢喜(2026)【电视剧】 from youku - 第1集" />
-
-</androidx.appcompat.widget.LinearLayoutCompat>
+    android:ellipsize="marquee"
+    android:focusable="true"
+    android:singleLine="true"
+    android:textColor="@color/selector_control_sheet_text"
+    android:textSize="14sp"
+    tools:text="愛奇異彈幕" />

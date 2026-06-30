@@ -102,6 +102,7 @@ import com.fongmi.android.tv.ui.dialog.TmdbSearchDialog;
 import com.fongmi.android.tv.ui.dialog.TitleDialog;
 import com.fongmi.android.tv.ui.dialog.TrackDialog;
 import com.fongmi.android.tv.ui.helper.EpisodeDisplayPolicy;
+import com.fongmi.android.tv.ui.helper.TmdbEpisodeGridPolicy;
 import com.fongmi.android.tv.ui.helper.TmdbNavigation;
 import com.fongmi.android.tv.utils.AudioUtil;
 import com.fongmi.android.tv.utils.Clock;
@@ -874,8 +875,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     }
 
     private int getEpisodeGridSpanCount() {
-        int width = Math.max(ResUtil.dp2px(320), ResUtil.getScreenWidth() - ResUtil.dp2px(48));
-        return Math.max(2, Math.min(6, width / ResUtil.dp2px(280)));
+        return TmdbEpisodeGridPolicy.tvAdaptiveSpanCount(getResources().getConfiguration().screenWidthDp);
     }
 
     private void setDecode() {
@@ -1019,8 +1019,10 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         mClock.setCallback(null);
         updateNavigationKey();
         subtitlePlaybackSession.stop(this);
-        player().reset();
-        player().stop();
+        if (service() != null) {
+            player().reset();
+            player().stop();
+        }
         getDetail();
     }
 
@@ -1375,11 +1377,11 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         mBinding.episodeContainer.setVisibility(isEmpty ? View.GONE : View.VISIBLE);
         mBinding.control.action.episodes.setVisibility(items.size() < 2 ? View.GONE : View.VISIBLE);
 
-        if (showTmdbEpisodeChrome && hasMultiple) episodeGridMode = Setting.getTmdbEpisodeGridMode();
+        if (showTmdbEpisodeChrome && hasMultiple) episodeGridMode = true;
         if (!showTmdbEpisodeChrome || !hasMultiple) episodeGridMode = false;
         mBinding.episodeHeader.setVisibility(showTmdbEpisodeChrome && !isEmpty ? View.VISIBLE : View.GONE);
         mBinding.episodeReverse.setVisibility(showTmdbEpisodeChrome && hasMultiple ? View.VISIBLE : View.GONE);
-        mBinding.episodeViewMode.setVisibility(showTmdbEpisodeChrome && hasMultiple ? View.VISIBLE : View.GONE);
+        mBinding.episodeViewMode.setVisibility(View.GONE);
         updateEpisodeFallbackStillUrl();
         mEpisodeAdapter.setUseTmdbCard(useTmdbCards);
         mEpisodeGridAdapter.setUseTmdbCard(useTmdbCards);
@@ -1531,6 +1533,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     }
 
     private void toggleEpisodeViewMode() {
+        if (isTmdbSourceEnabled()) return;
         episodeGridMode = !episodeGridMode;
         Setting.putTmdbEpisodeGridMode(episodeGridMode);
         applyEpisodeViewMode(true);
@@ -1818,11 +1821,34 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     private void exitFullscreen() {
         mBinding.video.setForeground(ResUtil.getDrawable(R.drawable.selector_video));
         mBinding.video.setLayoutParams(mFrameParams);
+        restoreEmbeddedVideoLayoutAfterFullscreen();
         getFocus1().requestFocus();
         mKeyDown.setFull(false);
         setFullscreen(false);
         mFocus2 = null;
         hideInfo();
+    }
+
+    private void restoreEmbeddedVideoLayoutAfterFullscreen() {
+        mBinding.video.forceLayout();
+        mBinding.video.requestLayout();
+        mBinding.exo.forceLayout();
+        mBinding.exo.requestLayout();
+        mBinding.scroll.forceLayout();
+        mBinding.scroll.requestLayout();
+        mBinding.progressLayout.requestLayout();
+        mBinding.video.post(() -> {
+            mBinding.video.setLayoutParams(mFrameParams);
+            mBinding.video.requestLayout();
+            mBinding.exo.requestLayout();
+            mBinding.scroll.requestLayout();
+        });
+        mBinding.progressLayout.postDelayed(() -> {
+            mBinding.video.setLayoutParams(mFrameParams);
+            mBinding.video.requestLayout();
+            mBinding.exo.requestLayout();
+            mBinding.scroll.requestLayout();
+        }, 180);
     }
 
     private void onContent() {

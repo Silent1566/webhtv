@@ -105,7 +105,7 @@
             android:exported="true"
             android:launchMode="singleTop"
             android:parentActivityName=".ui.activity.HomeActivity"
-            android:screenOrientation="userPortrait"
+            android:screenOrientation="fullUser"
             android:supportsPictureInPicture="true" />
 
         <activity

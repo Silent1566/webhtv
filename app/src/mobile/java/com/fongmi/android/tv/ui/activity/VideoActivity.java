@@ -1089,8 +1089,10 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         mClock.setCallback(null);
         updateNavigationKey();
         subtitlePlaybackSession.stop(this);
-        player().reset();
-        player().stop();
+        if (service() != null) {
+            player().reset();
+            player().stop();
+        }
         getDetail();
     }
 
@@ -1303,7 +1305,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
     }
 
     private void setOriginalEnhancedActionVisibility(boolean hide) {
-        mBinding.shortDisplay.setVisibility(hide ? View.GONE : View.VISIBLE);
+        mBinding.actionRow.setVisibility(hide ? View.GONE : View.VISIBLE);
     }
 
     private void setText(TextView view, int resId, String text) {
@@ -2205,10 +2207,33 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         mBinding.control.title.setVisibility(View.INVISIBLE);
         setSizeText();
         mBinding.video.setLayoutParams(mFrameParams);
+        restoreEmbeddedVideoLayoutAfterFullscreen();
         mKeyDown.resetScale();
         App.post(mR3, 2000);
         setRotate(false);
         hideControl();
+    }
+
+    private void restoreEmbeddedVideoLayoutAfterFullscreen() {
+        mBinding.video.forceLayout();
+        mBinding.video.requestLayout();
+        mBinding.exo.forceLayout();
+        mBinding.exo.requestLayout();
+        mBinding.scroll.forceLayout();
+        mBinding.scroll.requestLayout();
+        mBinding.progressLayout.requestLayout();
+        mBinding.video.post(() -> {
+            mBinding.video.setLayoutParams(mFrameParams);
+            mBinding.video.requestLayout();
+            mBinding.exo.requestLayout();
+            mBinding.scroll.requestLayout();
+        });
+        mBinding.progressLayout.postDelayed(() -> {
+            mBinding.video.setLayoutParams(mFrameParams);
+            mBinding.video.requestLayout();
+            mBinding.exo.requestLayout();
+            mBinding.scroll.requestLayout();
+        }, 180);
     }
 
     private void setTransition() {
@@ -3326,7 +3351,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
 
     private void applyFusionThemeSurface() {
         boolean light = isFusionLightTheme();
-        mBinding.getRoot().setBackgroundColor(light ? 0xFFF3F6F9 : 0xFF0F141A);
+        mBinding.getRoot().setBackgroundColor(mTmdbFallbackToNative ? Color.TRANSPARENT : light ? 0xFFF3F6F9 : 0xFF0F141A);
         mBinding.scroll.setBackgroundColor(Color.TRANSPARENT);
         mBinding.swipeLayout.setBackgroundColor(Color.TRANSPARENT);
         mBinding.progressLayout.setBackgroundColor(Color.TRANSPARENT);
@@ -3341,13 +3366,18 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
 
     private void applyContextWallScrimTheme() {
         if (mBinding.videoContextScrim == null) return;
+        if (mTmdbFallbackToNative) {
+            mBinding.videoContextScrim.setBackgroundResource(R.drawable.shape_video_context_scrim);
+            mBinding.videoContextScrim.setVisibility(View.VISIBLE);
+            return;
+        }
         boolean light = Setting.isFusionDetailPage() && isFusionLightTheme();
         mBinding.videoContextScrim.setBackgroundResource(light ? R.drawable.shape_video_context_scrim_light : R.drawable.shape_video_context_scrim);
     }
 
     private void applyFusionNativeTextColors() {
-        if (!Setting.isFusionDetailPage() || mBinding.nativeContentContainer == null) return;
-        tintFusionNativeTextTree(mBinding.nativeContentContainer, isFusionLightTheme());
+        if ((!Setting.isFusionDetailPage() && !mTmdbFallbackToNative) || mBinding.nativeContentContainer == null) return;
+        tintFusionNativeTextTree(mBinding.nativeContentContainer, !mTmdbFallbackToNative && isFusionLightTheme());
     }
 
     private void tintFusionNativeTextTree(View view, boolean light) {
@@ -3449,6 +3479,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         mTmdbFallbackToNative = true;
         mTmdbContentLoaded = true;
         hideTmdbHeader();
+        applyNativeFallbackWallpaperSurface();
         restoreFlagAndEpisodeFromTmdb();
         updateEpisodeGroupVisibility();
         restoreDefaultVideoLayout();
@@ -3460,6 +3491,15 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         mBinding.progressLayout.showContent();
         loadNativePersonalRecommendations(item);
         hideProgress();
+    }
+
+    private void applyNativeFallbackWallpaperSurface() {
+        mBinding.getRoot().setBackgroundColor(Color.TRANSPARENT);
+        mBinding.scroll.setBackgroundColor(Color.TRANSPARENT);
+        mBinding.swipeLayout.setBackgroundColor(Color.TRANSPARENT);
+        mBinding.progressLayout.setBackgroundColor(Color.TRANSPARENT);
+        if (mBinding.nativeContentContainer != null) mBinding.nativeContentContainer.setBackgroundColor(Color.TRANSPARENT);
+        applyContextWallScrimTheme();
     }
 
     private void loadNativePersonalRecommendations(Vod item) {
@@ -3782,7 +3822,9 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
     }
 
     private void moveFusionPlayerActionsToTmdb(ViewGroup playbackControls) {
-        if (!Setting.isFusionDetailPage()) return;
+        if (!Setting.isFusionDetailPage()) {
+            return;
+        }
         View actions = mBinding.control.action.getRoot();
         rememberTmdbMovedView(actions);
         if (actions.getParent() instanceof ViewGroup parent) parent.removeView(actions);

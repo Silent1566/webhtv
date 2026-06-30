@@ -33,7 +33,7 @@
         app:cardCornerRadius="8dp"
         app:cardElevation="0dp"
         app:strokeColor="@color/selector_episode_card_stroke"
-        app:strokeWidth="1dp"
+        app:strokeWidth="2dp"
         tools:visibility="visible">
 
         <FrameLayout
