@@ -126,13 +126,17 @@ public class TmdbService {
     }
 
     public JsonObject season(@NonNull TmdbItem item, int seasonNumber, @NonNull TmdbConfig config, JsonObject detail) throws Exception {
+        return season(item, seasonNumber, config, detail, false);
+    }
+
+    public JsonObject season(@NonNull TmdbItem item, int seasonNumber, @NonNull TmdbConfig config, JsonObject detail, boolean refresh) throws Exception {
         ensureReady(config);
         HttpUrl url = apiBuilder(config.getApiBase() + "/tv/" + item.getTmdbId() + "/season/" + seasonNumber, config)
                 .addQueryParameter("language", config.getLanguage())
                 .addQueryParameter("append_to_response", "images,credits,aggregate_credits,translations")
                 .addQueryParameter("include_image_language", config.getLanguage() + ",null")
                 .build();
-        return requestJson(url.toString(), config, "season", seasonCacheTtl(detail), "TMDB 分季返回为空", "TMDB 分季失败: HTTP ");
+        return requestJson(url.toString(), config, "season", seasonCacheTtl(detail), "TMDB 分季返回为空", "TMDB 分季失败: HTTP ", refresh);
     }
 
     public JsonObject episode(@NonNull TmdbItem item, int seasonNumber, int episodeNumber, @NonNull TmdbConfig config, JsonObject detail) throws Exception {
@@ -466,9 +470,13 @@ public class TmdbService {
     }
 
     private JsonObject requestJson(String url, TmdbConfig config, String type, long ttl, String emptyMessage, String failurePrefix) throws Exception {
+        return requestJson(url, config, type, ttl, emptyMessage, failurePrefix, false);
+    }
+
+    private JsonObject requestJson(String url, TmdbConfig config, String type, long ttl, String emptyMessage, String failurePrefix, boolean refresh) throws Exception {
         long start = System.currentTimeMillis();
         File file = cacheFile(type, url);
-        JsonObject cached = readCache(file, ttl);
+        JsonObject cached = refresh ? null : readCache(file, ttl);
         if (cached != null) {
             SpiderDebug.log("tmdb", "requestJson type=%s source=cache cost=%dms", type, System.currentTimeMillis() - start);
             return cached;

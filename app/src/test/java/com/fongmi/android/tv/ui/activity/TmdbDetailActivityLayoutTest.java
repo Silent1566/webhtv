@@ -357,6 +357,40 @@ public class TmdbDetailActivityLayoutTest {
     }
 
     @Test
+    public void tmdbEpisodeDataIsBoundBackToSourceEpisodesAndRefreshesByDataSeason() throws Exception {
+        Path activityPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
+        String activity = new String(Files.readAllBytes(activityPath), StandardCharsets.UTF_8);
+        Path servicePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "service", "TmdbService.java"));
+        String service = new String(Files.readAllBytes(servicePath), StandardCharsets.UTF_8);
+
+        int bindSeason = activity.indexOf("private void bindSeasonEpisodes(List<Episode> sourceEpisodes)");
+        int dataSeason = activity.indexOf("private int tmdbEpisodeDataSeason(List<Episode> sourceEpisodes)", bindSeason);
+        int fetchSeason = activity.indexOf("private void fetchSeasonIfNeeded(int seasonNumber)");
+        int updateSkeleton = activity.indexOf("private void updateEpisodeSkeleton()");
+
+        assertTrue(activityPath + " is missing bindSeasonEpisodes", bindSeason >= 0 && dataSeason > bindSeason);
+        assertTrue(activityPath + " is missing fetchSeasonIfNeeded", fetchSeason >= 0 && updateSkeleton > fetchSeason);
+
+        String bindBody = activity.substring(bindSeason, dataSeason);
+        String fetchBody = activity.substring(fetchSeason, updateSkeleton);
+
+        assertTrue("detail episodes should bind matched TMDB objects back onto source Episode items for playback cards and dialogs",
+                bindBody.contains("bindTmdbEpisodes(sourceEpisodes, tmdbSeason);")
+                        && activity.contains("episode.setTmdbEpisode(tmdbEpisodes.get(position.number()));"));
+        assertTrue("season fetch completion should refresh against the active TMDB data season, not only the selected source season",
+                fetchBody.contains("seasonNumber == tmdbEpisodeDataSeason(selectedFlag == null ? null : selectedFlag.getEpisodes())"));
+        assertTrue("stale split-season TMDB caches should trigger a one-shot fresh first-season probe for long single-season shows",
+                bindBody.contains("refreshFirstSeasonIfStaleSplit(sourceEpisodes);")
+                        && activity.contains("List<TmdbEpisode> cachedEpisodes = tmdbSeasonEpisodes.get(firstSeason);")
+                        && activity.contains("int cachedCount = cachedEpisodes == null ? 0 : cachedEpisodes.size();")
+                        && activity.contains("if (cachedCount >= neededCount) return;")
+                        && activity.contains("fetchSeasonIfNeeded(firstSeason, true);")
+                        && activity.contains("seasonEpisodeCounts.put(seasonNumber, episodes.size());")
+                        && service.contains("season(@NonNull TmdbItem item, int seasonNumber, @NonNull TmdbConfig config, JsonObject detail, boolean refresh)")
+                        && service.contains("refresh ? null : readCache(file, ttl)"));
+    }
+
+    @Test
     public void inlineFullscreenExitRestoresEmbeddedPlayerLayout() throws Exception {
         Path activityPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
         String activity = new String(Files.readAllBytes(activityPath), StandardCharsets.UTF_8);

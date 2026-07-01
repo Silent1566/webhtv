@@ -17,6 +17,7 @@ import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
 import androidx.leanback.widget.BaseGridView;
+import androidx.leanback.widget.OnChildViewHolderSelectedListener;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewbinding.ViewBinding;
 
@@ -37,6 +38,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class EpisodeListDialog extends BaseAlertDialog implements FlagAdapter.OnClickListener, ArrayAdapter.OnClickListener, EpisodeAdapter.OnClickListener {
+
+    private static final int TEXT_EPISODE_ROW_HEIGHT_DP = 40;
 
     private final List<Integer> segmentStarts;
     private final List<Integer> segmentEnds;
@@ -118,15 +121,23 @@ public class EpisodeListDialog extends BaseAlertDialog implements FlagAdapter.On
         binding.array.setOnKeyListener((view, keyCode, event) -> onArrayKey(event));
         binding.episode.setHorizontalSpacing(spacing);
         binding.episode.setVerticalSpacing(spacing);
+        binding.episode.setNestedScrollingEnabled(false);
+        if (tmdbCard) binding.episode.setFocusScrollStrategy(BaseGridView.FOCUS_SCROLL_ITEM);
         binding.episode.setAdapter(episodeAdapter = new EpisodeAdapter(this, getEpisodeContentWidth()));
         episodeAdapter.setUseTmdbCard(tmdbCard);
         episodeAdapter.setOnKeyListener((view, keyCode, event) -> onEpisodeKey(event));
         binding.episode.setOnKeyListener((view, keyCode, event) -> onEpisodeKey(event));
         binding.flag.setOnKeyListener((view, keyCode, event) -> onFlagKey(event));
-        binding.array.addOnChildViewHolderSelectedListener(new androidx.leanback.widget.OnChildViewHolderSelectedListener() {
+        binding.array.addOnChildViewHolderSelectedListener(new OnChildViewHolderSelectedListener() {
             @Override
             public void onChildViewHolderSelected(@NonNull RecyclerView parent, @Nullable RecyclerView.ViewHolder child, int position, int subposition) {
                 if (child != null) selectSegment(position, true);
+            }
+        });
+        binding.episode.addOnChildViewHolderSelectedListener(new OnChildViewHolderSelectedListener() {
+            @Override
+            public void onChildViewHolderSelected(@NonNull RecyclerView parent, @Nullable RecyclerView.ViewHolder child, int position, int subposition) {
+                if (child != null) alignEpisodeScroll(position);
             }
         });
     }
@@ -151,8 +162,9 @@ public class EpisodeListDialog extends BaseAlertDialog implements FlagAdapter.On
         List<Episode> episodes = flag.getEpisodes();
         allEpisodes.clear();
         allEpisodes.addAll(episodes);
-        int column = tmdbCard ? getTmdbCardColumn() : EpisodeAdapter.getColumn(episodes, getEpisodeContentWidth());
+        int column = tmdbCard ? getTmdbCardColumn() : getTextColumn(episodes);
         binding.episode.setNumColumns(column);
+        if (!tmdbCard) binding.episode.setColumnWidth(getTextColumnWidth(column));
         episodeAdapter.setUseTmdbCard(tmdbCard);
         episodeAdapter.setGridMode(tmdbCard);
         episodeAdapter.setVerticalGridMode(true);
@@ -184,6 +196,14 @@ public class EpisodeListDialog extends BaseAlertDialog implements FlagAdapter.On
         episodeAdapter.setNextFocusDown(0);
     }
 
+    private int getTextColumn(List<Episode> episodes) {
+        return Math.min(2, EpisodeAdapter.getColumn(episodes, getEpisodeContentWidth()));
+    }
+
+    private int getTextColumnWidth(int column) {
+        return (getEpisodeContentWidth() - ResUtil.dp2px(8) * (Math.max(1, column) - 1)) / Math.max(1, column);
+    }
+
     private int resolveSelectedSegment(int episodePosition) {
         if (segmentStarts.isEmpty()) return 0;
         for (int i = 0; i < segmentStarts.size(); i++) {
@@ -202,12 +222,53 @@ public class EpisodeListDialog extends BaseAlertDialog implements FlagAdapter.On
     private void setSegmentEpisodes(int position) {
         if (segmentStarts.isEmpty()) {
             episodeAdapter.addAll(allEpisodes);
+            updateEpisodeContentHeight();
             return;
         }
         position = Math.max(0, Math.min(position, segmentStarts.size() - 1));
         int start = segmentStarts.get(position);
         int end = segmentEnds.get(position);
         episodeAdapter.addAll(EpisodeRangePolicy.slice(allEpisodes, new EpisodeRangePolicy.Range("", start, end, position == selectedSegment)));
+        updateEpisodeContentHeight();
+    }
+
+    private void updateEpisodeContentHeight() {
+        ViewGroup.LayoutParams params = binding.episode.getLayoutParams();
+        if (params == null) return;
+        params.height = getEpisodeContentHeight();
+        binding.episode.setLayoutParams(params);
+    }
+
+    private int getEpisodeContentHeight() {
+        int count = Math.max(0, episodeAdapter.getItemCount());
+        if (count == 0) return ViewGroup.LayoutParams.WRAP_CONTENT;
+        int column = Math.max(1, episodeAdapter.getColumn());
+        int rows = Math.max(1, (count + column - 1) / column);
+        int spacing = ResUtil.dp2px(8);
+        int rowHeight = getEpisodeRowHeight();
+        return rowHeight * rows + spacing * Math.max(0, rows - 1) + binding.episode.getPaddingTop() + binding.episode.getPaddingBottom();
+    }
+
+    private int getEpisodeRowHeight() {
+        return tmdbCard
+                ? ResUtil.dp2px(EpisodeAdapter.GRID_CARD_HEIGHT_DP + EpisodeAdapter.GRID_CARD_BOTTOM_MARGIN_DP)
+                : ResUtil.dp2px(TEXT_EPISODE_ROW_HEIGHT_DP);
+    }
+
+    private void alignEpisodeScroll(int position) {
+        if (position == RecyclerView.NO_POSITION || episodeAdapter == null) return;
+        int column = Math.max(1, episodeAdapter.getColumn());
+        int rowStart = Math.max(0, position - position % column);
+        binding.episode.post(() -> {
+            if (binding == null) return;
+            if (rowStart == 0) {
+                binding.getRoot().scrollTo(0, 0);
+                return;
+            }
+            int rowIndex = rowStart / Math.max(1, episodeAdapter.getColumn());
+            int targetY = binding.episode.getTop() + rowIndex * (getEpisodeRowHeight() + ResUtil.dp2px(8)) - ResUtil.dp2px(8);
+            binding.getRoot().scrollTo(0, Math.max(0, targetY));
+        });
     }
 
     private void keepArrayFocus(int position) {
@@ -347,6 +408,7 @@ public class EpisodeListDialog extends BaseAlertDialog implements FlagAdapter.On
             if (binding == null) return;
             binding.episode.setSelectedPosition(position);
             if (requestFocus) binding.episode.requestFocus();
+            alignEpisodeScroll(position);
         });
     }
 

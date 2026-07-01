@@ -266,6 +266,14 @@ public class PlayerManager implements ParseCallback {
         return Math.max(0, player.getBufferedPosition() - getPosition());
     }
 
+    public int getBufferedPercentage() {
+        return player.getBufferedPercentage();
+    }
+
+    public boolean isLoading() {
+        return player.isLoading();
+    }
+
     public String getSizeText() {
         int width = getVideoWidth();
         int height = getVideoHeight();
@@ -1077,6 +1085,14 @@ public class PlayerManager implements ParseCallback {
     }
 
     public void setDanmaku(Danmaku item) {
+        setDanmaku(item, false);
+    }
+
+    public void reloadDanmaku(Danmaku item) {
+        setDanmaku(item, true);
+    }
+
+    private void setDanmaku(Danmaku item, boolean force) {
         if (danmakuController == null) return;
         if (spec != null) spec.setDanmaku(item);
         if (item.isEmpty()) {
@@ -1086,12 +1102,13 @@ public class PlayerManager implements ParseCallback {
             return;
         }
         String url = item.getRealUrl();
-        if (TextUtils.equals(currentDanmakuUrl, url)) {
+        if (!force && TextUtils.equals(currentDanmakuUrl, url)) {
             if (SpiderDebug.isEnabled()) SpiderDebug.log("danmaku", "skip same url=%s", summarizeUrl(url));
             return;
         }
+        if (force && currentDanmakuUrl != null) danmakuController.clearItems();
         currentDanmakuUrl = url;
-        if (SpiderDebug.isEnabled()) SpiderDebug.log("danmaku", "load name=%s url=%s", item.getName(), summarizeUrl(url));
+        if (SpiderDebug.isEnabled()) SpiderDebug.log("danmaku", "%s name=%s url=%s", force ? "reload" : "load", item.getName(), summarizeUrl(url));
         danmakuController.setDataSource(Uri.parse(url));
     }
 

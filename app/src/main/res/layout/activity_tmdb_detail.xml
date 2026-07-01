@@ -1324,6 +1324,25 @@
                             android:visibility="gone" />
 
                         <TextView
+                            android:id="@+id/externalLinksTitle"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="20dp"
+                            android:text="@string/tmdb_external_links_label"
+                            android:textColor="@android:color/white"
+                            android:textSize="16sp"
+                            android:textStyle="bold"
+                            android:visibility="gone" />
+
+                        <LinearLayout
+                            android:id="@+id/externalLinksContainer"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:orientation="vertical"
+                            android:visibility="gone" />
+
+                        <TextView
                             android:id="@+id/tmdbStatus"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"

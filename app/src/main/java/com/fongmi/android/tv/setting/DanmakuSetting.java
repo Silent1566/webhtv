@@ -348,6 +348,9 @@ public class DanmakuSetting {
     }
 
     public static void resetDisplay() {
+        DanmakuConfig config = DanmakuConfig.DEFAULT;
+        putScrollGapRatio(config.scrollGapRatio);
+        putLineSpacing(config.lineSpacing);
         putDisplayLines(3);
     }
 
@@ -369,8 +372,8 @@ public class DanmakuSetting {
                 .setTimeOffsetMs(getTimeOffsetMs())
                 .setMaxOnScreen(defaults.maxOnScreen)
                 .setScrollAreaRatio(defaults.scrollAreaRatio)
-                .setScrollGapRatio(defaults.scrollGapRatio)
-                .setLineSpacing(defaults.lineSpacing)
+                .setScrollGapRatio(getScrollGapRatio())
+                .setLineSpacing(getLineSpacing())
                 .setMaxScrollLines(getDisplayLines())
                 .setMaxTopLines(getDisplayLines())
                 .setMaxBottomLines(getDisplayLines())

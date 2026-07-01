@@ -55,6 +55,8 @@ final class DanmakuSettingPanel {
         setupFloat(appearance.projectionOffsetYSlider, appearance.projectionOffsetYValue, DanmakuSetting.getProjectionOffsetY(), "%.2f", DanmakuSetting::putProjectionOffsetY);
         setupFloat(appearance.projectionAlphaSlider, appearance.projectionAlphaValue, DanmakuSetting.getProjectionTransparency(), "%.2f", DanmakuSetting::putProjectionTransparency);
         setupSlider(appearance.lineCountSlider, appearance.lineCountValue, DanmakuSetting.getDisplayLines(), value -> lineCountText(value.intValue()), value -> DanmakuSetting.putDisplayLines(value.intValue()));
+        setupFloat(appearance.scrollGapSlider, appearance.scrollGapValue, DanmakuSetting.getScrollGapRatio(), "%.1f", DanmakuSetting::putScrollGapRatio);
+        setupFloat(appearance.lineSpacingSlider, appearance.lineSpacingValue, DanmakuSetting.getLineSpacing(), "%.1f", DanmakuSetting::putLineSpacing);
         setupChoice(DanmakuSetting.getStyleMode(), this::styleChipForMode, this::styleModeForChip, this::onStyleModeChanged, appearance.styleNone, appearance.styleShadow, appearance.styleStroke, appearance.styleProjection);
         setupChoice(DanmakuSetting.getColorMode(), this::colorChipForMode, this::colorModeForChip, this::onColorModeChanged, appearance.colorDefault, appearance.colorColorful, appearance.colorGradient);
         updateStyleSubSettings(DanmakuSetting.getStyleMode());
@@ -89,6 +91,8 @@ final class DanmakuSettingPanel {
         tintSlider(binding.appearance.projectionOffsetYSlider);
         tintSlider(binding.appearance.projectionAlphaSlider);
         tintSlider(binding.appearance.lineCountSlider);
+        tintSlider(binding.appearance.scrollGapSlider);
+        tintSlider(binding.appearance.lineSpacingSlider);
         tintSlider(binding.timing.timeOffsetSlider);
         tintSlider(binding.timing.durationSlider);
         tintSlider(binding.timing.fixedDurationSlider);

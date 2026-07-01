@@ -694,8 +694,12 @@
     <string name="about_acknowledge">我已知悉</string>
     <string name="setting_github_proxy">GitHub 加速源</string>
     <string name="setting_github_proxy_short">加速源</string>
-    <string name="setting_github_proxy_hint">一行一个加速源</string>
-    <string name="setting_github_proxy_message">GitHub Raw/Release 下载会使用第一个有效加速源。</string>
+    <string name="setting_github_proxy_hint">输入加速源 URL</string>
+    <string name="setting_github_proxy_message">点选列表中的源作为当前加速源,可在下方添加自定义源。GitHub Raw/Release 下载使用当前加速源。</string>
+    <string name="setting_github_proxy_add">添加</string>
+    <string name="setting_github_proxy_remove">移除</string>
+    <string name="setting_github_proxy_reset">重置默认</string>
+    <string name="setting_github_proxy_invalid">请输入有效的 http/https 地址</string>
 
     <!-- Backup & Restore -->
     <string name="restore_select">选择备份</string>

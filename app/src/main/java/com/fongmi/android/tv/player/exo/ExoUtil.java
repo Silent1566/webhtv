@@ -52,7 +52,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.FfmpegAudioRenderer;
+import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.CompatFfmpegAudioRenderer;
 import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.FfmpegVideoRenderer;
 
 public class ExoUtil {
@@ -118,6 +118,14 @@ public class ExoUtil {
         return decode == PlayerEngine.HARD ? DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON : DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER;
     }
 
+    private static int getVideoRenderMode(int decode) {
+        return getRenderMode(decode);
+    }
+
+    private static int getAudioRenderMode(int decode) {
+        return decode == PlayerEngine.HARD ? DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON : DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER;
+    }
+
     private static CaptionStyleCompat getCaptionStyle() {
         return PlayerSetting.isCaption() ? CaptionStyleCompat.createFromCaptionStyle(((CaptioningManager) App.get().getSystemService(Context.CAPTIONING_SERVICE)).getUserStyle()) : new CaptionStyleCompat(Color.WHITE, Color.TRANSPARENT, Color.TRANSPARENT, CaptionStyleCompat.EDGE_TYPE_OUTLINE, Color.BLACK, null);
     }
@@ -151,15 +159,15 @@ public class ExoUtil {
     }
 
     private static RenderersFactory buildPlaybackRenderersFactory(int decode) {
-        return buildRenderersFactory(getRenderMode(decode), PlayerSetting.isAudioPrefer(), PlayerSetting.isVideoPrefer());
+        return buildRenderersFactory(getAudioRenderMode(decode), getVideoRenderMode(decode), PlayerSetting.isAudioPrefer(), PlayerSetting.isVideoPrefer());
     }
 
     static RenderersFactory buildRenderersFactory() {
-        return buildRenderersFactory(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER, PlayerSetting.isAudioPrefer(), PlayerSetting.isVideoPrefer());
+        return buildRenderersFactory(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER, DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER, PlayerSetting.isAudioPrefer(), PlayerSetting.isVideoPrefer());
     }
 
-    private static RenderersFactory buildRenderersFactory(int renderMode, boolean audioPrefer, boolean videoPrefer) {
-        DefaultRenderersFactory factory = new FfmpegRenderersFactory(App.get(), audioPrefer, videoPrefer) {
+    private static RenderersFactory buildRenderersFactory(int audioRenderMode, int videoRenderMode, boolean audioPrefer, boolean videoPrefer) {
+        DefaultRenderersFactory factory = new FfmpegRenderersFactory(App.get(), audioRenderMode, videoRenderMode, audioPrefer, videoPrefer) {
             @Override
             protected AudioSink buildAudioSink(@NonNull Context context, boolean enableFloatOutput, boolean enableAudioOutputPlaybackParams) {
                 return ExoUtil.buildAudioSink(context, enableFloatOutput, enableAudioOutputPlaybackParams);
@@ -169,7 +177,7 @@ public class ExoUtil {
             factory.forceEnableMediaCodecAsynchronousQueueing();
             factory.experimentalSetLateThresholdToDropDecoderInputUs(ENHANCED_LATE_THRESHOLD_TO_DROP_INPUT_US);
         }
-        return factory.setEnableDecoderFallback(true).setExtensionRendererMode(renderMode);
+        return factory.setEnableDecoderFallback(true).setExtensionRendererMode(Math.max(audioRenderMode, videoRenderMode));
     }
 
     private static AudioSink buildAudioSink(Context context, boolean enableFloatOutput, boolean enableAudioOutputPlaybackParams) {
@@ -202,31 +210,35 @@ public class ExoUtil {
 
     private static class FfmpegRenderersFactory extends DefaultRenderersFactory {
 
+        private final int audioRenderMode;
+        private final int videoRenderMode;
         private final boolean audioPrefer;
         private final boolean videoPrefer;
 
-        FfmpegRenderersFactory(Context context, boolean audioPrefer, boolean videoPrefer) {
+        FfmpegRenderersFactory(Context context, int audioRenderMode, int videoRenderMode, boolean audioPrefer, boolean videoPrefer) {
             super(context);
+            this.audioRenderMode = audioRenderMode;
+            this.videoRenderMode = videoRenderMode;
             this.audioPrefer = audioPrefer;
             this.videoPrefer = videoPrefer;
         }
 
         @Override
         protected void buildAudioRenderers(Context context, int extensionRendererMode, MediaCodecSelector mediaCodecSelector, boolean enableDecoderFallback, AudioSink audioSink, Handler eventHandler, AudioRendererEventListener eventListener, ArrayList<Renderer> out) {
-            super.buildAudioRenderers(context, extensionRendererMode, mediaCodecSelector, enableDecoderFallback, audioSink, eventHandler, eventListener, out);
-            if (extensionRendererMode == EXTENSION_RENDERER_MODE_OFF) return;
+            super.buildAudioRenderers(context, audioRenderMode, mediaCodecSelector, enableDecoderFallback, audioSink, eventHandler, eventListener, out);
+            if (audioRenderMode == EXTENSION_RENDERER_MODE_OFF) return;
             try {
-                out.add(getExtensionRendererIndex(extensionRendererMode, audioPrefer, out), new FfmpegAudioRenderer(eventHandler, eventListener, audioSink));
+                out.add(getExtensionRendererIndex(audioRenderMode, audioPrefer, out), new CompatFfmpegAudioRenderer(eventHandler, eventListener, audioSink));
             } catch (Throwable ignored) {
             }
         }
 
         @Override
         protected void buildVideoRenderers(Context context, int extensionRendererMode, MediaCodecSelector mediaCodecSelector, boolean enableDecoderFallback, Handler eventHandler, VideoRendererEventListener eventListener, long allowedVideoJoiningTimeMs, ArrayList<Renderer> out) {
-            super.buildVideoRenderers(context, extensionRendererMode, mediaCodecSelector, enableDecoderFallback, eventHandler, eventListener, allowedVideoJoiningTimeMs, out);
-            if (extensionRendererMode == EXTENSION_RENDERER_MODE_OFF) return;
+            super.buildVideoRenderers(context, videoRenderMode, mediaCodecSelector, enableDecoderFallback, eventHandler, eventListener, allowedVideoJoiningTimeMs, out);
+            if (videoRenderMode == EXTENSION_RENDERER_MODE_OFF) return;
             try {
-                out.add(getExtensionRendererIndex(extensionRendererMode, videoPrefer, out), new FfmpegVideoRenderer(allowedVideoJoiningTimeMs, eventHandler, eventListener, MAX_DROPPED_VIDEO_FRAME_COUNT_TO_NOTIFY));
+                out.add(getExtensionRendererIndex(videoRenderMode, videoPrefer, out), new FfmpegVideoRenderer(allowedVideoJoiningTimeMs, eventHandler, eventListener, MAX_DROPPED_VIDEO_FRAME_COUNT_TO_NOTIFY));
             } catch (Throwable ignored) {
             }
         }

@@ -14,6 +14,7 @@ import com.fongmi.android.tv.databinding.AdapterEpisodeHoriBinding;
 import com.fongmi.android.tv.ui.adapter.EpisodeAdapter;
 import com.fongmi.android.tv.ui.base.BaseEpisodeHolder;
 import com.fongmi.android.tv.ui.dialog.EpisodeDetailDialog;
+import com.fongmi.android.tv.ui.helper.EpisodeCardPolicy;
 import com.fongmi.android.tv.utils.ImgUtil;
 import com.fongmi.android.tv.utils.ResUtil;
 
@@ -45,47 +46,55 @@ public class EpisodeHoriHolder extends BaseEpisodeHolder {
     @Override
     public void initView(Episode item) {
         TmdbEpisode tmdbEpisode = item.getTmdbEpisode();
+        if (EpisodeCardPolicy.shouldShowCard(useTmdbCard, tmdbEpisode != null, !TextUtils.isEmpty(fallbackStillUrl))) bindCard(item, tmdbEpisode);
+        else bindText(item);
+    }
 
-        if (useTmdbCard && tmdbEpisode != null) {
-            binding.text.setVisibility(View.GONE);
-            binding.card.setVisibility(View.VISIBLE);
+    private void bindCard(Episode item, TmdbEpisode tmdbEpisode) {
+        binding.text.setVisibility(View.GONE);
+        binding.card.setVisibility(View.VISIBLE);
 
-            binding.card.setSelected(item.isSelected());
-            bindCardActions(item, binding.getRoot(), binding.card, binding.still, binding.cardTitle, binding.overview);
+        binding.card.setSelected(item.isSelected());
+        bindCardActions(item, binding.getRoot(), binding.card, binding.still, binding.cardTitle, binding.overview);
 
-            binding.cardTitle.setText(EpisodeAdapter.getTitle(item));
-            binding.cardTitle.setSelected(item.isSelected());
+        binding.cardTitle.setText(EpisodeAdapter.getTitle(item));
+        binding.cardTitle.setSelected(item.isSelected());
 
-            String rawStillUrl = tmdbEpisode.getStillUrl();
-            String stillUrl = TextUtils.isEmpty(rawStillUrl) ? fallbackStillUrl : rawStillUrl;
-            String errorStillUrl = TextUtils.isEmpty(rawStillUrl) ? "" : fallbackStillUrl;
-            binding.still.setVisibility(View.VISIBLE);
+        String rawStillUrl = tmdbEpisode == null ? "" : tmdbEpisode.getStillUrl();
+        String stillUrl = TextUtils.isEmpty(rawStillUrl) ? fallbackStillUrl : rawStillUrl;
+        String errorStillUrl = TextUtils.isEmpty(rawStillUrl) ? "" : fallbackStillUrl;
+        binding.still.setVisibility(TextUtils.isEmpty(stillUrl) ? View.GONE : View.VISIBLE);
+        if (!TextUtils.isEmpty(stillUrl)) {
             ImgUtil.load(EpisodeAdapter.getTitle(item), stillUrl, errorStillUrl, binding.still, true, 0, 0);
-
-            if (!TextUtils.isEmpty(tmdbEpisode.getOverview())) {
-                binding.overview.setVisibility(View.VISIBLE);
-                binding.overview.setText(tmdbEpisode.getOverview());
-            } else {
-                binding.overview.setVisibility(View.GONE);
-            }
-
-            if (tmdbEpisode.getVoteAverage() > 0) {
-                binding.rating.setVisibility(View.VISIBLE);
-                binding.rating.setText(String.format(java.util.Locale.US, "★%.1f", tmdbEpisode.getVoteAverage()));
-            } else {
-                binding.rating.setVisibility(View.GONE);
-            }
         } else {
-            binding.text.setVisibility(View.VISIBLE);
-            binding.card.setVisibility(View.GONE);
-
-            binding.text.setMaxWidth(maxWidth);
-            binding.text.setSelected(item.isSelected());
-            binding.text.setText(EpisodeAdapter.getNativeTitle(item));
-            binding.text.setOnClickListener(v -> listener.onItemClick(item));
-            EpisodeAdapter.bindNativeTitlePopup(binding.getRoot(), item);
-            EpisodeAdapter.bindNativeTitlePopup(binding.text, item);
+            ImgUtil.clear(binding.still);
         }
+
+        if (tmdbEpisode != null && !TextUtils.isEmpty(tmdbEpisode.getOverview())) {
+            binding.overview.setVisibility(View.VISIBLE);
+            binding.overview.setText(tmdbEpisode.getOverview());
+        } else {
+            binding.overview.setVisibility(View.GONE);
+        }
+
+        if (tmdbEpisode != null && tmdbEpisode.getVoteAverage() > 0) {
+            binding.rating.setVisibility(View.VISIBLE);
+            binding.rating.setText(String.format(java.util.Locale.US, "★%.1f", tmdbEpisode.getVoteAverage()));
+        } else {
+            binding.rating.setVisibility(View.GONE);
+        }
+    }
+
+    private void bindText(Episode item) {
+        binding.text.setVisibility(View.VISIBLE);
+        binding.card.setVisibility(View.GONE);
+
+        binding.text.setMaxWidth(maxWidth);
+        binding.text.setSelected(item.isSelected());
+        binding.text.setText(EpisodeAdapter.getNativeTitle(item));
+        binding.text.setOnClickListener(v -> listener.onItemClick(item));
+        EpisodeAdapter.bindNativeTitlePopup(binding.getRoot(), item);
+        EpisodeAdapter.bindNativeTitlePopup(binding.text, item);
     }
 
     private void bindDetailLongClick(Episode item, View... views) {

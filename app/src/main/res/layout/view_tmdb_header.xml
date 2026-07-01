@@ -436,31 +436,6 @@
         android:visibility="gone"
         app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
 
-    <!-- 外部链接标题 -->
-    <com.google.android.material.textview.MaterialTextView
-        android:id="@+id/tmdbExternalLinksLabel"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="16dp"
-        android:layout_marginTop="16dp"
-        android:text="@string/tmdb_external_links_label"
-        android:textColor="@android:color/white"
-        android:textSize="15sp"
-        android:textStyle="bold"
-        android:visibility="gone"
-        tools:visibility="visible" />
-
-    <!-- 外部链接容器 -->
-    <androidx.appcompat.widget.LinearLayoutCompat
-        android:id="@+id/tmdbExternalLinks"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="16dp"
-        android:layout_marginEnd="16dp"
-        android:layout_marginTop="8dp"
-        android:orientation="vertical"
-        android:visibility="gone" />
-
     <!-- 猜你喜欢标题 -->
     <com.google.android.material.textview.MaterialTextView
         android:id="@+id/tmdbRecommendationsLabel"
@@ -618,6 +593,31 @@
             android:orientation="horizontal" />
 
     </HorizontalScrollView>
+
+    <!-- 外部链接标题 -->
+    <com.google.android.material.textview.MaterialTextView
+        android:id="@+id/tmdbExternalLinksLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="16dp"
+        android:text="@string/tmdb_external_links_label"
+        android:textColor="@android:color/white"
+        android:textSize="15sp"
+        android:textStyle="bold"
+        android:visibility="gone"
+        tools:visibility="visible" />
+
+    <!-- 外部链接容器 -->
+    <androidx.appcompat.widget.LinearLayoutCompat
+        android:id="@+id/tmdbExternalLinks"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginTop="8dp"
+        android:orientation="vertical"
+        android:visibility="gone" />
 
     <!-- TMDB 水印 + 分隔 -->
     <com.google.android.material.textview.MaterialTextView

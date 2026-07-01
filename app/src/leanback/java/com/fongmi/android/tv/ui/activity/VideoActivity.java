@@ -92,6 +92,7 @@ import com.fongmi.android.tv.ui.custom.CustomKeyDownVod;
 import com.fongmi.android.tv.ui.custom.CustomMovement;
 import com.fongmi.android.tv.ui.custom.CustomSeekView;
 import com.fongmi.android.tv.ui.custom.PlayerOsdController;
+import com.fongmi.android.tv.ui.custom.SpaceItemDecoration;
 import com.fongmi.android.tv.ui.dialog.ContentDialog;
 import com.fongmi.android.tv.ui.dialog.DanmakuDialog;
 import com.fongmi.android.tv.ui.dialog.EpisodeListDialog;
@@ -179,6 +180,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     private boolean detailRequested;
     private boolean detailHealthRecorded;
     private boolean playHealthRecorded;
+    private boolean episodeGridSpacingAdded;
     private boolean episodeGridMode;
     private Runnable mR1;
     private Runnable mR2;
@@ -527,6 +529,10 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
 
     private boolean isTmdbMode() {
         return getIntent().getBooleanExtra("tmdbMode", false);
+    }
+
+    private boolean shouldUseUpstreamNativeEpisodeModule() {
+        return Setting.isDirectDetailPage() && !isTmdbMode();
     }
 
     private boolean isTmdbSourceEnabled() {
@@ -1136,6 +1142,8 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         mTmdbDetailLoading = false;
         App.removeCallbacks(mTmdbDetailTimeout);
         mBinding.progressLayout.showContent();
+        // 内容从 INVISIBLE 恢复为 VISIBLE 后，焦点需要重新回到播放器
+        mBinding.video.post(() -> mBinding.video.requestFocus());
         SpiderDebug.log("tmdb-tv", "detail loading reveal (show content)");
     }
 
@@ -1313,10 +1321,11 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         if (result.hasPosition()) mHistory.setPosition(result.getPosition());
         mBinding.control.parse.setVisibility(isUseParse() ? View.VISIBLE : View.GONE);
         if (redirectToContentHandler(result)) return;
+        List<Danmaku> siteDanmakus = result.getDanmaku();
         startPlayer(getHistoryKey(), result, isUseParse(), getSite().getTimeout(), buildMetadata());
         subtitlePlaybackSession.onPlaybackStarted(this, result);
-        if (DanmakuApi.canSearch()) DanmakuApi.search(mHistory.getVodName(), getEpisode().getName(), danmaku -> {
-            if (DanmakuSetting.isSpiderFirst() && !result.getDanmaku().isEmpty()) player().addDanmaku(danmaku);
+        if (DanmakuApi.canAutoSearch(siteDanmakus)) DanmakuApi.search(mHistory.getVodName(), getEpisode().getName(), danmaku -> {
+            if (DanmakuSetting.isSpiderFirst() && !siteDanmakus.isEmpty()) player().addDanmaku(danmaku);
             else player().setDanmaku(danmaku);
         });
     }
@@ -1377,6 +1386,11 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         mBinding.episodeContainer.setVisibility(isEmpty ? View.GONE : View.VISIBLE);
         mBinding.control.action.episodes.setVisibility(items.size() < 2 ? View.GONE : View.VISIBLE);
 
+        if (shouldUseUpstreamNativeEpisodeModule()) {
+            setUpstreamNativeEpisodeItems(items, scrollToCurrent);
+            return;
+        }
+
         if (showTmdbEpisodeChrome && hasMultiple) episodeGridMode = true;
         if (!showTmdbEpisodeChrome || !hasMultiple) episodeGridMode = false;
         mBinding.episodeHeader.setVisibility(showTmdbEpisodeChrome && !isEmpty ? View.VISIBLE : View.GONE);
@@ -1404,11 +1418,36 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         updateFocus();
         if (scrollToCurrent) scrollToCurrentEpisode();
         setR2Callback();
-        // 延迟刷新一次，确保焦点状态正确初始化
-        mBinding.episode.post(() -> {
-            if (mEpisodeAdapter != null) mEpisodeAdapter.notifyDataSetChanged();
-            if (mEpisodeGridAdapter != null) mEpisodeGridAdapter.notifyDataSetChanged();
-        });
+    }
+
+    private void setUpstreamNativeEpisodeItems(List<Episode> items, boolean scrollToCurrent) {
+        episodeGridMode = true;
+        int column = EpisodeAdapter.getColumn(items);
+        mBinding.episodeHeader.setVisibility(View.GONE);
+        mBinding.episodeReverse.setVisibility(View.GONE);
+        mBinding.episodeViewMode.setVisibility(View.GONE);
+        mBinding.episodeLoadingIndicator.setVisibility(View.GONE);
+        mBinding.episode.setVisibility(View.GONE);
+        mBinding.episodeGrid.setVisibility(items.isEmpty() ? View.GONE : View.VISIBLE);
+        RecyclerView.LayoutManager layoutManager = mBinding.episodeGrid.getLayoutManager();
+        if (layoutManager instanceof GridLayoutManager gridLayoutManager) gridLayoutManager.setSpanCount(column);
+        mEpisodeAdapter.setUseTmdbCard(false);
+        mEpisodeGridAdapter.setUseTmdbCard(false);
+        mEpisodeAdapter.setGridMode(false);
+        mEpisodeAdapter.setVerticalGridMode(true);
+        mEpisodeAdapter.setColumn(column);
+        mEpisodeGridAdapter.setGridMode(true);
+        mEpisodeGridAdapter.setVerticalGridMode(true);
+        mEpisodeGridAdapter.setColumn(column);
+        mEpisodeAdapter.addAll(items);
+        mEpisodeGridAdapter.addAll(items);
+        updateEpisodeGridViewport();
+        updateUpstreamNativeEpisodeGridViewport();
+        mBinding.episodeGrid.post(this::updateUpstreamNativeEpisodeGridViewport);
+        setArrayAdapter(items.size());
+        updateFocus();
+        if (scrollToCurrent) scrollToCurrentEpisode();
+        setR2Callback();
     }
 
     // TMDB 加载结束后兜底：若仍卡在剧集加载指示器（电影无集数、未匹配到、获取失败等），
@@ -1554,6 +1593,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         mEpisodeGridAdapter.setGridMode(true);
         mEpisodeGridAdapter.setVerticalGridMode(true);
         mEpisodeGridAdapter.setColumn(spanCount);
+        updateEpisodeGridViewport();
         mBinding.episodeViewMode.setText(episodeGridMode ? R.string.detail_episode_view_list : R.string.detail_episode_view_grid);
         updateEpisodeReverseText();
         updateFocus();
@@ -1587,6 +1627,39 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
 
     private View getActiveEpisodeContentView() {
         return episodeGridMode ? mBinding.episodeGrid : mBinding.episode;
+    }
+
+    private void updateEpisodeGridViewport() {
+        ViewGroup.LayoutParams params = mBinding.episodeGrid.getLayoutParams();
+        if (params.height != ViewGroup.LayoutParams.WRAP_CONTENT) {
+            params.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+            mBinding.episodeGrid.setLayoutParams(params);
+        }
+        mBinding.episodeGrid.setNestedScrollingEnabled(false);
+    }
+
+    private void updateUpstreamNativeEpisodeGridViewport() {
+        int spacing = ResUtil.dp2px(12);
+        int height = getUpstreamNativeEpisodeGridHeight(spacing);
+        ViewGroup.LayoutParams params = mBinding.episodeGrid.getLayoutParams();
+        if (params.height != height) {
+            params.height = height;
+            mBinding.episodeGrid.setLayoutParams(params);
+        }
+        if (!episodeGridSpacingAdded) {
+            RecyclerView.LayoutManager layoutManager = mBinding.episodeGrid.getLayoutManager();
+            int spanCount = layoutManager instanceof GridLayoutManager gridLayoutManager ? gridLayoutManager.getSpanCount() : 2;
+            mBinding.episodeGrid.addItemDecoration(new SpaceItemDecoration(spanCount, 12));
+            episodeGridSpacingAdded = true;
+        }
+        mBinding.episodeGrid.setNestedScrollingEnabled(true);
+    }
+
+    private int getUpstreamNativeEpisodeGridHeight(int spacing) {
+        int available = getEpisodeAvailableHeight(mBinding.episodeGrid);
+        if (available > 0) return available;
+        int rows = ResUtil.getScreenHeight() < ResUtil.dp2px(560) ? 2 : 3;
+        return ResUtil.dp2px(64) * rows + spacing * Math.max(0, rows - 1) + mBinding.episodeGrid.getPaddingTop() + mBinding.episodeGrid.getPaddingBottom();
     }
 
     private void scrollToCurrentEpisode() {
@@ -1662,14 +1735,22 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     }
 
     private int getEpisodeAvailableHeight() {
+        return getEpisodeAvailableHeight(mBinding.episode);
+    }
+
+    private int getEpisodeAvailableHeight(View episodeView) {
         int height = mBinding.scroll.getHeight();
         if (height <= 0) return 0;
         int available = height - mBinding.scroll.getPaddingTop() - mBinding.scroll.getPaddingBottom();
-        ViewGroup.LayoutParams episodeParams = mBinding.episode.getLayoutParams();
+        if (mBinding.scroll.getChildCount() == 0 || !(mBinding.scroll.getChildAt(0) instanceof ViewGroup group)) return available;
+        View target = episodeView;
+        while (target.getParent() instanceof View parent && parent != group) target = parent;
+        ViewGroup.LayoutParams episodeParams = target.getLayoutParams();
         if (episodeParams instanceof ViewGroup.MarginLayoutParams margins) available -= margins.topMargin + margins.bottomMargin;
-        for (int i = 0; i < mBinding.scroll.getChildCount(); i++) {
-            View child = mBinding.scroll.getChildAt(i);
-            if (child == mBinding.episode || child.getVisibility() == View.GONE) continue;
+        available -= group.getPaddingTop() + group.getPaddingBottom();
+        for (int i = 0; i < group.getChildCount(); i++) {
+            View child = group.getChildAt(i);
+            if (child == target || child.getVisibility() == View.GONE) continue;
             available -= child.getMeasuredHeight();
             ViewGroup.LayoutParams params = child.getLayoutParams();
             if (params instanceof ViewGroup.MarginLayoutParams margins) available -= margins.topMargin + margins.bottomMargin;
@@ -2807,7 +2888,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
             finishEpisodeLoading();
         }
         else if (event.getType() == RefreshEvent.Type.SUBTITLE) player().setSub(Sub.from(event.getPath()));
-        else if (event.getType() == RefreshEvent.Type.DANMAKU) player().setDanmaku(Danmaku.from(event.getPath()));
+        else if (event.getType() == RefreshEvent.Type.DANMAKU) player().reloadDanmaku(Danmaku.from(event.getPath()));
         else if (event.getType() == RefreshEvent.Type.HISTORY) refreshPersonalRecommendationsForHistory();
     }
 
@@ -2815,8 +2896,17 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         if (item == null) return false;
         String id = item.getId();
         String siteKey = item.getSiteKey();
-        if (!TextUtils.isEmpty(id) && !TextUtils.equals(id, getId())) return false;
+        // 站点 id 可能包含分页标记（如 "140036/40"），而 Vod 的 id 通常不含（如 "140036"）
+        // 需要容忍 Intent id 中的分页后缀：去掉首个 "/" 之后的后缀再比较
+        if (!TextUtils.isEmpty(id) && !TextUtils.equals(id, stripPageSuffix(getId()))) return false;
         return TextUtils.isEmpty(siteKey) || TextUtils.equals(siteKey, getKey());
+    }
+
+    /** 去掉 id 中的分页后缀，如 "140036/40" → "140036" */
+    private static String stripPageSuffix(String id) {
+        if (TextUtils.isEmpty(id)) return id;
+        int slash = id.indexOf('/');
+        return slash >= 0 ? id.substring(0, slash) : id;
     }
 
     private void loadNativePersonalRecommendations(Vod item) {

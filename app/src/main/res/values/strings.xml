@@ -696,8 +696,12 @@
     <string name="about_acknowledge">I understand</string>
     <string name="setting_github_proxy">GitHub acceleration sources</string>
     <string name="setting_github_proxy_short">Accelerate</string>
-    <string name="setting_github_proxy_hint">One source per line</string>
-    <string name="setting_github_proxy_message">The first valid source is used for GitHub Raw/Release downloads.</string>
+    <string name="setting_github_proxy_hint">Enter a source URL</string>
+    <string name="setting_github_proxy_message">Tap a source to make it the active one. GitHub Raw/Release downloads use the active source.</string>
+    <string name="setting_github_proxy_add">Add</string>
+    <string name="setting_github_proxy_remove">Remove</string>
+    <string name="setting_github_proxy_reset">Reset to default</string>
+    <string name="setting_github_proxy_invalid">Please enter a valid http/https URL</string>
 
     <!-- Backup & Restore -->
     <string name="restore_select">Select backup</string>

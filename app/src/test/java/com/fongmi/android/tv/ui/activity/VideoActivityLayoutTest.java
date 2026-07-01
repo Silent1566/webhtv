@@ -160,6 +160,61 @@ public class VideoActivityLayoutTest {
     }
 
     @Test
+    public void mobileDirectPlaybackUsesUpstreamNativeEpisodeStrip() throws Exception {
+        Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int predicate = source.indexOf("private boolean shouldUseUpstreamNativeEpisodeModule()");
+        int bind = source.indexOf("private void setUpstreamNativeEpisodeItems(List<Episode> items)");
+        int layout = source.indexOf("private void updateEpisodeLayoutForUpstreamNative()");
+        int setEpisode = source.indexOf("private void setEpisodeAdapter(List<Episode> items)");
+
+        assertTrue(sourcePath + " is missing direct native episode predicate", predicate >= 0);
+        assertTrue("direct native episode mode must be scoped to the 影视原生 setting",
+                source.indexOf("return Setting.isDirectDetailPage() && !isTmdbMode();", predicate) > predicate);
+        assertTrue("direct native playback must bypass enhanced episode grid binding",
+                setEpisode >= 0 && source.indexOf("if (shouldUseUpstreamNativeEpisodeModule())", setEpisode) > setEpisode);
+        assertTrue("direct native playback should restore the upstream horizontal episode strip",
+                bind >= 0
+                        && source.indexOf("mEpisodeAdapter.setViewType(ViewType.HORI);", bind) > bind
+                        && source.indexOf("mBinding.more.setVisibility(items.size() < 10 ? View.GONE : View.VISIBLE);", bind) > bind
+                        && layout > bind
+                        && source.indexOf("new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)", layout) > layout);
+    }
+
+    @Test
+    public void leanbackDirectPlaybackUsesUpstreamNativeEpisodeModule() throws Exception {
+        Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int predicate = source.indexOf("private boolean shouldUseUpstreamNativeEpisodeModule()");
+        int setEpisode = source.indexOf("private void setEpisodeAdapter(List<Episode> items, boolean scrollToCurrent)");
+        int bind = source.indexOf("private void setUpstreamNativeEpisodeItems(List<Episode> items, boolean scrollToCurrent)");
+        int viewport = source.indexOf("private void updateUpstreamNativeEpisodeGridViewport()");
+
+        assertTrue(sourcePath + " is missing leanback direct native episode predicate", predicate >= 0);
+        assertTrue("leanback direct native episode mode must be scoped to the 影视原生 setting",
+                source.indexOf("return Setting.isDirectDetailPage() && !isTmdbMode();", predicate) > predicate);
+        assertTrue("leanback direct native playback must bypass enhanced episode chrome",
+                setEpisode >= 0 && source.indexOf("if (shouldUseUpstreamNativeEpisodeModule())", setEpisode) > setEpisode);
+        assertTrue("leanback direct native playback should keep upstream grouping and vertical episode grid",
+                bind >= 0
+                        && source.indexOf("mBinding.episodeHeader.setVisibility(View.GONE);", bind) > bind
+                        && source.indexOf("episodeGridMode = true;", bind) > bind
+                        && source.indexOf("mBinding.episode.setVisibility(View.GONE);", bind) > bind
+                        && source.indexOf("mBinding.episodeGrid.setVisibility(items.isEmpty() ? View.GONE : View.VISIBLE);", bind) > bind
+                        && source.indexOf("mEpisodeGridAdapter.setVerticalGridMode(true);", bind) > bind
+                        && source.indexOf("setArrayAdapter(items.size());", bind) > bind);
+        assertTrue("leanback direct native grouping must scroll the episode grid internally so the focused group stays visible",
+                viewport >= 0
+                        && source.indexOf("params.height = height;", viewport) > viewport
+                        && source.indexOf("getUpstreamNativeEpisodeGridHeight(spacing)", viewport) > viewport
+                        && source.indexOf("ResUtil.dp2px(64) * rows", viewport) > viewport
+                        && source.indexOf("new SpaceItemDecoration(spanCount, 12)", viewport) > viewport
+                        && source.indexOf("mBinding.episodeGrid.setNestedScrollingEnabled(true);", viewport) > viewport
+                        && source.indexOf("updateUpstreamNativeEpisodeGridViewport();", bind) > bind
+                        && source.indexOf("mBinding.episodeGrid.post(this::updateUpstreamNativeEpisodeGridViewport);", bind) > bind);
+    }
+
+    @Test
     public void leanbackOriginalEnhancedHidesShortDisplayAndSourceActions() throws Exception {
         Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
@@ -205,6 +260,153 @@ public class VideoActivityLayoutTest {
                         && activity.indexOf("mBinding.episodeViewMode.setVisibility(View.GONE);", setEpisode) > setEpisode
                         && toggle >= 0
                         && activity.indexOf("if (isTmdbSourceEnabled()) return;", toggle) > toggle);
+    }
+
+    @Test
+    public void leanbackPlaybackEpisodeDialogUsesSourceDisplayMode() throws Exception {
+        Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int method = source.indexOf("private void onEpisodes()");
+        int nextMethod = source.indexOf("private void onRepeat()", method);
+        String methodBody = nextMethod > method ? source.substring(method, nextMethod) : source.substring(method);
+
+        assertTrue(sourcePath + " is missing onEpisodes", method >= 0);
+        assertTrue("playback episode selector must keep TMDB/native-enhanced card mode when the source policy requires it",
+                methodBody.contains("EpisodeDisplayPolicy.shouldUseTmdbEpisodeCards(isTmdbSourceEnabled(), flag.getEpisodes())")
+                        && methodBody.contains(".tmdbCard(tmdbCard)"));
+    }
+
+    @Test
+    public void leanbackNativeEnhancedEpisodeGridExpandsWithDetailScroll() throws Exception {
+        Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int method = source.indexOf("private void updateEpisodeGridViewport()");
+        int apply = source.indexOf("private void applyEpisodeViewMode(boolean scrollToCurrent)");
+        int setEpisode = source.indexOf("private void setEpisodeAdapter(List<Episode> items, boolean scrollToCurrent)");
+        int setR2 = source.indexOf("setR2Callback();", setEpisode);
+        int nextMethod = source.indexOf("private void finishEpisodeLoading()", setEpisode);
+        String setEpisodeBody = nextMethod > setEpisode ? source.substring(setEpisode, nextMethod) : source.substring(setEpisode);
+        int setR2InBody = setEpisodeBody.indexOf("setR2Callback();");
+
+        assertTrue(sourcePath + " is missing updateEpisodeGridViewport", method >= 0);
+        assertTrue("leanback native enhanced episode grid must expand so source/page controls scroll away with it",
+                source.indexOf("params.height = ViewGroup.LayoutParams.WRAP_CONTENT", method) > method);
+        assertTrue("leanback native enhanced episode grid must leave vertical scrolling to the detail page",
+                source.indexOf("mBinding.episodeGrid.setNestedScrollingEnabled(false)", method) > method);
+        assertFalse("leanback native enhanced episode grid must not cap itself to an internal scroll viewport",
+                source.substring(method, source.indexOf("private void scrollToCurrentEpisode()", method)).contains("TmdbEpisodeGridPolicy.layout("));
+        assertTrue("episode view mode changes must refresh the grid viewport",
+                apply >= 0 && source.indexOf("updateEpisodeGridViewport();", apply) > apply);
+        assertTrue("episode binding must not schedule a second full adapter refresh after setup",
+                setR2 > setEpisode && setR2InBody >= 0 && !setEpisodeBody.substring(setR2InBody).contains("notifyDataSetChanged()"));
+    }
+
+    @Test
+    public void leanbackTmdbEpisodeCardsAvoidFocusJankHotspots() throws Exception {
+        Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "adapter", "EpisodeAdapter.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int bind = source.indexOf("private void bindCardView(@NonNull ViewHolder holder, Episode item, int position)");
+        int next = source.indexOf("private void applyCardSize(AdapterEpisodeCardBinding binding)", bind);
+        String bindBody = next > bind ? source.substring(bind, next) : source.substring(bind);
+
+        assertTrue(sourcePath + " is missing bindCardView", bind >= 0);
+        assertFalse("TMDB episode card binding must not recreate the focus foreground on every bind",
+                bindBody.contains("setForeground("));
+        assertTrue("TMDB episode cards should keep long overviews out of the remote focus path",
+                bindBody.contains("binding.overview.setText(\"\");")
+                        && bindBody.contains("binding.overview.setVisibility(View.GONE);"));
+    }
+
+    @Test
+    public void leanbackLightweightEpisodeSelectorsKeepTitlesReadable() throws Exception {
+        Path adapterPath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "adapter", "EpisodeAdapter.java"));
+        String adapter = new String(Files.readAllBytes(adapterPath), StandardCharsets.UTF_8);
+        int width = adapter.indexOf("private int getWidth()");
+        int column = adapter.indexOf("public static int getColumn(List<Episode> items, int maxWidth)");
+        int text = adapter.indexOf("private void bindTextView(@NonNull ViewHolder holder, Episode item, int position)");
+        int addAll = adapter.indexOf("public void addAll(List<Episode> items)");
+        int setUseTmdbCard = adapter.indexOf("public void setUseTmdbCard(boolean useTmdbCard)");
+        int isUsingTmdbCard = adapter.indexOf("public boolean isUsingTmdbCard()");
+        String addAllBody = addAll >= 0 && setUseTmdbCard > addAll ? adapter.substring(addAll, setUseTmdbCard) : "";
+        String setUseTmdbCardBody = setUseTmdbCard >= 0 && isUsingTmdbCard > setUseTmdbCard ? adapter.substring(setUseTmdbCard, isUsingTmdbCard) : "";
+
+        assertTrue(adapterPath + " is missing lightweight episode sizing hooks", width >= 0 && column >= 0 && text >= 0);
+        assertFalse("episode data refresh must not override the externally configured grid column count",
+                addAllBody.contains("column ="));
+        assertFalse("episode card mode changes must not override the externally configured grid column count",
+                setUseTmdbCardBody.contains("column ="));
+        assertTrue("vertical lightweight episode buttons must use the full column width instead of the compact 120dp cap",
+                adapter.indexOf("return verticalGridMode ? width : Math.min(width, ResUtil.dp2px(TEXT_BUTTON_MAX_WIDTH_DP));", width) > width);
+        assertTrue("lightweight episode columns must be measured from the actual displayed title",
+                adapter.indexOf("ResUtil.getTextWidth(getTitle(item), 16)", column) > column);
+        assertTrue("lightweight episode buttons must stay single-line so numeric episode labels do not wrap",
+                adapter.indexOf("textView.setLayoutParams(params);", text) > text
+                        && adapter.indexOf("textView.setSingleLine(true);", text) > text
+                        && adapter.indexOf("textView.setMaxLines(1);", text) > text
+                        && adapter.indexOf("TextUtils.TruncateAt.MARQUEE", text) > text);
+
+        Path dialogPath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "dialog", "EpisodeListDialog.java"));
+        String dialog = new String(Files.readAllBytes(dialogPath), StandardCharsets.UTF_8);
+        int textColumn = dialog.indexOf("private int getTextColumn(List<Episode> episodes)");
+        int setEpisodes = dialog.indexOf("private void setEpisodes(Flag flag)");
+        assertTrue(dialogPath + " is missing text column policy", textColumn >= 0);
+        assertTrue("playback lightweight selector should prefer wide two-column buttons for readable titles",
+                dialog.indexOf("return Math.min(2, EpisodeAdapter.getColumn(episodes, getEpisodeContentWidth()));", textColumn) > textColumn);
+        assertTrue("playback lightweight selector must set the Leanback grid column width, not only child view width",
+                setEpisodes >= 0 && dialog.indexOf("if (!tmdbCard) binding.episode.setColumnWidth(getTextColumnWidth(column));", setEpisodes) > setEpisodes);
+
+        Path nativeItemPath = findLeanbackResPath().resolve(Path.of("layout", "adapter_episode_dialog.xml"));
+        String nativeItem = new String(Files.readAllBytes(nativeItemPath), StandardCharsets.UTF_8);
+        assertTrue("native episode dialog item should keep upstream single-line marquee behavior",
+                nativeItem.contains("android:layout_height=\"42dp\"")
+                        && nativeItem.contains("android:singleLine=\"true\"")
+                        && nativeItem.contains("android:ellipsize=\"marquee\""));
+        assertFalse("native episode dialog item must not wrap compact episode numbers",
+                nativeItem.contains("android:maxLines=\"2\""));
+    }
+
+    @Test
+    public void leanbackTmdbEpisodeDialogAvoidsAlignedCardGridScrolling() throws Exception {
+        Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "dialog", "EpisodeListDialog.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int recycler = source.indexOf("private void setRecyclerView()");
+        int key = source.indexOf("private boolean onEpisodeKey(KeyEvent event)");
+
+        assertTrue(sourcePath + " is missing TMDB card focus setup", recycler >= 0 && key > recycler);
+        assertTrue("TMDB episode dialog should avoid aligned smooth scrolling for card grids",
+                source.indexOf("if (tmdbCard) binding.episode.setFocusScrollStrategy(BaseGridView.FOCUS_SCROLL_ITEM);", recycler) > recycler);
+        assertFalse("TMDB episode dialog must not swallow normal up/down focus navigation",
+                source.contains("handleTmdbEpisodeGridKey"));
+    }
+
+    @Test
+    public void leanbackEpisodeDialogLetsHeaderScrollWithEpisodes() throws Exception {
+        Path layoutPath = findLeanbackResPath().resolve(Path.of("layout", "dialog_episode_list.xml"));
+        String layout = new String(Files.readAllBytes(layoutPath), StandardCharsets.UTF_8);
+        Path dialogPath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "dialog", "EpisodeListDialog.java"));
+        String source = new String(Files.readAllBytes(dialogPath), StandardCharsets.UTF_8);
+        int recycler = source.indexOf("private void setRecyclerView()");
+        int setSegmentEpisodes = source.indexOf("private void setSegmentEpisodes(int position)");
+        int height = source.indexOf("private void updateEpisodeContentHeight()");
+        int align = source.indexOf("private void alignEpisodeScroll(int position)");
+
+        assertTrue("episode dialog must use a scroll root so line and segment controls move away with remote down",
+                layout.contains("<androidx.core.widget.NestedScrollView")
+                        && layout.contains("android:id=\"@+id/root\"")
+                        && layout.contains("android:fillViewport=\"true\""));
+        assertTrue("episode grid must expand inside the dialog scroll root instead of owning a fixed viewport",
+                layout.contains("android:id=\"@+id/episode\"")
+                        && layout.contains("android:layout_height=\"wrap_content\"")
+                        && source.indexOf("binding.episode.setNestedScrollingEnabled(false);", recycler) > recycler);
+        assertTrue("episode dialog must set an explicit content height because Leanback grids otherwise keep an internal viewport",
+                height > setSegmentEpisodes
+                        && source.indexOf("updateEpisodeContentHeight();", setSegmentEpisodes) > setSegmentEpisodes
+                        && source.indexOf("params.height = getEpisodeContentHeight();", height) > height);
+        assertTrue("episode focus changes must scroll the outer dialog instead of letting the inner grid flash under the header",
+                align > recycler
+                        && source.indexOf("binding.episode.addOnChildViewHolderSelectedListener", recycler) > recycler
+                        && source.indexOf("alignEpisodeScroll(position);", recycler) > recycler
+                        && source.indexOf("binding.getRoot().scrollTo(0, Math.max(0, targetY));", align) > align);
     }
 
     @Test

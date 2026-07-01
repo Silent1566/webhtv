@@ -28,6 +28,10 @@ public class DanmakuApi {
         return DanmakuSetting.isLoad() && DanmakuSetting.isAuto() && DanmakuSetting.hasValidApiUrl();
     }
 
+    public static boolean canAutoSearch(List<Danmaku> siteDanmakus) {
+        return canSearch() && (!DanmakuSetting.isSpiderFirst() || siteDanmakus == null || siteDanmakus.isEmpty());
+    }
+
     public static Call newCall(String name, String episode) {
         String url = DanmakuSetting.getValidApiUrl();
         if (TextUtils.isEmpty(url)) return null;

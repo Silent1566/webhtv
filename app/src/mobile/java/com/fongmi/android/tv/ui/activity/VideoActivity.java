@@ -812,6 +812,13 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
 
     private void updateEpisodeViewportHeight() {
         if (mBinding.episode.getVisibility() != View.VISIBLE) return;
+        if (shouldUseUpstreamNativeEpisodeModule()) {
+            if (mEpisodeMaxHeight == 0) return;
+            mEpisodeMaxHeight = 0;
+            mBinding.episode.setMaxHeight(0);
+            mBinding.episode.requestLayout();
+            return;
+        }
         int limit = ResUtil.isPad() || ResUtil.isLand(this) ? ResUtil.dp2px(328) : ResUtil.dp2px(280);
         // The episode list lives inside a scroll container, so capping it by the
         // current on-screen remainder can collapse the viewport to a single row
@@ -1410,10 +1417,11 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         if (result.hasDesc()) setText(mBinding.content, 0, result.getDesc());
         mBinding.control.parse.setVisibility(isUseParse() ? View.VISIBLE : View.GONE);
         if (redirectToAudioIfNeeded(result)) return;
+        List<Danmaku> siteDanmakus = result.getDanmaku();
         startPlayer(getHistoryKey(), result, isUseParse(), getSite().getTimeout(), buildMetadata());
         subtitlePlaybackSession.onPlaybackStarted(this, result);
-        if (DanmakuApi.canSearch()) DanmakuApi.search(mHistory.getVodName(), getEpisode().getName(), danmaku -> {
-            if (DanmakuSetting.isSpiderFirst() && !result.getDanmaku().isEmpty()) player().addDanmaku(danmaku);
+        if (DanmakuApi.canAutoSearch(siteDanmakus)) DanmakuApi.search(mHistory.getVodName(), getEpisode().getName(), danmaku -> {
+            if (DanmakuSetting.isSpiderFirst() && !siteDanmakus.isEmpty()) player().addDanmaku(danmaku);
             else player().setDanmaku(danmaku);
             refreshDanmakuControls();
         });
@@ -1506,7 +1514,6 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
     private void setEpisodeAdapter(List<Episode> items) {
         int size = items.size();
         boolean useTmdbCard = shouldUseTmdbEpisodeCards(items);
-        mEpisodeAdapter.setUseTmdbCard(useTmdbCard);
         mBinding.control.action.episodes.setVisibility(size < 2 ? View.GONE : View.VISIBLE);
         mBinding.control.action.next.setVisibility(size < 2 ? View.GONE : View.VISIBLE);
         mBinding.control.action.prev.setVisibility(size < 2 ? View.GONE : View.VISIBLE);
@@ -1514,6 +1521,11 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         mBinding.control.next.setVisibility(size < 2 ? View.GONE : View.VISIBLE);
         mBinding.control.prev.setVisibility(size < 2 ? View.GONE : View.VISIBLE);
         mBinding.reverse.setVisibility(size < 2 ? View.GONE : View.VISIBLE);
+        if (shouldUseUpstreamNativeEpisodeModule()) {
+            setUpstreamNativeEpisodeItems(items);
+            return;
+        }
+        mEpisodeAdapter.setUseTmdbCard(useTmdbCard);
         boolean showViewMode = useTmdbCard && size > 1;
         if (showViewMode) mEpisodeGridMode = Setting.getTmdbEpisodeGridMode();
         if (!showViewMode) mEpisodeGridMode = true;
@@ -1526,6 +1538,36 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         updateEpisodeGroupVisibility();
         setEpisodeItems(items);
         mBinding.episode.post(this::updateEpisodeViewportHeight);
+    }
+
+    private boolean shouldUseUpstreamNativeEpisodeModule() {
+        return Setting.isDirectDetailPage() && !isTmdbMode();
+    }
+
+    private void setUpstreamNativeEpisodeItems(List<Episode> items) {
+        mEpisodeGridMode = false;
+        mEpisodeAdapter.setUseTmdbCard(false);
+        mEpisodeAdapter.setViewType(ViewType.HORI);
+        mEpisodeGroupAdapter.addAll(List.of());
+        mBinding.episodeGroup.setVisibility(View.GONE);
+        if (mBinding.episodeViewMode != null) mBinding.episodeViewMode.setVisibility(View.GONE);
+        mBinding.episode.setVisibility(items.isEmpty() ? View.GONE : View.VISIBLE);
+        mBinding.more.setVisibility(items.size() < 10 ? View.GONE : View.VISIBLE);
+        updateEpisodeLayoutForUpstreamNative();
+        mEpisodeAdapter.addAll(items);
+    }
+
+    private void updateEpisodeLayoutForUpstreamNative() {
+        RecyclerView.LayoutManager manager = mBinding.episode.getLayoutManager();
+        if (!(manager instanceof LinearLayoutManager) || manager instanceof GridLayoutManager || ((LinearLayoutManager) manager).getOrientation() != LinearLayoutManager.HORIZONTAL) {
+            mBinding.episode.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+        }
+        updateEpisodeDecoration(new SpaceItemDecoration(8));
+        mEpisodeMaxHeight = 0;
+        mBinding.episode.setMaxHeight(0);
+        mBinding.episode.setClipChildren(false);
+        mBinding.episode.setClipToPadding(false);
+        mBinding.episode.requestLayout();
     }
 
     private void updateEpisodeGroupVisibility() {
@@ -2915,7 +2957,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         else if (event.getType() == RefreshEvent.Type.HISTORY) refreshPersonalRecommendationsForHistory();
         else if (event.getType() == RefreshEvent.Type.SUBTITLE) player().setSub(Sub.from(event.getPath()));
         else if (event.getType() == RefreshEvent.Type.DANMAKU) {
-            player().setDanmaku(Danmaku.from(event.getPath()));
+            player().reloadDanmaku(Danmaku.from(event.getPath()));
             refreshDanmakuControls();
         }
     }

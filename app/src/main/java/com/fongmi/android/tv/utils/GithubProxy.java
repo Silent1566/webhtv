@@ -34,6 +34,54 @@ public final class GithubProxy {
         return String.join("\n", BUILT_IN);
     }
 
+    public static List<String> getSources() {
+        return sources(Setting.getGithubProxy());
+    }
+
+    public static String getActive() {
+        return first(Setting.getGithubProxy());
+    }
+
+    public static boolean isBuiltIn(String source) {
+        if (isEmpty(source)) return false;
+        String normalized = normalize(source).toLowerCase(Locale.ROOT);
+        for (String item : BUILT_IN) {
+            if (item.toLowerCase(Locale.ROOT).equals(normalized)) return true;
+        }
+        return false;
+    }
+
+    public static String setActive(String source) {
+        if (isEmpty(source)) return Setting.getGithubProxy();
+        String normalized = normalize(source);
+        List<String> list = new ArrayList<>();
+        list.add(normalized);
+        for (String item : sources(Setting.getGithubProxy())) {
+            if (!item.equals(normalized)) list.add(item);
+        }
+        return String.join("\n", list);
+    }
+
+    public static String addSource(String source) {
+        if (isEmpty(source)) return Setting.getGithubProxy();
+        String normalized = normalize(source.trim());
+        if (!normalized.startsWith("http://") && !normalized.startsWith("https://")) {
+            return Setting.getGithubProxy();
+        }
+        List<String> list = sources(Setting.getGithubProxy());
+        if (list.contains(normalized)) return Setting.getGithubProxy();
+        list.add(normalized);
+        return String.join("\n", list);
+    }
+
+    public static String removeSource(String source) {
+        if (isEmpty(source)) return Setting.getGithubProxy();
+        String normalized = normalize(source);
+        List<String> list = sources(Setting.getGithubProxy());
+        list.remove(normalized);
+        return list.isEmpty() ? defaultSources() : String.join("\n", list);
+    }
+
     public static String normalizeConfig(String value) {
         List<String> sources = sources(value);
         return sources.isEmpty() ? defaultSources() : String.join("\n", sources);

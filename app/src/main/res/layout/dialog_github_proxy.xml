@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.appcompat.widget.LinearLayoutCompat xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:background="@color/white"
@@ -13,31 +14,78 @@
         style="@style/Widget.WebHTV.LightDialog.Helper"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:paddingBottom="16dp"
+        android:paddingBottom="14dp"
         android:text="@string/setting_github_proxy_message" />
 
-    <com.google.android.material.textview.MaterialTextView
-        style="@style/Widget.WebHTV.LightDialog.Label"
+    <com.fongmi.android.tv.ui.custom.CustomRecyclerView
+        android:id="@+id/list"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:paddingBottom="8dp"
-        android:text="@string/setting_github_proxy_hint" />
+        android:layout_height="192dp"
+        android:clipToPadding="false"
+        android:focusable="false"
+        android:overScrollMode="never"
+        app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
 
-    <com.google.android.material.textfield.TextInputEditText
-        android:id="@+id/githubProxyInput"
-        style="@style/Widget.WebHTV.LightDialog.Input"
+    <androidx.appcompat.widget.LinearLayoutCompat
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:gravity="start|top"
-        android:hint="@string/setting_github_proxy_hint"
-        android:inputType="textMultiLine|textNoSuggestions"
-        android:maxLines="8"
-        android:minLines="5"
-        android:overScrollMode="ifContentScrolls"
-        android:paddingStart="12dp"
-        android:paddingTop="10dp"
-        android:paddingEnd="12dp"
-        android:paddingBottom="10dp"
-        android:scrollbars="vertical" />
+        android:layout_marginTop="14dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <com.google.android.material.textfield.TextInputLayout
+            style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:hint="@string/setting_github_proxy_hint"
+            app:boxBackgroundColor="@color/white"
+            app:boxStrokeColor="@color/dialog_outlined_button_stroke"
+            app:hintTextColor="#5F6368">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/input"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:imeOptions="actionDone"
+                android:importantForAutofill="no"
+                android:inputType="textUri|textNoSuggestions"
+                android:nextFocusDown="@id/reset"
+                android:scrollHorizontally="true"
+                android:singleLine="true"
+                android:textColor="@color/black"
+                android:textColorHint="#666666" />
+
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/add"
+            style="@style/Widget.WebHTV.LightDialog.Button.Tonal"
+            android:layout_width="wrap_content"
+            android:layout_height="44dp"
+            android:layout_marginStart="10dp"
+            android:focusable="true"
+            android:minHeight="44dp"
+            android:minWidth="0dp"
+            android:nextFocusDown="@id/reset"
+            android:paddingStart="18dp"
+            android:paddingEnd="18dp"
+            android:text="@string/setting_github_proxy_add"
+            android:textSize="14sp"
+            app:cornerRadius="8dp" />
+
+    </androidx.appcompat.widget.LinearLayoutCompat>
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/reset"
+        style="@style/Widget.WebHTV.LightDialog.Button.Outlined"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:layout_marginTop="10dp"
+        android:focusable="true"
+        android:minHeight="44dp"
+        android:text="@string/setting_github_proxy_reset"
+        android:textSize="14sp"
+        app:cornerRadius="8dp" />
 
 </androidx.appcompat.widget.LinearLayoutCompat>

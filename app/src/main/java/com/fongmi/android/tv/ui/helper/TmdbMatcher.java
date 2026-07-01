@@ -12,6 +12,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -103,20 +104,24 @@ public class TmdbMatcher {
         if (items == null || items.isEmpty()) return null;
         TmdbItem strict = chooseStrictMatch(items, keyword, vod, sourceYear);
         if (strict != null || !Setting.isTmdbSmartMatch()) return strict;
-        return chooseSmartMatch(items, keyword, sourceYear);
+        return chooseSmartMatch(items, keyword, vod, sourceYear);
     }
 
     private TmdbItem chooseStrictMatch(List<TmdbItem> items, String keyword, Vod vod, int sourceYear) {
         String normalized = normalize(keyword);
         int season = sourceSeasonNumber(keyword, vod);
+        List<TmdbItem> matches = new ArrayList<>();
         for (TmdbItem item : items) {
             if (!normalize(item.getTitle()).equals(normalized)) continue;
-            if (sourceYear <= 0 || tmdbItemYear(item) == sourceYear || tmdbSeasonYearMatches(item, season, sourceYear)) return item;
+            if (sourceYear <= 0 || tmdbItemYear(item) == sourceYear || tmdbSeasonYearMatches(item, season, sourceYear)) matches.add(item);
         }
-        return null;
+        if (matches.isEmpty()) return null;
+        if (matches.size() == 1) return isUnwantedSplitSeasonMatch(matches.get(0), keyword, vod) ? null : matches.get(0);
+        TmdbItem detailChoice = chooseBySplitSeasonDetails(matches, keyword, vod);
+        return detailChoice == null ? matches.get(0) : detailChoice;
     }
 
-    private TmdbItem chooseSmartMatch(List<TmdbItem> items, String keyword, int sourceYear) {
+    private TmdbItem chooseSmartMatch(List<TmdbItem> items, String keyword, Vod vod, int sourceYear) {
         String normalized = normalize(keyword);
         TmdbItem sameTitle = null;
         TmdbItem closeYear = null;
@@ -127,13 +132,19 @@ public class TmdbMatcher {
             boolean titleMatch = title.equals(normalized);
             boolean cleanedTitleMatch = normalize(removeYearFromTitle(item.getTitle(), itemYear)).equals(normalized);
             if (!titleMatch && !cleanedTitleMatch) continue;
-            if (sourceYear <= 0) return item;
-            if (itemYear == sourceYear) return item;
+            if (sourceYear <= 0) {
+                if (isUnwantedSplitSeasonMatch(item, keyword, vod)) continue;
+                return item;
+            }
+            if (itemYear == sourceYear) {
+                if (isUnwantedSplitSeasonMatch(item, keyword, vod)) continue;
+                return item;
+            }
             if (itemYear > 0 && Math.abs(itemYear - sourceYear) <= 1 && closeYear == null) closeYear = item;
             if (sameTitle == null) sameTitle = item;
         }
-        if (closeYear != null) return closeYear;
-        if (sourceYear <= 0 && sameTitle != null) return sameTitle;
+        if (closeYear != null) return isUnwantedSplitSeasonMatch(closeYear, keyword, vod) ? null : closeYear;
+        if (sourceYear <= 0 && sameTitle != null) return isUnwantedSplitSeasonMatch(sameTitle, keyword, vod) ? null : sameTitle;
         return null;
     }
 
@@ -348,6 +359,47 @@ public class TmdbMatcher {
             return year > 0 ? year : firstYear(string(object, "name"));
         }
         return 0;
+    }
+
+    private TmdbItem chooseBySplitSeasonDetails(List<TmdbItem> matches, String keyword, Vod vod) {
+        TmdbItem best = null;
+        int bestScore = Integer.MIN_VALUE;
+        int secondScore = Integer.MIN_VALUE;
+        String source = matchSourceText(keyword, vod);
+        for (TmdbItem item : matches) {
+            try {
+                JsonObject detail = tmdbService.detail(item, tmdbConfig, false);
+                int score = TmdbMatchPolicy.splitSeasonDetailScore(source, detail);
+                if (score > bestScore) {
+                    secondScore = bestScore;
+                    bestScore = score;
+                    best = item;
+                } else if (score > secondScore) {
+                    secondScore = score;
+                }
+            } catch (Throwable ignored) {
+            }
+        }
+        if (best == null || bestScore <= 0) return null;
+        return bestScore - secondScore >= 200 ? best : null;
+    }
+
+    private boolean isUnwantedSplitSeasonMatch(TmdbItem item, String keyword, Vod vod) {
+        try {
+            JsonObject detail = tmdbService.detail(item, tmdbConfig, false);
+            return TmdbMatchPolicy.isUnwantedSplitSeasonVariant(matchSourceText(keyword, vod), detail);
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private String matchSourceText(String keyword, Vod vod) {
+        StringBuilder builder = new StringBuilder(Objects.toString(keyword, ""));
+        if (vod != null) {
+            builder.append(' ').append(Objects.toString(vod.getName(), ""));
+            builder.append(' ').append(Objects.toString(vod.getRemarks(), ""));
+        }
+        return builder.toString();
     }
 
     private int firstYear(String text) {

@@ -34,10 +34,12 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
     private static final int VIEW_TYPE_CARD = 1;
     private static final int CARD_WIDTH_DP = 280;
     private static final int CARD_HEIGHT_DP = 160;
-    private static final int GRID_CARD_HEIGHT_DP = 248;
+    private static final int TEXT_BUTTON_MAX_WIDTH_DP = 120;
+    public static final int GRID_CARD_HEIGHT_DP = 190;
+    public static final int GRID_CARD_BOTTOM_MARGIN_DP = 16;
     private static final int CARD_MARGIN_END_DP = 12;
     private static final String TMDB_IMAGE_SIZE_PATTERN = "(/t/p/)([^/]+)(/)";
-    private static final String PREFERRED_STILL_SIZE = "w1280";
+    private static final String PREFERRED_STILL_SIZE = "w780";
     private static final String FALLBACK_STILL_SIZE = "original";
 
     private final OnClickListener mListener;
@@ -79,14 +81,12 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
         EpisodeTitleCompact.apply(items);
         mItems.clear();
         mItems.addAll(items);
-        column = useTmdbCard ? 1 : getColumn(items);
         notifyDataSetChanged();
     }
 
     public void setUseTmdbCard(boolean useTmdbCard) {
         if (this.useTmdbCard == useTmdbCard) return;
         this.useTmdbCard = useTmdbCard;
-        column = useTmdbCard ? 1 : getColumn(mItems);
         notifyDataSetChanged();
     }
 
@@ -196,7 +196,7 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
         int spacing = ResUtil.dp2px(8);
         int padding = ResUtil.dp2px(40);
         EpisodeTitleCompact.apply(items);
-        for (Episode item : items) maxTextWidth = Math.max(maxTextWidth, ResUtil.getTextWidth(item.getDisplayName(), 16) + padding);
+        for (Episode item : items) maxTextWidth = Math.max(maxTextWidth, ResUtil.getTextWidth(getTitle(item), 16) + padding);
         for (int candidate : new int[]{8, 6, 5, 4, 3, 2}) {
             int width = (maxWidth - spacing * (candidate - 1)) / candidate;
             if (maxTextWidth <= width) return candidate;
@@ -213,7 +213,8 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
     }
 
     private int getWidth() {
-        return Math.min((maxWidth - spacing * (column - 1)) / column, ResUtil.dp2px(120));
+        int width = (maxWidth - spacing * (column - 1)) / column;
+        return verticalGridMode ? width : Math.min(width, ResUtil.dp2px(TEXT_BUTTON_MAX_WIDTH_DP));
     }
 
     @Override
@@ -264,7 +265,15 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
         TextView textView = holder.textView;
         if (textView == null) return;
 
-        textView.getLayoutParams().width = getWidth();
+        ViewGroup.LayoutParams params = textView.getLayoutParams();
+        int width = getWidth();
+        if (params.width != width) {
+            params.width = width;
+            textView.setLayoutParams(params);
+        }
+        textView.setSingleLine(true);
+        textView.setMaxLines(1);
+        textView.setEllipsize(TextUtils.TruncateAt.MARQUEE);
         textView.setNextFocusUpId(isTopEdge(position) && nextFocusUp != 0 ? nextFocusUp : View.NO_ID);
         textView.setNextFocusDownId(isBottomEdge(position) && nextFocusDown != 0 ? nextFocusDown : View.NO_ID);
         textView.setSelected(item.isSelected());
@@ -294,9 +303,6 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
         binding.cardContainer.setNextFocusDownId(isBottomEdge(position) && nextFocusDown != 0 ? nextFocusDown : View.NO_ID);
         binding.cardContainer.setOnKeyListener(keyListener);
 
-        // 设置焦点边框效果
-        binding.cardContainer.setForeground(binding.cardContainer.getContext().getDrawable(R.drawable.selector_episode_card));
-
         // 加载剧照
         String cardTitle = getCardTitle(item, tmdbEpisode);
         String stillUrl = tmdbEpisode.getStillUrl();
@@ -321,13 +327,9 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
         }
         binding.runtimeBadge.setVisibility(View.GONE);
 
-        // 设置简介
-        if (gridMode && !tmdbEpisode.getOverview().isEmpty()) {
-            binding.overview.setText(tmdbEpisode.getOverview());
-            binding.overview.setVisibility(View.VISIBLE);
-        } else {
-            binding.overview.setVisibility(View.GONE);
-        }
+        // 播放器/弹层网格上下移动焦点时，长简介会放大文本重绘和视觉闪烁；完整简介保留在长按详情里。
+        binding.overview.setText("");
+        binding.overview.setVisibility(View.GONE);
 
         // 点击和长按事件
         binding.cardContainer.setOnClickListener(v -> mListener.onItemClick(item));
@@ -346,12 +348,12 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
         binding.cardContainer.setLayoutParams(cardParams);
         if (cardParams instanceof ViewGroup.MarginLayoutParams marginParams) {
             marginParams.setMarginEnd(ResUtil.dp2px(CARD_MARGIN_END_DP));
-            marginParams.bottomMargin = gridMode ? ResUtil.dp2px(16) : 0;
+            marginParams.bottomMargin = gridMode ? ResUtil.dp2px(GRID_CARD_BOTTOM_MARGIN_DP) : 0;
             binding.cardContainer.setLayoutParams(marginParams);
         }
 
         ViewGroup.LayoutParams scrimParams = binding.scrim.getLayoutParams();
-        scrimParams.height = ResUtil.dp2px(gridMode ? 148 : 104);
+        scrimParams.height = ResUtil.dp2px(104);
         binding.scrim.setLayoutParams(scrimParams);
         binding.textPanel.setPadding(
                 ResUtil.dp2px(12),

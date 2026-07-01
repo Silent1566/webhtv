@@ -30,8 +30,8 @@ public final class TmdbEpisodeGridPolicy {
     }
 
     public static int tvAdaptiveSpanCount(int screenWidthDp) {
-        if (screenWidthDp >= 1600) return 5;
-        if (screenWidthDp >= 1200) return 4;
+        if (screenWidthDp >= 1100) return 5;
+        if (screenWidthDp >= 600) return 4;
         return 3;
     }
 

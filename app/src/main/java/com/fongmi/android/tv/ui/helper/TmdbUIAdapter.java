@@ -169,6 +169,10 @@ public class TmdbUIAdapter {
             TmdbItem matched = getCachedMatch(vod);
             if (matched != null) {
                 SpiderDebug.log("tmdb", "auto match cache hit title=%s cost=%dms", matched.getTitle(), System.currentTimeMillis() - start);
+                if (isCachedSplitSeasonMismatch(videoName, vod, matched)) {
+                    SpiderDebug.log("tmdb", "auto match cache skipped split-season variant title=%s id=%d name=%s", matched.getTitle(), matched.getTmdbId(), videoName);
+                    matched = null;
+                }
             }
             if (matched == null) {
                 long searchStart = System.currentTimeMillis();
@@ -428,6 +432,24 @@ public class TmdbUIAdapter {
     private TmdbItem getCachedMatch(Vod vod) {
         if (vod == null) return null;
         return Setting.getTmdbMatchCache().find(cacheSiteKey(vod), cacheVodId(vod));
+    }
+
+    private boolean isCachedSplitSeasonMismatch(String videoName, Vod vod, TmdbItem item) {
+        try {
+            JsonObject detail = tmdbService.detail(item, tmdbConfig, false);
+            return TmdbMatchPolicy.isUnwantedSplitSeasonVariant(matchSourceText(videoName, vod), detail);
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private String matchSourceText(String videoName, Vod vod) {
+        StringBuilder builder = new StringBuilder(videoName == null ? "" : videoName);
+        if (vod != null) {
+            builder.append(' ').append(vod.getName());
+            builder.append(' ').append(vod.getRemarks());
+        }
+        return builder.toString();
     }
 
     private void saveMatch(Vod vod, TmdbItem item) {

@@ -24,6 +24,13 @@ public class TmdbEpisodeGridPolicyTest {
     }
 
     @Test
+    public void tvAdaptiveSpanCountUsesFourColumnsOn1080pTvDensity() {
+        assertEquals(3, TmdbEpisodeGridPolicy.tvAdaptiveSpanCount(599));
+        assertEquals(4, TmdbEpisodeGridPolicy.tvAdaptiveSpanCount(686));
+        assertEquals(5, TmdbEpisodeGridPolicy.tvAdaptiveSpanCount(1100));
+    }
+
+    @Test
     public void shouldUseFallbackImageOnlyForLegacySmallGridPolicy() {
         assertFalse(TmdbEpisodeGridPolicy.shouldUseFallbackImage(false, 120));
         assertTrue(TmdbEpisodeGridPolicy.shouldUseFallbackImage(true, 24));
