@@ -35,6 +35,7 @@ jna = "5.18.1"
 jupnp = "3.0.4"
 juniversalchardet = "1.0.3"
 jgit = "6.10.0.202406032230-r"
+jsoup = "1.22.2"
 junit = "4.13.2"
 logger = "2.2.0"
 lottie = "6.7.1"
@@ -91,6 +92,7 @@ guava = { group = "com.google.guava", name = "guava", version.ref = "guava" }
 jna = { group = "net.java.dev.jna", name = "jna", version.ref = "jna" }
 juniversalchardet = { group = "com.googlecode.juniversalchardet", name = "juniversalchardet", version.ref = "juniversalchardet" }
 jgit = { group = "org.eclipse.jgit", name = "org.eclipse.jgit", version.ref = "jgit" }
+jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 rtmp-client = { group = "com.github.mcxinyu", name = "LibRtmp-Client-for-Android", version.ref = "rtmpClient" }
 logger = { group = "com.orhanobut", name = "logger", version.ref = "logger" }

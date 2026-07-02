@@ -80,6 +80,7 @@ import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.impl.CustomTarget;
 import com.fongmi.android.tv.model.SiteViewModel;
 import com.fongmi.android.tv.playback.PlaybackEventCollector;
+import com.fongmi.android.tv.playback.PlaybackOrientation;
 import com.fongmi.android.tv.player.IntroSkipPlayback;
 import com.fongmi.android.tv.player.PlayerHelper;
 import com.fongmi.android.tv.player.PlayerManager;
@@ -762,6 +763,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         mBinding.control.title.setOnLongClickListener(view -> onChange());
         mBinding.control.right.lock.setOnClickListener(view -> onLock());
         mBinding.control.right.rotate.setOnClickListener(view -> onRotate());
+        mBinding.control.right.pip.setOnClickListener(view -> onPiP());
         mBinding.control.fullscreen.setOnClickListener(view -> onFullscreen());
         mBinding.control.danmaku.setOnClickListener(view -> onDanmakuShow());
         mBinding.control.action.text.setOnClickListener(this::onTrack);
@@ -1415,7 +1417,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         if (result.hasArtwork() && !shouldKeepPushArtwork()) setArtwork(result.getArtwork());
         if (result.hasPosition()) mHistory.setPosition(result.getPosition());
         if (result.hasDesc()) setText(mBinding.content, 0, result.getDesc());
-        mBinding.control.parse.setVisibility(isUseParse() ? View.VISIBLE : View.GONE);
+        mBinding.control.parse.setVisibility(isFullscreen() && isUseParse() ? View.VISIBLE : View.GONE);
         if (redirectToAudioIfNeeded(result)) return;
         List<Danmaku> siteDanmakus = result.getDanmaku();
         startPlayer(getHistoryKey(), result, isUseParse(), getSite().getTimeout(), buildMetadata());
@@ -1721,7 +1723,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
     }
 
     private void seamless(Flag flag) {
-        Episode episode = flag.find(mHistory.getEpisode(), getMark().isEmpty());
+        Episode episode = getMark().isEmpty() ? flag.find(mHistory.getEpisode(), true) : flag.find(mHistory.getVodRemarks(), false);
         setQualityVisible(episode != null && episode.isSelected() && mQualityAdapter.getItemCount() > 1);
         if (episode == null || episode.isSelected()) return;
         mHistory.setVodRemarks(episode.getName());
@@ -1948,13 +1950,19 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
     private void onRotate() {
         setR1Callback();
         setRotate(!isRotate());
-        setRequestedOrientation(ResUtil.isLand(this) ? ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT : ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+        setRequestedOrientation(PlaybackOrientation.getRotateOrientation(this));
     }
 
     private void onFullscreen() {
         if (isFullscreen()) exitFullscreen();
         else enterFullscreen();
         showControl();
+    }
+
+    private void onPiP() {
+        if (!canShowPiP(isShortDramaSource())) return;
+        hideControl();
+        mPiP.enter(this, player().getVideoWidth(), player().getVideoHeight(), getScale(), true);
     }
 
     private void onTrack(View view) {
@@ -2230,7 +2238,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         setFullscreen(true);
         if (isLand() && !player().isPortrait()) setTransition();
         mBinding.video.setLayoutParams(new RelativeLayout.LayoutParams(RelativeLayout.LayoutParams.MATCH_PARENT, RelativeLayout.LayoutParams.MATCH_PARENT));
-        setRequestedOrientation(player().isPortrait() ? ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT : ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+        setRequestedOrientation(PlaybackOrientation.getEnterFullscreenOrientation(player().isPortrait()));
         mBinding.control.title.setVisibility(View.VISIBLE);
         setSizeText();
         setRotate(player().isPortrait());
@@ -2243,7 +2251,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         if (!isFullscreen()) return;
         setFullscreen(false);
         if (isLand() && !player().isPortrait()) setTransition();
-        setRequestedOrientation(isPort() ? ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT : ActivityInfo.SCREEN_ORIENTATION_FULL_USER);
+        setRequestedOrientation(PlaybackOrientation.getExitFullscreenOrientation(isPort()));
         mBinding.episodeGroup.postDelayed(() -> scrollToPosition(mBinding.episodeGroup, mEpisodeGroupAdapter.getPosition()), 100);
         mBinding.episode.postDelayed(this::scrollEpisodeToSelected, 100);
         mBinding.control.title.setVisibility(View.INVISIBLE);
@@ -2286,15 +2294,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
     }
 
     private int getLockOrient() {
-        if (isLock()) {
-            return ResUtil.getScreenOrientation(this);
-        } else if (isRotate()) {
-            return ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT;
-        } else if (isPort() && isAutoRotate()) {
-            return ActivityInfo.SCREEN_ORIENTATION_FULL_USER;
-        } else {
-            return ResUtil.isLand(this) ? ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE : ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT;
-        }
+        return PlaybackOrientation.getLockOrientation(this, isLock(), isRotate(), isPort() && isAutoRotate());
     }
 
     private void showProgress() {
@@ -2338,11 +2338,13 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         if (service() == null || isInPictureInPictureMode()) return;
         setOsdSuppressed(true);
         boolean shortDrama = isShortDramaSource();
+        boolean showPiP = canShowPiP(shortDrama);
         hideWidgetOverlay();
         mBinding.control.danmaku.setVisibility(isLock() || !player().haveDanmaku() ? View.GONE : View.VISIBLE);
-        mBinding.control.setting.setVisibility(mHistory == null || isFullscreen() ? View.GONE : View.VISIBLE);
-        mBinding.control.right.getRoot().setVisibility(isFullscreen() ? View.VISIBLE : View.GONE);
+        mBinding.control.setting.setVisibility(mHistory == null || (isFullscreen() && !shortDrama) ? View.GONE : View.VISIBLE);
+        mBinding.control.right.getRoot().setVisibility(isFullscreen() || showPiP ? View.VISIBLE : View.GONE);
         mBinding.control.right.rotate.setVisibility(isFullscreen() && !isLock() ? View.VISIBLE : View.GONE);
+        mBinding.control.right.pip.setVisibility(showPiP ? View.VISIBLE : View.GONE);
         mBinding.control.fullscreen.setVisibility(isLock() || shortDrama ? View.GONE : View.VISIBLE);
         mBinding.control.keep.setVisibility(mHistory == null ? View.GONE : View.VISIBLE);
         mBinding.control.osdDiagnostics.setVisibility(PlayerSetting.isOsdDiagnostics() && !player().isEmpty() ? View.VISIBLE : View.GONE);
@@ -2362,6 +2364,10 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         if (mOsd != null) mOsd.setControlsVisible(true);
         checkFullscreenImg();
         setR1Callback();
+    }
+
+    private boolean canShowPiP(boolean shortDrama) {
+        return !shortDrama && !isFullscreen() && !isLock() && !player().isEmpty() && player().haveTrack(C.TRACK_TYPE_VIDEO) && !PiP.noPiP();
     }
 
     private void hideControl() {
@@ -2399,8 +2405,8 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
     }
 
     private void setOrient() {
-        if (isPort() && isAutoRotate()) setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_FULL_USER);
-        if (isLand() && isAutoRotate()) setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE);
+        if (isPort() && isAutoRotate()) setRequestedOrientation(PlaybackOrientation.getPortAutoRotateOrientation());
+        if (isLand() && isAutoRotate()) setRequestedOrientation(PlaybackOrientation.getLandAutoRotateOrientation());
     }
 
     private void setR1Callback() {
@@ -2445,18 +2451,27 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
     }
 
     private void setContextWall(String url) {
-        if (!Setting.isPlaybackArtworkWall() && !Setting.isFusionDetailPage()) {
+        setContextWall(url, false);
+    }
+
+    private void setContextWall(String url, boolean skipLock) {
+        if (!Setting.isPlaybackArtworkWall() && !Setting.isFusionDetailPage() && !Setting.isOriginalEnhancedDetailPage()) {
             mContextWallUrl = "";
             hideContextWall();
             return;
         }
-        String wall = lockContextWall(url);
+        // 轮播场景（原生增强/Fusion 的 backdrop 变化）需要跳过锁定，否则永远只显示第一张
+        String wall = skipLock ? Objects.toString(url, "") : lockContextWall(url);
         if (TextUtils.isEmpty(wall)) {
             mContextWallUrl = "";
             hideContextWall();
             return;
         }
-        if (Objects.equals(mContextWallUrl, wall)) return;
+        if (Objects.equals(mContextWallUrl, wall)) {
+            android.util.Log.d("VideoActivity", "setContextWall: URL 相同，跳过（wall=" + wall + ")");
+            return;
+        }
+        android.util.Log.d("VideoActivity", "setContextWall: 切换背景 wall=" + wall);
         mContextWallUrl = wall;
         resetContextWallAlpha();
         if (isGone(mBinding.contextWall)) {
@@ -2471,6 +2486,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
                 mBinding.contextWall.setBackgroundColor(0x00000000);
                 mBinding.contextWall.setImageDrawable(resource);
                 mBinding.contextWall.setVisibility(View.VISIBLE);
+                android.util.Log.d("VideoActivity", "setContextWall: 图片加载完成");
             }
 
             @Override
@@ -2478,6 +2494,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
                 if (!Objects.equals(mContextWallUrl, wall)) return;
                 mContextWallUrl = "";
                 hideContextWall();
+                android.util.Log.w("VideoActivity", "setContextWall: 图片加载失败");
             }
         });
     }
@@ -2488,7 +2505,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
     }
 
     private void restoreContextWall() {
-        if (!Setting.isPlaybackArtworkWall()) return;
+        if (!Setting.isPlaybackArtworkWall() && !Setting.isFusionDetailPage() && !Setting.isOriginalEnhancedDetailPage()) return;
         String wall = getContextWall();
         if (TextUtils.isEmpty(wall)) {
             hideContextWall();
@@ -3019,10 +3036,10 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
 
     private void checkOrientation() {
         if (isFullscreen() && !isRotate() && player().isPortrait()) {
-            setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT);
+            setRequestedOrientation(PlaybackOrientation.getPortraitVideoSizeOrientation());
             setRotate(true);
         } else if (isFullscreen() && isRotate() && player().isLandscape()) {
-            setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE);
+            setRequestedOrientation(PlaybackOrientation.getLandscapeVideoSizeOrientation());
             setRotate(false);
         }
     }
@@ -3250,13 +3267,26 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
             public void onImagesLoaded() {
                 // TMDB 内容加载完成，设置标记并隐藏进度条
                 android.util.Log.d("VideoActivity", "TMDB 内容加载完成，隐藏进度条");
-                if (Setting.isFusionDetailPage() && mTmdbUIAdapter != null && mTmdbUIAdapter.getTmdbItem() != null) {
-                    setContextWall(mTmdbUIAdapter.getTmdbItem().getBackdropUrl());
+                // 原生增强模式：在内容加载后隐藏独立 backdrop
+                if (Setting.isOriginalEnhancedDetailPage() && mTmdbHeaderView != null) {
+                    mTmdbHeaderView.hideNativeHeroBackdrop();
                 }
                 mTmdbContentLoaded = true;
                 hideProgress();
             }
         });
+
+        // 原生增强模式和 Fusion 模式：设置 Backdrop 变化监听器，同步轮播到 contextWall
+        if (Setting.isFusionDetailPage() || Setting.isOriginalEnhancedDetailPage()) {
+            mTmdbHeaderView.setOnBackdropChangeListener(new com.fongmi.android.tv.ui.custom.TmdbHeaderView.OnBackdropChangeListener() {
+                @Override
+                public void onBackdropChanged(String imageUrl) {
+                    // 将轮播的图片同步到全屏背景（跳过锁定，允许切换）
+                    android.util.Log.d("VideoActivity", "接收到 backdrop 变化通知，URL=" + imageUrl);
+                    setContextWall(imageUrl, true);
+                }
+            });
+        }
 
         // TMDB 模式下：隐藏原生详情信息（但保持容器可见，因为 TMDB 内容也在里面）
         setNativeDetailInfoVisible(false);
@@ -3266,6 +3296,17 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
 
         if (Setting.isFusionDetailPage()) {
             applyFusionDetailChrome();
+        } else if (Setting.isOriginalEnhancedDetailPage()) {
+            // 原生增强模式：启用全屏背景
+            applyOriginalEnhancedBackdropLayout();
+            mBinding.getRoot().setBackgroundColor(Color.TRANSPARENT);
+            mBinding.scroll.setBackgroundColor(Color.TRANSPARENT);
+            mBinding.swipeLayout.setBackgroundColor(Color.TRANSPARENT);
+            mBinding.progressLayout.setBackgroundColor(Color.TRANSPARENT);
+            if (mBinding.nativeContentContainer != null) {
+                mBinding.nativeContentContainer.setBackgroundColor(Color.TRANSPARENT);
+            }
+            applyTmdbTabletVideoLayoutIfNeeded();
         } else {
             mBinding.scroll.setBackgroundColor(com.fongmi.android.tv.ui.custom.TmdbHeaderView.getThemeBackgroundColor());
             applyTmdbTabletVideoLayoutIfNeeded();
@@ -3317,6 +3358,29 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
             mBinding.videoContextScrim.setLayoutParams(scrimParams);
             mBinding.videoContextScrim.setVisibility(View.VISIBLE);
             applyContextWallScrimTheme();
+        }
+    }
+
+    private void applyOriginalEnhancedBackdropLayout() {
+        // 设置全屏背景布局（类似 Fusion）
+        RelativeLayout.LayoutParams wallParams = new RelativeLayout.LayoutParams(RelativeLayout.LayoutParams.MATCH_PARENT, RelativeLayout.LayoutParams.MATCH_PARENT);
+        wallParams.addRule(RelativeLayout.ALIGN_PARENT_TOP);
+        wallParams.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM);
+        wallParams.addRule(RelativeLayout.ALIGN_PARENT_START);
+        wallParams.addRule(RelativeLayout.ALIGN_PARENT_END);
+        mBinding.contextWall.setLayoutParams(wallParams);
+        mBinding.statusBar.setBackgroundColor(Color.TRANSPARENT);
+
+        // 设置遮罩层为全屏
+        if (mBinding.videoContextScrim != null) {
+            RelativeLayout.LayoutParams scrimParams = new RelativeLayout.LayoutParams(RelativeLayout.LayoutParams.MATCH_PARENT, RelativeLayout.LayoutParams.MATCH_PARENT);
+            scrimParams.addRule(RelativeLayout.ALIGN_PARENT_TOP);
+            scrimParams.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM);
+            scrimParams.addRule(RelativeLayout.ALIGN_PARENT_START);
+            scrimParams.addRule(RelativeLayout.ALIGN_PARENT_END);
+            mBinding.videoContextScrim.setLayoutParams(scrimParams);
+            mBinding.videoContextScrim.setBackgroundResource(R.drawable.shape_video_context_scrim);
+            mBinding.videoContextScrim.setVisibility(View.VISIBLE);
         }
     }
 
@@ -3445,7 +3509,8 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         tintFusionPlaybackIcon(mBinding.reverse, color);
         tintFusionPlaybackIcon(mBinding.episodeViewMode, color);
         tintFusionPlaybackIcon(mBinding.more, color);
-        tintFusionPlaybackTextTree(mBinding.control.action.getRoot(), color, light);
+        boolean playerOverlay = isFullscreen() || mBinding.control.action.getRoot().getParent() == mBinding.control.bottom;
+        tintFusionPlaybackTextTree(mBinding.control.action.getRoot(), playerOverlay ? Color.WHITE : color, !playerOverlay && light);
     }
 
     private boolean isTmdbPlaybackLightTheme() {

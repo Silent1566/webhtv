@@ -17,7 +17,7 @@ on:
           - stable
           - beta
       release_notes:
-        description: "Release notes"
+        description: "Release notes, use \\n for Markdown newlines"
         required: false
         type: string
       prerelease:
@@ -171,9 +171,38 @@ jobs:
           cp Release/apk/*.apk dist/
           ls -lh dist/
 
+      - name: Prepare release notes input
+        id: release_notes
+        env:
+          RELEASE_NOTES_RAW: ${{ inputs.release_notes }}
+        run: |
+          python3 - <<'PY'
+          import os
+
+          raw = os.environ.get("RELEASE_NOTES_RAW", "").strip()
+          notes = (
+              raw
+              .replace("\\r\\n", "\n")
+              .replace("\\n", "\n")
+              .replace("\\t", "\t")
+              .replace('\\"', '"')
+              .replace("\\'", "'")
+          )
+          delimiter = "RELEASE_NOTES_EOF"
+          while delimiter in notes:
+              delimiter += "_"
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+              fh.write(f"has_notes={'true' if notes else 'false'}\n")
+              fh.write(f"notes<<{delimiter}\n")
+              fh.write(notes)
+              if notes and not notes.endswith("\n"):
+                  fh.write("\n")
+              fh.write(f"{delimiter}\n")
+          PY
+
       - name: Generate update manifests
         env:
-          RELEASE_NOTES: ${{ inputs.release_notes }}
+          RELEASE_NOTES: ${{ steps.release_notes.outputs.notes }}
         run: |
           python3 - <<'PY'
           import glob
@@ -204,48 +233,20 @@ jobs:
           PY
           ls -lh dist/
 
-      - name: Write release notes
-        env:
-          RELEASE_NOTES: ${{ inputs.release_notes }}
-        run: |
-          {
-            echo "## ${{ steps.meta.outputs.title }}"
-            echo
-            if [ -n "$RELEASE_NOTES" ]; then
-              printf '%s\n' "$RELEASE_NOTES"
-            else
-              echo "手动触发 GitHub Actions 构建发布。"
-            fi
-            echo
-            echo "### 发布通道"
-            echo
-            echo "- ${{ steps.meta.outputs.channel }}"
-            echo
-            echo "### APK"
-            echo
-            for apk in dist/*.apk; do
-              echo "- $(basename "$apk")"
-            done
-            echo
-            echo "### 更新清单"
-            echo
-            for manifest in dist/*.json; do
-              echo "- $(basename "$manifest")"
-            done
-          } > dist/release-notes.md
-
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_NOTES: ${{ steps.release_notes.outputs.notes }}
         run: |
           PRERELEASE_FLAG=""
           if [ "${{ inputs.prerelease }}" = "true" ] || [ "${{ steps.meta.outputs.channel }}" = "beta" ]; then
             PRERELEASE_FLAG="--prerelease"
           fi
+          NOTES="${RELEASE_NOTES:-手动触发 GitHub Actions 构建发布。}"
           gh release create "${{ steps.meta.outputs.tag }}" \
             --target "$GITHUB_SHA" \
             --title "${{ steps.meta.outputs.title }}" \
-            --notes-file dist/release-notes.md \
+            --notes "$NOTES" \
             $PRERELEASE_FLAG \
             dist/*.apk dist/*.json
 

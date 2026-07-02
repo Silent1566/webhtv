@@ -347,7 +347,7 @@ public final class RemoteStore {
     static boolean shouldStart(RemoteProfile profile) {
         if (profile == null || TextUtils.isEmpty(profile.serverOrigin)) return false;
         ensureProfile(profile);
-        return profile.enabled || !profile.groups.isEmpty() || hasPendingGrant(profile);
+        return profile.enabled || hasPendingGrant(profile);
     }
 
     static boolean hasPendingGrant(RemoteProfile profile) {

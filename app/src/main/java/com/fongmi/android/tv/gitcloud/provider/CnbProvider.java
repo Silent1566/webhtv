@@ -11,6 +11,7 @@ import com.fongmi.android.tv.gitcloud.GitBranch;
 import com.fongmi.android.tv.gitcloud.GitCloudException;
 import com.fongmi.android.tv.gitcloud.GitFile;
 import com.fongmi.android.tv.gitcloud.GitFileContent;
+import com.fongmi.android.tv.gitcloud.GitHttpException;
 import com.fongmi.android.tv.gitcloud.GitProviderType;
 import com.fongmi.android.tv.gitcloud.GitRepo;
 import com.fongmi.android.tv.gitcloud.ProviderCapabilities;
@@ -75,12 +76,10 @@ public class CnbProvider extends BaseGitProvider {
     @Override
     public List<GitRepo> searchRepos(GitAccount account, String token, String keyword) throws GitCloudException {
         if (TextUtils.isEmpty(keyword)) throw new GitCloudException("搜索关键词为空");
-        if (TextUtils.isEmpty(token)) throw new GitCloudException("CNB 暂不支持匿名全网搜索，请输入完整仓库地址打开");
+        if (TextUtils.isEmpty(token)) throw new GitCloudException("CNB 搜索需要 token 权限 repo-basic-info:r");
         List<GitRepo> result = new ArrayList<>();
-        String needle = keyword.toLowerCase();
-        for (GitRepo item : listRepos(account, token)) {
-            if (item.displayName().toLowerCase().contains(needle)) result.add(item);
-        }
+        JsonArray array = getArray(api() + "/search/public-repos?key=" + enc(keyword) + "&topN=100", token);
+        for (JsonElement element : array) if (element.isJsonObject()) result.add(repo(account, element.getAsJsonObject()));
         return result;
     }
 
@@ -105,12 +104,19 @@ public class CnbProvider extends BaseGitProvider {
 
     @Override
     public GitRepo createRepo(GitAccount account, String token, CreateRepoRequest request) throws GitCloudException {
+        if (TextUtils.isEmpty(account.username)) throw new GitCloudException("CNB 创建仓库需要先校验账号");
         JsonObject payload = new JsonObject();
         payload.addProperty("name", request.name);
         payload.addProperty("description", request.description == null ? "" : request.description);
-        payload.addProperty("private", request.privateRepo);
         payload.addProperty("visibility", request.privateRepo ? "private" : "public");
-        return repo(account, post(api() + "/user/repos", token, payload));
+        JsonObject object = post(api() + "/" + encPath(account.username) + "/-/repos", token, payload);
+        GitRepo repo = repo(account, object);
+        GitRepo found = findCreatedRepo(account, token, request.name);
+        if (found != null) repo = found;
+        normalizeCreatedRepo(account, request, repo);
+        if (TextUtils.isEmpty(repo.defaultBranch)) repo.defaultBranch = "main";
+        debug("CNB create parsed keys=" + object.keySet() + " requestName=" + request.name + " owner=" + repo.owner + " name=" + repo.name + " fullName=" + repo.fullName + " branch=" + repo.defaultBranch + " cloneUrl=" + repo.cloneUrl);
+        return repo;
     }
 
     @Override
@@ -133,17 +139,23 @@ public class CnbProvider extends BaseGitProvider {
 
     @Override
     public List<GitFile> listFiles(GitAccount account, String token, GitRepo repo, String ref, String path) throws GitCloudException {
-        String branch = branch(account, token, repo, ref);
-        String url = repoApi(repo) + "/-/git/contents";
-        if (!TextUtils.isEmpty(path)) url += "/" + encPath(path);
-        if (!TextUtils.isEmpty(branch)) url += "?ref=" + enc(branch);
-        JsonObject object = get(url, token);
-        JsonArray array = "tree".equals(str(object, "type")) ? array(object, "entries") : new JsonArray();
-        if (!"tree".equals(str(object, "type"))) array.add(object);
-        List<GitFile> files = new ArrayList<>();
-        for (JsonElement element : array) if (element.isJsonObject()) files.add(file(account, repo, branch, element.getAsJsonObject()));
-        files.sort((a, b) -> a.directory == b.directory ? a.name.compareToIgnoreCase(b.name) : a.directory ? -1 : 1);
-        return files;
+        try {
+            String branch = branch(account, token, repo, ref);
+            String url = repoApi(repo) + "/-/git/contents";
+            if (!TextUtils.isEmpty(path)) url += "/" + encPath(path);
+            if (!TextUtils.isEmpty(branch)) url += "?ref=" + enc(branch);
+            JsonObject object = get(url, token);
+            if (TextUtils.isEmpty(path) && "empty".equals(str(object, "type"))) return new ArrayList<>();
+            JsonArray array = "tree".equals(str(object, "type")) ? array(object, "entries") : new JsonArray();
+            if (!"tree".equals(str(object, "type"))) array.add(object);
+            List<GitFile> files = new ArrayList<>();
+            for (JsonElement element : array) if (element.isJsonObject()) files.add(file(account, repo, branch, element.getAsJsonObject()));
+            files.sort((a, b) -> a.directory == b.directory ? a.name.compareToIgnoreCase(b.name) : a.directory ? -1 : 1);
+            return files;
+        } catch (GitHttpException e) {
+            if (e.code == 404 && TextUtils.isEmpty(path)) return new ArrayList<>();
+            throw e;
+        }
     }
 
     @Override
@@ -198,6 +210,28 @@ public class CnbProvider extends BaseGitProvider {
         return repo;
     }
 
+    private GitRepo findCreatedRepo(GitAccount account, String token, String name) {
+        try {
+            for (GitRepo item : listRepos(account, token)) {
+                if (TextUtils.equals(item.owner, account.username) && TextUtils.equals(item.name, name)) return item;
+                if (TextUtils.equals(item.fullName, account.username + "/" + name)) return item;
+            }
+        } catch (Throwable e) {
+            debug("CNB create lookup failed: " + e.getMessage());
+        }
+        return null;
+    }
+
+    private void normalizeCreatedRepo(GitAccount account, CreateRepoRequest request, GitRepo repo) {
+        if (TextUtils.isEmpty(repo.name)) repo.name = request.name;
+        if (TextUtils.isEmpty(repo.owner)) repo.owner = account.username;
+        if (TextUtils.isEmpty(repo.fullName) || repo.fullName.endsWith("/")) repo.fullName = repo.owner + "/" + repo.name;
+        if (TextUtils.isEmpty(repo.cloneUrl) || repo.cloneUrl.endsWith("/.git")) repo.cloneUrl = web(account) + "/" + repo.fullName + ".git";
+        if (TextUtils.isEmpty(repo.webUrl) || repo.webUrl.endsWith("/")) repo.webUrl = web(account) + "/" + repo.fullName;
+        if (TextUtils.isEmpty(repo.defaultBranch)) repo.defaultBranch = "main";
+        repo.privateRepo = repo.privateRepo || request.privateRepo;
+    }
+
     private GitFile file(GitAccount account, GitRepo repo, String ref, JsonObject object) {
         GitFile file = new GitFile();
         file.name = first(object, "name", "file_name");
@@ -228,8 +262,18 @@ public class CnbProvider extends BaseGitProvider {
     private String branch(GitAccount account, String token, GitRepo repo, String ref) throws GitCloudException {
         if (!TextUtils.isEmpty(ref)) return ref;
         if (!TextUtils.isEmpty(repo.defaultBranch)) return repo.defaultBranch;
-        List<GitBranch> branches = listBranches(account, token, repo);
-        if (branches.isEmpty()) return "";
+        List<GitBranch> branches;
+        try {
+            branches = listBranches(account, token, repo);
+        } catch (GitHttpException e) {
+            if (e.code != 404) throw e;
+            repo.defaultBranch = "main";
+            return repo.defaultBranch;
+        }
+        if (branches.isEmpty()) {
+            repo.defaultBranch = "main";
+            return repo.defaultBranch;
+        }
         repo.defaultBranch = branches.get(0).name;
         return repo.defaultBranch;
     }

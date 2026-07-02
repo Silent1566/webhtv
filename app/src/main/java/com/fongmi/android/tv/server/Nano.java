@@ -76,7 +76,7 @@ public class Nano extends NanoHTTPD {
         String url = session.getUri().trim();
         Map<String, String> files = new HashMap<>();
         if (session.getMethod() == Method.POST && shouldParseBody(url)) parse(session, files);
-        SpiderDebug.log("server", "%s %s params=%s", session.getMethod(), url, session.getParms());
+        if (shouldLogRequest(url)) SpiderDebug.log("server", "%s %s params=%s", session.getMethod(), url, session.getParms());
         if (url.startsWith("/tvbus")) return ok(LiveConfig.getResp());
         if (url.startsWith("/device")) return ok(Device.get().toString());
         for (Process process : process) if (process.isRequest(session, url)) return process.doResponse(session, url, files);
@@ -90,6 +90,10 @@ public class Nano extends NanoHTTPD {
                 && !"/playback/progress".equals(url)
                 && !"/playback/progress/batch".equals(url)
                 && !"/playback/progress/delete".equals(url);
+    }
+
+    private boolean shouldLogRequest(String url) {
+        return !url.startsWith("/debug/");
     }
 
     private void parse(IHTTPSession session, Map<String, String> files) {

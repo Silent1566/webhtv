@@ -26,7 +26,7 @@ public final class SubtitleProviderRegistry {
     private final Map<String, SubtitleProvider> providers;
 
     public SubtitleProviderRegistry() {
-        this(new AssrtSubtitleProvider(), new XunleiSubtitleProvider());
+        this(new AssrtSubtitleProvider(), new XunleiSubtitleProvider(), new ShooterSubtitleProvider());
     }
 
     SubtitleProviderRegistry(SubtitleProvider... providers) {
@@ -54,7 +54,12 @@ public final class SubtitleProviderRegistry {
         Map<String, Integer> addedByProvider = new LinkedHashMap<>();
         for (SubtitleProvider provider : enabled) {
             addedByProvider.put(provider.getName(), 0);
-            for (SubtitleQuery query : queries) if (query != null) tasks.add(new SearchTask(provider, query));
+            if (provider.isQueryIndependent()) {
+                SubtitleQuery query = firstQuery(queries);
+                if (query != null) tasks.add(new SearchTask(provider, query));
+            } else {
+                for (SubtitleQuery query : queries) if (query != null) tasks.add(new SearchTask(provider, query));
+            }
         }
         if (tasks.isEmpty()) return items;
 
@@ -114,6 +119,11 @@ public final class SubtitleProviderRegistry {
             if (dedupe.add(key)) items.add(candidate);
         }
         return items.size() - before;
+    }
+
+    private SubtitleQuery firstQuery(List<SubtitleQuery> queries) {
+        for (SubtitleQuery query : queries) if (query != null) return query;
+        return null;
     }
 
     private static boolean isEmpty(CharSequence value) {

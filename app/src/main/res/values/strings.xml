@@ -589,6 +589,7 @@
     <string name="setting_custom_csp_extensions_toggle">Extensions</string>
     <string name="setting_custom_csp_extensions">Extension URL / JSON</string>
     <string name="setting_custom_csp_extensions_file">File</string>
+    <string name="setting_custom_csp_files">Files</string>
     <string name="setting_custom_csp_extensions_example">https://example.com/site.js</string>
     <string name="setting_custom_csp_extensions_invalid">Invalid extensions JSON</string>
     <string name="setting_custom_csp_permission_required">Site injection needs file access permission.</string>
@@ -668,6 +669,7 @@
     <string name="setting_theme_color">Theme color</string>
     <string name="setting_auto">Auto</string>
     <string name="setting_custom">Custom</string>
+    <string name="setting_language">Language</string>
     <string name="setting_size">Image size</string>
     <string name="setting_ui_scale">Interface size</string>
     <string name="setting_doh">DoH</string>
@@ -1111,8 +1113,8 @@
     </string-array>
 
     <string-array name="select_search_ui">
-        <item>Horizontal</item>
-        <item>Vertical</item>
+        <item>Landscape</item>
+        <item>Portrait</item>
     </string-array>
 
     <string-array name="select_search_column">
@@ -1140,6 +1142,12 @@
         <item>Compact</item>
         <item>More compact</item>
         <item>Smaller</item>
+    </string-array>
+
+    <string-array name="select_language">
+        <item>Follow system</item>
+        <item>Simplified Chinese</item>
+        <item>Traditional Chinese</item>
     </string-array>
 
     <string-array name="select_scale">

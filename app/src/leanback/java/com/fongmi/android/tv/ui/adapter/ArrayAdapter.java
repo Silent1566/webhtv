@@ -97,9 +97,15 @@ public class ArrayAdapter extends RecyclerView.Adapter<ArrayAdapter.ViewHolder> 
         holder.binding.text.setNextFocusUpId(nextFocusUp == 0 ? View.NO_ID : nextFocusUp);
         holder.binding.text.setNextFocusDownId(nextFocusDown == 0 ? View.NO_ID : nextFocusDown);
         holder.binding.text.setOnKeyListener(keyListener);
+        holder.binding.text.setOnFocusChangeListener(null);
         if (text.equals(reverse)) holder.binding.getRoot().setOnClickListener(view -> mListener.onRevSort());
         else if (text.equals(backward) || text.equals(forward)) holder.binding.getRoot().setOnClickListener(view -> mListener.onRevPlay(holder.binding.text));
-        else holder.binding.getRoot().setOnClickListener(null);
+        else {
+            holder.binding.text.setOnFocusChangeListener((view, hasFocus) -> {
+                if (hasFocus) mListener.onSegmentFocus(position);
+            });
+            holder.binding.getRoot().setOnClickListener(view -> mListener.onSegmentClick(position));
+        }
     }
 
     public interface OnClickListener {
@@ -107,6 +113,10 @@ public class ArrayAdapter extends RecyclerView.Adapter<ArrayAdapter.ViewHolder> 
         void onRevSort();
 
         void onRevPlay(TextView view);
+
+        void onSegmentClick(int position);
+
+        void onSegmentFocus(int position);
     }
 
     public static class ViewHolder extends RecyclerView.ViewHolder {

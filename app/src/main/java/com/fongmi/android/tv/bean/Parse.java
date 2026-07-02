@@ -8,6 +8,7 @@ import androidx.annotation.Nullable;
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.gson.HeaderAdapter;
+import com.fongmi.android.tv.gson.ParseTypeAdapter;
 import com.fongmi.android.tv.impl.Diffable;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.UrlUtil;
@@ -27,6 +28,7 @@ public class Parse implements Diffable<Parse> {
     @SerializedName("name")
     private String name;
     @SerializedName("type")
+    @JsonAdapter(ParseTypeAdapter.class)
     private Integer type;
     @SerializedName("url")
     private String url;

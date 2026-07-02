@@ -37,6 +37,20 @@ public class SubtitleProviderRegistryTest {
         assertEquals("The Wandering Earth", candidates.get(2).getCandidateId());
     }
 
+    @Test
+    public void search_runsQueryIndependentProviderOnce() {
+        CountingProvider provider = new CountingProvider();
+        SubtitleProviderRegistry registry = new SubtitleProviderRegistry(provider);
+
+        List<SubtitleCandidate> candidates = registry.search(
+                List.of(query("流浪地球"), query("The Wandering Earth")),
+                SubtitleContext.builder().canonicalTitle("流浪地球").build());
+
+        assertEquals(1, provider.calls);
+        assertEquals(1, candidates.size());
+        assertEquals("流浪地球", candidates.get(0).getCandidateId());
+    }
+
     private SubtitleQuery query(String text) {
         return new SubtitleQuery(text, text, "zh", SubtitleQuerySource.SOURCE_TITLE, SubtitleStrictness.NORMAL, 0, -1, -1);
     }
@@ -69,6 +83,37 @@ public class SubtitleProviderRegistryTest {
             if (!started.await(1, TimeUnit.SECONDS)) throw new AssertionError("searches did not overlap");
             String id = duplicatePerQuery ? "shared" : query.getText();
             return List.of(new SubtitleCandidate(name, id, query.getText(), "zh", "srt", "", 0, 0, -1, -1, SubtitleMatchType.METADATA_FUZZY, query.getKey(), true, "{}"));
+        }
+
+        @Override
+        public SubtitleAsset resolve(SubtitleCandidate candidate, SubtitleContext context) {
+            return null;
+        }
+    }
+
+    private static final class CountingProvider implements SubtitleProvider {
+
+        private int calls;
+
+        @Override
+        public String getName() {
+            return "counter";
+        }
+
+        @Override
+        public boolean isEnabled() {
+            return true;
+        }
+
+        @Override
+        public boolean isQueryIndependent() {
+            return true;
+        }
+
+        @Override
+        public List<SubtitleCandidate> search(SubtitleQuery query, SubtitleContext context) {
+            calls++;
+            return List.of(new SubtitleCandidate("counter", query.getText(), query.getText(), "zh", "srt", "", 0, 0, -1, -1, SubtitleMatchType.METADATA_FUZZY, query.getKey(), true, "{}"));
         }
 
         @Override

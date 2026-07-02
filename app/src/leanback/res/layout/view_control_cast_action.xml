@@ -15,46 +15,46 @@
         <com.google.android.material.textview.MaterialTextView
             android:id="@+id/reset"
             style="@style/Control"
-            android:layout_marginEnd="12dp"
+            android:layout_marginEnd="8dp"
             android:nextFocusLeft="@id/video"
             android:text="@string/play_reset" />
 
         <com.google.android.material.textview.MaterialTextView
             android:id="@+id/player"
             style="@style/Control"
-            android:layout_marginEnd="12dp"
+            android:layout_marginEnd="8dp"
             android:text="@string/play_exo" />
 
         <com.google.android.material.textview.MaterialTextView
             android:id="@+id/decode"
             style="@style/Control"
-            android:layout_marginEnd="12dp"
+            android:layout_marginEnd="8dp"
             android:text="@string/play_decode" />
 
         <com.fongmi.android.tv.ui.custom.CustomUpDownView
             android:id="@+id/speed"
             style="@style/Control"
-            android:layout_marginEnd="12dp"
+            android:layout_marginEnd="8dp"
             android:fontFeatureSettings="tnum"
             android:text="@string/play_speed" />
 
         <com.google.android.material.textview.MaterialTextView
             android:id="@+id/scale"
             style="@style/Control"
-            android:layout_marginEnd="12dp"
+            android:layout_marginEnd="8dp"
             android:text="@string/play_scale" />
 
         <com.fongmi.android.tv.ui.custom.CustomUpDownView
             android:id="@+id/text"
             style="@style/Control"
-            android:layout_marginEnd="12dp"
+            android:layout_marginEnd="8dp"
             android:tag="3"
             android:text="@string/play_track_text" />
 
         <com.google.android.material.textview.MaterialTextView
             android:id="@+id/audio"
             style="@style/Control"
-            android:layout_marginEnd="12dp"
+            android:layout_marginEnd="8dp"
             android:tag="1"
             android:text="@string/play_track_audio" />
 

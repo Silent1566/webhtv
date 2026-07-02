@@ -36,8 +36,8 @@ public class DanmakuApi {
         String url = DanmakuSetting.getValidApiUrl();
         if (TextUtils.isEmpty(url)) return null;
         OkHttp.cancel(TAG);
-        name = Trans.t2s(name);
-        episode = Trans.t2s(episode);
+        name = Trans.t2s(false, name);
+        episode = Trans.t2s(false, episode);
         try {
             if (url.contains("{name}") || url.contains("{episode}")) {
                 return OkHttp.newCall(url.replace("{name}", Uri.encode(name)).replace("{episode}", Uri.encode(episode)), TAG);

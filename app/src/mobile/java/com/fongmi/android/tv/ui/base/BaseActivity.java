@@ -18,6 +18,7 @@ import androidx.fragment.app.FragmentActivity;
 import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.Updater;
+import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.audio.AudioMiniPlayer;
 import com.fongmi.android.tv.ui.custom.CustomWallView;
@@ -37,7 +38,7 @@ public abstract class BaseActivity extends AppCompatActivity {
 
     @Override
     protected void attachBaseContext(Context newBase) {
-        super.attachBaseContext(Setting.wrapUiScale(newBase));
+        super.attachBaseContext(Setting.wrapDisplay(newBase));
     }
 
     @Override
@@ -134,6 +135,7 @@ public abstract class BaseActivity extends AppCompatActivity {
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onSubscribe(Object o) {
+        if (o instanceof RefreshEvent event && event.getType() == RefreshEvent.Type.LANGUAGE) recreate();
     }
 
     protected void onBackInvoked() {

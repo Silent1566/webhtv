@@ -524,7 +524,14 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     }
 
     private Episode getEpisode() {
+        Flag flag = getFlag();
+        if (flag != null && !flag.getEpisodes().isEmpty()) return flag.getEpisodes().get(getSelectedEpisodePosition(flag.getEpisodes()));
         return mEpisodeAdapter.getActivated();
+    }
+
+    private int getSelectedEpisodePosition(List<Episode> episodes) {
+        for (int i = 0; i < episodes.size(); i++) if (episodes.get(i).isSelected()) return i;
+        return 0;
     }
 
     private boolean isTmdbMode() {
@@ -760,8 +767,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         mBinding.array.addOnChildViewHolderSelectedListener(new OnChildViewHolderSelectedListener() {
             @Override
             public void onChildViewHolderSelected(@NonNull RecyclerView parent, @Nullable RecyclerView.ViewHolder child, int position, int subposition) {
-                int count = mEpisodeAdapter.getItemCount();
-                if (count > getEpisodeSegmentSize(count) && position > 1) scrollToEpisode(mArrayAdapter.getStart(position));
+                if (child != null) selectEpisodeSegment(position, false);
             }
         });
     }
@@ -1331,7 +1337,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     }
 
     private boolean redirectToContentHandler(Result result) {
-        boolean handled = com.fongmi.android.tv.content.ContentDispatcher.dispatchResult(this, getHistoryKey(), getKey(), getFlag().getFlag(), mHistory.getVodName(), mHistory.getVodPic(), mEpisodeAdapter.getItems(), mEpisodeAdapter.getPosition(), result, getSite().getTimeout());
+        boolean handled = com.fongmi.android.tv.content.ContentDispatcher.dispatchResult(this, getHistoryKey(), getKey(), getFlag().getFlag(), mHistory.getVodName(), mHistory.getVodPic(), getFlag().getEpisodes(), getSelectedEpisodePosition(getFlag().getEpisodes()), result, getSite().getTimeout());
         if (handled) finish();
         return handled;
     }
@@ -1391,17 +1397,21 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
             return;
         }
 
-        if (showTmdbEpisodeChrome && hasMultiple) episodeGridMode = true;
+        if (showTmdbEpisodeChrome && hasMultiple) episodeGridMode = Setting.getTmdbEpisodeGridMode();
         if (!showTmdbEpisodeChrome || !hasMultiple) episodeGridMode = false;
         mBinding.episodeHeader.setVisibility(showTmdbEpisodeChrome && !isEmpty ? View.VISIBLE : View.GONE);
         mBinding.episodeReverse.setVisibility(showTmdbEpisodeChrome && hasMultiple ? View.VISIBLE : View.GONE);
-        mBinding.episodeViewMode.setVisibility(View.GONE);
+        mBinding.episodeViewMode.setVisibility(showTmdbEpisodeChrome && hasMultiple && useTmdbCards ? View.VISIBLE : View.GONE);
         updateEpisodeFallbackStillUrl();
         mEpisodeAdapter.setUseTmdbCard(useTmdbCards);
         mEpisodeGridAdapter.setUseTmdbCard(useTmdbCards);
         applyActionButtonVisibility();
-        mEpisodeAdapter.addAll(items);
-        mEpisodeGridAdapter.addAll(items);
+
+        // 优化：只加载第一个分段的数据，避免一次性渲染所有集数导致卡顿
+        int segmentSize = getEpisodeSegmentSize(items.size());
+        List<Episode> initialItems = items.size() > segmentSize ? items.subList(0, Math.min(segmentSize, items.size())) : items;
+        mEpisodeAdapter.addAll(initialItems);
+        mEpisodeGridAdapter.addAll(initialItems);
 
         applyEpisodeViewMode(false);
 
@@ -1439,8 +1449,12 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         mEpisodeGridAdapter.setGridMode(true);
         mEpisodeGridAdapter.setVerticalGridMode(true);
         mEpisodeGridAdapter.setColumn(column);
-        mEpisodeAdapter.addAll(items);
-        mEpisodeGridAdapter.addAll(items);
+
+        // 优化：只加载第一个分段的数据，避免一次性渲染所有集数导致卡顿
+        int segmentSize = getEpisodeSegmentSize(items.size());
+        List<Episode> initialItems = items.size() > segmentSize ? items.subList(0, Math.min(segmentSize, items.size())) : items;
+        mEpisodeAdapter.addAll(initialItems);
+        mEpisodeGridAdapter.addAll(initialItems);
         updateEpisodeGridViewport();
         updateUpstreamNativeEpisodeGridViewport();
         mBinding.episodeGrid.post(this::updateUpstreamNativeEpisodeGridViewport);
@@ -1476,7 +1490,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     }
 
     private void seamless(Flag flag) {
-        Episode episode = flag.find(mHistory.getEpisode(), getMark().isEmpty());
+        Episode episode = getMark().isEmpty() ? flag.find(mHistory.getEpisode(), true) : flag.find(mHistory.getVodRemarks(), false);
         setQualityVisible(episode != null && episode.isSelected() && mQualityAdapter.getItemCount() > 1);
         if (episode == null || episode.isSelected()) return;
         selectEpisode(episode, false);
@@ -1572,7 +1586,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     }
 
     private void toggleEpisodeViewMode() {
-        if (isTmdbSourceEnabled()) return;
+        if (mBinding.episodeViewMode.getVisibility() != View.VISIBLE) return;
         episodeGridMode = !episodeGridMode;
         Setting.putTmdbEpisodeGridMode(episodeGridMode);
         applyEpisodeViewMode(true);
@@ -1595,6 +1609,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         mEpisodeGridAdapter.setColumn(spanCount);
         updateEpisodeGridViewport();
         mBinding.episodeViewMode.setText(episodeGridMode ? R.string.detail_episode_view_list : R.string.detail_episode_view_grid);
+        mBinding.episodeViewMode.setContentDescription(getString(episodeGridMode ? R.string.detail_episode_view_list_action : R.string.detail_episode_view_grid_action));
         updateEpisodeReverseText();
         updateFocus();
         setEpisodeContentVisible(mBinding.episodeLoadingIndicator.getVisibility() != View.VISIBLE);
@@ -1783,7 +1798,11 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     }
 
     private int getEpisodeSegmentSize(int size) {
-        return size <= 60 ? 20 : 40;
+        // 优化：减小分段大小，避免一次性渲染过多卡片
+        if (size <= 30) return size;   // 30集以下不分段
+        if (size <= 60) return 20;     // 31-60集，每段20集
+        if (size <= 100) return 30;    // 61-100集，每段30集
+        return 40;                     // 100集以上，每段40集
     }
 
     private int findFocusDown(int index) {
@@ -1880,6 +1899,36 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         mHistory.setRevPlay(!mHistory.isRevPlay());
         view.setText(mHistory.getRevPlayText());
         Notify.show(mHistory.getRevPlayHint());
+    }
+
+    @Override
+    public void onSegmentClick(int position) {
+        selectEpisodeSegment(position, false);
+    }
+
+    @Override
+    public void onSegmentFocus(int position) {
+        selectEpisodeSegment(position, false);
+    }
+
+    private void selectEpisodeSegment(int position, boolean requestEpisodeFocus) {
+        if (position <= 1) return;
+        mBinding.array.setSelectedPosition(position);
+        mBinding.array.scrollToPosition(position);
+        showEpisodeSegment(position);
+        if (requestEpisodeFocus) scrollToEpisode(0, true);
+    }
+
+    private void showEpisodeSegment(int position) {
+        List<Episode> episodes = getFlag().getEpisodes();
+        if (episodes.isEmpty()) return;
+        int start = mArrayAdapter.getStart(position);
+        int end = Math.min(start + getEpisodeSegmentSize(episodes.size()), episodes.size());
+        List<Episode> items = episodes.subList(start, end);
+        mEpisodeAdapter.addAll(items);
+        mEpisodeGridAdapter.addAll(items);
+        if (episodeGridMode) mBinding.episodeGrid.scrollToPosition(0);
+        else mBinding.episode.setSelectedPosition(0);
     }
 
     private boolean shouldEnterFullscreen(Episode item) {
@@ -2009,15 +2058,24 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     }
 
     private void onNext(boolean notify) {
-        Episode item = mEpisodeAdapter.getNext();
+        Episode item = getAdjacentEpisode(1);
         if (!item.isSelected()) onItemClick(item);
         else if (notify) Notify.show(mHistory.isRevPlay() ? R.string.error_play_prev : R.string.error_play_next);
     }
 
     private void onPrev(boolean notify) {
-        Episode item = mEpisodeAdapter.getPrev();
+        Episode item = getAdjacentEpisode(-1);
         if (!item.isSelected()) onItemClick(item);
         else if (notify) Notify.show(mHistory.isRevPlay() ? R.string.error_play_next : R.string.error_play_prev);
+    }
+
+    private Episode getAdjacentEpisode(int offset) {
+        Flag flag = getFlag();
+        List<Episode> episodes = flag.getEpisodes();
+        if (episodes.isEmpty()) return new Episode();
+        int position = getSelectedEpisodePosition(episodes);
+        position = Math.max(0, Math.min(position + offset, episodes.size() - 1));
+        return episodes.get(position);
     }
 
     private void onScale() {

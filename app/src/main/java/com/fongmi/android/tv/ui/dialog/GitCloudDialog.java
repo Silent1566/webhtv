@@ -391,7 +391,7 @@ public class GitCloudDialog extends BaseAlertDialog {
         LinearLayoutCompat selectedActions = row();
         binding.changeRepo = compact("仓库");
         binding.refreshTree = outline("刷新");
-        binding.clearCache = outline("清");
+        binding.clearCache = outline("清缓存");
         selectedActions.addView(binding.changeRepo, new LinearLayoutCompat.LayoutParams(0, dp(32), 1));
         LinearLayoutCompat.LayoutParams refreshTreeParams = new LinearLayoutCompat.LayoutParams(0, dp(32), 1);
         refreshTreeParams.leftMargin = dp(6);

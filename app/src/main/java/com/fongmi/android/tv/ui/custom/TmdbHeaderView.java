@@ -86,6 +86,13 @@ public class TmdbHeaderView {
         void onImagesLoaded();
     }
 
+    /**
+     * Backdrop 图片变化回调接口（用于同步到外部 contextWall）
+     */
+    public interface OnBackdropChangeListener {
+        void onBackdropChanged(String imageUrl);
+    }
+
     public interface ActionListener {
         void onChangeSource();
 
@@ -113,6 +120,7 @@ public class TmdbHeaderView {
     private final java.util.Map<String, java.util.List<String[]>> ratingDisplayChips = new java.util.HashMap<>();
 
     private OnImagesLoadedListener imagesLoadedListener;
+    private OnBackdropChangeListener backdropChangeListener;
     private ActionListener actionListener;
 
     // 幻灯片相关
@@ -133,6 +141,13 @@ public class TmdbHeaderView {
      */
     public void setOnImagesLoadedListener(OnImagesLoadedListener listener) {
         this.imagesLoadedListener = listener;
+    }
+
+    /**
+     * 设置 Backdrop 变化监听器（用于同步到外部 contextWall）
+     */
+    public void setOnBackdropChangeListener(OnBackdropChangeListener listener) {
+        this.backdropChangeListener = listener;
     }
 
     public void setActionListener(ActionListener listener) {
@@ -667,6 +682,7 @@ public class TmdbHeaderView {
         // 收集所有可用的背景图，优先使用已按设备方向与清晰度筛选的图片。
         backdropPhotos.clear();
         java.util.List<String> photos = adapter.getPhotos();
+        android.util.Log.d("TmdbHeaderView", "setupBackdropSlideshow: photos count=" + (photos != null ? photos.size() : 0));
         if (photos != null) {
             for (String photo : photos) {
                 String highResPhoto = TmdbImageSelector.originalUrl(photo);
@@ -680,17 +696,26 @@ public class TmdbHeaderView {
             backdropPhotos.add(mainBackdrop);
         }
 
+        android.util.Log.d("TmdbHeaderView", "setupBackdropSlideshow: total backdropPhotos=" + backdropPhotos.size());
+
         // 如果只有一张图，直接加载
         if (backdropPhotos.isEmpty()) {
+            android.util.Log.w("TmdbHeaderView", "setupBackdropSlideshow: 没有可用的背景图");
             return;
         }
 
         if (backdropPhotos.size() == 1) {
+            android.util.Log.d("TmdbHeaderView", "setupBackdropSlideshow: 只有一张图，不启动轮播");
             loadBackdropIntoView(backdropPhotos.get(0));
+            // 通知外部监听器第一张图片
+            if (backdropChangeListener != null) {
+                backdropChangeListener.onBackdropChanged(backdropPhotos.get(0));
+            }
             return;
         }
 
         // 多张图片，启动幻灯片
+        android.util.Log.d("TmdbHeaderView", "setupBackdropSlideshow: 启动轮播，共 " + backdropPhotos.size() + " 张图片");
         startBackdropSlideshow();
     }
 
@@ -740,6 +765,16 @@ public class TmdbHeaderView {
                                 backdropView.setScaleType(ImageView.ScaleType.CENTER_CROP);
                                 backdropView.setImageDrawable(resource);
 
+                                android.util.Log.d("TmdbHeaderView", "轮播切换到第 " + currentBackdropIndex + " 张，URL=" + backdropPhotos.get(nextIndex));
+
+                                // 通知外部监听器（用于同步到 contextWall）
+                                if (backdropChangeListener != null) {
+                                    android.util.Log.d("TmdbHeaderView", "通知 backdropChangeListener");
+                                    backdropChangeListener.onBackdropChanged(backdropPhotos.get(nextIndex));
+                                } else {
+                                    android.util.Log.w("TmdbHeaderView", "backdropChangeListener 为 null，无法通知");
+                                }
+
                                 // 5秒后切换下一张
                                 if (backdropHandler != null && backdropRunnable != null) {
                                     backdropHandler.postDelayed(backdropRunnable, 5000);
@@ -755,6 +790,10 @@ public class TmdbHeaderView {
         if (!backdropPhotos.isEmpty()) {
             loadBackdropIntoView(backdropPhotos.get(0));
             currentBackdropIndex = 0;
+            // 通知外部监听器第一张图片
+            if (backdropChangeListener != null) {
+                backdropChangeListener.onBackdropChanged(backdropPhotos.get(0));
+            }
             // 5秒后开始切换
             backdropHandler.postDelayed(backdropRunnable, 5000);
         }
@@ -2146,5 +2185,60 @@ public class TmdbHeaderView {
         stopBackdropSlideshow();
         backdropHandler = null;
         backdropRunnable = null;
+    }
+
+    /**
+     * 隐藏原生 Hero 区域的独立 backdrop（用于原生增强模式的全屏背景）
+     */
+    public void hideNativeHeroBackdrop() {
+        if (headerRoot == null) return;
+
+        // 将 TmdbHeaderView 的根视图背景设为透明，让下方的 contextWall 透出来
+        headerRoot.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+
+        View nativeHero = headerRoot.findViewById(R.id.tmdbNativeHero);
+        if (nativeHero == null) return;
+
+        // 不隐藏 backdrop 图片视图，而是设为完全透明，这样轮播回调仍然会触发
+        // 但用户看不到它（因为 alpha=0 且有 contextWall 在底层）
+        View backdropView = nativeHero.findViewById(R.id.tmdbBackdrop);
+        if (backdropView != null) {
+            backdropView.setAlpha(0f);  // 完全透明，但保持可见状态
+            backdropView.setVisibility(View.VISIBLE);
+        }
+
+        // 隐藏渐变遮罩（backdrop 下方的第二个 View）
+        if (nativeHero instanceof android.widget.FrameLayout) {
+            android.widget.FrameLayout heroFrame = (android.widget.FrameLayout) nativeHero;
+            if (heroFrame.getChildCount() > 1) {
+                View scrim = heroFrame.getChildAt(1);
+                // 确保是遮罩层（不是 LinearLayout 容器）
+                if (scrim instanceof View && !(scrim instanceof ViewGroup)) {
+                    scrim.setVisibility(View.GONE);
+                }
+            }
+        }
+
+        // 调整 Hero 容器为透明背景，移除固定高度
+        nativeHero.setBackgroundColor(android.graphics.Color.TRANSPARENT);
+        ViewGroup.LayoutParams heroParams = nativeHero.getLayoutParams();
+        if (heroParams != null) {
+            heroParams.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+            nativeHero.setLayoutParams(heroParams);
+        }
+
+        // 调整内部海报+文字容器的上边距，因为不再需要为 backdrop 留空间
+        if (nativeHero instanceof android.widget.FrameLayout) {
+            android.widget.FrameLayout heroFrame = (android.widget.FrameLayout) nativeHero;
+            for (int i = 0; i < heroFrame.getChildCount(); i++) {
+                View child = heroFrame.getChildAt(i);
+                if (child instanceof androidx.appcompat.widget.LinearLayoutCompat) {
+                    ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) child.getLayoutParams();
+                    params.topMargin = ResUtil.dp2px(16);  // 减小顶部边距
+                    child.setLayoutParams(params);
+                    break;
+                }
+            }
+        }
     }
 }

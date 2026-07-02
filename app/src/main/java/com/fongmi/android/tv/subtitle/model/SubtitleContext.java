@@ -10,6 +10,7 @@ public final class SubtitleContext {
     private final String siteKey;
     private final String vodId;
     private final String mediaType;
+    private final String mediaPath;
     private final String canonicalTitle;
     private final String originalTitle;
     private final List<String> aliases;
@@ -28,6 +29,7 @@ public final class SubtitleContext {
         this.siteKey = builder.siteKey;
         this.vodId = builder.vodId;
         this.mediaType = builder.mediaType;
+        this.mediaPath = builder.mediaPath;
         this.canonicalTitle = builder.canonicalTitle;
         this.originalTitle = builder.originalTitle;
         this.aliases = Collections.unmodifiableList(new ArrayList<>(builder.aliases));
@@ -60,6 +62,10 @@ public final class SubtitleContext {
 
     public String getMediaType() {
         return mediaType;
+    }
+
+    public String getMediaPath() {
+        return mediaPath;
     }
 
     public String getCanonicalTitle() {
@@ -120,6 +126,7 @@ public final class SubtitleContext {
         private String siteKey = "";
         private String vodId = "";
         private String mediaType = "";
+        private String mediaPath = "";
         private String canonicalTitle = "";
         private String originalTitle = "";
         private final List<String> aliases = new ArrayList<>();
@@ -150,6 +157,11 @@ public final class SubtitleContext {
 
         public Builder mediaType(String mediaType) {
             this.mediaType = mediaType == null ? "" : mediaType;
+            return this;
+        }
+
+        public Builder mediaPath(String mediaPath) {
+            this.mediaPath = mediaPath == null ? "" : mediaPath;
             return this;
         }
 

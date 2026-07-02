@@ -2,10 +2,13 @@ package com.fongmi.android.tv.gitcloud.provider;
 
 import android.net.Uri;
 import android.text.TextUtils;
+import android.util.Log;
 
 import com.fongmi.android.tv.App;
+import com.fongmi.android.tv.BuildConfig;
 import com.fongmi.android.tv.gitcloud.GitCloudException;
 import com.fongmi.android.tv.gitcloud.GitHttpException;
+import com.github.catvod.crawler.SpiderDebug;
 import com.github.catvod.net.OkHttp;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -25,6 +28,7 @@ import okhttp3.ResponseBody;
 abstract class BaseGitProvider implements GitCloudProvider {
 
     private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
+    private static final String TAG = "TV-GitCloud";
 
     protected JsonObject get(String url, String token) throws GitCloudException {
         return request("GET", url, token, null).object();
@@ -60,11 +64,13 @@ abstract class BaseGitProvider implements GitCloudProvider {
         try (Response response = OkHttp.client().newCall(builder.build()).execute()) {
             ResponseBody responseBody = response.body();
             String text = responseBody == null ? "" : responseBody.string();
+            debug(method, url, response.code(), jsonMessage(text));
             if (!response.isSuccessful()) throw new GitHttpException(response.code(), humanError(response.code(), text));
             return new HttpResult(text);
         } catch (GitCloudException e) {
             throw e;
         } catch (IOException e) {
+            debug(method, url, 0, e.getMessage());
             throw new GitCloudException("网络请求失败：" + e.getMessage(), e);
         }
     }
@@ -155,6 +161,25 @@ abstract class BaseGitProvider implements GitCloudProvider {
         } catch (Throwable e) {
             return "";
         }
+    }
+
+    private void debug(String method, String url, int code, String message) {
+        String text = method + " " + url + " -> " + code;
+        if (!TextUtils.isEmpty(message)) text += " " + abbreviate(message);
+        debug(text);
+    }
+
+    protected void debug(String message) {
+        if (!BuildConfig.DEBUG) return;
+        String text = message == null ? "" : message;
+        Log.d(TAG, text);
+        SpiderDebug.log("git-cloud", text);
+    }
+
+    private String abbreviate(String value) {
+        if (value == null) return "";
+        String text = value.replace('\n', ' ').replace('\r', ' ');
+        return text.length() > 180 ? text.substring(0, 180) + "..." : text;
     }
 
     protected static class HttpResult {

@@ -4,6 +4,9 @@ import com.fongmi.android.tv.subtitle.model.ResolvedMediaIdentity;
 import com.fongmi.android.tv.subtitle.model.SubtitleContext;
 import com.fongmi.android.tv.subtitle.model.SubtitleRequest;
 
+import java.net.URI;
+import java.util.Locale;
+
 public final class SubtitleContextBuilder {
 
     private final SubtitleTmdbResolver resolver;
@@ -28,12 +31,14 @@ public final class SubtitleContextBuilder {
         String episodeTitle = !SubtitleStrings.isEmpty(identity.getEpisodeTitle()) ? identity.getEpisodeTitle() : parser.cleanTitle(request.getEpisodeName());
         String originalLanguage = request.getTmdbItem() == null ? "" : request.getTmdbItem().getOriginalLanguage();
         String originCountry = request.getTmdbItem() == null ? "" : request.getTmdbItem().getOriginCountry();
+        String mediaPath = localMediaPath(request.getPlayUrl());
 
         SubtitleContext.Builder builder = SubtitleContext.builder()
                 .playbackKey(request.getPlaybackKey())
                 .siteKey(request.getSiteKey())
                 .vodId(request.getVodId())
                 .mediaType(identity.getMediaType())
+                .mediaPath(mediaPath)
                 .canonicalTitle(canonicalTitle)
                 .originalTitle(originalTitle)
                 .year(year)
@@ -44,9 +49,26 @@ public final class SubtitleContextBuilder {
                 .originalLanguage(originalLanguage)
                 .originCountry(originCountry)
                 .identity(identity)
-                .networkStream(true);
+                .networkStream(SubtitleStrings.isEmpty(mediaPath));
 
         for (String alias : parser.aliases(request.getVodName(), request.getVodRemarks(), request.getEpisodeName())) builder.addAlias(alias);
         return builder.build();
+    }
+
+    private String localMediaPath(String value) {
+        if (SubtitleStrings.isEmpty(value)) return "";
+        String text = value.trim();
+        String lower = text.toLowerCase(Locale.ROOT);
+        if (lower.startsWith("file://")) {
+            try {
+                String path = URI.create(text).getPath();
+                return path == null ? "" : path;
+            } catch (Exception ignored) {
+                return text.substring("file://".length());
+            }
+        }
+        if (lower.contains("://")) return "";
+        if (text.startsWith("/") || text.matches("^[A-Za-z]:[\\\\/].*")) return text;
+        return "";
     }
 }

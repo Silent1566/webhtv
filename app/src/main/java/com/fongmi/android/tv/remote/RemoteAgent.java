@@ -211,6 +211,17 @@ public final class RemoteAgent {
             SpiderDebug.log("remote", "websocket closed origin=%s", serverOrigin);
         }
 
+        private synchronized void onWebSocketFailure(Throwable t, Response response) {
+            webSocketSupported = false;
+            onWebSocketClosed();
+            int code = response == null ? 0 : response.code();
+            if (code == 426) {
+                SpiderDebug.log("remote", "websocket unavailable origin=%s code=%s fallback=poll", serverOrigin, code);
+            } else {
+                SpiderDebug.log("remote", "websocket failed origin=%s error=%s", serverOrigin, t == null ? "" : t.getMessage());
+            }
+        }
+
         private synchronized void closeWebSocket() {
             WebSocket current = webSocket;
             webSocket = null;
@@ -260,8 +271,7 @@ public final class RemoteAgent {
 
         @Override
         public void onFailure(WebSocket webSocket, Throwable t, Response response) {
-            session.onWebSocketClosed();
-            SpiderDebug.log("remote", "websocket failed origin=%s error=%s", serverOrigin, t == null ? "" : t.getMessage());
+            session.onWebSocketFailure(t, response);
         }
     }
 }

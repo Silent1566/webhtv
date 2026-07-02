@@ -52,6 +52,15 @@
 -keep class org.jupnp.** { *; }
 -keep class javax.xml.** { *; }
 
+# Mobile inline cast uses reflection from the shared TMDB detail activity.
+-keepclassmembernames class com.fongmi.android.tv.ui.dialog.CastDialog {
+    public static com.fongmi.android.tv.ui.dialog.CastDialog create();
+    public com.fongmi.android.tv.ui.dialog.CastDialog history(com.fongmi.android.tv.bean.History);
+    public com.fongmi.android.tv.ui.dialog.CastDialog video(com.fongmi.android.tv.bean.CastVideo);
+    public com.fongmi.android.tv.ui.dialog.CastDialog fm(boolean);
+    public void show(androidx.fragment.app.FragmentActivity);
+}
+
 # Nano
 -keep class fi.iki.elonen.** { *; }
 

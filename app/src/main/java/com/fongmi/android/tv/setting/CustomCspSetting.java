@@ -221,10 +221,12 @@ public class CustomCspSetting {
 
     public static void save(Registry registry) {
         ensureFileAccess();
+        Set<String> before = itemIds(load());
         File file = registryFile();
         String text = App.gson().toJson(registry.normalize());
         Path.write(file, text.getBytes(StandardCharsets.UTF_8));
         ensureWritten(file, text);
+        cleanupRemovedFiles(before, itemIds(registry));
     }
 
     public static void writePage(String id, String code) {
@@ -240,6 +242,48 @@ public class CustomCspSetting {
         File file = file(id, "index.html");
         Path.copy(source, file);
         if (!source.exists() || !file.exists() || !Arrays.equals(Path.readToByte(source), Path.readToByte(file))) throw new IllegalStateException(App.get().getString(R.string.setting_custom_csp_save_failed, file.getAbsolutePath()));
+    }
+
+    public static String copyFile(File source, String id) {
+        ensureFileAccess();
+        if (source == null || !source.isFile()) throw new IllegalStateException(App.get().getString(R.string.setting_custom_csp_save_failed, ""));
+        File file = file(id, source.getName());
+        try {
+            if (!source.getCanonicalPath().equals(file.getCanonicalPath())) Path.copy(source, file);
+        } catch (Exception e) {
+            Path.copy(source, file);
+        }
+        if (!file.exists() || !Arrays.equals(Path.readToByte(source), Path.readToByte(file))) throw new IllegalStateException(App.get().getString(R.string.setting_custom_csp_save_failed, file.getAbsolutePath()));
+        return localUrl(id, source.getName());
+    }
+
+    public static void deleteFiles(String id) {
+        if (TextUtils.isEmpty(id)) return;
+        try {
+            File root = dir().getCanonicalFile();
+            File target = new File(root, id).getCanonicalFile();
+            if (!isInside(root, target)) return;
+            Path.clear(target);
+        } catch (Throwable e) {
+            SpiderDebug.log("custom-csp", "delete files failed id=%s error=%s", id, e.toString());
+        }
+    }
+
+    private static boolean isInside(File root, File target) throws Exception {
+        String rootPath = root.getCanonicalPath();
+        String targetPath = target.getCanonicalPath();
+        return targetPath.equals(rootPath) || targetPath.startsWith(rootPath + File.separator);
+    }
+
+    private static Set<String> itemIds(Registry registry) {
+        Set<String> ids = new HashSet<>();
+        if (registry == null) return ids;
+        for (Item item : registry.getItems()) if (item != null && !TextUtils.isEmpty(item.getId())) ids.add(item.getId());
+        return ids;
+    }
+
+    private static void cleanupRemovedFiles(Set<String> before, Set<String> after) {
+        for (String id : before) if (!after.contains(id)) deleteFiles(id);
     }
 
     private static void ensureFileAccess() {

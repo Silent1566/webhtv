@@ -6,11 +6,14 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.widget.LinearLayoutCompat;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.GridLayoutManager;
+import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.R;
@@ -38,6 +41,7 @@ public class SiteDialog extends BaseAlertDialog implements SiteAdapter.OnClickLi
     private DialogSiteBinding binding;
     private SiteListener listener;
     private SiteAdapter adapter;
+    private ItemTouchHelper sortTouchHelper;
     private SpaceItemDecoration itemDecoration;
     private List<String> groups;
     private boolean search;
@@ -85,7 +89,32 @@ public class SiteDialog extends BaseAlertDialog implements SiteAdapter.OnClickLi
         filter();
         binding.recycler.setItemAnimator(null);
         binding.recycler.setHasFixedSize(true);
+        attachSortTouchHelper();
         binding.recycler.post(() -> binding.recycler.scrollToPosition(adapter.getSelectedPosition()));
+    }
+
+    private void attachSortTouchHelper() {
+        sortTouchHelper = new ItemTouchHelper(new ItemTouchHelper.SimpleCallback(ItemTouchHelper.UP | ItemTouchHelper.DOWN | ItemTouchHelper.LEFT | ItemTouchHelper.RIGHT, 0) {
+            @Override
+            public boolean isLongPressDragEnabled() {
+                return false;
+            }
+
+            @Override
+            public boolean isItemViewSwipeEnabled() {
+                return false;
+            }
+
+            @Override
+            public boolean onMove(@NonNull RecyclerView recyclerView, @NonNull RecyclerView.ViewHolder source, @NonNull RecyclerView.ViewHolder target) {
+                return adapter.drag(source.getBindingAdapterPosition(), target.getBindingAdapterPosition());
+            }
+
+            @Override
+            public void onSwiped(@NonNull RecyclerView.ViewHolder viewHolder, int direction) {
+            }
+        });
+        sortTouchHelper.attachToRecyclerView(binding.recycler);
     }
 
     @Override
@@ -219,6 +248,14 @@ public class SiteDialog extends BaseAlertDialog implements SiteAdapter.OnClickLi
     public void onChangeClick(int position, Site item) {
         item.setChangeable(!item.isChangeable()).save();
         adapter.notifyItemChanged(position);
+    }
+
+    @Override
+    public boolean onTextLongClick(SiteAdapter.ViewHolder holder) {
+        if (sortTouchHelper == null || holder.getBindingAdapterPosition() == RecyclerView.NO_POSITION) return false;
+        Util.hideKeyboard(binding.keyword);
+        sortTouchHelper.startDrag(holder);
+        return true;
     }
 
     @Override

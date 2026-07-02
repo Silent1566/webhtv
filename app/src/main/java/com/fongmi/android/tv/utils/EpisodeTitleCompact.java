@@ -17,8 +17,10 @@ public final class EpisodeTitleCompact {
 
     private static final Pattern EXTENSION = Pattern.compile("(?i)\\.(mp4|mkv|avi|mov|flv|wmv|ts|m2ts|m3u8|rmvb|webm)$");
     private static final String SIZE_VALUE = "(?:\\d{1,3}(?:,\\d{3})+|\\d+)(?:\\.\\d+)?";
-    private static final Pattern SIZE_PREFIX = Pattern.compile("(?i)^\\s*[\\[\\(（【]?\\s*" + SIZE_VALUE + "\\s*(?:GB|G|MB|M)\\s*[\\]\\)）】]?\\s*");
-    private static final Pattern SIZE_SUFFIX = Pattern.compile("(?i)\\s*[\\[\\(（【]?\\s*" + SIZE_VALUE + "\\s*(?:GB|G|MB|M)\\s*[\\]\\)）】]?\\s*$");
+    private static final String SIZE_UNIT = "(?:TB|T|GB|G|MB|M)";
+    private static final String SIZE_TEXT = "(" + SIZE_VALUE + ")\\s*(" + SIZE_UNIT + ")";
+    private static final Pattern SIZE_PREFIX = Pattern.compile("(?i)^\\s*[\\[\\(（【]?\\s*" + SIZE_TEXT + "\\s*[\\]\\)）】]?\\s*");
+    private static final Pattern SIZE_SUFFIX = Pattern.compile("(?i)\\s*[\\[\\(（【]?\\s*" + SIZE_TEXT + "\\s*[\\]\\)）】]?\\s*$");
     private static final Pattern HASH_SUFFIX = Pattern.compile("(?i)\\s*[\\[\\(（【]\\s*[A-F0-9]{8,32}\\s*[\\]\\)）】]\\s*$");
     private static final Pattern EPISODE_START = Pattern.compile("(?i)^(?:S\\s*[0-9]{1,2}\\s*E\\s*[0-9]{1,4}(?:\\s*(?:E|[-~—–])\\s*[0-9]{1,4})?|[0-9]{1,2}\\s*x\\s*[0-9]{1,4}(?:\\s*[-~—–]\\s*[0-9]{1,4})?|第\\s*[0-9一二三四五六七八九十百]+\\s*(?:集|话|話|期|章|回)|[0-9]{1,4}\\s*(?:集|话|話|期|章|回)|(?:EP|E)\\s*[0-9]{1,4}(?:\\s*[-~—–]\\s*[0-9]{1,4})?|[0-9]{4}[-._][0-9]{1,2}[-._][0-9]{1,2}|[0-9]{1,4}(?:\\D|$)|[上下](?:集|部)?|前篇|后篇|後篇|正片|预告|預告|花絮)");
     private static final Pattern VARIANT_TOKEN = Pattern.compile("(?i)(?:^|[\\s._\\-·|/\\\\:：,，;；\\[\\]()（）【】《》])((?:4320|2160|1080|720)P|[48]K|HQ|HD|HDR10(?:\\+|⁺)?|HDR|SDR|DV|60FPS|50FPS|30FPS|25FPS|24FPS|10BITS|8BITS|HEVC|H265|H\\.265|AVC|H264|H\\.264|AV1|DDP\\s*2[.·]?0|AAC\\s*2[.·]?0)(?=$|[\\s._\\-·|/\\\\:：,，;；\\[\\]()（）【】《》])");
@@ -47,9 +49,14 @@ public final class EpisodeTitleCompact {
             return;
         }
         List<String> names = new ArrayList<>();
-        for (Episode episode : episodes) names.add(cleanFileNoise(episode.getRawDisplayName()));
+        List<String> sizes = new ArrayList<>();
+        for (Episode episode : episodes) {
+            String raw = episode.getRawDisplayName();
+            names.add(cleanFileNoise(raw));
+            sizes.add(extractSize(raw));
+        }
         if (episodes.size() < 2) {
-            for (int i = 0; i < episodes.size(); i++) episodes.get(i).setDisplayName(names.get(i));
+            for (int i = 0; i < episodes.size(); i++) episodes.get(i).setDisplayName(appendSize(names.get(i), sizes.get(i)));
             return;
         }
         int prefix = findPrefix(names);
@@ -62,13 +69,13 @@ public final class EpisodeTitleCompact {
             String compact = cleanupEdge(name.substring(Math.min(prefix, name.length()), Math.max(Math.min(name.length() - suffix, name.length()), Math.min(prefix, name.length()))));
             if (TextUtils.isEmpty(compact)) compact = name;
             String token = findEpisodeToken(name);
-            String display = preferEpisodeToken(token, compact);
+            String display = appendSize(preferEpisodeToken(token, compact), sizes.get(compacted.size()));
             compacted.add(display);
             fallback.add(compact);
             tokens.add(token);
             count.put(display, count.getOrDefault(display, 0) + 1);
         }
-        compacted = resolveDuplicates(names, compacted, fallback, tokens, count);
+        compacted = resolveDuplicates(names, compacted, fallback, tokens, sizes, count);
         for (int i = 0; i < episodes.size(); i++) {
             episodes.get(i).setDisplayName(compacted.get(i));
         }
@@ -80,6 +87,29 @@ public final class EpisodeTitleCompact {
         text = EXTENSION.matcher(text).replaceFirst("");
         text = cleanEdgeNoise(text);
         return cleanupEdge(text);
+    }
+
+    private static String extractSize(String value) {
+        if (TextUtils.isEmpty(value)) return "";
+        String text = EXTENSION.matcher(value.trim()).replaceFirst("");
+        String size = extractSize(SIZE_SUFFIX.matcher(text));
+        return TextUtils.isEmpty(size) ? extractSize(SIZE_PREFIX.matcher(text)) : size;
+    }
+
+    private static String extractSize(Matcher matcher) {
+        if (!matcher.find()) return "";
+        String value = matcher.group(1).replace(",", "");
+        String unit = matcher.group(2).toUpperCase(Locale.ROOT);
+        if (unit.equals("T")) unit = "TB";
+        if (unit.equals("G")) unit = "GB";
+        if (unit.equals("M")) unit = "MB";
+        return value + unit;
+    }
+
+    private static String appendSize(String display, String size) {
+        if (TextUtils.isEmpty(size)) return display;
+        if (TextUtils.isEmpty(display)) return "[" + size + "]";
+        return display + " [" + size + "]";
     }
 
     private static String cleanEdgeNoise(String value) {
@@ -191,12 +221,12 @@ public final class EpisodeTitleCompact {
         return TextUtils.isEmpty(token) ? compact : token;
     }
 
-    private static List<String> resolveDuplicates(List<String> names, List<String> compacted, List<String> fallback, List<String> tokens, Map<String, Integer> count) {
+    private static List<String> resolveDuplicates(List<String> names, List<String> compacted, List<String> fallback, List<String> tokens, List<String> sizes, Map<String, Integer> count) {
         List<String> result = new ArrayList<>(compacted);
         for (Map.Entry<String, Integer> entry : count.entrySet()) {
             if (entry.getValue() <= 1) continue;
             List<Integer> indexes = indexesOf(compacted, entry.getKey());
-            List<String> displays = buildDistinctDisplays(names, fallback, tokens, indexes);
+            List<String> displays = buildDistinctDisplays(names, fallback, tokens, sizes, indexes);
             for (int i = 0; i < indexes.size(); i++) result.set(indexes.get(i), displays.get(i));
         }
         return ensureUnique(result);
@@ -208,11 +238,11 @@ public final class EpisodeTitleCompact {
         return indexes;
     }
 
-    private static List<String> buildDistinctDisplays(List<String> names, List<String> fallback, List<String> tokens, List<Integer> indexes) {
+    private static List<String> buildDistinctDisplays(List<String> names, List<String> fallback, List<String> tokens, List<String> sizes, List<Integer> indexes) {
         List<String> firstCandidates = null;
         for (int level = 1; level <= 4; level++) {
             List<String> candidates = new ArrayList<>();
-            for (int index : indexes) candidates.add(buildVariantDisplay(names.get(index), tokens.get(index), fallback.get(index), level));
+            for (int index : indexes) candidates.add(appendSize(buildVariantDisplay(names.get(index), tokens.get(index), fallback.get(index), level), sizes.get(index)));
             if (level == 1) firstCandidates = candidates;
             if (allDistinct(candidates)) return candidates;
         }

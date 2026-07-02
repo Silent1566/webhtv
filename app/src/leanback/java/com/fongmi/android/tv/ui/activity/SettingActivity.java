@@ -51,6 +51,7 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
 
     private ActivitySettingBinding mBinding;
     private String[] size;
+    private String[] language;
 
     public static void start(Activity activity) {
         activity.startActivity(new Intent(activity, SettingActivity.class));
@@ -89,6 +90,7 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
     private void setOtherText() {
         mBinding.dohText.setText(getDohList()[getDohIndex()]);
         mBinding.incognitoText.setText(getSwitch(Setting.isIncognito()));
+        mBinding.languageText.setText((language = ResUtil.getStringArray(R.array.select_language))[Setting.getLanguageIndex()]);
         mBinding.sizeText.setText((size = ResUtil.getStringArray(R.array.select_size))[PlayerSetting.getSize()]);
     }
 
@@ -108,6 +110,7 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
         mBinding.live.setOnClickListener(this::onLive);
         mBinding.wall.setOnClickListener(this::onWall);
         mBinding.size.setOnClickListener(this::setSize);
+        mBinding.language.setOnClickListener(this::setLanguage);
         mBinding.cache.setOnClickListener(this::onCache);
         mBinding.backup.setOnClickListener(this::onBackup);
         mBinding.enhance.setOnClickListener(this::onEnhance);
@@ -279,6 +282,12 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
         mBinding.sizeText.setText(size[index]);
         PlayerSetting.putSize(index);
         RefreshEvent.size();
+    }
+
+    private void setLanguage(View view) {
+        int index = (Setting.getLanguageIndex() + 1) % language.length;
+        Setting.putLanguageIndex(index);
+        RefreshEvent.language();
     }
 
     private void setDoh(View view) {

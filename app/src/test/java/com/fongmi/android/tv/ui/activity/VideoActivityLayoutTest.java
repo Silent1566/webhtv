@@ -120,6 +120,34 @@ public class VideoActivityLayoutTest {
     }
 
     @Test
+    public void mobileVideoKeepsParseRowHiddenInEmbeddedPlayerWhenPlaybackStarts() throws Exception {
+        Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int method = source.indexOf("private void setPlayer(Result result)");
+        int setUseParse = source.indexOf("setUseParse(result.shouldUseParse());", method);
+        int guardedParseRow = source.indexOf("mBinding.control.parse.setVisibility(isFullscreen() && isUseParse() ? View.VISIBLE : View.GONE);", setUseParse);
+        int startPlayer = source.indexOf("startPlayer(getHistoryKey(), result, isUseParse()", setUseParse);
+
+        assertTrue(sourcePath + " is missing setPlayer", method >= 0);
+        assertTrue("parse row must only become visible in fullscreen during playback start", guardedParseRow > setUseParse && guardedParseRow < startPlayer);
+    }
+
+    @Test
+    public void mobileShortDramaKeepsStandardSettingButtonVisible() throws Exception {
+        Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int showControl = source.indexOf("private void showControl()");
+        int shortDrama = source.indexOf("boolean shortDrama = isShortDramaSource();", showControl);
+        int setting = source.indexOf("mBinding.control.setting.setVisibility(mHistory == null || (isFullscreen() && !shortDrama) ? View.GONE : View.VISIBLE);", shortDrama);
+        int shortDramaViews = source.indexOf("private View[] getShortDramaControlViews()");
+        int dockedSetting = source.indexOf("mBinding.control.setting,", shortDramaViews);
+
+        assertTrue(sourcePath + " is missing showControl", showControl >= 0);
+        assertTrue("short drama mode must keep the standard setting button visible while fullscreen", setting > shortDrama);
+        assertTrue("short drama floating controls must include the standard setting button", dockedSetting > shortDramaViews);
+    }
+
+    @Test
     public void mobileVideoTmdbMovableViewsKeepQualityBetweenFlagsAndEpisodes() throws Exception {
         Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
@@ -228,6 +256,21 @@ public class VideoActivityLayoutTest {
     }
 
     @Test
+    public void leanbackDetailActionRowScrollsHorizontally() throws Exception {
+        Path layoutFile = findLeanbackResPath().resolve(Path.of("layout", "activity_video.xml"));
+        Element row = findAndroidId(layoutFile.toFile(), "row2");
+
+        assertTrue(layoutFile + " is missing @+id/row2", row != null);
+        assertTrue("leanback detail action row must scroll instead of clipping overflow",
+                "HorizontalScrollView".equals(row.getNodeName()));
+        assertTrue("leanback detail action row must fill the remaining right side",
+                "match_parent".equals(row.getAttribute("android:layout_width"))
+                        && "true".equals(row.getAttribute("android:layout_alignParentEnd")));
+        assertTrue("leanback detail action row should hide scrollbars",
+                "none".equals(row.getAttribute("android:scrollbars")));
+    }
+
+    @Test
     public void leanbackTmdbEpisodeDialogUsesFullscreenAdaptiveCards() throws Exception {
         Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "dialog", "EpisodeListDialog.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
@@ -237,15 +280,15 @@ public class VideoActivityLayoutTest {
         int start = source.indexOf("public void onStart()");
 
         assertTrue(sourcePath + " is missing tmdb episode dialog hooks", init >= 0 && width > init && column > width && start > column);
-        assertTrue("TMDB episode dialog must use the full screen instead of the old right-side panel",
-                source.indexOf("if (tmdbCard) return screen;", width) > width
-                        && source.indexOf("int width = tmdbCard ? WindowManager.LayoutParams.MATCH_PARENT : panelWidth;", start) > start
-                        && source.indexOf("int gravity = tmdbCard ? Gravity.CENTER : Gravity.END | Gravity.BOTTOM;", start) > start);
+        assertTrue("Episode dialog must use the full screen for both card and text modes",
+                source.indexOf("return ResUtil.getScreenWidth(requireContext());", width) > width
+                        && source.indexOf("int width = WindowManager.LayoutParams.MATCH_PARENT;", start) > start
+                        && source.indexOf("int gravity = Gravity.CENTER;", start) > start);
         assertTrue("TMDB episode dialog must use the same adaptive TV card columns as TMDB detail",
                 source.indexOf("return TmdbEpisodeGridPolicy.tvAdaptiveSpanCount(getResources().getConfiguration().screenWidthDp);", column) > column);
-        assertTrue("TMDB episode dialog should drop the side-sheet chrome in card mode",
-                source.indexOf("binding.getRoot().setBackgroundColor(0x66111820);", init) > init
-                        && source.indexOf("binding.getRoot().setPadding(ResUtil.dp2px(48), ResUtil.dp2px(34), ResUtil.dp2px(48), ResUtil.dp2px(26));", init) > init);
+        assertTrue("TMDB episode dialog should use fullscreen optimized padding and background",
+                source.indexOf("binding.getRoot().setBackgroundColor(0x80111820);", init) > init
+                        && source.indexOf("binding.getRoot().setPadding(ResUtil.dp2px(24), ResUtil.dp2px(20), ResUtil.dp2px(24), ResUtil.dp2px(16));", init) > init);
 
         Path activityPath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
         String activity = new String(Files.readAllBytes(activityPath), StandardCharsets.UTF_8);
@@ -256,10 +299,76 @@ public class VideoActivityLayoutTest {
                 span >= 0
                         && activity.indexOf("return TmdbEpisodeGridPolicy.tvAdaptiveSpanCount(getResources().getConfiguration().screenWidthDp);", span) > span
                         && setEpisode >= 0
-                        && activity.indexOf("if (showTmdbEpisodeChrome && hasMultiple) episodeGridMode = true;", setEpisode) > setEpisode
-                        && activity.indexOf("mBinding.episodeViewMode.setVisibility(View.GONE);", setEpisode) > setEpisode
+                        && activity.indexOf("if (showTmdbEpisodeChrome && hasMultiple) episodeGridMode = Setting.getTmdbEpisodeGridMode();", setEpisode) > setEpisode
+                        && activity.indexOf("mBinding.episodeViewMode.setVisibility(showTmdbEpisodeChrome && hasMultiple && useTmdbCards ? View.VISIBLE : View.GONE);", setEpisode) > setEpisode
                         && toggle >= 0
-                        && activity.indexOf("if (isTmdbSourceEnabled()) return;", toggle) > toggle);
+                        && activity.indexOf("if (mBinding.episodeViewMode.getVisibility() != View.VISIBLE) return;", toggle) > toggle
+                        && activity.indexOf("Setting.putTmdbEpisodeGridMode(episodeGridMode);", toggle) > toggle);
+    }
+
+    @Test
+    public void leanbackPlaybackEpisodeRangeButtonsApplyOnFocusAndHandleClick() throws Exception {
+        Path adapterPath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "adapter", "ArrayAdapter.java"));
+        String adapter = new String(Files.readAllBytes(adapterPath), StandardCharsets.UTF_8);
+        Path activityPath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String activity = new String(Files.readAllBytes(activityPath), StandardCharsets.UTF_8);
+        Path dialogPath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "dialog", "EpisodeListDialog.java"));
+        String dialog = new String(Files.readAllBytes(dialogPath), StandardCharsets.UTF_8);
+
+        int bind = adapter.indexOf("public void onBindViewHolder");
+        int listener = adapter.indexOf("public interface OnClickListener");
+        assertTrue("leanback episode range buttons must forward click events",
+                bind >= 0
+                        && adapter.indexOf("mListener.onSegmentClick(position)", bind) > bind
+                        && adapter.indexOf("mListener.onSegmentFocus(position)", bind) > bind
+                        && listener >= 0
+                        && adapter.indexOf("void onSegmentClick(int position);", listener) > listener
+                        && adapter.indexOf("void onSegmentFocus(int position);", listener) > listener);
+
+        int recycler = activity.indexOf("mBinding.array.addOnChildViewHolderSelectedListener");
+        assertTrue("playback page range focus must apply the segment without moving focus into episodes",
+                recycler >= 0
+                        && activity.indexOf("selectEpisodeSegment(position, false);", recycler) > recycler);
+
+        int selector = activity.indexOf("private void selectEpisodeSegment(int position, boolean requestEpisodeFocus)");
+        assertTrue("playback page must share segment focus and click behavior",
+                selector >= 0
+                        && activity.indexOf("if (position <= 1) return;", selector) > selector
+                        && activity.indexOf("mBinding.array.setSelectedPosition(position);", selector) > selector
+                        && activity.indexOf("showEpisodeSegment(position);", selector) > selector);
+
+        int showSegment = activity.indexOf("private void showEpisodeSegment(int position)");
+        assertTrue("playback page range focus must replace the visible episode items",
+                showSegment >= 0
+                        && activity.indexOf("List<Episode> episodes = getFlag().getEpisodes();", showSegment) > showSegment
+                        && activity.indexOf("List<Episode> items = episodes.subList(start, end);", showSegment) > showSegment
+                        && activity.indexOf("mEpisodeAdapter.addAll(items);", showSegment) > showSegment
+                        && activity.indexOf("mEpisodeGridAdapter.addAll(items);", showSegment) > showSegment);
+
+        int selectedPosition = activity.indexOf("private int getSelectedEpisodePosition(List<Episode> episodes)");
+        int adjacent = activity.indexOf("private Episode getAdjacentEpisode(int offset)");
+        assertTrue("playback next/previous must follow the selected episode after reverse sorting",
+                selectedPosition >= 0
+                        && activity.indexOf("episodes.get(i).isSelected()", selectedPosition) > selectedPosition
+                        && adjacent >= 0
+                        && activity.indexOf("int position = getSelectedEpisodePosition(episodes);", adjacent) > adjacent
+                        && activity.indexOf("flag.getPosition()", adjacent) == -1);
+
+        int handler = activity.indexOf("public void onSegmentClick(int position)");
+        assertTrue("playback page must not jump focus away from the clicked episode range",
+                handler >= 0
+                        && activity.indexOf("selectEpisodeSegment(position, false);", handler) > handler);
+
+        int focusHandler = activity.indexOf("public void onSegmentFocus(int position)");
+        assertTrue("playback page must apply the focused episode range without jumping focus",
+                focusHandler >= 0
+                        && activity.indexOf("selectEpisodeSegment(position, false);", focusHandler) > focusHandler);
+
+        int dialogHandler = dialog.indexOf("public void onSegmentClick(int position)");
+        assertTrue("episode dialog must keep satisfying the ArrayAdapter click contract",
+                dialogHandler >= 0
+                        && dialog.indexOf("selectSegment(position, true);", dialogHandler) > dialogHandler
+                        && dialog.indexOf("public void onSegmentFocus(int position)") > dialogHandler);
     }
 
     @Test
@@ -587,6 +696,9 @@ public class VideoActivityLayoutTest {
                 source.indexOf("mTmdbHeaderView.getFusionSectionTitleColor()", method) > method);
         assertTrue("TMDB flag chips must use the same resolved playback theme as the moved labels",
                 methodBody.contains("mFlagAdapter.setTmdbLight(light)"));
+        assertTrue("fullscreen player action buttons must stay white instead of inheriting light TMDB text",
+                methodBody.contains("boolean playerOverlay = isFullscreen() || mBinding.control.action.getRoot().getParent() == mBinding.control.bottom")
+                        && methodBody.contains("playerOverlay ? Color.WHITE : color"));
         assertTrue("fusion playback icon retint must use a color filter", source.indexOf("setColorFilter(color)", method) > method);
         assertTrue("light fusion playback labels must clear inherited video shadows", source.indexOf("setShadowLayer(0, 0, 0, 0)", method) > method);
         assertTrue("episode view mode icon must be retinted after changing its drawable", viewModeRetint > viewModeIcon);
@@ -695,6 +807,27 @@ public class VideoActivityLayoutTest {
         assertTrue("TMDB header must apply theme after receiving the detail theme mode", apply > assign);
         assertTrue("TMDB header must not skip theme refresh just because the numeric mode is unchanged",
                 earlyReturn < 0 || earlyReturn > apply);
+    }
+
+    @Test
+    public void tmdbDetailThemeToggleRestylesExternalLinks() throws Exception {
+        Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int cycle = source.indexOf("private void cycleThemeMode()");
+        int apply = source.indexOf("applyDetailTheme();", cycle);
+        int external = source.indexOf("bindExternalLinks();", apply);
+        int render = source.indexOf("renderFlagSelection();", apply);
+        int method = source.indexOf("private int addExternalLink(String name, String url)");
+        int nextMethod = source.indexOf("private void openExternalLink(String url)", method);
+        String methodBody = nextMethod > method ? source.substring(method, nextMethod) : source.substring(method);
+
+        assertTrue(sourcePath + " is missing cycleThemeMode", cycle >= 0);
+        assertTrue("theme toggle must rebuild external link rows after theme colors change",
+                external > apply && external < render);
+        assertTrue("direct detail external link labels must use resolved theme text color",
+                methodBody.contains("label.setTextColor(colors.primary)"));
+        assertTrue("direct detail external link icons must use resolved theme icon color",
+                methodBody.contains("icon.setColorFilter(colors.secondary)"));
     }
 
     @Test

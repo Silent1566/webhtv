@@ -13,6 +13,7 @@ import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.dialog.UpdateDialog;
 import com.fongmi.android.tv.utils.Download;
 import com.fongmi.android.tv.utils.FileUtil;
+import com.fongmi.android.tv.utils.AppVersion;
 import com.fongmi.android.tv.utils.GithubProxy;
 import com.fongmi.android.tv.utils.Github;
 import com.fongmi.android.tv.utils.Notify;
@@ -114,10 +115,9 @@ public class Updater implements Download.Callback, UpdateListener {
     }
 
     private Update getUpdate(String channel) {
-        Update update = readUpdate(channel, Github.getCnbAsset(getManifestName(channel)), SOURCE_CNB);
-        if (update.hasManifest()) return update;
-        Update fallback = Update.CHANNEL_BETA.equals(channel) ? getGithubBetaUpdate(channel) : readUpdate(channel, Github.getGithubLatestAsset(getManifestName(channel)), SOURCE_GITHUB);
-        return fallback.hasManifest() ? fallback : update;
+        Update cnb = readUpdate(channel, Github.getCnbAsset(getManifestName(channel)), SOURCE_CNB);
+        Update github = Update.CHANNEL_BETA.equals(channel) ? getGithubBetaUpdate(channel) : readUpdate(channel, Github.getGithubLatestAsset(getManifestName(channel)), SOURCE_GITHUB);
+        return newer(cnb, github);
     }
 
     private Update getGithubBetaUpdate(String channel) {
@@ -162,8 +162,8 @@ public class Updater implements Download.Callback, UpdateListener {
             if (TextUtils.isEmpty(text)) throw new IllegalStateException("Empty update manifest: " + manifestUrl);
             JSONObject object = new JSONObject(text);
             update.name = object.optString("name");
-            update.desc = object.optString("desc");
-            update.notes = object.optString("notes");
+            update.desc = normalizeText(object.optString("desc"));
+            update.notes = normalizeText(object.optString("notes"));
             update.channel = object.optString("channel", channel);
             update.code = object.optInt("code");
             update.apk = object.optString("apk");
@@ -173,13 +173,35 @@ public class Updater implements Download.Callback, UpdateListener {
             if (isDefaultReleaseNotes(update.notes)) update.notes = "";
             if (TextUtils.isEmpty(update.notes)) {
                 String notes = getReleaseNotes(update.name);
-                if (!TextUtils.isEmpty(notes)) update.notes = notes;
+                if (!TextUtils.isEmpty(notes)) update.notes = normalizeText(notes);
             }
         } catch (Exception e) {
             e.printStackTrace();
             update.error = e.getMessage();
         }
         return update;
+    }
+
+    private Update newer(Update first, Update second) {
+        if (first == null || !first.hasManifest()) return second == null ? Update.empty(Update.CHANNEL_STABLE) : second;
+        if (second == null || !second.hasManifest()) return first;
+        if (second.code != first.code) return second.code > first.code ? second : first;
+        return compareName(second.name, first.name) > 0 ? second : first;
+    }
+
+    private int compareName(String left, String right) {
+        return AppVersion.stripPrefix(left).compareToIgnoreCase(AppVersion.stripPrefix(right));
+    }
+
+    private String normalizeText(String text) {
+        if (TextUtils.isEmpty(text)) return "";
+        return text
+                .replace("\\r\\n", "\n")
+                .replace("\\n", "\n")
+                .replace("\\r", "\n")
+                .replace("\\t", "\t")
+                .replace("\\\"", "\"")
+                .replace("\\'", "'");
     }
 
     private String getManifestName(String channel) {

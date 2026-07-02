@@ -587,6 +587,7 @@
     <string name="setting_custom_csp_extensions_toggle">扩展</string>
     <string name="setting_custom_csp_extensions">扩展 URL / JSON</string>
     <string name="setting_custom_csp_extensions_file">文件</string>
+    <string name="setting_custom_csp_files">文件</string>
     <string name="setting_custom_csp_extensions_example">https://example.com/site.js</string>
     <string name="setting_custom_csp_extensions_invalid">extensions JSON 格式无效</string>
     <string name="setting_custom_csp_permission_required">站点注入需要文件访问权限。</string>
@@ -666,6 +667,7 @@
     <string name="setting_theme_color">主题色彩</string>
     <string name="setting_auto">自动</string>
     <string name="setting_custom">自定义</string>
+    <string name="setting_language">语言</string>
     <string name="setting_size">图片尺寸</string>
     <string name="setting_ui_scale">界面大小</string>
     <string name="setting_doh">DoH</string>
@@ -1094,8 +1096,8 @@
     </string-array>
 
     <string-array name="select_search_ui">
-        <item>横向</item>
-        <item>纵向</item>
+        <item>横屏</item>
+        <item>竖屏</item>
     </string-array>
 
     <string-array name="select_search_column">
@@ -1123,6 +1125,12 @@
         <item>紧凑</item>
         <item>更紧凑</item>
         <item>更小</item>
+    </string-array>
+
+    <string-array name="select_language">
+        <item>跟随系统</item>
+        <item>简体中文</item>
+        <item>繁体中文</item>
     </string-array>
 
     <string-array name="select_scale">

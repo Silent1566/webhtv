@@ -13,6 +13,10 @@ public interface SubtitleProvider {
 
     boolean isEnabled();
 
+    default boolean isQueryIndependent() {
+        return false;
+    }
+
     List<SubtitleCandidate> search(SubtitleQuery query, SubtitleContext context) throws Exception;
 
     SubtitleAsset resolve(SubtitleCandidate candidate, SubtitleContext context) throws Exception;

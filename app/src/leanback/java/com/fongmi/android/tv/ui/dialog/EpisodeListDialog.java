@@ -99,8 +99,9 @@ public class EpisodeListDialog extends BaseAlertDialog implements FlagAdapter.On
     protected void initView() {
         panelWidth = getPanelWidth();
         if (tmdbCard) {
-            binding.getRoot().setBackgroundColor(0x66111820);
-            binding.getRoot().setPadding(ResUtil.dp2px(48), ResUtil.dp2px(34), ResUtil.dp2px(48), ResUtil.dp2px(26));
+            // TMDB 卡片模式：全屏显示，深色半透明背景，适中内边距
+            binding.getRoot().setBackgroundColor(0x80111820);
+            binding.getRoot().setPadding(ResUtil.dp2px(24), ResUtil.dp2px(20), ResUtil.dp2px(24), ResUtil.dp2px(16));
         }
         setRecyclerView();
         flagAdapter.addAll(flags == null ? new ArrayList<>() : flags);
@@ -143,9 +144,8 @@ public class EpisodeListDialog extends BaseAlertDialog implements FlagAdapter.On
     }
 
     private int getPanelWidth() {
-        int screen = ResUtil.getScreenWidth(requireContext());
-        if (tmdbCard) return screen;
-        return Math.max(ResUtil.dp2px(420), Math.min(ResUtil.dp2px(680), Math.round(screen * 0.42f)));
+        // 文本与卡片模式统一使用全屏宽度，避免长剧名在右侧窄抽屉中被截断
+        return ResUtil.getScreenWidth(requireContext());
     }
 
     private int getEpisodeContentWidth() {
@@ -180,11 +180,21 @@ public class EpisodeListDialog extends BaseAlertDialog implements FlagAdapter.On
         int selectedEpisode = getSelectedEpisodePosition(allEpisodes);
         segmentStarts.clear();
         segmentEnds.clear();
-        if (tmdbCard || size > segment) for (int i = 0; i < size; i += segment) {
-            segmentStarts.add(i);
-            int end = Math.min(i + segment, size);
-            segmentEnds.add(end);
-            items.add((i + 1) + "-" + end);
+        // 修复：对于 tmdbCard 模式，始终创建分段（即使 size <= segment），避免一次性加载所有剧集
+        if (tmdbCard) {
+            for (int i = 0; i < size; i += segment) {
+                segmentStarts.add(i);
+                int end = Math.min(i + segment, size);
+                segmentEnds.add(end);
+                items.add((i + 1) + "-" + end);
+            }
+        } else if (size > segment) {
+            for (int i = 0; i < size; i += segment) {
+                segmentStarts.add(i);
+                int end = Math.min(i + segment, size);
+                segmentEnds.add(end);
+                items.add((i + 1) + "-" + end);
+            }
         }
         selectedSegment = resolveSelectedSegment(selectedEpisode);
         arrayAdapter.setSegmentSize(segment);
@@ -368,10 +378,10 @@ public class EpisodeListDialog extends BaseAlertDialog implements FlagAdapter.On
     }
 
     private int getTmdbEpisodeSegmentSize(int size) {
-        List<EpisodeRangePolicy.Range> ranges = EpisodeRangePolicy.build(size, episodeAdapter == null ? 0 : episodeAdapter.getPosition(), false);
-        if (ranges.isEmpty()) return getEpisodeSegmentSize(size);
-        EpisodeRangePolicy.Range first = ranges.get(0);
-        return Math.max(1, first.end() - first.start());
+        // 强制使用固定分段大小，避免一次性加载过多剧集导致卡顿
+        if (size <= 30) return size;  // 30集以下不分段
+        if (size <= 100) return 30;   // 31-100集，每段30集
+        return 40;                    // 100集以上，每段40集
     }
 
     private int getTmdbCardColumn() {
@@ -434,6 +444,16 @@ public class EpisodeListDialog extends BaseAlertDialog implements FlagAdapter.On
     }
 
     @Override
+    public void onSegmentClick(int position) {
+        selectSegment(position, true);
+    }
+
+    @Override
+    public void onSegmentFocus(int position) {
+        selectSegment(position, true);
+    }
+
+    @Override
     public void onDismiss(@NonNull DialogInterface dialog) {
         super.onDismiss(dialog);
         if (dismissListener != null) dismissListener.onDismiss(dialog);
@@ -460,8 +480,9 @@ public class EpisodeListDialog extends BaseAlertDialog implements FlagAdapter.On
         if (window == null || binding == null) return;
         window.getDecorView().setPadding(0, 0, 0, 0);
         clearParentPaddingAndFillHeight();
-        int gravity = tmdbCard ? Gravity.CENTER : Gravity.END | Gravity.BOTTOM;
-        int width = tmdbCard ? WindowManager.LayoutParams.MATCH_PARENT : panelWidth;
+        // 选集对话框统一全屏居中显示，文本模式不再使用右侧侧抽屉
+        int gravity = Gravity.CENTER;
+        int width = WindowManager.LayoutParams.MATCH_PARENT;
         window.setGravity(gravity);
         WindowManager.LayoutParams params = window.getAttributes();
         params.width = width;

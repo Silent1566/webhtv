@@ -59,7 +59,7 @@ public class SettingPersonalActivity extends BaseActivity {
         mBinding.homeHistory.setOnClickListener(this::setHomeHistory);
         mBinding.tmdbEpisodeFileSize.setOnClickListener(this::setTmdbEpisodeFileSize);
         mBinding.searchThread.setOnClickListener(this::setSearchThread);
-        // mBinding.searchUi.setOnClickListener(this::setSearchUi); // 暂不支持横向/纵向布局切换
+        mBinding.searchUi.setOnClickListener(this::setSearchUi);
         // mBinding.searchColumn.setOnClickListener(this::setSearchColumn); // 在搜索页面切换更方便
     }
 
@@ -74,7 +74,7 @@ public class SettingPersonalActivity extends BaseActivity {
         mBinding.homeHistoryText.setText(getSwitch(Setting.isHomeHistory()));
         mBinding.tmdbEpisodeFileSizeText.setText(getSwitch(Setting.isTmdbEpisodeFileSize()));
         mBinding.searchThreadText.setText(String.valueOf(Setting.getSearchThread()));
-        // mBinding.searchUiText.setText((searchUi = getResources().getStringArray(R.array.select_search_ui))[Setting.getSearchUi()]); // 暂不支持
+        mBinding.searchUiText.setText((searchUi = getResources().getStringArray(R.array.select_search_ui))[Setting.getSearchUi()]);
         // mBinding.searchColumnText.setText(getSearchColumnText()); // 在搜索页面切换更方便
     }
 
@@ -150,13 +150,10 @@ public class SettingPersonalActivity extends BaseActivity {
         setText();
     }
 
-    // 暂不支持横向/纵向布局切换
-    /*
     private void setSearchUi(View view) {
         Setting.putSearchUi((Setting.getSearchUi() + 1) % searchUi.length);
         setText();
     }
-    */
 
     // 在搜索页面切换更方便，此处不再提供设置入口
     /*

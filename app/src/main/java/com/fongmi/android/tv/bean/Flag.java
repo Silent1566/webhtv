@@ -172,7 +172,11 @@ public class Flag implements Parcelable, Diffable<Flag> {
         return getEpisodes().stream()
                 .map(episode -> new Episode.Rule(episode, episode.getScore(remarks, number)))
                 .filter(Episode.Rule::find).max(Comparator.comparingInt(Episode.Rule::score)).map(Episode.Rule::episode)
-                .orElseGet(() -> getPosition() != -1 ? getEpisodes().get(getPosition()) : strict ? null : getEpisodes().get(0));
+                .orElseGet(() -> isPositionValid() ? getEpisodes().get(getPosition()) : strict ? null : getEpisodes().get(0));
+    }
+
+    private boolean isPositionValid() {
+        return getPosition() >= 0 && getPosition() < getEpisodes().size();
     }
 
     public Episode find(Episode target, boolean strict) {

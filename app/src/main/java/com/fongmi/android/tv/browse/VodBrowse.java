@@ -64,7 +64,7 @@ class VodBrowse {
     @NonNull
     static ImmutableList<MediaItem> search(@NonNull String query) {
         VodConfig.get().ensureLoaded();
-        String keyword = Trans.t2s(query);
+        String keyword = Trans.t2s(false, query);
         List<Site> sites = VodConfig.get().getSites().stream().filter(Site::isSearchable).toList();
         List<ListenableFuture<List<MediaItem>>> futures = sites.stream().map(site -> Task.largeExecutor().submit(() -> searchSite(site, keyword))).toList();
         List<MediaItem> items = collectResults(futures);
@@ -306,7 +306,7 @@ class VodBrowse {
     private static int matchScore(@NonNull MediaItem item, @NonNull String keyword) {
         CharSequence title = item.mediaMetadata.title;
         if (title == null) return 0;
-        String name = Trans.t2s(title.toString());
+        String name = Trans.t2s(false, title.toString());
         if (name.equals(keyword)) return 2;
         if (name.contains(keyword)) return 1;
         return 0;

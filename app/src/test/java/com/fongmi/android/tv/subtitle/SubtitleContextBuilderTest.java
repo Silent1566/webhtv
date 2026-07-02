@@ -7,6 +7,7 @@ import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 public class SubtitleContextBuilderTest {
 
@@ -56,5 +57,35 @@ public class SubtitleContextBuilderTest {
 
         SubtitleContext context = new SubtitleContextBuilder().build(request);
         assertEquals("en", context.getPreferredLanguage());
+    }
+
+    @Test
+    public void build_extractsLocalMediaPathFromFileUrl() {
+        SubtitleRequest request = SubtitleRequest.builder()
+                .siteKey("test")
+                .vodId("movie-1")
+                .vodName("想见你")
+                .playUrl("file:///sdcard/Movies/movie.mkv")
+                .allowTmdbLookup(false)
+                .build();
+
+        SubtitleContext context = new SubtitleContextBuilder().build(request);
+        assertEquals("/sdcard/Movies/movie.mkv", context.getMediaPath());
+        assertFalse(context.isNetworkStream());
+    }
+
+    @Test
+    public void build_leavesNetworkUrlOutOfMediaPath() {
+        SubtitleRequest request = SubtitleRequest.builder()
+                .siteKey("test")
+                .vodId("movie-1")
+                .vodName("想见你")
+                .playUrl("https://example.com/movie.mkv")
+                .allowTmdbLookup(false)
+                .build();
+
+        SubtitleContext context = new SubtitleContextBuilder().build(request);
+        assertTrue(context.getMediaPath().isEmpty());
+        assertTrue(context.isNetworkStream());
     }
 }

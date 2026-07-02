@@ -55,6 +55,7 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
 
     private FragmentSettingBinding mBinding;
     private String[] size;
+    private String[] language;
     private String[] uiScale;
 
     public static SettingFragment newInstance() {
@@ -105,6 +106,7 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
         mBinding.themeColorText.setText(getThemeText());
         mBinding.dohText.setText(getDohList()[getDohIndex()]);
         mBinding.incognitoText.setText(getSwitch(Setting.isIncognito()));
+        mBinding.languageText.setText((language = ResUtil.getStringArray(R.array.select_language))[Setting.getLanguageIndex()]);
         mBinding.sizeText.setText((size = ResUtil.getStringArray(R.array.select_size))[PlayerSetting.getSize()]);
         mBinding.uiScaleText.setText((uiScale = ResUtil.getStringArray(R.array.select_ui_scale))[Setting.getUiScaleIndex()]);
     }
@@ -125,6 +127,7 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
         mBinding.live.setOnClickListener(this::onLive);
         mBinding.wall.setOnClickListener(this::onWall);
         mBinding.size.setOnClickListener(this::setSize);
+        mBinding.language.setOnClickListener(this::setLanguage);
         mBinding.uiScale.setOnClickListener(this::setUiScale);
         mBinding.cache.setOnClickListener(this::onCache);
         mBinding.backup.setOnClickListener(this::onBackup);
@@ -309,6 +312,16 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
             mBinding.sizeText.setText(size[which]);
             PlayerSetting.putSize(which);
             RefreshEvent.size();
+            dialog.dismiss();
+        }).show();
+    }
+
+    private void setLanguage(View view) {
+        new MaterialAlertDialogBuilder(requireActivity()).setTitle(R.string.setting_language).setNegativeButton(R.string.dialog_negative, null).setSingleChoiceItems(language, Setting.getLanguageIndex(), (dialog, which) -> {
+            if (which != Setting.getLanguageIndex()) {
+                Setting.putLanguageIndex(which);
+                RefreshEvent.language();
+            }
             dialog.dismiss();
         }).show();
     }

@@ -60,4 +60,21 @@ public class XunleiSubtitleProviderTest {
         assertEquals(2019, second.getYear());
         assertEquals("简体中文", second.getLanguage());
     }
+
+    @Test
+    public void parseCandidates_boostsCidMatch() {
+        String body = "{"
+                + "\"code\":0,"
+                + "\"result\":\"ok\","
+                + "\"data\":["
+                + "{\"cid\":\"match-cid\",\"url\":\"https://example.com/match.srt\",\"ext\":\"srt\",\"name\":\"match.srt\",\"languages\":[\"默认\"]},"
+                + "{\"cid\":\"other-cid\",\"url\":\"https://example.com/other.srt\",\"ext\":\"srt\",\"name\":\"other.srt\",\"languages\":[\"默认\"]}"
+                + "]"
+                + "}";
+        SubtitleQuery query = new SubtitleQuery("title", "流浪地球", "zh", SubtitleQuerySource.SOURCE_TITLE, SubtitleStrictness.NORMAL, 2019, -1, -1);
+
+        List<SubtitleCandidate> candidates = XunleiSubtitleProvider.parseCandidates(body, query, new SubtitleTitleParser(), "match-cid");
+
+        assertTrue(candidates.get(0).getScore() > candidates.get(1).getScore());
+    }
 }

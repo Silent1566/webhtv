@@ -81,8 +81,8 @@ public class Tv {
         @Attribute(name = "channel", required = false)
         private String channel;
 
-        @Element(name = "title", required = false)
-        private String title;
+        @ElementList(entry = "title", required = false, inline = true)
+        private List<Title> title;
 
         public String getStart() {
             return TextUtils.isEmpty(start) ? "" : start;
@@ -97,7 +97,18 @@ public class Tv {
         }
 
         public String getTitle() {
-            return TextUtils.isEmpty(title) ? "" : title;
+            return title == null ? "" : title.stream().map(Title::getText).filter(text -> !text.isEmpty()).findFirst().orElse("");
+        }
+    }
+
+    @Root(name = "title", strict = false)
+    public static class Title {
+
+        @Text(required = false)
+        private String text;
+
+        public String getText() {
+            return TextUtils.isEmpty(text) ? "" : text;
         }
     }
 

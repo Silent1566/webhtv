@@ -40,6 +40,9 @@ import java.util.Objects;
 
 public class CollectActivity extends BaseActivity implements CollectAdapter.OnClickListener, SearchAdapter.OnClickListener, CustomScroller.Callback {
 
+    private static final float SEARCH_CARD_RATIO = 0.72f;
+    private static final int SEARCH_LIST_ROW_HEIGHT_DP = 116;
+
     private ActivityCollectBinding mBinding;
     private CollectAdapter mCollectAdapter;
     private SearchAdapter mSearchAdapter;
@@ -127,12 +130,17 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
             if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
 
             if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-                // 按下键：返回到搜索结果的第一个项
-                if (mBinding.recycler.getChildCount() > 0) {
-                    mBinding.recycler.getChildAt(0).requestFocus();
+                // 横屏布局先回到站源行，竖屏布局直接回到搜索结果。
+                if (isSearchLandscape()) {
+                    focusSelectedCollect();
                     return true;
                 }
+                return focusFirstResult();
             } else if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                if (isSearchLandscape()) {
+                    focusSelectedCollect();
+                    return true;
+                }
                 // 按左键：返回到收藏列表的第一项
                 if (mBinding.collect.getChildCount() > 0) {
                     mBinding.collect.setSelectedPosition(0);
@@ -147,16 +155,28 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
     private void setRecyclerView() {
         int count = getCount();
         mScroller = new CustomScroller(this);
+        mCollectAdapter = new CollectAdapter(this);
         mBinding.collect.setHasFixedSize(true);
         mBinding.collect.setItemAnimator(null);
         mBinding.collect.setVerticalSpacing(ResUtil.dp2px(12));
-        mBinding.collect.setAdapter(mCollectAdapter = new CollectAdapter(this));
+        mBinding.collect.setAdapter(mCollectAdapter);
         mBinding.collect.addOnChildViewHolderSelectedListener(new OnChildViewHolderSelectedListener() {
             @Override
             public void onChildViewHolderSelected(@NonNull RecyclerView parent, @Nullable RecyclerView.ViewHolder child, int position, int subposition) {
                 scheduleCollect(position, 260);
             }
         });
+        mBinding.collectHorizontal.setHasFixedSize(true);
+        mBinding.collectHorizontal.setItemAnimator(null);
+        mBinding.collectHorizontal.setHorizontalSpacing(ResUtil.dp2px(16));
+        mBinding.collectHorizontal.setAdapter(mCollectAdapter);
+        mBinding.collectHorizontal.addOnChildViewHolderSelectedListener(new OnChildViewHolderSelectedListener() {
+            @Override
+            public void onChildViewHolderSelected(@NonNull RecyclerView parent, @Nullable RecyclerView.ViewHolder child, int position, int subposition) {
+                scheduleCollect(position, 260);
+            }
+        });
+        setSearchLayout();
         mBinding.recycler.setHasFixedSize(true);
         mBinding.recycler.setItemAnimator(null);
         mBinding.recycler.setItemViewCacheSize(count * 3);
@@ -187,11 +207,18 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
                 }
             }
         });
-        mBinding.recycler.setAdapter(mSearchAdapter = new SearchAdapter(this, getItemWidth(count), getItemHeight(count)));
+        mBinding.recycler.setAdapter(mSearchAdapter = new SearchAdapter(this, getItemWidth(count), getItemHeight(count), isListMode(count)));
     }
 
     private boolean canLoadImage() {
         return !isFinishing() && !isDestroyed();
+    }
+
+    private void setSearchLayout() {
+        boolean horizontal = isSearchLandscape();
+        mBinding.collectHorizontal.setVisibility(horizontal ? android.view.View.VISIBLE : android.view.View.GONE);
+        mBinding.collect.setVisibility(horizontal ? android.view.View.GONE : android.view.View.VISIBLE);
+        mBinding.recycler.setPadding(ResUtil.dp2px(horizontal ? 24 : 0), 0, ResUtil.dp2px(24), ResUtil.dp2px(24));
     }
 
     private void setViewModel() {
@@ -243,14 +270,23 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
     private int getCount() {
         int column = Setting.getSearchColumn();
         if (column == 1) return 1; // 1列 (列表模式)
+        if (column == 2) return 2; // 2列
         return getAutoCount(); // 自适应
     }
 
     private int getAutoCount() {
-        int width = ResUtil.getScreenWidth() - ResUtil.dp2px(220);
+        int width = getResultWidth();
         int itemWidth = ResUtil.dp2px(120);
         int spacing = ResUtil.dp2px(8);
-        return Math.max(3, Math.min(7, (width + spacing) / (itemWidth + spacing)));
+        return Math.max(3, Math.min(isSearchLandscape() ? 6 : 7, (width + spacing) / (itemWidth + spacing)));
+    }
+
+    private boolean isSearchLandscape() {
+        return Setting.getSearchUi() == 0;
+    }
+
+    private boolean isListMode(int count) {
+        return count == 1;
     }
 
     private void setSearchColumn() {
@@ -289,7 +325,7 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
         if (layoutManager != null) {
             layoutManager.setSpanCount(count);
         }
-        mSearchAdapter = new SearchAdapter(this, getItemWidth(count), getItemHeight(count));
+        mSearchAdapter = new SearchAdapter(this, getItemWidth(count), getItemHeight(count), isListMode(count));
         mBinding.recycler.setAdapter(mSearchAdapter);
         mBinding.recycler.setItemViewCacheSize(count * 3);
 
@@ -303,13 +339,17 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
     }
 
     private int getItemWidth(int count) {
-        int width = ResUtil.getScreenWidth() - ResUtil.dp2px(220);
+        int width = getResultWidth();
         int spacing = ResUtil.dp2px(8) * (count - 1);
         return (width - spacing) / count;
     }
 
+    private int getResultWidth() {
+        return ResUtil.getScreenWidth() - ResUtil.dp2px(isSearchLandscape() ? 48 : 220);
+    }
+
     private int getItemHeight(int count) {
-        return (int) (getItemWidth(count) / 0.72f);
+        return isListMode(count) ? ResUtil.dp2px(SEARCH_LIST_ROW_HEIGHT_DP) : (int) (getItemWidth(count) / SEARCH_CARD_RATIO);
     }
 
     private void setCollect(Result result) {
@@ -367,6 +407,15 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
     @Override
     public boolean onCollectKey(int position, int keyCode, KeyEvent event) {
         if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+        if (isSearchLandscape()) {
+            if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+                mBinding.searchColumn.requestFocus();
+                return true;
+            }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) return focusFirstResult();
+            if (position == 0 && keyCode == KeyEvent.KEYCODE_DPAD_LEFT) return true;
+            return false;
+        }
         // 在第一项按上键，跳转到切换按钮
         if (position == 0 && keyCode == KeyEvent.KEYCODE_DPAD_UP) {
             mBinding.searchColumn.requestFocus();
@@ -447,12 +496,26 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
     }
 
     private boolean onSearchUp(int position, int count) {
-        // 如果在第一行，按上键跳转到切换按钮
         if (position < count) {
-            mBinding.searchColumn.requestFocus();
+            if (isSearchLandscape()) focusSelectedCollect();
+            else mBinding.searchColumn.requestFocus();
             return true;
         }
         return false;
+    }
+
+    private boolean focusFirstResult() {
+        if (mBinding.recycler.getChildCount() == 0) return false;
+        mBinding.recycler.getChildAt(0).requestFocus();
+        return true;
+    }
+
+    private void focusSelectedCollect() {
+        RecyclerView collect = isSearchLandscape() ? mBinding.collectHorizontal : mBinding.collect;
+        int position = mCollectAdapter != null ? mCollectAdapter.getPosition() : 0;
+        RecyclerView.ViewHolder holder = collect.findViewHolderForAdapterPosition(position);
+        if (holder != null) holder.itemView.requestFocus();
+        else collect.requestFocus();
     }
 
     private boolean onSearchDown(int position, int count) {

@@ -41,6 +41,20 @@
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 
+    <androidx.leanback.widget.HorizontalGridView
+        android:id="@+id/collectHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="84dp"
+        android:clipChildren="false"
+        android:clipToPadding="false"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:paddingBottom="16dp"
+        android:visibility="gone"
+        app:focusOutEnd="false"
+        app:focusOutFront="false"
+        tools:visibility="visible" />
+
     <androidx.appcompat.widget.LinearLayoutCompat
         android:layout_width="match_parent"
         android:layout_height="0dp"

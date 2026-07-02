@@ -63,6 +63,29 @@ public class TmdbDetailActivityLayoutTest {
     }
 
     @Test
+    public void mobileInlineCastReflectionKeepsR8MethodNames() throws Exception {
+        Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        Path proguardPath = findAppModulePath().resolve("proguard-rules.pro");
+        String proguard = new String(Files.readAllBytes(proguardPath), StandardCharsets.UTF_8);
+        int inlineCast = source.indexOf("protected void onInlineCast()");
+        int keepRule = proguard.indexOf("-keepclassmembernames class com.fongmi.android.tv.ui.dialog.CastDialog");
+
+        assertTrue(sourcePath + " is missing onInlineCast", inlineCast >= 0);
+        assertTrue("inline cast reflects CastDialog.create", source.indexOf("getMethod(\"create\")", inlineCast) > inlineCast);
+        assertTrue("inline cast reflects CastDialog.history", source.indexOf("getMethod(\"history\", History.class)", inlineCast) > inlineCast);
+        assertTrue("inline cast reflects CastDialog.video", source.indexOf("getMethod(\"video\", videoClass)", inlineCast) > inlineCast);
+        assertTrue("inline cast reflects CastDialog.fm", source.indexOf("getMethod(\"fm\", boolean.class)", inlineCast) > inlineCast);
+        assertTrue("inline cast reflects CastDialog.show", source.indexOf("getMethod(\"show\", androidx.fragment.app.FragmentActivity.class)", inlineCast) > inlineCast);
+        assertTrue("release R8 must keep CastDialog method names used by inline cast reflection", keepRule >= 0);
+        assertTrue("release R8 must keep CastDialog.create name", proguard.indexOf("public static com.fongmi.android.tv.ui.dialog.CastDialog create();", keepRule) > keepRule);
+        assertTrue("release R8 must keep CastDialog.history name", proguard.indexOf("public com.fongmi.android.tv.ui.dialog.CastDialog history(com.fongmi.android.tv.bean.History);", keepRule) > keepRule);
+        assertTrue("release R8 must keep CastDialog.video name", proguard.indexOf("public com.fongmi.android.tv.ui.dialog.CastDialog video(com.fongmi.android.tv.bean.CastVideo);", keepRule) > keepRule);
+        assertTrue("release R8 must keep CastDialog.fm name", proguard.indexOf("public com.fongmi.android.tv.ui.dialog.CastDialog fm(boolean);", keepRule) > keepRule);
+        assertTrue("release R8 must keep CastDialog.show name", proguard.indexOf("public void show(androidx.fragment.app.FragmentActivity);", keepRule) > keepRule);
+    }
+
+    @Test
     public void mobileFusionDetailKeepsInlinePlayerActionsInsideOverlay() throws Exception {
         Path layoutPath = findMainResPath().resolve(Path.of("layout", "activity_tmdb_detail.xml"));
         String layout = new String(Files.readAllBytes(layoutPath), StandardCharsets.UTF_8);
@@ -510,5 +533,10 @@ public class TmdbDetailActivityLayoutTest {
         Path moduleRelative = Path.of("src", "main", "res");
         if (Files.exists(moduleRelative)) return moduleRelative;
         return Path.of("app", "src", "main", "res");
+    }
+
+    private static Path findAppModulePath() {
+        if (Files.exists(Path.of("proguard-rules.pro"))) return Path.of(".");
+        return Path.of("app");
     }
 }

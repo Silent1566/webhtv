@@ -18,8 +18,10 @@ import com.google.gson.JsonParser;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.io.RandomAccessFile;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -69,7 +71,7 @@ public final class XunleiSubtitleProvider implements SubtitleProvider {
                 return new ArrayList<>();
             }
             String body = response.body().string();
-            List<SubtitleCandidate> candidates = parseCandidates(body, query, parser);
+            List<SubtitleCandidate> candidates = parseCandidates(body, query, parser, computeContentId(context));
             Log.i(TAG, "xunlei search candidates q=" + query.getText() + " count=" + candidates.size());
             return candidates;
         }
@@ -87,6 +89,10 @@ public final class XunleiSubtitleProvider implements SubtitleProvider {
     }
 
     static List<SubtitleCandidate> parseCandidates(String body, SubtitleQuery query, SubtitleTitleParser parser) {
+        return parseCandidates(body, query, parser, "");
+    }
+
+    static List<SubtitleCandidate> parseCandidates(String body, SubtitleQuery query, SubtitleTitleParser parser, String contentId) {
         List<SubtitleCandidate> items = new ArrayList<>();
         if (isEmpty(body) || query == null) return items;
         JsonObject root = JsonParser.parseString(body).getAsJsonObject();
@@ -97,7 +103,7 @@ public final class XunleiSubtitleProvider implements SubtitleProvider {
         for (JsonElement element : data) {
             if (!element.isJsonObject()) continue;
             try {
-                SubtitleCandidate candidate = parseCandidate(element.getAsJsonObject(), query, parser);
+                SubtitleCandidate candidate = parseCandidate(element.getAsJsonObject(), query, parser, contentId);
                 if (candidate != null) items.add(candidate);
             } catch (Exception ignored) {
             }
@@ -105,7 +111,7 @@ public final class XunleiSubtitleProvider implements SubtitleProvider {
         return items;
     }
 
-    private static SubtitleCandidate parseCandidate(JsonObject item, SubtitleQuery query, SubtitleTitleParser parser) {
+    private static SubtitleCandidate parseCandidate(JsonObject item, SubtitleQuery query, SubtitleTitleParser parser, String contentId) {
         String url = safeString(item, "url");
         String id = firstString(item, "cid", "gcid");
         if (isEmpty(id)) id = url;
@@ -120,6 +126,11 @@ public final class XunleiSubtitleProvider implements SubtitleProvider {
         int season = parser == null ? -1 : parser.seasonNumber(name);
         int episode = parser == null ? -1 : parser.episodeNumber(name);
         int score = Math.max(safeInt(item, "score"), safeInt(item, "fingerprintf_score"));
+        SubtitleMatchType matchType = SubtitleMatchType.METADATA_FUZZY;
+        if (!isEmpty(contentId) && contentId.equalsIgnoreCase(safeString(item, "cid"))) {
+            score += 120;
+            matchType = SubtitleMatchType.METADATA_STRICT;
+        }
 
         JsonObject payload = new JsonObject();
         payload.addProperty("url", url);
@@ -128,7 +139,42 @@ public final class XunleiSubtitleProvider implements SubtitleProvider {
         payload.addProperty("duration", duration);
         payload.addProperty("gcid", safeString(item, "gcid"));
         payload.addProperty("cid", safeString(item, "cid"));
-        return new SubtitleCandidate(NAME, id, name, language, format, releaseInfo(extraName, duration), score, year, season, episode, SubtitleMatchType.METADATA_FUZZY, query.getKey(), true, payload.toString());
+        return new SubtitleCandidate(NAME, id, name, language, format, releaseInfo(extraName, duration), score, year, season, episode, matchType, query.getKey(), true, payload.toString());
+    }
+
+    private static String computeContentId(SubtitleContext context) {
+        String mediaPath = context == null ? "" : context.getMediaPath();
+        if (isEmpty(mediaPath)) return "";
+        try {
+            File file = new File(mediaPath);
+            return file.isFile() ? computeContentId(file) : "";
+        } catch (Exception ignored) {
+            return "";
+        }
+    }
+
+    static String computeContentId(File file) throws Exception {
+        if (file == null || !file.isFile()) return "";
+        long fileSize = file.length();
+        byte[] buffer;
+        try (RandomAccessFile input = new RandomAccessFile(file, "r")) {
+            if (fileSize < 0xf000) {
+                buffer = new byte[(int) fileSize];
+                input.readFully(buffer);
+            } else {
+                buffer = new byte[0xf000];
+                input.readFully(buffer, 0, 0x5000);
+                input.seek(fileSize / 3);
+                input.readFully(buffer, 0x5000, 0x5000);
+                input.seek(fileSize - 0x5000);
+                input.readFully(buffer, 0xa000, 0x5000);
+            }
+        }
+        MessageDigest digest = MessageDigest.getInstance("SHA-1");
+        byte[] hash = digest.digest(buffer);
+        StringBuilder builder = new StringBuilder();
+        for (byte b : hash) builder.append(String.format("%02X", b & 0xff));
+        return builder.toString();
     }
 
     private File download(String url, SubtitleCandidate candidate, String filename) throws Exception {

@@ -62,6 +62,7 @@ import com.fongmi.android.tv.model.LiveViewModel;
 import com.fongmi.android.tv.player.PlayerHelper;
 import com.fongmi.android.tv.player.PlayerManager;
 import com.fongmi.android.tv.player.Source;
+import com.fongmi.android.tv.playback.PlaybackOrientation;
 import com.fongmi.android.tv.service.PlaybackService;
 import com.fongmi.android.tv.setting.LiveEpgSetting;
 import com.fongmi.android.tv.setting.LiveSetting;
@@ -600,15 +601,15 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
     }
 
     private int getLaunchOrient() {
-        return ResUtil.isPad() ? ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE : ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT;
+        return ResUtil.isPad() ? ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE : PlaybackOrientation.getPortraitVideoSizeOrientation();
     }
 
     private int getFullscreenOrient() {
-        return ResUtil.isPad() ? ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE : ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE;
+        return ResUtil.isPad() ? ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE : PlaybackOrientation.getEnterFullscreenOrientation(false);
     }
 
     private int getEmbeddedOrient() {
-        return ResUtil.isPad() ? ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE : ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT;
+        return ResUtil.isPad() ? ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE : PlaybackOrientation.getPortraitVideoSizeOrientation();
     }
 
     private void checkPlay() {
@@ -759,13 +760,8 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
     }
 
     private int getLockOrient() {
-        if (isLock()) {
-            return ResUtil.getScreenOrientation(this);
-        } else if (isRotate()) {
-            return ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT;
-        } else {
-            return ResUtil.isLand(this) ? ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE : ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT;
-        }
+        if (ResUtil.isPad() && !isLock()) return ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE;
+        return PlaybackOrientation.getLockOrientation(this, isLock(), isRotate());
     }
 
     private void hideUI() {

@@ -16,6 +16,7 @@ import com.fongmi.android.tv.databinding.AdapterSiteBinding;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.setting.SiteHealthStore;
 import com.fongmi.android.tv.setting.SiteBlockSetting;
+import com.fongmi.android.tv.setting.SiteOrderStore;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -49,6 +50,8 @@ public class SiteAdapter extends RecyclerView.Adapter<SiteAdapter.ViewHolder> {
         void onSearchClick(int position, Site item);
 
         void onChangeClick(int position, Site item);
+
+        boolean onTextLongClick(ViewHolder holder);
 
         boolean onSearchLongClick(Site item);
 
@@ -87,6 +90,7 @@ public class SiteAdapter extends RecyclerView.Adapter<SiteAdapter.ViewHolder> {
     private void addAll() {
         mAllItems.addAll(SiteBlockSetting.filter(VodConfig.get().getSites(), block));
         if (Setting.isSiteHealthDialogSort()) SiteHealthStore.sortSites(mAllItems);
+        SiteOrderStore.sortSites(mAllItems);
         filter(group, keyword);
     }
 
@@ -119,6 +123,29 @@ public class SiteAdapter extends RecyclerView.Adapter<SiteAdapter.ViewHolder> {
             if (matchGroup && matchKeyword) mItems.add(site);
         }
         notifyDataSetChanged();
+    }
+
+    public boolean drag(int from, int to) {
+        if (from == RecyclerView.NO_POSITION || to == RecyclerView.NO_POSITION) return false;
+        if (from < 0 || to < 0 || from >= mItems.size() || to >= mItems.size() || from == to) return false;
+        Site moving = mItems.get(from);
+        Site target = mItems.get(to);
+        moveAllItem(moving, target, from < to);
+        mItems.remove(from);
+        mItems.add(to, moving);
+        notifyItemMoved(from, to);
+        SiteOrderStore.save(mAllItems);
+        return true;
+    }
+
+    private void moveAllItem(Site moving, Site target, boolean afterTarget) {
+        int oldIndex = mAllItems.indexOf(moving);
+        int targetIndex = mAllItems.indexOf(target);
+        if (oldIndex < 0 || targetIndex < 0 || oldIndex == targetIndex) return;
+        mAllItems.remove(oldIndex);
+        if (oldIndex < targetIndex) targetIndex--;
+        int insertIndex = afterTarget ? targetIndex + 1 : targetIndex;
+        mAllItems.add(Math.max(0, Math.min(insertIndex, mAllItems.size())), moving);
     }
 
     @Override
@@ -157,6 +184,7 @@ public class SiteAdapter extends RecyclerView.Adapter<SiteAdapter.ViewHolder> {
         });
         holder.binding.search.setOnClickListener(v -> listener.onSearchClick(position, item));
         holder.binding.change.setOnClickListener(v -> listener.onChangeClick(position, item));
+        holder.binding.text.setOnLongClickListener(v -> listener.onTextLongClick(holder));
         holder.binding.search.setOnLongClickListener(v -> listener.onSearchLongClick(item));
         holder.binding.change.setOnLongClickListener(v -> listener.onChangeLongClick(item));
     }

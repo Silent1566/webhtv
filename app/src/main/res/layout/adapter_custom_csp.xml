@@ -39,6 +39,20 @@
             android:text="@string/setting_custom_csp_home"
             android:textColor="@color/black" />
 
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/localFiles"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:layout_marginStart="8dp"
+            android:minHeight="40dp"
+            android:minWidth="76dp"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:text="@string/setting_custom_csp_files"
+            android:textColor="@color/dialog_tonal_button_text"
+            app:backgroundTint="@color/dialog_tonal_button_bg" />
+
         <Space
             android:layout_width="0dp"
             android:layout_height="1dp"

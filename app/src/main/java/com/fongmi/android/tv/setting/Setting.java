@@ -9,6 +9,7 @@ import android.content.res.Configuration;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
+import android.os.LocaleList;
 import android.provider.Settings;
 import android.util.DisplayMetrics;
 
@@ -25,7 +26,10 @@ import com.fongmi.android.tv.bean.Update;
 import com.fongmi.android.tv.utils.WebViewUtil;
 import com.github.catvod.crawler.DebugLogStore;
 import com.github.catvod.crawler.SpiderDebug;
+import com.github.catvod.utils.Trans;
 import com.github.catvod.utils.Prefers;
+
+import java.util.Locale;
 
 public class Setting {
 
@@ -46,6 +50,11 @@ public class Setting {
     public static final int DETAIL_INTERACTION_SYSTEM = 0;
     public static final int DETAIL_INTERACTION_ORIGINAL = 1;
     public static final int DETAIL_THEME_CURRENT = DETAIL_STYLE_NATIVE;
+    public static final int LANGUAGE_FOLLOW_SYSTEM = 0;
+    public static final int LANGUAGE_SIMPLIFIED = 1;
+    public static final int LANGUAGE_TRADITIONAL = 2;
+    private static final int[] LANGUAGE_OPTIONS = {LANGUAGE_FOLLOW_SYSTEM, LANGUAGE_SIMPLIFIED, LANGUAGE_TRADITIONAL};
+
     public static final int UI_SCALE_FOLLOW_SYSTEM = 0;
     public static final int UI_SCALE_STANDARD = 1;
     public static final int UI_SCALE_COMPACT = 2;
@@ -341,6 +350,57 @@ public class Setting {
 
     public static void putIncognito(boolean incognito) {
         Prefers.put("incognito", incognito);
+    }
+
+    public static int getLanguage() {
+        int language = Prefers.getInt("language", LANGUAGE_FOLLOW_SYSTEM);
+        return isLanguage(language) ? language : LANGUAGE_FOLLOW_SYSTEM;
+    }
+
+    public static void putLanguage(int language) {
+        int value = isLanguage(language) ? language : LANGUAGE_FOLLOW_SYSTEM;
+        Prefers.put("language", value);
+        applyLanguage(value);
+    }
+
+    public static void applyLanguage() {
+        applyLanguage(getLanguage());
+    }
+
+    public static int getLanguageIndex() {
+        int language = getLanguage();
+        for (int i = 0; i < LANGUAGE_OPTIONS.length; i++) if (LANGUAGE_OPTIONS[i] == language) return i;
+        return LANGUAGE_FOLLOW_SYSTEM;
+    }
+
+    public static void putLanguageIndex(int index) {
+        putLanguage(index >= 0 && index < LANGUAGE_OPTIONS.length ? LANGUAGE_OPTIONS[index] : LANGUAGE_FOLLOW_SYSTEM);
+    }
+
+    private static boolean isLanguage(int language) {
+        for (int option : LANGUAGE_OPTIONS) if (option == language) return true;
+        return false;
+    }
+
+    private static void applyLanguage(int language) {
+        if (language == LANGUAGE_SIMPLIFIED) Trans.setTraditional(false);
+        else if (language == LANGUAGE_TRADITIONAL) Trans.setTraditional(true);
+        else Trans.setTraditional(null);
+    }
+
+    public static Context wrapDisplay(Context context) {
+        return wrapUiScale(wrapLanguage(context));
+    }
+
+    public static Context wrapLanguage(Context context) {
+        int language = getLanguage();
+        applyLanguage(language);
+        if (language == LANGUAGE_FOLLOW_SYSTEM) return context;
+        Locale locale = language == LANGUAGE_TRADITIONAL ? Locale.TRADITIONAL_CHINESE : Locale.SIMPLIFIED_CHINESE;
+        Configuration config = new Configuration(context.getResources().getConfiguration());
+        config.setLocale(locale);
+        config.setLocales(new LocaleList(locale));
+        return context.createConfigurationContext(config);
     }
 
     public static int getUiScale() {

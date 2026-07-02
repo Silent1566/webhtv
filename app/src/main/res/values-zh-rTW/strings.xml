@@ -571,6 +571,7 @@
     <string name="setting_custom_csp_extensions_toggle">擴展</string>
     <string name="setting_custom_csp_extensions">擴展 URL / JSON</string>
     <string name="setting_custom_csp_extensions_file">檔案</string>
+    <string name="setting_custom_csp_files">檔案</string>
     <string name="setting_custom_csp_extensions_example">https://example.com/site.js</string>
     <string name="setting_custom_csp_extensions_invalid">extensions JSON 格式無效</string>
     <string name="setting_custom_csp_permission_required">站點注入需要檔案存取權限。</string>
@@ -645,6 +646,7 @@
     <string name="setting_theme_color">主題色彩</string>
     <string name="setting_auto">自動</string>
     <string name="setting_custom">自訂</string>
+    <string name="setting_language">語言</string>
     <string name="setting_size">圖片尺寸</string>
     <string name="setting_ui_scale">介面大小</string>
     <string name="setting_doh">DoH</string>
@@ -1053,6 +1055,12 @@
         <item>更小</item>
     </string-array>
 
+    <string-array name="select_language">
+        <item>跟隨系統</item>
+        <item>簡體中文</item>
+        <item>繁體中文</item>
+    </string-array>
+
     <string-array name="select_scale">
         <item>原始</item>
         <item>16:9</item>
@@ -1268,6 +1276,11 @@
     <string name="detail_image_previous">上一張</string>
     <string name="detail_image_next">下一張</string>
     <string name="detail_image_close">關閉</string>
+
+    <string-array name="select_search_ui">
+        <item>橫屏</item>
+        <item>豎屏</item>
+    </string-array>
 
     <string-array name="select_search_column">
         <item>自適應</item>
