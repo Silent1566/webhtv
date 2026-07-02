@@ -376,14 +376,14 @@ public class DanmakuSetting {
                 .setLineSpacing(getLineSpacing())
                 .setMaxScrollLines(getDisplayLines())
                 .setMaxTopLines(getDisplayLines())
-                .setMaxBottomLines(getDisplayLines())
-                .setShowScroll(defaults.showScroll)
-                .setShowTop(defaults.showTop)
-                .setShowBottom(defaults.showBottom)
-                .setShowReverse(defaults.showReverse)
-                .setShowPositioned(defaults.showPositioned)
-                .setShowSubtitle(defaults.showSubtitle)
-                .setShowSpecial(defaults.showSpecial)
+                .setMaxBottomLines(0)
+                .setShowScroll(isShowScroll())
+                .setShowTop(isShowTop())
+                .setShowBottom(false)
+                .setShowReverse(isShowReverse())
+                .setShowPositioned(isShowPositioned())
+                .setShowSubtitle(isShowSubtitle())
+                .setShowSpecial(isShowSpecial())
                 .build();
     }
 }

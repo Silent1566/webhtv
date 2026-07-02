@@ -62,6 +62,7 @@ import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.CastVideo;
 import com.fongmi.android.tv.bean.Danmaku;
 import com.fongmi.android.tv.bean.Episode;
+import com.fongmi.android.tv.bean.EpisodePositionCache;
 import com.fongmi.android.tv.bean.Flag;
 import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.bean.Keep;
@@ -76,6 +77,7 @@ import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.databinding.ActivityVideoBinding;
 import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.event.CastEvent;
+import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.impl.CustomTarget;
 import com.fongmi.android.tv.model.SiteViewModel;
@@ -977,6 +979,8 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         mBinding.control.action.reset.setText(ResUtil.getStringArray(R.array.select_reset)[Setting.getReset()]);
         setupActionButtons();
         mBinding.video.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> mPiP.update(this, view));
+        // 初始化时隐藏底部控制栏，避免竖屏小窗时显示
+        mBinding.control.action.getRoot().setVisibility(View.GONE);
         setPlayer();
     }
 
@@ -2350,7 +2354,10 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         mBinding.control.osdDiagnostics.setVisibility(PlayerSetting.isOsdDiagnostics() && !player().isEmpty() ? View.VISIBLE : View.GONE);
         mBinding.control.osdDiagnostics.setAlpha(mOsd != null && mOsd.isDiagnosticsVisible() ? 1f : 0.72f);
         mBinding.control.parse.setVisibility(isFullscreen() && isUseParse() ? View.VISIBLE : View.GONE);
-        mBinding.control.action.getRoot().setVisibility(isFullscreen() || isFusionPlayerActionsDocked() ? View.VISIBLE : View.GONE);
+        // 竖屏模式下隐藏底部控制栏（EXO、硬解等选项），避免界面拥挤
+        // 使用屏幕方向判断：只在横屏全屏时显示，竖屏全屏时隐藏
+        boolean isLandscapeFullscreen = isFullscreen() && ResUtil.isLand(this);
+        mBinding.control.action.getRoot().setVisibility(isLandscapeFullscreen || isFusionPlayerActionsDocked() ? View.VISIBLE : View.GONE);
         mBinding.control.right.lock.setVisibility(isFullscreen() ? View.VISIBLE : View.GONE);
         mBinding.control.info.setVisibility(player().isEmpty() ? View.GONE : View.VISIBLE);
         mBinding.control.cast.setVisibility(isFullscreen() && mHistory != null && !player().isEmpty() ? View.VISIBLE : View.GONE);
@@ -2654,6 +2661,17 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
             " incognito=" + Setting.isIncognito());
         if (mHistory == null || Setting.isIncognito()) return;
         if (service() != null && isOwner()) {
+            // 保存当前集的播放位置到缓存
+            if (!TextUtils.isEmpty(mHistory.getVodRemarks())) {
+                EpisodePositionCache.get().put(
+                    getKey(),
+                    getId(),
+                    getFlag().getFlag(),
+                    mHistory.getVodRemarks(),
+                    player().getPosition(),
+                    player().getDuration()
+                );
+            }
             updatePlaybackHistoryPosition();
             mHistory.setCreateTime(System.currentTimeMillis());
         }
@@ -2664,6 +2682,8 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
             if (history.getDuration() > 0) history.merge().save();
             else history.save();
             android.util.Log.d("VideoActivity", "saveHistory: saved! key=" + history.getKey());
+            // 持久化集数位置缓存
+            EpisodePositionCache.get().save();
             if (exit) RefreshEvent.history();
         });
     }
@@ -2679,11 +2699,39 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         boolean sameFlag = TextUtils.equals(mHistory.getVodFlag(), getFlag().getFlag());
         if (!sameEpisode || !sameFlag) mIntroSkipPlayback.reset();
         if ((!sameEpisode || !sameFlag) && service() != null) {
+            // 保存当前集的播放位置到缓存
+            if (!TextUtils.isEmpty(mHistory.getVodRemarks())) {
+                EpisodePositionCache.get().put(
+                    getKey(),
+                    getId(),
+                    getFlag().getFlag(),
+                    mHistory.getVodRemarks(),
+                    player().getPosition(),
+                    player().getDuration()
+                );
+            }
             updatePlaybackHistoryPosition();
             PlaybackEventCollector.get().onStop(player());
         }
-        mHistory.setPosition(sameEpisode ? mHistory.getPosition() : C.TIME_UNSET);
-        if (!sameEpisode) mHistory.setDuration(C.TIME_UNSET);
+
+        if (!sameEpisode) {
+            // 从缓存中恢复新集的播放位置
+            EpisodePositionCache.EpisodePosition cached = EpisodePositionCache.get().get(
+                getKey(),
+                getId(),
+                getFlag().getFlag(),
+                item.getName()
+            );
+
+            if (cached != null) {
+                mHistory.setPosition(cached.position);
+                mHistory.setDuration(cached.duration);
+            } else {
+                mHistory.setPosition(C.TIME_UNSET);
+                mHistory.setDuration(C.TIME_UNSET);
+            }
+        }
+
         mHistory.setVodFlag(getFlag().getFlag());
         mHistory.setVodRemarks(item.getName());
         mHistory.setEpisodeUrl(item.getUrl());
@@ -3021,6 +3069,12 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
                 ? detail.getAsJsonObject("external_ids") : null;
         if (externalIds == null || !externalIds.has("imdb_id") || externalIds.get("imdb_id").isJsonNull()) return "";
         return externalIds.get("imdb_id").getAsString();
+    }
+
+    @Subscribe(threadMode = ThreadMode.MAIN)
+    public void onConfigEvent(ConfigEvent event) {
+        if (isRedirect() || !event.isVod() || mParseAdapter == null) return;
+        mParseAdapter.reload();
     }
 
     private void setPosition() {

@@ -18,13 +18,18 @@ import java.util.List;
 public class ParseAdapter extends RecyclerView.Adapter<ParseAdapter.ViewHolder> {
 
     private final OnClickListener listener;
-    private final List<Parse> mItems;
+    private List<Parse> mItems;
     private final int viewType;
 
     public ParseAdapter(OnClickListener listener, int viewType) {
         this.mItems = VodConfig.get().getParses();
         this.listener = listener;
         this.viewType = viewType;
+    }
+
+    public void reload() {
+        mItems = VodConfig.get().getParses();
+        notifyDataSetChanged();
     }
 
     public interface OnClickListener {

@@ -825,6 +825,7 @@
     <string name="player_caption">字幕样式</string>
     <string name="player_background">后台播放</string>
     <string name="player_audio_decode">音频软解</string>
+    <string name="player_audio_passthrough">音频直通</string>
     <string name="player_video_decode">视频软解</string>
     <string name="player_aac_track">AAC优先</string>
     <string name="player_music_notification">音乐后台通知</string>

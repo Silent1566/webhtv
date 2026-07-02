@@ -111,15 +111,15 @@ public class SiteAdapter extends RecyclerView.Adapter<SiteAdapter.ViewHolder> {
         this.group = group;
         this.keyword = keyword;
         String text = keyword == null ? "" : keyword.trim().toLowerCase(Locale.ROOT);
-        String tag = group == null ? "" : group.trim();
+        boolean searching = !TextUtils.isEmpty(text);
         mItems.clear();
         for (Site site : mAllItems) {
             String name = site.getName();
             String key = site.getKey();
-            boolean matchGroup = site.inGroup(group);
+            boolean matchGroup = searching || site.inGroup(group);
             boolean matchName = !TextUtils.isEmpty(name) && name.toLowerCase(Locale.ROOT).contains(text);
             boolean matchKey = !TextUtils.isEmpty(key) && key.toLowerCase(Locale.ROOT).contains(text);
-            boolean matchKeyword = TextUtils.isEmpty(text) || matchName || matchKey;
+            boolean matchKeyword = !searching || matchName || matchKey;
             if (matchGroup && matchKeyword) mItems.add(site);
         }
         notifyDataSetChanged();

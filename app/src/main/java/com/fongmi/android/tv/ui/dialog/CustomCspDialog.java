@@ -989,7 +989,19 @@ public class CustomCspDialog extends BaseAlertDialog {
     private JsonElement parseOtherInput(String field, String text) {
         String value = text == null ? "" : text.trim();
         if (CustomCspSetting.isOtherStringField(field)) return new JsonPrimitive(value);
-        return TextUtils.isEmpty(value) ? CustomCspSetting.defaultOtherValue(field) : JsonParser.parseString(value);
+        return TextUtils.isEmpty(value) ? CustomCspSetting.defaultOtherValue(field) : extractOtherField(field, CustomCspSetting.parseFlexible(value));
+    }
+
+    private JsonElement extractOtherField(String field, JsonElement element) {
+        if (element != null && element.isJsonObject()) {
+            JsonObject object = element.getAsJsonObject();
+            if (object.has(field)) return object.get(field).deepCopy();
+            if (object.has("other") && object.get("other").isJsonObject()) {
+                JsonObject other = object.getAsJsonObject("other");
+                if (other.has(field)) return other.get(field).deepCopy();
+            }
+        }
+        return element;
     }
 
     private void saveCode(CustomCspSetting.Item item, String code) {

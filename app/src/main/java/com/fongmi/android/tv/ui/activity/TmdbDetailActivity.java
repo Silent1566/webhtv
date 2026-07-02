@@ -57,6 +57,7 @@ import com.fongmi.android.tv.api.SiteApi;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Danmaku;
 import com.fongmi.android.tv.bean.Episode;
+import com.fongmi.android.tv.bean.EpisodePositionCache;
 import com.fongmi.android.tv.bean.Flag;
 import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.bean.Keep;
@@ -1417,6 +1418,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
 
     private void tintTextTree(View view, ThemeColors colors) {
         if (view instanceof RecyclerView) return;
+        if (view.getId() == R.id.loading) return;
         if (view instanceof TextView textView && !(view instanceof MaterialButton)) {
             textView.setTextColor(colors.primary);
         }
@@ -6433,9 +6435,24 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
 
     private void saveInlineHistory() {
         if (!isInlinePlayerMode() || !inlineStarted || !isOwner() || history == null) return;
+
+        // 保存当前集的播放位置到缓存
+        if (!TextUtils.isEmpty(history.getVodRemarks()) && service() != null && player() != null && !player().isReleased()) {
+            EpisodePositionCache.get().put(
+                getKeyText(),
+                getIdText(),
+                selectedFlag != null ? selectedFlag.getFlag() : "",
+                history.getVodRemarks(),
+                player().getPosition(),
+                player().getDuration()
+            );
+        }
+
         updateInlineHistoryProgress();
         if (history.canSave() && !Setting.isIncognito()) {
             history.merge().save();
+            // 持久化集数位置缓存
+            Task.execute(() -> EpisodePositionCache.get().save());
             RefreshEvent.history();
         }
     }
@@ -6552,7 +6569,35 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             history.setCid(VodConfig.getCid());
         }
         boolean same = isHistoryEpisode(item, history);
-        history.setPosition(same ? history.getPosition() : C.TIME_UNSET);
+
+        if (!same) {
+            // 保存当前集的播放位置到缓存
+            if (!TextUtils.isEmpty(history.getVodRemarks()) && service() != null && player() != null && !player().isReleased()) {
+                EpisodePositionCache.get().put(
+                    getKeyText(),
+                    getIdText(),
+                    selectedFlag.getFlag(),
+                    history.getVodRemarks(),
+                    player().getPosition(),
+                    player().getDuration()
+                );
+            }
+
+            // 从缓存中恢复新集的播放位置
+            EpisodePositionCache.EpisodePosition cached = EpisodePositionCache.get().get(
+                getKeyText(),
+                getIdText(),
+                selectedFlag.getFlag(),
+                historyEpisodeTitle(item)
+            );
+
+            if (cached != null) {
+                history.setPosition(cached.position);
+            } else {
+                history.setPosition(C.TIME_UNSET);
+            }
+        }
+
         history.setCid(VodConfig.getCid());
         history.setVodName(playbackHistoryName());
         history.setVodFlag(selectedFlag.getFlag());

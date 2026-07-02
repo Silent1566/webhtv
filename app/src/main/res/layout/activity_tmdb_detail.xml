@@ -1375,15 +1375,18 @@
 
             <ProgressBar
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content" />
+                android:layout_height="wrap_content"
+                android:indeterminateTint="#FFFFFF" />
 
             <TextView
+                android:id="@+id/loadingText"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
                 android:text="@string/detail_tmdb_loading_detail"
-                android:textColor="@android:color/white"
-                android:textSize="12sp" />
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:alpha="1.0" />
         </LinearLayout>
     </FrameLayout>
 </FrameLayout>

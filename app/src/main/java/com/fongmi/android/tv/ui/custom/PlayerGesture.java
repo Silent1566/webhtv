@@ -86,9 +86,11 @@ public class PlayerGesture extends GestureDetector.SimpleOnGestureListener imple
     }
 
     private boolean isSide(MotionEvent e) {
-        int width = videoView.getWidth() > 0 ? videoView.getWidth() : ResUtil.getScreenWidth(activity);
+        // 使用 getRawX 获取屏幕绝对坐标，避免横屏时 View 坐标系统问题
+        int width = ResUtil.getScreenWidth(activity);
         int four = width / 4;
-        return e.getX() <= four || e.getX() >= four * 3;
+        float x = e.getRawX();
+        return x <= four || x >= four * 3;
     }
 
     private void reset() {
@@ -168,8 +170,10 @@ public class PlayerGesture extends GestureDetector.SimpleOnGestureListener imple
     }
 
     private void checkSide(MotionEvent e2) {
-        int width = videoView.getWidth() > 0 ? videoView.getWidth() : ResUtil.getScreenWidth(activity);
-        if (e2.getX() > width / 2f) changeVolume = true;
+        // 使用 getRawX 获取屏幕绝对坐标，确保横屏时正确判断左右区域
+        int width = ResUtil.getScreenWidth(activity);
+        float x = e2.getRawX();
+        if (x > width / 2f) changeVolume = true;
         else changeBright = true;
     }
 

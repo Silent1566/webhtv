@@ -85,7 +85,7 @@ public class CustomCspSetting {
         return registry.normalize();
     }
 
-    private static JsonElement parseFlexible(String text) {
+    public static JsonElement parseFlexible(String text) {
         String value = stripTrailingCommas(text);
         try {
             return JsonParser.parseString(value);

@@ -48,6 +48,7 @@ import com.fongmi.android.tv.api.SiteApi;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Danmaku;
 import com.fongmi.android.tv.bean.Episode;
+import com.fongmi.android.tv.bean.EpisodePositionCache;
 import com.fongmi.android.tv.bean.Flag;
 import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.bean.Keep;
@@ -61,6 +62,7 @@ import com.fongmi.android.tv.bean.Track;
 import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.databinding.ActivityVideoBinding;
 import com.fongmi.android.tv.db.AppDatabase;
+import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.impl.CustomTarget;
 import com.fongmi.android.tv.model.SiteViewModel;
@@ -2651,6 +2653,17 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
             " incognito=" + Setting.isIncognito());
         if (mHistory == null || Setting.isIncognito()) return;
         if (service() != null && isOwner()) {
+            // 保存当前集的播放位置到缓存
+            if (!TextUtils.isEmpty(mHistory.getVodRemarks())) {
+                EpisodePositionCache.get().put(
+                    getKey(),
+                    getId(),
+                    getFlag().getFlag(),
+                    mHistory.getVodRemarks(),
+                    player().getPosition(),
+                    player().getDuration()
+                );
+            }
             updatePlaybackHistoryPosition();
             mHistory.setCreateTime(System.currentTimeMillis());
         }
@@ -2661,6 +2674,8 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
             if (history.getDuration() > 0) history.merge().save();
             else history.save();
             android.util.Log.d("VideoActivity", "saveHistory: saved! key=" + history.getKey());
+            // 持久化集数位置缓存
+            EpisodePositionCache.get().save();
             if (exit) RefreshEvent.history();
         });
     }
@@ -2676,11 +2691,39 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         boolean sameFlag = TextUtils.equals(mHistory.getVodFlag(), getFlag().getFlag());
         if (!sameEpisode || !sameFlag) mIntroSkipPlayback.reset();
         if ((!sameEpisode || !sameFlag) && service() != null) {
+            // 保存当前集的播放位置到缓存
+            if (!TextUtils.isEmpty(mHistory.getVodRemarks())) {
+                EpisodePositionCache.get().put(
+                    getKey(),
+                    getId(),
+                    getFlag().getFlag(),
+                    mHistory.getVodRemarks(),
+                    player().getPosition(),
+                    player().getDuration()
+                );
+            }
             updatePlaybackHistoryPosition();
             PlaybackEventCollector.get().onStop(player());
         }
-        mHistory.setPosition(sameEpisode ? mHistory.getPosition() : C.TIME_UNSET);
-        if (!sameEpisode) mHistory.setDuration(C.TIME_UNSET);
+
+        if (!sameEpisode) {
+            // 从缓存中恢复新集的播放位置
+            EpisodePositionCache.EpisodePosition cached = EpisodePositionCache.get().get(
+                getKey(),
+                getId(),
+                getFlag().getFlag(),
+                item.getName()
+            );
+
+            if (cached != null) {
+                mHistory.setPosition(cached.position);
+                mHistory.setDuration(cached.duration);
+            } else {
+                mHistory.setPosition(C.TIME_UNSET);
+                mHistory.setDuration(C.TIME_UNSET);
+            }
+        }
+
         mHistory.setVodFlag(getFlag().getFlag());
         mHistory.setVodRemarks(item.getName());
         mHistory.setEpisodeUrl(item.getUrl());
@@ -3904,6 +3947,12 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
                 ? detail.getAsJsonObject("external_ids") : null;
         if (externalIds == null || !externalIds.has("imdb_id") || externalIds.get("imdb_id").isJsonNull()) return "";
         return externalIds.get("imdb_id").getAsString();
+    }
+
+    @Subscribe(threadMode = ThreadMode.MAIN)
+    public void onConfigEvent(ConfigEvent event) {
+        if (isRedirect() || !event.isVod() || mParseAdapter == null) return;
+        mParseAdapter.addAll(VodConfig.get().getParses());
     }
 
     private void setPosition() {

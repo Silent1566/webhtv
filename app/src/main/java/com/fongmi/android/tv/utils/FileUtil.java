@@ -83,13 +83,18 @@ public class FileUtil {
     public static void clearCache(Callback callback) {
         Task.execute(() -> {
             Path.clear(Path.cache());
+            // 清理集数位置缓存
+            com.fongmi.android.tv.bean.EpisodePositionCache.get().clear();
             App.post(callback::success);
         });
     }
 
     public static void getCacheSize(Callback callback) {
         Task.execute(() -> {
-            String usage = byteCountToDisplaySize(getDirectorySize(Path.cache()));
+            long totalSize = getDirectorySize(Path.cache());
+            // 包含集数位置缓存的大小
+            totalSize += com.fongmi.android.tv.bean.EpisodePositionCache.get().getCacheSize();
+            String usage = byteCountToDisplaySize(totalSize);
             App.post(() -> callback.success(usage));
         });
     }
