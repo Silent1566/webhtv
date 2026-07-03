@@ -5,13 +5,19 @@ import java.util.List;
 
 public final class EpisodeRangePolicy {
 
+    public static final int CARD_PAGE_MAX_SIZE = 50;
+
     private EpisodeRangePolicy() {
     }
 
     public static List<Range> build(int size, int selectedIndex, boolean reverse) {
+        return build(size, selectedIndex, reverse, 0);
+    }
+
+    public static List<Range> build(int size, int selectedIndex, boolean reverse, int maxGroupSize) {
         List<Range> ranges = new ArrayList<>();
         if (size <= 0) return ranges;
-        int groupSize = groupSize(size);
+        int groupSize = groupSize(size, maxGroupSize);
         int count = (int) Math.ceil(size / (float) groupSize);
         for (int i = 0; i < count; i++) {
             int start = i * groupSize;
@@ -43,6 +49,16 @@ public final class EpisodeRangePolicy {
     }
 
     static int groupSize(int size) {
+        return groupSize(size, 0);
+    }
+
+    static int groupSize(int size, int maxGroupSize) {
+        int groupSize = defaultGroupSize(size);
+        if (maxGroupSize > 0) groupSize = Math.min(groupSize, Math.max(1, maxGroupSize));
+        return groupSize;
+    }
+
+    private static int defaultGroupSize(int size) {
         if (size <= 60) return 20;
         if (size > 2500) return 300;
         if (size > 1500) return 200;

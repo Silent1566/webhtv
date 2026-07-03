@@ -5,6 +5,7 @@ import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.Gravity;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -26,6 +27,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 
 public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.ViewHolder> {
 
@@ -64,6 +66,11 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
     }
 
     public void setItems(List<Episode> episodes, Map<Integer, TmdbEpisode> tmdbEpisodes, Map<Episode, Integer> numbers, Episode selected) {
+        if (sameItems(episodes, tmdbEpisodes, numbers)) {
+            if (Objects.equals(this.selected, selected)) return;
+            setSelected(selected);
+            return;
+        }
         items.clear();
         items.addAll(episodes);
         tmdbItems.clear();
@@ -105,11 +112,26 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
     }
 
     public void setMode(Mode mode) {
-        this.mode = mode == null ? Mode.LIST : mode;
+        Mode value = mode == null ? Mode.LIST : mode;
+        if (this.mode == value) return;
+        this.mode = value;
+        if (!items.isEmpty()) notifyDataSetChanged();
     }
 
     public void setGridSpanCount(int gridSpanCount) {
-        this.gridSpanCount = Math.max(1, gridSpanCount);
+        int value = Math.max(1, gridSpanCount);
+        if (this.gridSpanCount == value) return;
+        this.gridSpanCount = value;
+        if (!items.isEmpty() && mode == Mode.GRID) notifyDataSetChanged();
+    }
+
+    public void setDisplayMode(Mode mode, int gridSpanCount) {
+        Mode modeValue = mode == null ? Mode.LIST : mode;
+        int spanValue = Math.max(1, gridSpanCount);
+        boolean changed = this.mode != modeValue || this.gridSpanCount != spanValue;
+        this.mode = modeValue;
+        this.gridSpanCount = spanValue;
+        if (changed && !items.isEmpty()) notifyDataSetChanged();
     }
 
     public void setOnKeyListener(View.OnKeyListener keyListener) {
@@ -150,13 +172,17 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
         boolean activated = episode.equals(selected);
         boolean compact = compactPlain && tmdbEpisode == null && TextUtils.isEmpty(overview);
         String stillUrl = tmdbEpisode != null ? tmdbEpisode.getStillUrl() : "";
+        boolean suppressSharedFallback = shouldSuppressSharedFallbackVisuals();
         boolean allowFallback = mode == Mode.LIST || TmdbEpisodeGridPolicy.shouldUseFallbackImage(mode == Mode.GRID, items.size(), tmdbEpisode != null);
-        String imageUrl = !TextUtils.isEmpty(stillUrl) ? stillUrl : (allowFallback ? fallbackStillUrl : "");
-        String errorImageUrl = !TextUtils.isEmpty(stillUrl) && allowFallback ? fallbackStillUrl : "";
+        boolean usingSharedFallback = TextUtils.isEmpty(stillUrl) && allowFallback && !TextUtils.isEmpty(fallbackStillUrl);
+        String imageUrl = !TextUtils.isEmpty(stillUrl) ? stillUrl : (allowFallback && !suppressSharedFallback ? fallbackStillUrl : "");
+        String errorImageUrl = !TextUtils.isEmpty(stillUrl) && allowFallback && !suppressSharedFallback ? fallbackStillUrl : "";
         boolean hasImage = !TextUtils.isEmpty(imageUrl);
-        boolean showVisual = hasImage || !compact;
+        boolean showVisual = hasImage;
+        boolean darkSurface = showVisual || !light || isNativeEnhanced();
 
         applyCardSize(holder, compact);
+        holder.binding.textPanel.setGravity(showVisual ? Gravity.NO_GRAVITY : Gravity.CENTER_VERTICAL);
         if (isNativeEnhanced()) {
             boolean phoneWidth = isPhoneWidth(holder.itemView);
             holder.binding.index.setText(nativeEnhancedIndexTitle(title, cleanTitle, phoneWidth, mode));
@@ -175,7 +201,12 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
             holder.binding.title.setVisibility(View.GONE);
             holder.binding.date.setText(date);
             holder.binding.date.setVisibility(TextUtils.isEmpty(date) ? View.GONE : View.VISIBLE);
-            holder.binding.overview.setVisibility(View.GONE);
+            if (suppressSharedFallback && usingSharedFallback && !TextUtils.isEmpty(overview)) {
+                holder.binding.overview.setText(overview);
+                holder.binding.overview.setVisibility(View.VISIBLE);
+            } else {
+                holder.binding.overview.setVisibility(View.GONE);
+            }
         } else if (compact) {
             holder.binding.index.setText(title);
             holder.binding.index.setTextSize(14f);
@@ -194,23 +225,24 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
             holder.binding.overview.setText(overview);
             holder.binding.overview.setVisibility(TextUtils.isEmpty(overview) ? View.GONE : View.VISIBLE);
         }
-        holder.binding.index.setTextColor(showVisual || !light ? 0xFFFFFFFF : 0xFF15202B);
-        holder.binding.title.setTextColor(showVisual || !light ? 0xE6FFFFFF : 0xCC15202B);
-        holder.binding.date.setTextColor(showVisual || !light ? 0xCCFFFFFF : 0x9915202B);
-        holder.binding.overview.setTextColor(showVisual || !light ? 0xE6FFFFFF : 0xB315202B);
+        holder.binding.index.setTextColor(darkSurface ? 0xFFFFFFFF : 0xFF15202B);
+        holder.binding.title.setTextColor(darkSurface ? 0xE6FFFFFF : 0xCC15202B);
+        holder.binding.date.setTextColor(darkSurface ? 0xCCFFFFFF : 0x9915202B);
+        holder.binding.overview.setTextColor(darkSurface ? 0xE6FFFFFF : 0xB315202B);
         if (!isNativeEnhanced()) {
             holder.binding.badge.setText(episodeBadge(tmdbEpisode));
             holder.binding.badge.setVisibility(TextUtils.isEmpty(holder.binding.badge.getText()) ? View.GONE : View.VISIBLE);
         }
-        applyBadgeStyle(holder.binding.date, showVisual);
-        applyBadgeStyle(holder.binding.badge, showVisual);
-        applyBadgeStyle(holder.binding.fileSize, showVisual);
+        applyBadgeStyle(holder.binding.date, darkSurface);
+        applyBadgeStyle(holder.binding.badge, darkSurface);
+        applyBadgeStyle(holder.binding.fileSize, darkSurface);
         applyCardFocus(holder, activated);
         if (showVisual) {
             holder.binding.stillFrame.setVisibility(View.VISIBLE);
-            ImgUtil.load(title, imageUrl, errorImageUrl, holder.binding.still, true, imageWidth(holder), imageHeight(holder));
+            loadStillIfChanged(holder, title, imageUrl, errorImageUrl);
         } else {
             holder.binding.stillFrame.setVisibility(View.GONE);
+            holder.binding.still.setTag(R.id.tmdb_episode_still_request_key, null);
             ImgUtil.clear(holder.binding.still);
         }
         holder.binding.scrim.setVisibility(showVisual ? View.VISIBLE : View.GONE);
@@ -223,30 +255,49 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
     }
 
     private void applyCardSize(ViewHolder holder, boolean compact) {
-        ViewGroup.LayoutParams params = holder.binding.getRoot().getLayoutParams();
+        View root = holder.binding.getRoot();
+        ViewGroup.LayoutParams params = root.getLayoutParams();
+        int width;
+        int height;
         if (isNativeEnhanced()) {
-            params.width = mode == Mode.GRID ? ViewGroup.LayoutParams.MATCH_PARENT : dp(holder.itemView, 280);
-            params.height = dp(holder.itemView, mode == Mode.GRID ? nativeEnhancedGridCardHeight(holder.itemView) : 160);
+            width = mode == Mode.GRID ? ViewGroup.LayoutParams.MATCH_PARENT : dp(holder.itemView, 280);
+            height = dp(holder.itemView, mode == Mode.GRID ? nativeEnhancedGridCardHeight(holder.itemView) : 160);
         } else if (mode == Mode.GRID) {
-            params.width = ViewGroup.LayoutParams.MATCH_PARENT;
-            params.height = dp(holder.itemView, 118);
+            width = ViewGroup.LayoutParams.MATCH_PARENT;
+            height = dp(holder.itemView, 118);
         } else {
-            params.width = compact ? dp(holder.itemView, 220) : listCardWidth(holder.itemView);
-            params.height = dp(holder.itemView, compact ? 78 : (isPhoneWidth(holder.itemView) ? 172 : 190));
+            width = compact ? dp(holder.itemView, 220) : listCardWidth(holder.itemView);
+            height = dp(holder.itemView, compact ? 78 : (isPhoneWidth(holder.itemView) ? 172 : 190));
         }
-        holder.binding.getRoot().setLayoutParams(params);
+        boolean layoutChanged = params.width != width || params.height != height;
+        params.width = width;
+        params.height = height;
         if (params instanceof ViewGroup.MarginLayoutParams marginParams) {
-            marginParams.setMarginEnd(dp(holder.itemView, isNativeEnhanced() ? 12 : mode == Mode.GRID ? 8 : 12));
-            marginParams.bottomMargin = dp(holder.itemView, isNativeEnhanced() && mode == Mode.GRID ? 16 : mode == Mode.GRID ? 10 : 0);
-            holder.binding.getRoot().setLayoutParams(marginParams);
+            int marginEnd = dp(holder.itemView, isNativeEnhanced() ? 12 : mode == Mode.GRID ? 8 : 12);
+            int bottomMargin = dp(holder.itemView, isNativeEnhanced() && mode == Mode.GRID ? 16 : mode == Mode.GRID ? 10 : 0);
+            layoutChanged |= marginParams.getMarginEnd() != marginEnd || marginParams.bottomMargin != bottomMargin;
+            marginParams.setMarginEnd(marginEnd);
+            marginParams.bottomMargin = bottomMargin;
         }
+        if (layoutChanged) root.setLayoutParams(params);
         ViewGroup.LayoutParams scrimParams = holder.binding.scrim.getLayoutParams();
-        scrimParams.height = dp(holder.itemView, isNativeEnhanced() ? mode == Mode.GRID ? nativeEnhancedGridScrimHeight(holder.itemView) : 104 : 96);
-        holder.binding.scrim.setLayoutParams(scrimParams);
+        int scrimHeight = dp(holder.itemView, isNativeEnhanced() ? mode == Mode.GRID ? nativeEnhancedGridScrimHeight(holder.itemView) : 104 : 96);
+        if (scrimParams.height != scrimHeight) {
+            scrimParams.height = scrimHeight;
+            holder.binding.scrim.setLayoutParams(scrimParams);
+        }
         int horizontal = nativeEnhancedMobileGrid(holder.itemView) ? 10 : isNativeEnhanced() ? 12 : 10;
         int top = nativeEnhancedMobileGrid(holder.itemView) ? 18 : isNativeEnhanced() ? 0 : 18;
         int bottom = nativeEnhancedMobileGrid(holder.itemView) ? 10 : isNativeEnhanced() ? mode == Mode.GRID ? 14 : 12 : 10;
-        holder.binding.textPanel.setPadding(dp(holder.itemView, horizontal), dp(holder.itemView, top), dp(holder.itemView, horizontal), dp(holder.itemView, bottom));
+        int horizontalPx = dp(holder.itemView, horizontal);
+        int topPx = dp(holder.itemView, top);
+        int bottomPx = dp(holder.itemView, bottom);
+        if (holder.binding.textPanel.getPaddingLeft() != horizontalPx
+                || holder.binding.textPanel.getPaddingTop() != topPx
+                || holder.binding.textPanel.getPaddingRight() != horizontalPx
+                || holder.binding.textPanel.getPaddingBottom() != bottomPx) {
+            holder.binding.textPanel.setPadding(horizontalPx, topPx, horizontalPx, bottomPx);
+        }
     }
 
     private boolean nativeEnhancedMobileGrid(View view) {
@@ -294,12 +345,68 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
         return ResUtil.dp2px(mode == Mode.GRID ? TmdbEpisodeGridPolicy.GRID_CARD_HEIGHT_DP : (isPhoneWidth(holder.itemView) ? 172 : 190));
     }
 
+    private boolean shouldSuppressSharedFallbackVisuals() {
+        return false;
+    }
+
+    private void loadStillIfChanged(ViewHolder holder, String title, String imageUrl, String errorImageUrl) {
+        int width = imageWidth(holder);
+        int height = imageHeight(holder);
+        String key = imageUrl + '\n' + errorImageUrl + '\n' + width + 'x' + height + '\n' + title;
+        Object previous = holder.binding.still.getTag(R.id.tmdb_episode_still_request_key);
+        if (TextUtils.equals(key, previous instanceof String ? (String) previous : null)) return;
+        holder.binding.still.setTag(R.id.tmdb_episode_still_request_key, key);
+        ImgUtil.load(title, imageUrl, errorImageUrl, holder.binding.still, true, width, height);
+    }
+
+    private boolean sameItems(List<Episode> episodes, Map<Integer, TmdbEpisode> tmdbEpisodes, Map<Episode, Integer> numbers) {
+        return sameEpisodes(episodes) && sameTmdbEpisodes(tmdbEpisodes) && sameEpisodeNumbers(numbers);
+    }
+
+    private boolean sameEpisodes(List<Episode> episodes) {
+        if (episodes == null || episodes.size() != items.size()) return false;
+        for (int i = 0; i < episodes.size(); i++) {
+            if (!Objects.equals(items.get(i), episodes.get(i))) return false;
+        }
+        return true;
+    }
+
+    private boolean sameTmdbEpisodes(Map<Integer, TmdbEpisode> episodes) {
+        if (episodes == null || episodes.size() != tmdbItems.size()) return false;
+        for (Map.Entry<Integer, TmdbEpisode> entry : episodes.entrySet()) {
+            if (!sameTmdbEpisode(tmdbItems.get(entry.getKey()), entry.getValue())) return false;
+        }
+        return true;
+    }
+
+    private boolean sameTmdbEpisode(TmdbEpisode a, TmdbEpisode b) {
+        if (a == b) return true;
+        if (a == null || b == null) return false;
+        return a.getNumber() == b.getNumber()
+                && a.getRuntime() == b.getRuntime()
+                && a.getTmdbId() == b.getTmdbId()
+                && a.getSeasonNumber() == b.getSeasonNumber()
+                && Double.compare(a.getVoteAverage(), b.getVoteAverage()) == 0
+                && Objects.equals(a.getTitle(), b.getTitle())
+                && Objects.equals(a.getDate(), b.getDate())
+                && Objects.equals(a.getOverview(), b.getOverview())
+                && Objects.equals(a.getStillUrl(), b.getStillUrl());
+    }
+
+    private boolean sameEpisodeNumbers(Map<Episode, Integer> numbers) {
+        if (numbers == null || numbers.size() != episodeNumbers.size()) return false;
+        for (Map.Entry<Episode, Integer> entry : numbers.entrySet()) {
+            if (!Objects.equals(episodeNumbers.get(entry.getKey()), entry.getValue())) return false;
+        }
+        return true;
+    }
+
     private boolean isPhoneWidth(View view) {
         return view.getResources().getConfiguration().smallestScreenWidthDp < 600;
     }
 
-    private void applyBadgeStyle(TextView view, boolean hasStill) {
-        boolean darkBadge = hasStill || !light;
+    private void applyBadgeStyle(TextView view, boolean darkSurface) {
+        boolean darkBadge = darkSurface;
         view.setTextColor(darkBadge ? 0xE6FFFFFF : 0xCC15202B);
         GradientDrawable background = new GradientDrawable();
         background.setColor(darkBadge ? 0xB3000000 : 0x1F15202B);
@@ -423,6 +530,7 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
 
     @Override
     public void onViewRecycled(@NonNull ViewHolder holder) {
+        holder.binding.still.setTag(R.id.tmdb_episode_still_request_key, null);
         ImgUtil.clear(holder.binding.still);
         super.onViewRecycled(holder);
     }

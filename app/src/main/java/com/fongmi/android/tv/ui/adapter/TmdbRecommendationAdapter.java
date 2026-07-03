@@ -57,6 +57,7 @@ public class TmdbRecommendationAdapter extends RecyclerView.Adapter<TmdbRecommen
     }
 
     public void setItems(List<TmdbItem> recommendations) {
+        if (sameItems(recommendations)) return;
         items.clear();
         if (recommendations != null) items.addAll(recommendations);
         notifyDataSetChanged();
@@ -93,6 +94,15 @@ public class TmdbRecommendationAdapter extends RecyclerView.Adapter<TmdbRecommen
             if (sameItem(item, target)) return true;
         }
         return false;
+    }
+
+    private boolean sameItems(List<TmdbItem> recommendations) {
+        if (recommendations == null) return items.isEmpty();
+        if (items.size() != recommendations.size()) return false;
+        for (int i = 0; i < items.size(); i++) {
+            if (!sameItem(items.get(i), recommendations.get(i))) return false;
+        }
+        return true;
     }
 
     private boolean sameItem(TmdbItem first, TmdbItem second) {

@@ -54,8 +54,9 @@ public class TmdbRailAdapter extends RecyclerView.Adapter<TmdbRailAdapter.ViewHo
     }
 
     public void setItems(List<TmdbItem> values) {
+        if (sameItems(values)) return;
         items.clear();
-        items.addAll(values);
+        if (values != null) items.addAll(values);
         notifyDataSetChanged();
     }
 
@@ -107,6 +108,27 @@ public class TmdbRailAdapter extends RecyclerView.Adapter<TmdbRailAdapter.ViewHo
     @Override
     public int getItemCount() {
         return items.size();
+    }
+
+    private boolean sameItems(List<TmdbItem> values) {
+        if (values == null) return items.isEmpty();
+        if (items.size() != values.size()) return false;
+        for (int i = 0; i < items.size(); i++) {
+            if (!sameItem(items.get(i), values.get(i))) return false;
+        }
+        return true;
+    }
+
+    private boolean sameItem(TmdbItem first, TmdbItem second) {
+        if (first == second) return true;
+        if (first == null || second == null) return false;
+        if (first.getTmdbId() > 0 && second.getTmdbId() > 0) {
+            return first.getTmdbId() == second.getTmdbId() && first.getMediaType().equals(second.getMediaType());
+        }
+        return first.getTitle().equals(second.getTitle())
+                && first.getSubtitle().equals(second.getSubtitle())
+                && first.getPosterUrl().equals(second.getPosterUrl())
+                && first.getBackdropUrl().equals(second.getBackdropUrl());
     }
 
     static class ViewHolder extends RecyclerView.ViewHolder {

@@ -42,6 +42,7 @@ public class TmdbCastAdapter extends RecyclerView.Adapter<TmdbCastAdapter.ViewHo
     }
 
     public void setItems(List<TmdbPerson> cast) {
+        if (sameItems(cast)) return;
         items.clear();
         if (cast != null) items.addAll(cast);
         notifyDataSetChanged();
@@ -73,6 +74,24 @@ public class TmdbCastAdapter extends RecyclerView.Adapter<TmdbCastAdapter.ViewHo
     @Override
     public int getItemCount() {
         return items.size();
+    }
+
+    private boolean sameItems(List<TmdbPerson> cast) {
+        if (cast == null) return items.isEmpty();
+        if (items.size() != cast.size()) return false;
+        for (int i = 0; i < items.size(); i++) {
+            if (!sameItem(items.get(i), cast.get(i))) return false;
+        }
+        return true;
+    }
+
+    private boolean sameItem(TmdbPerson first, TmdbPerson second) {
+        if (first == second) return true;
+        if (first == null || second == null) return false;
+        if (first.getPersonId() > 0 && second.getPersonId() > 0) return first.getPersonId() == second.getPersonId();
+        return first.getName().equals(second.getName())
+                && first.getSubtitle().equals(second.getSubtitle())
+                && first.getProfileUrl().equals(second.getProfileUrl());
     }
 
     static class ViewHolder extends RecyclerView.ViewHolder {

@@ -623,6 +623,21 @@ public class VideoActivityLayoutTest {
     }
 
     @Test
+    public void mobileVideoDirectTmdbReleasesBlockingProgressAfterHeaderBind() throws Exception {
+        Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int method = source.indexOf("private void updateVod(Vod item)");
+        int bind = source.indexOf("mTmdbHeaderView.bind(mTmdbUIAdapter);", method);
+        int hide = source.indexOf("hideProgress();", bind);
+        int style = source.indexOf("styleTmdbSourceInFlagTitle();", bind);
+
+        assertTrue(sourcePath + " is missing updateVod", method >= 0);
+        assertTrue("direct TMDB playback must bind the header when TMDB data is ready", bind > method);
+        assertTrue("direct TMDB playback must stop the blocking player spinner immediately after the first header bind",
+                hide > bind && hide < style);
+    }
+
+    @Test
     public void mobileVideoFusionThemeToggleActuallyChangesThemeMode() throws Exception {
         Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);

@@ -167,6 +167,128 @@ public class TmdbDetailActivityLayoutTest {
     }
 
     @Test
+    public void standaloneDetailAppliesInitialTmdbResultInSinglePass() throws Exception {
+        Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int load = source.indexOf("private void loadContent(@Nullable TmdbBundle reusableBundle)");
+        int helper = source.indexOf("private boolean shouldLoadInitialStandaloneTmdbDetailInSinglePass");
+        int apply = source.indexOf("private void applyTmdbResult(TmdbLoadResult result)");
+
+        assertTrue(sourcePath + " is missing standalone single-pass initial TMDB loading", load >= 0 && helper > load && apply > helper);
+        assertTrue("standalone TMDB detail should wait for the initial TMDB bundle before the first page bind",
+                source.indexOf("boolean singlePassStandaloneTmdb = shouldLoadInitialStandaloneTmdbDetailInSinglePass(reusableBundle, tmdbFuture);", load) > load
+                        && source.indexOf("if (!singlePassStandaloneTmdb || finalVod == null)", load) > load
+                        && source.indexOf("applyLoaded(finalVod, finalResult == null ? null : finalResult.bundle(), finalResult == null ? new ArrayList<>() : finalResult.searchItems(), finalError, true);", load) > load);
+        assertTrue("single-pass loading must only apply to standalone TMDB detail without a reusable bundle",
+                source.indexOf("return reusableBundle == null && tmdbFuture != null && activeTmdbBundle == null && Setting.isStandaloneTmdbDetailMode(getDetailMode());", helper) > helper);
+        assertTrue("standalone initial loading must not use a delayed second TMDB rebind",
+                !source.contains("INITIAL_STANDALONE_TMDB_RESULT_DEFER_MS")
+                        && !source.contains("postDelayed(this::flushInitialStandaloneTmdbResult"));
+    }
+
+    @Test
+    public void standaloneDetailPreloadsInitialSeasonBeforeFirstBind() throws Exception {
+        Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int load = source.indexOf("private void loadContent(@Nullable TmdbBundle reusableBundle)");
+        int preload = source.indexOf("private TmdbLoadResult preloadInitialStandaloneSeason");
+        int fetch = source.indexOf("private void fetchSeasonIfNeeded(int seasonNumber, boolean refresh)");
+
+        assertTrue(sourcePath + " is missing initial standalone season preload", load >= 0 && preload > load && fetch > preload);
+        assertTrue("standalone initial detail should preload the current season before the first UI bind",
+                source.indexOf("if (singlePassStandaloneTmdb) finalResult = preloadInitialStandaloneSeason(finalResult, finalVod);", load) > load
+                        && source.indexOf("tmdbService.season(bundle.item(), seasonNumber, tmdbConfig, bundle.detail(), false);", preload) > preload
+                        && source.indexOf("seasonEpisodes.put(seasonNumber, episodes);", preload) > preload
+                        && source.indexOf("return new TmdbLoadResult(withSeason, result.searchItems());", preload) > preload);
+        assertTrue("initial season preload must use the same current-season data shape that fetchSeasonIfNeeded would later fill",
+                source.indexOf("seasonCounts.put(seasonNumber, episodes.size());", preload) > preload
+                        && source.indexOf("seasonCast.put(seasonNumber, tmdbService.seasonCast(season, tmdbConfig));", preload) > preload
+                        && source.indexOf("seasonPhotos.put(seasonNumber, tmdbService.seasonPhotos(season, tmdbConfig));", preload) > preload);
+    }
+
+    @Test
+    public void standaloneEpisodeModeToggleDoesNotForceSelectedScroll() throws Exception {
+        Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int method = source.indexOf("private void toggleEpisodeViewMode()");
+        int nextMethod = source.indexOf("private void updateEpisodeViewModeButton()", method);
+
+        assertTrue(sourcePath + " is missing toggleEpisodeViewMode", method >= 0 && nextMethod > method);
+        String body = source.substring(method, nextMethod);
+        assertTrue("standalone TMDB episode mode toggle should preserve scroll instead of forcing selected-item alignment",
+                body.contains("rerenderEpisodeViewportOnly(false);")
+                        && !body.contains("rerenderEpisodeViewportOnly(true);"));
+    }
+
+    @Test
+    public void standaloneEpisodeViewportRerenderOnlyNumbersCurrentPage() throws Exception {
+        Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int method = source.indexOf("private void rerenderEpisodeViewportOnly(boolean scrollToSelection)");
+        int nextMethod = source.indexOf("private void updateEpisodeRangeButtonStates()", method);
+
+        assertTrue(sourcePath + " is missing rerenderEpisodeViewportOnly", method >= 0 && nextMethod > method);
+        String body = source.substring(method, nextMethod);
+        assertTrue("episode mode toggles must number only the current card page, not every visible episode",
+                body.contains("List<Episode> pageItems = ranges.size() > 1 ? EpisodeRangePolicy.slice(displayEpisodes, ranges.get(episodeRangeIndex)) : displayEpisodes;")
+                        && body.contains("Map<Episode, Integer> numbers = episodeNumbers(pageItems, episodes);")
+                        && body.indexOf("Map<Episode, Integer> numbers = episodeNumbers(pageItems, episodes);") > body.indexOf("List<Episode> pageItems ="));
+        assertTrue("episode mode toggles must not rebuild episode-number maps for every visible episode",
+                !body.contains("episodeNumbers(visibleEpisodes, episodes);"));
+    }
+
+    @Test
+    public void standaloneMobileEpisodeCardPagesUseLargerButBoundedGroups() throws Exception {
+        Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int constant = source.indexOf("private static final int STANDALONE_MOBILE_EPISODE_CARD_PAGE_MAX_SIZE = 36;");
+        int method = source.indexOf("private int episodeCardPageMaxSize()");
+        int nextMethod = source.indexOf("private boolean shouldRefreshEpisodeMediaSection", method);
+
+        assertTrue(sourcePath + " is missing standalone mobile episode card page sizing", constant >= 0 && method > constant && nextMethod > method);
+        String body = source.substring(method, nextMethod);
+        assertTrue("standalone mobile TMDB detail should use the larger bounded page size while other modes keep the default",
+                body.contains("Util.isMobile() && Setting.isStandaloneTmdbDetailMode(getDetailMode()) ? STANDALONE_MOBILE_EPISODE_CARD_PAGE_MAX_SIZE : EpisodeRangePolicy.CARD_PAGE_MAX_SIZE"));
+    }
+
+    @Test
+    public void openingDetailBindsTmdbEpisodesWithoutRepeatedIndexOf() throws Exception {
+        Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int method = source.indexOf("private void bindTmdbEpisodes(List<Episode> sourceEpisodes, int tmdbSeason)");
+        int nextMethod = source.indexOf("private int tmdbEpisodeDataSeason", method);
+
+        assertTrue(sourcePath + " is missing bindTmdbEpisodes", method >= 0 && nextMethod > method);
+        String body = source.substring(method, nextMethod);
+        assertTrue("opening detail should index source episodes once before binding TMDB episode metadata",
+                body.contains("Map<Episode, Integer> indices = episodeIndices(sourceEpisodes);")
+                        && body.contains("EpisodePosition position = episodePosition(episode, sourceEpisodes, index);"));
+        assertTrue("opening detail must not call indexOf for every episode unless the identity index misses",
+                body.contains("if (index < 0) index = sourceEpisodes.indexOf(episode);")
+                        && !body.contains("EpisodePosition position = episodePosition(episode, sourceEpisodes);"));
+    }
+
+    @Test
+    public void compactCinemaDetailKeepsPosterVisible() throws Exception {
+        Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int method = source.indexOf("private void applyCinemaDetailTemplate()");
+        int nextMethod = source.indexOf("private boolean isCompactWidth()", method);
+
+        assertTrue(sourcePath + " is missing applyCinemaDetailTemplate", method >= 0 && nextMethod > method);
+        String body = source.substring(method, nextMethod);
+        assertTrue("compact immersive/cinema detail must not hide the poster again",
+                body.contains("binding.posterCard.setVisibility(compact ? View.VISIBLE : View.GONE);"));
+        assertTrue("compact immersive/cinema poster should use a stable small size beside the title",
+                body.contains("new LinearLayout.LayoutParams(ResUtil.dp2px(92), ResUtil.dp2px(138))")
+                        && body.contains("binding.posterCard.setLayoutParams(posterParams);"));
+        assertTrue("compact immersive/cinema title area must share the row with the poster instead of occupying full width",
+                body.contains("new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)")
+                        && body.contains("infoParams.setMarginStart(compact ? ResUtil.dp2px(14) : 0);")
+                        && body.contains("if (compact) setWidthMatch(binding.detailActions);"));
+    }
+
+    @Test
     public void fusionDetailShowsFocusedPersonalAiReason() throws Exception {
         Path activityPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
         String activity = new String(Files.readAllBytes(activityPath), StandardCharsets.UTF_8);

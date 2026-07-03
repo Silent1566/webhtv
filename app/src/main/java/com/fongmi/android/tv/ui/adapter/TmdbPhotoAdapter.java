@@ -50,8 +50,10 @@ public class TmdbPhotoAdapter extends RecyclerView.Adapter<TmdbPhotoAdapter.View
     }
 
     public void setItems(List<String> photos) {
+        List<String> next = photos == null ? List.of() : photos;
+        if (items.equals(next)) return;
         items.clear();
-        if (photos != null) items.addAll(photos);
+        items.addAll(next);
         notifyDataSetChanged();
     }
 

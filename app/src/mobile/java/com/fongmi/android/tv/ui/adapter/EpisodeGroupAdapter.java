@@ -71,8 +71,12 @@ public class EpisodeGroupAdapter extends RecyclerView.Adapter<EpisodeGroupAdapte
     }
 
     public static List<Group> build(int size, int selectedIndex, boolean reverse) {
+        return build(size, selectedIndex, reverse, 0);
+    }
+
+    public static List<Group> build(int size, int selectedIndex, boolean reverse, int maxGroupSize) {
         List<Group> groups = new ArrayList<>();
-        for (EpisodeRangePolicy.Range range : EpisodeRangePolicy.build(size, selectedIndex, reverse)) {
+        for (EpisodeRangePolicy.Range range : EpisodeRangePolicy.build(size, selectedIndex, reverse, maxGroupSize)) {
             Group group = new Group(range.label(), range.start(), range.end());
             group.selected = range.selected();
             groups.add(group);

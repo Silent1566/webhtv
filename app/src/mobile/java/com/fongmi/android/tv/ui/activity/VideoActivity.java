@@ -1539,7 +1539,8 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         if (mBinding.episodeViewMode != null) mBinding.episodeViewMode.setVisibility(showViewMode ? View.VISIBLE : View.GONE);
         mBinding.episode.setVisibility(items.isEmpty() ? View.GONE : View.VISIBLE);
         mBinding.more.setVisibility(View.GONE);
-        List<EpisodeGroupAdapter.Group> groups = EpisodeGroupAdapter.build(size, getSelectedEpisodePosition(items), mHistory != null && mHistory.isRevSort());
+        int maxGroupSize = useTmdbCard ? EpisodeRangePolicy.CARD_PAGE_MAX_SIZE : 0;
+        List<EpisodeGroupAdapter.Group> groups = EpisodeGroupAdapter.build(size, getSelectedEpisodePosition(items), mHistory != null && mHistory.isRevSort(), maxGroupSize);
         mEpisodeGroupAdapter.addAll(groups);
         updateEpisodeGroupVisibility();
         setEpisodeItems(items);
@@ -2808,6 +2809,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
                 moveFlagAndEpisodeToTmdb();
                 mBinding.progressLayout.showContent();
                 mTmdbHeaderView.bind(mTmdbUIAdapter);
+                hideProgress();
                 styleTmdbSourceInFlagTitle();
                 applyTmdbPlaybackControlColors();
                 applyFusionPlayerBelowSpacing();

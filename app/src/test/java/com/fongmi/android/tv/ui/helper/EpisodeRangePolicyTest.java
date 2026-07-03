@@ -37,6 +37,22 @@ public class EpisodeRangePolicyTest {
     }
 
     @Test
+    public void build_capsCardPagesAtFiftyEpisodes() {
+        List<EpisodeRangePolicy.Range> ranges = EpisodeRangePolicy.build(501, 0, false, 50);
+
+        assertEquals(11, ranges.size());
+        assertEquals("1-50", ranges.get(0).label());
+        assertEquals("451-500", ranges.get(9).label());
+        assertEquals("501", ranges.get(10).label());
+    }
+
+    @Test
+    public void gridFallbackImagesRemainAvailableForCardPagesWithoutEpisodeArtwork() {
+        assertTrue(TmdbEpisodeGridPolicy.shouldUseFallbackImage(true, 50, false));
+        assertTrue(TmdbEpisodeGridPolicy.shouldUseFallbackImage(true, 50, true));
+    }
+
+    @Test
     public void slice_clampsRangeToItems() {
         List<Integer> items = List.of(1, 2, 3, 4);
 

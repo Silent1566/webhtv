@@ -30,6 +30,7 @@ import com.fongmi.android.tv.ui.adapter.EpisodeGroupAdapter;
 import com.fongmi.android.tv.ui.adapter.FlagAdapter;
 import com.fongmi.android.tv.ui.base.ViewType;
 import com.fongmi.android.tv.ui.custom.SpaceItemDecoration;
+import com.fongmi.android.tv.ui.helper.EpisodeRangePolicy;
 import com.fongmi.android.tv.utils.EpisodeTitleCompact;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.Util;
@@ -161,7 +162,8 @@ public class EpisodeListDialog extends AppCompatDialogFragment implements FlagAd
     private void setGroups(Flag flag) {
         if (flag == null) return;
         List<Episode> episodes = flag.getEpisodes();
-        groupAdapter.addAll(EpisodeGroupAdapter.build(episodes.size(), getSelectedEpisodePosition(episodes), reverse));
+        int maxGroupSize = tmdbCard ? EpisodeRangePolicy.CARD_PAGE_MAX_SIZE : 0;
+        groupAdapter.addAll(EpisodeGroupAdapter.build(episodes.size(), getSelectedEpisodePosition(episodes), reverse, maxGroupSize));
         setEpisodes(episodes);
         binding.group.scrollToPosition(groupAdapter.getPosition());
         binding.episode.scrollToPosition(episodeAdapter.getPosition());

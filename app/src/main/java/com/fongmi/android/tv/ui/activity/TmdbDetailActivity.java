@@ -154,6 +154,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -182,6 +183,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private static final int SHORT_DRAMA_FRAME_HEIGHT = 16;
     private static final int INLINE_SIDE_CONTROL_MARGIN_DP = 4;
     private static final int INLINE_SIDE_CONTROL_FULLSCREEN_MARGIN_DP = 48;
+    private static final int STANDALONE_MOBILE_EPISODE_CARD_PAGE_MAX_SIZE = 36;
     private static final long LEANBACK_FUSION_EXIT_DISPLAY_SUPPRESS_MS = 800;
     private static final float NORMAL_SPEED = 1.0f;
     private static final Pattern SOURCE_SEASON = Pattern.compile("(?i)(?:第\\s*([零〇一二三四五六七八九十两0-9]+)\\s*[季部]|season\\s*([0-9]{1,2})|s([0-9]{1,2})(?:[-._\\s]*e[0-9]{1,3})?)");
@@ -274,6 +276,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private boolean inlinePiPSourceFrozen;
     private long inlineStartPosition = C.TIME_UNSET;
     private int selectedSeasonNumber = -1;
+    private int lastEpisodeMediaSeason = Integer.MIN_VALUE;
     private int playerIndex = -1;
     private int inlinePiPIndex = -1;
     private int requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
@@ -1200,14 +1203,22 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         setPaddingDp(binding.contentInner, 0, 0, 0, 0);
         binding.heroRow.setOrientation(LinearLayout.HORIZONTAL);
         binding.heroRow.setGravity(compact ? 0 : android.view.Gravity.CENTER_VERTICAL);
-        binding.posterCard.setVisibility(View.GONE);
-        LinearLayout.LayoutParams infoParams = new LinearLayout.LayoutParams(topWidth, ViewGroup.LayoutParams.WRAP_CONTENT);
-        infoParams.setMarginStart(0);
+        binding.posterCard.setVisibility(compact ? View.VISIBLE : View.GONE);
+        if (compact) {
+            LinearLayout.LayoutParams posterParams = new LinearLayout.LayoutParams(ResUtil.dp2px(92), ResUtil.dp2px(138));
+            binding.posterCard.setLayoutParams(posterParams);
+            binding.posterCard.setRadius(ResUtil.dp2px(14));
+        }
+        LinearLayout.LayoutParams infoParams = compact
+                ? new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                : new LinearLayout.LayoutParams(topWidth, ViewGroup.LayoutParams.WRAP_CONTENT);
+        infoParams.setMarginStart(compact ? ResUtil.dp2px(14) : 0);
         binding.detailInfo.setLayoutParams(infoParams);
-        setWidthPx(binding.detailActions, topWidth);
+        if (compact) setWidthMatch(binding.detailActions);
+        else setWidthPx(binding.detailActions, topWidth);
         setWidthMatch(binding.flagHeader);
         setWidthMatch(binding.flagScroll);
-        binding.title.setTextSize(compact ? 38f : 44f);
+        binding.title.setTextSize(compact ? 32f : 44f);
         binding.subtitle.setTextSize(compact ? 13f : 14f);
         binding.overview.setTextSize(compact ? 14.5f : 16f);
         binding.overview.setLineSpacing(ResUtil.dp2px(compact ? 4 : 3), 1f);
@@ -1431,6 +1442,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         Task.execute(() -> {
             boolean tmdbAllowed = isTmdbAllowedForCurrentSite();
             Future<TmdbLoadResult> tmdbFuture = reusableBundle == null && tmdbConfig.isReady() && tmdbAllowed ? Task.executor().submit(this::loadTmdbResult) : null;
+            boolean singlePassStandaloneTmdb = shouldLoadInitialStandaloneTmdbDetailInSinglePass(reusableBundle, tmdbFuture);
             Vod loadedVod = null;
             String error = null;
             try {
@@ -1447,10 +1459,12 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
 
             Vod finalVod = loadedVod;
             String finalError = error;
-            runOnAliveUi(() -> {
-                if (generation != loadGeneration) return;
-                applyLoaded(finalVod, reusableBundle, new ArrayList<>(), finalError, false);
-            });
+            if (!singlePassStandaloneTmdb || finalVod == null) {
+                runOnAliveUi(() -> {
+                    if (generation != loadGeneration) return;
+                    applyLoaded(finalVod, reusableBundle, new ArrayList<>(), finalError, false);
+                });
+            }
             if (finalVod == null || tmdbFuture == null) {
                 if (tmdbFuture != null) tmdbFuture.cancel(true);
                 return;
@@ -1472,14 +1486,101 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
                     }
                     result = new TmdbLoadResult(bundle, matchedSearchItems);
                 }
-                TmdbLoadResult finalResult = result;
+                TmdbLoadResult loadedResult = result;
+                if (singlePassStandaloneTmdb) loadedResult = preloadInitialStandaloneSeason(loadedResult, finalVod);
+                TmdbLoadResult finalResult = loadedResult;
                 runOnAliveUi(() -> {
-                    if (generation != loadGeneration || vod == null) return;
-                    applyTmdbResult(finalResult);
+                    if (generation != loadGeneration || (!singlePassStandaloneTmdb && vod == null)) return;
+                    if (singlePassStandaloneTmdb) {
+                        applyLoaded(finalVod, finalResult == null ? null : finalResult.bundle(), finalResult == null ? new ArrayList<>() : finalResult.searchItems(), finalError, true);
+                    } else {
+                        applyTmdbResult(finalResult);
+                    }
                 });
             } catch (Throwable ignored) {
+                if (singlePassStandaloneTmdb) {
+                    runOnAliveUi(() -> {
+                        if (generation != loadGeneration) return;
+                        applyLoaded(finalVod, null, new ArrayList<>(), finalError, false);
+                    });
+                }
             }
         });
+    }
+
+    private boolean shouldLoadInitialStandaloneTmdbDetailInSinglePass(@Nullable TmdbBundle reusableBundle, @Nullable Future<TmdbLoadResult> tmdbFuture) {
+        return reusableBundle == null && tmdbFuture != null && activeTmdbBundle == null && Setting.isStandaloneTmdbDetailMode(getDetailMode());
+    }
+
+    private TmdbLoadResult preloadInitialStandaloneSeason(TmdbLoadResult result, Vod loadedVod) {
+        TmdbBundle bundle = result == null ? null : result.bundle();
+        if (bundle == null || loadedVod == null || bundle.item() == null || !"tv".equalsIgnoreCase(bundle.item().getMediaType()) || !canMatchTmdb()) return result;
+        int seasonNumber = initialStandaloneSeasonNumber(loadedVod, bundle);
+        if (seasonNumber < 0 || bundle.seasonEpisodes().containsKey(seasonNumber)) return result;
+        try {
+            JsonObject season = tmdbService.season(bundle.item(), seasonNumber, tmdbConfig, bundle.detail(), false);
+            Map<Integer, Integer> seasonCounts = new HashMap<>(bundle.seasonCounts());
+            Map<Integer, List<TmdbEpisode>> seasonEpisodes = new HashMap<>(bundle.seasonEpisodes());
+            Map<Integer, List<TmdbPerson>> seasonCast = new HashMap<>(bundle.seasonCast());
+            Map<Integer, List<String>> seasonPhotos = new HashMap<>(bundle.seasonPhotos());
+            List<TmdbEpisode> episodes = tmdbService.episodes(season, tmdbConfig, bundle.item().getTmdbId(), seasonNumber);
+            seasonCounts.put(seasonNumber, episodes.size());
+            seasonEpisodes.put(seasonNumber, episodes);
+            seasonCast.put(seasonNumber, tmdbService.seasonCast(season, tmdbConfig));
+            seasonPhotos.put(seasonNumber, tmdbService.seasonPhotos(season, tmdbConfig));
+            TmdbBundle withSeason = new TmdbBundle(bundle.item(), bundle.detail(), bundle.cast(), bundle.creators(), bundle.photos(), bundle.related(), bundle.seasons(), seasonCounts, seasonEpisodes, seasonCast, seasonPhotos);
+            return new TmdbLoadResult(withSeason, result.searchItems());
+        } catch (Throwable ignored) {
+            return result;
+        }
+    }
+
+    private int initialStandaloneSeasonNumber(Vod loadedVod, TmdbBundle bundle) {
+        List<Episode> episodes = initialStandaloneEpisodes(loadedVod);
+        if (episodes.isEmpty()) return -1;
+        Episode selected = initialStandaloneEpisode(episodes);
+        int sourceSeason = sourceSeasonNumber(selected);
+        if (sourceSeason > 0 && bundle.seasons().contains(sourceSeason)) return sourceSeason;
+        int titleSeason = sourceSeasonNumber(loadedVod.getName());
+        if (titleSeason > 0 && bundle.seasons().contains(titleSeason)) return titleSeason;
+        int firstSeason = firstSeasonNumber(bundle.detail());
+        if (!hasExplicitSeasonNumbers(episodes) && EpisodeSeasonPolicy.shouldUseSingleSeasonEpisodeData(episodes.size(), firstSeason, bundle.seasons(), bundle.seasonCounts())) return firstSeason;
+        if (bundle.seasons().contains(firstSeason)) return firstSeason;
+        return bundle.seasons().isEmpty() ? -1 : bundle.seasons().get(0);
+    }
+
+    private List<Episode> initialStandaloneEpisodes(Vod loadedVod) {
+        List<Flag> flags = loadedVod.getFlags();
+        if (flags == null || flags.isEmpty()) return List.of();
+        String historyFlag = "";
+        try {
+            History saved = History.find(getHistoryKey());
+            historyFlag = saved == null ? "" : saved.getVodFlag();
+        } catch (Throwable ignored) {
+        }
+        Flag selected = flags.get(0);
+        for (Flag flag : flags) {
+            if (!TextUtils.isEmpty(historyFlag) && TextUtils.equals(historyFlag, flag.getFlag())) {
+                selected = flag;
+                break;
+            }
+        }
+        return selected.getEpisodes();
+    }
+
+    private Episode initialStandaloneEpisode(List<Episode> episodes) {
+        if (episodes == null || episodes.isEmpty()) return null;
+        try {
+            History saved = History.find(getHistoryKey());
+            Episode episode = findEpisodeByUrl(saved == null ? "" : saved.getEpisodeUrl(), episodes);
+            if (episode != null) return episode;
+            if (saved != null) {
+                String remarks = saved.getVodRemarks();
+                for (Episode item : episodes) if (item.getName().equalsIgnoreCase(remarks) || item.getDisplayName().equals(remarks)) return item;
+            }
+        } catch (Throwable ignored) {
+        }
+        return episodes.get(0);
     }
 
     private boolean canTouchUi() {
@@ -1594,6 +1695,10 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private void applyTmdbResult(TmdbLoadResult result) {
+        applyTmdbResultNow(result);
+    }
+
+    private void applyTmdbResultNow(TmdbLoadResult result) {
         TmdbBundle bundle = result == null ? null : result.bundle();
         applyTmdbBundle(bundle);
         if (bundle != null) saveTmdbMatch(bundle.item());
@@ -1604,10 +1709,11 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         bindRatings();
         bindOverview();
         renderSeasonSelection();
+        lastEpisodeMediaSeason = Integer.MIN_VALUE;
         renderEpisodes();
-        bindTmdbSection();
+        if (selectedFlag == null || selectedFlag.getEpisodes() == null || selectedFlag.getEpisodes().isEmpty()) bindTmdbSection();
         focusInlinePlayerPanel();
-        if (bundle != null) loadTmdbMediaBlocks(bundle);
+        if (bundle != null) binding.getRoot().post(() -> loadTmdbMediaBlocks(bundle));
         if (shouldShowAutoTmdbMatchDialog(bundle)) showTmdbMatchDialog(result == null ? List.of() : result.searchItems());
     }
 
@@ -2619,28 +2725,83 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         renderSeasonSelection();
         bindSeasonEpisodes(episodes);
         refreshCurrentHistoryEpisodeTitle();
-        Map<Episode, Integer> episodeNumbers = episodeNumbers(visibleEpisodes, episodes);
+        boolean shouldRefreshTmdbSection = shouldRefreshEpisodeMediaSection(episodes);
         List<Episode> displayEpisodes = new ArrayList<>(visibleEpisodes);
         if (episodeReverse) Collections.reverse(displayEpisodes);
-        List<EpisodeRangePolicy.Range> episodeRanges = EpisodeRangePolicy.build(displayEpisodes.size(), displayEpisodes.indexOf(selectedEpisode), episodeReverse);
+        List<EpisodeRangePolicy.Range> episodeRanges = buildCardEpisodeRanges(displayEpisodes, selectedEpisode);
         episodeRangeIndex = resolveEpisodeRangeIndex(episodeRanges);
         renderEpisodeRanges(episodeRanges);
         List<Episode> pagedDisplayEpisodes = episodeRanges.size() > 1 ? EpisodeRangePolicy.slice(displayEpisodes, episodeRanges.get(episodeRangeIndex)) : displayEpisodes;
+        Map<Episode, Integer> episodeNumbers = episodeNumbers(pagedDisplayEpisodes, episodes);
         binding.episodeReverse.setText(episodeReverse ? R.string.detail_episode_forward : R.string.detail_episode_reverse);
         if (shouldForceAdaptiveEpisodeGrid()) episodeGridMode = true;
         binding.episodeViewMode.setVisibility(shouldForceAdaptiveEpisodeGrid() ? View.GONE : View.VISIBLE);
+        applyEpisodeViewport(pagedDisplayEpisodes, episodeNumbers, true);
+        if (shouldRefreshTmdbSection) bindTmdbSection();
+    }
+
+    private List<EpisodeRangePolicy.Range> buildCardEpisodeRanges(List<Episode> episodes, Episode selected) {
+        return EpisodeRangePolicy.build(episodes.size(), episodes.indexOf(selected), episodeReverse, episodeCardPageMaxSize());
+    }
+
+    private int episodeCardPageMaxSize() {
+        return Util.isMobile() && Setting.isStandaloneTmdbDetailMode(getDetailMode()) ? STANDALONE_MOBILE_EPISODE_CARD_PAGE_MAX_SIZE : EpisodeRangePolicy.CARD_PAGE_MAX_SIZE;
+    }
+
+    private boolean shouldRefreshEpisodeMediaSection(List<Episode> episodes) {
+        int currentSeason = tmdbEpisodeDataSeason(episodes);
+        if (currentSeason != lastEpisodeMediaSeason) {
+            lastEpisodeMediaSeason = currentSeason;
+            return true;
+        }
+        return false;
+    }
+
+    private void applyEpisodeViewport(List<Episode> items, Map<Episode, Integer> episodeNumbers, boolean scrollToSelection) {
         updateEpisodeViewModeButton();
         int spanCount = episodeSpanCount();
-        episodeAdapter.setMode(episodeGridMode ? TmdbEpisodeAdapter.Mode.GRID : TmdbEpisodeAdapter.Mode.LIST);
-        episodeAdapter.setGridSpanCount(spanCount);
+        episodeAdapter.setDisplayMode(episodeGridMode ? TmdbEpisodeAdapter.Mode.GRID : TmdbEpisodeAdapter.Mode.LIST, spanCount);
         updateEpisodeLayoutManager(spanCount);
-        updateEpisodeViewport(pagedDisplayEpisodes.size(), spanCount);
+        updateEpisodeViewport(items.size(), spanCount);
         episodeAdapter.setFallbackStillUrl(episodeFallbackStillUrl());
-        episodeAdapter.setItems(pagedDisplayEpisodes, tmdbEpisodes, episodeNumbers, selectedEpisode);
+        episodeAdapter.setItems(items, tmdbEpisodes, episodeNumbers, selectedEpisode);
         updateEpisodeSkeleton();
-        scrollEpisodeToSelected();
+        if (scrollToSelection) scrollEpisodeToSelected();
         updatePlayLabel();
-        bindTmdbSection();
+    }
+
+    private void rerenderEpisodeViewportOnly(boolean scrollToSelection) {
+        List<Episode> episodes = selectedFlag == null ? null : selectedFlag.getEpisodes();
+        if (episodes == null || episodes.isEmpty()) return;
+        List<Episode> visibleEpisodes = visibleEpisodes(episodes);
+        List<Episode> displayEpisodes = new ArrayList<>(visibleEpisodes);
+        if (episodeReverse) Collections.reverse(displayEpisodes);
+        List<EpisodeRangePolicy.Range> ranges = buildCardEpisodeRanges(displayEpisodes, selectedEpisode);
+        if (ranges.isEmpty()) {
+            applyEpisodeViewport(List.of(), Map.of(), false);
+            return;
+        }
+        episodeRangeIndex = resolveEpisodeRangeIndex(ranges);
+        updateEpisodeRangeButtonStates();
+        List<Episode> pageItems = ranges.size() > 1 ? EpisodeRangePolicy.slice(displayEpisodes, ranges.get(episodeRangeIndex)) : displayEpisodes;
+        Map<Episode, Integer> numbers = episodeNumbers(pageItems, episodes);
+        binding.episodeReverse.setText(episodeReverse ? R.string.detail_episode_forward : R.string.detail_episode_reverse);
+        applyEpisodeViewport(pageItems, numbers, scrollToSelection);
+    }
+
+    private void updateEpisodeRangeButtonStates() {
+        if (binding == null) return;
+        for (int i = 0; i < binding.episodeRangeContainer.getChildCount(); i++) {
+            View child = binding.episodeRangeContainer.getChildAt(i);
+            if (child instanceof MaterialButton button) setChipState(button, i == episodeRangeIndex);
+        }
+    }
+
+    private void selectEpisodeRange(int index, boolean scrollToSelection) {
+        cancelPendingInlinePlayback();
+        manualEpisodeRange = true;
+        episodeRangeIndex = index;
+        rerenderEpisodeViewportOnly(scrollToSelection);
     }
 
     private int resolveEpisodeRangeIndex(List<EpisodeRangePolicy.Range> ranges) {
@@ -2664,12 +2825,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             MaterialButton button = createChipButton(range.label());
             setChipState(button, i == episodeRangeIndex);
             int index = i;
-            button.setOnClickListener(view -> {
-                cancelPendingInlinePlayback();
-                manualEpisodeRange = true;
-                episodeRangeIndex = index;
-                renderEpisodes();
-            });
+            button.setOnClickListener(view -> selectEpisodeRange(index, false));
             setEpisodeRangeFocusChange(button, index);
             button.setOnKeyListener((view, keyCode, event) -> onDetailEpisodeRangeKey(keyCode, event));
             binding.episodeRangeContainer.addView(button);
@@ -2684,11 +2840,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         button.setOnFocusChangeListener((view, focused) -> {
             applyChipFocus(button, index == episodeRangeIndex, focused, colors);
             if (!focused || index == episodeRangeIndex) return;
-            cancelPendingInlinePlayback();
-            manualEpisodeRange = true;
-            episodeRangeIndex = index;
             pendingEpisodeRangeFocus = index;
-            renderEpisodes();
+            selectEpisodeRange(index, false);
         });
     }
 
@@ -2872,7 +3025,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         if (shouldForceAdaptiveEpisodeGrid()) return;
         episodeGridMode = !episodeGridMode;
         Setting.putTmdbEpisodeGridMode(episodeGridMode);
-        renderEpisodes();
+        rerenderEpisodeViewportOnly(false);
     }
 
     private void updateEpisodeViewModeButton() {
@@ -2935,12 +3088,22 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
 
     private Map<Episode, Integer> episodeNumbers(List<Episode> visibleEpisodes, List<Episode> allEpisodes) {
         Map<Episode, Integer> numbers = new HashMap<>();
+        Map<Episode, Integer> indices = episodeIndices(allEpisodes);
         for (int i = 0; i < visibleEpisodes.size(); i++) {
             Episode episode = visibleEpisodes.get(i);
-            EpisodePosition position = episodePosition(episode, allEpisodes);
+            int index = indices.getOrDefault(episode, -1);
+            if (index < 0 && allEpisodes != null) index = allEpisodes.indexOf(episode);
+            EpisodePosition position = episodePosition(episode, allEpisodes, index);
             numbers.put(episode, position.number() > 0 ? position.number() : i + 1);
         }
         return numbers;
+    }
+
+    private Map<Episode, Integer> episodeIndices(List<Episode> episodes) {
+        Map<Episode, Integer> indices = new IdentityHashMap<>();
+        if (episodes == null) return indices;
+        for (int i = 0; i < episodes.size(); i++) indices.put(episodes.get(i), i);
+        return indices;
     }
 
     private void renderSeasonSelection() {
@@ -2980,8 +3143,11 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
 
     private void bindTmdbEpisodes(List<Episode> sourceEpisodes, int tmdbSeason) {
         if (sourceEpisodes == null || sourceEpisodes.isEmpty()) return;
+        Map<Episode, Integer> indices = episodeIndices(sourceEpisodes);
         for (Episode episode : sourceEpisodes) {
-            EpisodePosition position = episodePosition(episode, sourceEpisodes);
+            int index = indices.getOrDefault(episode, -1);
+            if (index < 0) index = sourceEpisodes.indexOf(episode);
+            EpisodePosition position = episodePosition(episode, sourceEpisodes, index);
             if (position.season() == tmdbSeason) episode.setTmdbEpisode(tmdbEpisodes.get(position.number()));
         }
     }
@@ -3023,6 +3189,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
                     seasonEpisodeCounts.put(seasonNumber, episodes.size());
                     tmdbSeasonCast.put(seasonNumber, cast);
                     tmdbSeasonPhotos.put(seasonNumber, photos);
+                    lastEpisodeMediaSeason = Integer.MIN_VALUE;
                     if (seasonNumber == tmdbEpisodeDataSeason(selectedFlag == null ? null : selectedFlag.getEpisodes()) || usesSingleTmdbSeasonEpisodeData(selectedFlag == null ? null : selectedFlag.getEpisodes())) renderEpisodes();
                 });
             } catch (Throwable ignored) {
@@ -5009,7 +5176,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         final Runnable[] render = new Runnable[1];
         final java.util.function.BiConsumer<Integer, Boolean> showPage = (index, focusEpisode) -> {
             List<Episode> ordered = orderedInlineEpisodes();
-            List<EpisodeRangePolicy.Range> ranges = EpisodeRangePolicy.build(ordered.size(), ordered.indexOf(selectedEpisode), episodeReverse);
+            List<EpisodeRangePolicy.Range> ranges = buildCardEpisodeRanges(ordered, selectedEpisode);
             if (ranges.isEmpty()) {
                 adapter.setItems(List.of(), selectedEpisode, inlineEpisodeTitles(selectedFlag.getEpisodes()));
                 return;
@@ -5034,7 +5201,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             List<Episode> ordered = orderedInlineEpisodes();
             pageRow.removeAllViews();
             pageButtons.clear();
-            List<EpisodeRangePolicy.Range> ranges = EpisodeRangePolicy.build(ordered.size(), ordered.indexOf(selectedEpisode), episodeReverse);
+            List<EpisodeRangePolicy.Range> ranges = buildCardEpisodeRanges(ordered, selectedEpisode);
             pageScroll.setVisibility(ranges.size() > 1 ? View.VISIBLE : View.GONE);
             if (ranges.isEmpty()) return;
             if (!manualPage[0]) pageIndex[0] = EpisodeRangePolicy.selectedPosition(ranges);
@@ -5183,15 +5350,14 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         });
         final java.util.function.BiConsumer<Integer, Boolean> showPage = (index, focusEpisode) -> {
             List<Episode> ordered = orderedInlineEpisodes();
-            List<EpisodeRangePolicy.Range> ranges = EpisodeRangePolicy.build(ordered.size(), ordered.indexOf(selectedEpisode), episodeReverse);
+            List<EpisodeRangePolicy.Range> ranges = buildCardEpisodeRanges(ordered, selectedEpisode);
             if (ranges.isEmpty()) {
                 adapter.setItems(List.of(), tmdbEpisodes, Map.of(), selectedEpisode);
                 return;
             }
             pageIndex[0] = Math.max(0, Math.min(index, ranges.size() - 1));
             List<Episode> pageItems = EpisodeRangePolicy.slice(ordered, ranges.get(pageIndex[0]));
-            adapter.setMode(TmdbEpisodeAdapter.Mode.GRID);
-            adapter.setGridSpanCount(layout.spanCount());
+            adapter.setDisplayMode(TmdbEpisodeAdapter.Mode.GRID, layout.spanCount());
             adapter.setFallbackStillUrl(episodeFallbackStillUrl());
             adapter.setItems(pageItems, tmdbEpisodes, episodeNumbers(pageItems, selectedFlag.getEpisodes()), selectedEpisode);
             for (int i = 0; i < pageButtons.size(); i++) {
@@ -5221,7 +5387,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             List<Episode> ordered = orderedInlineEpisodes();
             pageRow.removeAllViews();
             pageButtons.clear();
-            List<EpisodeRangePolicy.Range> ranges = EpisodeRangePolicy.build(ordered.size(), ordered.indexOf(selectedEpisode), episodeReverse);
+            List<EpisodeRangePolicy.Range> ranges = buildCardEpisodeRanges(ordered, selectedEpisode);
             pageScroll.setVisibility(ranges.size() > 1 ? View.VISIBLE : View.GONE);
             if (ranges.isEmpty()) return;
             int selectedPage = EpisodeRangePolicy.selectedPosition(ranges);
@@ -5419,6 +5585,10 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
 
     private EpisodePosition episodePosition(Episode episode, List<Episode> episodes) {
         int index = episode == null || episodes == null ? -1 : episodes.indexOf(episode);
+        return episodePosition(episode, episodes, index);
+    }
+
+    private EpisodePosition episodePosition(Episode episode, List<Episode> episodes, int index) {
         int sourceNumber = sourceEpisodeNumber(episode);
         if (usesSingleTmdbSeasonEpisodeData(episodes)) return new EpisodePosition(firstSeasonNumber(matchedTmdbDetail), linearEpisodeNumber(sourceNumber, index));
         int sourceSeason = sourceSeasonNumber(episode);
