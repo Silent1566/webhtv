@@ -1,15 +1,16 @@
 package com.fongmi.android.tv.player;
 
 import android.net.Uri;
+import android.os.SystemClock;
 import android.text.TextUtils;
 
 import androidx.annotation.NonNull;
 import androidx.media3.common.C;
 import androidx.media3.common.Effect;
 import androidx.media3.common.Format;
+import androidx.media3.common.MediaEdition;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.MediaMetadata;
-import androidx.media3.common.MediaTitle;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.common.Tracks;
@@ -49,6 +50,7 @@ import com.github.catvod.crawler.SpiderDebug;
 import com.github.catvod.net.OkHttp;
 import com.google.common.net.HttpHeaders;
 
+import java.io.IOException;
 import java.text.DecimalFormat;
 import java.util.Collections;
 import java.util.HashMap;
@@ -62,9 +64,11 @@ public class PlayerManager implements ParseCallback {
 
     private static final long LOCAL_PROXY_READY_TIMEOUT_MS = 5000;
     private static final long LOCAL_PROXY_RETRY_DELAY_MS = 1000;
+    private static final long HARD_DECODE_SWITCH_RETRY_DELAY_MS = 1200;
     private static final int LOCAL_PROXY_MAX_RETRY = 2;
     private static final int[] PLAYER_FALLBACK_ORDER = new int[]{PlayerSetting.EXO, PlayerSetting.IJK, PlayerSetting.SYSTEM};
     private static final int LUT_WARMUP_RECOVERED_ERROR_REFRESH_THRESHOLD = 3;
+    private static final long DANMAKU_FORCE_RELOAD_DEBOUNCE_MS = 10000;
     private static final float[] SPEED_PRESETS = new float[]{0.5f, 0.75f, 1f, 1.2f, 1.25f, 1.5f, 1.75f, 2f, 2.5f, 3f, 5f};
     private static final DecimalFormat SPEED_FORMAT = new DecimalFormat("0.##x");
 
@@ -78,6 +82,10 @@ public class PlayerManager implements ParseCallback {
     private PlaySpec spec;
     private Player player;
     private String currentDanmakuUrl;
+    private String currentDanmakuKey;
+    private String loadingDanmakuKey;
+    private long danmakuLoadStartedAtMs;
+    private boolean danmakuLoadInProgress;
 
     private boolean initTrack;
     private boolean exoFallbackTried;
@@ -90,9 +98,11 @@ public class PlayerManager implements ParseCallback {
     private boolean lutPipelinePrepareInProgress;
     private boolean pendingLutPreview;
     private boolean waitingLutBeforePlay;
+    private boolean playWhenReady = true;
     private boolean lutWarmupRecoveryActive;
     private boolean lutWarmupRefreshRequested;
     private boolean lutWarmupReloadPreviewPending;
+    private boolean hardDecodeSwitchRetryArmed;
     private boolean lutAllowed = true;
     private boolean manualPlayerSwitchPending;
     private int playerType;
@@ -132,7 +142,7 @@ public class PlayerManager implements ParseCallback {
         waitingLutBeforePlay = false;
         lutWarmupReloadPreviewPending = false;
         clearLutWarmupRecovery();
-        currentDanmakuUrl = null;
+        clearDanmakuState();
     }
 
     private void resetLutRuntimeState(String reason, boolean clearEngineEffects) {
@@ -166,8 +176,8 @@ public class PlayerManager implements ParseCallback {
         return engine.getCurrentTracks();
     }
 
-    public List<MediaTitle> getCurrentMediaTitles() {
-        return engine.getCurrentMediaTitles();
+    public List<MediaEdition> getCurrentMediaEditions() {
+        return engine.getCurrentMediaEditions();
     }
 
     public MediaItem getCurrentMediaItem() {
@@ -321,6 +331,10 @@ public class PlayerManager implements ParseCallback {
         return engine.getDecodeText();
     }
 
+    public boolean isHardDecode() {
+        return engine.isHard();
+    }
+
     public String getPlayerText() {
         return getPlayerText(playerType);
     }
@@ -409,8 +423,9 @@ public class PlayerManager implements ParseCallback {
         setMediaItem();
     }
 
-    public void setTitle(MediaTitle title) {
-        if (spec != null) spec.setUrl(spec.getUri().buildUpon().fragment("title=" + title.index).build().toString());
+    public void setTitle(MediaEdition edition) {
+        if (spec != null) spec.setUrl(spec.getUri().buildUpon().fragment("edition=" + edition.index).build().toString());
+        if (engine.selectEdition(edition)) return;
         setMediaItem();
         seekTo(0);
     }
@@ -429,6 +444,19 @@ public class PlayerManager implements ParseCallback {
         danmakuController = controller;
         danmakuController.setOkHttpClient(OkHttp.player());
         danmakuController.setConfig(DanmakuSetting.getConfig());
+        danmakuController.setListener(new DanmakuController.Listener() {
+            @Override
+            public void onLoadCompleted(Uri uri, int count) {
+                logDanmakuLoad("completed", uri, count, null);
+                finishDanmakuLoad(uri);
+            }
+
+            @Override
+            public void onLoadError(Uri uri, IOException error) {
+                logDanmakuLoad("error", uri, -1, error);
+                finishDanmakuLoad(uri);
+            }
+        });
     }
 
     public void setDanmakuConfig(DanmakuConfig config) {
@@ -527,13 +555,14 @@ public class PlayerManager implements ParseCallback {
         retry = 0;
         localProxyRetry = 0;
         resetPlayerFallback();
+        hardDecodeSwitchRetryArmed = false;
     }
 
     public void clear() {
         prepareSeq++;
         lutApplySeq++;
         spec = null;
-        currentDanmakuUrl = null;
+        clearDanmakuState();
         lutAppliedForItem = false;
         lutApplyInProgress = false;
         lutPipelineReadyForItem = false;
@@ -548,8 +577,11 @@ public class PlayerManager implements ParseCallback {
     }
 
     public void toggleDecode() {
-        engine.setDecode(engine.isHard() ? PlayerEngine.SOFT : PlayerEngine.HARD);
-        rebuildPlayer();
+        int next = engine.isHard() ? PlayerEngine.SOFT : PlayerEngine.HARD;
+        boolean resetVideoSurface = playerType == PlayerSetting.EXO && next == PlayerEngine.HARD;
+        hardDecodeSwitchRetryArmed = next == PlayerEngine.HARD;
+        engine.setDecode(next);
+        rebuildPlayer(resetVideoSurface);
         setMediaItem();
     }
 
@@ -580,21 +612,19 @@ public class PlayerManager implements ParseCallback {
     }
 
     private void switchEngine(int type, boolean persist, boolean preserveState, boolean notifyPrepare) {
-        long position = preserveState ? getPosition() : 0;
-        float speed = preserveState ? getSpeed() : 1f;
-        boolean repeat = preserveState && isRepeatOne();
         int decode = engine.getDecode();
-        switchEngine(type, persist, notifyPrepare, decode, position, speed, repeat);
+        switchEngine(type, persist, preserveState, notifyPrepare, decode);
     }
 
     private void switchEngine(int type, boolean persist, boolean preserveState, boolean notifyPrepare, int decode) {
         long position = preserveState ? getPosition() : 0;
         float speed = preserveState ? getSpeed() : 1f;
         boolean repeat = preserveState && isRepeatOne();
-        switchEngine(type, persist, notifyPrepare, decode, position, speed, repeat);
+        boolean wasPlayWhenReady = preserveState && player != null ? player.getPlayWhenReady() : playWhenReady;
+        switchEngine(type, persist, notifyPrepare, decode, position, speed, repeat, wasPlayWhenReady);
     }
 
-    private void switchEngine(int type, boolean persist, boolean notifyPrepare, int decode, long position, float speed, boolean repeat) {
+    private void switchEngine(int type, boolean persist, boolean notifyPrepare, int decode, long position, float speed, boolean repeat, boolean wasPlayWhenReady) {
         prepareSeq++;
         resetLutRuntimeState("switch_player", true);
         engine.release();
@@ -606,16 +636,21 @@ public class PlayerManager implements ParseCallback {
         if (SpiderDebug.isEnabled()) SpiderDebug.log("player", "switch player type=%d persist=%s position=%d spec=%s", type, persist, position, debugSpec());
         engine = buildEngine(playerType, sanitizeDecode(decode));
         player = engine.getPlayer();
-        callback.onPlayerRebuild(player);
+        callback.onPlayerRebuild(player, false);
         if (spec == null || spec.getUrl() == null) return;
-        if (persist) setMediaItem();
-        else setMediaItemNow(Constant.TIMEOUT_PLAY, notifyPrepare);
+        this.playWhenReady = wasPlayWhenReady;
+        if (notifyPrepare) setMediaItem(Constant.TIMEOUT_PLAY);
+        else setMediaItemNow(Constant.TIMEOUT_PLAY, false);
         if (position > 0) seekTo(position);
         if (speed != 1f) setSpeed(speed);
         setRepeatOne(repeat);
     }
 
     private void rebuildPlayer() {
+        rebuildPlayer(false);
+    }
+
+    private void rebuildPlayer(boolean resetVideoSurface) {
         player = engine.rebuild(listener);
         videoEffectsActive = false;
         videoEffectsDirty = false;
@@ -625,7 +660,7 @@ public class PlayerManager implements ParseCallback {
         lutPipelinePrepareInProgress = false;
         pendingLutPreview = false;
         waitingLutBeforePlay = false;
-        callback.onPlayerRebuild(player);
+        callback.onPlayerRebuild(player, resetVideoSurface);
     }
 
     private PlayerEngine buildEngine(int type, int decode) {
@@ -644,27 +679,39 @@ public class PlayerManager implements ParseCallback {
     }
 
     public void start(PlaySpec spec, long timeout) {
+        start(spec, timeout, true);
+    }
+
+    public void start(PlaySpec spec, long timeout, boolean playWhenReady) {
         this.spec = spec;
+        this.playWhenReady = playWhenReady;
         retry = 0;
         exoFallbackTried = false;
         realtimeFallbackTried = false;
         manualPlayerSwitchPending = false;
         localProxyRetry = 0;
         resetPlayerFallback();
-        currentDanmakuUrl = null;
+        hardDecodeSwitchRetryArmed = false;
+        clearDanmakuState();
         setMediaItem(timeout);
     }
 
     public void parse(String key, Result result, boolean useParse, MediaMetadata metadata) {
+        parse(key, result, useParse, metadata, true);
+    }
+
+    public void parse(String key, Result result, boolean useParse, MediaMetadata metadata, boolean playWhenReady) {
         stopParse();
         spec = PlaySpec.fromParse(result, key, metadata);
+        this.playWhenReady = playWhenReady;
         retry = 0;
         exoFallbackTried = false;
         realtimeFallbackTried = false;
         manualPlayerSwitchPending = false;
         localProxyRetry = 0;
         resetPlayerFallback();
-        currentDanmakuUrl = null;
+        hardDecodeSwitchRetryArmed = false;
+        clearDanmakuState();
         parseJob = ParseJob.create(this).start(result, useParse);
     }
 
@@ -674,6 +721,7 @@ public class PlayerManager implements ParseCallback {
     }
 
     public void setMediaItem() {
+        playWhenReady = player == null || player.getPlayWhenReady();
         setMediaItem(Constant.TIMEOUT_PLAY);
     }
 
@@ -732,7 +780,7 @@ public class PlayerManager implements ParseCallback {
         prepareLutPipeline();
         initTrack = false;
         waitingLutBeforePlay = false;
-        engine.start(spec.checkUa());
+        engine.start(spec.checkUa(), playWhenReady);
         App.post(runnable, timeout);
         if (notifyPrepare) callback.onPrepare();
     }
@@ -1094,22 +1142,83 @@ public class PlayerManager implements ParseCallback {
 
     private void setDanmaku(Danmaku item, boolean force) {
         if (danmakuController == null) return;
-        if (spec != null) spec.setDanmaku(item);
         if (item.isEmpty()) {
+            if (spec != null) spec.setDanmaku(item);
             if (SpiderDebug.isEnabled()) SpiderDebug.log("danmaku", "clear current=%s", summarizeUrl(currentDanmakuUrl));
             if (currentDanmakuUrl != null) danmakuController.clearItems();
-            currentDanmakuUrl = null;
+            clearDanmakuState();
             return;
         }
         String url = item.getRealUrl();
+        String key = normalizeDanmakuKey(url);
         if (!force && TextUtils.equals(currentDanmakuUrl, url)) {
             if (SpiderDebug.isEnabled()) SpiderDebug.log("danmaku", "skip same url=%s", summarizeUrl(url));
             return;
         }
+        if (force && shouldSkipForcedDanmakuReload(key)) {
+            if (SpiderDebug.isEnabled()) SpiderDebug.log("danmaku", "skip duplicate reload key=%s url=%s", summarizeUrl(key), summarizeUrl(url));
+            return;
+        }
+        if (spec != null) spec.setDanmaku(item);
         if (force && currentDanmakuUrl != null) danmakuController.clearItems();
         currentDanmakuUrl = url;
-        if (SpiderDebug.isEnabled()) SpiderDebug.log("danmaku", "%s name=%s url=%s", force ? "reload" : "load", item.getName(), summarizeUrl(url));
+        currentDanmakuKey = key;
+        loadingDanmakuKey = key;
+        danmakuLoadStartedAtMs = SystemClock.elapsedRealtime();
+        danmakuLoadInProgress = true;
+        if (SpiderDebug.isEnabled()) SpiderDebug.log("danmaku", "%s name=%s url=%s key=%s", force ? "reload" : "load", item.getName(), summarizeUrl(url), summarizeUrl(key));
         danmakuController.setDataSource(Uri.parse(url));
+    }
+
+    private boolean shouldSkipForcedDanmakuReload(String key) {
+        if (TextUtils.isEmpty(key) || !TextUtils.equals(currentDanmakuKey, key) || danmakuLoadStartedAtMs <= 0) return false;
+        if (danmakuLoadInProgress && (TextUtils.isEmpty(loadingDanmakuKey) || TextUtils.equals(loadingDanmakuKey, key))) return true;
+        long elapsed = SystemClock.elapsedRealtime() - danmakuLoadStartedAtMs;
+        return elapsed >= 0 && elapsed < DANMAKU_FORCE_RELOAD_DEBOUNCE_MS;
+    }
+
+    private void finishDanmakuLoad(Uri uri) {
+        String key = normalizeDanmakuKey(uri == null ? "" : uri.toString());
+        if (!TextUtils.isEmpty(loadingDanmakuKey) && !TextUtils.equals(loadingDanmakuKey, key)) return;
+        danmakuLoadInProgress = false;
+        loadingDanmakuKey = null;
+    }
+
+    private void clearDanmakuState() {
+        currentDanmakuUrl = null;
+        currentDanmakuKey = null;
+        loadingDanmakuKey = null;
+        danmakuLoadStartedAtMs = 0;
+        danmakuLoadInProgress = false;
+    }
+
+    private void logDanmakuLoad(String event, Uri uri, int count, IOException error) {
+        if (!SpiderDebug.isEnabled()) return;
+        long elapsed = danmakuLoadStartedAtMs <= 0 ? -1 : SystemClock.elapsedRealtime() - danmakuLoadStartedAtMs;
+        if (error == null) {
+            SpiderDebug.log("danmaku", "load %s count=%d elapsed=%dms url=%s", event, count, elapsed, summarizeUrl(uri == null ? "" : uri.toString()));
+        } else {
+            SpiderDebug.log("danmaku", "load %s elapsed=%dms url=%s error=%s", event, elapsed, summarizeUrl(uri == null ? "" : uri.toString()), error.getMessage());
+        }
+    }
+
+    private static String normalizeDanmakuKey(String url) {
+        if (TextUtils.isEmpty(url)) return "";
+        String value = url.trim();
+        try {
+            Uri uri = Uri.parse(value);
+            String nested = getNestedDanmakuUrl(uri);
+            return TextUtils.isEmpty(nested) ? value : normalizeDanmakuKey(nested);
+        } catch (Throwable e) {
+            return value;
+        }
+    }
+
+    private static String getNestedDanmakuUrl(Uri uri) {
+        if (uri == null) return "";
+        String path = uri.getPath();
+        if (TextUtils.isEmpty(path) || !path.endsWith("/danmaku")) return "";
+        return uri.getQueryParameter("url");
     }
 
     public void addDanmaku(Danmaku item) {
@@ -1125,7 +1234,7 @@ public class PlayerManager implements ParseCallback {
         if (headers != null) headers.remove(HttpHeaders.RANGE);
         if (spec != null) spec.setHeaders(headers);
         if (spec != null) spec.setUrl(url);
-        setMediaItem();
+        setMediaItem(Constant.TIMEOUT_PLAY);
     }
 
     @Override
@@ -1194,7 +1303,7 @@ public class PlayerManager implements ParseCallback {
 
         void onReload(String msg);
 
-        void onPlayerRebuild(Player newPlayer);
+        void onPlayerRebuild(Player newPlayer, boolean resetVideoSurface);
     }
 
     private final Player.Listener listener = new Player.Listener() {
@@ -1205,6 +1314,7 @@ public class PlayerManager implements ParseCallback {
             if (SpiderDebug.isEnabled()) SpiderDebug.log("player", "state=%s spec=%s", stateName(state), debugSpec());
             if (state == Player.STATE_READY) {
                 manualPlayerSwitchPending = false;
+                hardDecodeSwitchRetryArmed = false;
                 clearLutWarmupRecovery();
                 applyLutForCurrentItem();
             }
@@ -1229,7 +1339,7 @@ public class PlayerManager implements ParseCallback {
         }
 
         @Override
-        public void onMediaTitlesChanged(@NonNull List<MediaTitle> titles) {
+        public void onMediaEditionsChanged(@NonNull List<MediaEdition> editions) {
             callback.onTitlesChanged();
         }
 
@@ -1241,6 +1351,7 @@ public class PlayerManager implements ParseCallback {
             LocalProxyDebug.dumpIfLocalFailure(spec == null ? null : spec.getUrl(), e);
             if (retryLutFailure(e)) return;
             if (retryLutWarmupByRefresh(action, e)) return;
+            if (action == PlayerEngine.ErrorAction.DECODE && retryHardDecodeSwitch(e)) return;
             if (action == PlayerEngine.ErrorAction.FATAL && retryLocalProxy(e)) return;
             if (shouldStopOnManualSwitchFailure(manualPlayerSwitchPending, action)) {
                 callback.onError(engine.getErrorMessage(e));
@@ -1263,7 +1374,7 @@ public class PlayerManager implements ParseCallback {
                 if (fallbackPlayer(e)) return;
                 callback.onError(engine.getErrorMessage(e));
             } else {
-                toggleDecode();
+                callback.onError(engine.getErrorMessage(e));
             }
         }
     };
@@ -1279,6 +1390,40 @@ public class PlayerManager implements ParseCallback {
         if (retryExoFallback("timeout")) return;
         if (fallbackPlayer(e)) return;
         callback.onError(ResUtil.getString(R.string.error_play_timeout));
+    }
+
+    private boolean retryHardDecodeSwitch(PlaybackException e) {
+        if (!hardDecodeSwitchRetryArmed || engine == null || player == null || spec == null || !engine.isHard()) return false;
+        if (e.errorCode != PlaybackException.ERROR_CODE_DECODER_INIT_FAILED && e.errorCode != PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED && e.errorCode != PlaybackException.ERROR_CODE_DECODING_FAILED) return false;
+        hardDecodeSwitchRetryArmed = false;
+        int seq = ++prepareSeq;
+        PlaySpec target = spec;
+        long position = Math.max(0, getPosition());
+        float speed = getSpeed();
+        boolean repeat = isRepeatOne();
+        boolean wasPlayWhenReady = player.getPlayWhenReady();
+        App.removeCallbacks(runnable);
+        resetLutRuntimeState("hard_decode_switch_retry", true);
+        engine.release();
+        engine = buildEngine(playerType, PlayerEngine.HARD);
+        player = engine.getPlayer();
+        callback.onPlayerRebuild(player, true);
+        this.playWhenReady = wasPlayWhenReady;
+        initTrack = false;
+        if (SpiderDebug.isEnabled()) SpiderDebug.log("player", "hard decode switch retry delay=%d position=%d spec=%s cause=%s", HARD_DECODE_SWITCH_RETRY_DELAY_MS, position, debugSpec(), causeChain(e));
+        App.post(() -> {
+            if (seq != prepareSeq || spec != target || engine == null || player == null || !engine.isHard()) return;
+            if (SpiderDebug.isEnabled()) SpiderDebug.log("player", "hard decode switch retry start position=%d spec=%s", position, debugSpec());
+            setDanmakus(target.getDanmakus());
+            initTrack = false;
+            waitingLutBeforePlay = false;
+            engine.start(target.checkUa(), position, wasPlayWhenReady);
+            if (speed != 1f) setSpeed(speed);
+            setRepeatOne(repeat);
+            App.post(runnable, Constant.TIMEOUT_PLAY);
+            callback.onPrepare();
+        }, HARD_DECODE_SWITCH_RETRY_DELAY_MS);
+        return true;
     }
 
     private boolean retryLutFailure(PlaybackException e) {

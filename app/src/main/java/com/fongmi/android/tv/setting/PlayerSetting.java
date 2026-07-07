@@ -14,6 +14,8 @@ public class PlayerSetting {
     public static final int NONE = -1;
     public static final int RENDER_SURFACE = 0;
     public static final int RENDER_TEXTURE = 1;
+    public static final int PAD_LIVE_FULLSCREEN = 0;
+    public static final int PAD_LIVE_STANDARD = 1;
     private static final int DEFAULT_PLAY_CACHE_OPTION = 0;
     private static final String KEY_DISPLAY_TIME = "display_time";
     private static final String KEY_DISPLAY_TRAFFIC = "display_traffic";
@@ -77,6 +79,18 @@ public class PlayerSetting {
         Prefers.put("render", value);
         if (isTunnel() && value == RENDER_TEXTURE) Prefers.put("tunnel", false);
         if (isExoEnhanced() && value == RENDER_TEXTURE) Prefers.put("exo_4k_compat", false);
+    }
+
+    public static int getPadLiveMode() {
+        return Prefers.getInt("pad_live_mode", PAD_LIVE_FULLSCREEN) == PAD_LIVE_STANDARD ? PAD_LIVE_STANDARD : PAD_LIVE_FULLSCREEN;
+    }
+
+    public static void putPadLiveMode(int mode) {
+        Prefers.put("pad_live_mode", mode == PAD_LIVE_STANDARD ? PAD_LIVE_STANDARD : PAD_LIVE_FULLSCREEN);
+    }
+
+    public static boolean isPadLiveFullscreen() {
+        return getPadLiveMode() == PAD_LIVE_FULLSCREEN;
     }
 
     public static int getSize() {
@@ -169,6 +183,14 @@ public class PlayerSetting {
 
     public static void putAutoChange(boolean autoChange) {
         Prefers.put("player_auto_change", autoChange);
+    }
+
+    public static boolean isAutoPlay() {
+        return Prefers.getBoolean("player_auto_play", true);
+    }
+
+    public static void putAutoPlay(boolean autoPlay) {
+        Prefers.put("player_auto_play", autoPlay);
     }
 
     public static int getBackground() {
@@ -363,6 +385,22 @@ public class PlayerSetting {
 
     public static void putVideoPrefer(boolean videoPrefer) {
         Prefers.put("video_prefer", videoPrefer);
+    }
+
+    public static int getFFmpegMode() {
+        return Prefers.getInt("ffmpeg_mode", 2);
+    }
+
+    public static void putFFmpegMode(int mode) {
+        Prefers.put("ffmpeg_mode", mode);
+    }
+
+    public static boolean useNextLibFFmpeg() {
+        return getFFmpegMode() == 0;
+    }
+
+    public static void putUseNextLibFFmpeg(boolean useNextLib) {
+        putFFmpegMode(useNextLib ? 0 : 1);
     }
 
     public static boolean isPreferAAC() {

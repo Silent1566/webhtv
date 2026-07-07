@@ -22,6 +22,7 @@ import android.text.TextUtils;
 import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.KeyEvent;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
@@ -61,6 +62,7 @@ import com.fongmi.android.tv.gitcloud.drive.JGitDriveEngine;
 import com.fongmi.android.tv.gitcloud.provider.GitCloudProvider;
 import com.fongmi.android.tv.gitcloud.provider.GitCloudProviders;
 import com.fongmi.android.tv.gitcloud.secure.GitCloudTokenStore;
+import com.fongmi.android.tv.ui.custom.SafeScrollEditText;
 import com.fongmi.android.tv.ui.custom.SettingClipboardOverlay;
 import com.fongmi.android.tv.utils.Formatters;
 import com.fongmi.android.tv.utils.Notify;
@@ -841,23 +843,24 @@ public class GitCloudDialog extends BaseAlertDialog {
     private void confirmDeleteRepo(GitRepo item) {
         TextInput confirm = input("输入仓库名确认", false);
         confirm.layout.setHelperText("请输入 " + item.name + " 或 " + item.fullName);
-        androidx.appcompat.app.AlertDialog dialog = new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog)
-                .setTitle("删除仓库")
-                .setMessage("该操作会删除远端仓库，无法撤销。")
-                .setView(confirm.layout)
-                .setNegativeButton(R.string.dialog_negative, null)
-                .setPositiveButton("删除", null)
-                .show();
-        dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setOnClickListener(view -> {
+        LinearLayoutCompat content = new LinearLayoutCompat(requireContext());
+        content.setOrientation(LinearLayoutCompat.VERTICAL);
+        content.addView(detail("该操作会删除远端仓库，无法撤销。"));
+        LinearLayoutCompat.LayoutParams params = new LinearLayoutCompat.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.topMargin = dp(12);
+        content.addView(confirm.layout, params);
+        final android.app.Dialog[] holder = new android.app.Dialog[1];
+        holder[0] = LightDialog.create(requireContext(), "删除仓库", content, "删除", view -> {
             String value = value(confirm.edit);
             if (!TextUtils.equals(value, item.name) && !TextUtils.equals(value, item.fullName)) {
                 confirm.layout.setError("仓库名不匹配");
                 return;
             }
             confirm.layout.setError(null);
-            dialog.dismiss();
+            holder[0].dismiss();
             deleteRepo(item);
-        });
+        }, getString(R.string.dialog_negative), null);
+        holder[0].show();
     }
 
     private void deleteRepo(GitRepo item) {
@@ -1029,16 +1032,15 @@ public class GitCloudDialog extends BaseAlertDialog {
         editPath.edit.setEnabled(false);
         TextInput editContent = input("内容", false);
         editContent.edit.setText(content.text == null ? "" : content.text);
-        editContent.edit.setMinLines(10);
-        editContent.edit.setGravity(Gravity.TOP | Gravity.START);
+        setupTextEditor(editContent.edit, 10, 14);
         root.addView(editPath.layout);
         root.addView(editContent.layout);
-        new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog)
-                .setTitle("编辑文件")
-                .setView(root)
-                .setNegativeButton(R.string.dialog_negative, null)
-                .setPositiveButton("保存", (dialog, which) -> saveEditedText(file.path, rawValue(editContent.edit), content.file == null ? file.sha : content.file.sha))
-                .show();
+        final android.app.Dialog[] holder = new android.app.Dialog[1];
+        holder[0] = LightDialog.create(requireContext(), "编辑文件", root, "保存", view -> {
+            saveEditedText(file.path, rawValue(editContent.edit), content.file == null ? file.sha : content.file.sha);
+            holder[0].dismiss();
+        }, getString(R.string.dialog_negative), null);
+        holder[0].show();
     }
 
     private void saveEditedText(String path, String content, String sha) {
@@ -1118,9 +1120,8 @@ public class GitCloudDialog extends BaseAlertDialog {
         actions.addView(create, createParams);
         root.addView(actions);
 
-        androidx.appcompat.app.AlertDialog dialog = new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog)
-                .setView(root)
-                .show();
+        android.app.Dialog dialog = LightDialog.create(requireContext(), null, root);
+        dialog.show();
         Window window = dialog.getWindow();
         if (window != null) window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
 
@@ -1176,16 +1177,15 @@ public class GitCloudDialog extends BaseAlertDialog {
         TextInput editPath = input("远端路径", false);
         editPath.edit.setText(joinRemote(currentPath, "new-file.txt"));
         TextInput content = input("内容", false);
-        content.edit.setMinLines(6);
-        content.edit.setGravity(Gravity.TOP | Gravity.START);
+        setupTextEditor(content.edit, 6, 12);
         root.addView(editPath.layout);
         root.addView(content.layout);
-        new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog)
-                .setTitle("新建文件")
-                .setView(root)
-                .setNegativeButton(R.string.dialog_negative, null)
-                .setPositiveButton(R.string.dialog_positive, (dialog, which) -> uploadText(value(editPath.edit), value(content.edit)))
-                .show();
+        final android.app.Dialog[] holder = new android.app.Dialog[1];
+        holder[0] = LightDialog.create(requireContext(), "新建文件", root, getString(R.string.dialog_positive), view -> {
+            uploadText(value(editPath.edit), value(content.edit));
+            holder[0].dismiss();
+        }, getString(R.string.dialog_negative), null);
+        holder[0].show();
     }
 
     private void uploadText(String path, String content) {
@@ -1195,12 +1195,10 @@ public class GitCloudDialog extends BaseAlertDialog {
 
     private void showUploadChooser() {
         if (!requireAccount("上传文件需要先添加账号")) return;
-        new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog)
-                .setItems(new String[]{"文件", "目录"}, (dialog, which) -> {
-                    if (which == 0) chooseUploadFile();
-                    else chooseUploadFolder();
-                })
-                .show();
+        ChoiceDialog.showSingle(getChildFragmentManager(), "上传", new String[]{"文件", "目录"}, -1, which -> {
+            if (which == 0) chooseUploadFile();
+            else chooseUploadFolder();
+        });
     }
 
     private void chooseUploadFile() {
@@ -1267,20 +1265,14 @@ public class GitCloudDialog extends BaseAlertDialog {
         panel.addView(scroll, scrollParams);
         renderDownloadDirs();
 
-        androidx.appcompat.app.AlertDialog dialog = new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog)
-                .setTitle("选择保存目录")
-                .setView(panel)
-                .setNegativeButton(R.string.dialog_negative, null)
-                .setNeutralButton("新建", null)
-                .setPositiveButton("保存到此处", null)
-                .show();
-        dialog.getButton(android.content.DialogInterface.BUTTON_NEUTRAL).setOnClickListener(view -> showCreateDownloadDir());
-        dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setOnClickListener(view -> {
+        final android.app.Dialog[] holder = new android.app.Dialog[1];
+        holder[0] = LightDialog.create(requireContext(), "选择保存目录", panel, "保存到此处", view -> {
             File target = downloadDirSelected;
             if (target == null) return;
-            dialog.dismiss();
+            holder[0].dismiss();
             downloadToDirectory(target, files);
-        });
+        }, getString(R.string.dialog_negative), null, "新建", view -> showCreateDownloadDir());
+        holder[0].show();
     }
 
     private void selectDownloadDir(File dir) {
@@ -1340,21 +1332,19 @@ public class GitCloudDialog extends BaseAlertDialog {
         TextInputEditText input = new TextInputEditText(requireContext());
         input.setSingleLine(true);
         input.setText("新建文件夹");
-        new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog)
-                .setTitle("新建文件夹")
-                .setView(input)
-                .setNegativeButton(R.string.dialog_negative, null)
-                .setPositiveButton(R.string.dialog_positive, (dialog, which) -> {
-                    String name = cleanDownloadName(value(input));
-                    if (TextUtils.isEmpty(name)) return;
-                    File dir = new File(downloadDirSelected, name);
-                    if (!dir.exists() && !dir.mkdirs()) {
-                        Notify.show("创建文件夹失败");
-                        return;
-                    }
-                    selectDownloadDir(dir);
-                })
-                .show();
+        final android.app.Dialog[] holder = new android.app.Dialog[1];
+        holder[0] = LightDialog.create(requireContext(), "新建文件夹", input, getString(R.string.dialog_positive), view -> {
+            String name = cleanDownloadName(value(input));
+            if (TextUtils.isEmpty(name)) return;
+            File dir = new File(downloadDirSelected, name);
+            if (!dir.exists() && !dir.mkdirs()) {
+                Notify.show("创建文件夹失败");
+                return;
+            }
+            holder[0].dismiss();
+            selectDownloadDir(dir);
+        }, getString(R.string.dialog_negative), null);
+        holder[0].show();
     }
 
     private void downloadToDirectory(File dir, List<GitFile> files) {
@@ -1368,14 +1358,11 @@ public class GitCloudDialog extends BaseAlertDialog {
     }
 
     private void chooseDownloadFileTarget(GitFile file) {
-        new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog)
-                .setTitle("保存到")
-                .setItems(new String[]{"手动选择", "TV 目录", "下载目录"}, (dialog, which) -> {
-                    if (which == 1) launchDownloadFile(file, "primary:TV");
-                    else if (which == 2) launchDownloadFile(file, "primary:Download");
-                    else launchDownloadFile(file, "");
-                })
-                .show();
+        ChoiceDialog.showSingle(getChildFragmentManager(), "保存到", new String[]{"手动选择", "TV 目录", "下载目录"}, -1, which -> {
+            if (which == 1) launchDownloadFile(file, "primary:TV");
+            else if (which == 2) launchDownloadFile(file, "primary:Download");
+            else launchDownloadFile(file, "");
+        });
     }
 
     private void launchDownloadFile(GitFile file, String initialDocumentId) {
@@ -1448,12 +1435,7 @@ public class GitCloudDialog extends BaseAlertDialog {
         for (GitFile file : targets) if (file.directory) dirs++;
         String message = "确定删除选中的 " + targets.size() + " 项？";
         if (dirs > 0) message += "目录会递归删除其中的文件。";
-        new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog)
-                .setTitle("删除文件")
-                .setMessage(message)
-                .setNegativeButton(R.string.dialog_negative, null)
-                .setPositiveButton("删除", (dialog, which) -> deleteSelectedSync())
-                .show();
+        ChoiceDialog.showConfirm(getChildFragmentManager(), "删除文件", message, "删除", this::deleteSelectedSync);
     }
 
     private void deleteSelectedSync() {
@@ -1810,12 +1792,7 @@ public class GitCloudDialog extends BaseAlertDialog {
     private void confirmRestore() {
         if (!requireAccount("恢复备份需要先添加账号")) return;
         if (repo == null || !repo.privateRepo) return;
-        new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog)
-                .setTitle("恢复备份")
-                .setMessage("将从选中的备份，或最新备份，恢复 TV、TVBox、TVData。已有同名文件会被覆盖。")
-                .setNegativeButton(R.string.dialog_negative, null)
-                .setPositiveButton("恢复", (dialog, which) -> restoreBackup())
-                .show();
+        ChoiceDialog.showConfirm(getChildFragmentManager(), "恢复备份", "将从选中的备份，或最新备份，恢复 TV、TVBox、TVData。已有同名文件会被覆盖。", "恢复", this::restoreBackup);
     }
 
     private void restoreBackup() {
@@ -2134,7 +2111,7 @@ public class GitCloudDialog extends BaseAlertDialog {
         LinearLayoutCompat.LayoutParams params = new LinearLayoutCompat.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         params.topMargin = dp(8);
         layout.setLayoutParams(params);
-        TextInputEditText edit = new TextInputEditText(layout.getContext());
+        TextInputEditText edit = "内容".contentEquals(hint) ? new SafeScrollEditText(layout.getContext()) : new TextInputEditText(layout.getContext());
         edit.setSingleLine(!"内容".contentEquals(hint));
         edit.setTextSize(14);
         edit.setTextColor(Color.parseColor("#202124"));
@@ -2144,6 +2121,21 @@ public class GitCloudDialog extends BaseAlertDialog {
         if (password) edit.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         layout.addView(edit, new LinearLayoutCompat.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         return new TextInput(layout, edit);
+    }
+
+    private void setupTextEditor(TextInputEditText edit, int minLines, int maxLines) {
+        edit.setSingleLine(false);
+        edit.setMinLines(minLines);
+        edit.setMaxLines(maxLines);
+        edit.setGravity(Gravity.TOP | Gravity.START);
+        edit.setPaddingRelative(dp(14), dp(18), dp(20), dp(20));
+        edit.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        edit.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        edit.setOnTouchListener((view, event) -> {
+            int action = event.getActionMasked();
+            view.getParent().requestDisallowInterceptTouchEvent(action != MotionEvent.ACTION_UP && action != MotionEvent.ACTION_CANCEL);
+            return false;
+        });
     }
 
     private View section(String title) {

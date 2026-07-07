@@ -1,12 +1,16 @@
 package com.fongmi.android.tv.ui.dialog;
 
 import android.app.Dialog;
+import android.content.Context;
 import android.os.Bundle;
+import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
+import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
@@ -32,7 +36,9 @@ public class QuickSearchDialog extends BaseBottomSheetDialog implements QuickAda
     private final List<Vod> pending;
     private DialogQuickSearchBinding binding;
     private QuickAdapter.OnClickListener listener;
+    private OnSearchListener searchListener;
     private QuickAdapter adapter;
+    private String keyword;
     private String title;
 
     public QuickSearchDialog() {
@@ -43,13 +49,27 @@ public class QuickSearchDialog extends BaseBottomSheetDialog implements QuickAda
         return new QuickSearchDialog();
     }
 
+    public interface OnSearchListener {
+        void onSearch(String keyword);
+    }
+
     public QuickSearchDialog title(String title) {
         this.title = title;
         return this;
     }
 
+    public QuickSearchDialog keyword(String keyword) {
+        this.keyword = keyword;
+        return this;
+    }
+
     public QuickSearchDialog listener(QuickAdapter.OnClickListener listener) {
         this.listener = listener;
+        return this;
+    }
+
+    public QuickSearchDialog searchListener(OnSearchListener listener) {
+        this.searchListener = listener;
         return this;
     }
 
@@ -102,6 +122,14 @@ public class QuickSearchDialog extends BaseBottomSheetDialog implements QuickAda
     @Override
     protected void initView() {
         binding.title.setText(title);
+        binding.keyword.setText(keyword);
+        binding.keyword.setSelection(binding.keyword.length());
+        binding.search.setOnClickListener(view -> submitSearch());
+        binding.keyword.setOnEditorActionListener((view, actionId, event) -> {
+            if (actionId != EditorInfo.IME_ACTION_SEARCH) return false;
+            submitSearch();
+            return true;
+        });
         binding.recycler.setHasFixedSize(true);
         binding.recycler.setAdapter(adapter = new QuickAdapter(this));
         if (!pending.isEmpty()) adapter.addAll(pending);
@@ -152,6 +180,23 @@ public class QuickSearchDialog extends BaseBottomSheetDialog implements QuickAda
     private void updateEmpty() {
         if (binding == null || adapter == null) return;
         binding.empty.setVisibility(adapter.isEmpty() ? View.VISIBLE : View.GONE);
+    }
+
+    private void submitSearch() {
+        if (binding == null) return;
+        String value = binding.keyword.getText() == null ? "" : binding.keyword.getText().toString().trim();
+        if (TextUtils.isEmpty(value)) return;
+        keyword = value;
+        binding.title.setText(getString(R.string.detail_search, value));
+        hideKeyboard();
+        clear();
+        if (searchListener != null) searchListener.onSearch(value);
+    }
+
+    private void hideKeyboard() {
+        InputMethodManager manager = (InputMethodManager) requireContext().getSystemService(Context.INPUT_METHOD_SERVICE);
+        if (manager != null) manager.hideSoftInputFromWindow(binding.keyword.getWindowToken(), 0);
+        binding.keyword.clearFocus();
     }
 
     @Override

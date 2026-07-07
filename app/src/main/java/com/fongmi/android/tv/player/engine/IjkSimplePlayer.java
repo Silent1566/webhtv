@@ -19,16 +19,20 @@ import androidx.media3.common.Player;
 import androidx.media3.common.SimpleBasePlayer;
 import androidx.media3.common.Tracks;
 import androidx.media3.common.VideoSize;
+import androidx.media3.common.text.CueGroup;
 import androidx.media3.common.util.UnstableApi;
 
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.player.exo.ExoUtil;
+import com.fongmi.android.tv.utils.Task;
 import com.github.catvod.crawler.SpiderDebug;
 import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.Future;
 
 import tv.danmaku.ijk.media.player.IMediaPlayer;
 import tv.danmaku.ijk.media.player.IjkMediaPlayer;
@@ -38,6 +42,7 @@ import tv.danmaku.ijk.media.player.IjkTimedText;
 class IjkSimplePlayer extends SimpleBasePlayer implements IMediaPlayer.Listener {
 
     private static final long STATE_REFRESH_INTERVAL_MS = 1000;
+    private static final long SUBTITLE_REFRESH_INTERVAL_MS = 250;
 
     private static final Commands COMMANDS = new Commands.Builder()
             .add(COMMAND_PLAY_PAUSE)
@@ -68,9 +73,13 @@ class IjkSimplePlayer extends SimpleBasePlayer implements IMediaPlayer.Listener 
     private PlaybackParameters playbackParameters;
     private PlaybackException playerError;
     private VideoSize videoSize;
+    private IjkSubtitleTrack subtitleTrack;
+    private CueGroup currentCues;
+    private Future<?> subtitleLoad;
     private int playbackState;
     private int bufferingPercent;
     private int decode;
+    private int subtitleSerial;
     private long pendingSeekPositionMs;
     private boolean playWhenReady;
     private boolean loading;
@@ -86,6 +95,8 @@ class IjkSimplePlayer extends SimpleBasePlayer implements IMediaPlayer.Listener 
         stateRefreshRunnable = this::refreshPlaybackState;
         playbackParameters = PlaybackParameters.DEFAULT;
         videoSize = VideoSize.UNKNOWN;
+        subtitleTrack = IjkSubtitleTrack.EMPTY;
+        currentCues = CueGroup.EMPTY_TIME_ZERO;
         playbackState = Player.STATE_IDLE;
         pendingSeekPositionMs = C.TIME_UNSET;
         playWhenReady = true;
@@ -105,6 +116,7 @@ class IjkSimplePlayer extends SimpleBasePlayer implements IMediaPlayer.Listener 
                 .setRepeatMode(repeatOne ? Player.REPEAT_MODE_ONE : Player.REPEAT_MODE_OFF)
                 .setPlaybackParameters(playbackParameters)
                 .setVideoSize(videoSize)
+                .setCurrentCues(currentCues)
                 .setVolume(volume)
                 .setPlaylist(mediaItem == null ? ImmutableList.of() : ImmutableList.of(mediaItemData()))
                 .setCurrentMediaItemIndex(mediaItem == null ? C.INDEX_UNSET : 0);
@@ -136,6 +148,7 @@ class IjkSimplePlayer extends SimpleBasePlayer implements IMediaPlayer.Listener 
 
     @Override
     protected ListenableFuture<?> handleSetMediaItems(List<MediaItem> mediaItems, int startIndex, long startPositionMs) {
+        clearSubtitles();
         mediaItem = mediaItems.isEmpty() ? null : mediaItems.get(0);
         pendingSeekPositionMs = mediaItem != null && startPositionMs > 0 ? startPositionMs : C.TIME_UNSET;
         playbackState = mediaItem == null ? Player.STATE_IDLE : Player.STATE_IDLE;
@@ -146,18 +159,21 @@ class IjkSimplePlayer extends SimpleBasePlayer implements IMediaPlayer.Listener 
 
     @Override
     protected ListenableFuture<?> handleAddMediaItems(int index, List<MediaItem> mediaItems) {
+        clearSubtitles();
         mediaItem = mediaItems.isEmpty() ? null : mediaItems.get(0);
         return Futures.immediateVoidFuture();
     }
 
     @Override
     protected ListenableFuture<?> handleReplaceMediaItems(int fromIndex, int toIndex, List<MediaItem> mediaItems) {
+        clearSubtitles();
         mediaItem = mediaItems.isEmpty() ? null : mediaItems.get(0);
         return Futures.immediateVoidFuture();
     }
 
     @Override
     protected ListenableFuture<?> handleRemoveMediaItems(int fromIndex, int toIndex) {
+        clearSubtitles();
         mediaItem = null;
         playbackState = Player.STATE_IDLE;
         loading = false;
@@ -208,6 +224,7 @@ class IjkSimplePlayer extends SimpleBasePlayer implements IMediaPlayer.Listener 
         } else {
             pendingSeekPositionMs = positionMs;
         }
+        updateCurrentCues(positionMs);
         invalidateState();
         return Futures.immediateVoidFuture();
     }
@@ -249,7 +266,10 @@ class IjkSimplePlayer extends SimpleBasePlayer implements IMediaPlayer.Listener 
         playerError = null;
         if (pendingSeekPositionMs != C.TIME_UNSET) {
             ijk.seekTo(pendingSeekPositionMs);
+            updateCurrentCues(pendingSeekPositionMs);
             pendingSeekPositionMs = C.TIME_UNSET;
+        } else {
+            updateCurrentCues(position());
         }
         if (playWhenReady) ijk.start();
         invalidateState();
@@ -260,6 +280,7 @@ class IjkSimplePlayer extends SimpleBasePlayer implements IMediaPlayer.Listener 
     public void onCompletion(IMediaPlayer mp) {
         playbackState = Player.STATE_ENDED;
         loading = false;
+        currentCues = CueGroup.EMPTY_TIME_ZERO;
         stopStateRefresh();
         invalidateState();
     }
@@ -269,6 +290,7 @@ class IjkSimplePlayer extends SimpleBasePlayer implements IMediaPlayer.Listener 
         playbackState = Player.STATE_IDLE;
         loading = false;
         stopStateRefresh();
+        clearSubtitles();
         playerError = new PlaybackException("IJK error: " + what + ", " + extra, null, errorCode(what));
         SpiderDebug.log("ijk", "error what=%d extra=%d mapped=%d decode=%d state=%d loading=%s uri=%s", what, extra, playerError.errorCode, decode, playbackState, loading, summarizeUri());
         invalidateState();
@@ -317,6 +339,7 @@ class IjkSimplePlayer extends SimpleBasePlayer implements IMediaPlayer.Listener 
             loading = true;
             playerError = null;
             ijk.reset();
+            startSubtitleLoad(mediaItem);
             ijk.setWakeMode(App.get(), PowerManager.PARTIAL_WAKE_LOCK);
             configureOptions(mediaItem.localConfiguration.uri);
             bindVideoOutput();
@@ -333,6 +356,7 @@ class IjkSimplePlayer extends SimpleBasePlayer implements IMediaPlayer.Listener 
             SpiderDebug.log("ijk", "open failed uri=%s error=%s", summarizeUri(), e.toString());
             playbackState = Player.STATE_IDLE;
             loading = false;
+            clearSubtitles();
             stopStateRefresh();
             invalidateState();
         }
@@ -347,12 +371,14 @@ class IjkSimplePlayer extends SimpleBasePlayer implements IMediaPlayer.Listener 
         loading = false;
         bufferingPercent = 0;
         videoSize = VideoSize.UNKNOWN;
+        clearSubtitles();
         if (resetState) playbackState = Player.STATE_IDLE;
         stopStateRefresh();
     }
 
     private void startStateRefresh() {
-        App.post(stateRefreshRunnable, STATE_REFRESH_INTERVAL_MS);
+        App.removeCallbacks(stateRefreshRunnable);
+        App.post(stateRefreshRunnable, subtitleTrack.isEmpty() ? STATE_REFRESH_INTERVAL_MS : SUBTITLE_REFRESH_INTERVAL_MS);
     }
 
     private void stopStateRefresh() {
@@ -361,8 +387,43 @@ class IjkSimplePlayer extends SimpleBasePlayer implements IMediaPlayer.Listener 
 
     private void refreshPlaybackState() {
         if (mediaItem == null || playbackState == Player.STATE_IDLE || playbackState == Player.STATE_ENDED || playerError != null) return;
+        updateCurrentCues(position());
         invalidateState();
         startStateRefresh();
+    }
+
+    private void startSubtitleLoad(MediaItem item) {
+        clearSubtitles();
+        if (item.localConfiguration == null || item.localConfiguration.subtitleConfigurations.isEmpty()) return;
+        int serial = ++subtitleSerial;
+        List<MediaItem.SubtitleConfiguration> configs = item.localConfiguration.subtitleConfigurations;
+        Map<String, String> headers = ExoUtil.extractHeaders(item);
+        subtitleLoad = Task.submit(() -> {
+            IjkSubtitleTrack loaded = IjkSubtitleTrack.load(configs, headers);
+            App.post(() -> {
+                if (serial != subtitleSerial || mediaItem != item) return;
+                subtitleLoad = null;
+                subtitleTrack = loaded;
+                updateCurrentCues(position());
+                invalidateState();
+                if (playbackState != Player.STATE_IDLE && playbackState != Player.STATE_ENDED) startStateRefresh();
+            });
+        });
+    }
+
+    private void clearSubtitles() {
+        subtitleSerial++;
+        if (subtitleLoad != null) subtitleLoad.cancel(true);
+        subtitleLoad = null;
+        subtitleTrack = IjkSubtitleTrack.EMPTY;
+        currentCues = CueGroup.EMPTY_TIME_ZERO;
+    }
+
+    private boolean updateCurrentCues(long positionMs) {
+        CueGroup next = subtitleTrack.getCueGroup(positionMs);
+        if (currentCues.cues.equals(next.cues)) return false;
+        currentCues = next;
+        return true;
     }
 
     private void setVideoOutput(Object output) {
@@ -428,6 +489,10 @@ class IjkSimplePlayer extends SimpleBasePlayer implements IMediaPlayer.Listener 
     private void configureOptions(Uri uri) {
         String url = uri.toString();
         ijk.setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_loop_filter", 48);
+        if (decode == PlayerEngine.SOFT) {
+            ijk.setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "fast", 1);
+            ijk.setOption(IjkMediaPlayer.OPT_CATEGORY_CODEC, "skip_frame", 8);
+        }
         ijk.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "dns_cache_clear", 1);
         ijk.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "dns_cache_timeout", -1);
         ijk.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "fflags", "fastseek");

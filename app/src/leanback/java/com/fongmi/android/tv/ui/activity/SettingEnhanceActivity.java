@@ -29,6 +29,7 @@ import com.fongmi.android.tv.ui.dialog.AiConfigDialog;
 import com.fongmi.android.tv.ui.dialog.AudioSourceDialog;
 import com.fongmi.android.tv.ui.dialog.ShortDramaSourceDialog;
 import com.fongmi.android.tv.ui.dialog.TmdbSourceDialog;
+import com.fongmi.android.tv.ui.dialog.CspWarmupDialog;
 import com.fongmi.android.tv.ui.dialog.CustomCspDialog;
 import com.fongmi.android.tv.ui.dialog.DebugLogDialog;
 import com.fongmi.android.tv.ui.dialog.GitCloudDialog;
@@ -161,7 +162,7 @@ public class SettingEnhanceActivity extends BaseActivity {
             return getSwitch(Setting.isWebHomeExtension()) + " · " + webHomeExtension.readyCount + "/" + webHomeExtension.installedCount;
         });
         safeSet("webHomeFullscreen", mBinding.webHomeFullscreenText, () -> getSwitch(Setting.isWebHomeFullscreen()));
-        safeSet("cspWarmup", mBinding.cspWarmupText, () -> getSwitch(Setting.isCspWarmup()));
+        safeSet("cspWarmup", mBinding.cspWarmupText, this::getCspWarmupText);
         safeSet("playbackArtworkWall", mBinding.playbackArtworkWallText, () -> getSwitch(Setting.isPlaybackArtworkWall()));
         safeSet("playbackWebhook", mBinding.playbackWebhookText, () -> ViewingRecordSyncStore.summary(this));
         safeSet("managePage", mBinding.managePageText, () -> getString(R.string.manage_page_web));
@@ -336,8 +337,13 @@ public class SettingEnhanceActivity extends BaseActivity {
     }
 
     private void setCspWarmup(View view) {
-        Setting.putCspWarmup(!Setting.isCspWarmup());
-        mBinding.cspWarmupText.setText(getSwitch(Setting.isCspWarmup()));
+        CspWarmupDialog.show(this, this::setText);
+    }
+
+    private String getCspWarmupText() {
+        int mode = Setting.getCspWarmupMode();
+        if (mode == Setting.CSP_WARMUP_CUSTOM) return getString(R.string.setting_csp_warmup_custom_count, Setting.getCspWarmupSites().size());
+        return getString(mode == Setting.CSP_WARMUP_DEFAULT ? R.string.setting_csp_warmup_default : R.string.setting_disable);
     }
 
     private boolean clearSiteHealth(View view) {

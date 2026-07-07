@@ -46,4 +46,9 @@ public class FilterDialog extends BaseBottomSheetDialog {
         binding.recycler.setHasFixedSize(true);
         binding.recycler.setAdapter(new FilterAdapter(listener, filter));
     }
+
+    @Override
+    protected boolean transparent() {
+        return true;
+    }
 }

@@ -39,8 +39,12 @@ import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.api.DanmakuApi;
 import com.fongmi.android.tv.bean.Danmaku;
+import com.fongmi.android.tv.bean.DanmakuMatchCache;
 import com.fongmi.android.tv.bean.DanmakuTitle;
 import com.fongmi.android.tv.player.PlayerManager;
+import com.fongmi.android.tv.setting.Setting;
+import com.fongmi.android.tv.title.MediaTitleLearningExample;
+import com.fongmi.android.tv.title.MediaTitleLearningStore;
 import com.fongmi.android.tv.ui.custom.CustomRecyclerView;
 import com.fongmi.android.tv.utils.KeyUtil;
 import com.fongmi.android.tv.utils.Notify;
@@ -81,6 +85,10 @@ public final class DanmakuSearchDialog extends DialogFragment implements Callbac
     private boolean hideKeyword;
     private boolean restoreParent;
     private String selectedSource;
+    private String siteKey;
+    private String vodId;
+    private String rawTitle;
+    private String episodeName;
 
     public static DanmakuSearchDialog create() {
         return new DanmakuSearchDialog();
@@ -114,6 +122,14 @@ public final class DanmakuSearchDialog extends DialogFragment implements Callbac
 
     public DanmakuSearchDialog hideKeyword(boolean hideKeyword) {
         this.hideKeyword = hideKeyword;
+        return this;
+    }
+
+    public DanmakuSearchDialog identity(String siteKey, String vodId, String rawTitle, String episodeName) {
+        this.siteKey = clean(siteKey);
+        this.vodId = clean(vodId);
+        this.rawTitle = clean(rawTitle);
+        this.episodeName = clean(episodeName);
         return this;
     }
 
@@ -170,7 +186,7 @@ public final class DanmakuSearchDialog extends DialogFragment implements Callbac
         super.onDismiss(dialog);
         FragmentActivity activity = getActivity();
         if (!restoreParent || activity == null || activity.isFinishing()) return;
-        DanmakuDialog.create().player(player).show(activity);
+        DanmakuDialog.create().player(player).identity(siteKey, vodId, rawTitle, episodeName).show(activity);
     }
 
     private LinearLayout createContentView() {
@@ -327,8 +343,17 @@ public final class DanmakuSearchDialog extends DialogFragment implements Callbac
     private void onItemClick(Danmaku item) {
         restoreParent = false;
         if (SpiderDebug.isEnabled()) SpiderDebug.log("danmaku", "search item click selected=%s name=%s url=%s", item.isSelected(), item.getName(), item.getUrl());
+        if (!item.isSelected()) rememberManualDanmaku(item);
         if (player != null) player.setDanmaku(item.isSelected() ? Danmaku.empty() : item);
         dismiss();
+    }
+
+    private void rememberManualDanmaku(Danmaku item) {
+        if (TextUtils.isEmpty(siteKey) || TextUtils.isEmpty(vodId) || item == null || item.isEmpty()) return;
+        DanmakuMatchCache cache = Setting.getDanmakuMatchCache();
+        MediaTitleLearningExample example = cache.put(siteKey, vodId, first(episodeName, getEpisode().toString().trim()), getKeywordText(), first(rawTitle, getTitle().toString()), item);
+        Setting.putDanmakuMatchCache(cache);
+        if (example != null) MediaTitleLearningStore.load().put(example);
     }
 
     private void setKeyword(CharSequence text) {
@@ -339,6 +364,14 @@ public final class DanmakuSearchDialog extends DialogFragment implements Callbac
 
     private String getKeywordText() {
         return keywordView == null || keywordView.getText() == null ? "" : keywordView.getText().toString().trim();
+    }
+
+    private String first(String first, String second) {
+        return !TextUtils.isEmpty(first) ? first : clean(second);
+    }
+
+    private String clean(String value) {
+        return value == null ? "" : value.trim();
     }
 
     private CharSequence getTitle() {

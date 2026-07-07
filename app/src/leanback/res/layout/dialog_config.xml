@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.appcompat.widget.LinearLayoutCompat xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
-    android:layout_width="wrap_content"
+    android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:padding="24dp">
+    android:gravity="top"
+    android:orientation="horizontal">
 
     <androidx.appcompat.widget.AppCompatImageView
         android:id="@+id/code"
@@ -11,94 +13,135 @@
         android:layout_height="180dp"
         android:scaleType="centerCrop" />
 
-    <com.google.android.material.textview.MaterialTextView
-        android:id="@+id/info"
-        android:layout_width="wrap_content"
+    <androidx.appcompat.widget.LinearLayoutCompat
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginStart="12dp"
-        android:layout_toEndOf="@+id/code"
-        android:ellipsize="end"
-        android:focusable="true"
-        android:lineSpacingExtra="4dp"
-        android:maxLines="3"
-        android:paddingStart="4dp"
-        android:paddingEnd="4dp"
-        android:textColor="@color/white"
-        android:textSize="18sp"
-        tools:text="@string/push_info" />
-
-    <com.google.android.material.textview.MaterialTextView
-        android:id="@+id/name"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:visibility="gone" />
-
-    <com.fongmi.android.tv.ui.custom.CustomEditText
-        android:id="@+id/text"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_above="@+id/bottom"
-        android:layout_alignStart="@+id/info"
-        android:layout_marginBottom="10dp"
-        android:hint="@string/dialog_config_hint"
-        android:imeOptions="actionDone"
-        android:importantForAutofill="no"
-        android:inputType="text"
-        android:nextFocusDown="@id/positive"
-        android:singleLine="true"
-        android:textSize="18sp" />
-
-    <androidx.appcompat.widget.LinearLayoutCompat
-        android:id="@+id/bottom"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_alignStart="@+id/info"
-        android:layout_alignBottom="@+id/code"
-        android:orientation="horizontal">
+        android:layout_weight="1"
+        android:minHeight="180dp"
+        android:orientation="vertical">
 
         <com.google.android.material.textview.MaterialTextView
-            android:id="@+id/choose"
-            android:layout_width="0dp"
+            android:id="@+id/info"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginEnd="16dp"
-            android:layout_weight="1"
-            android:background="@drawable/selector_button"
+            android:ellipsize="end"
             android:focusable="true"
-            android:focusableInTouchMode="true"
-            android:gravity="center"
-            android:singleLine="true"
-            android:text="@string/setting_choose"
-            android:textColor="@color/white"
-            android:textSize="14sp" />
+            android:lineSpacingExtra="4dp"
+            android:maxLines="3"
+            android:textColor="#3C4043"
+            android:textSize="18sp"
+            tools:text="@string/push_info" />
 
         <com.google.android.material.textview.MaterialTextView
-            android:id="@+id/positive"
-            android:layout_width="0dp"
+            android:id="@+id/name"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginEnd="16dp"
-            android:layout_weight="1"
-            android:background="@drawable/selector_button"
-            android:focusable="true"
-            android:focusableInTouchMode="true"
-            android:gravity="center"
-            android:singleLine="true"
-            android:text="@string/dialog_positive"
-            android:textColor="@color/white"
-            android:textSize="14sp" />
+            android:visibility="gone" />
 
-        <com.google.android.material.textview.MaterialTextView
-            android:id="@+id/negative"
-            android:layout_width="0dp"
+        <com.fongmi.android.tv.ui.custom.CustomEditText
+            android:id="@+id/text"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:background="@drawable/selector_button"
-            android:focusable="true"
-            android:focusableInTouchMode="true"
-            android:gravity="center"
+            android:layout_marginTop="8dp"
+            android:hint="@string/dialog_config_hint"
+            android:imeOptions="actionDone"
+            android:importantForAutofill="no"
+            android:inputType="text"
+            android:nextFocusDown="@id/positive"
             android:singleLine="true"
-            android:text="@string/dialog_negative"
-            android:textColor="@color/white"
-            android:textSize="14sp" />
+            android:textColor="#202124"
+            android:textColorHint="#8A8F98"
+            android:textSize="18sp" />
 
+        <androidx.appcompat.widget.LinearLayoutCompat
+            android:id="@+id/bottom"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="center_vertical|end"
+            android:orientation="horizontal">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/choose"
+                android:layout_width="0dp"
+                android:layout_height="40dp"
+                android:layout_weight="1"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:paddingStart="6dp"
+                android:paddingEnd="6dp"
+                android:singleLine="true"
+                android:text="@string/setting_choose"
+                android:textAllCaps="false"
+                android:textColor="@color/dialog_outlined_button_text"
+                android:textSize="14sp"
+                app:autoSizeMaxTextSize="14sp"
+                app:autoSizeMinTextSize="10sp"
+                app:autoSizeStepGranularity="1sp"
+                app:autoSizeTextType="uniform"
+                app:backgroundTint="@color/dialog_outlined_button_bg"
+                app:strokeColor="@color/dialog_outlined_button_stroke"
+                app:strokeWidth="1dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/positive"
+                android:layout_width="0dp"
+                android:layout_height="40dp"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:paddingStart="6dp"
+                android:paddingEnd="6dp"
+                android:singleLine="true"
+                android:text="@string/dialog_positive"
+                android:textAllCaps="false"
+                android:textColor="@color/dialog_primary_button_text"
+                android:textSize="14sp"
+                app:autoSizeMaxTextSize="14sp"
+                app:autoSizeMinTextSize="10sp"
+                app:autoSizeStepGranularity="1sp"
+                app:autoSizeTextType="uniform"
+                app:backgroundTint="@color/dialog_primary_button_bg"
+                app:strokeColor="@color/dialog_outlined_button_stroke"
+                app:strokeWidth="1dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/negative"
+                android:layout_width="0dp"
+                android:layout_height="40dp"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:paddingStart="6dp"
+                android:paddingEnd="6dp"
+                android:singleLine="true"
+                android:text="@string/dialog_negative"
+                android:textAllCaps="false"
+                android:textColor="@color/dialog_outlined_button_text"
+                android:textSize="14sp"
+                app:autoSizeMaxTextSize="14sp"
+                app:autoSizeMinTextSize="10sp"
+                app:autoSizeStepGranularity="1sp"
+                app:autoSizeTextType="uniform"
+                app:backgroundTint="@color/dialog_outlined_button_bg"
+                app:strokeColor="@color/dialog_outlined_button_stroke"
+                app:strokeWidth="1dp" />
+
+        </androidx.appcompat.widget.LinearLayoutCompat>
     </androidx.appcompat.widget.LinearLayoutCompat>
-</RelativeLayout>
+</androidx.appcompat.widget.LinearLayoutCompat>

@@ -580,13 +580,13 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
     }
 
     @Override
-    public void onPlayerRebuild(Player newPlayer) {
+    public void onPlayerRebuild(Player newPlayer, boolean resetVideoSurface) {
         exoPlayer.removeListener(listener);
         exoPlayer = newPlayer;
         exoPlayer.addListener(listener);
         PlaybackEventCollector.get().setPlayer(player);
         if (session != null) session.setPlayer(wrap(newPlayer));
-        playerCallbacks.forEach(callback -> callback.onPlayerRebuild(newPlayer));
+        playerCallbacks.forEach(callback -> callback.onPlayerRebuild(newPlayer, resetVideoSurface));
     }
 
     private final Player.Listener listener = new Player.Listener() {
@@ -680,7 +680,7 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
         default void onReload(String msg) {
         }
 
-        default void onPlayerRebuild(Player player) {
+        default void onPlayerRebuild(Player player, boolean resetVideoSurface) {
         }
     }
 

@@ -69,31 +69,6 @@
             tools:visibility="visible" />
 
         <com.google.android.material.textview.MaterialTextView
-            android:id="@+id/osdDiagnostics"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="top|start"
-            android:background="@drawable/shape_player_osd_diagnostics"
-            android:ellipsize="end"
-            android:fontFeatureSettings="tnum"
-            android:lineSpacingExtra="2dp"
-            android:maxWidth="760dp"
-            android:maxLines="12"
-            android:paddingStart="14dp"
-            android:paddingTop="10dp"
-            android:paddingEnd="14dp"
-            android:paddingBottom="10dp"
-            android:shadowColor="#CC000000"
-            android:shadowDx="1.5"
-            android:shadowDy="1.5"
-            android:shadowRadius="2"
-            android:textColor="@color/white"
-            android:textSize="12sp"
-            android:visibility="gone"
-            tools:text="结论  正常&#10;网络  当前 12.8 MB/s / 估算带宽 48.0Mbps&#10;缓冲  就绪(READY) / 18.2 s / 48% / 重缓冲 0 次&#10;视频  hevc 3840x2160 @59.940fps 42.0Mbps decoder c2.mtk.hevc.decoder&#10;音频  eac3 6ch 48kHz 640Kbps decoder ffmpegAudioRenderer&#10;掉帧  12&#10;播放  EXO / 硬解 / Surface / 隧道 关 / EXO增强 开 / 音频直通 开 / FFmpeg音频兜底 开&#10;来源  hls https://example.com m3u8&#10;屏幕  59.94 Hz"
-            tools:visibility="visible" />
-
-        <com.google.android.material.textview.MaterialTextView
             android:id="@+id/osdBottomRight"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -110,6 +85,62 @@
             tools:visibility="visible" />
 
     </FrameLayout>
+
+    <LinearLayout
+        android:id="@+id/osdDiagnosticsPanel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|start"
+        android:background="@drawable/shape_player_osd_diagnostics"
+        android:baselineAligned="false"
+        android:orientation="horizontal"
+        android:paddingStart="5dp"
+        android:paddingTop="5dp"
+        android:paddingEnd="7dp"
+        android:paddingBottom="5dp"
+        android:visibility="gone"
+        tools:visibility="visible">
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/osdDiagnostics"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1.25"
+            android:fontFeatureSettings="tnum"
+            android:includeFontPadding="false"
+            android:lineSpacingExtra="0dp"
+            android:shadowColor="#CC000000"
+            android:shadowDx="1.2"
+            android:shadowDy="1.2"
+            android:shadowRadius="1.5"
+            android:textColor="@color/white"
+            android:textScaleX="0.92"
+            android:textSize="9sp"
+            android:typeface="monospace"
+            tools:text="结论  正常&#10;视频  hevc 3840x2160 @59.940fps 42.0Mbps / codec hvc1 / color BT709 Limited SDR 8/8 / dec c2.mtk.hevc.decoder&#10;HEVC硬解  c2.mtk.hevc.decoder / 4K60 是 / 4K30 是 / 1440p60 是 / 1080p60 是 / bitrate&lt;=160Mbps&#10;音频  eac3 6ch 48kHz 640Kbps / dec c2.android.eac3.decoder&#10;网络  当前 12.8 MB/s / 估算带宽 48.0Mbps / 最近加载 6.2MB / 120 ms&#10;状态  就绪(READY) / 18.2 s / 48% / 重缓冲 0 次 / 掉帧 12&#10;播放  EXO / 硬解 / Surface / 隧道关 / 性能推荐 / 帧率匹配 开 / 预载开 / 直通开 / 兜底开&#10;来源  hls https://example.com m3u8" />
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/osdDiagnosticsExtra"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:fontFeatureSettings="tnum"
+            android:includeFontPadding="false"
+            android:lineSpacingExtra="0dp"
+            android:shadowColor="#CC000000"
+            android:shadowDx="1.2"
+            android:shadowDy="1.2"
+            android:shadowRadius="1.5"
+            android:textColor="@color/white"
+            android:textScaleX="0.92"
+            android:textSize="9sp"
+            android:typeface="monospace"
+            android:visibility="gone"
+            tools:text="设备  Xiaomi 2210132C / device diting / abi arm64-v8a,armeabi-v7a&#10;系统  Android 15 / SDK 35 / incremental 123456&#10;芯片  soc Qualcomm SM8475 / hardware qcom / board taro&#10;屏幕  app 2400x1080 / mode 2400x1080@120Hz / current 120 Hz / modes 60Hz/90Hz/120Hz&#10;WebView  com.google.android.webview / 126.0.0.0 / code 126000000&#10;网络环境  WiFi validated unmetered / system proxy 关 / app proxy 关"
+            tools:visibility="visible" />
+
+    </LinearLayout>
 
     <com.fongmi.android.tv.ui.custom.MiniProgressView
         android:id="@+id/osdMiniProgress"

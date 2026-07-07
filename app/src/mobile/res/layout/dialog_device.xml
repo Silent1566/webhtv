@@ -20,7 +20,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="@string/device_select"
-            android:textColor="?attr/colorOnSurface"
+            android:textColor="#202124"
             android:textSize="16sp" />
 
         <androidx.appcompat.widget.AppCompatImageView
@@ -32,6 +32,7 @@
             android:src="@drawable/ic_sync_two"
             android:tag="0"
             android:visibility="gone"
+            app:tint="#5F6368"
             tools:visibility="visible" />
 
         <androidx.appcompat.widget.AppCompatImageView
@@ -40,14 +41,16 @@
             android:layout_height="wrap_content"
             android:layout_marginEnd="16dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@drawable/ic_action_scan" />
+            android:src="@drawable/ic_action_scan"
+            app:tint="#5F6368" />
 
         <androidx.appcompat.widget.AppCompatImageView
             android:id="@+id/refresh"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@drawable/ic_action_refresh" />
+            android:src="@drawable/ic_action_refresh"
+            app:tint="#5F6368" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 

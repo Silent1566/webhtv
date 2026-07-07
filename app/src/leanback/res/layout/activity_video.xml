@@ -279,7 +279,7 @@
                 app:drawableStartCompat="@drawable/ic_detail_short_display" />
 
             <com.google.android.material.textview.MaterialTextView
-                android:id="@+id/search"
+                android:id="@+id/searchDetail"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="16dp"
@@ -289,6 +289,7 @@
                 android:focusableInTouchMode="true"
                 android:gravity="center"
                 android:minWidth="96dp"
+                android:nextFocusRight="@id/keep"
                 android:nextFocusUp="@id/actor"
                 android:nextFocusDown="@id/flag"
                 android:singleLine="true"
@@ -296,25 +297,6 @@
                 android:textColor="@color/white"
                 android:textSize="16sp"
                 app:drawableStartCompat="@drawable/ic_action_search" />
-
-            <com.google.android.material.textview.MaterialTextView
-                android:id="@+id/keep"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginEnd="16dp"
-                android:background="@drawable/selector_video_item"
-                android:drawablePadding="6dp"
-                android:focusable="true"
-                android:focusableInTouchMode="true"
-                android:gravity="center"
-                android:minWidth="96dp"
-                android:nextFocusUp="@id/actor"
-                android:nextFocusDown="@id/tmdbCast"
-                android:singleLine="true"
-                android:text="@string/keep"
-                android:textColor="@color/white"
-                android:textSize="16sp"
-                app:drawableStartCompat="@drawable/ic_detail_keep_off" />
 
             <com.google.android.material.textview.MaterialTextView
                 android:id="@+id/change1"
@@ -327,14 +309,36 @@
                 android:focusableInTouchMode="true"
                 android:gravity="center"
                 android:minWidth="96dp"
-                android:nextFocusRight="@id/tmdbRematch"
+                android:nextFocusRight="@id/keep"
                 android:nextFocusUp="@id/actor"
                 android:nextFocusDown="@id/tmdbCast"
                 android:singleLine="true"
                 android:text="@string/play_change"
                 android:textColor="@color/white"
                 android:textSize="16sp"
+                android:visibility="gone"
                 app:drawableStartCompat="@drawable/ic_detail_change" />
+
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/keep"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="16dp"
+                android:background="@drawable/selector_video_item"
+                android:drawablePadding="6dp"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:gravity="center"
+                android:minWidth="96dp"
+                android:nextFocusLeft="@id/searchDetail"
+                android:nextFocusRight="@id/tmdbRematch"
+                android:nextFocusUp="@id/actor"
+                android:nextFocusDown="@id/tmdbCast"
+                android:singleLine="true"
+                android:text="@string/keep"
+                android:textColor="@color/white"
+                android:textSize="16sp"
+                app:drawableStartCompat="@drawable/ic_detail_keep_off" />
 
             <com.google.android.material.textview.MaterialTextView
                 android:id="@+id/tmdbRematch"
@@ -462,6 +466,20 @@
                     android:gravity="center"
                     android:minWidth="76dp"
                     android:text="@string/detail_episode_view_grid"
+                    android:textColor="@color/white"
+                    android:textSize="16sp" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/episodeFileName"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp"
+                    android:background="@drawable/selector_button"
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:gravity="center"
+                    android:minWidth="76dp"
+                    android:text="@string/detail_episode_file_name_original"
                     android:textColor="@color/white"
                     android:textSize="16sp" />
 

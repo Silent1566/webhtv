@@ -10,12 +10,11 @@
     android:defaultFocusHighlightEnabled="false"
     android:focusable="true"
     android:focusableInTouchMode="true"
-    android:foreground="@drawable/selector_tmdb_cast_focus"
     android:stateListAnimator="@null"
     app:cardBackgroundColor="#16202A"
     app:cardCornerRadius="14dp"
     app:cardElevation="0dp"
-    app:rippleColor="@color/transparent"
+    app:rippleColor="@android:color/transparent"
     app:strokeColor="#26FFFFFF"
     app:strokeWidth="1dp">
 

@@ -17,6 +17,7 @@ import com.fongmi.android.tv.playback.PlaybackRemoteSyncer;
 import com.fongmi.android.tv.remote.RemoteAgent;
 import com.fongmi.android.tv.setting.ProxySetting;
 import com.fongmi.android.tv.setting.Setting;
+import com.fongmi.android.tv.utils.DanmakuSearchListFocusFixer;
 import com.fongmi.android.tv.utils.NsdDeviceDiscovery;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.hook.Hook;
@@ -94,6 +95,7 @@ public class App extends Application implements Application.ActivityLifecycleCal
         if (DebugLogStore.isEnabled()) Setting.logDebugEnvironment("restore");
         Notify.createChannel();
         ProxySetting.apply();
+        DanmakuSearchListFocusFixer.start();
         registerActivityLifecycleCallbacks(this);
         registerContentHandlers();
         post(this::startBackgroundServices, 1200);

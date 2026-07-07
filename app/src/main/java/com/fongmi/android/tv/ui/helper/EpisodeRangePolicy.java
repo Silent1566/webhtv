@@ -19,12 +19,22 @@ public final class EpisodeRangePolicy {
         if (size <= 0) return ranges;
         int groupSize = groupSize(size, maxGroupSize);
         int count = (int) Math.ceil(size / (float) groupSize);
+        int remainder = size % groupSize;
         for (int i = 0; i < count; i++) {
-            int start = i * groupSize;
-            int end = Math.min(start + groupSize, size);
+            int start;
+            int end;
+            if (reverse && remainder != 0) {
+                // Reverse keeps the same episode-number group boundaries as forward order,
+                // so the partial group lands first (chunks align to the end of the list).
+                start = i == 0 ? 0 : remainder + (i - 1) * groupSize;
+                end = i == 0 ? remainder : Math.min(start + groupSize, size);
+            } else {
+                start = i * groupSize;
+                end = Math.min(start + groupSize, size);
+            }
             int labelStart = reverse ? size - start : start + 1;
             int labelEnd = reverse ? size - end + 1 : end;
-            boolean single = Math.max(labelStart, labelEnd) == Math.min(labelStart, labelEnd);
+            boolean single = labelStart == labelEnd;
             boolean selected = selectedIndex >= start && selectedIndex < end;
             ranges.add(new Range(single ? String.valueOf(labelStart) : labelStart + "-" + labelEnd, start, end, selected));
         }

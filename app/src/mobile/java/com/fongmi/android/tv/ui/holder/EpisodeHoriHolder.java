@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.ContextWrapper;
 import android.text.TextUtils;
 import android.view.View;
+import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
 import androidx.fragment.app.FragmentActivity;
@@ -57,7 +58,8 @@ public class EpisodeHoriHolder extends BaseEpisodeHolder {
         binding.card.setSelected(item.isSelected());
         bindCardActions(item, binding.getRoot(), binding.card, binding.still, binding.cardTitle, binding.overview);
 
-        binding.cardTitle.setText(EpisodeAdapter.getTitle(item));
+        String cardTitle = EpisodeAdapter.getCardTitle(item);
+        binding.cardTitle.setText(cardTitle);
         binding.cardTitle.setSelected(item.isSelected());
 
         String rawStillUrl = tmdbEpisode == null ? "" : tmdbEpisode.getStillUrl();
@@ -65,7 +67,7 @@ public class EpisodeHoriHolder extends BaseEpisodeHolder {
         String errorStillUrl = TextUtils.isEmpty(rawStillUrl) ? "" : fallbackStillUrl;
         binding.still.setVisibility(TextUtils.isEmpty(stillUrl) ? View.GONE : View.VISIBLE);
         if (!TextUtils.isEmpty(stillUrl)) {
-            ImgUtil.load(EpisodeAdapter.getTitle(item), stillUrl, errorStillUrl, binding.still, true, 0, 0);
+            ImgUtil.load(cardTitle, stillUrl, errorStillUrl, binding.still, true, 0, 0);
         } else {
             ImgUtil.clear(binding.still);
         }
@@ -83,6 +85,7 @@ public class EpisodeHoriHolder extends BaseEpisodeHolder {
         } else {
             binding.rating.setVisibility(View.GONE);
         }
+        bindFileSize(EpisodeAdapter.getCardFileSize(item, cardTitle));
     }
 
     private void bindText(Episode item) {
@@ -95,6 +98,16 @@ public class EpisodeHoriHolder extends BaseEpisodeHolder {
         binding.text.setOnClickListener(v -> listener.onItemClick(item));
         EpisodeAdapter.bindNativeTitlePopup(binding.getRoot(), item);
         EpisodeAdapter.bindNativeTitlePopup(binding.text, item);
+    }
+
+    private void bindFileSize(String fileSize) {
+        binding.fileSize.setText(fileSize);
+        binding.fileSize.setVisibility(TextUtils.isEmpty(fileSize) ? View.GONE : View.VISIBLE);
+        ViewGroup.LayoutParams params = binding.fileSize.getLayoutParams();
+        if (params instanceof ViewGroup.MarginLayoutParams marginParams) {
+            marginParams.topMargin = ResUtil.dp2px(8);
+            binding.fileSize.setLayoutParams(marginParams);
+        }
     }
 
     private void bindDetailLongClick(Episode item, View... views) {

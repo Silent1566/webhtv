@@ -5,7 +5,7 @@ import android.view.View;
 import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
-import androidx.media3.common.MediaTitle;
+import androidx.media3.common.MediaEdition;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.fongmi.android.tv.databinding.AdapterTitleBinding;
@@ -19,7 +19,7 @@ import java.util.Locale;
 public class TitleAdapter extends RecyclerView.Adapter<TitleAdapter.ViewHolder> {
 
     private final OnClickListener listener;
-    private final List<MediaTitle> mItems;
+    private final List<MediaEdition> mItems;
     private final StringBuilder builder;
     private final Formatter formatter;
 
@@ -32,10 +32,10 @@ public class TitleAdapter extends RecyclerView.Adapter<TitleAdapter.ViewHolder> 
 
     public interface OnClickListener {
 
-        void onItemClick(MediaTitle item);
+        void onItemClick(MediaEdition item);
     }
 
-    public TitleAdapter addAll(List<MediaTitle> items) {
+    public TitleAdapter addAll(List<MediaEdition> items) {
         mItems.addAll(items);
         notifyDataSetChanged();
         return this;
@@ -59,7 +59,7 @@ public class TitleAdapter extends RecyclerView.Adapter<TitleAdapter.ViewHolder> 
 
     @Override
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
-        MediaTitle item = mItems.get(position);
+        MediaEdition item = mItems.get(position);
         holder.binding.text.setSelected(item.selected);
         holder.binding.text.setText(item.label + " [" + Util.format(builder, formatter, item.durationUs / 1000) + "]");
     }

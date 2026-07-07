@@ -24,6 +24,12 @@ public final class EpisodeTitleFormatter {
         return title;
     }
 
+    public static String formatTmdbTitle(String label, String sourceName, String tmdbTitle, boolean showScraped) {
+        if (showScraped) return formatTmdbTitle(label, sourceName, tmdbTitle);
+        // 原文件名模式：优先展示源文件名，缺失时回退到 label
+        return isEmpty(sourceName) ? (isEmpty(label) ? "" : label) : sourceName;
+    }
+
     public static String withSourceFileSize(String sourceName, String title, boolean includeFileSize) {
         if (isEmpty(title) || !includeFileSize) return isEmpty(title) ? "" : title;
         String fileSize = extractFileSize(sourceName);

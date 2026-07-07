@@ -33,8 +33,6 @@ import com.google.android.material.bottomsheet.BottomSheetDialog;
 
 public class LiveDialog extends BaseBottomSheetDialog implements LiveAdapter.OnClickListener {
 
-    private static final int DRAWER_COLOR = 0xFF28282A;
-
     private DialogLiveBinding binding;
     private LiveListener listener;
     private LiveAdapter adapter;
@@ -182,8 +180,8 @@ public class LiveDialog extends BaseBottomSheetDialog implements LiveAdapter.OnC
     }
 
     private void fillDrawer() {
-        binding.getRoot().setBackgroundColor(DRAWER_COLOR);
-        binding.getRoot().getChildAt(0).setBackgroundColor(DRAWER_COLOR);
+        binding.getRoot().setBackgroundResource(R.drawable.shape_dialog_control_glass_panel);
+        binding.getRoot().getChildAt(0).setBackgroundResource(R.drawable.shape_dialog_control_glass_scrim);
         ViewGroup.LayoutParams params = binding.recycler.getLayoutParams();
         if (params instanceof LinearLayoutCompat.LayoutParams layoutParams) {
             layoutParams.height = 0;

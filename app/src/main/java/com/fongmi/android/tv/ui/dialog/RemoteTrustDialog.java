@@ -22,7 +22,6 @@ import android.view.Window;
 import android.view.WindowManager;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
-import android.widget.ImageView;
 
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.widget.LinearLayoutCompat;
@@ -34,6 +33,10 @@ import androidx.fragment.app.FragmentActivity;
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.bean.Config;
+import com.fongmi.android.tv.databinding.DialogRemoteTrustConfirmBinding;
+import com.fongmi.android.tv.databinding.DialogRemoteTrustAddDeviceBinding;
+import com.fongmi.android.tv.databinding.DialogRemoteTrustQrBinding;
+import com.fongmi.android.tv.databinding.DialogRemoteTrustTextCommandBinding;
 import com.fongmi.android.tv.remote.RemoteAgent;
 import com.fongmi.android.tv.remote.RemoteAgentService;
 import com.fongmi.android.tv.remote.RemoteClient;
@@ -274,6 +277,22 @@ public final class RemoteTrustDialog {
         params.gravity = Gravity.CENTER;
         window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         window.clearFlags(WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM);
+        window.setAttributes(params);
+        window.setLayout(params.width, WindowManager.LayoutParams.WRAP_CONTENT);
+    }
+
+    private static void configureSmallModalWindow(Context context, AlertDialog dialog) {
+        Window window = dialog.getWindow();
+        if (window == null) return;
+        WindowManager.LayoutParams params = window.getAttributes();
+        boolean land = ResUtil.isLand(context);
+        int width = Math.min(Math.round(ResUtil.getScreenWidth(context) * (land ? 0.58f : 0.92f)), dp(context, 560));
+        params.width = Math.max(width, dp(context, 320));
+        params.height = WindowManager.LayoutParams.WRAP_CONTENT;
+        params.gravity = Gravity.CENTER;
+        window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        window.clearFlags(WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM);
+        window.getDecorView().setPadding(0, 0, 0, 0);
         window.setAttributes(params);
         window.setLayout(params.width, WindowManager.LayoutParams.WRAP_CONTENT);
     }
@@ -913,26 +932,31 @@ public final class RemoteTrustDialog {
             Notify.show(R.string.remote_trust_no_profile);
             return;
         }
-        LinearLayoutCompat root = dialogRoot(activity);
-        TextInputEditText code = input(activity, InputType.TYPE_CLASS_NUMBER, true);
-        TextInputEditText alias = input(activity, InputType.TYPE_CLASS_TEXT, true);
-        root.addView(inputLayout(activity, R.string.remote_trust_bind_code, code), matchWrap());
-        root.addView(inputLayout(activity, R.string.remote_trust_device_alias, alias), topMargin(matchWrap(), 8));
+        DialogRemoteTrustAddDeviceBinding dialogBinding = DialogRemoteTrustAddDeviceBinding.inflate(LayoutInflater.from(activity));
         AlertDialog dialog = new MaterialAlertDialogBuilder(activity, R.style.ThemeOverlay_WebHTV_LightDialog)
-                .setTitle(R.string.remote_trust_add_device_title)
-                .setView(root)
-                .setNegativeButton(R.string.dialog_cancel, null)
-                .setPositiveButton(R.string.remote_trust_add_device, null)
+                .setView(dialogBinding.getRoot())
                 .create();
-        dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
-            String value = textOf(code);
+        dialogBinding.negative.setOnClickListener(v -> dialog.dismiss());
+        dialogBinding.positive.setOnClickListener(v -> {
+            String value = textOf(dialogBinding.code);
             if (TextUtils.isEmpty(value)) {
                 Notify.show(R.string.remote_trust_code_required);
                 return;
             }
             dialog.dismiss();
-            addDevice(activity, binding, value, textOf(alias));
-        }));
+            addDevice(activity, binding, value, textOf(dialogBinding.alias));
+        });
+        dialogBinding.alias.setOnEditorActionListener((textView, actionId, event) -> {
+            if (actionId == EditorInfo.IME_ACTION_DONE) {
+                dialogBinding.positive.performClick();
+                return true;
+            }
+            return false;
+        });
+        dialog.setOnShowListener(d -> {
+            configureSmallModalWindow(activity, dialog);
+            dialogBinding.code.requestFocus();
+        });
         showModal(dialog);
     }
 
@@ -1120,17 +1144,17 @@ public final class RemoteTrustDialog {
     }
 
     private static void showTextCommandDialog(FragmentActivity activity, Binding binding, int title, int hint, String type, String payloadKey) {
-        TextInputEditText input = input(activity, InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI, true);
-        LinearLayoutCompat root = dialogRoot(activity);
-        root.addView(inputLayout(activity, hint, input), matchWrap());
+        DialogRemoteTrustTextCommandBinding dialogBinding = DialogRemoteTrustTextCommandBinding.inflate(LayoutInflater.from(activity));
+        dialogBinding.title.setText(title);
+        dialogBinding.inputLayout.setHint(activity.getString(hint));
+        dialogBinding.input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
+        dialogBinding.positive.setText("action.push".equals(type) ? R.string.remote_trust_send_push : R.string.remote_trust_send_search);
         AlertDialog dialog = new MaterialAlertDialogBuilder(activity, R.style.ThemeOverlay_WebHTV_LightDialog)
-                .setTitle(title)
-                .setView(root)
-                .setNegativeButton(R.string.dialog_cancel, null)
-                .setPositiveButton("action.push".equals(type) ? R.string.remote_trust_send_push : R.string.remote_trust_send_search, null)
+                .setView(dialogBinding.getRoot())
                 .create();
-        dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
-            String value = textOf(input);
+        dialogBinding.negative.setOnClickListener(v -> dialog.dismiss());
+        dialogBinding.positive.setOnClickListener(v -> {
+            String value = textOf(dialogBinding.input);
             if (TextUtils.isEmpty(value)) {
                 Notify.show(hint);
                 return;
@@ -1139,7 +1163,18 @@ public final class RemoteTrustDialog {
             payload.addProperty(payloadKey, value);
             dialog.dismiss();
             sendCommand(activity, binding, type, payload);
-        }));
+        });
+        dialogBinding.input.setOnEditorActionListener((textView, actionId, event) -> {
+            if (actionId == EditorInfo.IME_ACTION_DONE) {
+                dialogBinding.positive.performClick();
+                return true;
+            }
+            return false;
+        });
+        dialog.setOnShowListener(d -> {
+            configureSmallModalWindow(activity, dialog);
+            dialogBinding.input.requestFocus();
+        });
         showModal(dialog);
     }
 
@@ -1919,17 +1954,12 @@ public final class RemoteTrustDialog {
 
     private static void confirmConfigDelete(FragmentActivity activity, Binding binding, ConfigDialogState state, JsonObject payload) {
         if (payload == null) return;
-        showModal(new MaterialAlertDialogBuilder(activity, R.style.ThemeOverlay_WebHTV_LightDialog)
-                .setTitle(R.string.remote_trust_config_delete)
-                .setMessage(activity.getString(R.string.remote_trust_config_delete_message, payload.has("url") ? payload.get("url").getAsString() : ""))
-                .setNegativeButton(R.string.dialog_cancel, null)
-                .setPositiveButton(R.string.dialog_confirm, (dialog, which) -> runConfigCommand(activity, binding, state, "config.delete", payload, () -> {
-                    removeConfig(state.items, payload);
-                    binding.configCache.put(remoteCacheKey(binding), state.items);
-                    state.selected = null;
-                    renderRemoteConfigList(activity, binding, state);
-                }))
-                .create());
+        ChoiceDialog.showConfirm(activity, R.string.remote_trust_config_delete, activity.getString(R.string.remote_trust_config_delete_message, payload.has("url") ? payload.get("url").getAsString() : ""), R.string.dialog_confirm, () -> runConfigCommand(activity, binding, state, "config.delete", payload, () -> {
+            removeConfig(state.items, payload);
+            binding.configCache.put(remoteCacheKey(binding), state.items);
+            state.selected = null;
+            renderRemoteConfigList(activity, binding, state);
+        }));
     }
 
     private static void prefetchVodSites(FragmentActivity activity, Binding binding, ConfigDialogState state) {
@@ -2134,12 +2164,19 @@ public final class RemoteTrustDialog {
             Notify.show(R.string.remote_trust_sync_self_forbidden);
             return;
         }
-        showModal(new MaterialAlertDialogBuilder(activity, R.style.ThemeOverlay_WebHTV_LightDialog)
-                .setTitle(R.string.remote_trust_action_sync)
-                .setMessage(activity.getString(R.string.remote_trust_sync_confirm, deviceName(selected.device)))
-                .setNegativeButton(R.string.dialog_cancel, null)
-                .setPositiveButton(R.string.dialog_confirm, (dialog, which) -> startRemoteSync(activity, binding, selected))
-                .create());
+        DialogRemoteTrustConfirmBinding dialogBinding = DialogRemoteTrustConfirmBinding.inflate(LayoutInflater.from(activity));
+        dialogBinding.title.setText(R.string.remote_trust_action_sync);
+        dialogBinding.message.setText(activity.getString(R.string.remote_trust_sync_confirm, deviceName(selected.device)));
+        AlertDialog dialog = new MaterialAlertDialogBuilder(activity, R.style.ThemeOverlay_WebHTV_LightDialog)
+                .setView(dialogBinding.getRoot())
+                .create();
+        dialogBinding.negative.setOnClickListener(v -> dialog.dismiss());
+        dialogBinding.positive.setOnClickListener(v -> {
+            dialog.dismiss();
+            startRemoteSync(activity, binding, selected);
+        });
+        dialog.setOnShowListener(d -> configureSmallModalWindow(activity, dialog));
+        showModal(dialog);
     }
 
     private static void startRemoteSync(FragmentActivity activity, Binding binding, DeviceRow selected) {
@@ -2605,50 +2642,40 @@ public final class RemoteTrustDialog {
     }
 
     private static void confirmClear(FragmentActivity activity, Binding binding) {
-        showModal(new MaterialAlertDialogBuilder(activity, R.style.ThemeOverlay_WebHTV_LightDialog)
-                .setTitle(R.string.remote_trust_reset_local)
-                .setMessage(R.string.remote_trust_clear_message)
-                .setNegativeButton(R.string.dialog_cancel, null)
-                .setPositiveButton(R.string.dialog_confirm, (dialog, which) -> {
-                    RemoteStore.clear();
-                    RemoteAgent.get().stop();
-                    RemoteAgentService.stop(activity);
-                    binding.initialized = false;
-                    clearBindCode(binding);
-                    binding.selectedGroupId = "";
-                    binding.selectedDeviceId = "";
-                    binding.serviceStateText = "";
-                    binding.serviceDetailText = "";
-                    binding.diagnostics = "";
-                    binding.statusExpanded = false;
-                    binding.advancedExpanded = false;
-                    binding.autoBindAttempted = false;
-                    resetDetect(binding);
-                    binding.creatingBindCode = false;
-                    clearRemoteCache(binding);
-                    binding.page = PAGE_DEVICES;
-                    render(activity, binding);
-                })
-                .create());
+        ChoiceDialog.showConfirm(activity, R.string.remote_trust_reset_local, activity.getString(R.string.remote_trust_clear_message), R.string.dialog_confirm, () -> {
+            RemoteStore.clear();
+            RemoteAgent.get().stop();
+            RemoteAgentService.stop(activity);
+            binding.initialized = false;
+            clearBindCode(binding);
+            binding.selectedGroupId = "";
+            binding.selectedDeviceId = "";
+            binding.serviceStateText = "";
+            binding.serviceDetailText = "";
+            binding.diagnostics = "";
+            binding.statusExpanded = false;
+            binding.advancedExpanded = false;
+            binding.autoBindAttempted = false;
+            resetDetect(binding);
+            binding.creatingBindCode = false;
+            clearRemoteCache(binding);
+            binding.page = PAGE_DEVICES;
+            render(activity, binding);
+        });
     }
 
     private static void confirmDeleteDevice(FragmentActivity activity, Binding binding, DeviceRow row) {
         if (row == null || row.group == null || row.device == null) return;
-        showModal(new MaterialAlertDialogBuilder(activity, R.style.ThemeOverlay_WebHTV_LightDialog)
-                .setTitle(R.string.remote_trust_delete_device)
-                .setMessage(activity.getString(R.string.remote_trust_delete_device_message, deviceName(row.device)))
-                .setNegativeButton(R.string.dialog_cancel, null)
-                .setPositiveButton(R.string.dialog_confirm, (dialog, which) -> {
-                    RemoteProfile profile = currentProfile(binding);
-                    if (profile == null) return;
-                    if (RemoteStore.removeDevice(profile.serverOrigin, row.group.groupId, row.device.deviceId)) {
-                        binding.selectedGroupId = "";
-                        binding.selectedDeviceId = "";
-                        Notify.show(R.string.remote_trust_delete_device_done);
-                        render(activity, binding);
-                    }
-                })
-                .create());
+        ChoiceDialog.showConfirm(activity, R.string.remote_trust_delete_device, activity.getString(R.string.remote_trust_delete_device_message, deviceName(row.device)), R.string.dialog_confirm, () -> {
+            RemoteProfile profile = currentProfile(binding);
+            if (profile == null) return;
+            if (RemoteStore.removeDevice(profile.serverOrigin, row.group.groupId, row.device.deviceId)) {
+                binding.selectedGroupId = "";
+                binding.selectedDeviceId = "";
+                Notify.show(R.string.remote_trust_delete_device_done);
+                render(activity, binding);
+            }
+        });
     }
 
     private static void copyCode(Context context, Binding binding) {
@@ -2939,26 +2966,17 @@ public final class RemoteTrustDialog {
     private static void showServerQr(FragmentActivity activity, Binding binding) {
         Server.get().start();
         String server = Server.get().getAddress(false) + "/remote/trust/setup";
-        LinearLayoutCompat root = dialogRoot(activity);
-        ImageView image = new ImageView(activity);
-        image.setImageBitmap(QRCode.getLightBitmap(server, 220, 1));
-        image.setAdjustViewBounds(true);
-        image.setBackgroundColor(Color.WHITE);
-        image.setPadding(dp(activity, 10), dp(activity, 10), dp(activity, 10), dp(activity, 10));
-        root.addView(image, new LinearLayoutCompat.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(activity, 240)));
-        MaterialTextView value = text(activity, server, 12, "#5F6368", false);
-        value.setGravity(Gravity.CENTER);
-        value.setTextIsSelectable(true);
-        value.setPadding(0, dp(activity, 8), 0, 0);
-        root.addView(value, matchWrap());
+        DialogRemoteTrustQrBinding dialogBinding = DialogRemoteTrustQrBinding.inflate(LayoutInflater.from(activity));
+        dialogBinding.image.setImageBitmap(QRCode.getLightBitmap(server, 220, 1));
+        dialogBinding.value.setText(server);
         AlertDialog dialog = new MaterialAlertDialogBuilder(activity, R.style.ThemeOverlay_WebHTV_LightDialog)
-                .setTitle(R.string.remote_trust_server_qr)
-                .setView(root)
-                .setNegativeButton(R.string.dialog_cancel, null)
+                .setView(dialogBinding.getRoot())
                 .create();
+        dialogBinding.negative.setOnClickListener(v -> dialog.dismiss());
         dialog.setOnDismissListener(d -> {
             if (binding.serverQrDialog == dialog) binding.serverQrDialog = null;
         });
+        dialog.setOnShowListener(d -> configureSmallModalWindow(activity, dialog));
         binding.serverQrDialog = showModal(dialog);
     }
 

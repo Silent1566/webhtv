@@ -98,12 +98,14 @@ public class CustomKeyDown extends GestureDetector.SimpleOnGestureListener imple
     }
 
     private boolean isEdge(MotionEvent e) {
-        return ResUtil.isEdge(activity, e, ResUtil.dp2px(24));
+        // 使用 App.get() 而非 activity，避免被 wrapLanguage 冻结的 context 导致横屏时宽高错误
+        return ResUtil.isEdge(App.get(), e, ResUtil.dp2px(24));
     }
 
     private boolean isSide(MotionEvent e) {
         // 使用 getRawX 获取屏幕绝对坐标，避免横屏时 View 坐标系统问题
-        int width = ResUtil.getScreenWidth(activity);
+        // 使用 App.get() 而非 activity，避免被 wrapLanguage 冻结的 context 导致横屏时宽度错误
+        int width = ResUtil.getScreenWidth(App.get());
         int four = width / 4;
         float x = e.getRawX();
         return !(x > four) || !(x < four * 3);
@@ -188,7 +190,8 @@ public class CustomKeyDown extends GestureDetector.SimpleOnGestureListener imple
 
     private void checkSide(MotionEvent e2) {
         // 使用 getRawX 获取屏幕绝对坐标，确保横屏时正确判断左右区域
-        int width = ResUtil.getScreenWidth(activity);
+        // 使用 App.get() 而非 activity，避免被 wrapLanguage 冻结的 context 导致横屏时宽度错误
+        int width = ResUtil.getScreenWidth(App.get());
         float x = e2.getRawX();
         if (x > width / 2f) changeVolume = true;
         else changeBright = true;

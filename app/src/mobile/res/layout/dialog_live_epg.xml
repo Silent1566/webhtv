@@ -4,13 +4,13 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/shape_control_sheet_panel"
+    android:background="@drawable/shape_dialog_control_glass_panel"
     tools:background="#1F1F1F">
 
     <View
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="@drawable/shape_control_sheet_scrim" />
+        android:background="@drawable/shape_dialog_control_glass_scrim" />
 
     <androidx.appcompat.widget.LinearLayoutCompat
         android:layout_width="match_parent"
@@ -69,7 +69,7 @@
             android:layout_height="44dp"
             android:layout_marginTop="10dp"
             android:layout_marginEnd="7dp"
-            android:background="@drawable/shape_player_child_sheet_input"
+            android:background="@drawable/shape_dialog_glass_input"
             android:hint="@string/live_epg_hint"
             android:imeOptions="actionDone"
             android:inputType="textUri"

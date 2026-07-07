@@ -134,9 +134,30 @@ public class EpisodeAdapter extends RecyclerView.Adapter<BaseEpisodeHolder> {
     }
 
     private static String getTmdbTitle(Episode item, TmdbEpisode tmdbEpisode) {
-        String title = EpisodeTitleFormatter.formatTmdbTitle(tmdbEpisode.getNumber(), tmdbEpisode.getTitle());
-        if (TextUtils.isEmpty(title)) title = TextUtils.isEmpty(item.getName()) ? item.getDisplayName() : item.getName();
+        String title = getCardTitle(item);
         return EpisodeTitleFormatter.withSourceFileSize(item.getName(), title, Setting.isTmdbEpisodeFileSize());
+    }
+
+    public static String getCardTitle(Episode item) {
+        if (item == null) return "";
+        TmdbEpisode tmdbEpisode = item.getTmdbEpisode();
+        if (tmdbEpisode == null) return getNativeTitle(item);
+        int number = tmdbEpisode.getNumber();
+        String label = number > 0 ? String.valueOf(number) : item.getName();
+        String title = EpisodeTitleFormatter.formatTmdbTitle(label, item.getName(), tmdbEpisode.getTitle(), Setting.getTmdbEpisodeShowScrapedName());
+        if (TextUtils.isEmpty(title)) title = TextUtils.isEmpty(item.getName()) ? item.getDisplayName() : item.getName();
+        return title;
+    }
+
+    public static String getCardFileSize(Episode item, String title) {
+        return getCardFileSize(item, title, Setting.isTmdbEpisodeFileSize());
+    }
+
+    static String getCardFileSize(Episode item, String title, boolean includeFileSize) {
+        if (item == null || !includeFileSize) return "";
+        String fileSize = EpisodeTitleFormatter.extractFileSize(item.getName());
+        if (TextUtils.isEmpty(fileSize) || EpisodeTitleFormatter.containsFileSize(title)) return "";
+        return fileSize;
     }
 
     public static void bindTitle(MaterialTextView text, Episode item) {

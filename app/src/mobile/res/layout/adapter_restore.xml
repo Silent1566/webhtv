@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.appcompat.widget.LinearLayoutCompat xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@drawable/shape_accent"
+    android:background="@drawable/shape_light_dialog_item"
     android:gravity="center_vertical"
     android:orientation="horizontal">
 
@@ -18,7 +19,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:singleLine="true"
-            android:textColor="?attr/colorOnSurface"
+            android:textColor="#202124"
             android:textSize="14sp" />
 
         <com.google.android.material.textview.MaterialTextView
@@ -26,7 +27,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:singleLine="true"
-            android:textColor="?attr/colorOnSurfaceVariant"
+            android:textColor="#5F6368"
             android:textSize="12sp" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
@@ -36,6 +37,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:background="?attr/selectableItemBackgroundBorderless"
-        android:src="@drawable/ic_setting_delete" />
+        android:src="@drawable/ic_setting_delete"
+        app:tint="#5F6368" />
 
 </androidx.appcompat.widget.LinearLayoutCompat>

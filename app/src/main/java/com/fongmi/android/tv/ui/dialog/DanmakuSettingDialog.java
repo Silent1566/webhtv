@@ -5,6 +5,7 @@ import android.content.DialogInterface;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
+import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -14,6 +15,7 @@ import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.app.AppCompatDialogFragment;
 import androidx.core.view.WindowCompat;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
@@ -148,7 +150,7 @@ public final class DanmakuSettingDialog {
         }
     }
 
-    public static final class SideSheet extends BaseSideSheetDialog {
+    public static final class SideSheet extends AppCompatDialogFragment {
 
         private DialogDanmakuSettingBinding binding;
         private final PlayerManager player;
@@ -159,18 +161,38 @@ public final class DanmakuSettingDialog {
             this.restoreParent = restoreParent;
         }
 
+        @NonNull
         @Override
-        protected int getWidth() {
-            return Math.min(ResUtil.dp2px(420), ResUtil.getScreenWidth() / 2);
+        public Dialog onCreateDialog(Bundle savedInstanceState) {
+            Dialog dialog = super.onCreateDialog(savedInstanceState);
+            dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+            configureWindow(dialog);
+            return dialog;
         }
 
         @Override
-        protected ViewBinding getBinding(@NonNull LayoutInflater inflater, @Nullable ViewGroup container) {
-            return binding = DanmakuSettingDialog.inflate(inflater, container);
+        public void onStart() {
+            super.onStart();
+            configureWindow(getDialog());
+        }
+
+        @Nullable
+        @Override
+        public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+            binding = DanmakuSettingDialog.inflate(inflater, container);
+            binding.getRoot().setBackgroundResource(R.drawable.shape_dialog_glass_panel);
+            FrameLayout overlay = new FrameLayout(requireContext());
+            overlay.setBackgroundColor(Color.TRANSPARENT);
+            overlay.setOnClickListener(view -> dismiss());
+            binding.getRoot().setClickable(true);
+            FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(getWidth(), ViewGroup.LayoutParams.MATCH_PARENT, Gravity.END);
+            overlay.addView(binding.getRoot(), params);
+            return overlay;
         }
 
         @Override
-        protected void initView() {
+        public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
+            super.onViewCreated(view, savedInstanceState);
             new DanmakuSettingPanel(binding, player).bind();
         }
 
@@ -180,18 +202,21 @@ public final class DanmakuSettingDialog {
             DanmakuSettingDialog.restoreParent(this, player, restoreParent);
         }
 
-        @Override
-        public void onStart() {
-            super.onStart();
-            Dialog dialog = getDialog();
-            Window window = dialog == null ? null : dialog.getWindow();
-            if (window != null) window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-            FrameLayout sheet = dialog == null ? null : dialog.findViewById(com.google.android.material.R.id.m3_side_sheet);
-            if (sheet != null) {
-                int color = ResUtil.getColor(R.color.transparent);
-                sheet.setBackgroundColor(color);
-                if (sheet.getParent() instanceof View) ((View) sheet.getParent()).setBackgroundColor(color);
-            }
+        private int getWidth() {
+            return Math.min(ResUtil.dp2px(420), ResUtil.getScreenWidth() / 2);
+        }
+
+        private void configureWindow(Dialog dialog) {
+            if (dialog == null || dialog.getWindow() == null) return;
+            Window window = dialog.getWindow();
+            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+            window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+            window.setDimAmount(0f);
+            window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING);
+            WindowCompat.setDecorFitsSystemWindows(window, false);
+            window.setLayout(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT);
+            Util.hideSystemUI(window);
         }
     }
 

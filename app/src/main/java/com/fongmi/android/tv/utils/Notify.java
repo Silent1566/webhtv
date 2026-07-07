@@ -67,6 +67,13 @@ public class Notify {
         }
     }
 
+    public static void dismissToast() {
+        try {
+            if (get().mToast != null) get().mToast.cancel();
+        } catch (Exception ignored) {
+        }
+    }
+
     private void create(Context context) {
         ViewProgressBinding binding = ViewProgressBinding.inflate(LayoutInflater.from(context));
         mDialog = new MaterialAlertDialogBuilder(context).setView(binding.getRoot()).create();

@@ -58,7 +58,7 @@
         android:id="@+id/remark"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_above="@+id/name"
+        android:layout_above="@+id/progress"
         android:background="@drawable/shape_vod_remark"
         android:ellipsize="marquee"
         android:singleLine="true"
@@ -66,11 +66,23 @@
         android:textSize="14sp"
         tools:text="1080p" />
 
+    <com.google.android.material.progressindicator.LinearProgressIndicator
+        android:id="@+id/progress"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_below="@+id/image"
+        android:layout_alignStart="@+id/image"
+        android:layout_alignEnd="@+id/image"
+        android:background="@color/black_20"
+        app:indicatorColor="@color/white"
+        app:trackColor="@color/transparent"
+        app:trackStopIndicatorSize="0dp" />
+
     <com.google.android.material.textview.MaterialTextView
         android:id="@+id/name"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_below="@+id/image"
+        android:layout_below="@+id/progress"
         android:layout_alignStart="@+id/image"
         android:layout_alignEnd="@+id/image"
         android:background="@drawable/shape_vod_name"

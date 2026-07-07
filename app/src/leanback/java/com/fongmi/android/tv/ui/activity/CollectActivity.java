@@ -168,7 +168,7 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
         });
         mBinding.collectHorizontal.setHasFixedSize(true);
         mBinding.collectHorizontal.setItemAnimator(null);
-        mBinding.collectHorizontal.setHorizontalSpacing(ResUtil.dp2px(16));
+        mBinding.collectHorizontal.setHorizontalSpacing(ResUtil.dp2px(8));
         mBinding.collectHorizontal.setAdapter(mCollectAdapter);
         mBinding.collectHorizontal.addOnChildViewHolderSelectedListener(new OnChildViewHolderSelectedListener() {
             @Override

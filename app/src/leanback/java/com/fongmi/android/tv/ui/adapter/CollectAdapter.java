@@ -84,13 +84,20 @@ public class CollectAdapter extends RecyclerView.Adapter<CollectAdapter.ViewHold
     @NonNull
     @Override
     public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        return new ViewHolder(AdapterTypeBinding.inflate(LayoutInflater.from(parent.getContext()), parent, false));
+        boolean isHorizontal = parent instanceof androidx.leanback.widget.HorizontalGridView;
+        return new ViewHolder(AdapterTypeBinding.inflate(LayoutInflater.from(parent.getContext()), parent, false), isHorizontal);
     }
 
     @Override
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         Collect item = mItems.get(position);
-        holder.binding.text.getLayoutParams().width = ResUtil.dp2px(160);
+        // 横屏模式使用WRAP_CONTENT，竖屏模式使用固定宽度160dp
+        holder.binding.text.getLayoutParams().width = holder.isHorizontal ?
+            ViewGroup.LayoutParams.WRAP_CONTENT : ResUtil.dp2px(160);
+        // 竖屏模式文字居中，横屏模式文字左对齐
+        holder.binding.text.setGravity(holder.isHorizontal ?
+            android.view.Gravity.START | android.view.Gravity.CENTER_VERTICAL :
+            android.view.Gravity.CENTER);
         holder.binding.text.setSingleLine(true);
         holder.binding.text.setEllipsize(android.text.TextUtils.TruncateAt.MARQUEE);
         holder.binding.text.setMarqueeRepeatLimit(-1);
@@ -112,10 +119,12 @@ public class CollectAdapter extends RecyclerView.Adapter<CollectAdapter.ViewHold
     public static class ViewHolder extends RecyclerView.ViewHolder {
 
         private final AdapterTypeBinding binding;
+        private final boolean isHorizontal;
 
-        ViewHolder(@NonNull AdapterTypeBinding binding) {
+        ViewHolder(@NonNull AdapterTypeBinding binding, boolean isHorizontal) {
             super(binding.getRoot());
             this.binding = binding;
+            this.isHorizontal = isHorizontal;
         }
     }
 }

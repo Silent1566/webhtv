@@ -2,6 +2,7 @@
 
     <!-- App -->
     <string name="app_name">TV</string>
+    <string name="app_exit_confirm">Press back again to exit</string>
 
     <!-- Live -->
     <string name="live_pass">Pass</string>
@@ -27,11 +28,18 @@
     <string name="detail_episode_view_list">List</string>
     <string name="detail_episode_view_grid_action">Switch to grid</string>
     <string name="detail_episode_view_list_action">Switch to list</string>
+    <string name="detail_episode_file_name_original">Original</string>
+    <string name="detail_episode_file_name_scraped">Scraped</string>
+    <string name="detail_episode_file_name_original_action">Switch to original filename</string>
+    <string name="detail_episode_file_name_scraped_action">Switch to scraped filename</string>
 
     <!-- Keep -->
     <string name="keep">Keep</string>
     <string name="keep_add">Added</string>
     <string name="keep_del">Removed</string>
+    <string name="exit_confirm_title">Exit app?</string>
+    <string name="exit_confirm_message">The current page will close. Background playback will continue if it is running.</string>
+    <string name="exit_confirm_positive">Exit</string>
 
     <!-- Play -->
     <string name="play">Play</string>
@@ -48,6 +56,15 @@
     <string name="play_speed">1.00</string>
     <string name="play_reset">Reset</string>
     <string name="play_decode">Hard</string>
+    <string name="play_params">Playback params</string>
+    <string name="codec_capability_short">Codec caps</string>
+    <string name="codec_capability_title">Hardware codec capabilities</string>
+    <string name="codec_capability_search">Search codec, mime, decoder, resolution, audio...</string>
+    <string name="codec_capability_current">Current</string>
+    <string name="codec_capability_all">All</string>
+    <string name="codec_capability_video">Video</string>
+    <string name="codec_capability_audio">Audio</string>
+    <string name="codec_capability_copy">Copy</string>
     <string name="play_timer">Timer</string>
     <string name="play_title">Chapter</string>
     <string name="play_scale">Default</string>
@@ -143,6 +160,7 @@
     <string name="setting_vod">Vod</string>
     <string name="setting_live">Live</string>
     <string name="setting_wall">Wallpaper</string>
+    <string name="setting_config_dialog_title">%1$s %2$s</string>
     <string name="setting_builtin_wall">Built-in wallpapers</string>
     <string name="setting_player">Player setting</string>
     <string name="setting_danmaku">Danmaku setting</string>
@@ -157,6 +175,10 @@
     <string name="setting_personal_recommendation">Personal recommendations</string>
     <string name="setting_tmdb_episode_file_size">Keep file size in TMDB episodes</string>
     <string name="setting_auto_skip_intro_outro">Auto skip intro/outro</string>
+    <string name="intro_skip_confirm_title">Skip intro/outro?</string>
+    <string name="intro_skip_confirm_intro">Skip intro</string>
+    <string name="intro_skip_confirm_recap">Skip recap</string>
+    <string name="intro_skip_confirm_outro">Skip outro</string>
     <string name="personal_recommendation_confirm_title">Enable personal recommendations</string>
     <string name="personal_recommendation_confirm_message">Personal recommendations read movie and show titles from local viewing history, and may send the current title and history titles to TMDB or Douban as search keywords to build related lists.\n\nPlayback URLs, account information, source configuration, and playback progress are not sent. You can turn this off at any time.</string>
     <string name="setting_search_thread">Search threads</string>
@@ -383,6 +405,12 @@
     <string name="setting_web_home_extension">WebHome extensions</string>
     <string name="setting_web_home_fullscreen">WebHome homepage fullscreen</string>
     <string name="setting_csp_warmup">CSP init warmup</string>
+    <string name="setting_csp_warmup_default">Default</string>
+    <string name="setting_csp_warmup_custom">Custom</string>
+    <string name="setting_csp_warmup_custom_count">Custom · %1$d sites</string>
+    <string name="setting_csp_warmup_select_site">Select CSP sites</string>
+    <string name="setting_csp_warmup_no_site">No jar CSP site available</string>
+    <string name="setting_csp_warmup_select_required">Select at least one CSP site</string>
     <string name="setting_playback_artwork_wall">Playback stills</string>
     <string name="setting_viewing_record_sync">Viewing record sync</string>
     <string name="viewing_record_sync_entry_summary">%1$s · Remote %2$d/%3$d · Webhook %4$d/%5$d</string>
@@ -816,10 +844,14 @@
     <string name="player_render">Render</string>
     <string name="player_button_config">Player buttons</string>
     <string name="player_button_config_summary">%1$d/%2$d shown</string>
+    <string name="player_pad_live">Tablet live</string>
     <string name="player_button_up">Up</string>
     <string name="player_button_down">Down</string>
     <string name="play_episodes">Episodes</string>
-    <string name="player_exo_4k_compat">EXO enhanced mode</string>
+    <string name="player_exo_4k_compat">Playback performance</string>
+    <string name="player_performance">Playback performance</string>
+    <string name="player_performance_recommended">Recommended</string>
+    <string name="player_performance_compatible">Compatible</string>
     <string name="player_kernel">Player engine</string>
     <string name="player_scale">Scale</string>
     <string name="player_lut">LUT color</string>
@@ -829,6 +861,7 @@
     <string name="player_audio_decode">Audio software decode</string>
     <string name="player_audio_passthrough">Audio passthrough</string>
     <string name="player_video_decode">Video software decode</string>
+    <string name="player_ffmpeg_mode">FFmpeg mode</string>
     <string name="player_aac_track">Prefer aac track</string>
     <string name="player_music_notification">Music background notification</string>
     <string name="player_audio_book_notification">Audiobook background notification</string>
@@ -844,6 +877,7 @@
     <string name="player_preload_size">Preload size</string>
     <string name="player_preload_time">Preload time</string>
     <string name="player_preload_time_value">%1$d seconds</string>
+    <string name="player_auto_play">Auto play</string>
     <string name="player_auto_change">Auto source change</string>
     <string name="player_speed">Press speed</string>
     <string name="player_ua">User-Agent</string>
@@ -1131,6 +1165,12 @@
         <item>Smart + dialog</item>
     </string-array>
 
+    <string-array name="select_auto_skip_intro_outro">
+        <item>Off</item>
+        <item>Auto skip</item>
+        <item>Ask to confirm</item>
+    </string-array>
+
     <string-array name="select_site_column">
         <item>Single row</item>
         <item>Double row</item>
@@ -1206,7 +1246,7 @@
     </string-array>
 
     <string name="setting_tmdb_source">TMDB data config</string>
-    <string name="setting_ai_recommendation">AI recommendation</string>
+    <string name="setting_ai_recommendation">AI configuration</string>
     <string name="setting_tmdb_model">TMDB interaction model</string>
     <string name="setting_tmdb_model_native">Native enhancement</string>
     <string name="setting_tmdb_match_mode">TMDB match mode</string>
@@ -1246,6 +1286,9 @@
     <string name="dialog_tmdb_api_host_hint">For example https://api.tmdb.org</string>
     <string name="dialog_tmdb_image_host_label">Image host</string>
     <string name="dialog_tmdb_image_host_hint">For example https://image.tmdb.org</string>
+    <string name="dialog_tmdb_section_data">Data source</string>
+    <string name="dialog_tmdb_section_ratings">Ratings</string>
+    <string name="dialog_tmdb_section_rules">Source rules</string>
     <string name="dialog_omdb_api_key_label">OMDb API Key (Optional, for IMDB ratings)</string>
     <string name="dialog_omdb_api_key_hint">Enter OMDb API Key</string>
     <string name="dialog_omdb_api_key_tip">Get free API Key (1000/day): https://www.omdbapi.com/apikey.aspx</string>
@@ -1269,7 +1312,11 @@
     <string name="tmdb_personal_recommendations_tmdb_label">Personal Picks - TMDB</string>
     <string name="tmdb_personal_recommendations_douban_label">Personal Picks - Douban</string>
     <string name="tmdb_personal_recommendations_ai_label">Personal Picks - Smart</string>
-    <string name="dialog_ai_enable">Enable smart recommendations</string>
+    <string name="dialog_ai_enable">Enable AI service</string>
+    <string name="dialog_ai_title_extraction">AI real title recognition</string>
+    <string name="dialog_ai_section_service">Service</string>
+    <string name="dialog_ai_section_connection">Connection</string>
+    <string name="dialog_ai_section_model">Model settings</string>
     <string name="dialog_ai_protocol_label">Protocol type</string>
     <string-array name="dialog_ai_protocol_labels">
         <item>OpenAI Responses API</item>
@@ -1290,13 +1337,14 @@
     <string name="dialog_ai_fetch_models_failed">Failed to fetch models: %1$s</string>
     <string name="dialog_ai_user_agent_label">Custom User-Agent</string>
     <string name="dialog_ai_user_agent_hint">Optional, for UA-restricted providers</string>
-    <string name="dialog_ai_prompt_config">Prompt settings</string>
+    <string name="dialog_ai_prompt_config">AI prompt configuration</string>
     <string name="dialog_ai_recommend_prompt_label">Recommendation prompt</string>
+    <string name="dialog_ai_title_extraction_prompt_label">Title extraction prompt</string>
     <string name="dialog_ai_prompt_reset">Reset default</string>
     <string name="dialog_ai_test">Test configuration</string>
     <string name="dialog_ai_test_running">Testing AI configuration...</string>
-    <string name="dialog_ai_test_success">AI test passed: parsed %1$d item(s), sample %2$s</string>
-    <string name="dialog_ai_test_failed">AI test failed: %1$s</string>
+    <string name="dialog_ai_test_success">AI test passed: %1$s (time %2$s)</string>
+    <string name="dialog_ai_test_failed">AI test failed: %1$s (time %2$s)</string>
     <string name="ai_recommendation_info_title">Smart recommendation</string>
     <string name="ai_recommendation_reason_label">Recommendation reason</string>
     <string name="ai_recommendation_reason_preview">Reason: %1$s</string>
@@ -1339,8 +1387,8 @@
     <string name="detail_source_empty">No available source</string>
     <string name="detail_source_episode_empty">No available episodes or source</string>
     <string name="detail_source_searching">Searching sources...</string>
-    <string name="detail_theme_dark">Theme: Dark</string>
-    <string name="detail_theme_light">Theme: Light</string>
+    <string name="detail_theme_dark">Dark</string>
+    <string name="detail_theme_light">Light</string>
     <string name="detail_tmdb_cast">Cast</string>
     <string name="detail_tmdb_creators">Creators</string>
     <string name="detail_tmdb_works">You Might Like</string>

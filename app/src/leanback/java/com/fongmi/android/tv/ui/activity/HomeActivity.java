@@ -60,6 +60,7 @@ import com.fongmi.android.tv.ui.custom.CustomRowPresenter;
 import com.fongmi.android.tv.ui.custom.CustomSelector;
 import com.fongmi.android.tv.ui.custom.CustomTitleView;
 import com.fongmi.android.tv.ui.dialog.HistoryDialog;
+import com.fongmi.android.tv.ui.dialog.ExitConfirmDialog;
 import com.fongmi.android.tv.ui.dialog.SiteDialog;
 import com.fongmi.android.tv.ui.presenter.FuncPresenter;
 import com.fongmi.android.tv.ui.presenter.HeaderPresenter;
@@ -114,6 +115,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     private String webDefaultChromeMode = TV_FULL;
     private boolean webToolbarVisible = true;
     private boolean loadingHomeCategory;
+    private boolean pendingOpenVod; // 手动点击"点播"后等待数据加载完成再进分类页
 
     private Site getHome() {
         return VodConfig.get().getHome();
@@ -301,6 +303,11 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
             }
             mResult = result;
             addVideo(result);
+            // 如果用户手动点击了"点播"按钮，数据加载完成后自动进入分类页
+            if (pendingOpenVod && !result.getTypes().isEmpty()) {
+                pendingOpenVod = false;
+                onItemClick(result.getTypes().get(0));
+            }
         });
     }
 
@@ -619,14 +626,15 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     @Override
     public void onItemClick(Func item) {
         if (item.getResId() == R.string.home_vod) {
-            // 如果内容未加载，先加载
-            if (mResult.getTypes().isEmpty()) {
-                getVideo();
+            // mHomeResult 才可靠保存首页分类（mResult 可能被分类内容结果覆盖）
+            Result homeResult = mHomeResult != null && !mHomeResult.getTypes().isEmpty() ? mHomeResult : mResult;
+            if (homeResult.getTypes().isEmpty()) {
+                // 内容未加载（如 Web 站源首页未拉取原生分类），强制加载原生数据后自动进分类页
+                pendingOpenVod = true;
+                getVideo(true);
             } else {
-                // 内容已加载，模拟点击第一个分类标签
-                if (mResult.getTypes().size() > 0) {
-                    onItemClick(mResult.getTypes().get(0));
-                }
+                // 内容已加载，进入第一个分类
+                onItemClick(homeResult.getTypes().get(0));
             }
         } else if (item.getResId() == R.string.home_live) LiveActivity.start(this);
         else if (item.getResId() == R.string.home_keep) KeepActivity.start(this);
@@ -848,6 +856,10 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     }
 
     private void exitHome() {
+        ExitConfirmDialog.create(this::confirmExitHome).show(this);
+    }
+
+    private void confirmExitHome() {
         if (PlaybackService.isRunning()) moveTaskToBack(true);
         else super.onBackInvoked();
     }

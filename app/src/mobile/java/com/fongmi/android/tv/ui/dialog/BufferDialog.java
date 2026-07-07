@@ -1,7 +1,11 @@
 package com.fongmi.android.tv.ui.dialog;
 
+import android.app.Dialog;
 import android.content.DialogInterface;
+import android.os.Bundle;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import androidx.viewbinding.ViewBinding;
 
@@ -18,6 +22,20 @@ public class BufferDialog extends BaseAlertDialog {
 
     public static void show(Fragment fragment) {
         new BufferDialog().show(fragment.getChildFragmentManager(), null);
+    }
+
+    @Override
+    @NonNull
+    public Dialog onCreateDialog(@Nullable Bundle savedInstanceState) {
+        Dialog dialog = LightDialog.create(requireContext(), getString(R.string.player_buffer), getBinding().getRoot(), getString(R.string.dialog_positive), view -> {
+            onPositive(null, 0);
+            dismiss();
+        }, getString(R.string.dialog_negative), view -> {
+            onNegative(null, 0);
+            dismiss();
+        });
+        initView();
+        return dialog;
     }
 
     @Override

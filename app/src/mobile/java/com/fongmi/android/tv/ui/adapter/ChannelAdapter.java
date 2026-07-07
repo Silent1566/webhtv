@@ -5,12 +5,15 @@ import android.view.View;
 import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
+import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
+import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.bean.Channel;
 import com.fongmi.android.tv.databinding.AdapterChannelBinding;
+import com.fongmi.android.tv.setting.LiveSetting;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -214,6 +217,7 @@ public class ChannelAdapter extends RecyclerView.Adapter<ChannelAdapter.ViewHold
         item.loadLogo(holder.binding.logo);
         holder.binding.name.setText(item.getShow());
         holder.binding.number.setText(item.getNumber());
+        setListStyle(holder);
         holder.binding.getRoot().setSelected(item.isSelected());
         holder.binding.getRoot().setOnClickListener(view -> listener.onItemClick(item));
         holder.binding.getRoot().setOnLongClickListener(view -> listener.onLongClick(item));
@@ -226,6 +230,13 @@ public class ChannelAdapter extends RecyclerView.Adapter<ChannelAdapter.ViewHold
         } else {
             holder.binding.getRoot().setSelected(mItems.get(visibleStart + position).isSelected());
         }
+    }
+
+    private void setListStyle(ViewHolder holder) {
+        boolean classic = LiveSetting.isListStyleClassic();
+        holder.binding.getRoot().setBackgroundResource(classic ? R.drawable.shape_live_classic : R.drawable.shape_live);
+        holder.binding.name.setTextColor(ContextCompat.getColorStateList(holder.binding.name.getContext(), classic ? R.color.selector_live_text_classic : R.color.selector_live_text));
+        holder.binding.number.setTextColor(ContextCompat.getColorStateList(holder.binding.number.getContext(), classic ? R.color.selector_live_text_classic : R.color.selector_live_text));
     }
 
     @Override

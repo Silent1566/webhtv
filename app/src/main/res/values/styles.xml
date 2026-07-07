@@ -151,6 +151,7 @@
     <style name="Control">
         <item name="android:clickable">true</item>
         <item name="android:focusable">true</item>
+        <item name="android:textColor">@color/player_control_text</item>
     </style>
 
     <style name="DisplayControl" parent="Control">
@@ -170,6 +171,15 @@
         <item name="android:shadowDx">0</item>
         <item name="android:shadowDy">0</item>
         <item name="android:shadowRadius">0</item>
+    </style>
+
+    <style name="TextAppearance.WebHTV.LightDialogSliderLabel" parent="TextAppearance.MaterialComponents.Tooltip">
+        <item name="android:textColor">@color/white</item>
+    </style>
+
+    <style name="Widget.WebHTV.LightDialogSliderLabel" parent="Widget.MaterialComponents.Tooltip">
+        <item name="android:textAppearance">@style/TextAppearance.WebHTV.LightDialogSliderLabel</item>
+        <item name="backgroundTint">#174EA6</item>
     </style>
 
 </resources>

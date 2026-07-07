@@ -1,0 +1,281 @@
+diff --git a/build.gradle.kts b/build.gradle.kts
+index 1413f8d..18acf58 100644
+--- a/build.gradle.kts
++++ b/build.gradle.kts
+@@ -7,11 +7,11 @@ subprojects {
+     plugins.withId(rootProject.libs.plugins.mavenPublish.get().pluginId) {
+         configure<com.vanniktech.maven.publish.MavenPublishBaseExtension> {
+             publishToMavenCentral()
+-            signAllPublications()
++            if (providers.gradleProperty("signPublications").orNull == "true") signAllPublications()
+             coordinates(
+                 groupId = "io.github.anilbeesetti",
+                 artifactId = property("POM_ARTIFACT_ID") as String,
+-                version = "${libs.versions.androidxMedia3.get()}-0.12.1"
++                version = "1.10.0-0.12.1-fongmi-softload"
+             )
+ 
+             pom {
+diff --git a/ffmpeg/setup.sh b/ffmpeg/setup.sh
+index 7389538..09f6fcd 100755
+--- a/ffmpeg/setup.sh
++++ b/ffmpeg/setup.sh
+@@ -120,9 +120,10 @@ function buildLibVpx() {
+       ;;
+     esac
+ 
+-    CC=${TOOLCHAIN_PREFIX}/bin/${TOOLCHAIN}clang \
+-      CXX=${CC}++ \
+-      LD=${CC} \
++    CC_BIN=${TOOLCHAIN_PREFIX}/bin/${TOOLCHAIN}clang
++    CC=${CC_BIN} \
++      CXX=${CC_BIN}++ \
++      LD=${CC_BIN} \
+       AR=${TOOLCHAIN_PREFIX}/bin/llvm-ar \
+       AS=${VPX_AS} \
+       STRIP=${TOOLCHAIN_PREFIX}/bin/llvm-strip \
+@@ -137,6 +138,7 @@ function buildLibVpx() {
+       --disable-shared \
+       --disable-examples \
+       --disable-docs \
++      --disable-unit-tests \
+       --enable-realtime-only \
+       --enable-install-libs \
+       --enable-multithread \
+@@ -156,6 +158,8 @@ function buildLibVpx() {
+ function buildMbedTLS() {
+     pushd $MBEDTLS_DIR
+ 
++    scripts/config.py unset MBEDTLS_AESCE_C
++
+     for ABI in $ANDROID_ABIS; do
+ 
+       CMAKE_BUILD_DIR=$MBEDTLS_DIR/mbedtls_build_${ABI}
+@@ -168,7 +172,10 @@ function buildMbedTLS() {
+        -DANDROID_ABI=$ABI \
+        -DCMAKE_TOOLCHAIN_FILE=${ANDROID_NDK_HOME}/build/cmake/android.toolchain.cmake \
+        -DCMAKE_INSTALL_PREFIX=$BUILD_DIR/external/$ABI \
++       -DCMAKE_C_FLAGS="-Wno-documentation" \
+        -DCMAKE_SHARED_LINKER_FLAGS="-Wl,-z,max-page-size=16384" \
++       -DENABLE_PROGRAMS=0 \
++       -DMBEDTLS_FATAL_WARNINGS=0 \
+        -DENABLE_TESTING=0
+ 
+       make -j$JOBS
+diff --git a/gradle/libs.versions.toml b/gradle/libs.versions.toml
+index 3a3cf0d..4892413 100644
+--- a/gradle/libs.versions.toml
++++ b/gradle/libs.versions.toml
+@@ -1,5 +1,5 @@
+ [versions]
+-androidCompileSdk = "36"
++androidCompileSdk = "37"
+ agp = "9.1.0"
+ kotlin = "2.3.20"
+ androidxMedia3 = "1.10.0"
+@@ -7,7 +7,7 @@ checkerQual = "3.54.0"
+ googleErrorProne = "2.48.0"
+ androidxAnnotation = "1.9.1"
+ cmake = "3.22.1"
+-ndk = "25.2.9519653"
++ndk = "28.2.13676358"
+ mavenPublish = "0.36.0"
+ 
+ [libraries]
+diff --git a/media3ext/src/main/cpp/ffvideo.cpp b/media3ext/src/main/cpp/ffvideo.cpp
+index 4c37d03..33a7727 100644
+--- a/media3ext/src/main/cpp/ffvideo.cpp
++++ b/media3ext/src/main/cpp/ffvideo.cpp
+@@ -84,7 +84,10 @@ struct JniContext {
+ JniContext *createVideoContext(JNIEnv *env,
+                                AVCodec *codec,
+                                jbyteArray extraData,
+-                               jint threads) {
++                               jint threads,
++                               jint skipFrame,
++                               jint skipLoopFilter,
++                               jint lowres) {
+     auto *jniContext = new JniContext();
+ 
+     AVCodecContext *codecContext = avcodec_alloc_context3(codec);
+@@ -106,6 +109,14 @@ JniContext *createVideoContext(JNIEnv *env,
+     }
+ 
+     codecContext->thread_count = threads;
++    codecContext->skip_frame = static_cast<AVDiscard>(skipFrame);
++    codecContext->skip_loop_filter = static_cast<AVDiscard>(skipLoopFilter);
++    if (lowres > 0) {
++        codecContext->lowres = std::min(static_cast<int>(lowres), static_cast<int>(codec->max_lowres));
++        if (codecContext->lowres <= 0) {
++            LOGE("Lowres decode requested but not supported by codec.");
++        }
++    }
+     codecContext->err_recognition = AV_EF_IGNORE_ERR;
+     int result = avcodec_open2(codecContext, codec, nullptr);
+     if (result < 0) {
+@@ -134,14 +145,17 @@ Java_io_github_anilbeesetti_nextlib_media3ext_ffdecoder_FfmpegVideoDecoder_ffmpe
+                                                                                  jobject thiz,
+                                                                                  jstring codec_name,
+                                                                                  jbyteArray extra_data,
+-                                                                                 jint threads) {
++                                                                                 jint threads,
++                                                                                 jint skip_frame,
++                                                                                 jint skip_loop_filter,
++                                                                                 jint lowres) {
+     AVCodec *codec = getCodecByName(env, codec_name);
+     if (!codec) {
+         LOGE("Codec not found.");
+         return 0L;
+     }
+ 
+-    return (jlong) createVideoContext(env, codec, extra_data, threads);
++    return (jlong) createVideoContext(env, codec, extra_data, threads, skip_frame, skip_loop_filter, lowres);
+ }
+ 
+ extern "C"
+@@ -390,4 +404,4 @@ Java_io_github_anilbeesetti_nextlib_media3ext_ffdecoder_FfmpegVideoDecoder_ffmpe
+     av_frame_free(&frame);
+ 
+     return result;
+-}
+\ No newline at end of file
++}
+diff --git a/media3ext/src/main/java/io/github/anilbeesetti/nextlib/media3ext/ffdecoder/FfmpegVideoDecoder.java b/media3ext/src/main/java/io/github/anilbeesetti/nextlib/media3ext/ffdecoder/FfmpegVideoDecoder.java
+index b4e2f3f..d430b34 100644
+--- a/media3ext/src/main/java/io/github/anilbeesetti/nextlib/media3ext/ffdecoder/FfmpegVideoDecoder.java
++++ b/media3ext/src/main/java/io/github/anilbeesetti/nextlib/media3ext/ffdecoder/FfmpegVideoDecoder.java
+@@ -48,11 +48,28 @@ final class FfmpegVideoDecoder extends
+      * @param numInputBuffers        Number of input buffers.
+      * @param numOutputBuffers       Number of output buffers.
+      * @param initialInputBufferSize The initial size of each input buffer, in bytes.
+-     * @param threads                Number of threads libgav1 will use to decode.
++     * @param threads                Number of threads FFmpeg will use to decode.
+      * @throws FfmpegDecoderException Thrown if an exception occurs when initializing the
+      *                                decoder.
+      */
+     public FfmpegVideoDecoder(int numInputBuffers, int numOutputBuffers, int initialInputBufferSize, int threads, Format format) throws FfmpegDecoderException {
++        this(numInputBuffers, numOutputBuffers, initialInputBufferSize, threads, format, /* skipFrame= */ 0, /* skipLoopFilter= */ 0, /* lowres= */ 0);
++    }
++
++    /**
++     * Creates a Ffmpeg video Decoder with load-shedding options.
++     *
++     * @param numInputBuffers        Number of input buffers.
++     * @param numOutputBuffers       Number of output buffers.
++     * @param initialInputBufferSize The initial size of each input buffer, in bytes.
++     * @param threads                Number of threads FFmpeg will use to decode.
++     * @param skipFrame              FFmpeg AVDiscard value for frame skipping.
++     * @param skipLoopFilter         FFmpeg AVDiscard value for loop-filter skipping.
++     * @param lowres                 FFmpeg lowres decode level.
++     * @throws FfmpegDecoderException Thrown if an exception occurs when initializing the
++     *                                decoder.
++     */
++    public FfmpegVideoDecoder(int numInputBuffers, int numOutputBuffers, int initialInputBufferSize, int threads, Format format, int skipFrame, int skipLoopFilter, int lowres) throws FfmpegDecoderException {
+         super(new DecoderInputBuffer[numInputBuffers], new VideoDecoderOutputBuffer[numOutputBuffers]);
+ 
+         if (!FfmpegLibrary.isAvailable()) {
+@@ -62,7 +79,7 @@ final class FfmpegVideoDecoder extends
+         codecName = Assertions.checkNotNull(FfmpegLibrary.getCodecName(format.sampleMimeType));
+         extraData = getExtraData(format.sampleMimeType, format.initializationData);
+         this.format = format;
+-        nativeContext = ffmpegInitialize(codecName, extraData, threads);
++        nativeContext = ffmpegInitialize(codecName, extraData, threads, skipFrame, skipLoopFilter, lowres);
+         if (nativeContext == 0) {
+             throw new FfmpegDecoderException("Failed to initialize decoder.");
+         }
+@@ -197,7 +214,7 @@ final class FfmpegVideoDecoder extends
+         }
+     }
+ 
+-    private native long ffmpegInitialize(String codecName, @Nullable byte[] extraData, int threads);
++    private native long ffmpegInitialize(String codecName, @Nullable byte[] extraData, int threads, int skipFrame, int skipLoopFilter, int lowres);
+ 
+     private native long ffmpegReset(long context);
+ 
+@@ -232,4 +249,4 @@ final class FfmpegVideoDecoder extends
+     private native int ffmpegReceiveFrame(
+             long context, int outputMode, VideoDecoderOutputBuffer outputBuffer, boolean decodeOnly);
+ 
+-}
+\ No newline at end of file
++}
+diff --git a/media3ext/src/main/java/io/github/anilbeesetti/nextlib/media3ext/ffdecoder/FfmpegVideoRenderer.java b/media3ext/src/main/java/io/github/anilbeesetti/nextlib/media3ext/ffdecoder/FfmpegVideoRenderer.java
+index 0e0991b..2f9ab29 100644
+--- a/media3ext/src/main/java/io/github/anilbeesetti/nextlib/media3ext/ffdecoder/FfmpegVideoRenderer.java
++++ b/media3ext/src/main/java/io/github/anilbeesetti/nextlib/media3ext/ffdecoder/FfmpegVideoRenderer.java
+@@ -42,6 +42,9 @@ public final class FfmpegVideoRenderer extends DecoderVideoRenderer {
+     private final int numOutputBuffers;
+ 
+     private final int threads;
++    private final int skipFrame;
++    private final int skipLoopFilter;
++    private final int lowres;
+ 
+     @Nullable private FfmpegVideoDecoder decoder;
+ 
+@@ -68,7 +71,10 @@ public final class FfmpegVideoRenderer extends DecoderVideoRenderer {
+                 maxDroppedFramesToNotify,
+                 /* threads= */ getRuntime().availableProcessors(),
+                 DEFAULT_NUM_OF_INPUT_BUFFERS,
+-                DEFAULT_NUM_OF_OUTPUT_BUFFERS);
++                DEFAULT_NUM_OF_OUTPUT_BUFFERS,
++                /* skipFrame= */ 0,
++                /* skipLoopFilter= */ 0,
++                /* lowres= */ 0);
+     }
+ 
+     /**
+@@ -93,10 +99,44 @@ public final class FfmpegVideoRenderer extends DecoderVideoRenderer {
+             int threads,
+             int numInputBuffers,
+             int numOutputBuffers) {
++        this(allowedJoiningTimeMs, eventHandler, eventListener, maxDroppedFramesToNotify, threads, numInputBuffers, numOutputBuffers, /* skipFrame= */ 0, /* skipLoopFilter= */ 0, /* lowres= */ 0);
++    }
++
++    /**
++     * Creates a new instance with FFmpeg decoder load-shedding options.
++     *
++     * @param allowedJoiningTimeMs The maximum duration in milliseconds for which this video renderer
++     *     can attempt to seamlessly join an ongoing playback.
++     * @param eventHandler A handler to use when delivering events to {@code eventListener}. May be
++     *     null if delivery of events is not required.
++     * @param eventListener A listener of events. May be null if delivery of events is not required.
++     * @param maxDroppedFramesToNotify The maximum number of frames that can be dropped between
++     *     invocations of {@link VideoRendererEventListener#onDroppedFrames(int, long)}.
++     * @param threads Number of threads FFmpeg will use to decode.
++     * @param numInputBuffers Number of input buffers.
++     * @param numOutputBuffers Number of output buffers.
++     * @param skipFrame FFmpeg AVDiscard value for frame skipping.
++     * @param skipLoopFilter FFmpeg AVDiscard value for loop-filter skipping.
++     * @param lowres FFmpeg lowres decode level. Unsupported decoders ignore this natively.
++     */
++    public FfmpegVideoRenderer(
++            long allowedJoiningTimeMs,
++            @Nullable Handler eventHandler,
++            @Nullable VideoRendererEventListener eventListener,
++            int maxDroppedFramesToNotify,
++            int threads,
++            int numInputBuffers,
++            int numOutputBuffers,
++            int skipFrame,
++            int skipLoopFilter,
++            int lowres) {
+         super(allowedJoiningTimeMs, eventHandler, eventListener, maxDroppedFramesToNotify);
+         this.threads = threads;
+         this.numInputBuffers = numInputBuffers;
+         this.numOutputBuffers = numOutputBuffers;
++        this.skipFrame = skipFrame;
++        this.skipLoopFilter = skipLoopFilter;
++        this.lowres = lowres;
+     }
+ 
+     @Override
+@@ -138,7 +178,7 @@ public final class FfmpegVideoRenderer extends DecoderVideoRenderer {
+     protected Decoder<DecoderInputBuffer, ? extends VideoDecoderOutputBuffer, ? extends DecoderException> createDecoder(Format format, @Nullable CryptoConfig cryptoConfig) throws DecoderException {
+         TraceUtil.beginSection("createFfmpegVideoDecoder");
+         int initialInputBufferSize = format.maxInputSize != Format.NO_VALUE ? format.maxInputSize : DEFAULT_INPUT_BUFFER_SIZE;
+-        FfmpegVideoDecoder decoder = new FfmpegVideoDecoder(numInputBuffers, numOutputBuffers, initialInputBufferSize, threads, format);
++        FfmpegVideoDecoder decoder = new FfmpegVideoDecoder(numInputBuffers, numOutputBuffers, initialInputBufferSize, threads, format, skipFrame, skipLoopFilter, lowres);
+         this.decoder = decoder;
+         TraceUtil.endSection();
+         return decoder;

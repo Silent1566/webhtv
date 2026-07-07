@@ -115,8 +115,7 @@ public class TmdbPersonWorkAdapter extends RecyclerView.Adapter<TmdbPersonWorkAd
 
     private void applyTheme(ViewHolder holder) {
         if (holder.itemView instanceof MaterialCardView card) {
-            card.setCardBackgroundColor(light ? 0xFFFFFFFF : 0x261C2833);
-            card.setStrokeColor(light ? 0x33424B57 : 0x1FFFFFFF);
+            TmdbCardFocusHelper.bind(card, light ? 0xFFFFFFFF : 0x261C2833, light ? 0x33424B57 : 0x1FFFFFFF);
         }
         holder.poster.setBackgroundColor(light ? 0xFFE7EDF3 : 0xFF25313D);
         holder.title.setTextColor(light ? 0xFF12202D : 0xFFFFFFFF);

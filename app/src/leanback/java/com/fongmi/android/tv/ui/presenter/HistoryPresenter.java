@@ -76,9 +76,18 @@ public class HistoryPresenter extends Presenter {
         holder.binding.site.setText(item.getSiteName());
         holder.binding.remark.setText(item.getVodRemarks());
         holder.binding.site.setVisibility(item.getSiteVisible());
+        setProgress(holder.binding, item);
         holder.binding.delete.setVisibility(!delete ? View.GONE : View.VISIBLE);
         holder.binding.remark.setVisibility(delete || same ? View.GONE : View.VISIBLE);
         ImgUtil.load(item.getVodName(), item.getVodPic(), holder.binding.image);
+    }
+
+    private void setProgress(AdapterVodBinding binding, History item) {
+        int duration = (int) Math.min(Integer.MAX_VALUE, Math.max(0, item.getDuration()));
+        int progress = (int) Math.min(Integer.MAX_VALUE, Math.max(0, item.getPosition()));
+        binding.progress.setVisibility(View.VISIBLE);
+        binding.progress.setMax(duration > 0 ? duration : 1);
+        binding.progress.setProgress(duration > 0 ? Math.min(progress, duration) : 0, true);
     }
 
     @Override

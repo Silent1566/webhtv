@@ -4,13 +4,13 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/shape_control_sheet_panel"
+    android:background="@drawable/shape_dialog_control_glass_panel"
     tools:background="#1F1F1F">
 
     <View
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="@drawable/shape_control_sheet_scrim" />
+        android:background="@drawable/shape_dialog_control_glass_scrim" />
 
     <androidx.appcompat.widget.LinearLayoutCompat
         android:layout_width="match_parent"

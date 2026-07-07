@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.appcompat.widget.LinearLayoutCompat xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="46dp"
@@ -20,11 +21,12 @@
         android:layout_width="38dp"
         android:layout_height="46dp"
         android:layout_marginStart="8dp"
-        android:background="@null"
+        android:background="@drawable/selector_live_action_button"
         android:padding="9dp"
         android:scaleType="centerInside"
         android:src="@drawable/ic_live_pass"
         android:visibility="gone"
+        app:tint="@color/selector_live_action_icon"
         tools:visibility="visible" />
 
     <androidx.appcompat.widget.AppCompatImageView
@@ -32,11 +34,12 @@
         android:layout_width="38dp"
         android:layout_height="46dp"
         android:layout_marginStart="6dp"
-        android:background="@null"
+        android:background="@drawable/selector_live_action_button"
         android:padding="9dp"
         android:scaleType="centerInside"
         android:src="@drawable/ic_live_boot"
         android:visibility="gone"
+        app:tint="@color/selector_live_action_icon"
         tools:visibility="visible" />
 
 </androidx.appcompat.widget.LinearLayoutCompat>

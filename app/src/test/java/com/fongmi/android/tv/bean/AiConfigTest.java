@@ -70,4 +70,31 @@ public class AiConfigTest {
         assertEquals(AiConfig.DEFAULT_RECOMMEND_PROMPT, config.getRecommendPrompt());
         assertFalse(config.isRecommendPromptCustom());
     }
+
+    @Test
+    public void objectFrom_upgradesLegacyDefaultTitleExtractionPrompt() {
+        AiConfig config = AiConfig.objectFrom("{\"titleExtractionPrompt\":\"" + AiConfig.LEGACY_TITLE_EXTRACTION_PROMPT_V1.replace("\"", "\\\"") + "\"}");
+
+        assertEquals(AiConfig.DEFAULT_TITLE_EXTRACTION_PROMPT, config.getTitleExtractionPrompt());
+        assertEquals(AiConfig.DEFAULT_TITLE_EXTRACTION_PROMPT_VERSION, config.getTitleExtractionPromptVersion());
+        assertFalse(config.isTitleExtractionPromptCustom());
+    }
+
+    @Test
+    public void objectFrom_preservesLegacyCustomTitleExtractionPrompt() {
+        AiConfig config = AiConfig.objectFrom("{\"titleExtractionPrompt\":\"只提取中文正式片名\"}");
+
+        assertEquals("只提取中文正式片名", config.getTitleExtractionPrompt());
+        assertTrue(config.isTitleExtractionPromptCustom());
+    }
+
+    @Test
+    public void setTitleExtractionPrompt_marksCurrentDefaultAsSystemPrompt() {
+        AiConfig config = AiConfig.objectFrom("{}");
+        config.setTitleExtractionPrompt("优先还原被分隔符拆开的中文片名");
+        config.setTitleExtractionPrompt(AiConfig.DEFAULT_TITLE_EXTRACTION_PROMPT);
+
+        assertEquals(AiConfig.DEFAULT_TITLE_EXTRACTION_PROMPT, config.getTitleExtractionPrompt());
+        assertFalse(config.isTitleExtractionPromptCustom());
+    }
 }

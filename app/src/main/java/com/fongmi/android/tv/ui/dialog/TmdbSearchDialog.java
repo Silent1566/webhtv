@@ -160,7 +160,7 @@ public class TmdbSearchDialog {
         binding.searchBar.setVisibility(searchable ? View.VISIBLE : View.GONE);
         if (!searchable) return;
         binding.query.setText(query);
-        binding.query.setSelectAllOnFocus(true);
+        binding.query.setSelectAllOnFocus(false);
         binding.query.setOnClickListener(view -> showKeyboard());
         binding.querySearch.setVisibility(View.VISIBLE);
         binding.querySearch.setOnClickListener(view -> search());

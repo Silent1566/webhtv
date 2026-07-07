@@ -1,5 +1,6 @@
 package com.fongmi.android.tv.ui.adapter;
 
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.text.TextUtils;
 import android.view.LayoutInflater;
@@ -30,6 +31,11 @@ import java.util.Map;
 import java.util.Objects;
 
 public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.ViewHolder> {
+
+    private static final int FOCUS_STROKE = 0xFFFFD166;
+    private static final int FOCUS_STROKE_DP = 3;
+    private static final int ACTIVE_STROKE_DP = 2;
+    private static final int FOCUS_ELEVATION_DP = 8;
 
     public enum Mode {
         LIST,
@@ -66,7 +72,11 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
     }
 
     public void setItems(List<Episode> episodes, Map<Integer, TmdbEpisode> tmdbEpisodes, Map<Episode, Integer> numbers, Episode selected) {
-        if (sameItems(episodes, tmdbEpisodes, numbers)) {
+        setItems(episodes, tmdbEpisodes, numbers, selected, false);
+    }
+
+    public void setItems(List<Episode> episodes, Map<Integer, TmdbEpisode> tmdbEpisodes, Map<Episode, Integer> numbers, Episode selected, boolean forceRefresh) {
+        if (!forceRefresh && sameItems(episodes, tmdbEpisodes, numbers)) {
             if (Objects.equals(this.selected, selected)) return;
             setSelected(selected);
             return;
@@ -95,13 +105,22 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
     }
 
     public void setLight(boolean light) {
+        if (this.light == light) return;
         this.light = light;
         notifyDataSetChanged();
     }
 
     public void setActiveStrokeColor(int activeStrokeColor) {
+        if (this.activeStrokeColor == activeStrokeColor) return;
         this.activeStrokeColor = activeStrokeColor;
         notifyDataSetChanged();
+    }
+
+    public void setTheme(boolean light, int activeStrokeColor) {
+        boolean changed = this.light != light || this.activeStrokeColor != activeStrokeColor;
+        this.light = light;
+        this.activeStrokeColor = activeStrokeColor;
+        if (changed) notifyDataSetChanged();
     }
 
     public void setFallbackStillUrl(String fallbackStillUrl) {
@@ -185,12 +204,13 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
         holder.binding.textPanel.setGravity(showVisual ? Gravity.NO_GRAVITY : Gravity.CENTER_VERTICAL);
         if (isNativeEnhanced()) {
             boolean phoneWidth = isPhoneWidth(holder.itemView);
-            holder.binding.index.setText(nativeEnhancedIndexTitle(title, cleanTitle, phoneWidth, mode));
+            holder.binding.index.setText(nativeEnhancedIndexTitle(title, cleanTitle, fileSize, phoneWidth, mode));
             holder.binding.index.setTextSize(nativeEnhancedIndexTextSize(phoneWidth, mode));
-            holder.binding.fileSize.setVisibility(View.GONE);
             holder.binding.title.setVisibility(View.GONE);
             holder.binding.date.setText(nativeEnhancedMeta(tmdbEpisode));
-            holder.binding.date.setVisibility(TextUtils.isEmpty(holder.binding.date.getText()) || mode != Mode.GRID ? View.GONE : View.VISIBLE);
+            boolean showDate = !TextUtils.isEmpty(holder.binding.date.getText()) && mode == Mode.GRID;
+            holder.binding.date.setVisibility(showDate ? View.VISIBLE : View.GONE);
+            bindFileSize(holder, nativeEnhancedFileSizeBadge(fileSize, cleanTitle), showDate);
             holder.binding.badge.setVisibility(View.GONE);
             holder.binding.overview.setText(overview);
             holder.binding.overview.setVisibility(mode == Mode.GRID && !TextUtils.isEmpty(overview) ? View.VISIBLE : View.GONE);
@@ -416,13 +436,11 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
 
     private void applyCardFocus(ViewHolder holder, boolean activated) {
         if (isNativeEnhanced()) {
-            holder.binding.getRoot().setSelected(activated);
-            holder.binding.getRoot().setForeground(ResUtil.getDrawable(R.drawable.selector_episode_card));
-            holder.binding.getRoot().setCardBackgroundColor(0xFF141A20);
-            holder.binding.getRoot().setStrokeWidth(0);
-            holder.binding.getRoot().setCardElevation(0);
-            holder.binding.getRoot().setTranslationZ(0);
-            holder.binding.getRoot().setOnFocusChangeListener(focusChangeListener);
+            applyNativeEnhancedCardFocus(holder, activated, holder.binding.getRoot().hasFocus());
+            holder.binding.getRoot().setOnFocusChangeListener((view, focused) -> {
+                applyNativeEnhancedCardFocus(holder, activated, focused);
+                if (focusChangeListener != null) focusChangeListener.onFocusChange(view, focused);
+            });
             return;
         }
         TmdbCardFocusHelper.bind(
@@ -435,12 +453,40 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
                 });
     }
 
+    private void applyNativeEnhancedCardFocus(ViewHolder holder, boolean activated, boolean focused) {
+        holder.binding.getRoot().setSelected(false);
+        holder.binding.getRoot().setActivated(false);
+        holder.binding.getRoot().setChecked(false);
+        holder.binding.getRoot().setForeground(null);
+        holder.binding.getRoot().setCardBackgroundColor(0xFF141A20);
+        holder.binding.getRoot().setStrokeColor(focused ? FOCUS_STROKE : activated ? activeStrokeColor : 0x00000000);
+        holder.binding.getRoot().setStrokeWidth(ResUtil.dp2px(focused ? FOCUS_STROKE_DP : activated ? ACTIVE_STROKE_DP : 0));
+        holder.binding.getRoot().setCardElevation(ResUtil.dp2px(focused ? FOCUS_ELEVATION_DP : 0));
+        holder.binding.getRoot().setTranslationZ(ResUtil.dp2px(focused ? FOCUS_ELEVATION_DP : 0));
+        Drawable foreground = focused
+                ? TmdbCardFocusHelper.foregroundBorder(holder.binding.getRoot(), FOCUS_STROKE, FOCUS_STROKE_DP)
+                : activated ? TmdbCardFocusHelper.foregroundBorder(holder.binding.getRoot(), activeStrokeColor, ACTIVE_STROKE_DP) : null;
+        holder.binding.getRoot().setForeground(foreground);
+        holder.binding.getRoot().animate().cancel();
+        holder.binding.getRoot().setScaleX(1f);
+        holder.binding.getRoot().setScaleY(1f);
+    }
+
     private boolean isNativeEnhanced() {
         return nativeEnhanced;
     }
 
     static String nativeEnhancedIndexTitle(String title, String cleanTitle, boolean phoneWidth, Mode mode) {
         return phoneWidth && mode == Mode.GRID ? cleanTitle : title;
+    }
+
+    static String nativeEnhancedIndexTitle(String title, String cleanTitle, String fileSize, boolean phoneWidth, Mode mode) {
+        return TextUtils.isEmpty(nativeEnhancedFileSizeBadge(fileSize, cleanTitle)) ? nativeEnhancedIndexTitle(title, cleanTitle, phoneWidth, mode) : cleanTitle;
+    }
+
+    static String nativeEnhancedFileSizeBadge(String fileSize, String cleanTitle) {
+        if (TextUtils.isEmpty(fileSize) || EpisodeTitleFormatter.containsFileSize(cleanTitle)) return "";
+        return fileSize;
     }
 
     static float nativeEnhancedIndexTextSize(boolean phoneWidth, Mode mode) {
@@ -461,7 +507,7 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
     }
 
     public static String formatCleanTitle(String label, String sourceName, String tmdbTitle) {
-        return EpisodeTitleFormatter.formatTmdbTitle(label, sourceName, tmdbTitle);
+        return EpisodeTitleFormatter.formatTmdbTitle(label, sourceName, tmdbTitle, Setting.getTmdbEpisodeShowScrapedName());
     }
 
     private static String titleWithFileSize(Episode episode, String title) {

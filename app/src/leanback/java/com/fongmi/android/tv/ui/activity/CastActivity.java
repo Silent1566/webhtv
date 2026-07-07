@@ -371,7 +371,7 @@ public class CastActivity extends PlaybackActivity implements CustomKeyDownVod.L
     private final PlaybackService.NavigationCallback mNavigationCallback = new PlaybackService.NavigationCallback() {
         @Override
         public void onStop() {
-            finish();
+            finishPlayback();
         }
     };
 
@@ -546,7 +546,7 @@ public class CastActivity extends PlaybackActivity implements CustomKeyDownVod.L
         } else if (isVisible(mBinding.widget.center)) {
             hideCenter();
         } else {
-            super.onBackInvoked();
+            finishPlayback();
         }
     }
 

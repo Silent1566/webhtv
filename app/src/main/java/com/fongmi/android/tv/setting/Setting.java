@@ -19,16 +19,24 @@ import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.BuildConfig;
 import com.fongmi.android.tv.bean.AiConfig;
 import com.fongmi.android.tv.bean.AudioConfig;
+import com.fongmi.android.tv.bean.DanmakuMatchCache;
 import com.fongmi.android.tv.bean.ShortDramaConfig;
 import com.fongmi.android.tv.bean.TmdbConfig;
 import com.fongmi.android.tv.bean.TmdbMatchCache;
 import com.fongmi.android.tv.bean.Update;
+import com.fongmi.android.tv.utils.AppCache;
 import com.fongmi.android.tv.utils.WebViewUtil;
 import com.github.catvod.crawler.DebugLogStore;
 import com.github.catvod.crawler.SpiderDebug;
 import com.github.catvod.utils.Trans;
 import com.github.catvod.utils.Prefers;
+import com.google.gson.reflect.TypeToken;
 
+import java.lang.reflect.Type;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
 
 public class Setting {
@@ -48,12 +56,21 @@ public class Setting {
     public static final int TMDB_MATCH_STRICT_DIALOG = 2;
     public static final int TMDB_MATCH_SMART_DIALOG = 3;
     public static final int DETAIL_INTERACTION_SYSTEM = 0;
+    public static final int INTRO_SKIP_OFF = 0;
+    public static final int INTRO_SKIP_AUTO = 1;
+    public static final int INTRO_SKIP_CONFIRM = 2;
     public static final int DETAIL_INTERACTION_ORIGINAL = 1;
     public static final int DETAIL_THEME_CURRENT = DETAIL_STYLE_NATIVE;
+    private static final Type STRING_LIST = new TypeToken<List<String>>() {}.getType();
+
     public static final int LANGUAGE_FOLLOW_SYSTEM = 0;
     public static final int LANGUAGE_SIMPLIFIED = 1;
     public static final int LANGUAGE_TRADITIONAL = 2;
     private static final int[] LANGUAGE_OPTIONS = {LANGUAGE_FOLLOW_SYSTEM, LANGUAGE_SIMPLIFIED, LANGUAGE_TRADITIONAL};
+
+    public static final int CSP_WARMUP_DISABLED = 0;
+    public static final int CSP_WARMUP_DEFAULT = 1;
+    public static final int CSP_WARMUP_CUSTOM = 2;
 
     public static final int UI_SCALE_FOLLOW_SYSTEM = 0;
     public static final int UI_SCALE_STANDARD = 1;
@@ -527,11 +544,53 @@ public class Setting {
     }
 
     public static boolean isCspWarmup() {
-        return Prefers.getBoolean("csp_warmup");
+        return getCspWarmupMode() != CSP_WARMUP_DISABLED;
     }
 
     public static void putCspWarmup(boolean warmup) {
-        Prefers.put("csp_warmup", warmup);
+        if (warmup) {
+            Prefers.put("csp_warmup", true);
+            if (getCspWarmupSelectedMode() == CSP_WARMUP_DISABLED) Prefers.put("csp_warmup_mode", CSP_WARMUP_DEFAULT);
+        } else {
+            Prefers.put("csp_warmup", false);
+        }
+    }
+
+    public static int getCspWarmupMode() {
+        if (!Prefers.getBoolean("csp_warmup")) return CSP_WARMUP_DISABLED;
+        return getCspWarmupSelectedMode();
+    }
+
+    public static int getCspWarmupSelectedMode() {
+        int mode = Prefers.getInt("csp_warmup_mode", CSP_WARMUP_DEFAULT);
+        return mode == CSP_WARMUP_CUSTOM ? CSP_WARMUP_CUSTOM : CSP_WARMUP_DEFAULT;
+    }
+
+    public static void putCspWarmupMode(int mode) {
+        if (mode == CSP_WARMUP_DISABLED) {
+            Prefers.put("csp_warmup", false);
+        } else {
+            Prefers.put("csp_warmup", true);
+            Prefers.put("csp_warmup_mode", mode == CSP_WARMUP_CUSTOM ? CSP_WARMUP_CUSTOM : CSP_WARMUP_DEFAULT);
+        }
+    }
+
+    public static List<String> getCspWarmupSites() {
+        try {
+            List<String> keys = App.gson().fromJson(Prefers.getString("csp_warmup_sites", "[]"), STRING_LIST);
+            if (keys == null) return Collections.emptyList();
+            List<String> result = new ArrayList<>();
+            for (String key : keys) if (key != null && !key.trim().isEmpty() && !result.contains(key.trim())) result.add(key.trim());
+            return result;
+        } catch (Exception e) {
+            return Collections.emptyList();
+        }
+    }
+
+    public static void putCspWarmupSites(List<String> keys) {
+        LinkedHashSet<String> result = new LinkedHashSet<>();
+        if (keys != null) for (String key : keys) if (key != null && !key.trim().isEmpty()) result.add(key.trim());
+        Prefers.put("csp_warmup_sites", App.gson().toJson(result));
     }
 
     public static boolean isDebugLog() {
@@ -733,12 +792,28 @@ public class Setting {
         return AiConfig.objectFrom(getAiConfig()).isReady();
     }
 
+    public static boolean isAiTitleExtraction() {
+        return Prefers.getBoolean("ai_title_extraction", false);
+    }
+
+    public static void putAiTitleExtraction(boolean enabled) {
+        Prefers.put("ai_title_extraction", enabled);
+    }
+
     public static TmdbMatchCache getTmdbMatchCache() {
-        return TmdbMatchCache.objectFrom(Prefers.getString("tmdb_match_cache"));
+        return TmdbMatchCache.objectFrom(AppCache.get(AppCache.KEY_TMDB_MATCH));
     }
 
     public static void putTmdbMatchCache(TmdbMatchCache cache) {
-        Prefers.put("tmdb_match_cache", App.gson().toJson(cache));
+        AppCache.put(AppCache.KEY_TMDB_MATCH, App.gson().toJson(cache));
+    }
+
+    public static DanmakuMatchCache getDanmakuMatchCache() {
+        return DanmakuMatchCache.objectFrom(Prefers.getString("danmaku_match_cache"));
+    }
+
+    public static void putDanmakuMatchCache(DanmakuMatchCache cache) {
+        Prefers.put("danmaku_match_cache", App.gson().toJson(cache));
     }
 
     public static boolean isTmdbEnabled() {
@@ -988,7 +1063,7 @@ public class Setting {
     }
 
     public static boolean getTmdbEpisodeGridMode() {
-        return Prefers.getBoolean("tmdb_episode_grid_mode", false);
+        return Prefers.getBoolean("tmdb_episode_grid_mode", !"mobile".equals(BuildConfig.FLAVOR_mode));
     }
 
     public static void putTmdbEpisodeGridMode(boolean gridMode) {
@@ -1001,6 +1076,14 @@ public class Setting {
 
     public static void putTmdbEpisodeFileSize(boolean enabled) {
         Prefers.put("tmdb_episode_file_size", enabled);
+    }
+
+    public static boolean getTmdbEpisodeShowScrapedName() {
+        return Prefers.getBoolean("tmdb_episode_show_scraped_name", true);
+    }
+
+    public static void putTmdbEpisodeShowScrapedName(boolean showScraped) {
+        Prefers.put("tmdb_episode_show_scraped_name", showScraped);
     }
 
     public static int nextTmdbDetailTheme(int theme) {
@@ -1081,12 +1164,24 @@ public class Setting {
         Prefers.put("subtitle_assrt_token", token);
     }
 
+    public static int getIntroSkipMode() {
+        return Prefers.getInt("intro_skip_mode", INTRO_SKIP_OFF);
+    }
+
+    public static void putIntroSkipMode(int mode) {
+        Prefers.put("intro_skip_mode", mode);
+    }
+
     public static boolean isAutoSkipIntroOutro() {
-        return Prefers.getBoolean("auto_skip_intro_outro", false);
+        return getIntroSkipMode() == INTRO_SKIP_AUTO;
+    }
+
+    public static boolean isIntroSkipEnabled() {
+        return getIntroSkipMode() != INTRO_SKIP_OFF;
     }
 
     public static void putAutoSkipIntroOutro(boolean enabled) {
-        Prefers.put("auto_skip_intro_outro", enabled);
+        putIntroSkipMode(enabled ? INTRO_SKIP_AUTO : INTRO_SKIP_OFF);
     }
 
     public static int getSearchUi() {

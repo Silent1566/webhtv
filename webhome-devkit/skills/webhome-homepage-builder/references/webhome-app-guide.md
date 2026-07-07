@@ -1454,11 +1454,13 @@ GET/POST /cache?do=set&rule=命名空间&key=键&value=值
 GET/POST /cache?do=del&rule=命名空间&key=键
 ```
 
-实际存储 key：
+逻辑缓存 key：
 
 ```text
 cache_ + (rule ? rule + "_" : "") + key
 ```
+
+底层存放在应用缓存目录，用户清理缓存时会一并删除。
 
 ### 13.6 `/file` 和文件管理
 
@@ -2335,11 +2337,13 @@ await fm.cache.del("key", "rule");
 | `fm.cache.set(key, value, rule)` | `key: string`，`value: string`，`rule?: string` | `{}` | 写入字符串 |
 | `fm.cache.del(key, rule)` | `key: string`，`rule?: string` | `{}` | 删除字符串 |
 
-实际 Native 存储 key：
+逻辑 Native 缓存 key：
 
 ```text
 cache_ + (rule ? rule + "_" : "") + key
 ```
+
+底层存放在应用缓存目录，用户清理缓存时会一并删除。
 
 注意：
 

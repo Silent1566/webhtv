@@ -18,7 +18,6 @@ import android.view.WindowManager;
 import android.widget.EditText;
 
 import androidx.annotation.NonNull;
-import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.widget.LinearLayoutCompat;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.FragmentActivity;
@@ -283,22 +282,11 @@ public class PlaybackRemoteSyncDialog extends BaseAlertDialog {
     }
 
     private void confirmDelete(RemoteSyncConfig config) {
-        AlertDialog dialog = new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog)
-                .setTitle(R.string.playback_remote_sync_delete_title)
-                .setMessage(getString(R.string.playback_remote_sync_delete_message, config.displayName()))
-                .setNegativeButton(R.string.dialog_negative, null)
-                .setPositiveButton(R.string.setting_delete, null)
-                .create();
-        dialog.setOnShowListener(d -> {
-            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).requestFocus();
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(view -> {
-                PlaybackRemoteSyncStore.remove(config.id);
-                if (callback != null) callback.run();
-                dialog.dismiss();
-                showList();
-            });
+        ChoiceDialog.showConfirm(this, R.string.playback_remote_sync_delete_title, getString(R.string.playback_remote_sync_delete_message, config.displayName()), R.string.setting_delete, () -> {
+            PlaybackRemoteSyncStore.remove(config.id);
+            if (callback != null) callback.run();
+            showList();
         });
-        dialog.show();
     }
 
     private void syncNow(String id) {

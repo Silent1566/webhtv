@@ -37,6 +37,21 @@ public class EpisodeRangePolicyTest {
     }
 
     @Test
+    public void build_preservesGroupBoundariesInReverseMode() {
+        // 38 episodes: forward groups are "1-20" and "21-38" with boundary at 20|21.
+        // Reverse should maintain the same episode-number boundary: "38-21" and "20-1".
+        List<EpisodeRangePolicy.Range> ranges = EpisodeRangePolicy.build(38, 0, true);
+
+        assertEquals(2, ranges.size());
+        assertEquals("38-21", ranges.get(0).label());
+        assertEquals(0, ranges.get(0).start());
+        assertEquals(18, ranges.get(0).end());
+        assertEquals("20-1", ranges.get(1).label());
+        assertEquals(18, ranges.get(1).start());
+        assertEquals(38, ranges.get(1).end());
+    }
+
+    @Test
     public void build_capsCardPagesAtFiftyEpisodes() {
         List<EpisodeRangePolicy.Range> ranges = EpisodeRangePolicy.build(501, 0, false, 50);
 

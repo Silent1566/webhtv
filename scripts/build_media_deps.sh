@@ -130,7 +130,7 @@ patch_toml_string_value() {
   local file="$1"
   local key="$2"
   local value="$3"
-  perl -0pi -e "s/${key} = \"[0-9.]+\"/${key} = \"${value}\"/" "$file"
+  perl -0pi -e "s/${key} = \"[^\"]+\"/${key} = \"${value}\"/" "$file"
 }
 
 clone_or_update() {
@@ -140,6 +140,11 @@ clone_or_update() {
   local dir="$4"
   mkdir -p "$(dirname "$dir")"
   if [[ -d "$dir/.git" ]]; then
+    if git -C "$dir" cat-file -e "$commit^{commit}" 2>/dev/null; then
+      git -C "$dir" checkout --force --detach "$commit"
+      git -C "$dir" clean -fdx
+      return 0
+    fi
     echo "Fetching $repo"
     git -C "$dir" fetch --tags --prune origin "$branch"
   else
@@ -179,10 +184,17 @@ add_media_jar_dependency() {
 
 patch_media_release_version() {
   local version="$1"
-  patch_gradle_string_property "$MEDIA_DIR/constants.gradle" "releaseVersion" "$version"
+  if [[ -f "$MEDIA_DIR/gradle/libs.versions.toml" ]]; then
+    patch_toml_string_value "$MEDIA_DIR/gradle/libs.versions.toml" "releaseVersion" "$version"
+  else
+    patch_gradle_string_property "$MEDIA_DIR/constants.gradle" "releaseVersion" "$version"
+  fi
 }
 
 patch_media_build_tools() {
+  if [[ ! -f "$MEDIA_DIR/common_config.gradle" ]]; then
+    return 0
+  fi
   local build_tools
   build_tools="$(latest_installed_build_tools "$ANDROID_HOME")"
   if [[ -z "$build_tools" ]]; then
@@ -194,6 +206,9 @@ patch_media_build_tools() {
 }
 
 patch_media_pom_workaround() {
+  if [[ ! -f "$MEDIA_DIR/missing_aar_type_workaround.gradle" ]]; then
+    return 0
+  fi
   add_media_jar_dependency "com.googlecode.juniversalchardet:juniversalchardet"
   add_media_jar_dependency "com.hierynomus:smbj"
   add_media_jar_dependency "org.brotli:dec"
@@ -224,10 +239,14 @@ prepare_android_env() {
 prepare_media_compile_sdk() {
   local media_compile
   local app_compile
-  media_compile="$(awk -F'= *' '/compileSdkVersion/ { print $2; exit }' "$MEDIA_DIR/constants.gradle" | tr -dc '0-9')"
   app_compile="$(version_catalog_value compileSdk)"
+  if [[ -f "$MEDIA_DIR/gradle/libs.versions.toml" ]]; then
+    media_compile="$(awk -F'"' '$1 ~ /^compileSdkVersion *= */ { print $2; exit }' "$MEDIA_DIR/gradle/libs.versions.toml")"
+  else
+    media_compile="$(awk -F'= *' '/compileSdkVersion/ { print $2; exit }' "$MEDIA_DIR/constants.gradle" | tr -dc '0-9')"
+  fi
   if [[ -z "$media_compile" ]]; then
-    echo "Unable to read Media3 compileSdkVersion from $MEDIA_DIR/constants.gradle" >&2
+    echo "Unable to read Media3 compileSdkVersion." >&2
     exit 1
   fi
   if platform_api_exists "$ANDROID_HOME" "$media_compile"; then
@@ -235,7 +254,11 @@ prepare_media_compile_sdk() {
   fi
   if [[ -n "$app_compile" && "$app_compile" =~ ^[0-9]+$ ]] && platform_api_exists "$ANDROID_HOME" "$app_compile"; then
     echo "Android SDK platform $media_compile is not installed; building locked Media3 with project compileSdk $app_compile."
-    patch_gradle_number_property "$MEDIA_DIR/constants.gradle" "compileSdkVersion" "$app_compile"
+    if [[ -f "$MEDIA_DIR/gradle/libs.versions.toml" ]]; then
+      patch_toml_string_value "$MEDIA_DIR/gradle/libs.versions.toml" "compileSdkVersion" "$app_compile"
+    else
+      patch_gradle_number_property "$MEDIA_DIR/constants.gradle" "compileSdkVersion" "$app_compile"
+    fi
     return 0
   fi
   echo "Android SDK platform $media_compile is required to build FongMi/media." >&2
@@ -295,7 +318,7 @@ publish_media() {
   done
 
   echo "Publishing FongMi/media $media_version to $LOCAL_MAVEN"
-  (cd "$MEDIA_DIR" && ./gradlew --no-daemon -PmavenRepo="$LOCAL_MAVEN" -PreleaseVersion="$media_version" "${tasks[@]}")
+  (cd "$MEDIA_DIR" && ./gradlew --no-daemon --console=plain -PmavenRepo="$LOCAL_MAVEN" -PreleaseVersion="$media_version" "${tasks[@]}")
 }
 
 prepare_nextlib() {

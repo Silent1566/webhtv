@@ -16,6 +16,7 @@ import androidx.media3.common.util.Util;
 
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.BuildConfig;
+import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.utils.FileUtil;
 
 import java.util.ArrayList;
@@ -23,11 +24,20 @@ import java.util.List;
 import java.util.Map;
 import java.util.StringJoiner;
 import java.util.function.LongConsumer;
+import java.util.function.Supplier;
 
 public class PlayerHelper {
 
     public static String getDefaultUa() {
         return Util.getUserAgent(App.get(), BuildConfig.APPLICATION_ID);
+    }
+
+    public static String getUa() {
+        return resolveUa(Setting.getUa(), PlayerHelper::getDefaultUa);
+    }
+
+    public static String resolveUa(String ua, Supplier<String> fallback) {
+        return ua == null || ua.isEmpty() ? fallback.get() : ua;
     }
 
     public static String getSubtitleMimeType(String path) {

@@ -8,8 +8,10 @@ import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.common.VideoSize;
 import androidx.media3.exoplayer.DecoderReuseEvaluation;
+import androidx.media3.exoplayer.ExoPlaybackException;
 import androidx.media3.exoplayer.analytics.AnalyticsListener;
 import androidx.media3.exoplayer.analytics.AnalyticsListener.EventTime;
+import androidx.media3.exoplayer.mediacodec.MediaCodecRenderer;
 
 import com.github.catvod.crawler.SpiderDebug;
 
@@ -92,9 +94,10 @@ public class PlaybackAnalyticsListener implements AnalyticsListener {
     @Override
     public void onPlayerError(EventTime eventTime, PlaybackException error) {
         String code = PlaybackException.getErrorCodeName(error.errorCode);
-        snapshot = snapshot.withError(code, error.getMessage());
+        ErrorDetails details = ErrorDetails.from(error);
+        snapshot = snapshot.withError(code, error.getMessage(), details);
         if (!SpiderDebug.isEnabled()) return;
-        SpiderDebug.log("playback-metrics", "error code=%s message=%s", code, error.getMessage());
+        SpiderDebug.log("playback-metrics", "error code=%s message=%s details=%s", code, error.getMessage(), details.summary());
     }
 
     private static String stateName(int state) {
@@ -107,54 +110,91 @@ public class PlaybackAnalyticsListener implements AnalyticsListener {
         };
     }
 
-    public record Snapshot(String state, String videoDecoderName, Format videoFormat, String audioDecoderName, Format audioFormat, long droppedFrames, long positionMs, long bufferedMs, long bandwidthEstimate, int lastLoadTimeMs, long lastLoadBytes, int rebufferCount, long rebufferTotalMs, long rebufferStartMs, boolean everReady, String errorCode, String errorMessage) {
+    public record Snapshot(String state, String videoDecoderName, Format videoFormat, String audioDecoderName, Format audioFormat, long droppedFrames, long positionMs, long bufferedMs, long bandwidthEstimate, int lastLoadTimeMs, long lastLoadBytes, int rebufferCount, long rebufferTotalMs, long rebufferStartMs, boolean everReady, String errorCode, String errorMessage, Format errorFormat, String errorDecoderName, String errorDiagnosticInfo, boolean errorSecureDecoderRequired, String errorCause) {
 
         public static Snapshot empty() {
-            return new Snapshot("", "", null, "", null, 0, 0, 0, 0, 0, 0, 0, 0, 0, false, "", "");
+            return new Snapshot("", "", null, "", null, 0, 0, 0, 0, 0, 0, 0, 0, 0, false, "", "", null, "", "", false, "");
         }
 
         private Snapshot withState(String state, long positionMs, long bufferedMs) {
-            return new Snapshot(state, videoDecoderName, videoFormat, audioDecoderName, audioFormat, droppedFrames, positionMs, Math.max(0, bufferedMs), bandwidthEstimate, lastLoadTimeMs, lastLoadBytes, rebufferCount, rebufferTotalMs, rebufferStartMs, everReady, errorCode, errorMessage);
+            return new Snapshot(state, videoDecoderName, videoFormat, audioDecoderName, audioFormat, droppedFrames, positionMs, Math.max(0, bufferedMs), bandwidthEstimate, lastLoadTimeMs, lastLoadBytes, rebufferCount, rebufferTotalMs, rebufferStartMs, everReady, errorCode, errorMessage, errorFormat, errorDecoderName, errorDiagnosticInfo, errorSecureDecoderRequired, errorCause);
         }
 
         private Snapshot withVideoDecoder(String decoderName) {
-            return new Snapshot(state, decoderName, videoFormat, audioDecoderName, audioFormat, droppedFrames, positionMs, bufferedMs, bandwidthEstimate, lastLoadTimeMs, lastLoadBytes, rebufferCount, rebufferTotalMs, rebufferStartMs, everReady, errorCode, errorMessage);
+            return new Snapshot(state, decoderName, videoFormat, audioDecoderName, audioFormat, droppedFrames, positionMs, bufferedMs, bandwidthEstimate, lastLoadTimeMs, lastLoadBytes, rebufferCount, rebufferTotalMs, rebufferStartMs, everReady, errorCode, errorMessage, errorFormat, errorDecoderName, errorDiagnosticInfo, errorSecureDecoderRequired, errorCause);
         }
 
         private Snapshot withVideoFormat(Format format) {
-            return new Snapshot(state, videoDecoderName, format, audioDecoderName, audioFormat, droppedFrames, positionMs, bufferedMs, bandwidthEstimate, lastLoadTimeMs, lastLoadBytes, rebufferCount, rebufferTotalMs, rebufferStartMs, everReady, errorCode, errorMessage);
+            return new Snapshot(state, videoDecoderName, format, audioDecoderName, audioFormat, droppedFrames, positionMs, bufferedMs, bandwidthEstimate, lastLoadTimeMs, lastLoadBytes, rebufferCount, rebufferTotalMs, rebufferStartMs, everReady, errorCode, errorMessage, errorFormat, errorDecoderName, errorDiagnosticInfo, errorSecureDecoderRequired, errorCause);
         }
 
         private Snapshot withAudioDecoder(String decoderName) {
-            return new Snapshot(state, videoDecoderName, videoFormat, decoderName, audioFormat, droppedFrames, positionMs, bufferedMs, bandwidthEstimate, lastLoadTimeMs, lastLoadBytes, rebufferCount, rebufferTotalMs, rebufferStartMs, everReady, errorCode, errorMessage);
+            return new Snapshot(state, videoDecoderName, videoFormat, decoderName, audioFormat, droppedFrames, positionMs, bufferedMs, bandwidthEstimate, lastLoadTimeMs, lastLoadBytes, rebufferCount, rebufferTotalMs, rebufferStartMs, everReady, errorCode, errorMessage, errorFormat, errorDecoderName, errorDiagnosticInfo, errorSecureDecoderRequired, errorCause);
         }
 
         private Snapshot withAudioFormat(Format format) {
-            return new Snapshot(state, videoDecoderName, videoFormat, audioDecoderName, format, droppedFrames, positionMs, bufferedMs, bandwidthEstimate, lastLoadTimeMs, lastLoadBytes, rebufferCount, rebufferTotalMs, rebufferStartMs, everReady, errorCode, errorMessage);
+            return new Snapshot(state, videoDecoderName, videoFormat, audioDecoderName, format, droppedFrames, positionMs, bufferedMs, bandwidthEstimate, lastLoadTimeMs, lastLoadBytes, rebufferCount, rebufferTotalMs, rebufferStartMs, everReady, errorCode, errorMessage, errorFormat, errorDecoderName, errorDiagnosticInfo, errorSecureDecoderRequired, errorCause);
         }
 
         private Snapshot withDroppedFrames(long droppedFrames) {
-            return new Snapshot(state, videoDecoderName, videoFormat, audioDecoderName, audioFormat, droppedFrames, positionMs, bufferedMs, bandwidthEstimate, lastLoadTimeMs, lastLoadBytes, rebufferCount, rebufferTotalMs, rebufferStartMs, everReady, errorCode, errorMessage);
+            return new Snapshot(state, videoDecoderName, videoFormat, audioDecoderName, audioFormat, droppedFrames, positionMs, bufferedMs, bandwidthEstimate, lastLoadTimeMs, lastLoadBytes, rebufferCount, rebufferTotalMs, rebufferStartMs, everReady, errorCode, errorMessage, errorFormat, errorDecoderName, errorDiagnosticInfo, errorSecureDecoderRequired, errorCause);
         }
 
         private Snapshot withBandwidth(int loadTimeMs, long bytesLoaded, long bitrateEstimate) {
-            return new Snapshot(state, videoDecoderName, videoFormat, audioDecoderName, audioFormat, droppedFrames, positionMs, bufferedMs, Math.max(0, bitrateEstimate), Math.max(0, loadTimeMs), Math.max(0, bytesLoaded), rebufferCount, rebufferTotalMs, rebufferStartMs, everReady, errorCode, errorMessage);
+            return new Snapshot(state, videoDecoderName, videoFormat, audioDecoderName, audioFormat, droppedFrames, positionMs, bufferedMs, Math.max(0, bitrateEstimate), Math.max(0, loadTimeMs), Math.max(0, bytesLoaded), rebufferCount, rebufferTotalMs, rebufferStartMs, everReady, errorCode, errorMessage, errorFormat, errorDecoderName, errorDiagnosticInfo, errorSecureDecoderRequired, errorCause);
         }
 
         private Snapshot withRebufferStart(long now) {
-            return new Snapshot(state, videoDecoderName, videoFormat, audioDecoderName, audioFormat, droppedFrames, positionMs, bufferedMs, bandwidthEstimate, lastLoadTimeMs, lastLoadBytes, rebufferCount + 1, rebufferTotalMs, now, everReady, errorCode, errorMessage);
+            return new Snapshot(state, videoDecoderName, videoFormat, audioDecoderName, audioFormat, droppedFrames, positionMs, bufferedMs, bandwidthEstimate, lastLoadTimeMs, lastLoadBytes, rebufferCount + 1, rebufferTotalMs, now, everReady, errorCode, errorMessage, errorFormat, errorDecoderName, errorDiagnosticInfo, errorSecureDecoderRequired, errorCause);
         }
 
         private Snapshot withRebufferEnd(long now) {
-            return new Snapshot(state, videoDecoderName, videoFormat, audioDecoderName, audioFormat, droppedFrames, positionMs, bufferedMs, bandwidthEstimate, lastLoadTimeMs, lastLoadBytes, rebufferCount, rebufferTotalMs + Math.max(0, now - rebufferStartMs), 0, everReady, errorCode, errorMessage);
+            return new Snapshot(state, videoDecoderName, videoFormat, audioDecoderName, audioFormat, droppedFrames, positionMs, bufferedMs, bandwidthEstimate, lastLoadTimeMs, lastLoadBytes, rebufferCount, rebufferTotalMs + Math.max(0, now - rebufferStartMs), 0, everReady, errorCode, errorMessage, errorFormat, errorDecoderName, errorDiagnosticInfo, errorSecureDecoderRequired, errorCause);
         }
 
         private Snapshot withEverReady() {
-            return new Snapshot(state, videoDecoderName, videoFormat, audioDecoderName, audioFormat, droppedFrames, positionMs, bufferedMs, bandwidthEstimate, lastLoadTimeMs, lastLoadBytes, rebufferCount, rebufferTotalMs, rebufferStartMs, true, errorCode, errorMessage);
+            return new Snapshot(state, videoDecoderName, videoFormat, audioDecoderName, audioFormat, droppedFrames, positionMs, bufferedMs, bandwidthEstimate, lastLoadTimeMs, lastLoadBytes, rebufferCount, rebufferTotalMs, rebufferStartMs, true, errorCode, errorMessage, errorFormat, errorDecoderName, errorDiagnosticInfo, errorSecureDecoderRequired, errorCause);
         }
 
-        private Snapshot withError(String code, String message) {
-            return new Snapshot(state, videoDecoderName, videoFormat, audioDecoderName, audioFormat, droppedFrames, positionMs, bufferedMs, bandwidthEstimate, lastLoadTimeMs, lastLoadBytes, rebufferCount, rebufferTotalMs, rebufferStartMs, everReady, code, message);
+        private Snapshot withError(String code, String message, ErrorDetails details) {
+            Format format = details.format() != null ? details.format() : videoFormat;
+            return new Snapshot(state, videoDecoderName, format, audioDecoderName, audioFormat, droppedFrames, positionMs, bufferedMs, bandwidthEstimate, lastLoadTimeMs, lastLoadBytes, rebufferCount, rebufferTotalMs, rebufferStartMs, everReady, code, message, details.format(), details.decoderName(), details.diagnosticInfo(), details.secureDecoderRequired(), details.cause());
         }
+    }
+
+    private record ErrorDetails(Format format, String decoderName, String diagnosticInfo, boolean secureDecoderRequired, String cause) {
+
+        static ErrorDetails from(PlaybackException error) {
+            Format format = null;
+            String decoderName = "";
+            String diagnosticInfo = "";
+            boolean secure = false;
+            if (error instanceof ExoPlaybackException exo) format = exo.rendererFormat;
+            MediaCodecRenderer.DecoderInitializationException init = findDecoderInitException(error);
+            if (init != null) {
+                decoderName = init.codecInfo == null ? "" : init.codecInfo.name;
+                diagnosticInfo = init.diagnosticInfo == null ? "" : init.diagnosticInfo;
+                secure = init.secureDecoderRequired;
+            }
+            Throwable cause = rootCause(error);
+            return new ErrorDetails(format, decoderName, diagnosticInfo, secure, cause == null ? "" : cause.getClass().getSimpleName() + ": " + cause.getMessage());
+        }
+
+        private String summary() {
+            return "decoder=" + decoderName + " diagnostic=" + diagnosticInfo + " secure=" + secureDecoderRequired + " cause=" + cause;
+        }
+    }
+
+    private static MediaCodecRenderer.DecoderInitializationException findDecoderInitException(Throwable error) {
+        for (Throwable current = error; current != null; current = current.getCause()) {
+            if (current instanceof MediaCodecRenderer.DecoderInitializationException init) return init;
+        }
+        return null;
+    }
+
+    private static Throwable rootCause(Throwable error) {
+        Throwable current = error;
+        while (current != null && current.getCause() != null) current = current.getCause();
+        return current;
     }
 }

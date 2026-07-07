@@ -29,12 +29,12 @@ import androidx.appcompat.widget.LinearLayoutCompat;
 import androidx.core.widget.NestedScrollView;
 
 import com.fongmi.android.tv.R;
+import com.fongmi.android.tv.ui.dialog.LightDialog;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.Util;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.checkbox.MaterialCheckBox;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.textfield.TextInputLayout;
 import com.google.android.material.textview.MaterialTextView;
@@ -284,19 +284,17 @@ public class SettingClipboardOverlay {
         layout.setHint("剪贴内容");
         layout.setBoxBackgroundMode(TextInputLayout.BOX_BACKGROUND_OUTLINE);
         layout.addView(input, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        new MaterialAlertDialogBuilder(root.getContext(), R.style.ThemeOverlay_WebHTV_LightDialog)
-                .setTitle("编辑剪贴板")
-                .setView(layout)
-                .setNegativeButton(R.string.dialog_negative, null)
-                .setPositiveButton(R.string.dialog_positive, (dialog, which) -> {
-                    String next = normalize(input.getText() == null ? "" : input.getText().toString());
-                    if (TextUtils.isEmpty(next)) return;
-                    replace(item, next);
-                    selected.clear();
-                    selected.add(next);
-                    render();
-                })
-                .show();
+        final Dialog[] holder = new Dialog[1];
+        holder[0] = LightDialog.create(root.getContext(), "编辑剪贴板", layout, root.getContext().getString(R.string.dialog_positive), view -> {
+            String next = normalize(input.getText() == null ? "" : input.getText().toString());
+            if (TextUtils.isEmpty(next)) return;
+            replace(item, next);
+            selected.clear();
+            selected.add(next);
+            render();
+            holder[0].dismiss();
+        }, root.getContext().getString(R.string.dialog_negative), null);
+        holder[0].show();
     }
 
     private void delete() {

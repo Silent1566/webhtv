@@ -28,6 +28,17 @@ public class AiConfig {
             + "推荐数量为 12-24 部，默认推荐 16 部；若用户历史较少则推荐 12 部，历史丰富则推荐 18-24 部。"
             + "只返回可解析 JSON，不要解释、Markdown 或多余文本，格式为 {\"items\":[{\"title\":\"片名\",\"year\":2024,\"mediaType\":\"movie 或 tv\",\"reason\":\"一句推荐理由\"}]}。"
             + "mediaType 只能使用 movie 或 tv，reason 控制在 20-45 个中文字符，并说明它为什么适合这个用户。";
+    public static final int DEFAULT_TITLE_EXTRACTION_PROMPT_VERSION = 2;
+    public static final String LEGACY_TITLE_EXTRACTION_PROMPT_V1 = "你是影视资源标题解析器。你的任务是从网盘/资源站标题中提取真实影视作品名。\n"
+            + "要求：只返回严格 JSON，不要 Markdown，不要解释；不要保留清晰度、编码、字幕、语言版本、更新状态、集数、合集、资源组、平台名；"
+            + "如果标题是拼音缩写、谐音、防和谐写法，请尽量还原为中文正式片名；学习样本来自用户本机手动修正，相关时优先，但不要强行套用；不要编造 TMDB ID。\n"
+            + "返回格式：{\"canonicalTitle\":\"剧名\",\"originalTitle\":\"\",\"mediaType\":\"tv|movie|unknown\",\"year\":0,\"seasonNumber\":-1,\"episodeNumber\":-1,\"episodeTitle\":\"\",\"aliases\":[\"别名\"],\"confidence\":0.0,\"reasonCode\":\"clean|homophone|pinyin|uncertain\"}";
+    public static final String DEFAULT_TITLE_EXTRACTION_PROMPT = "你是影视资源标题解析器。你的任务是从网盘、资源站、推送链接标题中提取真实影视作品名。\n"
+            + "要求：只返回严格 JSON，不要 Markdown，不要解释；不要保留清晰度、编码、字幕、语言版本、更新状态、集数、合集、资源组、平台名、线路名或分类词。"
+            + "标题中的 #、空格、点、短横线、竖线常用于分隔或防和谐；如果两侧中文片段能组成正式片名，请合并还原，例如“凡人#修仙传”应提取为“凡人修仙传”。"
+            + "开头或结尾的单字母、A/B/C、动漫、电影、电视剧、剧集等通常是资源分组或分类，不属于作品名。"
+            + "如果标题是拼音缩写、谐音、防和谐写法，请尽量还原为中文正式片名；学习样本来自用户本机手动修正，相关时优先，但不要强行套用；不要编造 TMDB ID。\n"
+            + "返回格式：{\"canonicalTitle\":\"剧名\",\"originalTitle\":\"\",\"mediaType\":\"tv|movie|unknown\",\"year\":0,\"seasonNumber\":-1,\"episodeNumber\":-1,\"episodeTitle\":\"\",\"aliases\":[\"别名\"],\"confidence\":0.0,\"reasonCode\":\"clean|homophone|pinyin|separator|uncertain\"}";
 
     @SerializedName("enabled")
     private boolean enabled;
@@ -47,6 +58,12 @@ public class AiConfig {
     private int recommendPromptVersion;
     @SerializedName("recommendPromptCustom")
     private boolean recommendPromptCustom;
+    @SerializedName("titleExtractionPrompt")
+    private String titleExtractionPrompt;
+    @SerializedName("titleExtractionPromptVersion")
+    private int titleExtractionPromptVersion;
+    @SerializedName("titleExtractionPromptCustom")
+    private boolean titleExtractionPromptCustom;
 
     public static AiConfig objectFrom(String json) {
         try {
@@ -64,6 +81,7 @@ public class AiConfig {
         model = trimOr(model, DEFAULT_MODEL);
         customUserAgent = trimOr(customUserAgent, "");
         sanitizeRecommendPrompt();
+        sanitizeTitleExtractionPrompt();
         return this;
     }
 
@@ -158,6 +176,35 @@ public class AiConfig {
         recommendPromptVersion = DEFAULT_RECOMMEND_PROMPT_VERSION;
     }
 
+    public String getTitleExtractionPrompt() {
+        return titleExtractionPrompt;
+    }
+
+    public void setTitleExtractionPrompt(String titleExtractionPrompt) {
+        String value = titleExtractionPrompt == null ? "" : titleExtractionPrompt.trim();
+        if (isEmpty(value) || isBuiltInTitleExtractionPrompt(value)) {
+            resetTitleExtractionPrompt();
+        } else {
+            this.titleExtractionPrompt = value;
+            this.titleExtractionPromptCustom = true;
+            this.titleExtractionPromptVersion = DEFAULT_TITLE_EXTRACTION_PROMPT_VERSION;
+        }
+    }
+
+    public int getTitleExtractionPromptVersion() {
+        return titleExtractionPromptVersion;
+    }
+
+    public boolean isTitleExtractionPromptCustom() {
+        return titleExtractionPromptCustom;
+    }
+
+    public void resetTitleExtractionPrompt() {
+        titleExtractionPrompt = DEFAULT_TITLE_EXTRACTION_PROMPT;
+        titleExtractionPromptCustom = false;
+        titleExtractionPromptVersion = DEFAULT_TITLE_EXTRACTION_PROMPT_VERSION;
+    }
+
     public static String defaultEndpoint(String protocol) {
         if (PROTOCOL_OPENAI_CHAT.equals(protocol)) return DEFAULT_OPENAI_CHAT_ENDPOINT;
         if (PROTOCOL_ANTHROPIC_MESSAGES.equals(protocol)) return DEFAULT_ANTHROPIC_ENDPOINT;
@@ -193,6 +240,17 @@ public class AiConfig {
         if (recommendPromptVersion <= 0) recommendPromptVersion = DEFAULT_RECOMMEND_PROMPT_VERSION;
     }
 
+    private void sanitizeTitleExtractionPrompt() {
+        String value = titleExtractionPrompt == null ? "" : titleExtractionPrompt.trim();
+        if (isEmpty(value) || isBuiltInTitleExtractionPrompt(value)) {
+            resetTitleExtractionPrompt();
+            return;
+        }
+        titleExtractionPrompt = value;
+        titleExtractionPromptCustom = true;
+        if (titleExtractionPromptVersion <= 0) titleExtractionPromptVersion = DEFAULT_TITLE_EXTRACTION_PROMPT_VERSION;
+    }
+
     public static boolean isBuiltInRecommendPrompt(String prompt) {
         if (prompt == null) return false;
         String value = prompt.trim();
@@ -200,7 +258,18 @@ public class AiConfig {
         return LEGACY_RECOMMEND_PROMPT_V1.equals(value);
     }
 
+    public static boolean isBuiltInTitleExtractionPrompt(String prompt) {
+        if (prompt == null) return false;
+        String value = prompt.trim();
+        if (DEFAULT_TITLE_EXTRACTION_PROMPT.equals(value)) return true;
+        return LEGACY_TITLE_EXTRACTION_PROMPT_V1.equals(value);
+    }
+
     public static String[] systemRecommendPromptsForCache() {
         return new String[]{DEFAULT_RECOMMEND_PROMPT, LEGACY_RECOMMEND_PROMPT_V1};
+    }
+
+    public static String[] systemTitleExtractionPromptsForCache() {
+        return new String[]{DEFAULT_TITLE_EXTRACTION_PROMPT, LEGACY_TITLE_EXTRACTION_PROMPT_V1};
     }
 }

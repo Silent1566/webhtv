@@ -25,7 +25,6 @@ import android.widget.LinearLayout;
 import androidx.annotation.NonNull;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
-import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.widget.LinearLayoutCompat;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
@@ -736,18 +735,13 @@ public class WebHomeExtensionDialog extends BaseAlertDialog {
             labels[i] = siteLabel(site);
             checked[i] = editor.siteKeys.contains(site.getKey());
         }
-        new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog)
-                .setTitle(R.string.web_home_extension_choose_sites)
-                .setMultiChoiceItems(labels, checked, (dialog, which, isChecked) -> checked[which] = isChecked)
-                .setNegativeButton(R.string.dialog_negative, null)
-                .setPositiveButton(R.string.dialog_positive, (dialog, which) -> {
-                    editor.siteKeys.clear();
-                    for (int i = 0; i < sites.size(); i++) if (checked[i]) editor.siteKeys.add(sites.get(i).getKey());
-                    if (editor.siteKeys.isEmpty()) editor.siteKeys.add(VodConfig.get().getHome().getKey());
-                    updateSitePickerText(editor);
-                    syncMatchTextFromSites(editor);
-                })
-                .show();
+        ChoiceDialog.showMulti(this, R.string.web_home_extension_choose_sites, labels, checked, result -> {
+            editor.siteKeys.clear();
+            for (int i = 0; i < sites.size(); i++) if (result[i]) editor.siteKeys.add(sites.get(i).getKey());
+            if (editor.siteKeys.isEmpty()) editor.siteKeys.add(VodConfig.get().getHome().getKey());
+            updateSitePickerText(editor);
+            syncMatchTextFromSites(editor);
+        });
     }
 
     private void syncMatchTextFromSites(SourceEditor editor) {
@@ -973,15 +967,10 @@ public class WebHomeExtensionDialog extends BaseAlertDialog {
     }
 
     private void deleteSource(WebHomeExtensionSourceStore.Entry source) {
-        new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog)
-                .setTitle(R.string.web_home_extension_delete_source_title)
-                .setMessage(getString(R.string.web_home_extension_delete_source_message, source.getName()))
-                .setNegativeButton(R.string.dialog_negative, null)
-                .setPositiveButton(R.string.setting_delete, (dialog, which) -> {
-                    WebHomeExtensionSourceStore.remove(source.getId());
-                    onSourceSaved();
-                })
-                .show();
+        ChoiceDialog.showConfirm(this, R.string.web_home_extension_delete_source_title, getString(R.string.web_home_extension_delete_source_message, source.getName()), R.string.setting_delete, () -> {
+            WebHomeExtensionSourceStore.remove(source.getId());
+            onSourceSaved();
+        });
     }
 
     private void onSourceSaved() {
@@ -1086,22 +1075,11 @@ public class WebHomeExtensionDialog extends BaseAlertDialog {
     }
 
     private void confirmEnable(WebHomeExtensionRegistry.Item item) {
-        AlertDialog dialog = new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog)
-                .setTitle(R.string.web_home_extension_enable_confirm_title)
-                .setMessage(getString(R.string.web_home_extension_enable_confirm_message, item.name, source(item), empty(item.matchText)))
-                .setNegativeButton(R.string.dialog_negative, null)
-                .setPositiveButton(R.string.setting_enable, null)
-                .create();
-        dialog.setOnShowListener(d -> {
-            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).requestFocus();
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(view -> {
-                WebHomeExtensionRegistry.get().setExtensionEnabled(item.id, true);
-                HomeWebController.requestExtensionReload();
-                dialog.dismiss();
-                refresh(false);
-            });
+        ChoiceDialog.showConfirm(this, R.string.web_home_extension_enable_confirm_title, getString(R.string.web_home_extension_enable_confirm_message, item.name, source(item), empty(item.matchText)), R.string.setting_enable, () -> {
+            WebHomeExtensionRegistry.get().setExtensionEnabled(item.id, true);
+            HomeWebController.requestExtensionReload();
+            refresh(false);
         });
-        dialog.show();
     }
 
     private void addDetail(LinearLayoutCompat root, String value) {

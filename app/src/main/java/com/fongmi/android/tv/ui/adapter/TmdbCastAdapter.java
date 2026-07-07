@@ -1,7 +1,5 @@
 package com.fongmi.android.tv.ui.adapter;
 
-import android.content.res.ColorStateList;
-import android.os.Build;
 import android.view.LayoutInflater;
 import android.view.Gravity;
 import android.view.View;
@@ -96,11 +94,8 @@ public class TmdbCastAdapter extends RecyclerView.Adapter<TmdbCastAdapter.ViewHo
 
     static class ViewHolder extends RecyclerView.ViewHolder {
 
-        private static final int FOCUS_STROKE = 0xFFFFD166;
-        private static final int FOCUS_STROKE_TV = 0xFFFFFFFF;
         private static final int STROKE_NORMAL = 0x26FFFFFF;
         private static final int CARD_BACKGROUND = 0xFF16202A;
-        private static final int FOCUS_ELEVATION_DP = 8;
         private final MaterialCardView card;
         private final LinearLayout content;
         private final LinearLayout textBlock;
@@ -115,10 +110,6 @@ public class TmdbCastAdapter extends RecyclerView.Adapter<TmdbCastAdapter.ViewHo
                 itemView.setFocusableInTouchMode(false);
             }
             card = (MaterialCardView) itemView;
-            card.setRippleColor(ColorStateList.valueOf(0x00000000));
-            card.setForeground(card.getContext().getDrawable(R.drawable.selector_tmdb_cast_focus));
-            card.setStateListAnimator(null);
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) card.setDefaultFocusHighlightEnabled(false);
             content = itemView.findViewById(R.id.content);
             textBlock = itemView.findViewById(R.id.text);
             profile = itemView.findViewById(R.id.profile);
@@ -174,22 +165,8 @@ public class TmdbCastAdapter extends RecyclerView.Adapter<TmdbCastAdapter.ViewHo
         }
 
         private void bindFocusChrome(boolean cinema, boolean light) {
-            itemView.setOnFocusChangeListener(null);
-            applyCardChrome(cinema, light, itemView.hasFocus());
-            itemView.setOnFocusChangeListener((view, focused) -> applyCardChrome(cinema, light, focused));
-        }
-
-        private void applyCardChrome(boolean cinema, boolean light, boolean focused) {
             TmdbCinemaTheme.Palette palette = TmdbCinemaTheme.palette(light);
-            boolean leanback = Util.isLeanback();
-            int focusedStroke = leanback ? FOCUS_STROKE_TV : FOCUS_STROKE;
-            int focusedElevation = leanback ? 0 : FOCUS_ELEVATION_DP;
-            card.setActivated(focused);
-            card.setCardBackgroundColor(cinema ? palette.card() : CARD_BACKGROUND);
-            card.setStrokeColor(focused ? focusedStroke : (cinema ? palette.cardStroke() : STROKE_NORMAL));
-            card.setStrokeWidth(dp(focused ? 3 : 1));
-            card.setCardElevation(dp(focused ? focusedElevation : 0));
-            card.setTranslationZ(dp(focused ? focusedElevation : 0));
+            TmdbCardFocusHelper.bind(card, cinema ? palette.card() : CARD_BACKGROUND, cinema ? palette.cardStroke() : STROKE_NORMAL);
         }
 
         private int dp(int value) {

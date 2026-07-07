@@ -93,6 +93,35 @@ public class TmdbHeaderViewLayoutTest {
                 source.indexOf("button.setAlpha(1f);", tintMethod) > tintMethod);
     }
 
+    @Test
+    public void ratingChipsUseReadableLightAndBackdropSurfaces() throws Exception {
+        Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "custom", "TmdbHeaderView.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int applyTheme = source.indexOf("private void applyTheme()");
+        int createRating = source.indexOf("private com.google.android.material.textview.MaterialTextView createRatingChip");
+        int createSource = source.indexOf("private View createSourceRatingChip");
+        int style = source.indexOf("private void styleRatingChipContainer");
+        int resolve = source.indexOf("private int resolveRatingChipTextColor");
+
+        assertTrue(sourcePath + " is missing rating chip creation and theme refresh helpers",
+                applyTheme >= 0 && createRating >= 0 && createSource >= 0 && style >= 0 && resolve >= 0);
+        assertTrue("theme refresh must restyle already-created rating chips after dark/light switches",
+                source.indexOf("styleRatingChipContainer(headerRoot.findViewById(R.id.tmdbRatingsContainer));", applyTheme) > applyTheme
+                        && source.indexOf("styleRatingChipContainer(headerRoot.findViewById(R.id.tmdbOmdbRatings));", applyTheme) > applyTheme);
+        assertTrue("rating chip creation should tag the source color so refresh can keep a readable brand color",
+                source.indexOf("chip.setTag(color);", createRating) > createRating
+                        && source.indexOf("valueView.setTag(color);", createSource) > createSource);
+        assertTrue("light rating chip surfaces must use darkened brand colors instead of yellow/green on white",
+                source.indexOf("boolean lightSurface = !backdropSurfaceMode && lightChrome;", style) > style
+                        && source.indexOf("resolveRatingChipTextColor(color, lightSurface)", style) > style
+                        && source.indexOf("return 0xFF0F7A4A;", resolve) > resolve
+                        && source.indexOf("return 0xFF8A5A00;", resolve) > resolve
+                        && source.indexOf("return 0xFFB42318;", resolve) > resolve);
+        assertTrue("backdrop rating chip surfaces must remain dark glass with white text",
+                source.indexOf("backdropSurfaceMode ? COLOR_BACKDROP_SURFACE_CONTROL_BG", style) > style
+                        && source.indexOf("backdropSurfaceMode ? COLOR_FUSION_BACKDROP_TEXT", style) > style);
+    }
+
     private static Path findMainJavaPath() {
         Path moduleRelative = Path.of("src", "main", "java");
         if (Files.exists(moduleRelative)) return moduleRelative;

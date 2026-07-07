@@ -71,6 +71,7 @@ public class KeepAdapter extends BaseDiffAdapter<Keep, KeepAdapter.ViewHolder> {
         Keep item = getItem(position);
         setClickListener(holder.itemView, item);
         holder.binding.name.setText(item.getVodName());
+        holder.binding.progress.setVisibility(View.GONE);
         holder.binding.remark.setVisibility(View.GONE);
         holder.binding.site.setVisibility(View.VISIBLE);
         holder.binding.site.setText(item.getSiteName());

@@ -17,6 +17,7 @@ import org.simpleframework.xml.Attribute;
 import org.simpleframework.xml.Text;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
@@ -172,7 +173,11 @@ public class Flag implements Parcelable, Diffable<Flag> {
         return getEpisodes().stream()
                 .map(episode -> new Episode.Rule(episode, episode.getScore(remarks, number)))
                 .filter(Episode.Rule::find).max(Comparator.comparingInt(Episode.Rule::score)).map(Episode.Rule::episode)
-                .orElseGet(() -> isPositionValid() ? getEpisodes().get(getPosition()) : strict ? null : getEpisodes().get(0));
+                .orElseGet(() -> {
+                    if (isPositionValid()) return getEpisodes().get(getPosition());
+                    if (strict || getEpisodes().isEmpty()) return null;
+                    return getEpisodes().get(0);
+                });
     }
 
     private boolean isPositionValid() {
@@ -188,11 +193,29 @@ public class Flag implements Parcelable, Diffable<Flag> {
     }
 
     public void mergeEpisodes(List<Episode> items, boolean rev) {
+        List<Episode> toAdd = new ArrayList<>();
         for (Episode item : items) {
-            if (getEpisodes().contains(item)) continue;
-            if (rev) getEpisodes().add(0, item);
-            else getEpisodes().add(item);
+            int index = indexOf(item);
+            if (index != -1) {
+                mergeEpisode(getEpisodes().get(index), item);
+                continue;
+            }
+            toAdd.add(item);
         }
+        if (!toAdd.isEmpty()) {
+            if (rev) {
+                Collections.reverse(toAdd);
+                getEpisodes().addAll(0, toAdd);
+            } else {
+                getEpisodes().addAll(toAdd);
+            }
+        }
+    }
+
+    private void mergeEpisode(Episode target, Episode source) {
+        if (target == null || source == null) return;
+        if (source.getTmdbEpisode() != null) target.setTmdbEpisode(source.getTmdbEpisode());
+        if (!TextUtils.equals(source.getDisplayName(), source.getRawDisplayName())) target.setDisplayName(source.getDisplayName());
     }
 
     public Flag trans() {

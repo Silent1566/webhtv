@@ -1,5 +1,6 @@
 package com.fongmi.android.tv.ui.dialog;
 
+import android.app.Dialog;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
@@ -17,7 +18,6 @@ import android.view.WindowManager;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
-import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.widget.LinearLayoutCompat;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
@@ -69,7 +69,7 @@ public class LoginStatePathDialog extends BaseAlertDialog {
     private TreeAdapter appAdapter;
     private TreeAdapter sdcardAdapter;
     private Runnable callback;
-    private AlertDialog editor;
+    private Dialog editor;
     private boolean appPanelCollapsed;
     private boolean sdcardPanelCollapsed;
     private boolean appPanelTouched;
@@ -435,17 +435,11 @@ public class LoginStatePathDialog extends BaseAlertDialog {
             container.addView(input, inputParams);
         }
 
-        editor = new MaterialAlertDialogBuilder(requireContext(), R.style.Theme_WebHTV_LightDialog)
-                .setTitle(R.string.login_state_edit)
-                .setView(container)
-                .setNegativeButton(R.string.dialog_negative, null)
-                .setPositiveButton(R.string.dialog_positive, null)
-                .show();
+        SafeScrollEditText finalInput = input;
+        editor = LightDialog.create(requireContext(), getString(R.string.login_state_edit), container, payload.editable && finalInput != null ? getString(R.string.dialog_positive) : null, v -> save(editor, preview.getPath(), finalInput.getText() == null ? "" : finalInput.getText().toString()), getString(R.string.dialog_negative), null);
         editor.setCancelable(false);
         editor.setCanceledOnTouchOutside(false);
-        editor.getButton(AlertDialog.BUTTON_POSITIVE).setVisibility(payload.editable ? View.VISIBLE : View.GONE);
-        SafeScrollEditText finalInput = input;
-        if (payload.editable && finalInput != null) editor.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> save(editor, preview.getPath(), finalInput.getText() == null ? "" : finalInput.getText().toString()));
+        editor.show();
     }
 
     private SafeScrollEditText editText(LoginStateSync.TextPreview preview) {
@@ -480,7 +474,7 @@ public class LoginStatePathDialog extends BaseAlertDialog {
         return drawable;
     }
 
-    private void save(AlertDialog dialog, String path, String content) {
+    private void save(Dialog dialog, String path, String content) {
         Task.execute(() -> {
             try {
                 LoginStateSync.write(path, content);

@@ -56,7 +56,7 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="14"
-        android:background="@color/transparent"
+        android:background="@drawable/shape_live_embedded_list"
         android:orientation="vertical"
         tools:visibility="visible">
 

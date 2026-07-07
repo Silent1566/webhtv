@@ -65,7 +65,7 @@ EpisodePositionCache.get().clear();
 ```
 
 **缓存文件位置：**
-`/data/data/com.fongmi.android.tv/cache/episode_positions.json`
+`/data/data/com.silent.android.webhtv/cache/episode_positions.json`
 
 ### 2. 修改：`VideoActivity.updateHistory()`
 

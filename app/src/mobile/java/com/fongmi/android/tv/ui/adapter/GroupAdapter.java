@@ -4,10 +4,13 @@ import android.view.LayoutInflater;
 import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
+import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.bean.Group;
 import com.fongmi.android.tv.databinding.AdapterGroupBinding;
+import com.fongmi.android.tv.setting.LiveSetting;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -91,6 +94,7 @@ public class GroupAdapter extends RecyclerView.Adapter<GroupAdapter.ViewHolder> 
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         Group item = mItems.get(position);
         holder.binding.name.setText(item.getName());
+        setListStyle(holder);
         holder.binding.getRoot().setSelected(item.isSelected());
         holder.binding.getRoot().setOnClickListener(view -> listener.onItemClick(item));
     }
@@ -102,6 +106,12 @@ public class GroupAdapter extends RecyclerView.Adapter<GroupAdapter.ViewHolder> 
         } else {
             holder.binding.getRoot().setSelected(mItems.get(position).isSelected());
         }
+    }
+
+    private void setListStyle(ViewHolder holder) {
+        boolean classic = LiveSetting.isListStyleClassic();
+        holder.binding.name.setBackgroundResource(classic ? R.drawable.shape_live_classic : R.drawable.shape_live);
+        holder.binding.name.setTextColor(ContextCompat.getColorStateList(holder.binding.name.getContext(), classic ? R.color.selector_live_text_classic : R.color.selector_live_text));
     }
 
     public class ViewHolder extends RecyclerView.ViewHolder {

@@ -1,5 +1,6 @@
 package io.github.anilbeesetti.nextlib.media3ext.ffdecoder;
 
+import android.content.Context;
 import android.os.Handler;
 
 import androidx.media3.common.C;
@@ -13,14 +14,24 @@ import androidx.media3.exoplayer.RendererCapabilities;
 import androidx.media3.exoplayer.audio.AudioRendererEventListener;
 import androidx.media3.exoplayer.audio.AudioSink;
 import androidx.media3.exoplayer.audio.DecoderAudioRenderer;
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector;
+import androidx.media3.exoplayer.mediacodec.MediaCodecUtil;
 
 public final class CompatFfmpegAudioRenderer extends DecoderAudioRenderer<FfmpegAudioDecoder> {
 
     private static final int NUM_BUFFERS = 16;
     private static final int DEFAULT_INPUT_BUFFER_SIZE = 5760;
+    private final Context context;
+    private final boolean systemDecoderFallbackOnly;
 
     public CompatFfmpegAudioRenderer(Handler eventHandler, AudioRendererEventListener eventListener, AudioSink audioSink) {
+        this(null, eventHandler, eventListener, audioSink, false);
+    }
+
+    public CompatFfmpegAudioRenderer(Context context, Handler eventHandler, AudioRendererEventListener eventListener, AudioSink audioSink, boolean systemDecoderFallbackOnly) {
         super(eventHandler, eventListener, audioSink);
+        this.context = context;
+        this.systemDecoderFallbackOnly = systemDecoderFallbackOnly;
     }
 
     @Override
@@ -34,6 +45,7 @@ public final class CompatFfmpegAudioRenderer extends DecoderAudioRenderer<Ffmpeg
         String sampleMimeType = decodeFormat.sampleMimeType;
         if (sampleMimeType == null) return C.FORMAT_UNSUPPORTED_TYPE;
         if (!FfmpegLibrary.isAvailable() || !MimeTypes.isAudio(sampleMimeType)) return C.FORMAT_UNSUPPORTED_TYPE;
+        if (systemDecoderFallbackOnly && isSystemDecoderSupported(decodeFormat)) return C.FORMAT_UNSUPPORTED_SUBTYPE;
         if (!FfmpegLibrary.supportsFormat(sampleMimeType)) return C.FORMAT_UNSUPPORTED_SUBTYPE;
         if (!sinkSupportsFormat(decodeFormat, C.ENCODING_PCM_16BIT) && !sinkSupportsFormat(decodeFormat, C.ENCODING_PCM_FLOAT)) return C.FORMAT_UNSUPPORTED_SUBTYPE;
         return decodeFormat.cryptoType == C.CRYPTO_TYPE_NONE ? C.FORMAT_HANDLED : C.FORMAT_UNSUPPORTED_DRM;
@@ -68,9 +80,21 @@ public final class CompatFfmpegAudioRenderer extends DecoderAudioRenderer<Ffmpeg
     private static Format normalizeDecodeFormat(Format format) {
         String sampleMimeType = format.sampleMimeType;
         if (sampleMimeType == null) return format;
-        if (sampleMimeType.startsWith(MimeTypes.AUDIO_DTS_HD + ";") || MimeTypes.AUDIO_DTS_X.equals(sampleMimeType)) return format.buildUpon().setSampleMimeType(MimeTypes.AUDIO_DTS_HD).build();
+        if (sampleMimeType.startsWith(MimeTypes.AUDIO_DTS_HD + ";") || MimeTypes.AUDIO_MEDIA3_DTS_HD_MA_CORELESS.equals(sampleMimeType)) return format.buildUpon().setSampleMimeType(MimeTypes.AUDIO_DTS_HD).build();
         if (MimeTypes.AUDIO_AMR.equals(sampleMimeType)) return format.buildUpon().setSampleMimeType(MimeTypes.AUDIO_AMR_NB).build();
         return format;
+    }
+
+    private boolean isSystemDecoderSupported(Format format) {
+        if (context == null || format.sampleMimeType == null) return false;
+        try {
+            for (androidx.media3.exoplayer.mediacodec.MediaCodecInfo info : MediaCodecSelector.DEFAULT.getDecoderInfos(format.sampleMimeType, false, false)) {
+                if (info.isFormatSupported(context, format)) return true;
+            }
+            return false;
+        } catch (MediaCodecUtil.DecoderQueryException e) {
+            return false;
+        }
     }
 
     private boolean sinkSupportsFormat(Format format, int pcmEncoding) {

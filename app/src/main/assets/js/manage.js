@@ -2239,10 +2239,10 @@ function showConfigDialog(type = null, url = '', name = '') {
     const selectedType = editing ? Number(type || 0) : Number(configFilter || 0);
     editingConfig = { type: selectedType, oldUrl: url || '', editing };
     $('#configType').val(String(editingConfig.type));
-    $('#configTypeRow').toggle(editing);
+    $('#configTypeRow').toggle(!editing);
     $('#configName').val(name || '');
     $('#configUrl').val(url || '');
-    $('#configDialogTitle').text(url ? '编辑接口' : '新增接口');
+    $('#configDialogTitle').text(editing ? '编辑接口' : '新增接口');
     openDialog('configDialog');
 }
 function chooseConfigLocalFile() {

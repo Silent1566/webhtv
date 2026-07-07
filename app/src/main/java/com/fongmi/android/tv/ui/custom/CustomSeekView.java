@@ -24,6 +24,10 @@ import java.util.concurrent.TimeUnit;
 
 public class CustomSeekView extends FrameLayout implements Player.Listener, TimeBar.OnScrubListener {
 
+    public interface SeekListener {
+        void onSeekStarted();
+    }
+
     private static final String TAG = "CustomSeekView";
     private static final int MAX_UPDATE_INTERVAL_MS = 1000;
     private static final int MIN_UPDATE_INTERVAL_MS = 200;
@@ -40,6 +44,7 @@ public class CustomSeekView extends FrameLayout implements Player.Listener, Time
     private boolean scrubbing;
     private boolean attached;
     private Player player;
+    private SeekListener seekListener;
 
     public CustomSeekView(Context context) {
         this(context, null);
@@ -68,6 +73,10 @@ public class CustomSeekView extends FrameLayout implements Player.Listener, Time
         this.player = player;
         player.addListener(this);
         if (attached) updateTimeline();
+    }
+
+    public void setSeekListener(SeekListener seekListener) {
+        this.seekListener = seekListener;
     }
 
     private String stringToTime(long time) {
@@ -147,6 +156,7 @@ public class CustomSeekView extends FrameLayout implements Player.Listener, Time
     }
 
     private void seekToTimeBarPosition(long positionMs) {
+        if (seekListener != null) seekListener.onSeekStarted();
         player.seekTo(positionMs);
         updateProgress();
         player.play();

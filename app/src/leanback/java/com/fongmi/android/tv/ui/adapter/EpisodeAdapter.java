@@ -205,7 +205,7 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
     }
 
     public static String getTitle(Episode item) {
-        if (item.getTmdbEpisode() != null) {
+        if (item.getTmdbEpisode() != null && Setting.getTmdbEpisodeShowScrapedName()) {
             String title = EpisodeTitleFormatter.formatTmdbTitle(item.getTmdbEpisode().getNumber(), item.getTmdbEpisode().getTitle());
             if (!title.isEmpty()) return item.getDesc().concat(EpisodeTitleFormatter.withSourceFileSize(item.getName(), title, Setting.isTmdbEpisodeFileSize()));
         }
@@ -304,7 +304,7 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
         binding.cardContainer.setOnKeyListener(keyListener);
 
         // 加载剧照
-        String cardTitle = getCardTitle(item, tmdbEpisode);
+        String cardTitle = getCardTitle(item);
         String stillUrl = tmdbEpisode.getStillUrl();
         String imageUrl = TextUtils.isEmpty(stillUrl) ? fallbackStillUrl : stillUrl;
         String errorImageUrl = TextUtils.isEmpty(stillUrl) ? "" : fallbackStillUrl;
@@ -319,13 +319,15 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
 
         // 网格模式展示手机版原生增强同款的日期 / 时长徽标，列表模式保持干净的横向剧照条
         String meta = getMeta(tmdbEpisode);
-        if (gridMode && !TextUtils.isEmpty(meta)) {
+        boolean showMeta = gridMode && !TextUtils.isEmpty(meta);
+        if (showMeta) {
             binding.dateBadge.setText(meta);
             binding.dateBadge.setVisibility(View.VISIBLE);
         } else {
             binding.dateBadge.setVisibility(View.GONE);
         }
         binding.runtimeBadge.setVisibility(View.GONE);
+        bindFileSize(binding, getCardFileSize(item, cardTitle), showMeta);
 
         // 播放器/弹层网格上下移动焦点时，长简介会放大文本重绘和视觉闪烁；完整简介保留在长按详情里。
         binding.overview.setText("");
@@ -361,6 +363,16 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
                 ResUtil.dp2px(12),
                 ResUtil.dp2px(gridMode ? 14 : 12));
         binding.cardTitle.setTextSize(gridMode ? 18 : 18);
+    }
+
+    private void bindFileSize(AdapterEpisodeCardBinding binding, String fileSize, boolean belowMeta) {
+        binding.fileSize.setText(fileSize);
+        binding.fileSize.setVisibility(TextUtils.isEmpty(fileSize) ? View.GONE : View.VISIBLE);
+        ViewGroup.LayoutParams params = binding.fileSize.getLayoutParams();
+        if (params instanceof ViewGroup.MarginLayoutParams marginParams) {
+            marginParams.topMargin = ResUtil.dp2px(belowMeta ? 46 : 10);
+            binding.fileSize.setLayoutParams(marginParams);
+        }
     }
 
     private void loadStill(AdapterEpisodeCardBinding binding, String url, String errorUrl) {
@@ -428,10 +440,25 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
         return result.equals(url) ? url.replaceFirst("/(w\\d+|h\\d+|original)/", "/" + size + "/") : result;
     }
 
-    private String getCardTitle(Episode item, TmdbEpisode tmdbEpisode) {
+    public static String getCardTitle(Episode item) {
+        if (item == null) return "";
+        TmdbEpisode tmdbEpisode = item.getTmdbEpisode();
+        if (tmdbEpisode == null) return getTitle(item);
+        if (!Setting.getTmdbEpisodeShowScrapedName()) return item.getDisplayName();
         String title = EpisodeTitleFormatter.formatTmdbTitle(tmdbEpisode.getNumber(), tmdbEpisode.getTitle());
         if (title.isEmpty()) title = tmdbEpisode.getDisplayTitle();
-        return EpisodeTitleFormatter.withSourceFileSize(item.getName(), title, Setting.isTmdbEpisodeFileSize());
+        return title;
+    }
+
+    public static String getCardFileSize(Episode item, String title) {
+        return getCardFileSize(item, title, Setting.isTmdbEpisodeFileSize());
+    }
+
+    static String getCardFileSize(Episode item, String title, boolean includeFileSize) {
+        if (item == null || !includeFileSize) return "";
+        String fileSize = EpisodeTitleFormatter.extractFileSize(item.getName());
+        if (TextUtils.isEmpty(fileSize) || EpisodeTitleFormatter.containsFileSize(title)) return "";
+        return fileSize;
     }
 
     private String getMeta(TmdbEpisode tmdbEpisode) {
@@ -442,13 +469,13 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
     }
 
     private boolean isTopEdge(int position) {
-        if (column <= 1) return position == 0;
+        if (column <= 1) return !verticalGridMode || position == 0;
         if (verticalGridMode) return position < column;
         return position % column == 0;
     }
 
     private boolean isBottomEdge(int position) {
-        if (column <= 1) return position == getItemCount() - 1;
+        if (column <= 1) return !verticalGridMode || position == getItemCount() - 1;
         if (verticalGridMode) {
             int lastRowCount = (getItemCount() - 1) % column + 1;
             return position >= getItemCount() - lastRowCount;

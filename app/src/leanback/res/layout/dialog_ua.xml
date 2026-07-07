@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="wrap_content"
-    android:layout_height="wrap_content"
-    android:padding="24dp">
+    android:layout_height="wrap_content">
 
     <androidx.appcompat.widget.AppCompatImageView
         android:id="@+id/code"
@@ -23,7 +23,7 @@
         android:maxLines="3"
         android:paddingStart="4dp"
         android:paddingEnd="4dp"
-        android:textColor="@color/white"
+        android:textColor="#5F6368"
         android:textSize="18sp"
         tools:text="@string/push_info" />
 
@@ -40,6 +40,8 @@
         android:inputType="text"
         android:nextFocusDown="@id/positive"
         android:singleLine="true"
+        android:textColor="#202124"
+        android:textColorHint="#8A8F98"
         android:textSize="18sp" />
 
     <androidx.appcompat.widget.LinearLayoutCompat
@@ -50,34 +52,35 @@
         android:layout_alignBottom="@+id/code"
         android:orientation="horizontal">
 
-        <com.google.android.material.textview.MaterialTextView
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/positive"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginEnd="16dp"
             android:layout_weight="1"
-            android:background="@drawable/selector_button"
             android:focusable="true"
             android:focusableInTouchMode="true"
             android:gravity="center"
             android:singleLine="true"
             android:text="@string/dialog_positive"
-            android:textColor="@color/white"
-            android:textSize="14sp" />
+            android:textColor="@color/dialog_primary_button_text"
+            android:textSize="14sp"
+            app:backgroundTint="@color/dialog_primary_button_bg" />
 
-        <com.google.android.material.textview.MaterialTextView
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/negative"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:background="@drawable/selector_button"
             android:focusable="true"
             android:focusableInTouchMode="true"
             android:gravity="center"
             android:singleLine="true"
             android:text="@string/dialog_negative"
-            android:textColor="@color/white"
-            android:textSize="14sp" />
+            android:textColor="@color/dialog_outlined_button_text"
+            android:textSize="14sp"
+            app:backgroundTint="@color/dialog_outlined_button_bg"
+            app:strokeColor="@color/dialog_outlined_button_stroke" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 </RelativeLayout>

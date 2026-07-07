@@ -5,11 +5,13 @@
     android:layout_height="190dp"
     android:layout_marginEnd="12dp"
     android:clickable="true"
+    android:defaultFocusHighlightEnabled="false"
     android:focusable="true"
-    android:foreground="?attr/selectableItemBackground"
+    android:stateListAnimator="@null"
     app:cardBackgroundColor="#CC16202A"
     app:cardCornerRadius="8dp"
     app:cardElevation="0dp"
+    app:rippleColor="@android:color/transparent"
     app:strokeColor="#33FFFFFF"
     app:strokeWidth="1dp">
 

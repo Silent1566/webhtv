@@ -13,6 +13,7 @@ import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.RippleDrawable;
+import android.graphics.drawable.StateListDrawable;
 import android.text.InputType;
 import android.text.TextUtils;
 import android.util.DisplayMetrics;
@@ -39,9 +40,14 @@ import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.api.DanmakuApi;
 import com.fongmi.android.tv.bean.Danmaku;
+import com.fongmi.android.tv.bean.DanmakuMatchCache;
 import com.fongmi.android.tv.bean.DanmakuTitle;
 import com.fongmi.android.tv.player.PlayerManager;
+import com.fongmi.android.tv.setting.Setting;
+import com.fongmi.android.tv.title.MediaTitleLearningExample;
+import com.fongmi.android.tv.title.MediaTitleLearningStore;
 import com.fongmi.android.tv.ui.custom.CustomRecyclerView;
+import com.fongmi.android.tv.utils.KeyUtil;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.Util;
@@ -78,6 +84,10 @@ public final class DanmakuSearchInputDialog extends DialogFragment implements Ca
     private boolean selected;
     private boolean restoreParent;
     private String selectedSource;
+    private String siteKey;
+    private String vodId;
+    private String rawTitle;
+    private String episodeName;
 
     public static DanmakuSearchInputDialog create() {
         return new DanmakuSearchInputDialog();
@@ -98,6 +108,14 @@ public final class DanmakuSearchInputDialog extends DialogFragment implements Ca
         return this;
     }
 
+    public DanmakuSearchInputDialog identity(String siteKey, String vodId, String rawTitle, String episodeName) {
+        this.siteKey = clean(siteKey);
+        this.vodId = clean(vodId);
+        this.rawTitle = clean(rawTitle);
+        this.episodeName = clean(episodeName);
+        return this;
+    }
+
     public void show(FragmentActivity activity) {
         for (Fragment f : activity.getSupportFragmentManager().getFragments()) if (f instanceof DanmakuSearchInputDialog) return;
         show(activity.getSupportFragmentManager(), null);
@@ -112,13 +130,9 @@ public final class DanmakuSearchInputDialog extends DialogFragment implements Ca
         dialog.setContentView(createContentView());
         dialog.setCanceledOnTouchOutside(true);
         dialog.setOnShowListener(d -> {
-            input.setOnEditorActionListener((textView, actionId, event) -> {
-                if (actionId != EditorInfo.IME_ACTION_SEARCH) return false;
-                search();
-                return true;
-            });
-            search.setOnClickListener(v -> search());
-            Util.showKeyboard(input);
+            bindEvents();
+            if (Util.isLeanback()) search.requestFocus();
+            else Util.showKeyboard(input);
         });
         return dialog;
     }
@@ -144,7 +158,7 @@ public final class DanmakuSearchInputDialog extends DialogFragment implements Ca
         super.onDismiss(dialog);
         FragmentActivity activity = getActivity();
         if (selected || !restoreParent || activity == null || activity.isFinishing()) return;
-        DanmakuDialog.create().player(player).show(activity);
+        DanmakuDialog.create().player(player).identity(siteKey, vodId, rawTitle, episodeName).show(activity);
     }
 
     @Override
@@ -157,8 +171,17 @@ public final class DanmakuSearchInputDialog extends DialogFragment implements Ca
     private void onItemClick(Danmaku item) {
         selected = true;
         if (SpiderDebug.isEnabled()) SpiderDebug.log("danmaku", "search dialog item click selected=%s name=%s url=%s", item.isSelected(), item.getName(), item.getUrl());
+        if (!item.isSelected()) rememberManualDanmaku(item);
         player.setDanmaku(item.isSelected() ? Danmaku.empty() : item);
         dismiss();
+    }
+
+    private void rememberManualDanmaku(Danmaku item) {
+        if (TextUtils.isEmpty(siteKey) || TextUtils.isEmpty(vodId) || item == null || item.isEmpty()) return;
+        DanmakuMatchCache cache = Setting.getDanmakuMatchCache();
+        MediaTitleLearningExample example = cache.put(siteKey, vodId, first(episodeName, getEpisode()), getKeyword(), first(rawTitle, getTitle()), item);
+        Setting.putDanmakuMatchCache(cache);
+        if (example != null) MediaTitleLearningStore.load().put(example);
     }
 
     private TextInputEditText createInput() {
@@ -196,6 +219,8 @@ public final class DanmakuSearchInputDialog extends DialogFragment implements Ca
         sourceScroll.setHorizontalScrollBarEnabled(false);
         sourceScroll.setOverScrollMode(HorizontalScrollView.OVER_SCROLL_NEVER);
         sourceScroll.setVisibility(GONE);
+        sourceScroll.setClipChildren(false);
+        sourceScroll.setClipToPadding(false);
         sourceScroll.addView(sourceTabs, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.MATCH_PARENT));
         LinearLayout.LayoutParams tabParams = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(40));
         tabParams.setMargins(0, dp(10), 0, 0);
@@ -241,6 +266,7 @@ public final class DanmakuSearchInputDialog extends DialogFragment implements Ca
     }
 
     private LinearLayout createSearchRow() {
+        input.setId(View.generateViewId());
         LinearLayout inputBox = new LinearLayout(requireContext());
         inputBox.setOrientation(LinearLayout.HORIZONTAL);
         inputBox.setGravity(Gravity.CENTER_VERTICAL);
@@ -249,6 +275,9 @@ public final class DanmakuSearchInputDialog extends DialogFragment implements Ca
         inputBox.addView(input, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.MATCH_PARENT));
 
         search = actionButton(getString(R.string.play_search), true);
+        search.setId(View.generateViewId());
+        input.setNextFocusRightId(search.getId());
+        search.setNextFocusLeftId(input.getId());
         search.setIconResource(R.drawable.ic_action_search);
         search.setIconGravity(MaterialButton.ICON_GRAVITY_TEXT_START);
         search.setIconPadding(dp(4));
@@ -279,6 +308,11 @@ public final class DanmakuSearchInputDialog extends DialogFragment implements Ca
         recycler.setMaxHeight(dp(304));
         recycler.setAdapter(adapter);
         recycler.setVisibility(GONE);
+        recycler.setId(View.generateViewId());
+        recycler.setClipChildren(false);
+        recycler.setClipToPadding(false);
+        input.setNextFocusDownId(recycler.getId());
+        search.setNextFocusDownId(recycler.getId());
         frame.addView(recycler, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT));
 
         empty = new TextView(requireContext());
@@ -297,6 +331,17 @@ public final class DanmakuSearchInputDialog extends DialogFragment implements Ca
         progress.setVisibility(GONE);
         frame.addView(progress, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER));
         return frame;
+    }
+
+    private void bindEvents() {
+        input.setOnEditorActionListener((textView, actionId, event) -> {
+            if (actionId != EditorInfo.IME_ACTION_SEARCH) return false;
+            search();
+            return true;
+        });
+        input.setOnKeyListener((view, keyCode, event) -> KeyUtil.isActionDown(event) && KeyUtil.isDownKey(event) && focusResult());
+        search.setOnKeyListener((view, keyCode, event) -> KeyUtil.isActionDown(event) && KeyUtil.isDownKey(event) && focusResult());
+        search.setOnClickListener(v -> search());
     }
 
     private void search() {
@@ -321,6 +366,23 @@ public final class DanmakuSearchInputDialog extends DialogFragment implements Ca
     private String getEpisode() {
         CharSequence episode = player == null || player.getMetadata() == null ? "" : player.getMetadata().artist;
         return episode == null ? "" : episode.toString().trim();
+    }
+
+    private String getTitle() {
+        CharSequence title = player == null || player.getMetadata() == null ? "" : player.getMetadata().title;
+        return title == null ? "" : title.toString().trim();
+    }
+
+    private String getKeyword() {
+        return input == null || input.getText() == null ? "" : input.getText().toString().trim();
+    }
+
+    private String first(String first, String second) {
+        return !TextUtils.isEmpty(first) ? first : clean(second);
+    }
+
+    private String clean(String value) {
+        return value == null ? "" : value.trim();
     }
 
     private void showProgress() {
@@ -356,6 +418,7 @@ public final class DanmakuSearchInputDialog extends DialogFragment implements Ca
     private void onSuccess(List<Danmaku> items) {
         if (SpiderDebug.isEnabled()) SpiderDebug.log("danmaku", "search dialog success count=%d", items.size());
         hideProgress();
+        syncCurrentState(items);
         groups.clear();
         for (Danmaku item : items) {
             String source = item.getSourceName();
@@ -366,9 +429,27 @@ public final class DanmakuSearchInputDialog extends DialogFragment implements Ca
             showError(getString(R.string.error_empty));
             return;
         }
-        selectedSource = groups.keySet().iterator().next();
+        selectedSource = chooseInitialSource();
         renderSourceTabs();
         showSourceItems();
+    }
+
+    private void syncCurrentState(List<Danmaku> items) {
+        String selectedUrl = getSelectedDanmakuUrl();
+        for (Danmaku item : items) item.setSelected(!TextUtils.isEmpty(selectedUrl) && selectedUrl.equals(item.getUrl()));
+    }
+
+    private String getSelectedDanmakuUrl() {
+        if (player == null || player.getDanmakus() == null) return "";
+        for (Danmaku item : player.getDanmakus()) if (item != null && item.isSelected()) return item.getUrl();
+        return "";
+    }
+
+    private String chooseInitialSource() {
+        for (Map.Entry<String, List<Danmaku>> entry : groups.entrySet()) {
+            for (Danmaku item : entry.getValue()) if (item.isSelected()) return entry.getKey();
+        }
+        return groups.keySet().iterator().next();
     }
 
     private void renderSourceTabs() {
@@ -380,6 +461,7 @@ public final class DanmakuSearchInputDialog extends DialogFragment implements Ca
             MaterialButton tab = actionButton(source + " " + (items == null ? 0 : items.size()), active);
             tab.setSingleLine(true);
             tab.setEllipsize(TextUtils.TruncateAt.END);
+            tab.setSelected(active);
             tab.setOnClickListener(v -> {
                 selectedSource = source;
                 renderSourceTabs();
@@ -404,7 +486,14 @@ public final class DanmakuSearchInputDialog extends DialogFragment implements Ca
         empty.setVisibility(GONE);
         recycler.setVisibility(VISIBLE);
         adapter.addAll(items, input.getText() == null ? "" : input.getText().toString().trim());
+        focusResult();
+    }
+
+    private boolean focusResult() {
+        if (recycler == null || recycler.getVisibility() != VISIBLE || adapter.getItemCount() == 0) return false;
+        recycler.scrollToPosition(adapter.getSelected());
         recycler.requestFocus();
+        return true;
     }
 
     private MaterialButton actionButton(String text, boolean primary) {
@@ -419,33 +508,45 @@ public final class DanmakuSearchInputDialog extends DialogFragment implements Ca
         button.setInsetBottom(0);
         button.setPadding(dp(10), 0, dp(10), 0);
         button.setCornerRadius(dp(8));
+        button.setFocusable(true);
+        button.setFocusableInTouchMode(true);
         if (primary) {
-            button.setBackgroundTintList(buttonBackground("#DCEAFF", "#EDF4FF", "#F3F6FA"));
-            button.setTextColor(buttonText("#174EA6", "#8AA8D8"));
+            button.setBackgroundTintList(buttonBackground("#C7DBFF", "#DCEAFF", "#EDF4FF", "#F3F6FA"));
+            button.setTextColor(buttonText("#0B57D0", "#174EA6", "#8AA8D8"));
+            button.setStrokeColor(buttonStroke("#0B57D0", "#AECBFA", "#E8EAED"));
+            button.setStrokeWidth(dp(2));
         } else {
-            button.setBackgroundTintList(buttonBackground("#F1F4F8", "#FFFFFF", "#F3F6FA"));
-            button.setTextColor(buttonText("#202124", "#9AA0A6"));
-            button.setStrokeColor(buttonText("#DADCE0", "#E8EAED"));
+            button.setBackgroundTintList(buttonBackground("#E4EEFF", "#F1F4F8", "#FFFFFF", "#F3F6FA"));
+            button.setTextColor(buttonText("#174EA6", "#202124", "#9AA0A6"));
+            button.setStrokeColor(buttonStroke("#0B57D0", "#DADCE0", "#E8EAED"));
             button.setStrokeWidth(dp(1));
         }
         return button;
     }
 
     private void styleSearchButton(MaterialButton button) {
-        button.setBackgroundTintList(buttonBackground("#0B57D0", "#174EA6", "#E8EAED"));
-        button.setTextColor(buttonText("#FFFFFF", "#9AA0A6"));
+        button.setBackgroundTintList(buttonBackground("#0B57D0", "#174EA6", "#174EA6", "#E8EAED"));
+        button.setTextColor(buttonText("#FFFFFF", "#FFFFFF", "#9AA0A6"));
+        button.setStrokeColor(buttonStroke("#FFFFFF", "#174EA6", "#E8EAED"));
+        button.setStrokeWidth(dp(2));
     }
 
-    private ColorStateList buttonBackground(String pressed, String normal, String disabled) {
+    private ColorStateList buttonBackground(String focused, String selected, String normal, String disabled) {
         return new ColorStateList(
-                new int[][]{new int[]{android.R.attr.state_pressed}, new int[]{android.R.attr.state_focused}, new int[]{-android.R.attr.state_enabled}, new int[]{}},
-                new int[]{Color.parseColor(pressed), Color.parseColor(pressed), Color.parseColor(disabled), Color.parseColor(normal)});
+                new int[][]{new int[]{android.R.attr.state_pressed}, new int[]{android.R.attr.state_focused}, new int[]{android.R.attr.state_selected}, new int[]{-android.R.attr.state_enabled}, new int[]{}},
+                new int[]{Color.parseColor(focused), Color.parseColor(focused), Color.parseColor(selected), Color.parseColor(disabled), Color.parseColor(normal)});
     }
 
-    private ColorStateList buttonText(String normal, String disabled) {
+    private ColorStateList buttonText(String focused, String normal, String disabled) {
         return new ColorStateList(
-                new int[][]{new int[]{-android.R.attr.state_enabled}, new int[]{}},
-                new int[]{Color.parseColor(disabled), Color.parseColor(normal)});
+                new int[][]{new int[]{android.R.attr.state_focused}, new int[]{android.R.attr.state_selected}, new int[]{-android.R.attr.state_enabled}, new int[]{}},
+                new int[]{Color.parseColor(focused), Color.parseColor(focused), Color.parseColor(disabled), Color.parseColor(normal)});
+    }
+
+    private ColorStateList buttonStroke(String focused, String normal, String disabled) {
+        return new ColorStateList(
+                new int[][]{new int[]{android.R.attr.state_focused}, new int[]{-android.R.attr.state_enabled}, new int[]{}},
+                new int[]{Color.parseColor(focused), Color.parseColor(disabled), Color.parseColor(normal)});
     }
 
     private GradientDrawable round(int color, int radius, int stroke) {
@@ -547,6 +648,14 @@ public final class DanmakuSearchInputDialog extends DialogFragment implements Ca
             return rows.get(position) instanceof Header ? TYPE_HEADER : TYPE_ITEM;
         }
 
+        private int getSelected() {
+            for (int i = 0; i < rows.size(); i++) {
+                Object row = rows.get(i);
+                if (row instanceof Danmaku && ((Danmaku) row).isSelected()) return i;
+            }
+            return 0;
+        }
+
         @NonNull
         @Override
         public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
@@ -641,12 +750,14 @@ public final class DanmakuSearchInputDialog extends DialogFragment implements Ca
                 this.button.setTextSize(14);
                 this.button.setClickable(true);
                 this.button.setFocusable(true);
+                this.button.setFocusableInTouchMode(true);
                 this.button.setOnClickListener(this);
             }
 
             private void bind(Danmaku item) {
-                button.setText(item.getName());
-                button.setTextColor(item.isSelected() ? Color.parseColor("#174EA6") : Color.parseColor("#202124"));
+                button.setText(item.isSelected() ? "\u2713 " + item.getName() : item.getName());
+                button.setSelected(item.isSelected());
+                button.setTextColor(rowTextColor(item.isSelected()));
                 button.setTypeface(Typeface.DEFAULT, item.isSelected() ? Typeface.BOLD : Typeface.NORMAL);
                 button.setBackground(rowBackground(button.getContext(), item.isSelected()));
             }
@@ -673,13 +784,25 @@ public final class DanmakuSearchInputDialog extends DialogFragment implements Ca
         }
 
         private static Drawable rowBackground(Context context, boolean selected) {
-            int color = selected ? Color.parseColor("#EAF2FF") : Color.parseColor("#F8FAFD");
-            int stroke = selected ? Color.parseColor("#AECBFA") : Color.parseColor("#E3E7EE");
-            GradientDrawable content = new GradientDrawable();
-            content.setColor(color);
-            content.setCornerRadius(dp(context, 8));
-            content.setStroke(dp(context, 1), stroke);
-            return new RippleDrawable(ColorStateList.valueOf(Color.parseColor("#1A0B57D0")), content, null);
+            StateListDrawable drawable = new StateListDrawable();
+            drawable.addState(new int[]{android.R.attr.state_focused}, round(context, Color.parseColor("#DCEAFF"), Color.parseColor("#0B57D0"), 2));
+            if (selected) drawable.addState(new int[]{android.R.attr.state_selected}, round(context, Color.parseColor("#EAF2FF"), Color.parseColor("#0B57D0"), 2));
+            drawable.addState(new int[]{}, round(context, selected ? Color.parseColor("#EAF2FF") : Color.parseColor("#F8FAFD"), selected ? Color.parseColor("#AECBFA") : Color.parseColor("#E3E7EE"), 1));
+            return drawable;
+        }
+
+        private static ColorStateList rowTextColor(boolean selected) {
+            return new ColorStateList(
+                    new int[][]{new int[]{android.R.attr.state_focused}, new int[]{android.R.attr.state_selected}, new int[]{}},
+                    new int[]{Color.parseColor("#0B57D0"), Color.parseColor("#174EA6"), selected ? Color.parseColor("#174EA6") : Color.parseColor("#202124")});
+        }
+
+        private static GradientDrawable round(Context context, int color, int stroke, int strokeWidth) {
+            GradientDrawable drawable = new GradientDrawable();
+            drawable.setColor(color);
+            drawable.setCornerRadius(dp(context, 8));
+            drawable.setStroke(dp(context, strokeWidth), stroke);
+            return drawable;
         }
 
         private static Drawable headerBackground(Context context) {

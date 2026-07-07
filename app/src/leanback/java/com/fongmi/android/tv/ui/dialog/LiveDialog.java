@@ -114,7 +114,7 @@ public class LiveDialog extends BaseAlertDialog implements LiveAdapter.OnClickLi
         params.gravity = Gravity.END | Gravity.TOP;
         params.width = Math.max(ResUtil.dp2px(360), Math.min(ResUtil.dp2px(520), Math.round(ResUtil.getScreenWidth() * 0.32f)));
         params.height = WindowManager.LayoutParams.MATCH_PARENT;
-        getDialog().getWindow().setBackgroundDrawable(new ColorDrawable(0xFF28282A));
+        getDialog().getWindow().setBackgroundDrawable(new ColorDrawable(0x00000000));
         getDialog().getWindow().setAttributes(params);
         getDialog().getWindow().setLayout(params.width, WindowManager.LayoutParams.MATCH_PARENT);
     }

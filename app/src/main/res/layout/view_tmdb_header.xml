@@ -298,7 +298,7 @@
                 style="?attr/materialButtonOutlinedStyle"
                 android:layout_width="wrap_content"
                 android:layout_height="40dp"
-                android:minWidth="72dp"
+                android:minWidth="60dp"
                 android:text="@string/play_change"
                 android:textAllCaps="false"
                 android:textColor="@color/tmdb_action_button_text"
@@ -314,7 +314,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="40dp"
                 android:layout_marginStart="10dp"
-                android:minWidth="72dp"
+                android:minWidth="60dp"
                 android:text="@string/keep"
                 android:textAllCaps="false"
                 android:textColor="@color/tmdb_action_button_text"
@@ -330,7 +330,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="40dp"
                 android:layout_marginStart="10dp"
-                android:minWidth="72dp"
+                android:minWidth="60dp"
                 android:text="@string/detail_tmdb_rematch"
                 android:textAllCaps="false"
                 android:textColor="@color/tmdb_action_button_text"
@@ -339,6 +339,24 @@
                 app:cornerRadius="20dp"
                 app:strokeColor="@color/tmdb_action_button_stroke"
                 app:strokeWidth="1dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/tmdbThemeToggle"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:layout_marginStart="10dp"
+                android:minWidth="60dp"
+                android:text="@string/detail_theme_light"
+                android:visibility="gone"
+                android:textAllCaps="false"
+                android:textColor="@color/tmdb_action_button_text"
+                android:textSize="13sp"
+                app:backgroundTint="@color/tmdb_action_button_bg"
+                app:cornerRadius="20dp"
+                app:strokeColor="@color/tmdb_action_button_stroke"
+                app:strokeWidth="1dp"
+                tools:text="浅色" />
 
         </androidx.appcompat.widget.LinearLayoutCompat>
 

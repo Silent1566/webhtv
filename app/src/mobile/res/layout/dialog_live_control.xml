@@ -3,7 +3,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/shape_control_sheet_panel"
+    android:background="@drawable/shape_dialog_control_glass_panel"
     tools:background="#1F1F1F">
 
     <com.fongmi.android.tv.ui.custom.ContextWallImageView
@@ -16,7 +16,7 @@
     <View
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="@drawable/shape_control_sheet_scrim" />
+        android:background="@drawable/shape_dialog_control_glass_scrim" />
 
     <androidx.core.widget.NestedScrollView
         android:id="@+id/controlScroll"
@@ -107,18 +107,26 @@
                     android:id="@+id/change"
                     style="@style/ControlSheetButton"
                     android:text="@string/play_change" />
+            </androidx.appcompat.widget.LinearLayoutCompat>
 
-                <Space
-                    android:layout_width="0dp"
-                    android:layout_height="34dp"
-                    android:layout_marginEnd="7dp"
-                    android:layout_weight="1" />
+            <com.google.android.material.textview.MaterialTextView
+                style="@style/ControlSheetTitle"
+                android:text="@string/live_control_display_style" />
 
-                <Space
-                    android:layout_width="0dp"
-                    android:layout_height="34dp"
-                    android:layout_marginEnd="7dp"
-                    android:layout_weight="1" />
+            <androidx.appcompat.widget.LinearLayoutCompat
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/listTransparent"
+                    style="@style/ControlSheetButton"
+                    android:text="@string/live_control_list_transparent" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/listReadable"
+                    style="@style/ControlSheetButton"
+                    android:text="@string/live_control_list_readable" />
             </androidx.appcompat.widget.LinearLayoutCompat>
 
             <com.google.android.material.textview.MaterialTextView

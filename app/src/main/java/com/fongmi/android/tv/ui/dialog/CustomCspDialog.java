@@ -1,6 +1,7 @@
 package com.fongmi.android.tv.ui.dialog;
 
 import android.app.Activity;
+import android.app.Dialog;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.res.ColorStateList;
@@ -30,7 +31,6 @@ import android.widget.LinearLayout;
 import androidx.annotation.NonNull;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
-import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.widget.AppCompatImageButton;
 import androidx.appcompat.widget.LinearLayoutCompat;
 import androidx.core.content.ContextCompat;
@@ -468,30 +468,26 @@ public class CustomCspDialog extends BaseAlertDialog {
         TextInputEditText input = createInput(true);
         TextInputLayout valueLayout = createOtherValueLayout(input);
         MaterialButton fieldButton = createOtherFieldButton(selectedField[0]);
-        fieldButton.setOnClickListener(view -> new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog)
-                .setTitle(R.string.setting_custom_csp_other_fields)
-                .setItems(fields.toArray(new String[0]), (dialog, which) -> {
-                    if (TextUtils.equals(selectedField[0], fields.get(which))) return;
-                    selectedField[0] = fields.get(which);
-                    selectedValue[0] = CustomCspSetting.defaultOtherValue(selectedField[0]);
-                    fieldButton.setText(selectedField[0]);
-                    updateOtherInput(input, valueLayout, selectedField[0], selectedValue[0]);
-                })
-                .show());
+        fieldButton.setOnClickListener(view -> ChoiceDialog.showSingle(this, R.string.setting_custom_csp_other_fields, fields.toArray(new String[0]), fields.indexOf(selectedField[0]), which -> {
+            if (TextUtils.equals(selectedField[0], fields.get(which))) return;
+            selectedField[0] = fields.get(which);
+            selectedValue[0] = CustomCspSetting.defaultOtherValue(selectedField[0]);
+            fieldButton.setText(selectedField[0]);
+            updateOtherInput(input, valueLayout, selectedField[0], selectedValue[0]);
+        }));
         updateOtherInput(input, valueLayout, selectedField[0], selectedValue[0]);
-        showManualCloseDialog(new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog)
-                .setTitle(R.string.setting_custom_csp_other)
-                .setView(createOtherEditPanel(fieldButton, valueLayout))
-                .setPositiveButton(R.string.dialog_positive, (dialog, which) -> {
-                    try {
-                        editing.setOther(selectedField[0], parseOtherInput(selectedField[0], input.getText().toString()));
-                        if (position >= 0) adapter.replace(position, editing);
-                        else adapter.add(editing);
-                    } catch (Exception e) {
-                        Notify.show(R.string.setting_custom_csp_json_invalid);
-                    }
-                })
-                .setNegativeButton(R.string.dialog_negative, null));
+        final Dialog[] holder = new Dialog[1];
+        holder[0] = LightDialog.create(requireContext(), getString(R.string.setting_custom_csp_other), createOtherEditPanel(fieldButton, valueLayout), getString(R.string.dialog_positive), view -> {
+            try {
+                editing.setOther(selectedField[0], parseOtherInput(selectedField[0], input.getText().toString()));
+                if (position >= 0) adapter.replace(position, editing);
+                else adapter.add(editing);
+                holder[0].dismiss();
+            } catch (Exception e) {
+                Notify.show(R.string.setting_custom_csp_json_invalid);
+            }
+        }, getString(R.string.dialog_negative), null);
+        showManualCloseDialog(holder[0]);
     }
 
     private boolean saveEdit() {
@@ -830,31 +826,30 @@ public class CustomCspDialog extends BaseAlertDialog {
         input.setMaxLines(14);
         input.setText(Path.read(CustomCspSetting.file(item.getId(), "index.html")));
         setupScrollableText(input);
-        showManualCloseDialog(new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog)
-                .setTitle(R.string.setting_custom_csp_code)
-                .setView(createInputPanel(R.string.setting_custom_csp_code, input))
-                .setPositiveButton(R.string.dialog_positive, (dialog, which) -> saveCode(item, input.getText().toString()))
-                .setNegativeButton(R.string.dialog_negative, null));
+        final Dialog[] holder = new Dialog[1];
+        holder[0] = LightDialog.create(requireContext(), getString(R.string.setting_custom_csp_code), createInputPanel(R.string.setting_custom_csp_code, input), getString(R.string.dialog_positive), view -> {
+            saveCode(item, input.getText().toString());
+            holder[0].dismiss();
+        }, getString(R.string.dialog_negative), null);
+        showManualCloseDialog(holder[0]);
     }
 
     private void editLink(CustomCspSetting.Item item) {
         syncAllVisibleRows();
         TextInputEditText input = createInput(false);
         input.setText(item.getHomePage());
-        showManualCloseDialog(new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog)
-                .setTitle(R.string.setting_custom_csp_link)
-                .setView(createInputPanel(R.string.setting_custom_csp_link, input))
-                .setPositiveButton(R.string.dialog_positive, (dialog, which) -> {
-                    item.setHomePage(input.getText().toString().trim());
-                    markJsonDirty();
-                    if (editMode && editor != null && item == editingItem) editor.updateHomePage();
-                    else adapter.notifyDataSetChanged();
-                })
-                .setNegativeButton(R.string.dialog_negative, null));
+        final Dialog[] holder = new Dialog[1];
+        holder[0] = LightDialog.create(requireContext(), getString(R.string.setting_custom_csp_link), createInputPanel(R.string.setting_custom_csp_link, input), getString(R.string.dialog_positive), view -> {
+            item.setHomePage(input.getText().toString().trim());
+            markJsonDirty();
+            if (editMode && editor != null && item == editingItem) editor.updateHomePage();
+            else adapter.notifyDataSetChanged();
+            holder[0].dismiss();
+        }, getString(R.string.dialog_negative), null);
+        showManualCloseDialog(holder[0]);
     }
 
-    private void showManualCloseDialog(MaterialAlertDialogBuilder builder) {
-        AlertDialog dialog = builder.create();
+    private void showManualCloseDialog(Dialog dialog) {
         dialog.setCancelable(false);
         dialog.setCanceledOnTouchOutside(false);
         dialog.show();
@@ -871,16 +866,13 @@ public class CustomCspDialog extends BaseAlertDialog {
                 getString(R.string.setting_custom_csp_sort_bottom),
                 getString(R.string.setting_custom_csp_sort_move_to)
         };
-        new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog)
-                .setTitle(R.string.setting_custom_csp_sort_more)
-                .setItems(actions, (dialog, which) -> {
-                    if (which == 0) moveSortItem(index, 0);
-                    else if (which == 1) moveSortItem(index, index - 5);
-                    else if (which == 2) moveSortItem(index, index + 5);
-                    else if (which == 3) moveSortItem(index, adapter.getItemCount() - 1);
-                    else showMoveToPosition(index);
-                })
-                .show();
+        ChoiceDialog.showSingle(this, R.string.setting_custom_csp_sort_more, actions, -1, which -> {
+            if (which == 0) moveSortItem(index, 0);
+            else if (which == 1) moveSortItem(index, index - 5);
+            else if (which == 2) moveSortItem(index, index + 5);
+            else if (which == 3) moveSortItem(index, adapter.getItemCount() - 1);
+            else showMoveToPosition(index);
+        });
     }
 
     private void showMoveToPosition(int index) {
@@ -889,12 +881,12 @@ public class CustomCspDialog extends BaseAlertDialog {
         input.setInputType(InputType.TYPE_CLASS_NUMBER);
         input.setText(String.valueOf(index + 1));
         input.selectAll();
-        new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog)
-                .setTitle(R.string.setting_custom_csp_sort_move_to_title)
-                .setView(createInputPanel(getString(R.string.setting_custom_csp_sort_move_to_hint, adapter.getItemCount()), input))
-                .setPositiveButton(R.string.dialog_positive, (dialog, which) -> moveSortItem(index, parseInt(input.getText().toString(), index + 1) - 1))
-                .setNegativeButton(R.string.dialog_negative, null)
-                .show();
+        final Dialog[] holder = new Dialog[1];
+        holder[0] = LightDialog.create(requireContext(), getString(R.string.setting_custom_csp_sort_move_to_title), createInputPanel(getString(R.string.setting_custom_csp_sort_move_to_hint, adapter.getItemCount()), input), getString(R.string.dialog_positive), view -> {
+            moveSortItem(index, parseInt(input.getText().toString(), index + 1) - 1);
+            holder[0].dismiss();
+        }, getString(R.string.dialog_negative), null);
+        holder[0].show();
     }
 
     private void moveSortItem(int fromIndex, int toIndex) {
@@ -1803,16 +1795,13 @@ public class CustomCspDialog extends BaseAlertDialog {
             List<String> fields = new ArrayList<>(CustomCspSetting.otherFields());
             String initialField = item.getOtherKey();
             if (!fields.contains(initialField)) fields.add(0, initialField);
-            new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog)
-                    .setTitle(R.string.setting_custom_csp_other_fields)
-                    .setItems(fields.toArray(new String[0]), (dialog, which) -> {
-                        String field = fields.get(which);
-                        if (TextUtils.equals(item.getOtherKey(), field)) return;
-                        item.setOther(field, CustomCspSetting.defaultOtherValue(field));
-                        updateOtherEditor();
-                        updateValidity();
-                    })
-                    .show();
+            ChoiceDialog.showSingle(CustomCspDialog.this, R.string.setting_custom_csp_other_fields, fields.toArray(new String[0]), fields.indexOf(initialField), which -> {
+                String field = fields.get(which);
+                if (TextUtils.equals(item.getOtherKey(), field)) return;
+                item.setOther(field, CustomCspSetting.defaultOtherValue(field));
+                updateOtherEditor();
+                updateValidity();
+            });
         }
 
         private void ensureOtherValue() {

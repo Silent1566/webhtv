@@ -31,8 +31,36 @@ public class PlayerDisplaySettingSyncTest {
         assertTrue("PlayerOsdController is missing setTopLeft", method >= 0);
         int methodEnd = source.indexOf("\n    }", method);
         String body = source.substring(method, methodEnd);
-        assertTrue("Player OSD should honor the shared resolution display switch", body.contains("PlayerSetting.isOsdSize()"));
-        assertTrue("Player OSD should allow title and resolution to be toggled independently", body.contains("showTitle") && body.contains("showSize"));
+        assertTrue("Player OSD should honor the shared resolution display switch", body.contains("PlayerSetting.isOsdResolution()"));
+        assertTrue("Player OSD should allow title and resolution to be toggled independently", body.contains("showTitle") && body.contains("showResolution"));
+    }
+
+    @Test
+    public void playerOsdControllerForcesPersistentTextWhite() throws Exception {
+        String source = read(mainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "custom", "PlayerOsdController.java")));
+        int method = source.indexOf("private void setTextSize(float sp)");
+        assertTrue("PlayerOsdController is missing setTextSize", method >= 0);
+        int methodEnd = source.indexOf("\n    }", method);
+        String body = source.substring(method, methodEnd);
+
+        assertTrue("top-left OSD text must stay white over themed TMDB surfaces", body.contains("topLeft.setTextColor(0xFFFFFFFF)"));
+        assertTrue("top-right OSD text must stay white over themed TMDB surfaces", body.contains("topRight.setTextColor(0xFFFFFFFF)"));
+        assertTrue("bottom-left OSD text must stay white over themed TMDB surfaces", body.contains("bottomLeft.setTextColor(0xFFFFFFFF)"));
+        assertTrue("bottom-right OSD text must stay white over themed TMDB surfaces", body.contains("bottomRight.setTextColor(0xFFFFFFFF)"));
+    }
+
+    @Test
+    public void playerOsdControllerCanSuppressPersistentCornerLabels() throws Exception {
+        String source = read(mainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "custom", "PlayerOsdController.java")));
+        int method = source.indexOf("public void setPersistentSuppressed(boolean persistentSuppressed)");
+        int render = source.indexOf("private boolean render()");
+
+        assertTrue("PlayerOsdController must expose persistent display suppression for embedded mobile players", method >= 0);
+        assertTrue("persistent suppression should hide title/time/progress/traffic/mini labels while keeping diagnostics available",
+                render >= 0
+                        && source.indexOf("if (persistentSuppressed)", render) > render
+                        && source.indexOf("hidePersistent();", render) > render
+                        && source.indexOf("setDiagnosticsPanel(player);", render) > render);
     }
 
     @Test
@@ -44,6 +72,12 @@ public class PlayerDisplaySettingSyncTest {
         assertTrue(source.contains("\"display_progress\""));
         assertTrue(source.contains("\"display_mini\""));
         assertTrue(source.contains("\"display_title\""));
+    }
+
+    @Test
+    public void backupIncludesFfmpegModePreference() throws Exception {
+        String source = read(mainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "bean", "Backup.java")));
+        assertTrue(source.contains("\"ffmpeg_mode\""));
     }
 
     private static void assertSettingPageUsesDisplayPreferences(String source) {

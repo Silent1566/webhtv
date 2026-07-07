@@ -11,6 +11,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.utils.ImgUtil;
 import com.fongmi.android.tv.utils.Util;
+import com.google.android.material.card.MaterialCardView;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -27,14 +28,17 @@ public class TmdbPersonPhotoAdapter extends RecyclerView.Adapter<TmdbPersonPhoto
     private final List<String> items = new ArrayList<>();
     private final Listener listener;
     private boolean legacyMode;
+    private boolean light;
 
     public TmdbPersonPhotoAdapter(Listener listener) {
         this.listener = listener;
     }
 
     public void setLight(boolean light) {
+        boolean changed = !legacyMode || this.light != light;
         legacyMode = true;
-        notifyDataSetChanged();
+        this.light = light;
+        if (changed) notifyDataSetChanged();
     }
 
     public void setItems(List<String> values) {
@@ -54,6 +58,8 @@ public class TmdbPersonPhotoAdapter extends RecyclerView.Adapter<TmdbPersonPhoto
     @Override
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         String url = items.get(position);
+        MaterialCardView card = holder.card;
+        if (card != null) TmdbCardFocusHelper.bind(card, light ? 0xEEFFFFFF : 0xCC16202A, light ? 0x33647480 : 0x33FFFFFF);
         ImgUtil.load(holder.photo.getContext().getString(R.string.detail_person_photos), url, holder.photo, true, 320, 480);
         holder.itemView.setOnClickListener(v -> {
             if (listener != null) listener.onItemClick(position, url);
@@ -66,6 +72,7 @@ public class TmdbPersonPhotoAdapter extends RecyclerView.Adapter<TmdbPersonPhoto
     }
 
     static class ViewHolder extends RecyclerView.ViewHolder {
+        MaterialCardView card;
         ImageView photo;
 
         ViewHolder(View view, boolean legacyMode) {
@@ -74,6 +81,7 @@ public class TmdbPersonPhotoAdapter extends RecyclerView.Adapter<TmdbPersonPhoto
                 itemView.setFocusable(false);
                 itemView.setFocusableInTouchMode(false);
             }
+            card = view instanceof MaterialCardView ? (MaterialCardView) view : null;
             photo = view.findViewById(R.id.photo);
         }
     }

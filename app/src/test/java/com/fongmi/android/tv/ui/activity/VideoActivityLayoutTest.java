@@ -188,25 +188,142 @@ public class VideoActivityLayoutTest {
     }
 
     @Test
-    public void mobileDirectPlaybackUsesUpstreamNativeEpisodeStrip() throws Exception {
+    public void mobileTmdbDetailHidesNativeActionRowInColorfulMode() throws Exception {
+        Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int method = source.indexOf("private void setDetail(Vod item)");
+
+        assertTrue(sourcePath + " is missing setDetail", method >= 0);
+        assertTrue("TMDB detail playback must hide the native action row for colorful/native styled detail pages",
+                source.indexOf("setOriginalEnhancedActionVisibility(tmdbMode);", method) > method);
+    }
+
+    @Test
+    public void mobileReadyStateKeepsPlaybackInitializationAfterPendingResumeSeek() throws Exception {
+        Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int method = source.indexOf("protected void onStateChanged(int state)");
+        int ready = source.indexOf("case Player.STATE_READY:", method);
+        int seek = source.indexOf("boolean pendingResumeSeekApplied = applyPendingResumeSeek();", ready);
+        int reset = source.indexOf("player().reset();", ready);
+        int shortDrama = source.indexOf("applyShortDramaMode();", ready);
+        int introSkip = source.indexOf("requestIntroSkipPlan();", ready);
+        int autoSkipGuard = source.indexOf("if (!pendingResumeSeekApplied) applyAutoIntroSkip();", ready);
+
+        assertTrue(sourcePath + " is missing onStateChanged", method >= 0);
+        assertTrue("ready playback must capture whether a pending resume seek was applied", seek > ready);
+        assertTrue("pending resume seek must not skip playback reset", reset > seek);
+        assertTrue("pending resume seek must not skip short-drama readiness", shortDrama > reset);
+        assertTrue("pending resume seek must not skip intro-skip planning", introSkip > shortDrama);
+        assertTrue("auto intro skip should wait for the deferred seek to settle", autoSkipGuard > introSkip);
+    }
+
+    @Test
+    public void mobileTmdbImageReadyRebindsDeferredSummaryAndRevealsDetailContent() throws Exception {
+        Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int listener = source.indexOf("mTmdbHeaderView.setOnImagesLoadedListener");
+        int callback = source.indexOf("onTmdbContentReady();", listener);
+        int helper = source.indexOf("private void onTmdbContentReady()");
+        int loaded = source.indexOf("mTmdbContentLoaded = true;", helper);
+        int summary = source.indexOf("if (mVod != null) setText(mVod);", helper);
+        int reveal = source.indexOf("showDetailContent();", helper);
+
+        assertTrue("TMDB image completion must funnel through a dedicated content-ready callback", callback > listener);
+        assertTrue(sourcePath + " is missing onTmdbContentReady", helper >= 0);
+        assertTrue("TMDB content-ready callback must mark the TMDB page as loaded", loaded > helper);
+        assertTrue("TMDB content-ready callback must rebind the deferred native summary text", summary > loaded);
+        assertTrue("TMDB content-ready callback must reveal detail content independently from video readiness", reveal > summary);
+    }
+
+    @Test
+    public void mobilePlaybackReadyAlwaysClearsVideoLoadingOverlay() throws Exception {
+        Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int playback = source.indexOf("private void showPlaybackContent()");
+        int hide = source.indexOf("hideProgress();", playback);
+        int detailCall = source.indexOf("showDetailContent();", hide);
+        int detail = source.indexOf("private void showDetailContent()");
+        int revealGuard = source.indexOf("if (!canRevealPlaybackContent()) return;", detail);
+        int showContent = source.indexOf("mBinding.progressLayout.showContent();", detail);
+
+        assertTrue(sourcePath + " is missing showPlaybackContent", playback >= 0);
+        assertTrue("playback readiness must clear only the video loading overlay first", hide > playback && detailCall > hide);
+        assertTrue("detail content reveal must remain independently gated by detail loading state", revealGuard > detail && showContent > revealGuard);
+        assertTrue("detail content reveal must remain gated after the video overlay is cleared", showContent > revealGuard);
+    }
+
+    @Test
+    public void mobileTmdbContentReadyDoesNotClearVideoLoadingBeforePlaybackReady() throws Exception {
+        Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int method = source.indexOf("private void onTmdbContentReady()");
+        int end = source.indexOf("private void showError(String text)", method);
+        String body = method >= 0 && end > method ? source.substring(method, end) : "";
+
+        assertTrue(sourcePath + " is missing onTmdbContentReady", method >= 0);
+        assertTrue("TMDB completion must reveal detail content immediately", body.contains("showDetailContent();"));
+        assertFalse("TMDB detail completion must not clear the independent video loading overlay", body.contains("hideProgress();"));
+        assertFalse("TMDB detail completion must not wait for player READY", body.contains("Player.STATE_READY"));
+        assertFalse("TMDB detail completion must not go through playback content helper", body.contains("showPlaybackContent();"));
+    }
+
+    @Test
+    public void mobileTmdbPlaybackLoadingOnlyUsesProgressLayoutBeforeDetailContentLoads() throws Exception {
+        Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int method = source.indexOf("private void showProgress()");
+        int end = source.indexOf("private void hideProgress()", method);
+        String body = method >= 0 && end > method ? source.substring(method, end) : "";
+        int showOverlay = body.indexOf("mBinding.progress.getRoot().setVisibility(View.VISIBLE);");
+        int tmdbGuard = body.indexOf("if (shouldLoadTmdbDetail() && !mTmdbContentLoaded) mBinding.progressLayout.showProgress();");
+        int nativeFallback = body.indexOf("else if (!mBinding.progressLayout.isContent()) mBinding.progressLayout.hideContent();");
+
+        assertTrue(sourcePath + " is missing showProgress", method >= 0);
+        assertTrue("video loading overlay must still be shown first", showOverlay >= 0);
+        assertTrue("initial TMDB detail loading must use progressLayout until detail content is ready", tmdbGuard > showOverlay);
+        assertTrue("non-TMDB playback should keep the existing content-preserving fallback", nativeFallback > tmdbGuard);
+    }
+
+    @Test
+    public void mobileEpisodeSwitchDoesNotResetLoadedTmdbDetailContent() throws Exception {
+        Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int method = source.indexOf("private void getPlayer(Flag flag, Episode episode)");
+        int end = source.indexOf("private void setPlayer(Result result)", method);
+        String body = method >= 0 && end > method ? source.substring(method, end) : "";
+
+        assertTrue(sourcePath + " is missing getPlayer", method >= 0);
+        assertFalse("episode switches start playback but must not force the already-loaded TMDB detail area back to loading", body.contains("mTmdbContentLoaded = false"));
+        assertTrue("episode switches should still show the video loading overlay", body.contains("showProgress();"));
+    }
+
+    @Test
+    public void mobileDirectPlaybackUsesUpstreamNativeEpisodeGrid() throws Exception {
         Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
         int predicate = source.indexOf("private boolean shouldUseUpstreamNativeEpisodeModule()");
         int bind = source.indexOf("private void setUpstreamNativeEpisodeItems(List<Episode> items)");
-        int layout = source.indexOf("private void updateEpisodeLayoutForUpstreamNative()");
+        int viewport = source.indexOf("private void updateEpisodeViewportHeight()");
+        int nextViewportMethod = source.indexOf("private boolean isTmdbEpisodeCardMode()", viewport);
         int setEpisode = source.indexOf("private void setEpisodeAdapter(List<Episode> items)");
+        String viewportBody = nextViewportMethod > viewport ? source.substring(viewport, nextViewportMethod) : "";
 
         assertTrue(sourcePath + " is missing direct native episode predicate", predicate >= 0);
         assertTrue("direct native episode mode must be scoped to the 影视原生 setting",
                 source.indexOf("return Setting.isDirectDetailPage() && !isTmdbMode();", predicate) > predicate);
         assertTrue("direct native playback must bypass enhanced episode grid binding",
                 setEpisode >= 0 && source.indexOf("if (shouldUseUpstreamNativeEpisodeModule())", setEpisode) > setEpisode);
-        assertTrue("direct native playback should restore the upstream horizontal episode strip",
+        assertTrue("direct native playback should restore the upstream episode grid",
                 bind >= 0
-                        && source.indexOf("mEpisodeAdapter.setViewType(ViewType.HORI);", bind) > bind
-                        && source.indexOf("mBinding.more.setVisibility(items.size() < 10 ? View.GONE : View.VISIBLE);", bind) > bind
-                        && layout > bind
-                        && source.indexOf("new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)", layout) > layout);
+                        && source.indexOf("mEpisodeGridMode = true;", bind) > bind
+                        && source.indexOf("mEpisodeAdapter.setViewType(ViewType.GRID);", bind) > bind
+                        && source.indexOf("mBinding.more.setVisibility(View.GONE);", bind) > bind
+                        && source.indexOf("EpisodeGroupAdapter.build(size, getSelectedEpisodePosition(items), mHistory != null && mHistory.isRevSort())", bind) > bind
+                        && source.indexOf("mBinding.episodeGroup.setVisibility(groups.size() > 1 ? View.VISIBLE : View.GONE);", bind) > bind
+                        && source.indexOf("setEpisodeItems(items);", bind) > bind);
+        assertTrue("direct native episode grid should use the standard viewport cap",
+                viewport >= 0 && !viewportBody.contains("shouldUseUpstreamNativeEpisodeModule()"));
     }
 
     @Test
@@ -243,16 +360,277 @@ public class VideoActivityLayoutTest {
     }
 
     @Test
-    public void leanbackOriginalEnhancedHidesShortDisplayAndSourceActions() throws Exception {
+    public void leanbackVodEventPageSuffixStripPreservesLeadingSlashIds() throws Exception {
+        Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int method = source.indexOf("private static String stripPageSuffix(String id)");
+        int nextMethod = source.indexOf("private void loadNativePersonalRecommendations", method);
+        String body = method >= 0 && nextMethod > method ? source.substring(method, nextMethod) : "";
+
+        assertTrue(sourcePath + " is missing stripPageSuffix", method >= 0);
+        assertTrue("leanback VOD event ids may start with /index.php and must not be stripped to empty",
+                body.contains("slash > 0 ? id.substring(0, slash) : id"));
+        assertFalse("only real page suffixes after the first character should be stripped",
+                body.contains("slash >= 0 ? id.substring(0, slash) : id"));
+    }
+
+    @Test
+    public void playbackControllerConnectionDoesNotReplayStaleState() throws Exception {
+        Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "PlaybackActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int handle = source.indexOf("private void handleControllerConnected()");
+        int addListener = source.indexOf("mController.addListener(this);", handle);
+        int seekListener = source.indexOf("getSeekView().setSeekListener(this::onSeekStarted);", handle);
+        int controllerHook = source.indexOf("onControllerConnected();", addListener);
+        int serviceConnected = source.indexOf("public void onServiceConnected");
+        int serviceHook = source.indexOf("onServiceConnected();", serviceConnected);
+
+        assertTrue(sourcePath + " is missing handleControllerConnected", handle >= 0);
+        assertTrue("controller seek events must be bridged to playback activities", seekListener > handle && seekListener < addListener);
+        assertTrue("controller listener must be registered before the controller hook", addListener > handle && addListener < controllerHook);
+        assertTrue("controller-specific hook must still run", controllerHook > addListener);
+        assertTrue("service-specific hook must still run", serviceHook > serviceConnected);
+        assertFalse("controller connection must not replay stale READY/playing state and hide loading early",
+                source.contains("syncControllerPlaybackState()"));
+    }
+
+    @Test
+    public void playbackActivityKeepsScreenOnFromPlaybackStateTransitions() throws Exception {
+        Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "PlaybackActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int sync = source.indexOf("private void syncKeepScreenOn()");
+        int should = source.indexOf("private boolean shouldKeepScreenOn()", sync);
+        int lifecycle = source.indexOf("private String lifecycleState()", should);
+        String syncBody = sync >= 0 && should > sync ? source.substring(sync, should) : "";
+        String shouldBody = should >= 0 && lifecycle > should ? source.substring(should, lifecycle) : "";
+        int connected = source.indexOf("private void handleControllerConnected()");
+        int connectedAddListener = source.indexOf("mController.addListener(this);", connected);
+        int connectedSync = source.indexOf("syncKeepScreenOn();", connectedAddListener);
+        int playing = source.indexOf("public void onIsPlayingChanged(boolean isPlaying)");
+        int playingSync = source.indexOf("syncKeepScreenOn();", playing);
+        int playWhenReady = source.indexOf("public void onPlayWhenReadyChanged(boolean playWhenReady, int reason)");
+        int playWhenReadySync = source.indexOf("syncKeepScreenOn();", playWhenReady);
+        int state = source.indexOf("public void onPlaybackStateChanged(int state)");
+        int stateSync = source.indexOf("syncKeepScreenOn();", state);
+        int service = source.indexOf("public void onServiceConnected(ComponentName name, IBinder binder)");
+        int serviceSync = source.indexOf("syncKeepScreenOn();", service);
+        int resume = source.indexOf("protected void onResume()");
+        int resumeSync = source.indexOf("syncKeepScreenOn();", resume);
+
+        assertTrue(sourcePath + " is missing syncKeepScreenOn", sync >= 0);
+        assertTrue(sourcePath + " is missing shouldKeepScreenOn", should > sync);
+        assertTrue("wake flag sync must add and clear the window flag from one place",
+                syncBody.contains("addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)")
+                        && syncBody.contains("clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)"));
+        assertTrue("wake flag must stay on while playback is active or preparing to play",
+                shouldBody.contains("active.isPlaying()")
+                        && shouldBody.contains("active.getPlayWhenReady()")
+                        && shouldBody.contains("state == Player.STATE_BUFFERING || state == Player.STATE_READY"));
+        assertTrue("controller attachment must sync wake state in case playback was already active", connectedSync > connectedAddListener);
+        assertTrue("playing changes must sync wake state", playingSync > playing);
+        assertTrue("playWhenReady changes must sync wake state so pausing while buffering clears the flag", playWhenReady >= 0 && playWhenReadySync > playWhenReady);
+        assertTrue("state changes must sync wake state so buffering/ready cannot miss the flag", stateSync > state);
+        assertTrue("service connection must sync wake state before subclass hooks run", serviceSync > service);
+        assertTrue("resume must resync wake state after returning to an active player", resumeSync > resume);
+    }
+
+    @Test
+    public void playbackLoadingOnlyClearsFromReadyOrTmdbReady() throws Exception {
+        Path mobilePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String mobile = new String(Files.readAllBytes(mobilePath), StandardCharsets.UTF_8);
+        assertNoPrematurePlaybackReveal(mobilePath, mobile);
+
+        Path leanbackPath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String leanback = new String(Files.readAllBytes(leanbackPath), StandardCharsets.UTF_8);
+        assertNoPrematurePlaybackReveal(leanbackPath, leanback);
+    }
+
+    @Test
+    public void seekRequestsShowPlaybackLoadingOverlay() throws Exception {
+        Path playbackPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "PlaybackActivity.java"));
+        String playback = new String(Files.readAllBytes(playbackPath), StandardCharsets.UTF_8);
+        int hook = playback.indexOf("protected void onSeekStarted()");
+        int seekTo = playback.indexOf("protected void seekTo(long time)");
+        int seekHook = playback.indexOf("onSeekStarted();", seekTo);
+        int controllerSeek = playback.indexOf("mController.seekTo", seekHook);
+
+        Path seekPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "custom", "CustomSeekView.java"));
+        String seek = new String(Files.readAllBytes(seekPath), StandardCharsets.UTF_8);
+        int listener = seek.indexOf("public interface SeekListener");
+        int setListener = seek.indexOf("public void setSeekListener");
+        int seekMethod = seek.indexOf("private void seekToTimeBarPosition");
+        int notify = seek.indexOf("seekListener.onSeekStarted();", seekMethod);
+        int playerSeek = seek.indexOf("player.seekTo(positionMs);", notify);
+
+        Path mobilePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String mobile = new String(Files.readAllBytes(mobilePath), StandardCharsets.UTF_8);
+        int mobileOverride = mobile.indexOf("protected void onSeekStarted()");
+        int mobileShow = mobile.indexOf("showProgress();", mobileOverride);
+
+        Path leanbackPath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String leanback = new String(Files.readAllBytes(leanbackPath), StandardCharsets.UTF_8);
+        int leanbackOverride = leanback.indexOf("protected void onSeekStarted()");
+        int leanbackShow = leanback.indexOf("showProgress();", leanbackOverride);
+
+        assertTrue(playbackPath + " is missing onSeekStarted", hook >= 0);
+        assertTrue("remote seek must show loading before seeking", seekHook > seekTo && seekHook < controllerSeek);
+        assertTrue(seekPath + " is missing SeekListener", listener >= 0 && setListener > listener);
+        assertTrue("drag seek must notify before player.seekTo", notify > seekMethod && notify < playerSeek);
+        assertTrue("mobile video seek must show loading", mobileOverride >= 0 && mobileShow > mobileOverride);
+        assertTrue("leanback video seek must show loading", leanbackOverride >= 0 && leanbackShow > leanbackOverride);
+    }
+
+    @Test
+    public void seekLoadingHasReadyStateFallbackWhenPlaybackStateDoesNotChange() throws Exception {
+        Path mobilePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String mobile = new String(Files.readAllBytes(mobilePath), StandardCharsets.UTF_8);
+        assertSeekProgressFallback(mobilePath, mobile);
+
+        Path leanbackPath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String leanback = new String(Files.readAllBytes(leanbackPath), StandardCharsets.UTF_8);
+        assertSeekProgressFallback(leanbackPath, leanback);
+    }
+
+    @Test
+    public void mobileTmdbVodRefreshDoesNotClearVideoLoadingBeforePlaybackReady() throws Exception {
+        Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int method = source.indexOf("private void updateVod(Vod item)");
+        int loaded = source.indexOf("if (loaded) {", method);
+        int fallback = source.indexOf("} else {", loaded);
+        String loadedBody = loaded >= 0 && fallback > loaded ? source.substring(loaded, fallback) : "";
+
+        assertTrue(sourcePath + " is missing updateVod", method >= 0);
+        assertTrue("TMDB VOD refresh must still bind the loaded header", loadedBody.contains("mTmdbHeaderView.bind(mTmdbUIAdapter);"));
+        assertFalse("TMDB VOD refresh must not reveal detail content outside onTmdbContentReady", loadedBody.contains("mBinding.progressLayout.showContent();"));
+        assertFalse("TMDB VOD refresh must not clear the independent video loading overlay", loadedBody.contains("hideProgress();"));
+    }
+
+    @Test
+    public void leanbackEpisodeFocusOrderReachesTmdbRowsAfterEpisodes() throws Exception {
+        Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int order = source.indexOf("private List<Integer> getEpisodeFocusOrders()");
+        int updateFocus = source.indexOf("private void updateFocus()", order);
+        String orderBody = updateFocus > order ? source.substring(order, updateFocus) : "";
+        int episodeGrid = orderBody.indexOf("R.id.episodeGrid");
+        int photos = orderBody.indexOf("R.id.tmdbPhotos");
+        int part = orderBody.indexOf("R.id.part");
+        int quick = orderBody.indexOf("R.id.quick");
+        int bindTmdb = source.indexOf("private void bindTmdbData()");
+        int bindRatings = source.indexOf("private void bindTmdbOmdbRatings()", bindTmdb);
+        String bindBody = bindRatings > bindTmdb ? source.substring(bindTmdb, bindRatings) : "";
+
+        assertTrue(sourcePath + " is missing getEpisodeFocusOrders", order >= 0);
+        assertTrue("leanback episode focus order must include the TMDB photos row", photos >= 0);
+        assertTrue("TMDB photos must be after episode rows so DPAD_DOWN can leave the selected episode card", episodeGrid >= 0 && episodeGrid < photos);
+        assertTrue("TMDB rows must stay before quick search rows in the detail-page focus order", photos < part && part < quick);
+        assertTrue("binding visible TMDB rows must refresh episode card nextFocusDown targets",
+                bindBody.contains("updateFocus();") && bindBody.indexOf("updateFocus();") < bindBody.indexOf("finishTmdbDetail();"));
+    }
+
+    @Test
+    public void leanbackTmdbOmdbRatingChipsUseReadableDarkGlass() throws Exception {
+        Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int method = source.indexOf("private View createOmdbRatingChip(String platform, String value, String color)");
+        int next = source.indexOf("private void setupBackdropSlideshow", method);
+        String body = method >= 0 && next > method ? source.substring(method, next) : "";
+
+        assertTrue(sourcePath + " is missing createOmdbRatingChip", method >= 0);
+        assertTrue("leanback OMDB chips should use dark glass so white/yellow text remains visible on light artwork",
+                body.contains("background.setColor(0x6610141A);")
+                        && body.contains("background.setStroke(ResUtil.dp2px(1), 0x33FFFFFF);")
+                        && body.contains("platformView.setTextColor(0xE6FFFFFF);")
+                        && !body.contains("background.setColor(0x26FFFFFF);")
+                        && !body.contains("platformView.setTextColor(0xFF9AA7B4);"));
+    }
+
+    @Test
+    public void leanbackEpisodeHeaderToolsTrapHorizontalDpadInsideToolPair() throws Exception {
+        Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int method = source.indexOf("private boolean onEpisodeHeaderToolKey");
+        int nextMethod = source.indexOf("private boolean isEpisodeListFocused()", method);
+        String body = method >= 0 && nextMethod > method ? source.substring(method, nextMethod) : "";
+
+        assertTrue("episode header reverse and grid/list buttons should handle DPAD horizontally themselves",
+                source.contains("mBinding.episodeReverse.setOnKeyListener((view, keyCode, event) -> onEpisodeHeaderToolKey(view, keyCode, event));")
+                        && source.contains("mBinding.episodeViewMode.setOnKeyListener((view, keyCode, event) -> onEpisodeHeaderToolKey(view, keyCode, event));"));
+        assertTrue(sourcePath + " is missing onEpisodeHeaderToolKey", method >= 0);
+        assertTrue("reverse DPAD_RIGHT should focus the grid/list button",
+                body.contains("KeyUtil.isRightKey(event) && view == mBinding.episodeReverse")
+                        && body.contains("mBinding.episodeViewMode.requestFocus(View.FOCUS_RIGHT);"));
+        assertTrue("grid/list DPAD_LEFT should focus the reverse button",
+                body.contains("KeyUtil.isLeftKey(event) && view == mBinding.episodeViewMode")
+                        && body.contains("mBinding.episodeReverse.requestFocus(View.FOCUS_LEFT);"));
+        assertTrue("unused horizontal directions should be consumed so focus cannot jump to unrelated action buttons",
+                body.lastIndexOf("return true;") > body.lastIndexOf("mBinding.episodeReverse.requestFocus(View.FOCUS_LEFT);"));
+    }
+
+    @Test
+    public void leanbackHorizontalEpisodeRowExposesVerticalFocusFromEveryCard() throws Exception {
+        Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "adapter", "EpisodeAdapter.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int top = source.indexOf("private boolean isTopEdge(int position)");
+        int bottom = source.indexOf("private boolean isBottomEdge(int position)");
+        int interfaces = source.indexOf("public interface OnClickListener", bottom);
+        String topBody = bottom > top ? source.substring(top, bottom) : "";
+        String bottomBody = interfaces > bottom ? source.substring(bottom, interfaces) : "";
+
+        assertTrue(sourcePath + " is missing isTopEdge", top >= 0);
+        assertTrue(sourcePath + " is missing isBottomEdge", bottom >= 0);
+        assertTrue("single-row horizontal episode cards must all expose nextFocusUp",
+                topBody.contains("return !verticalGridMode || position == 0;"));
+        assertTrue("single-row horizontal episode cards must all expose nextFocusDown",
+                bottomBody.contains("return !verticalGridMode || position == getItemCount() - 1;"));
+    }
+
+    @Test
+    public void leanbackTmdbDetailUsesChangeSourceActionOutsideDirectNative() throws Exception {
         Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
         int method = source.indexOf("private void setOriginalEnhancedActionVisibility(boolean hide)");
+        int event = source.indexOf("protected void initEvent()");
 
         assertTrue(sourcePath + " is missing setOriginalEnhancedActionVisibility", method >= 0);
         assertTrue("native enhanced mode must hide the short display button",
                 source.indexOf("mBinding.shortDisplay.setVisibility(hide ? View.GONE : View.VISIBLE)", method) > method);
-        assertTrue("native enhanced mode must hide the source change button",
-                source.indexOf("mBinding.change1.setVisibility(hide ? View.GONE : View.VISIBLE)", method) > method);
+        assertTrue("TMDB detail modes must show the source change button instead of the search button",
+                source.indexOf("mBinding.change1.setVisibility(hide ? View.VISIBLE : View.GONE)", method) > method
+                        && source.indexOf("mBinding.searchDetail.setVisibility(hide ? View.GONE : View.VISIBLE)", method) > method);
+        assertTrue("source change action must keep long-press global search",
+                event >= 0 && source.indexOf("mBinding.change1.setOnLongClickListener(view -> {", event) > event
+                        && source.indexOf("onGlobalSearch();", source.indexOf("mBinding.change1.setOnLongClickListener(view -> {", event)) > event);
+    }
+
+    @Test
+    public void leanbackDetailActionOrderPutsChangeBeforeKeepAndTmdb() throws Exception {
+        String layout = new String(Files.readAllBytes(findLeanbackResPath().resolve(Path.of("layout", "activity_video.xml"))), StandardCharsets.UTF_8);
+        int search = layout.indexOf("android:id=\"@+id/searchDetail\"");
+        int change = layout.indexOf("android:id=\"@+id/change1\"");
+        int keep = layout.indexOf("android:id=\"@+id/keep\"");
+        int tmdb = layout.indexOf("android:id=\"@+id/tmdbRematch\"");
+
+        assertTrue("direct native search action must stay in the row", search >= 0);
+        assertTrue("TMDB detail action order must be change source, favorite, TMDB", change >= 0 && change < keep && keep < tmdb);
+    }
+
+    @Test
+    public void leanbackGlobalSearchLongPressCarriesCurrentTitle() throws Exception {
+        Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int method = source.indexOf("private void onGlobalSearch()");
+        int methodEnd = source.indexOf("\n    }", method);
+        String body = method >= 0 && methodEnd > method ? source.substring(method, methodEnd) : "";
+
+        assertTrue(sourcePath + " is missing onGlobalSearch", method >= 0);
+        assertTrue("global search must use the current detail title as keyword",
+                body.contains("String keyword = mBinding.name.getText().toString().trim();")
+                        && body.contains("if (TextUtils.isEmpty(keyword)) keyword = getName();"));
+        assertTrue("global search must open SearchActivity with the title instead of a blank search page",
+                body.contains("SearchActivity.start(this, keyword);")
+                        && !body.contains("SearchActivity.start(this);"));
     }
 
     @Test
@@ -268,6 +646,34 @@ public class VideoActivityLayoutTest {
                         && "true".equals(row.getAttribute("android:layout_alignParentEnd")));
         assertTrue("leanback detail action row should hide scrollbars",
                 "none".equals(row.getAttribute("android:scrollbars")));
+    }
+
+    @Test
+    public void leanbackDetailActionButtonsPreferSourceLineBeforeRecommendations() throws Exception {
+        Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int method = source.indexOf("private void setDetailButtonsNextFocus(int fallback)");
+        int methodEnd = source.indexOf("\n    }", method);
+        String body = method >= 0 && methodEnd > method ? source.substring(method, methodEnd) : "";
+
+        assertTrue(sourcePath + " is missing setDetailButtonsNextFocus fallback handling", method >= 0);
+        assertTrue("detail action down focus must prefer the visible source line before TMDB recommendation rows",
+                body.contains("int target = isVisible(mBinding.flag) ? R.id.flag : fallback;"));
+        assertTrue("all visible/optional detail action buttons must share the same down-focus target",
+                body.contains("mBinding.content.setNextFocusDownId(target);")
+                        && body.contains("mBinding.shortDisplay.setNextFocusDownId(target);")
+                        && body.contains("mBinding.searchDetail.setNextFocusDownId(target);")
+                        && body.contains("mBinding.keep.setNextFocusDownId(target);")
+                        && body.contains("mBinding.change1.setNextFocusDownId(target);")
+                        && body.contains("mBinding.tmdbRematch.setNextFocusDownId(target);"));
+
+        int bindTmdbData = source.indexOf("private void bindTmdbData()");
+        int empty = source.indexOf("if (!hasTmdbContent)", bindTmdbData);
+        int emptyEnd = source.indexOf("SpiderDebug.log(\"tmdb-tv\"", empty);
+        String emptyBody = empty >= 0 && emptyEnd > empty ? source.substring(empty, emptyEnd) : "";
+        assertTrue("empty TMDB detail rows must keep change and TMDB actions in the down-focus chain",
+                emptyBody.contains("mBinding.change1.setNextFocusDownId(R.id.flag);")
+                        && emptyBody.contains("mBinding.tmdbRematch.setNextFocusDownId(R.id.flag);"));
     }
 
     @Test
@@ -489,6 +895,23 @@ public class VideoActivityLayoutTest {
     }
 
     @Test
+    public void leanbackPlaybackEpisodeKeyIgnoresMissingFocus() throws Exception {
+        Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int method = source.indexOf("private boolean onEpisodeKey(KeyEvent event)");
+        int directCrashPath = source.indexOf("findContainingViewHolder(getCurrentFocus())", method);
+        int focus = source.indexOf("View focus = getCurrentFocus();", method);
+        int guard = source.indexOf("if (focus == null) return false;", focus);
+        int holder = source.indexOf("findContainingViewHolder(focus)", guard);
+
+        assertTrue(sourcePath + " is missing onEpisodeKey", method >= 0);
+        assertFalse("episode key handling must not pass a null current focus into RecyclerView", directCrashPath >= 0);
+        assertTrue("episode key handling must read current focus before resolving the RecyclerView holder", focus > method);
+        assertTrue("episode key handling must ignore key events when focus has already been cleared", guard > focus);
+        assertTrue("episode key handling must only resolve a holder after the focus null guard", holder > guard);
+    }
+
+    @Test
     public void leanbackEpisodeDialogLetsHeaderScrollWithEpisodes() throws Exception {
         Path layoutPath = findLeanbackResPath().resolve(Path.of("layout", "dialog_episode_list.xml"));
         String layout = new String(Files.readAllBytes(layoutPath), StandardCharsets.UTF_8);
@@ -577,20 +1000,20 @@ public class VideoActivityLayoutTest {
     }
 
     @Test
-    public void tmdbHeaderHidesChangeSourceInOriginalEnhancedMode() throws Exception {
+    public void tmdbHeaderKeepsChangeSourceVisibleForEnhancedModes() throws Exception {
         Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "custom", "TmdbHeaderView.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
         int method = source.indexOf("private void updateOriginalEnhancedActionVisibility()");
 
         assertTrue(sourcePath + " is missing updateOriginalEnhancedActionVisibility", method >= 0);
-        assertTrue("TMDB header must hide source change in original enhanced mode",
-                source.indexOf("changeSource.setVisibility(Setting.isOriginalEnhancedDetailPage() ? View.GONE : View.VISIBLE)", method) > method);
+        assertTrue("TMDB header must keep source change available in enhanced modes",
+                source.indexOf("changeSource.setVisibility(View.VISIBLE)", method) > method);
     }
 
     @Test
     public void leanbackNativeActionButtonsShareMinimumWidth() throws Exception {
         Path layoutPath = findLeanbackResPath().resolve(Path.of("layout", "activity_video.xml"));
-        for (String id : Arrays.asList("content", "shortDisplay", "search", "keep", "change1", "tmdbRematch")) {
+        for (String id : Arrays.asList("content", "shortDisplay", "searchDetail", "keep", "change1", "tmdbRematch")) {
             Element action = findAndroidId(layoutPath.toFile(), id);
             assertTrue(layoutPath + " is missing @+id/" + id, action != null);
             assertTrue(id + " must use the shared native action width",
@@ -623,18 +1046,21 @@ public class VideoActivityLayoutTest {
     }
 
     @Test
-    public void mobileVideoDirectTmdbReleasesBlockingProgressAfterHeaderBind() throws Exception {
+    public void mobileVideoDirectTmdbRevealsDetailAfterHeaderBindWithoutClearingVideoProgress() throws Exception {
         Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
         int method = source.indexOf("private void updateVod(Vod item)");
         int bind = source.indexOf("mTmdbHeaderView.bind(mTmdbUIAdapter);", method);
-        int hide = source.indexOf("hideProgress();", bind);
         int style = source.indexOf("styleTmdbSourceInFlagTitle();", bind);
+        int contentReady = source.indexOf("private void onTmdbContentReady()");
+        int reveal = source.indexOf("showDetailContent();", contentReady);
 
         assertTrue(sourcePath + " is missing updateVod", method >= 0);
         assertTrue("direct TMDB playback must bind the header when TMDB data is ready", bind > method);
-        assertTrue("direct TMDB playback must stop the blocking player spinner immediately after the first header bind",
-                hide > bind && hide < style);
+        assertTrue("direct TMDB playback should continue styling after the header bind", style > bind);
+        assertTrue("direct TMDB playback must reveal detail content from the TMDB content-ready callback", reveal > contentReady);
+        assertFalse("direct TMDB header bind must not clear the independent video loading overlay",
+                source.substring(bind, style).contains("hideProgress();"));
     }
 
     @Test
@@ -644,6 +1070,27 @@ public class VideoActivityLayoutTest {
 
         assertTrue("fusion theme button must switch light to dark and dark to light",
                 source.contains("int theme = isFusionLightTheme() ? 2 : 1;"));
+    }
+
+    @Test
+    public void tmdbHeaderThemeToggleIsHiddenUntilVideoActivityAllowsFusionThemeSwitching() throws Exception {
+        Path layoutPath = findMainResPath().resolve(Path.of("layout", "view_tmdb_header.xml"));
+        Element themeToggle = findAndroidId(layoutPath.toFile(), "tmdbThemeToggle");
+        Path headerPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "custom", "TmdbHeaderView.java"));
+        String headerSource = new String(Files.readAllBytes(headerPath), StandardCharsets.UTF_8);
+        Path videoPath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String videoSource = new String(Files.readAllBytes(videoPath), StandardCharsets.UTF_8);
+        int styleFusion = headerSource.indexOf("private void styleFusionActions()");
+        int styleFusionEnd = headerSource.indexOf("private void clearFusionActionStyling()", styleFusion);
+        String styleFusionBody = headerSource.substring(styleFusion, styleFusionEnd);
+
+        assertTrue(layoutPath + " is missing @+id/tmdbThemeToggle", themeToggle != null);
+        assertTrue("TMDB header theme toggle must start hidden so colorful playback pages do not show it",
+                "gone".equals(themeToggle.getAttribute("android:visibility")));
+        assertFalse("TmdbHeaderView must not force the theme toggle visible; VideoActivity owns that mode decision",
+                styleFusionBody.contains("themeToggle.setVisibility(View.VISIBLE)"));
+        assertTrue("VideoActivity must still show the header theme toggle for the real fusion detail mode",
+                videoSource.contains("DetailThemeVisibility.showFusionThemeButton(Setting.isFusionDetailPage(), isFullscreen(), isInPictureInPictureMode())"));
     }
 
     @Test
@@ -707,6 +1154,9 @@ public class VideoActivityLayoutTest {
                 source.indexOf("if (!Setting.isFusionDetailPage()) return true;", method) < 0);
         assertTrue("TMDB playback labels and icons must use the header's current detail theme",
                 source.indexOf("mTmdbHeaderView.isCurrentDetailLightTheme()", method) > method);
+        assertTrue("dynamic backdrop playback labels must force white text instead of profile dark text",
+                methodBody.contains("boolean light = !shouldUseTmdbBackdropSurface() && isTmdbPlaybackLightTheme()")
+                        && methodBody.contains("int color = shouldUseTmdbBackdropSurface() ? Color.WHITE : tmdbPlaybackControlColor(light)"));
         assertTrue("TMDB playback labels and icons must match the header section title color",
                 source.indexOf("mTmdbHeaderView.getFusionSectionTitleColor()", method) > method);
         assertTrue("TMDB flag chips must use the same resolved playback theme as the moved labels",
@@ -793,7 +1243,71 @@ public class VideoActivityLayoutTest {
                 source.indexOf("mBinding.videoContextScrim.setBackgroundResource(R.drawable.shape_video_context_scrim);", scrim) > scrim
                         && source.indexOf("mBinding.videoContextScrim.setVisibility(View.VISIBLE);", scrim) > scrim);
         assertTrue("fusion theme refresh must not cover unmatched fallback with a solid color",
-                source.indexOf("mBinding.getRoot().setBackgroundColor(mTmdbFallbackToNative ? Color.TRANSPARENT", theme) > theme);
+                source.indexOf("mBinding.getRoot().setBackgroundColor(mTmdbFallbackToNative || shouldUseTmdbBackdropSurface() ? Color.TRANSPARENT", theme) > theme);
+    }
+
+    @Test
+    public void mobileColorfulAndNativeStyledTmdbDetailUseDynamicBackdropSurface() throws Exception {
+        Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int predicate = source.indexOf("private boolean shouldUseTmdbBackdropSurface()");
+        int setContextWall = source.indexOf("private void setContextWall(String url, boolean skipLock)");
+        int init = source.indexOf("private void initTmdbMode()");
+        int themeSurface = source.indexOf("private void applyFusionThemeSurface()");
+        int move = source.indexOf("private void moveFlagAndEpisodeToTmdb()");
+
+        assertTrue(sourcePath + " is missing shouldUseTmdbBackdropSurface", predicate >= 0);
+        assertTrue("colorful and native styled TMDB detail must opt into the dynamic backdrop surface",
+                source.indexOf("Setting.getDetailOpenMode() == Setting.DETAIL_OPEN_ENHANCED", predicate) > predicate
+                        && source.indexOf("Setting.isTmdbNativeStyle()", predicate) > predicate);
+        assertTrue("dynamic backdrop surface must be allowed even when playback artwork wall is disabled",
+                source.indexOf("!shouldUseTmdbBackdropSurface()", setContextWall) > setContextWall);
+        assertTrue("colorful and native styled TMDB detail must receive backdrop slideshow changes",
+                source.indexOf("shouldUseTmdbBackdropSurface()", init) > init
+                        && source.indexOf("setContextWall(imageUrl, true);", init) > init);
+        assertTrue("colorful and native styled TMDB detail must use the transparent fullscreen backdrop layout",
+                source.indexOf("applyOriginalEnhancedBackdropLayout();", init) > init
+                        && source.indexOf("mBinding.scroll.setBackgroundColor(Color.TRANSPARENT);", init) > init);
+        assertTrue("colorful and native styled TMDB detail must not be covered by later theme surface refreshes",
+                source.indexOf("mTmdbFallbackToNative || shouldUseTmdbBackdropSurface() ? Color.TRANSPARENT", themeSurface) > themeSurface);
+        assertTrue("header theme refresh must re-hide the standalone hero artwork",
+                source.indexOf("mTmdbHeaderView.refreshTheme();", move) > move
+                        && source.indexOf("mTmdbHeaderView.hideNativeHeroBackdrop();", move) > move);
+    }
+
+    @Test
+    public void tmdbPlaybackBackdropSurfaceHidesTopPosterArtwork() throws Exception {
+        Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "custom", "TmdbHeaderView.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int method = source.indexOf("public void hideNativeHeroBackdrop()");
+
+        assertTrue(sourcePath + " is missing hideNativeHeroBackdrop", method >= 0);
+        assertTrue("dynamic backdrop surface must keep the hidden backdrop from reserving hero height",
+                source.indexOf("params.height = 1;", method) > method);
+        assertTrue("dynamic backdrop surface must hide the top poster card",
+                source.indexOf("R.id.tmdbPoster", method) > method
+                        && source.indexOf("posterCard.setVisibility(View.GONE);", method) > method);
+        assertTrue("title text must align after the poster card is removed",
+                source.indexOf("textParams.setMarginStart(0);", method) > method);
+        assertTrue("dynamic backdrop surface must force header text to white with shadow",
+                source.indexOf("backdropSurfaceMode = true;", method) > method
+                        && source.indexOf("applyBackdropSurfaceTextColors();", method) > method
+                        && source.indexOf("private void applyBackdropSurfaceTextColors()") > method
+                        && source.indexOf("styleFusionBackdropText(textView, COLOR_FUSION_BACKDROP_TEXT)", method) > method);
+        assertTrue("dynamic backdrop surface must not recolor action button text on light pills",
+                source.indexOf("!(view instanceof MaterialButton)", method) > method);
+        assertTrue("dynamic backdrop surface must style rating chips and action buttons as dark translucent glass",
+                source.contains("COLOR_BACKDROP_SURFACE_CONTROL_BG = 0x6610141A")
+                        && source.contains("styleBackdropSurfaceRatingChips();")
+                        && source.contains("tintActions(Setting.DETAIL_STYLE_CINEMA);")
+                        && source.contains("if (backdropSurfaceMode) {")
+                        && source.contains("button.setTextColor(COLOR_FUSION_BACKDROP_TEXT);"));
+        assertTrue("rating chips created after backdrop mode starts must keep white text instead of source colors",
+                source.contains("chip.setTextColor(backdropSurfaceMode ? COLOR_FUSION_BACKDROP_TEXT")
+                        && source.contains("textView.setTextColor(backdropSurfaceMode ? COLOR_FUSION_BACKDROP_TEXT"));
+        assertTrue("dynamic backdrop surface must be reported as a dark readable surface",
+                source.contains("if (backdropSurfaceMode) return false;")
+                        && source.contains("if (backdropSurfaceMode) return COLOR_FUSION_BACKDROP_TEXT;"));
     }
 
     @Test
@@ -830,19 +1344,29 @@ public class VideoActivityLayoutTest {
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
         int cycle = source.indexOf("private void cycleThemeMode()");
         int apply = source.indexOf("applyDetailTheme();", cycle);
-        int external = source.indexOf("bindExternalLinks();", apply);
-        int render = source.indexOf("renderFlagSelection();", apply);
+        int refresh = source.indexOf("refreshDetailThemeDynamicViews();", apply);
         int method = source.indexOf("private int addExternalLink(String name, String url)");
         int nextMethod = source.indexOf("private void openExternalLink(String url)", method);
+        int style = source.indexOf("private void styleExternalLinkRow(View view, ThemeColors colors)");
+        int styleEnd = source.indexOf("private void openExternalLink(String url)", style);
         String methodBody = nextMethod > method ? source.substring(method, nextMethod) : source.substring(method);
+        String styleBody = styleEnd > style ? source.substring(style, styleEnd) : source.substring(style);
 
         assertTrue(sourcePath + " is missing cycleThemeMode", cycle >= 0);
-        assertTrue("theme toggle must rebuild external link rows after theme colors change",
-                external > apply && external < render);
+        assertTrue(sourcePath + " is missing styleExternalLinkRow", style >= 0);
+        assertTrue("theme toggle must restyle dynamic rows without rebuilding the whole detail section",
+                refresh > apply);
+        assertTrue("new external link rows must share the same styling path as theme refreshes",
+                methodBody.contains("styleExternalLinkRow(row, colors);"));
+        assertTrue("external link rows must repaint their chrome when remote focus changes",
+                methodBody.contains("row.setOnFocusChangeListener((view, focused) -> styleExternalLinkRow(view, currentThemeColors()));"));
         assertTrue("direct detail external link labels must use resolved theme text color",
-                methodBody.contains("label.setTextColor(colors.primary)"));
+                styleBody.contains("label.setTextColor(colors.primary)"));
         assertTrue("direct detail external link icons must use resolved theme icon color",
-                methodBody.contains("icon.setColorFilter(colors.secondary)"));
+                styleBody.contains("icon.setColorFilter(colors.secondary)"));
+        assertTrue("focused direct detail external links must use the shared yellow focus stroke",
+                styleBody.contains("boolean focused = row.hasFocus();")
+                        && styleBody.contains("background.setStroke(ResUtil.dp2px(focused ? FOCUS_STROKE_DP : CHIP_STROKE_DP), focused ? FOCUS_STROKE : colors.line);"));
     }
 
     @Test
@@ -862,6 +1386,40 @@ public class VideoActivityLayoutTest {
                 source.indexOf("mBinding.videoContextScrim.setLayoutParams(", method) > method);
         assertTrue("Fusion context wall scrim must remain visible over the full-screen artwork",
                 source.indexOf("mBinding.videoContextScrim.setVisibility(View.VISIBLE)", method) > method);
+    }
+
+    private static void assertNoPrematurePlaybackReveal(Path sourcePath, String source) {
+        int playing = source.indexOf("protected void onPlayingChanged(boolean isPlaying)");
+        int playingEnd = source.indexOf("protected void onSizeChanged", playing);
+        String playingBody = playing >= 0 && playingEnd > playing ? source.substring(playing, playingEnd) : "";
+        int time = source.indexOf("public void onTimeChanged(long time)");
+        int timeEnd = source.indexOf("private void updatePlaybackHistoryPosition()", time);
+        String timeBody = time >= 0 && timeEnd > time ? source.substring(time, timeEnd) : "";
+
+        assertTrue(sourcePath + " is missing onPlayingChanged", playing >= 0);
+        assertTrue(sourcePath + " is missing onTimeChanged", time >= 0);
+        assertFalse("playing changes can arrive before first frame and must not hide loading", playingBody.contains("showPlaybackContent();"));
+        assertFalse("time ticks can observe old playback and must not hide loading", timeBody.contains("showPlaybackContent();"));
+    }
+
+    private static void assertSeekProgressFallback(Path sourcePath, String source) {
+        int field = source.indexOf("private Runnable mSeekProgressFallback;");
+        int init = source.indexOf("mSeekProgressFallback = this::hideSeekProgressIfReady;");
+        int started = source.indexOf("protected void onSeekStarted()");
+        int show = source.indexOf("showProgress();", started);
+        int remove = source.indexOf("App.removeCallbacks(mSeekProgressFallback);", show);
+        int post = source.indexOf("App.post(mSeekProgressFallback, 500);", remove);
+        int helper = source.indexOf("private void hideSeekProgressIfReady()");
+        int readyGuard = source.indexOf("player().getPlaybackState() != Player.STATE_READY", helper);
+        int reveal = source.indexOf("showPlaybackContent();", readyGuard);
+        int destroy = source.indexOf("protected void onDestroy()");
+        int destroyRemove = source.indexOf("mSeekProgressFallback", destroy);
+
+        assertTrue(sourcePath + " is missing mSeekProgressFallback", field >= 0);
+        assertTrue("seek fallback runnable must be initialized", init > field);
+        assertTrue("seek must show loading before scheduling the READY fallback", show > started && remove > show && post > remove);
+        assertTrue("seek fallback must only clear loading once playback is READY", readyGuard > helper && reveal > readyGuard);
+        assertTrue("seek fallback callback must be removed on destroy", destroyRemove > destroy);
     }
 
     private static Path findMobileResPath() {

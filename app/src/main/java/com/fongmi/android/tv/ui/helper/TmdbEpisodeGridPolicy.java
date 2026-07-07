@@ -11,6 +11,7 @@ public final class TmdbEpisodeGridPolicy {
     public static final int NATIVE_GRID_SCRIM_HEIGHT_DP = 148;
     public static final int NATIVE_MOBILE_GRID_SCRIM_HEIGHT_DP = 104;
     public static final int GRID_FALLBACK_IMAGE_LIMIT = 24;
+    public static final int NO_FOCUS_TARGET = -1;
 
     private static final int MAX_VISIBLE_ROWS = 3;
 
@@ -33,6 +34,16 @@ public final class TmdbEpisodeGridPolicy {
         if (screenWidthDp >= 1100) return 5;
         if (screenWidthDp >= 600) return 4;
         return 3;
+    }
+
+    public static int verticalFocusTarget(int position, int spanCount, int itemCount, boolean down) {
+        if (position < 0 || spanCount <= 0 || itemCount <= 0) return NO_FOCUS_TARGET;
+        int target = down ? position + spanCount : position - spanCount;
+        if (target >= 0 && target < itemCount) return target;
+        if (!down) return NO_FOCUS_TARGET;
+        int rowStart = position / spanCount * spanCount;
+        int lastRowStart = (itemCount - 1) / spanCount * spanCount;
+        return rowStart < lastRowStart ? itemCount - 1 : NO_FOCUS_TARGET;
     }
 
     public static int nativeGridCardHeightDp(boolean phoneWidth) {

@@ -4772,6 +4772,7 @@
       deviceMode: "unknown",
       detailReturn: null,
       homeReturn: null,
+      nativeReturn: null,
       focusReturnEl: null,
       remoteInitialFocused: false,
       renderTimer: 0,
@@ -8655,6 +8656,7 @@
         rememberDetailReturn(button);
         rememberWatchIntent(state.selected, "view");
         startWatchTracking(state.selected);
+        markNativePlaybackReturnHome("continue");
         const playbackItem = Object.assign({}, state.selected || {}, history || {}, {
           title: history.title || state.selected.title,
           pic: state.selected.pic || history.pic || "",
@@ -11236,6 +11238,7 @@ nsec: ${state.identity.nsec}` : "身份未就绪";
     async function playPanResult(item) {
       const payload = buildPanPlayPayload(item);
       if (!payload) return;
+      markNativePlaybackReturnHome("pan");
       await rememberPanPlaybackReturn(item);
       if (state.selected) {
         rememberWatchIntent(state.selected, "search");
@@ -11348,9 +11351,35 @@ nsec: ${state.identity.nsec}` : "身份未就绪";
       restoreFocusReturn($("detailSheet") && $("detailSheet").classList.contains("active") ? detailPrimaryActionButton() : null);
     }
 
+    function markNativePlaybackReturnHome(reason) {
+      if (!isNativeLeanbackClient() || !($("detailSheet") && $("detailSheet").classList.contains("active"))) return;
+      state.nativeReturn = {
+        homeAfterResume: true,
+        at: Date.now(),
+        reason: String(reason || "playback")
+      };
+      saveUiSnapshotNow();
+    }
+
+    function consumeNativePlaybackReturnHome() {
+      const marker = state.nativeReturn;
+      if (!marker || !marker.homeAfterResume) return false;
+      const stale = Date.now() - Number(marker.at || 0) > RETURN_CONTEXT_TTL_MS;
+      const detailActive = $("detailSheet") && $("detailSheet").classList.contains("active");
+      if (stale || !isNativeLeanbackClient() || !detailActive) {
+        state.nativeReturn = null;
+        scheduleUiSnapshotSave();
+        return false;
+      }
+      state.nativeReturn = null;
+      closeDetail(false);
+      return true;
+    }
+
     async function nativeSearch(title) {
       if (!title) return;
       rememberDetailReturn($("detailSearchBtn"));
+      markNativePlaybackReturnHome("search");
       const item = state.selected || {};
       const wallPic = playbackWallPic(item);
       await sdk().search(title, {
@@ -13884,6 +13913,7 @@ nsec: ${state.identity.nsec}` : "身份未就绪";
         imageUrl: $("viewerImage") && $("viewerImage").style.display !== "none" ? $("viewerImage").getAttribute("src") || "" : "",
         detailReturn: state.detailReturn || null,
         homeReturn: state.homeReturn || null,
+        nativeReturn: state.nativeReturn || null,
         pan: {
           visible: !!($("panSearchBlock") && $("panSearchBlock").classList.contains("active")),
           keyword: state.pan.keyword || "",
@@ -13965,6 +13995,7 @@ nsec: ${state.identity.nsec}` : "身份未就绪";
       if (!snapshot) return false;
       state.detailReturn = snapshot.detailReturn || null;
       state.homeReturn = snapshot.homeReturn || null;
+      state.nativeReturn = snapshot.nativeReturn || null;
       restoreSearchSnapshot(snapshot.search);
       if (snapshot.activeList) state.activeList = snapshot.activeList;
       normalizeActiveListForViewport();
@@ -14009,13 +14040,14 @@ nsec: ${state.identity.nsec}` : "身份未就绪";
       lockViewportWidth();
       fitConnectionPanel();
       renderConnection();
-      if (!isPanPlaybackReturn) {
+      const consumedNativeReturn = consumeNativePlaybackReturnHome();
+      if (!consumedNativeReturn && !isPanPlaybackReturn) {
         if ($("detailSheet") && $("detailSheet").classList.contains("active") && state.selected) refreshActiveDetailView();
         if ($("panSearchBlock") && $("panSearchBlock").classList.contains("active")) renderPanResults();
         renderAll({ deferContent: uiSnapshotRoute() === "home" });
         normalizeRails();
       }
-      if (!restorePanPlaybackReturn({ skipRender: isPanPlaybackReturn })) restoreDetailReturn();
+      if (!consumedNativeReturn && !restorePanPlaybackReturn({ skipRender: isPanPlaybackReturn })) restoreDetailReturn();
       updateBackTopButton();
       scheduleHistorySettlement();
       loadRecentList({ refresh: true, silent: true }).catch(() => {});

@@ -124,17 +124,11 @@ public final class SubtitleMatchService {
         SubtitleMatchResult result;
         try {
             SubtitleContext context = contextBuilder.build(request);
-            List<com.fongmi.android.tv.subtitle.model.SubtitleQuery> queries = queryPlanner.build(context);
-            Log.i(TAG, "auto context title=" + context.getCanonicalTitle() + " original=" + context.getOriginalTitle() + " year=" + context.getYear() + " tmdb=" + context.hasTmdbIdentity() + " queries=" + queries.size());
-            List<SubtitleCandidate> ranked = ranker.rank(registry.search(queries, context), context);
-            SubtitleCandidate selected = ranker.pickBest(ranked, context);
-            Log.i(TAG, "auto ranked count=" + ranked.size() + " selected=" + best(selected) + " best=" + best(ranked));
-            if (selected == null) {
-                result = SubtitleMatchResult.noMatch(ranked, ranked.isEmpty() ? "empty_result" : "below_threshold");
-            } else {
-                SubtitleAsset asset = registry.resolve(selected, context);
-                Log.i(TAG, "auto resolve matched=" + (asset != null) + " selected=" + best(selected));
-                result = asset == null ? SubtitleMatchResult.noMatch(ranked, "resolve_failed") : SubtitleMatchResult.matched(selected, asset, ranked);
+            result = matchContext(context, "auto");
+            if (result.getStatus() == com.fongmi.android.tv.subtitle.model.SubtitleMatchStatus.NO_MATCH) {
+                SubtitleContext fallback = contextBuilder.buildWithAiFallback(request);
+                Log.i(TAG, "auto ai fallback title=" + fallback.getCanonicalTitle() + " sourceTitle=" + context.getCanonicalTitle());
+                result = matchContext(fallback, "auto ai");
             }
         } catch (Throwable e) {
             Log.w(TAG, "auto error " + e.getMessage(), e);
@@ -143,6 +137,18 @@ public final class SubtitleMatchService {
         if (!isCurrent(request.getPlaybackKey(), generation)) return;
         jobs.remove(request.getPlaybackKey());
         dispatch(listener, request, result);
+    }
+
+    private SubtitleMatchResult matchContext(SubtitleContext context, String phase) throws Exception {
+        List<com.fongmi.android.tv.subtitle.model.SubtitleQuery> queries = queryPlanner.build(context);
+        Log.i(TAG, phase + " context title=" + context.getCanonicalTitle() + " original=" + context.getOriginalTitle() + " year=" + context.getYear() + " tmdb=" + context.hasTmdbIdentity() + " queries=" + queries.size());
+        List<SubtitleCandidate> ranked = ranker.rank(registry.search(queries, context), context);
+        SubtitleCandidate selected = ranker.pickBest(ranked, context);
+        Log.i(TAG, phase + " ranked count=" + ranked.size() + " selected=" + best(selected) + " best=" + best(ranked));
+        if (selected == null) return SubtitleMatchResult.noMatch(ranked, ranked.isEmpty() ? "empty_result" : "below_threshold");
+        SubtitleAsset asset = registry.resolve(selected, context);
+        Log.i(TAG, phase + " resolve matched=" + (asset != null) + " selected=" + best(selected));
+        return asset == null ? SubtitleMatchResult.noMatch(ranked, "resolve_failed") : SubtitleMatchResult.matched(selected, asset, ranked);
     }
 
     private boolean isCurrent(String playbackKey, int generation) {

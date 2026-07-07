@@ -3,6 +3,7 @@ package com.fongmi.android.tv.ui.activity;
 import android.app.Activity;
 import android.content.Intent;
 import android.os.Bundle;
+import android.text.TextUtils;
 import android.view.View;
 
 import androidx.viewbinding.ViewBinding;
@@ -135,7 +136,9 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
 
     @Override
     public void setConfig(Config config) {
-        if (config.getUrl().startsWith("file")) {
+        if (config == null) return;
+        String url = config.getUrl();
+        if (!TextUtils.isEmpty(url) && url.startsWith("file")) {
             PermissionUtil.requestFile(this, allGranted -> load(config));
         } else {
             load(config);

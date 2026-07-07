@@ -2,23 +2,23 @@ package com.fongmi.android.tv.ui.dialog;
 
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.text.TextUtils;
-import android.util.TypedValue;
-import android.view.Gravity;
+import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
 import android.view.ViewGroup;
-import android.widget.ScrollView;
 import android.widget.TextView;
 
-import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.widget.LinearLayoutCompat;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
+import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
+import com.fongmi.android.tv.databinding.DialogLoginStateLearnBinding;
 import com.fongmi.android.tv.utils.LoginStateSync;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
@@ -30,119 +30,105 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-public final class LoginStateLearnDialog {
+public final class LoginStateLearnDialog extends BaseAlertDialog {
 
     private static final int MAX_SECTION_ROWS = 4;
 
-    private LoginStateLearnDialog() {
-    }
+    private DialogLoginStateLearnBinding binding;
+    private Runnable callback;
+    private boolean learning;
 
     public static void show(Fragment fragment, Runnable callback) {
         show(fragment.requireActivity(), callback);
     }
 
     public static void show(FragmentActivity activity, Runnable callback) {
-        boolean learning = LoginStateSync.hasLearningSnapshot();
+        for (Fragment fragment : activity.getSupportFragmentManager().getFragments()) if (fragment instanceof LoginStateLearnDialog && fragment.isAdded() && !fragment.isRemoving()) return;
+        LoginStateLearnDialog dialog = new LoginStateLearnDialog();
+        dialog.callback = callback;
+        dialog.show(activity.getSupportFragmentManager(), null);
+    }
+
+    @Override
+    protected ViewBinding getBinding() {
+        return binding = DialogLoginStateLearnBinding.inflate(getLayoutInflater());
+    }
+
+    @Override
+    protected MaterialAlertDialogBuilder getBuilder() {
+        return new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog).setView(getBinding().getRoot());
+    }
+
+    @Override
+    protected void initView() {
+        bindState();
+    }
+
+    @Override
+    protected void initEvent() {
+        binding.reset.setOnClickListener(v -> onReset());
+        binding.manage.setOnClickListener(v -> onManage());
+        binding.negative.setOnClickListener(v -> dismiss());
+        binding.positive.setOnClickListener(v -> onPositive());
+    }
+
+    @Override
+    public void onStart() {
+        super.onStart();
+        resize();
+        binding.positive.requestFocus();
+    }
+
+    private void bindState() {
+        FragmentActivity activity = requireActivity();
+        learning = LoginStateSync.hasLearningSnapshot();
         int learned = LoginStateSync.learnedCount();
-        final AlertDialog[] dialogRef = new AlertDialog[1];
-        Runnable resetAction = () -> {
-            LoginStateSync.resetLearningResults();
-            Notify.show(R.string.login_state_reset_results_done);
-            if (callback != null) callback.run();
-            AlertDialog current = dialogRef[0];
-            if (current != null) current.dismiss();
-            if (!activity.isFinishing()) show(activity, callback);
-        };
-        AlertDialog dialog = new MaterialAlertDialogBuilder(activity)
-                .setView(view(activity, learning, learned, resetAction))
-                .setNegativeButton(R.string.dialog_negative, null)
-                .setNeutralButton(R.string.login_state_manage_paths, null)
-                .setPositiveButton(learning ? R.string.login_state_finish : R.string.login_state_start, null)
-                .create();
-        dialogRef[0] = dialog;
-        dialog.setOnShowListener(d -> {
-            resize(dialog, activity);
-            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(v -> {
-                dialog.dismiss();
-                LoginStatePathDialog.show(activity, callback);
-            });
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
-                dialog.dismiss();
-                run(activity, learning, callback);
-            });
-        });
-        dialog.show();
+        binding.message.setText(activity.getString(learning ? R.string.login_state_learning_message : R.string.login_state_message, learned));
+        binding.positive.setText(learning ? R.string.login_state_finish : R.string.login_state_start);
+        binding.reset.setVisibility(LoginStateSync.pendingPaths().isEmpty() && LoginStateSync.findings().isEmpty() ? View.GONE : View.VISIBLE);
+        binding.quickContent.removeAllViews();
+        binding.quickContent.addView(quickView(activity), new LinearLayoutCompat.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        setScrollHeight(activity);
     }
 
-    private static LinearLayoutCompat view(FragmentActivity activity, boolean learning, int learned, Runnable resetAction) {
-        LinearLayoutCompat container = new LinearLayoutCompat(activity);
-        container.setOrientation(LinearLayoutCompat.VERTICAL);
-        container.setPadding(ResUtil.dp2px(24), ResUtil.dp2px(18), ResUtil.dp2px(24), 0);
-
-        addHeader(activity, container, resetAction);
-
-        TextView message = new TextView(activity);
-        message.setText(activity.getString(learning ? R.string.login_state_learning_message : R.string.login_state_message, learned));
-        message.setTextColor(0xDE000000);
-        message.setTextSize(14);
-        message.setLineSpacing(0, 1.12f);
-        container.addView(message, new LinearLayoutCompat.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-
-        ScrollView scroll = new ScrollView(activity);
-        scroll.setFillViewport(false);
-        scroll.setScrollbarFadingEnabled(false);
-        scroll.addView(quickView(activity), new ScrollView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-
-        int height = Math.max(ResUtil.dp2px(190), Math.min(ResUtil.dp2px(300), (int) (ResUtil.getScreenHeight(activity) * 0.34f)));
-        LinearLayoutCompat.LayoutParams params = new LinearLayoutCompat.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, height);
-        params.topMargin = ResUtil.dp2px(12);
-        container.addView(scroll, params);
-        return container;
+    private void setScrollHeight(FragmentActivity activity) {
+        ViewGroup.LayoutParams params = binding.contentScroll.getLayoutParams();
+        params.height = Math.max(ResUtil.dp2px(190), Math.min(ResUtil.dp2px(300), (int) (ResUtil.getScreenHeight(activity) * 0.34f)));
+        binding.contentScroll.setLayoutParams(params);
     }
 
-    private static void addHeader(FragmentActivity activity, LinearLayoutCompat container, Runnable resetAction) {
-        LinearLayoutCompat row = new LinearLayoutCompat(activity);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setOrientation(LinearLayoutCompat.HORIZONTAL);
-        TextView title = new TextView(activity);
-        title.setText(R.string.setting_login_state);
-        title.setTextColor(0xDE000000);
-        title.setTextSize(20);
-        title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        title.setSingleLine(true);
-        title.setEllipsize(TextUtils.TruncateAt.END);
-        row.addView(title, new LinearLayoutCompat.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        if (!LoginStateSync.pendingPaths().isEmpty() || !LoginStateSync.findings().isEmpty()) row.addView(resetButton(activity, resetAction), new LinearLayoutCompat.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ResUtil.dp2px(36)));
-        container.addView(row, new LinearLayoutCompat.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-    }
-
-    private static TextView resetButton(FragmentActivity activity, Runnable resetAction) {
-        TextView button = new TextView(activity);
-        button.setText(R.string.login_state_reset_results);
-        button.setTextColor(0xFF1A73E8);
-        button.setTextSize(13);
-        button.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        button.setGravity(Gravity.CENTER);
-        button.setMinHeight(ResUtil.dp2px(36));
-        button.setPadding(ResUtil.dp2px(12), 0, ResUtil.dp2px(12), 0);
-        button.setClickable(true);
-        button.setFocusable(true);
-        TypedValue value = new TypedValue();
-        if (activity.getTheme().resolveAttribute(android.R.attr.selectableItemBackground, value, true)) button.setBackgroundResource(value.resourceId);
-        button.setOnClickListener(v -> resetAction.run());
-        return button;
-    }
-
-    private static void resize(AlertDialog dialog, FragmentActivity activity) {
-        Window window = dialog.getWindow();
-        if (window == null) return;
+    private void resize() {
+        if (getDialog() == null || getDialog().getWindow() == null) return;
+        Window window = getDialog().getWindow();
         WindowManager.LayoutParams params = window.getAttributes();
-        boolean land = ResUtil.isLand(activity);
-        int width = Math.min((int) (ResUtil.getScreenWidth(activity) * (land ? 0.68f : 0.92f)), ResUtil.dp2px(640));
+        boolean land = ResUtil.isLand(requireContext());
+        int width = Math.min((int) (ResUtil.getScreenWidth(requireContext()) * (land ? 0.68f : 0.92f)), ResUtil.dp2px(640));
         params.width = Math.max(width, ResUtil.dp2px(320));
         params.height = WindowManager.LayoutParams.WRAP_CONTENT;
+        window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        window.getDecorView().setPadding(0, 0, 0, 0);
         window.setAttributes(params);
         window.setLayout(params.width, params.height);
+    }
+
+    private void onReset() {
+        LoginStateSync.resetLearningResults();
+        Notify.show(R.string.login_state_reset_results_done);
+        if (callback != null) callback.run();
+        bindState();
+    }
+
+    private void onManage() {
+        FragmentActivity activity = requireActivity();
+        dismiss();
+        LoginStatePathDialog.show(activity, callback);
+    }
+
+    private void onPositive() {
+        FragmentActivity activity = requireActivity();
+        boolean finish = learning;
+        dismiss();
+        run(activity, finish, callback);
     }
 
     private static LinearLayoutCompat quickView(FragmentActivity activity) {

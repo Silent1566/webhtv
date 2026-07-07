@@ -1,9 +1,9 @@
 {
   "fongmi_media": {
-    "repo": "https://github.com/FongMi/media.git",
-    "branch": "release-1.10.1-fongmi",
-    "commit": "4d26e566e2d291356216b58124ce3c489ca2a4d3",
-    "version": "1.10.1-fongmi"
+    "repo": "https://github.com/fish2018/webhtv",
+    "branch": "media/release-1.11.0-alpha01-fongmi",
+    "commit": "e3e922d5c01bc0b564849940fe589daf37360d15",
+    "version": "1.11.0-alpha01-fongmi"
   },
   "fongmi_nextlib": {
     "repo": "https://github.com/FongMi/nextlib.git",

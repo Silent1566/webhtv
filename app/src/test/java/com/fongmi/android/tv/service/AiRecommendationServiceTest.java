@@ -10,8 +10,10 @@ import org.junit.Test;
 import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.LinkedHashMap;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -23,21 +25,21 @@ public class AiRecommendationServiceTest {
     public void extractOutputText_readsResponsesConvenienceField() {
         String body = "{\"output_text\":\"{\\\"items\\\":[{\\\"title\\\":\\\"想见你\\\"}]}\"}";
 
-        assertEquals("{\"items\":[{\"title\":\"想见你\"}]}", AiRecommendationService.extractOutputText(body));
+        assertEquals("{\"items\":[{\"title\":\"想见你\"}]}", AiCompletionClient.extractOutputText(body));
     }
 
     @Test
     public void extractOutputText_readsNestedResponsesContentText() {
         String body = "{\"output\":[{\"content\":[{\"type\":\"output_text\",\"text\":\"{\\\"items\\\":[{\\\"title\\\":\\\"黑暗荣耀\\\"}]}\"}]}]}";
 
-        assertEquals("{\"items\":[{\"title\":\"黑暗荣耀\"}]}", AiRecommendationService.extractOutputText(body));
+        assertEquals("{\"items\":[{\"title\":\"黑暗荣耀\"}]}", AiCompletionClient.extractOutputText(body));
     }
 
     @Test
     public void extractOutputText_readsLooselyNestedResponsesText() {
         String body = "{\"output\":[{\"type\":\"message\",\"content\":[{\"type\":\"text\",\"text\":{\"value\":\"{\\\"items\\\":[{\\\"title\\\":\\\"边水往事\\\"}]}\"}}]}]}";
 
-        assertEquals("{\"items\":[{\"title\":\"边水往事\"}]}", AiRecommendationService.extractOutputText(body));
+        assertEquals("{\"items\":[{\"title\":\"边水往事\"}]}", AiCompletionClient.extractOutputText(body));
     }
 
     @Test
@@ -88,14 +90,14 @@ public class AiRecommendationServiceTest {
     public void requestSpec_buildsOpenAiChatRequestFromBaseEndpoint() {
         AiConfig config = AiConfig.objectFrom("{\"enabled\":true,\"protocol\":\"openai_chat\",\"endpoint\":\"https://api.example.com/v1\",\"apiKey\":\"sk-test\",\"model\":\"gpt-test\",\"customUserAgent\":\"claude-cli/2.1.161\"}");
 
-        AiRecommendationService.RequestSpec spec = AiRecommendationService.requestSpec(config, "hello");
+        AiCompletionClient.RequestSpec spec = AiCompletionClient.requestSpec(config, "hello");
 
-        assertEquals("https://api.example.com/v1/chat/completions", spec.url);
-        assertEquals("Bearer sk-test", spec.headers.get("Authorization"));
-        assertEquals("claude-cli/2.1.161", spec.headers.get("User-Agent"));
-        assertEquals("gpt-test", spec.body.get("model").getAsString());
-        assertEquals("user", spec.body.getAsJsonArray("messages").get(0).getAsJsonObject().get("role").getAsString());
-        assertEquals("hello", spec.body.getAsJsonArray("messages").get(0).getAsJsonObject().get("content").getAsString());
+        assertEquals("https://api.example.com/v1/chat/completions", spec.getUrl());
+        assertEquals("Bearer sk-test", spec.getHeaders().get("Authorization"));
+        assertEquals("claude-cli/2.1.161", spec.getHeaders().get("User-Agent"));
+        assertEquals("gpt-test", spec.getBody().get("model").getAsString());
+        assertEquals("user", spec.getBody().getAsJsonArray("messages").get(0).getAsJsonObject().get("role").getAsString());
+        assertEquals("hello", spec.getBody().getAsJsonArray("messages").get(0).getAsJsonObject().get("content").getAsString());
     }
 
     @Test
@@ -103,21 +105,21 @@ public class AiRecommendationServiceTest {
         AiConfig config = AiConfig.objectFrom("{\"protocol\":\"openai_chat\"}");
         String body = "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"{\\\"items\\\":[{\\\"title\\\":\\\"繁花\\\"}]}\"}}]}";
 
-        assertEquals("{\"items\":[{\"title\":\"繁花\"}]}", AiRecommendationService.extractCompletionText(body, config));
+        assertEquals("{\"items\":[{\"title\":\"繁花\"}]}", AiCompletionClient.extractCompletionText(body, config));
     }
 
     @Test
     public void requestSpec_buildsAnthropicMessagesRequest() {
         AiConfig config = AiConfig.objectFrom("{\"enabled\":true,\"protocol\":\"anthropic_messages\",\"endpoint\":\"https://api.anthropic.com/v1\",\"apiKey\":\"sk-ant\",\"model\":\"claude-test\"}");
 
-        AiRecommendationService.RequestSpec spec = AiRecommendationService.requestSpec(config, "hello");
+        AiCompletionClient.RequestSpec spec = AiCompletionClient.requestSpec(config, "hello");
 
-        assertEquals("https://api.anthropic.com/v1/messages", spec.url);
-        assertEquals("sk-ant", spec.headers.get("x-api-key"));
-        assertEquals("2023-06-01", spec.headers.get("anthropic-version"));
-        assertEquals("claude-test", spec.body.get("model").getAsString());
-        assertEquals(4096, spec.body.get("max_tokens").getAsInt());
-        assertEquals("hello", spec.body.getAsJsonArray("messages").get(0).getAsJsonObject().get("content").getAsString());
+        assertEquals("https://api.anthropic.com/v1/messages", spec.getUrl());
+        assertEquals("sk-ant", spec.getHeaders().get("x-api-key"));
+        assertEquals("2023-06-01", spec.getHeaders().get("anthropic-version"));
+        assertEquals("claude-test", spec.getBody().get("model").getAsString());
+        assertEquals(4096, spec.getBody().get("max_tokens").getAsInt());
+        assertEquals("hello", spec.getBody().getAsJsonArray("messages").get(0).getAsJsonObject().get("content").getAsString());
     }
 
     @Test
@@ -125,19 +127,19 @@ public class AiRecommendationServiceTest {
         AiConfig config = AiConfig.objectFrom("{\"protocol\":\"anthropic_messages\"}");
         String body = "{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"items\\\":[{\\\"title\\\":\\\"三体\\\"}]}\"}]}";
 
-        assertEquals("{\"items\":[{\"title\":\"三体\"}]}", AiRecommendationService.extractCompletionText(body, config));
+        assertEquals("{\"items\":[{\"title\":\"三体\"}]}", AiCompletionClient.extractCompletionText(body, config));
     }
 
     @Test
     public void requestSpec_buildsGeminiNativeRequest() {
         AiConfig config = AiConfig.objectFrom("{\"enabled\":true,\"protocol\":\"gemini_native\",\"endpoint\":\"https://generativelanguage.googleapis.com/v1beta\",\"apiKey\":\"gm-key\",\"model\":\"gemini-2.5-flash\"}");
 
-        AiRecommendationService.RequestSpec spec = AiRecommendationService.requestSpec(config, "hello");
+        AiCompletionClient.RequestSpec spec = AiCompletionClient.requestSpec(config, "hello");
 
-        assertEquals("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent", spec.url);
-        assertEquals("gm-key", spec.headers.get("x-goog-api-key"));
-        assertEquals("user", spec.body.getAsJsonArray("contents").get(0).getAsJsonObject().get("role").getAsString());
-        assertEquals("hello", spec.body.getAsJsonArray("contents").get(0).getAsJsonObject().getAsJsonArray("parts").get(0).getAsJsonObject().get("text").getAsString());
+        assertEquals("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent", spec.getUrl());
+        assertEquals("gm-key", spec.getHeaders().get("x-goog-api-key"));
+        assertEquals("user", spec.getBody().getAsJsonArray("contents").get(0).getAsJsonObject().get("role").getAsString());
+        assertEquals("hello", spec.getBody().getAsJsonArray("contents").get(0).getAsJsonObject().getAsJsonArray("parts").get(0).getAsJsonObject().get("text").getAsString());
     }
 
     @Test
@@ -145,7 +147,7 @@ public class AiRecommendationServiceTest {
         AiConfig config = AiConfig.objectFrom("{\"protocol\":\"gemini_native\"}");
         String body = "{\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"{\\\"items\\\":[{\\\"title\\\":\\\"沙丘\\\"}]}\"}]}}]}";
 
-        assertEquals("{\"items\":[{\"title\":\"沙丘\"}]}", AiRecommendationService.extractCompletionText(body, config));
+        assertEquals("{\"items\":[{\"title\":\"沙丘\"}]}", AiCompletionClient.extractCompletionText(body, config));
     }
 
     @Test
@@ -245,9 +247,9 @@ public class AiRecommendationServiceTest {
         AiConfig zhipuV4 = AiConfig.objectFrom("{\"protocol\":\"openai_chat\",\"endpoint\":\"https://open.bigmodel.cn/api/coding/paas/v4\",\"apiKey\":\"sk\"}");
         AiConfig anthropicCompat = AiConfig.objectFrom("{\"protocol\":\"anthropic_messages\",\"endpoint\":\"https://api.z.ai/api/anthropic\",\"apiKey\":\"sk\"}");
 
-        assertEquals("https://proxy.example.com/v1/models", AiRecommendationService.buildModelUrlCandidates(openAiFull).get(0));
-        assertEquals("https://open.bigmodel.cn/api/coding/paas/v4/models", AiRecommendationService.buildModelUrlCandidates(zhipuV4).get(0));
-        assertEquals("https://api.z.ai/v1/models", AiRecommendationService.buildModelUrlCandidates(anthropicCompat).get(1));
+        assertEquals("https://proxy.example.com/v1/models", AiCompletionClient.buildModelUrlCandidates(openAiFull).get(0));
+        assertEquals("https://open.bigmodel.cn/api/coding/paas/v4/models", AiCompletionClient.buildModelUrlCandidates(zhipuV4).get(0));
+        assertEquals("https://api.z.ai/v1/models", AiCompletionClient.buildModelUrlCandidates(anthropicCompat).get(1));
     }
 
     @Test
@@ -255,8 +257,8 @@ public class AiRecommendationServiceTest {
         AiConfig openAi = AiConfig.objectFrom("{\"protocol\":\"openai_chat\"}");
         AiConfig gemini = AiConfig.objectFrom("{\"protocol\":\"gemini_native\"}");
 
-        List<AiRecommendationService.ModelInfo> openAiModels = AiRecommendationService.parseModelList("{\"data\":[{\"id\":\"gpt-4.1-mini\",\"owned_by\":\"openai\"}]}", openAi);
-        List<AiRecommendationService.ModelInfo> geminiModels = AiRecommendationService.parseModelList("{\"models\":[{\"name\":\"models/gemini-2.5-flash\",\"supportedGenerationMethods\":[\"generateContent\"]},{\"name\":\"models/embedding-001\",\"supportedGenerationMethods\":[\"embedContent\"]}]}", gemini);
+        List<AiCompletionClient.ModelInfo> openAiModels = AiCompletionClient.parseModelList("{\"data\":[{\"id\":\"gpt-4.1-mini\",\"owned_by\":\"openai\"}]}", openAi);
+        List<AiCompletionClient.ModelInfo> geminiModels = AiCompletionClient.parseModelList("{\"models\":[{\"name\":\"models/gemini-2.5-flash\",\"supportedGenerationMethods\":[\"generateContent\"]},{\"name\":\"models/embedding-001\",\"supportedGenerationMethods\":[\"embedContent\"]}]}", gemini);
 
         assertEquals(1, openAiModels.size());
         assertEquals("gpt-4.1-mini", openAiModels.get(0).getId());
@@ -268,9 +270,24 @@ public class AiRecommendationServiceTest {
 
     @Test
     public void sanitizeUserAgent_ignoresControlCharactersButAllowsTab() {
-        assertEquals("claude-cli/2.1.161", AiRecommendationService.sanitizeUserAgent(" claude-cli/2.1.161 "));
-        assertEquals("client\tname", AiRecommendationService.sanitizeUserAgent("client\tname"));
-        assertEquals("", AiRecommendationService.sanitizeUserAgent("bad\nua"));
+        assertEquals("claude-cli/2.1.161", AiCompletionClient.sanitizeUserAgent(" claude-cli/2.1.161 "));
+        assertEquals("client\tname", AiCompletionClient.sanitizeUserAgent("client\tname"));
+        assertEquals("", AiCompletionClient.sanitizeUserAgent("bad\nua"));
+    }
+
+    @Test
+    public void aiDebugLog_redactsSecretHeadersAndKeepsSingleLine() {
+        Map<String, String> headers = new LinkedHashMap<>();
+        headers.put("Authorization", "Bearer sk-test");
+        headers.put("x-api-key", "sk-test");
+        headers.put("User-Agent", "webhtv");
+
+        Map<String, String> redacted = AiDebugLog.redactedHeaders(headers);
+
+        assertEquals("<redacted>", redacted.get("Authorization"));
+        assertEquals("<redacted>", redacted.get("x-api-key"));
+        assertEquals("webhtv", redacted.get("User-Agent"));
+        assertFalse(AiDebugLog.clip("a\nb").contains("\n"));
     }
 
     @Test

@@ -3,9 +3,9 @@ package com.fongmi.android.tv.player.engine;
 import androidx.media3.common.C;
 import androidx.media3.common.Effect;
 import androidx.media3.common.Format;
+import androidx.media3.common.MediaEdition;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.MediaMetadata;
-import androidx.media3.common.MediaTitle;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.common.Tracks;
@@ -184,12 +184,17 @@ public class ExoPlayerEngine implements PlayerEngine {
 
     @Override
     public boolean haveTitle() {
-        return !player.getCurrentMediaTitles().isEmpty();
+        return !player.getCurrentMediaEditions().isEmpty();
     }
 
     @Override
-    public List<MediaTitle> getCurrentMediaTitles() {
-        return player.getCurrentMediaTitles();
+    public List<MediaEdition> getCurrentMediaEditions() {
+        return player.getCurrentMediaEditions();
+    }
+
+    @Override
+    public boolean selectEdition(MediaEdition edition) {
+        return player.selectEdition(edition);
     }
 
     @Override

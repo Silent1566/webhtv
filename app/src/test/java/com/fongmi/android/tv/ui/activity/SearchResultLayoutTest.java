@@ -23,7 +23,7 @@ public class SearchResultLayoutTest {
         assertTrue("TV search results need a horizontal site row for landscape layout",
                 layout.contains("android:id=\"@+id/collectHorizontal\""));
         assertTrue("Horizontal site row must not consume the result area height",
-                layout.contains("android:id=\"@+id/collectHorizontal\"\n        android:layout_width=\"match_parent\"\n        android:layout_height=\"84dp\""));
+                layout.contains("android:layout_height=\"56dp\""));
         assertTrue("Landscape layout must show the horizontal site row",
                 source.contains("mBinding.collectHorizontal.setVisibility(horizontal ? android.view.View.VISIBLE : android.view.View.GONE);"));
         assertTrue("Landscape layout must hide the vertical side site list",

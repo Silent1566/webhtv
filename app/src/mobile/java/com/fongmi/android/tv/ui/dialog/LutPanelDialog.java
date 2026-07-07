@@ -43,12 +43,12 @@ import java.util.Set;
 public class LutPanelDialog extends BaseBottomSheetDialog {
 
     private static final long FAVORITE_DOUBLE_CLICK_MS = 450;
-    private static final int PANEL_COLOR = 0xFF28282A;
-    private static final int BUTTON_COLOR = 0xFF37373A;
-    private static final int BUTTON_FOCUS_COLOR = 0xFF424247;
-    private static final int BUTTON_SELECTED_COLOR = 0xFF4B4B4F;
-    private static final int BUTTON_STROKE_COLOR = 0x14FFFFFF;
-    private static final int BUTTON_ACTIVE_STROKE_COLOR = 0x33FFFFFF;
+    private static final int[] PANEL_COLORS = new int[]{0xE62F315E, 0xD6282955, 0xCC303463};
+    private static final int BUTTON_COLOR = 0x1FFFFFFF;
+    private static final int BUTTON_FOCUS_COLOR = 0x2EFFFFFF;
+    private static final int BUTTON_SELECTED_COLOR = 0x3DFFFFFF;
+    private static final int BUTTON_STROKE_COLOR = 0x24FFFFFF;
+    private static final int BUTTON_ACTIVE_STROKE_COLOR = 0x4DFFFFFF;
 
     private MaterialTextView title;
     private MaterialTextView all;
@@ -338,15 +338,15 @@ public class LutPanelDialog extends BaseBottomSheetDialog {
         GradientDrawable drawable = new GradientDrawable();
         drawable.setColor(selected ? BUTTON_SELECTED_COLOR : focused ? BUTTON_FOCUS_COLOR : BUTTON_COLOR);
         drawable.setStroke(dp(1), selected || focused ? BUTTON_ACTIVE_STROKE_COLOR : BUTTON_STROKE_COLOR);
-        drawable.setCornerRadius(dp(7));
+        drawable.setCornerRadius(dp(6));
         view.setBackground(drawable);
         view.setTextColor(selected ? Color.WHITE : 0xE6FFFFFF);
     }
 
     private GradientDrawable panelBackground() {
-        GradientDrawable drawable = new GradientDrawable();
-        drawable.setColor(PANEL_COLOR);
-        drawable.setCornerRadii(new float[]{dp(18), dp(18), dp(18), dp(18), 0, 0, 0, 0});
+        GradientDrawable drawable = new GradientDrawable(GradientDrawable.Orientation.TL_BR, PANEL_COLORS);
+        drawable.setCornerRadii(new float[]{dp(22), dp(22), dp(22), dp(22), 0, 0, 0, 0});
+        drawable.setStroke(dp(1), 0x66FFFFFF);
         return drawable;
     }
 

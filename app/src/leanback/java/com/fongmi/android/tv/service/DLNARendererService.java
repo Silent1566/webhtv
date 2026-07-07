@@ -242,7 +242,7 @@ public class DLNARendererService extends AndroidUpnpServiceImpl implements Servi
 
     private final PlaybackService.PlayerCallback playerCallback = new PlaybackService.PlayerCallback() {
         @Override
-        public void onPlayerRebuild(Player newPlayer) {
+        public void onPlayerRebuild(Player newPlayer, boolean resetVideoSurface) {
             if (currentListenerPlayer != null) currentListenerPlayer.removeListener(listener);
             currentListenerPlayer = newPlayer;
             newPlayer.addListener(listener);

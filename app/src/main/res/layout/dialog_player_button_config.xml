@@ -52,7 +52,8 @@
         android:layout_weight="1"
         android:clipToPadding="false"
         android:overScrollMode="never"
-        android:paddingBottom="4dp" />
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp" />
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/close"

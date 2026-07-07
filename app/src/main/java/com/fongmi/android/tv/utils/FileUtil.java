@@ -83,6 +83,7 @@ public class FileUtil {
     public static void clearCache(Callback callback) {
         Task.execute(() -> {
             Path.clear(Path.cache());
+            AppCache.clearLegacyPreferences();
             // 清理集数位置缓存
             com.fongmi.android.tv.bean.EpisodePositionCache.get().clear();
             App.post(callback::success);

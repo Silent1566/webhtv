@@ -4,8 +4,10 @@ import android.text.TextUtils;
 
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.db.AppDatabase;
+import com.fongmi.android.tv.title.MediaTitleParser;
 
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 
 public class TmdbMatchCache {
@@ -31,9 +33,27 @@ public class TmdbMatchCache {
         return entry == null ? null : entry.toItem();
     }
 
+    public TmdbItem find(String siteKey, String vodId, String sourceTitle) {
+        if (TextUtils.isEmpty(siteKey) || TextUtils.isEmpty(vodId)) return null;
+        if (TextUtils.isEmpty(sourceTitle)) return find(siteKey, vodId);
+        Entry entry = getItems().get(key(siteKey, vodId, sourceTitle));
+        if (entry != null) return entry.toItem();
+        Entry legacy = getItems().get(key(siteKey, vodId));
+        return isCompatible(legacy, sourceTitle) ? legacy.toItem() : null;
+    }
+
     public void put(String siteKey, String vodId, TmdbItem item) {
         if (TextUtils.isEmpty(siteKey) || TextUtils.isEmpty(vodId) || item == null || item.getTmdbId() <= 0) return;
         getItems().put(key(siteKey, vodId), Entry.from(item));
+    }
+
+    public void put(String siteKey, String vodId, String sourceTitle, TmdbItem item) {
+        if (TextUtils.isEmpty(sourceTitle)) {
+            put(siteKey, vodId, item);
+            return;
+        }
+        if (TextUtils.isEmpty(siteKey) || TextUtils.isEmpty(vodId) || item == null || item.getTmdbId() <= 0) return;
+        getItems().put(key(siteKey, vodId, sourceTitle), Entry.from(item));
     }
 
     public Map<String, Entry> getItems() {
@@ -43,6 +63,29 @@ public class TmdbMatchCache {
 
     private String key(String siteKey, String vodId) {
         return siteKey + AppDatabase.SYMBOL + vodId;
+    }
+
+    private String key(String siteKey, String vodId, String sourceTitle) {
+        return key(siteKey, vodId) + AppDatabase.SYMBOL + sourceKey(sourceTitle);
+    }
+
+    private boolean isCompatible(Entry entry, String sourceTitle) {
+        if (entry == null || TextUtils.isEmpty(sourceTitle)) return false;
+        String source = matchTitle(sourceTitle);
+        String cached = matchTitle(entry.title);
+        return TextUtils.isEmpty(source) || (!TextUtils.isEmpty(cached) && cached.equals(source));
+    }
+
+    private String sourceKey(String sourceTitle) {
+        return normalize(sourceTitle).replace(AppDatabase.SYMBOL, " ");
+    }
+
+    private String matchTitle(String text) {
+        return normalize(new MediaTitleParser().cleanTitle(text));
+    }
+
+    private String normalize(String text) {
+        return text == null ? "" : text.replaceAll("[\\s·•:：\\-_/\\\\|()（）\\[\\]【】]+", "").trim().toLowerCase(Locale.ROOT);
     }
 
     public static class Entry {

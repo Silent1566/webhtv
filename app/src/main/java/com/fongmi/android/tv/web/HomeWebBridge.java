@@ -19,13 +19,13 @@ import com.fongmi.android.tv.ui.activity.KeepActivity;
 import com.fongmi.android.tv.ui.activity.LiveActivity;
 import com.fongmi.android.tv.ui.activity.SearchActivity;
 import com.fongmi.android.tv.ui.activity.VideoActivity;
+import com.fongmi.android.tv.utils.AppCache;
 import com.fongmi.android.tv.utils.ImgUtil;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.Task;
 import com.fongmi.android.tv.web.ext.WebHomeExtensionRegistry;
 import com.github.catvod.crawler.SpiderDebug;
 import com.github.catvod.utils.Json;
-import com.github.catvod.utils.Prefers;
 import com.google.gson.JsonObject;
 
 import java.net.URLEncoder;
@@ -125,7 +125,7 @@ public class HomeWebBridge {
                 case "app.history" -> history();
                 case "pan.check" -> checkLinks(payload);
                 case "pan.play" -> playPan(payload);
-                case "cache.get" -> quote(Prefers.getString(cacheKey(payload)));
+                case "cache.get" -> quote(AppCache.get(cacheKey(payload)));
                 case "cache.set" -> cacheSet(payload);
                 case "cache.del" -> cacheDel(payload);
                 case "device.info" -> device();
@@ -357,19 +357,19 @@ public class HomeWebBridge {
     }
 
     private String cacheSet(JsonObject payload) {
-        Prefers.put(cacheKey(payload), Json.safeString(payload, "value"));
+        AppCache.put(cacheKey(payload), Json.safeString(payload, "value"));
         return "{}";
     }
 
     private String cacheDel(JsonObject payload) {
-        Prefers.remove(cacheKey(payload));
+        AppCache.remove(cacheKey(payload));
         return "{}";
     }
 
     private String cacheKey(JsonObject payload) {
         String rule = Json.safeString(payload, "rule");
         String key = Json.safeString(payload, "key");
-        return "cache_" + (TextUtils.isEmpty(rule) ? "" : rule + "_") + key;
+        return AppCache.key(rule, key);
     }
 
     private String device() {

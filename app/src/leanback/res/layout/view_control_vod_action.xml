@@ -41,10 +41,17 @@
             android:text="@string/play_reset" />
 
         <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/search"
+            style="@style/Control"
+            android:layout_marginEnd="8dp"
+            android:text="@string/play_search" />
+
+        <com.google.android.material.textview.MaterialTextView
             android:id="@+id/change2"
             style="@style/Control"
             android:layout_marginEnd="8dp"
-            android:text="@string/play_change" />
+            android:text="@string/play_change"
+            android:visibility="gone" />
 
         <com.google.android.material.textview.MaterialTextView
             android:id="@+id/fullscreen"
@@ -63,6 +70,18 @@
             style="@style/Control"
             android:layout_marginEnd="8dp"
             android:text="@string/play_decode" />
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/playParams"
+            style="@style/Control"
+            android:layout_marginEnd="8dp"
+            android:text="@string/play_params" />
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/codecCapability"
+            style="@style/Control"
+            android:layout_marginEnd="8dp"
+            android:text="@string/codec_capability_short" />
 
         <com.fongmi.android.tv.ui.custom.CustomUpDownView
             android:id="@+id/speed"

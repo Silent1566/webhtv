@@ -19,7 +19,6 @@ import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
 import android.widget.PopupWindow;
 import android.widget.ScrollView;
-import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -441,15 +440,6 @@ public class SearchFragment extends BaseFragment implements MenuProvider, WordAd
     public void onPrepareMenu(@NonNull Menu menu) {
         menu.findItem(R.id.action_reset).setVisible(!empty());
         menu.findItem(R.id.action_scope).setTitle(mCurrentSite ? getString(R.string.search_scope_current) : TextUtils.isEmpty(mGroup) ? getString(R.string.search_scope_all) : mGroup);
-        tintToolbarActionText(R.id.action_scope);
-    }
-
-    private void tintToolbarActionText(int id) {
-        ViewGroup toolbar = mBinding.toolbar;
-        toolbar.post(() -> {
-            View action = toolbar.findViewById(id);
-            if (action instanceof TextView textView) textView.setTextColor(Color.WHITE);
-        });
     }
 
     @Override

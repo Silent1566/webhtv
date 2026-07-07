@@ -272,14 +272,7 @@ public class WebHomeExtensionDebugDialog extends BaseAlertDialog implements Home
             if (source != null && TextUtils.equals(source.getId(), entry.getId())) checked = i;
         }
         List<WebHomeExtensionSourceStore.Entry> options = sources;
-        new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog)
-                .setTitle(R.string.web_home_extension_select_script)
-                .setSingleChoiceItems(labels, checked, (dialog, which) -> {
-                    selectSource(options.get(which));
-                    dialog.dismiss();
-                })
-                .setNegativeButton(R.string.dialog_negative, null)
-                .show();
+        ChoiceDialog.showSingle(this, R.string.web_home_extension_select_script, labels, checked, which -> selectSource(options.get(which)));
     }
 
     private void selectSource(WebHomeExtensionSourceStore.Entry entry) {

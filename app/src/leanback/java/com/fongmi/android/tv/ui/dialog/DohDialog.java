@@ -3,6 +3,8 @@ package com.fongmi.android.tv.ui.dialog;
 import androidx.fragment.app.FragmentActivity;
 import androidx.viewbinding.ViewBinding;
 
+import com.fongmi.android.tv.R;
+import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.databinding.DialogDohBinding;
 import com.fongmi.android.tv.ui.adapter.DohAdapter;
 import com.fongmi.android.tv.ui.custom.SpaceItemDecoration;
@@ -25,7 +27,9 @@ public class DohDialog extends BaseAlertDialog implements DohAdapter.OnClickList
     }
 
     public void show(FragmentActivity activity) {
-        show(activity.getSupportFragmentManager(), null);
+        String[] items = new String[VodConfig.get().getDoh().size()];
+        for (int i = 0; i < items.length; i++) items[i] = VodConfig.get().getDoh().get(i).getName();
+        ChoiceDialog.showSingle(activity, R.string.setting_doh, items, index, which -> ((Listener) activity).setDoh(VodConfig.get().getDoh().get(which)));
     }
 
     @Override

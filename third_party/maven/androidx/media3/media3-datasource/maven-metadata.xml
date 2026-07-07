@@ -3,11 +3,11 @@
   <groupId>androidx.media3</groupId>
   <artifactId>media3-datasource</artifactId>
   <versioning>
-    <latest>1.10.1-fongmi</latest>
-    <release>1.10.1-fongmi</release>
+    <latest>1.11.0-alpha01-fongmi</latest>
+    <release>1.11.0-alpha01-fongmi</release>
     <versions>
-      <version>1.10.1-fongmi</version>
+      <version>1.11.0-alpha01-fongmi</version>
     </versions>
-    <lastUpdated>20260628111928</lastUpdated>
+    <lastUpdated>20260705164015</lastUpdated>
   </versioning>
 </metadata>

@@ -20,6 +20,8 @@ public class PlayerButtonSetting {
 
     public static final String PLAYER = "player";
     public static final String DECODE = "decode";
+    public static final String PLAY_PARAMS = "play_params";
+    public static final String CODEC_CAPABILITY = "codec_capability";
     public static final String SPEED = "speed";
     public static final String SCALE = "scale";
     public static final String LUT = "lut";
@@ -43,6 +45,8 @@ public class PlayerButtonSetting {
     private static final List<Item> DEFAULT = List.of(
             new Item(PLAYER, R.string.play_exo),
             new Item(DECODE, R.string.play_decode),
+            new Item(PLAY_PARAMS, R.string.play_params),
+            new Item(CODEC_CAPABILITY, R.string.codec_capability_short),
             new Item(SPEED, R.string.play_speed),
             new Item(SCALE, R.string.play_scale),
             new Item(LUT, R.string.play_lut),

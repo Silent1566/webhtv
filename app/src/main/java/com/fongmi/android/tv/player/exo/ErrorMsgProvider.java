@@ -1,5 +1,7 @@
 package com.fongmi.android.tv.player.exo;
 
+import androidx.media3.common.Format;
+import androidx.media3.common.MimeTypes;
 import androidx.media3.common.PlaybackException;
 
 public class ErrorMsgProvider {
@@ -19,7 +21,7 @@ public class ErrorMsgProvider {
             case PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED -> "Container Malformed";
             case PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED -> "Manifest Unsupported";
             case PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED -> "Container Unsupported";
-            case PlaybackException.ERROR_CODE_DECODER_INIT_FAILED -> "Decoder Init Failed";
+            case PlaybackException.ERROR_CODE_DECODER_INIT_FAILED -> getDecoderInitFailed();
             case PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED -> "Decoder Query Failed";
             case PlaybackException.ERROR_CODE_DECODING_FAILED -> "Decoding Failed";
             case PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED -> "Decoding Format Unsupported";
@@ -37,5 +39,31 @@ public class ErrorMsgProvider {
             case PlaybackException.ERROR_CODE_DRM_LICENSE_ACQUISITION_FAILED -> "DRM License Acquisition Failed";
             default -> e.getErrorCodeName();
         };
+    }
+
+    private String getDecoderInitFailed() {
+        PlaybackAnalyticsListener.Snapshot snapshot = PlaybackAnalyticsListener.getSnapshot();
+        Format format = snapshot.errorFormat() != null ? snapshot.errorFormat() : snapshot.videoFormat();
+        StringBuilder builder = new StringBuilder(isHardwareDecoder(snapshot.errorDecoderName()) ? "硬解不可用" : "解码器初始化失败");
+        if (format != null) appendFormat(builder, format);
+        if (!snapshot.errorDecoderName().isEmpty()) builder.append("\nDecoder: ").append(snapshot.errorDecoderName());
+        if (!snapshot.errorCause().isEmpty()) builder.append("\n原因: ").append(snapshot.errorCause());
+        return builder.toString();
+    }
+
+    private void appendFormat(StringBuilder builder, Format format) {
+        builder.append("\n").append(MimeTypes.isAudio(format.sampleMimeType) ? "音频: " : "视频: ");
+        if (format.sampleMimeType != null) builder.append(format.sampleMimeType);
+        if (format.codecs != null) builder.append(" / ").append(format.codecs);
+        if (format.width > 0 && format.height > 0) builder.append(" / ").append(format.width).append("x").append(format.height);
+        if (format.frameRate > 0) builder.append(" / ").append(Math.round(format.frameRate)).append("fps");
+        if (format.bitrate > 0) builder.append(" / ").append(format.bitrate / 1_000_000f).append("Mbps");
+        if (format.colorInfo != null) builder.append(" / ").append(format.colorInfo);
+    }
+
+    private boolean isHardwareDecoder(String decoderName) {
+        if (decoderName == null) return false;
+        String name = decoderName.toLowerCase();
+        return !name.contains("ffmpeg") && !name.contains("google") && !name.contains("android") && !name.contains("software");
     }
 }

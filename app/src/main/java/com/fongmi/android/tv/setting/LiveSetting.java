@@ -4,6 +4,9 @@ import com.github.catvod.utils.Prefers;
 
 public class LiveSetting {
 
+    private static final int LIST_STYLE_GLASS = 0;
+    private static final int LIST_STYLE_CLASSIC = 1;
+
     public static boolean isBoot() {
         return Prefers.getBoolean("boot_live");
     }
@@ -42,5 +45,26 @@ public class LiveSetting {
 
     public static void putScale(int scale) {
         Prefers.put("scale_live", scale);
+    }
+
+    public static int getListStyle() {
+        int style = Prefers.getInt("live_list_style", LIST_STYLE_CLASSIC);
+        return style == LIST_STYLE_CLASSIC ? LIST_STYLE_CLASSIC : LIST_STYLE_GLASS;
+    }
+
+    public static boolean isListStyleClassic() {
+        return getListStyle() == LIST_STYLE_CLASSIC;
+    }
+
+    public static void putListStyle(int style) {
+        Prefers.put("live_list_style", style == LIST_STYLE_CLASSIC ? LIST_STYLE_CLASSIC : LIST_STYLE_GLASS);
+    }
+
+    public static void putListStyleClassic(boolean classic) {
+        putListStyle(classic ? LIST_STYLE_CLASSIC : LIST_STYLE_GLASS);
+    }
+
+    public static void toggleListStyle() {
+        putListStyle(isListStyleClassic() ? LIST_STYLE_GLASS : LIST_STYLE_CLASSIC);
     }
 }

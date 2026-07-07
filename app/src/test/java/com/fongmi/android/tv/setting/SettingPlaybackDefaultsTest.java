@@ -22,7 +22,7 @@ public class SettingPlaybackDefaultsTest {
     public void autoSkipIntroOutro_defaultsOff() throws Exception {
         String source = read(sourcePath().resolve(Path.of("com", "fongmi", "android", "tv", "setting", "Setting.java")));
 
-        assertTrue(source.contains("Prefers.getBoolean(\"auto_skip_intro_outro\", false)"));
+        assertTrue(source.contains("Prefers.getInt(\"intro_skip_mode\", INTRO_SKIP_OFF)"));
     }
 
     @Test

@@ -45,7 +45,12 @@ public class TmdbService {
         try (Response response = execute(url.toString(), config)) {
             if (response.body() == null) throw new IllegalStateException("TMDB configuration returned empty");
             if (!response.isSuccessful()) throw new IllegalStateException("TMDB configuration failed: HTTP " + response.code());
-            return App.gson().fromJson(response.body().string(), JsonObject.class);
+            try {
+                return App.gson().fromJson(response.body().string(), JsonObject.class);
+            } catch (ClassCastException e) {
+                SpiderDebug.log("TmdbService", "ClassCastException in configuration parsing: " + e.getMessage());
+                throw new IllegalStateException("Failed to parse TMDB configuration: " + e.getMessage(), e);
+            }
         }
     }
 
@@ -54,7 +59,12 @@ public class TmdbService {
         try (Response response = execute(searchUrl(keyword, config), config)) {
             if (response.body() == null) throw new IllegalStateException("TMDB 搜索返回为空");
             if (!response.isSuccessful()) throw new IllegalStateException("TMDB 搜索失败: HTTP " + response.code());
-            return App.gson().fromJson(response.body().string(), JsonObject.class);
+            try {
+                return App.gson().fromJson(response.body().string(), JsonObject.class);
+            } catch (ClassCastException e) {
+                SpiderDebug.log("TmdbService", "ClassCastException in searchRaw parsing: " + e.getMessage());
+                throw new IllegalStateException("TMDB 搜索数据解析失败: " + e.getMessage(), e);
+            }
         }
     }
 
@@ -174,25 +184,36 @@ public class TmdbService {
     }
 
     public List<TmdbPerson> cast(JsonObject detail, @NonNull TmdbConfig config) {
-        JsonArray aggregate = array(detail, "aggregate_credits", "cast");
-        if (aggregate.size() > 0) return aggregateCast(aggregate, config);
-        List<TmdbPerson> items = new ArrayList<>();
-        JsonArray results = array(detail, "credits", "cast");
-        for (JsonElement element : results) {
-            if (!element.isJsonObject()) continue;
-            JsonObject object = element.getAsJsonObject();
-            if (!object.has("id") || object.get("id").isJsonNull()) continue;
-            items.add(new TmdbPerson(
-                    object.get("id").getAsInt(),
-                    string(object, "name"),
-                    string(object, "character", "known_for_department"),
-                    image(config.getImageBase(), string(object, "profile_path")),
-                    string(object, "known_for_department"),
-                    ""
-            ));
-            if (items.size() >= 18) break;
+        try {
+            JsonArray aggregate = array(detail, "aggregate_credits", "cast");
+            if (aggregate.size() > 0) return aggregateCast(aggregate, config);
+            List<TmdbPerson> items = new ArrayList<>();
+            JsonArray results = array(detail, "credits", "cast");
+            for (JsonElement element : results) {
+                try {
+                    if (!element.isJsonObject()) continue;
+                    JsonObject object = element.getAsJsonObject();
+                    if (!object.has("id") || object.get("id").isJsonNull()) continue;
+                    items.add(new TmdbPerson(
+                            object.get("id").getAsInt(),
+                            string(object, "name"),
+                            string(object, "character", "known_for_department"),
+                            image(config.getImageBase(), string(object, "profile_path")),
+                            string(object, "known_for_department"),
+                            ""
+                    ));
+                    if (items.size() >= 18) break;
+                } catch (ClassCastException e) {
+                    SpiderDebug.log("TmdbService", "ClassCastException in cast parsing: " + e.getMessage());
+                } catch (Throwable e) {
+                    SpiderDebug.log("TmdbService", "Error parsing cast item: " + e.getMessage());
+                }
+            }
+            return items;
+        } catch (Throwable e) {
+            SpiderDebug.log("TmdbService", "Error in cast method: " + e.getMessage());
+            return new ArrayList<>();
         }
-        return items;
     }
 
     public List<TmdbPerson> creators(JsonObject detail, @NonNull TmdbConfig config) {
@@ -278,22 +299,32 @@ public class TmdbService {
 
     public List<TmdbEpisode> episodes(JsonObject season, @NonNull TmdbConfig config, int tmdbId, int seasonNumber) {
         List<TmdbEpisode> items = new ArrayList<>();
-        JsonArray results = array(season, "episodes");
-        for (JsonElement element : results) {
-            if (!element.isJsonObject()) continue;
-            JsonObject object = element.getAsJsonObject();
-            int number = object.has("episode_number") && !object.get("episode_number").isJsonNull() ? object.get("episode_number").getAsInt() : items.size() + 1;
-            items.add(new TmdbEpisode(
-                    number,
-                    string(object, "name"),
-                    string(object, "air_date"),
-                    string(object, "overview"),
-                    image(config.getBackdropBase(), string(object, "still_path")),
-                    object.has("vote_average") && !object.get("vote_average").isJsonNull() ? object.get("vote_average").getAsDouble() : 0,
-                    object.has("runtime") && !object.get("runtime").isJsonNull() ? object.get("runtime").getAsInt() : 0,
-                    tmdbId,
-                    seasonNumber
-            ));
+        try {
+            JsonArray results = array(season, "episodes");
+            for (JsonElement element : results) {
+                try {
+                    if (!element.isJsonObject()) continue;
+                    JsonObject object = element.getAsJsonObject();
+                    int number = object.has("episode_number") && !object.get("episode_number").isJsonNull() ? object.get("episode_number").getAsInt() : items.size() + 1;
+                    items.add(new TmdbEpisode(
+                            number,
+                            string(object, "name"),
+                            string(object, "air_date"),
+                            string(object, "overview"),
+                            image(config.getBackdropBase(), string(object, "still_path")),
+                            object.has("vote_average") && !object.get("vote_average").isJsonNull() ? object.get("vote_average").getAsDouble() : 0,
+                            object.has("runtime") && !object.get("runtime").isJsonNull() ? object.get("runtime").getAsInt() : 0,
+                            tmdbId,
+                            seasonNumber
+                    ));
+                } catch (ClassCastException e) {
+                    SpiderDebug.log("TmdbService", "ClassCastException in episode parsing: " + e.getMessage());
+                } catch (Throwable e) {
+                    SpiderDebug.log("TmdbService", "Error parsing episode item: " + e.getMessage());
+                }
+            }
+        } catch (Throwable e) {
+            SpiderDebug.log("TmdbService", "Error in episodes method: " + e.getMessage());
         }
         return items;
     }
@@ -485,7 +516,13 @@ public class TmdbService {
             if (response.body() == null) throw new IllegalStateException(emptyMessage);
             if (!response.isSuccessful()) throw new IllegalStateException(failurePrefix + response.code());
             String body = response.body().string();
-            JsonObject object = App.gson().fromJson(body, JsonObject.class);
+            JsonObject object;
+            try {
+                object = App.gson().fromJson(body, JsonObject.class);
+            } catch (ClassCastException e) {
+                SpiderDebug.log("TmdbService", "ClassCastException in requestJson type=" + type + ": " + e.getMessage());
+                throw new IllegalStateException("TMDB 数据解析失败 (" + type + "): " + e.getMessage(), e);
+            }
             writeCache(file, body);
             SpiderDebug.log("tmdb", "requestJson type=%s source=network cost=%dms", type, System.currentTimeMillis() - start);
             return object;
@@ -510,8 +547,15 @@ public class TmdbService {
             if (file == null || !file.exists() || file.length() <= 0) return null;
             if (ttl != Long.MAX_VALUE && System.currentTimeMillis() - file.lastModified() > ttl) return null;
             String body = Path.read(file);
-            return TextUtils.isEmpty(body) ? null : App.gson().fromJson(body, JsonObject.class);
+            if (TextUtils.isEmpty(body)) return null;
+            try {
+                return App.gson().fromJson(body, JsonObject.class);
+            } catch (ClassCastException e) {
+                SpiderDebug.log("TmdbService", "ClassCastException reading cache from " + file.getName() + ": " + e.getMessage());
+                return null;
+            }
         } catch (Throwable e) {
+            SpiderDebug.log("TmdbService", "Error reading cache: " + e.getMessage());
             return null;
         }
     }
@@ -595,18 +639,24 @@ public class TmdbService {
     private List<TmdbPerson> aggregateCast(JsonArray results, TmdbConfig config) {
         List<TmdbPerson> items = new ArrayList<>();
         for (JsonElement element : results) {
-            if (!element.isJsonObject()) continue;
-            JsonObject object = element.getAsJsonObject();
-            if (!object.has("id") || object.get("id").isJsonNull()) continue;
-            items.add(new TmdbPerson(
-                    object.get("id").getAsInt(),
-                    string(object, "name"),
-                    aggregateRole(object),
-                    image(config.getImageBase(), string(object, "profile_path")),
-                    string(object, "known_for_department"),
-                    ""
-            ));
-            if (items.size() >= 18) break;
+            try {
+                if (!element.isJsonObject()) continue;
+                JsonObject object = element.getAsJsonObject();
+                if (!object.has("id") || object.get("id").isJsonNull()) continue;
+                items.add(new TmdbPerson(
+                        object.get("id").getAsInt(),
+                        string(object, "name"),
+                        aggregateRole(object),
+                        image(config.getImageBase(), string(object, "profile_path")),
+                        string(object, "known_for_department"),
+                        ""
+                ));
+                if (items.size() >= 18) break;
+            } catch (ClassCastException e) {
+                SpiderDebug.log("TmdbService", "ClassCastException in aggregateCast: " + e.getMessage());
+            } catch (Throwable e) {
+                SpiderDebug.log("TmdbService", "Error parsing aggregateCast item: " + e.getMessage());
+            }
         }
         return items;
     }
@@ -623,17 +673,27 @@ public class TmdbService {
     }
 
     private String overviewForLanguage(JsonArray translations, String language) {
-        if (TextUtils.isEmpty(language)) return "";
-        String target = language.toLowerCase(Locale.ROOT);
-        for (JsonElement element : translations) {
-            if (!element.isJsonObject()) continue;
-            JsonObject object = element.getAsJsonObject();
-            String iso = string(object, "iso_639_1");
-            String name = string(object, "name", "english_name");
-            String code = string(object, "iso_3166_1");
-            if (!matchesLanguage(target, iso, code, name)) continue;
-            String overview = string(object.has("data") && object.get("data").isJsonObject() ? object.getAsJsonObject("data") : null, "overview");
-            if (!TextUtils.isEmpty(overview)) return overview;
+        try {
+            if (TextUtils.isEmpty(language)) return "";
+            String target = language.toLowerCase(Locale.ROOT);
+            for (JsonElement element : translations) {
+                try {
+                    if (!element.isJsonObject()) continue;
+                    JsonObject object = element.getAsJsonObject();
+                    String iso = string(object, "iso_639_1");
+                    String name = string(object, "name", "english_name");
+                    String code = string(object, "iso_3166_1");
+                    if (!matchesLanguage(target, iso, code, name)) continue;
+                    String overview = string(object.has("data") && object.get("data").isJsonObject() ? object.getAsJsonObject("data") : null, "overview");
+                    if (!TextUtils.isEmpty(overview)) return overview;
+                } catch (ClassCastException e) {
+                    SpiderDebug.log("TmdbService", "ClassCastException in overviewForLanguage - element type: " + (element != null ? element.getClass().getSimpleName() : "null") + ", language: " + language + ", error: " + e.getMessage());
+                } catch (Throwable e) {
+                    SpiderDebug.log("TmdbService", "Error parsing translation element for language " + language + ": " + e.getMessage());
+                }
+            }
+        } catch (Throwable e) {
+            SpiderDebug.log("TmdbService", "Fatal error in overviewForLanguage for language " + language + ": " + e.getMessage());
         }
         return "";
     }
@@ -678,17 +738,27 @@ public class TmdbService {
     }
 
     private String biographyForLanguage(JsonArray translations, String language) {
-        if (TextUtils.isEmpty(language)) return "";
-        String target = language.toLowerCase(Locale.ROOT);
-        for (JsonElement element : translations) {
-            if (!element.isJsonObject()) continue;
-            JsonObject object = element.getAsJsonObject();
-            String iso = string(object, "iso_639_1");
-            String name = string(object, "name", "english_name");
-            String code = string(object, "iso_3166_1");
-            if (!matchesLanguage(target, iso, code, name)) continue;
-            String biography = string(object.has("data") && object.get("data").isJsonObject() ? object.getAsJsonObject("data") : null, "biography");
-            if (!TextUtils.isEmpty(biography)) return biography;
+        try {
+            if (TextUtils.isEmpty(language)) return "";
+            String target = language.toLowerCase(Locale.ROOT);
+            for (JsonElement element : translations) {
+                try {
+                    if (!element.isJsonObject()) continue;
+                    JsonObject object = element.getAsJsonObject();
+                    String iso = string(object, "iso_639_1");
+                    String name = string(object, "name", "english_name");
+                    String code = string(object, "iso_3166_1");
+                    if (!matchesLanguage(target, iso, code, name)) continue;
+                    String biography = string(object.has("data") && object.get("data").isJsonObject() ? object.getAsJsonObject("data") : null, "biography");
+                    if (!TextUtils.isEmpty(biography)) return biography;
+                } catch (ClassCastException e) {
+                    SpiderDebug.log("TmdbService", "ClassCastException in biographyForLanguage - element type: " + (element != null ? element.getClass().getSimpleName() : "null") + ", language: " + language + ", error: " + e.getMessage());
+                } catch (Throwable e) {
+                    SpiderDebug.log("TmdbService", "Error parsing biography element for language " + language + ": " + e.getMessage());
+                }
+            }
+        } catch (Throwable e) {
+            SpiderDebug.log("TmdbService", "Fatal error in biographyForLanguage for language " + language + ": " + e.getMessage());
         }
         return "";
     }
@@ -700,25 +770,31 @@ public class TmdbService {
     private List<TmdbItem> items(JsonArray array, TmdbConfig config, String defaultMediaType) {
         List<TmdbItem> items = new ArrayList<>();
         for (JsonElement element : array) {
-            if (!element.isJsonObject()) continue;
-            JsonObject object = element.getAsJsonObject();
-            String mediaType = normalizeMediaType(string(object, "media_type"));
-            if (TextUtils.isEmpty(mediaType)) mediaType = normalizeMediaType(defaultMediaType);
-            if (TextUtils.isEmpty(mediaType)) continue;
-            if (!object.has("id") || object.get("id").isJsonNull()) continue;
-            String title = "movie".equals(mediaType) ? string(object, "title", "name") : string(object, "name", "title");
-            String date = "movie".equals(mediaType) ? string(object, "release_date") : string(object, "first_air_date");
-            double voteValue = object.has("vote_average") && !object.get("vote_average").isJsonNull() ? object.get("vote_average").getAsDouble() : 0.0;
-            String vote = voteValue > 0 ? String.format(Locale.US, "%.1f", voteValue) : "";
-            String subtitle = buildSubtitle(mediaType, date, vote);
-            String credit = credit(object);
-            String posterPath = string(object, "poster_path");
-            String backdropPath = string(object, "backdrop_path");
-            String language = string(object, "original_language");
-            String country = firstString(array(object, "origin_country"));
-            List<Integer> genreIds = integers(array(object, "genre_ids"));
-            String department = string(object, "department");
-            items.add(new TmdbItem(object.get("id").getAsInt(), mediaType, title, subtitle, string(object, "overview"), image(config.getImageBase(), posterPath), image(config.getBackdropBase(), backdropPath), credit, voteValue, language, country, genreIds, department));
+            try {
+                if (!element.isJsonObject()) continue;
+                JsonObject object = element.getAsJsonObject();
+                String mediaType = normalizeMediaType(string(object, "media_type"));
+                if (TextUtils.isEmpty(mediaType)) mediaType = normalizeMediaType(defaultMediaType);
+                if (TextUtils.isEmpty(mediaType)) continue;
+                if (!object.has("id") || object.get("id").isJsonNull()) continue;
+                String title = "movie".equals(mediaType) ? string(object, "title", "name") : string(object, "name", "title");
+                String date = "movie".equals(mediaType) ? string(object, "release_date") : string(object, "first_air_date");
+                double voteValue = object.has("vote_average") && !object.get("vote_average").isJsonNull() ? object.get("vote_average").getAsDouble() : 0.0;
+                String vote = voteValue > 0 ? String.format(Locale.US, "%.1f", voteValue) : "";
+                String subtitle = buildSubtitle(mediaType, date, vote);
+                String credit = credit(object);
+                String posterPath = string(object, "poster_path");
+                String backdropPath = string(object, "backdrop_path");
+                String language = string(object, "original_language");
+                String country = firstString(array(object, "origin_country"));
+                List<Integer> genreIds = integers(array(object, "genre_ids"));
+                String department = string(object, "department");
+                items.add(new TmdbItem(object.get("id").getAsInt(), mediaType, title, subtitle, string(object, "overview"), image(config.getImageBase(), posterPath), image(config.getBackdropBase(), backdropPath), credit, voteValue, language, country, genreIds, department));
+            } catch (ClassCastException e) {
+                SpiderDebug.log("TmdbService", "ClassCastException in items parsing - element type: " + (element != null ? element.getClass().getSimpleName() : "null") + ", error: " + e.getMessage());
+            } catch (Throwable e) {
+                SpiderDebug.log("TmdbService", "Error parsing TmdbItem: " + e.getMessage());
+            }
         }
         return items;
     }
@@ -786,10 +862,13 @@ public class TmdbService {
     private List<Integer> integers(JsonArray array) {
         List<Integer> values = new ArrayList<>();
         for (JsonElement element : array) {
-            if (element == null || element.isJsonNull()) continue;
             try {
+                if (element == null || element.isJsonNull()) continue;
                 values.add(element.getAsInt());
-            } catch (Throwable ignored) {
+            } catch (ClassCastException e) {
+                SpiderDebug.log("TmdbService", "ClassCastException in integers parsing - element type: " + (element != null ? element.getClass().getSimpleName() : "null"));
+            } catch (Throwable e) {
+                SpiderDebug.log("TmdbService", "Error parsing integer from array: " + e.getMessage());
             }
         }
         return values;

@@ -1,10 +1,22 @@
 package com.fongmi.android.tv.ui.custom;
 
+import android.content.Context;
+import android.content.pm.PackageInfo;
+import android.media.MediaCodecInfo;
+import android.media.MediaCodecList;
+import android.media.MediaFormat;
+import android.net.ConnectivityManager;
+import android.net.NetworkCapabilities;
 import android.net.Uri;
 import android.net.TrafficStats;
+import android.os.Build;
 import android.text.TextUtils;
+import android.util.DisplayMetrics;
 import android.util.TypedValue;
+import android.view.Display;
 import android.view.View;
+import android.view.ViewGroup;
+import android.webkit.WebView;
 import android.widget.TextView;
 
 import androidx.media3.common.C;
@@ -13,9 +25,13 @@ import androidx.media3.common.MimeTypes;
 import androidx.media3.common.Tracks;
 
 import com.fongmi.android.tv.App;
+import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.player.PlayerManager;
 import com.fongmi.android.tv.player.exo.PlaybackAnalyticsListener;
+import com.fongmi.android.tv.setting.PlaybackPerformanceSetting;
 import com.fongmi.android.tv.setting.PlayerSetting;
+import com.fongmi.android.tv.setting.PreloadSetting;
+import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.utils.Util;
 
 import java.text.DecimalFormat;
@@ -33,6 +49,10 @@ public class PlayerOsdController {
 
     private static final DecimalFormat SPEED_FORMAT = new DecimalFormat("#.0");
     private static final int UID = App.get().getApplicationInfo().uid;
+    private static volatile String cachedDeviceText;
+    private static volatile String cachedSystemText;
+    private static volatile String cachedWebViewText;
+    private static volatile String cachedHevcDecoderText;
 
     private final SimpleDateFormat timeFormat;
     private final TextView topLeft;
@@ -40,6 +60,8 @@ public class PlayerOsdController {
     private final TextView bottomLeft;
     private final TextView bottomRight;
     private final TextView diagnostics;
+    private final TextView diagnosticsExtra;
+    private final View diagnosticsPanel;
     private final MiniProgressView miniProgress;
     private final Runnable update;
     private final Source source;
@@ -56,6 +78,7 @@ public class PlayerOsdController {
     private String lastSpeedText;
     private boolean controlsVisible;
     private boolean diagnosticsVisible;
+    private boolean persistentSuppressed;
     private boolean started;
 
     public PlayerOsdController(View root, TextView topLeft, TextView topRight, TextView bottomLeft, TextView bottomRight, TextView diagnostics, MiniProgressView miniProgress, Source source, float miniSp) {
@@ -67,12 +90,16 @@ public class PlayerOsdController {
         this.bottomRight = bottomRight;
         this.bottomLeft = bottomLeft;
         this.diagnostics = diagnostics;
+        this.diagnosticsExtra = root.findViewById(R.id.osdDiagnosticsExtra);
+        this.diagnosticsPanel = root.findViewById(R.id.osdDiagnosticsPanel);
         this.topRight = topRight;
         this.topLeft = topLeft;
         this.miniSp = miniSp;
         this.source = source;
         this.root = root;
         this.update = this::update;
+        diagnosticsExtra.setVisibility(View.GONE);
+        updateDiagnosticsWidth();
     }
 
     public void start() {
@@ -107,6 +134,12 @@ public class PlayerOsdController {
     public void setControlsVisible(boolean controlsVisible) {
         if (this.controlsVisible == controlsVisible) return;
         this.controlsVisible = controlsVisible;
+        if (started) render();
+    }
+
+    public void setPersistentSuppressed(boolean persistentSuppressed) {
+        if (this.persistentSuppressed == persistentSuppressed) return;
+        this.persistentSuppressed = persistentSuppressed;
         if (started) render();
     }
 
@@ -146,6 +179,12 @@ public class PlayerOsdController {
         setTextSize(miniSp);
         PlayerManager player = source.getPlayer();
         updateSpeed();
+        if (persistentSuppressed) {
+            hidePersistent();
+            setDiagnosticsPanel(player);
+            root.setVisibility(diagnosticsPanel.getVisibility() == View.VISIBLE ? View.VISIBLE : View.GONE);
+            return true;
+        }
         setTopLeft(player);
         setTopRight();
         setBottomLeft(player);
@@ -197,12 +236,54 @@ public class PlayerOsdController {
 
     private void setDiagnosticsPanel(PlayerManager player) {
         if (controlsVisible || !PlayerSetting.isOsdDiagnostics() || !diagnosticsVisible || player == null) {
-            diagnostics.setVisibility(View.GONE);
+            diagnosticsPanel.setVisibility(View.GONE);
             return;
         }
-        String text = getDiagnostics(player);
-        diagnostics.setText(text);
-        diagnostics.setVisibility(TextUtils.isEmpty(text) ? View.GONE : View.VISIBLE);
+        DiagnosticsText text = getDiagnostics(player);
+        boolean land = isLandscape();
+        updateDiagnosticsWidth();
+        diagnostics.setTextSize(TypedValue.COMPLEX_UNIT_SP, getDiagnosticsSp());
+        diagnosticsExtra.setTextSize(TypedValue.COMPLEX_UNIT_SP, getDiagnosticsSp());
+        diagnostics.setText(land ? text.main() : text.all());
+        diagnosticsExtra.setText(text.extra());
+        diagnosticsExtra.setVisibility(land && !TextUtils.isEmpty(text.extra()) ? View.VISIBLE : View.GONE);
+        diagnosticsPanel.setVisibility(TextUtils.isEmpty(text.all()) ? View.GONE : View.VISIBLE);
+    }
+
+    private void updateDiagnosticsWidth() {
+        int rootWidth = root.getWidth() > 0 ? root.getWidth() : App.get().getResources().getDisplayMetrics().widthPixels;
+        int rootHeight = root.getHeight() > 0 ? root.getHeight() : App.get().getResources().getDisplayMetrics().heightPixels;
+        if (rootWidth <= 0) return;
+        boolean land = rootWidth >= rootHeight;
+        int width = Math.round(rootWidth * (land ? 0.98f : 0.98f));
+        ViewGroup.LayoutParams params = diagnosticsPanel.getLayoutParams();
+        if (params != null && params.width != width) {
+            params.width = width;
+            params.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+            diagnosticsPanel.setLayoutParams(params);
+        }
+        diagnosticsPanel.setPadding(dp(land ? 8 : 5), dp(land ? 7 : 5), dp(land ? 8 : 7), dp(land ? 7 : 5));
+        diagnostics.setMaxWidth(width);
+        diagnosticsExtra.setMaxWidth(width);
+        if (rootHeight > 0) {
+            int maxHeight = Math.round(rootHeight * (land ? 0.84f : 1.0f));
+            diagnostics.setMaxHeight(maxHeight);
+            diagnosticsExtra.setMaxHeight(maxHeight);
+        }
+        diagnostics.setTextScaleX(land ? 0.96f : 0.92f);
+        diagnosticsExtra.setTextScaleX(land ? 0.96f : 0.92f);
+    }
+
+    private float getDiagnosticsSp() {
+        boolean land = isLandscape();
+        float target = land ? 10.2f : 8.0f;
+        return Math.min(miniSp, target);
+    }
+
+    private boolean isLandscape() {
+        int rootWidth = root.getWidth() > 0 ? root.getWidth() : App.get().getResources().getDisplayMetrics().widthPixels;
+        int rootHeight = root.getHeight() > 0 ? root.getHeight() : App.get().getResources().getDisplayMetrics().heightPixels;
+        return rootWidth >= rootHeight;
     }
 
     private void setMiniProgress(PlayerManager player) {
@@ -221,10 +302,25 @@ public class PlayerOsdController {
 
     private void setTextSize(float sp) {
         topLeft.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp);
+        topLeft.setTextColor(0xFFFFFFFF);
         topRight.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp);
+        topRight.setTextColor(0xFFFFFFFF);
         bottomLeft.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp);
+        bottomLeft.setTextColor(0xFFFFFFFF);
         bottomRight.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp);
-        diagnostics.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp);
+        bottomRight.setTextColor(0xFFFFFFFF);
+        diagnostics.setTextColor(0xFFFFFFFF);
+        diagnostics.setTextSize(TypedValue.COMPLEX_UNIT_SP, getDiagnosticsSp());
+        diagnosticsExtra.setTextColor(0xFFFFFFFF);
+        diagnosticsExtra.setTextSize(TypedValue.COMPLEX_UNIT_SP, getDiagnosticsSp());
+    }
+
+    private void hidePersistent() {
+        topLeft.setVisibility(View.GONE);
+        topRight.setVisibility(View.GONE);
+        bottomLeft.setVisibility(View.GONE);
+        bottomRight.setVisibility(View.GONE);
+        miniProgress.setVisibility(View.GONE);
     }
 
     private void updateSpeed() {
@@ -243,38 +339,49 @@ public class PlayerOsdController {
         lastSpeedText = formatSpeed(lastSpeedKBps);
     }
 
-    private String getDiagnostics(PlayerManager player) {
+    private DiagnosticsText getDiagnostics(PlayerManager player) {
         PlaybackAnalyticsListener.Snapshot snapshot = player.isIjk() ? PlaybackAnalyticsListener.Snapshot.empty() : PlaybackAnalyticsListener.getSnapshot();
-        Format video = snapshot.videoFormat() != null ? snapshot.videoFormat() : player.getVideoFormat();
+        Format video = snapshot.videoFormat() != null ? snapshot.videoFormat() : snapshot.errorFormat() != null ? snapshot.errorFormat() : player.getVideoFormat();
         Format audio = snapshot.audioFormat();
         String state = stateText(player.getPlaybackState()) + (player.isLoading() ? " / 正在加载" : "");
         String buffer = join(" / ", formatDuration(player.getBufferedDuration()), player.getBufferedPercentage() > 0 ? player.getBufferedPercentage() + "%" : "");
         String rebuffer = snapshot.rebufferCount() <= 0 ? "0 次" : snapshot.rebufferCount() + " 次 / " + formatDuration(snapshot.rebufferTotalMs());
         String network = join(" / ", "当前 " + emptyDash(lastSpeedText), "估算带宽 " + emptyDash(formatBitrate(snapshot.bandwidthEstimate())), snapshot.lastLoadBytes() > 0 ? "最近加载 " + formatBytes(snapshot.lastLoadBytes()) + " / " + snapshot.lastLoadTimeMs() + " ms" : "");
-        String videoText = summarizeVideo(video, player, snapshot.videoDecoderName());
+        String videoText = summarizeVideo(video, player, snapshot.videoDecoderName(), getVideoTrackState(player));
         AudioTrackState audioTrack = getAudioTrackState(player);
         String audioText = summarizeAudio(audio, audioTrack, snapshot.audioDecoderName());
         String render = PlayerSetting.getRender() == PlayerSetting.RENDER_SURFACE ? "Surface" : "Texture";
         String tunnel = switchText(PlayerSetting.isTunnelingEnabled());
-        String enhance = switchText(PlayerSetting.isExoEnhanced());
+        String performance = PlaybackPerformanceSetting.getProfileName();
         String passThrough = switchText(PlayerSetting.isAudioPassThrough());
-        String playerText = join(" / ", player.getPlayerText(), player.getDecodeText(), render, "隧道 " + tunnel, "EXO增强 " + enhance, "音频直通 " + passThrough, player.isIjk() ? "" : "FFmpeg音频兜底 开");
-        String error = join(" ", snapshot.errorCode(), shortText(snapshot.errorMessage(), 72));
-        String display = getDisplayRefreshText();
-        return join("\n",
+        String preload = "预载" + switchText(PreloadSetting.isPreload());
+        String frameRateMatch = player.isIjk() ? "" : "帧率匹配 开";
+        String softTune = getSoftDecodeTuneText(player);
+        String playerText = join(" / ", player.getPlayerText(), player.getDecodeText(), render, "隧道" + tunnel, "性能" + performance, frameRateMatch, preload, "直通" + passThrough, softTune, player.isIjk() ? "" : "兜底开");
+        String playback = join(" / ", state, buffer, "重缓冲 " + rebuffer, "掉帧 " + snapshot.droppedFrames());
+        String error = getErrorText(player, snapshot);
+        String main = join("\n",
                 row("结论", getDiagnosis(player, snapshot, video, audioTrack)),
-                row("网络", network),
-                row("缓冲", join(" / ", state, buffer, "重缓冲 " + rebuffer)),
+                TextUtils.isEmpty(error) ? "" : row("错误", error),
                 row("视频", videoText),
+                row("设备HEVC能力", getHevcDecoderText()),
                 row("音频", audioText),
-                row("掉帧", String.valueOf(snapshot.droppedFrames())),
+                row("网络", network),
+                row("状态", playback),
                 row("播放", playerText),
-                row("来源", summarizeSource(player.getUrl())),
-                row("屏幕", TextUtils.isEmpty(display) ? "-" : display),
-                TextUtils.isEmpty(error) ? "" : row("错误", error));
+                row("来源", summarizeSource(player.getUrl())));
+        String extra = join("\n",
+                row("设备", getDeviceText()),
+                row("系统", getSystemText()),
+                row("芯片", getChipText()),
+                row("屏幕", getDisplayText()),
+                row("WebView", getWebViewText()),
+                row("网络环境", getNetworkEnvironmentText()));
+        return new DiagnosticsText(main, extra);
     }
 
     private String getDiagnosis(PlayerManager player, PlaybackAnalyticsListener.Snapshot snapshot, Format video, AudioTrackState audioTrack) {
+        if (isDecodeError(snapshot) && player.isHardDecode()) return "硬件解码失败：设备可能不支持该视频编码、分辨率、帧率或规格";
         if (!TextUtils.isEmpty(snapshot.errorCode())) return "播放器报错，先看错误行";
         if (audioTrack.hasTracks() && audioTrack.isUnsupported()) return "音频轨不支持：" + summarizeAudioFormat(audioTrack.format()) + " / " + supportText(audioTrack.support());
         if (audioTrack.hasTracks() && !audioTrack.selected() && snapshot.audioFormat() == null && player.getPlaybackState() == androidx.media3.common.Player.STATE_READY) return "已发现音轨但未选中，可能无声";
@@ -289,11 +396,52 @@ public class PlayerOsdController {
         return "正常";
     }
 
-    private String summarizeVideo(Format format, PlayerManager player, String decoder) {
+    private String getErrorText(PlayerManager player, PlaybackAnalyticsListener.Snapshot snapshot) {
+        String raw = join(" ", snapshot.errorCode(), shortText(snapshot.errorMessage(), 72));
+        String decoder = TextUtils.isEmpty(snapshot.errorDecoderName()) ? "" : "decoder " + snapshot.errorDecoderName();
+        String diagnostic = TextUtils.isEmpty(snapshot.errorDiagnosticInfo()) ? "" : "diagnostic " + snapshot.errorDiagnosticInfo();
+        String secure = snapshot.errorSecureDecoderRequired() ? "secure required" : "";
+        String cause = TextUtils.isEmpty(snapshot.errorCause()) ? "" : "cause " + shortText(snapshot.errorCause(), 72);
+        String explanation = getErrorExplanation(player, snapshot);
+        return join(" / ", raw, decoder, diagnostic, secure, cause, explanation);
+    }
+
+    private String getErrorExplanation(PlayerManager player, PlaybackAnalyticsListener.Snapshot snapshot) {
+        if (isDecodeError(snapshot) && player.isHardDecode()) return "中文说明：硬解失败，设备硬件解码器可能不支持当前视频规格";
+        if (isDecodeError(snapshot)) return "中文说明：软解/解码流程失败，请尝试切回硬解或更换资源";
+        return "";
+    }
+
+    private String getSoftDecodeTuneText(PlayerManager player) {
+        if (player.isHardDecode()) return "";
+        if (player.isIjk()) return "软解降负载 IJK跳帧/滤波";
+        return PlaybackPerformanceSetting.isSoftVideoTuneEnabled() ? "软解降负载 EXO跳帧/滤波/低分辨" : "软解降负载 关";
+    }
+
+    private boolean isDecodeError(PlaybackAnalyticsListener.Snapshot snapshot) {
+        String code = snapshot.errorCode();
+        return "ERROR_CODE_DECODER_INIT_FAILED".equals(code) || "ERROR_CODE_DECODER_QUERY_FAILED".equals(code) || "ERROR_CODE_DECODING_FAILED".equals(code);
+    }
+
+    private String summarizeVideo(Format format, PlayerManager player, String decoder, VideoTrackState videoTrack) {
+        if (format == null && videoTrack.hasTracks()) format = videoTrack.format();
         String size = getSize(format, player);
         String fps = getFrameRate(format);
         String bitrate = getBitrate(format);
-        return join(" ", getMime(format), size, TextUtils.isEmpty(fps) ? "" : "@" + fps, bitrate, TextUtils.isEmpty(decoder) ? "" : "decoder " + decoder);
+        String codec = format == null || TextUtils.isEmpty(format.codecs) ? "codec -" : "codec " + format.codecs;
+        String color = getColor(format).replace("color ", "色彩 ");
+        String support = videoTrack.hasTracks() && !videoTrack.isHandled() ? supportText(videoTrack.support()) : "";
+        String decode = "decoder " + emptyDash(decoder);
+        return join(" / ",
+                "格式 " + emptyDash(getMime(format)),
+                "分辨率 " + emptyDash(size),
+                "帧率 " + emptyDash(fps),
+                "码率 " + emptyDash(bitrate),
+                codec,
+                TextUtils.isEmpty(color) ? "色彩 -" : color,
+                decode,
+                support,
+                videoTrack.supportSummary());
     }
 
     private String summarizeAudio(Format format, AudioTrackState audioTrack, String decoder) {
@@ -302,7 +450,7 @@ public class PlayerOsdController {
             return join(" / ", summarizeAudioFormat(audioTrack.format()), supportText(audioTrack.support()), audioTrack.supportSummary(), audioTrack.selected() ? "已选中" : "未选中");
         }
         String support = audioTrack.hasTracks() && !audioTrack.isHandled() ? supportText(audioTrack.support()) : "";
-        return join(" ", summarizeAudioFormat(format), getBitrate(format), TextUtils.isEmpty(decoder) ? "" : "decoder " + decoder, support);
+        return join(" / ", join(" ", summarizeAudioFormat(format), getBitrate(format)), TextUtils.isEmpty(decoder) ? "" : "dec " + decoder, support);
     }
 
     private String summarizeAudioFormat(Format format) {
@@ -328,7 +476,7 @@ public class PlayerOsdController {
                 total++;
                 int support = group.getTrackSupport(i);
                 boolean isSelected = group.isTrackSelected(i);
-                if (support == C.FORMAT_HANDLED || support == C.FORMAT_EXCEEDS_CAPABILITIES) supported++;
+                if (support == C.FORMAT_HANDLED) supported++;
                 AudioTrackCandidate candidate = new AudioTrackCandidate(group.getTrackFormat(i), support, isSelected);
                 if (first == null) first = candidate;
                 if (isSelected) selected = candidate;
@@ -340,6 +488,36 @@ public class PlayerOsdController {
         return candidate == null ? new AudioTrackState(null, C.FORMAT_UNSUPPORTED_TYPE, false, total, supported) : new AudioTrackState(candidate.format(), candidate.support(), candidate.selected(), total, supported);
     }
 
+    private VideoTrackState getVideoTrackState(PlayerManager player) {
+        if (player == null || player.isIjk()) return VideoTrackState.empty();
+        Tracks tracks = player.getCurrentTracks();
+        if (tracks == null) return VideoTrackState.empty();
+        VideoTrackCandidate selected = null;
+        VideoTrackCandidate handled = null;
+        VideoTrackCandidate exceeds = null;
+        VideoTrackCandidate unsupported = null;
+        VideoTrackCandidate first = null;
+        int total = 0;
+        int supported = 0;
+        for (Tracks.Group group : tracks.getGroups()) {
+            if (group.getType() != C.TRACK_TYPE_VIDEO) continue;
+            for (int i = 0; i < group.length; i++) {
+                total++;
+                int support = group.getTrackSupport(i);
+                boolean isSelected = group.isTrackSelected(i);
+                if (support == C.FORMAT_HANDLED) supported++;
+                VideoTrackCandidate candidate = new VideoTrackCandidate(group.getTrackFormat(i), support, isSelected);
+                if (first == null) first = candidate;
+                if (isSelected) selected = candidate;
+                if (handled == null && support == C.FORMAT_HANDLED) handled = candidate;
+                if (exceeds == null && support == C.FORMAT_EXCEEDS_CAPABILITIES) exceeds = candidate;
+                if (unsupported == null && isUnsupportedSupport(support)) unsupported = candidate;
+            }
+        }
+        VideoTrackCandidate candidate = selected != null ? selected : handled != null ? handled : exceeds != null ? exceeds : unsupported != null ? unsupported : first;
+        return candidate == null ? new VideoTrackState(null, C.FORMAT_UNSUPPORTED_TYPE, false, total, supported) : new VideoTrackState(candidate.format(), candidate.support(), candidate.selected(), total, supported);
+    }
+
     private boolean isUnsupportedSupport(int support) {
         return support == C.FORMAT_UNSUPPORTED_TYPE || support == C.FORMAT_UNSUPPORTED_SUBTYPE || support == C.FORMAT_UNSUPPORTED_DRM;
     }
@@ -347,7 +525,7 @@ public class PlayerOsdController {
     private String supportText(int support) {
         return switch (support) {
             case C.FORMAT_HANDLED -> "支持";
-            case C.FORMAT_EXCEEDS_CAPABILITIES -> "支持但超规格: EXCEEDS_CAPABILITIES";
+            case C.FORMAT_EXCEEDS_CAPABILITIES -> "超出设备声明能力: EXCEEDS_CAPABILITIES，不应判定为可硬解";
             case C.FORMAT_UNSUPPORTED_DRM -> "不支持: NO_UNSUPPORTED_DRM";
             case C.FORMAT_UNSUPPORTED_SUBTYPE -> "不支持: NO_UNSUPPORTED_SUBTYPE";
             case C.FORMAT_UNSUPPORTED_TYPE -> "不支持: NO_UNSUPPORTED_TYPE";
@@ -370,6 +548,14 @@ public class PlayerOsdController {
         return format == null ? "" : formatBitrate(format.bitrate);
     }
 
+    private String getColor(Format format) {
+        if (format == null || format.colorInfo == null) return "";
+        String color = format.colorInfo.toLogString();
+        if (TextUtils.isEmpty(color)) return "";
+        color = color.replace("Limited range", "Limited").replace("Full range", "Full").replace("SMPTE 170M", "SMPTE170M");
+        return "color " + color;
+    }
+
     private long getMediaBitrate(Format video, Format audio) {
         long bitrate = 0;
         if (video != null && video.bitrate > 0) bitrate += video.bitrate;
@@ -389,8 +575,9 @@ public class PlayerOsdController {
     private String getAudioMime(Format format) {
         if (format == null) return "";
         String mime = format.sampleMimeType;
-        if (MimeTypes.AUDIO_DTS_X.equals(mime)) return "DTS:X";
-        if (MimeTypes.AUDIO_DTS_MA.equals(mime)) return "DTS-HD MA";
+        if (isCodec(format, MimeTypes.CODEC_DTS_HD_MA_X_IMAX)) return "DTS:X IMAX";
+        if (isCodec(format, MimeTypes.CODEC_DTS_HD_MA_X)) return "DTS:X";
+        if (MimeTypes.AUDIO_DTS_HD_MA.equals(mime) || MimeTypes.AUDIO_MEDIA3_DTS_HD_MA_CORELESS.equals(mime)) return "DTS-HD MA";
         if (MimeTypes.AUDIO_DTS_EXPRESS.equals(mime)) return "DTS-HD LBR";
         if (MimeTypes.AUDIO_DTS_UHD_P2.equals(mime)) return "DTS-UHD P2";
         if (MimeTypes.AUDIO_DTS_HD.equals(mime)) return "DTS-HD";
@@ -406,6 +593,10 @@ public class PlayerOsdController {
         if (MimeTypes.AUDIO_AMR.equals(mime) || MimeTypes.AUDIO_AMR_NB.equals(mime)) return "AMR-NB";
         if (MimeTypes.AUDIO_AMR_WB.equals(mime)) return "AMR-WB";
         return getMime(format);
+    }
+
+    private boolean isCodec(Format format, String codec) {
+        return !TextUtils.isEmpty(format.codecs) && format.codecs.contains(codec);
     }
 
     private String formatBitrate(long bitrate) {
@@ -435,6 +626,174 @@ public class PlayerOsdController {
     private String getDisplayRefreshText() {
         if (root.getDisplay() == null || root.getDisplay().getRefreshRate() <= 0) return "";
         return refreshFormat.format(root.getDisplay().getRefreshRate()) + " Hz";
+    }
+
+    private String getDeviceText() {
+        String value = cachedDeviceText;
+        if (value != null) return value;
+        return cachedDeviceText = join(" / ",
+                join(" ", emptyDash(Build.MANUFACTURER), emptyDash(Build.MODEL)),
+                "device " + emptyDash(Build.DEVICE),
+                "abi " + String.join(",", Build.SUPPORTED_ABIS));
+    }
+
+    private String getSystemText() {
+        String value = cachedSystemText;
+        if (value != null) return value;
+        return cachedSystemText = join(" / ",
+                "Android " + emptyDash(Build.VERSION.RELEASE),
+                "SDK " + Build.VERSION.SDK_INT,
+                "incremental " + emptyDash(Build.VERSION.INCREMENTAL));
+    }
+
+    private String getChipText() {
+        return join(" / ",
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ? "soc " + emptyDash(Build.SOC_MANUFACTURER) + " " + emptyDash(Build.SOC_MODEL) : "",
+                "hardware " + emptyDash(Build.HARDWARE),
+                "board " + emptyDash(Build.BOARD));
+    }
+
+    private String getWebViewText() {
+        String value = cachedWebViewText;
+        if (value != null) return value;
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return cachedWebViewText = "provider unavailable / SDK " + Build.VERSION.SDK_INT;
+        try {
+            PackageInfo info = WebView.getCurrentWebViewPackage();
+            if (info == null) return cachedWebViewText = "provider unavailable";
+            long code = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P ? info.getLongVersionCode() : info.versionCode;
+            return cachedWebViewText = join(" / ", info.versionName, info.packageName, "code " + code);
+        } catch (Throwable e) {
+            return cachedWebViewText = "provider query failed: " + e.getClass().getSimpleName();
+        }
+    }
+
+    private String getDisplayText() {
+        Display display = root.getDisplay();
+        DisplayMetrics metrics = App.get().getResources().getDisplayMetrics();
+        String appSize = metrics.widthPixels > 0 && metrics.heightPixels > 0 ? "app " + metrics.widthPixels + "x" + metrics.heightPixels : "";
+        String refresh = getDisplayRefreshText();
+        if (display == null) return join(" / ", appSize, TextUtils.isEmpty(refresh) ? "" : refresh);
+        Display.Mode mode = display.getMode();
+        String modeText = mode == null ? "" : Math.max(mode.getPhysicalWidth(), mode.getPhysicalHeight()) + "x" + Math.min(mode.getPhysicalWidth(), mode.getPhysicalHeight()) + "@" + refreshFormat.format(mode.getRefreshRate()) + "Hz";
+        return join(" / ", appSize, modeText, TextUtils.isEmpty(refresh) ? "" : "current " + refresh, getDisplayModesText(display));
+    }
+
+    private String getDisplayModesText(Display display) {
+        try {
+            Display.Mode[] modes = display.getSupportedModes();
+            if (modes == null || modes.length <= 1) return "";
+            StringBuilder builder = new StringBuilder("modes ");
+            int count = 0;
+            for (Display.Mode mode : modes) {
+                String hz = refreshFormat.format(mode.getRefreshRate());
+                if (builder.toString().contains(hz + "Hz")) continue;
+                if (count++ > 0) builder.append("/");
+                builder.append(hz).append("Hz");
+                if (count >= 6) break;
+            }
+            return builder.toString();
+        } catch (Throwable ignored) {
+            return "";
+        }
+    }
+
+    private String getNetworkEnvironmentText() {
+        return join(" / ", getActiveNetworkText(), getSystemProxyText(), getAppProxyText());
+    }
+
+    private String getActiveNetworkText() {
+        try {
+            ConnectivityManager manager = (ConnectivityManager) App.get().getSystemService(Context.CONNECTIVITY_SERVICE);
+            if (manager == null) return "";
+            NetworkCapabilities caps = manager.getNetworkCapabilities(manager.getActiveNetwork());
+            if (caps == null) return "network unavailable";
+            String type = caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ? "WiFi" :
+                    caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) ? "Ethernet" :
+                            caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ? "Cellular" :
+                                    caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN) ? "VPN" : "Other";
+            String validated = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) ? "validated" : "not validated";
+            String metered = manager.isActiveNetworkMetered() ? "metered" : "unmetered";
+            return join(" ", type, validated, metered);
+        } catch (Throwable e) {
+            return "network query failed";
+        }
+    }
+
+    private String getSystemProxyText() {
+        String host = System.getProperty("http.proxyHost");
+        String port = System.getProperty("http.proxyPort");
+        return TextUtils.isEmpty(host) ? "system proxy 关" : "system proxy " + host + (TextUtils.isEmpty(port) ? "" : ":" + port);
+    }
+
+    private String getAppProxyText() {
+        if (!Setting.isShellProxy()) return "app proxy 关";
+        String url = Setting.getShellProxyUrl();
+        return "app proxy 开" + (TextUtils.isEmpty(url) ? "" : " " + shortText(url, 36));
+    }
+
+    private String getHevcDecoderText() {
+        String value = cachedHevcDecoderText;
+        if (value != null) return value;
+        try {
+            HevcDecoderSummary best = null;
+            int count = 0;
+            for (MediaCodecInfo info : new MediaCodecList(MediaCodecList.REGULAR_CODECS).getCodecInfos()) {
+                if (info.isEncoder() || !isHardwareCodec(info)) continue;
+                HevcDecoderSummary summary = summarizeHevcDecoder(info);
+                if (summary == null) continue;
+                count++;
+                if (best == null || summary.score() > best.score()) best = summary;
+            }
+            if (best == null) return cachedHevcDecoderText = "未发现硬件 HEVC decoder";
+            return cachedHevcDecoderText = best.text() + (count > 1 ? " / decoders " + count : "");
+        } catch (Throwable e) {
+            return cachedHevcDecoderText = "query failed: " + e.getClass().getSimpleName();
+        }
+    }
+
+    private HevcDecoderSummary summarizeHevcDecoder(MediaCodecInfo info) {
+        try {
+            MediaCodecInfo.VideoCapabilities caps = info.getCapabilitiesForType(MediaFormat.MIMETYPE_VIDEO_HEVC).getVideoCapabilities();
+            boolean uhd60 = supports(caps, 3840, 2160, 60);
+            boolean uhd30 = supports(caps, 3840, 2160, 30);
+            boolean qhd60 = supports(caps, 2560, 1440, 60);
+            boolean fhd60 = supports(caps, 1920, 1080, 60);
+            int score = (uhd60 ? 8 : 0) + (uhd30 ? 4 : 0) + (qhd60 ? 2 : 0) + (fhd60 ? 1 : 0);
+            String bitrate = "";
+            try {
+                android.util.Range<Integer> range = caps.getBitrateRange();
+                if (range != null && range.getUpper() > 0) bitrate = "bitrate<=" + formatBitrate(range.getUpper());
+            } catch (Throwable ignored) {
+            }
+            String text = join(" / ",
+                    "decoder " + info.getName(),
+                    "4K60=" + yesNo(uhd60),
+                    "4K30=" + yesNo(uhd30),
+                    "1440p60=" + yesNo(qhd60),
+                    "1080p60=" + yesNo(fhd60),
+                    TextUtils.isEmpty(bitrate) ? "" : bitrate.replace("bitrate<=", "码率上限 "));
+            return new HevcDecoderSummary(score, text);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private boolean supports(MediaCodecInfo.VideoCapabilities caps, int width, int height, double fps) {
+        try {
+            return caps.areSizeAndRateSupported(width, height, fps) || caps.areSizeAndRateSupported(height, width, fps);
+        } catch (Throwable e) {
+            return false;
+        }
+    }
+
+    private boolean isHardwareCodec(MediaCodecInfo info) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) return info.isHardwareAccelerated();
+        String name = info.getName().toLowerCase(Locale.US);
+        return !name.contains("google") && !name.contains("android") && !name.contains("ffmpeg") && !name.contains("software") && !name.startsWith("c2.android");
+    }
+
+    private String yesNo(boolean value) {
+        return value ? "是" : "否";
     }
 
     private String summarizeSource(String url) {
@@ -515,6 +874,10 @@ public class PlayerOsdController {
         return TextUtils.isEmpty(value) ? "-" : value;
     }
 
+    private int dp(int value) {
+        return Math.round(value * App.get().getResources().getDisplayMetrics().density);
+    }
+
     private String shortText(String value, int max) {
         if (TextUtils.isEmpty(value) || value.length() <= max) return value;
         return value.substring(0, Math.max(0, max - 1)) + "...";
@@ -529,6 +892,19 @@ public class PlayerOsdController {
     }
 
     private record AudioTrackCandidate(Format format, int support, boolean selected) {
+    }
+
+    private record VideoTrackCandidate(Format format, int support, boolean selected) {
+    }
+
+    private record HevcDecoderSummary(int score, String text) {
+    }
+
+    private record DiagnosticsText(String main, String extra) {
+
+        String all() {
+            return TextUtils.isEmpty(extra) ? main : main + "\n" + extra;
+        }
     }
 
     private record AudioTrackState(Format format, int support, boolean selected, int total, int supported) {
@@ -551,6 +927,25 @@ public class PlayerOsdController {
 
         String supportSummary() {
             return total <= 1 ? "" : "音轨 " + supported + "/" + total + " 支持";
+        }
+    }
+
+    private record VideoTrackState(Format format, int support, boolean selected, int total, int supported) {
+
+        static VideoTrackState empty() {
+            return new VideoTrackState(null, C.FORMAT_UNSUPPORTED_TYPE, false, 0, 0);
+        }
+
+        boolean hasTracks() {
+            return total > 0;
+        }
+
+        boolean isHandled() {
+            return support == C.FORMAT_HANDLED;
+        }
+
+        String supportSummary() {
+            return total <= 1 ? "" : "视频轨 " + supported + "/" + total + " 支持";
         }
     }
 }

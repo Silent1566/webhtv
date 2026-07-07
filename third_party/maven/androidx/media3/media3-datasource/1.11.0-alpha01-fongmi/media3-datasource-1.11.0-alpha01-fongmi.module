@@ -1,0 +1,131 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "androidx.media3",
+    "module": "media3-datasource",
+    "version": "1.11.0-alpha01-fongmi",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "9.1.0"
+    }
+  },
+  "variants": [
+    {
+      "name": "releaseVariantReleaseApiPublication",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-api"
+      },
+      "dependencies": [
+        {
+          "group": "androidx.media3",
+          "module": "media3-common",
+          "version": {
+            "requires": "1.11.0-alpha01-fongmi"
+          }
+        },
+        {
+          "group": "androidx.media3",
+          "module": "media3-database",
+          "version": {
+            "requires": "1.11.0-alpha01-fongmi"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "media3-datasource-1.11.0-alpha01-fongmi.aar",
+          "url": "media3-datasource-1.11.0-alpha01-fongmi.aar",
+          "size": 180010,
+          "sha512": "195db6c7627f4d14a62fae3a528671bbd93016052f949ca76dc24314bc75b6abc9697625512b393d72d00fbd43fe7eca6bcc25d79ce45855164638335333ac19",
+          "sha256": "d495d3be801ebd0c135d66cb273b69d8a4a03c7b7c092e1c2382eecb257b74b8",
+          "sha1": "ccea563381cbd275f85ad4189829d9ecae7952a4",
+          "md5": "49204cb7a2d95584e41c942c360c907b"
+        }
+      ]
+    },
+    {
+      "name": "releaseVariantReleaseRuntimePublication",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-runtime"
+      },
+      "dependencies": [
+        {
+          "group": "androidx.annotation",
+          "module": "annotation",
+          "version": {
+            "requires": "1.6.0"
+          }
+        },
+        {
+          "group": "androidx.exifinterface",
+          "module": "exifinterface",
+          "version": {
+            "requires": "1.3.6"
+          }
+        },
+        {
+          "group": "com.hierynomus",
+          "module": "smbj",
+          "version": {
+            "requires": "0.14.0"
+          }
+        },
+        {
+          "group": "androidx.media3",
+          "module": "media3-common",
+          "version": {
+            "requires": "1.11.0-alpha01-fongmi"
+          }
+        },
+        {
+          "group": "androidx.media3",
+          "module": "media3-database",
+          "version": {
+            "requires": "1.11.0-alpha01-fongmi"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "media3-datasource-1.11.0-alpha01-fongmi.aar",
+          "url": "media3-datasource-1.11.0-alpha01-fongmi.aar",
+          "size": 180010,
+          "sha512": "195db6c7627f4d14a62fae3a528671bbd93016052f949ca76dc24314bc75b6abc9697625512b393d72d00fbd43fe7eca6bcc25d79ce45855164638335333ac19",
+          "sha256": "d495d3be801ebd0c135d66cb273b69d8a4a03c7b7c092e1c2382eecb257b74b8",
+          "sha1": "ccea563381cbd275f85ad4189829d9ecae7952a4",
+          "md5": "49204cb7a2d95584e41c942c360c907b"
+        }
+      ]
+    },
+    {
+      "name": "releaseVariantReleaseSourcePublication",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.usage": "java-runtime"
+      },
+      "files": [
+        {
+          "name": "media3-datasource-1.11.0-alpha01-fongmi-sources.jar",
+          "url": "media3-datasource-1.11.0-alpha01-fongmi-sources.jar",
+          "size": 145178,
+          "sha512": "86dbf27ac4d83af9c45a741816b038cd5d66fb96dc6e1b1e05ed928ec8dd3ca908984140d7e37b7ac9b7d5fa30a2ce73b595fb0057a3c16dc757949f52403aaf",
+          "sha256": "de3b25ebf4d775e73a4f8636bddbd88753ae791f70cecb2a20e721344782ebf8",
+          "sha1": "9622b0a1ea08906a84bebe36199b02504e693bdb",
+          "md5": "9b66b7690d0cd32177be3e9b7d3540e2"
+        }
+      ]
+    }
+  ]
+}

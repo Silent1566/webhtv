@@ -1,5 +1,10 @@
 package com.fongmi.android.tv.ui.dialog;
 
+import android.app.Dialog;
+import android.os.Bundle;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.fragment.app.FragmentActivity;
 import androidx.viewbinding.ViewBinding;
 
@@ -15,6 +20,15 @@ public class SpeedDialog extends BaseAlertDialog {
 
     public static void show(FragmentActivity activity) {
         new SpeedDialog().show(activity.getSupportFragmentManager(), null);
+    }
+
+    @Override
+    @NonNull
+    public Dialog onCreateDialog(@Nullable Bundle savedInstanceState) {
+        Dialog dialog = LightDialog.create(requireContext(), getString(com.fongmi.android.tv.R.string.player_speed), getBinding().getRoot());
+        initView();
+        initEvent();
+        return dialog;
     }
 
     @Override
@@ -42,9 +56,4 @@ public class SpeedDialog extends BaseAlertDialog {
         });
     }
 
-    @Override
-    public void onStart() {
-        super.onStart();
-        getDialog().getWindow().setBackgroundDrawableResource(android.R.color.transparent);
-    }
 }

@@ -32,6 +32,48 @@
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 
+    <androidx.appcompat.widget.LinearLayoutCompat
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"
+        android:paddingBottom="10dp">
+
+        <androidx.appcompat.widget.AppCompatEditText
+            android:id="@+id/keyword"
+            android:layout_width="0dp"
+            android:layout_height="44dp"
+            android:layout_weight="1"
+            android:background="@drawable/shape_quick_search_input"
+            android:gravity="center_vertical"
+            android:hint="@string/search_keyword"
+            android:imeOptions="actionSearch"
+            android:includeFontPadding="false"
+            android:inputType="text"
+            android:maxLines="1"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:singleLine="true"
+            android:textColor="@color/white"
+            android:textColorHint="@color/white_50"
+            android:textSize="15sp" />
+
+        <androidx.appcompat.widget.AppCompatImageButton
+            android:id="@+id/search"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:layout_marginStart="10dp"
+            android:background="@drawable/shape_quick_search_icon_button"
+            android:contentDescription="@string/play_search"
+            android:padding="10dp"
+            android:scaleType="center"
+            android:src="@drawable/ic_action_search"
+            app:tint="@color/dialog_outlined_button_text" />
+
+    </androidx.appcompat.widget.LinearLayoutCompat>
+
     <View
         android:layout_width="match_parent"
         android:layout_height="1dp"

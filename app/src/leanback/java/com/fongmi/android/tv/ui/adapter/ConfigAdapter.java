@@ -1,5 +1,6 @@
 package com.fongmi.android.tv.ui.adapter;
 
+import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -35,8 +36,13 @@ public class ConfigAdapter extends RecyclerView.Adapter<ConfigAdapter.ViewHolder
     }
 
     public ConfigAdapter addAll(int type) {
+        return addAll(type, null);
+    }
+
+    public ConfigAdapter addAll(int type, Config current) {
         mItems = Config.getAll(type);
-        if (!mItems.isEmpty() && !readOnly) mItems.remove(0);
+        String currentUrl = current == null ? null : current.getUrl();
+        if (!readOnly && !TextUtils.isEmpty(currentUrl)) mItems.removeIf(item -> TextUtils.equals(item.getUrl(), currentUrl));
         return this;
     }
 

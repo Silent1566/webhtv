@@ -26,6 +26,15 @@ public class PushParserTest {
     }
 
     @Test
+    public void fromTextExtractsTitleFromBaiduShareWithPassword() {
+        PushParser.Parsed parsed = PushParser.fromText("https://pan.baidu.com/s/1yfjq53RDyugPJIGjJh3_HA?pwd=v659|F 凡人#修仙传 动漫");
+
+        assertEquals("https://pan.baidu.com/s/1yfjq53RDyugPJIGjJh3_HA?pwd=v659", parsed.getUrl());
+        assertEquals("F 凡人#修仙传 动漫", parsed.getTitle());
+        assertEquals("F 凡人#修仙传 动漫", parsed.getName());
+    }
+
+    @Test
     public void fromTextSniffsUrlBeforePipeTitle() {
         PushParser.Parsed parsed = PushParser.fromText("推送 https://cdn.test/movie.mp4?token=1 | 莫离 (2026)");
 

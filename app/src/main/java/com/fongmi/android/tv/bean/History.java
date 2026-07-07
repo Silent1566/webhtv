@@ -129,6 +129,23 @@ public class History implements Diffable<History> {
         return AppDatabase.get().getHistoryDao().find(VodConfig.getCid(), key);
     }
 
+    public static History findPlayback(String key, String vodName, List<Flag> flags) {
+        return findPlayback(key, Collections.singletonList(vodName), flags);
+    }
+
+    public static History findPlayback(String key, List<String> vodNames, List<Flag> flags) {
+        History history = find(key);
+        if (history != null) return history;
+        if (vodNames != null) {
+            for (String vodName : vodNames) {
+                if (vodName == null || vodName.isEmpty()) continue;
+                history = findPlaybackCandidate(key, findByName(vodName), flags);
+                if (history != null) return history.cid(VodConfig.getCid());
+            }
+        }
+        return null;
+    }
+
     public static List<History> findByName(String name) {
         try {
             return AppDatabase.get().getHistoryDao().findByName(VodConfig.getCid(), name);
@@ -154,6 +171,40 @@ public class History implements Diffable<History> {
                 if (target.getCreateTime() > latestTime) target.cid(VodConfig.getCid()).merge(items, true).save();
             }
         });
+    }
+
+    static History findPlaybackCandidate(String key, List<History> items, List<Flag> flags) {
+        if (items == null || items.isEmpty()) return null;
+        for (History item : items) if (canResume(item) && matchesAnyEpisode(item, flags)) return copyForPlaybackKey(item, key);
+        for (History item : items) if (canResume(item)) return copyForPlaybackKey(item, key);
+        return copyForPlaybackKey(items.get(0), key);
+    }
+
+    private static boolean canResume(History item) {
+        return item != null && item.getPosition() > 0;
+    }
+
+    private static History copyForPlaybackKey(History item, String key) {
+        History copy = item.copy();
+        if (key != null && !key.isEmpty()) copy.setKey(key);
+        return copy;
+    }
+
+    private static boolean matchesAnyEpisode(History item, List<Flag> flags) {
+        if (item == null || flags == null || flags.isEmpty()) return false;
+        for (Flag flag : flags) {
+            if (flag == null || flag.getEpisodes() == null) continue;
+            for (Episode episode : flag.getEpisodes()) if (matchesEpisode(item, episode)) return true;
+        }
+        return false;
+    }
+
+    private static boolean matchesEpisode(History item, Episode episode) {
+        if (episode == null) return false;
+        String episodeUrl = item.getEpisodeUrl();
+        if (!episodeUrl.isEmpty() && episodeUrl.equals(episode.getUrl())) return true;
+        String remarks = item.getVodRemarks();
+        return !remarks.isEmpty() && (remarks.equalsIgnoreCase(episode.getName()) || remarks.equals(episode.getDisplayName()));
     }
 
     @NonNull

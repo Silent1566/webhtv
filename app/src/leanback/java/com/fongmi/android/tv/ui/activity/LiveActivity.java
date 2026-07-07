@@ -520,7 +520,7 @@ public class LiveActivity extends PlaybackActivity implements GroupAdapter.OnCli
 
         @Override
         public void onStop() {
-            finish();
+            finishLivePlayback();
         }
     };
 
@@ -1176,9 +1176,16 @@ public class LiveActivity extends PlaybackActivity implements GroupAdapter.OnCli
         } else if (isVisible(mBinding.recycler)) {
             hideUI();
         } else {
-            if (isTaskRoot()) startActivity(new Intent(this, HomeActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP));
-            super.onBackInvoked();
+            finishLivePlayback();
         }
+    }
+
+    private void finishLivePlayback() {
+        markPlaybackExiting();
+        if (service() != null) service().shutdown();
+        else stopPlayback();
+        if (isTaskRoot()) startActivity(new Intent(this, HomeActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP));
+        finish();
     }
 
     @Override

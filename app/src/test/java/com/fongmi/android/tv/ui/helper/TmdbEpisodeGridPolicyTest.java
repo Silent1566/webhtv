@@ -31,6 +31,16 @@ public class TmdbEpisodeGridPolicyTest {
     }
 
     @Test
+    public void verticalFocusTargetMovesBySpanInsideGrid() {
+        assertEquals(4, TmdbEpisodeGridPolicy.verticalFocusTarget(0, 4, 20, true));
+        assertEquals(8, TmdbEpisodeGridPolicy.verticalFocusTarget(4, 4, 20, true));
+        assertEquals(0, TmdbEpisodeGridPolicy.verticalFocusTarget(4, 4, 20, false));
+        assertEquals(TmdbEpisodeGridPolicy.NO_FOCUS_TARGET, TmdbEpisodeGridPolicy.verticalFocusTarget(0, 4, 20, false));
+        assertEquals(TmdbEpisodeGridPolicy.NO_FOCUS_TARGET, TmdbEpisodeGridPolicy.verticalFocusTarget(16, 4, 20, true));
+        assertEquals(5, TmdbEpisodeGridPolicy.verticalFocusTarget(3, 4, 6, true));
+    }
+
+    @Test
     public void shouldUseFallbackImageOnlyForLegacySmallGridPolicy() {
         assertFalse(TmdbEpisodeGridPolicy.shouldUseFallbackImage(false, 120));
         assertTrue(TmdbEpisodeGridPolicy.shouldUseFallbackImage(true, 24));

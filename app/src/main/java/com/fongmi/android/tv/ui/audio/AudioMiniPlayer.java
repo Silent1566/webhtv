@@ -648,7 +648,7 @@ public final class AudioMiniPlayer implements ServiceConnection {
         }
 
         @Override
-        public void onPlayerRebuild(Player player) {
+        public void onPlayerRebuild(Player player, boolean resetVideoSurface) {
             attachPlayer();
         }
     };

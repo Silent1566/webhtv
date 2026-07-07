@@ -4,11 +4,11 @@
     android:id="@+id/text"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@drawable/selector_chip_round"
+    android:background="@drawable/selector_dialog_glass_chip"
     android:ellipsize="marquee"
     android:focusable="true"
     android:focusableInTouchMode="true"
     android:singleLine="true"
-    android:textColor="@color/text"
+    android:textColor="@color/selector_dialog_glass_chip_text"
     android:textSize="14sp"
     tools:text="中文、哥斯拉.srt" />

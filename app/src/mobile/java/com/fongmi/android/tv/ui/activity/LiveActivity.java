@@ -262,7 +262,7 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
         setVideoView();
         setNavigation();
         setViewModel();
-        enterFullscreenLiveOnPad();
+        applyPadLiveMode();
     }
 
     @Override
@@ -276,6 +276,7 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
         mBinding.control.prev.setOnClickListener(view -> prevChannel());
         mBinding.control.right.lock.setOnClickListener(view -> onLock());
         mBinding.control.right.rotate.setOnClickListener(view -> onRotate());
+        mBinding.control.right.pip.setOnClickListener(view -> onPiP());
         mBinding.control.action.text.setOnClickListener(this::onTrack);
         mBinding.control.action.audio.setOnClickListener(this::onTrack);
         mBinding.control.action.video.setOnClickListener(this::onTrack);
@@ -352,6 +353,7 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
         mBinding.control.action.invert.setSelected(LiveSetting.isInvert());
         mBinding.control.action.across.setSelected(LiveSetting.isAcross());
         mBinding.control.action.change.setSelected(LiveSetting.isChange());
+        applyLiveListStyle();
         mBinding.video.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> mPiP.update(this, view));
     }
 
@@ -536,7 +538,7 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
     }
 
     private void onBack() {
-        if (ResUtil.isPad() && !isEmbeddedLiveUi()) {
+        if (isPadLiveFullscreenMode() && !isEmbeddedLiveUi()) {
             finishLivePlayback();
             return;
         }
@@ -576,6 +578,12 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
         else exitFullscreenLive();
     }
 
+    private void onPiP() {
+        if (service() == null || !player().haveTrack(C.TRACK_TYPE_VIDEO)) return;
+        hideControl();
+        mPiP.enter(this, LIVE_PIP_WIDTH, LIVE_PIP_HEIGHT, LiveSetting.getScale(), true);
+    }
+
     private void enterFullscreenLive() {
         setRotate(true);
         hideInfo();
@@ -587,7 +595,7 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
     }
 
     private void enterFullscreenLiveOnPad() {
-        if (!ResUtil.isPad() || isRotate() || isInPictureInPictureMode()) return;
+        if (!isPadLiveFullscreenMode() || isRotate() || isInPictureInPictureMode()) return;
         setRequestedOrientation(getFullscreenOrient());
         if (!ResUtil.isLand(this)) return;
         enterFullscreenLive();
@@ -601,7 +609,8 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
     }
 
     private int getLaunchOrient() {
-        return ResUtil.isPad() ? ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE : PlaybackOrientation.getPortraitVideoSizeOrientation();
+        if (isPadLiveFullscreenMode()) return ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE;
+        return PlaybackOrientation.getPortraitVideoSizeOrientation();
     }
 
     private int getFullscreenOrient() {
@@ -609,7 +618,21 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
     }
 
     private int getEmbeddedOrient() {
-        return ResUtil.isPad() ? ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE : PlaybackOrientation.getPortraitVideoSizeOrientation();
+        if (isPadLiveFullscreenMode()) return ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE;
+        return PlaybackOrientation.getPortraitVideoSizeOrientation();
+    }
+
+    private boolean isPadLiveFullscreenMode() {
+        return ResUtil.isPad() && PlayerSetting.isPadLiveFullscreen();
+    }
+
+    private void applyPadLiveMode() {
+        if (!ResUtil.isPad() || isInPictureInPictureMode()) return;
+        if (PlayerSetting.isPadLiveFullscreen()) {
+            enterFullscreenLiveOnPad();
+        } else if (!isRotate()) {
+            setRequestedOrientation(getEmbeddedOrient());
+        }
     }
 
     private void checkPlay() {
@@ -760,7 +783,7 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
     }
 
     private int getLockOrient() {
-        if (ResUtil.isPad() && !isLock()) return ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE;
+        if (ResUtil.isPad() && !isLock() && (PlayerSetting.isPadLiveFullscreen() || isRotate())) return ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE;
         return PlaybackOrientation.getLockOrientation(this, isLock(), isRotate());
     }
 
@@ -848,7 +871,7 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
         if (!embedded && isVisible(mBinding.recycler)) hideUI(false);
         mBinding.control.info.setVisibility(player().isEmpty() ? View.GONE : View.VISIBLE);
         mBinding.control.cast.setVisibility(View.GONE);
-        mBinding.control.right.rotate.setVisibility(isLock() || ResUtil.isPad() ? View.GONE : View.VISIBLE);
+        mBinding.control.right.rotate.setVisibility(isLock() || isPadLiveFullscreenMode() ? View.GONE : View.VISIBLE);
         mBinding.control.center.setVisibility(isLock() ? View.GONE : View.VISIBLE);
         mBinding.control.bottom.setVisibility(isLock() ? View.GONE : View.VISIBLE);
         mBinding.control.action.getRoot().setVisibility(embedded ? View.GONE : View.VISIBLE);
@@ -1264,7 +1287,8 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
 
     @Override
     public void onLivePiPPanel() {
-        enterPiP("panel");
+        dismissLiveControlDialog();
+        App.post(this::onPiP, 100);
     }
 
     @Override
@@ -1272,6 +1296,12 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
         dismissLiveControlDialog();
         moveTaskToBack(true);
         setAudioOnly(true);
+    }
+
+    @Override
+    public void onLiveListStylePanel(boolean classic) {
+        LiveSetting.putListStyleClassic(classic);
+        applyLiveListStyle();
     }
 
     @Override
@@ -1300,7 +1330,7 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
 
         @Override
         public void onStop() {
-            finish();
+            finishLivePlayback();
         }
 
         @Override
@@ -1740,7 +1770,8 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
             hideUI();
         } else {
             hideInfo();
-            if (isStop()) finish();
+            // PiP 窗口点 × 关闭时，主动停止播放，避免声音继续
+            if (isStop()) finishLivePlayback();
         }
     }
 
@@ -1761,7 +1792,7 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
     public void onConfigurationChanged(@NonNull Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
         updateSystemUI();
-        enterFullscreenLiveOnPad();
+        applyPadLiveMode();
     }
 
     @Override
@@ -1809,18 +1840,32 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
         if (overlay) {
             moveLiveMenuToVideo();
             mBinding.recycler.setOrientation(LinearLayoutCompat.HORIZONTAL);
-            mBinding.recycler.setBackgroundResource(R.drawable.shape_live_list);
             if (mBinding.liveCurrent != null) mBinding.liveCurrent.setVisibility(View.GONE);
             setLiveListContainerOverlay();
             updateOverlayMenuWidths();
         } else {
             moveLiveMenuToRoot();
             mBinding.recycler.setOrientation(LinearLayoutCompat.VERTICAL);
-            mBinding.recycler.setBackgroundColor(Color.TRANSPARENT);
             if (mBinding.liveCurrent != null) mBinding.liveCurrent.setVisibility(View.VISIBLE);
             setLiveListContainerEmbedded();
             restoreEmbeddedMenuWidths();
         }
+        applyLiveListStyle();
+    }
+
+    private void applyLiveListStyle() {
+        if (mBinding == null) return;
+        if (liveMenuOverlay) {
+            mBinding.recycler.setBackgroundResource(R.drawable.shape_live_list);
+        } else {
+            mBinding.recycler.setBackgroundResource(LiveSetting.isListStyleClassic() ? R.color.transparent : R.drawable.shape_live_embedded_list);
+        }
+        if (mBinding.liveCurrent != null) {
+            mBinding.liveCurrent.setBackgroundResource(LiveSetting.isListStyleClassic() ? R.drawable.shape_live_classic : R.drawable.shape_live);
+        }
+        if (mGroupAdapter != null) mGroupAdapter.notifyDataSetChanged();
+        if (mChannelAdapter != null) mChannelAdapter.notifyDataSetChanged();
+        if (mEpgDataAdapter != null) mEpgDataAdapter.notifyDataSetChanged();
     }
 
     private void moveLiveMenuToVideo() {

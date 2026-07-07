@@ -5,6 +5,7 @@ import android.content.ContextWrapper;
 import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
+import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
 import androidx.fragment.app.FragmentActivity;
@@ -18,6 +19,7 @@ import com.fongmi.android.tv.ui.base.BaseEpisodeHolder;
 import com.fongmi.android.tv.ui.dialog.EpisodeDetailDialog;
 import com.fongmi.android.tv.ui.helper.EpisodeCardPolicy;
 import com.fongmi.android.tv.utils.ImgUtil;
+import com.fongmi.android.tv.utils.ResUtil;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -73,7 +75,8 @@ public class EpisodeGridHolder extends BaseEpisodeHolder {
         binding.card.setSelected(item.isSelected());
         bindCardActions(item, binding.getRoot(), binding.card, binding.imageFrame, binding.still, binding.textPanel, binding.cardTitle, binding.overview);
 
-        binding.cardTitle.setText(EpisodeAdapter.getTitle(item));
+        String cardTitle = EpisodeAdapter.getCardTitle(item);
+        binding.cardTitle.setText(cardTitle);
         binding.cardTitle.setSelected(item.isSelected());
 
         String stillUrl = episode == null ? "" : episode.getStillUrl();
@@ -86,7 +89,7 @@ public class EpisodeGridHolder extends BaseEpisodeHolder {
             Glide.with(binding.still.getContext()).clear(binding.still);
             binding.still.setImageDrawable(null);
         } else {
-            ImgUtil.load(EpisodeAdapter.getTitle(item), imageUrl, errorImageUrl, binding.still, true, 0, 0);
+            ImgUtil.load(cardTitle, imageUrl, errorImageUrl, binding.still, true, 0, 0);
         }
 
         if (episode == null || TextUtils.isEmpty(episode.getOverview())) {
@@ -104,8 +107,10 @@ public class EpisodeGridHolder extends BaseEpisodeHolder {
         }
 
         String meta = episode == null || !hasStill ? "" : getMeta(episode);
-        binding.meta.setVisibility(TextUtils.isEmpty(meta) ? View.GONE : View.VISIBLE);
+        boolean showMeta = !TextUtils.isEmpty(meta);
+        binding.meta.setVisibility(showMeta ? View.VISIBLE : View.GONE);
         binding.meta.setText(meta);
+        bindFileSize(EpisodeAdapter.getCardFileSize(item, cardTitle), showMeta);
     }
 
     private String getMeta(TmdbEpisode episode) {
@@ -113,6 +118,16 @@ public class EpisodeGridHolder extends BaseEpisodeHolder {
         if (!TextUtils.isEmpty(episode.getDate())) values.add(episode.getDate());
         if (episode.getRuntime() > 0) values.add(episode.getRuntime() + "m");
         return TextUtils.join(" / ", values);
+    }
+
+    private void bindFileSize(String fileSize, boolean belowMeta) {
+        binding.fileSize.setText(fileSize);
+        binding.fileSize.setVisibility(TextUtils.isEmpty(fileSize) ? View.GONE : View.VISIBLE);
+        ViewGroup.LayoutParams params = binding.fileSize.getLayoutParams();
+        if (params instanceof ViewGroup.MarginLayoutParams marginParams) {
+            marginParams.topMargin = ResUtil.dp2px(belowMeta ? 36 : 8);
+            binding.fileSize.setLayoutParams(marginParams);
+        }
     }
 
     private void setMarquee(boolean focused) {

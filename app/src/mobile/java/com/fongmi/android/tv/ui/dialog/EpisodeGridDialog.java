@@ -15,6 +15,7 @@ import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.bean.Episode;
 import com.fongmi.android.tv.databinding.DialogEpisodeGridBinding;
 import com.fongmi.android.tv.setting.PlayerSetting;
+import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.adapter.EpisodeAdapter;
 import com.fongmi.android.tv.ui.fragment.EpisodeFragment;
 import com.fongmi.android.tv.utils.ResUtil;
@@ -73,10 +74,12 @@ public class EpisodeGridDialog extends BaseBottomSheetDialog {
         setSpanCount();
         setTitles();
         setPager();
+        updateEpisodeFileNameButton();
     }
 
     @Override
     protected void initEvent() {
+        binding.episodeFileName.setOnClickListener(this::onEpisodeFileNameToggle);
         binding.column.setOnClickListener(this::onColumnToggle);
         getChildFragmentManager().setFragmentResultListener("result", this, (requestKey, bundle) -> {
             ((EpisodeAdapter.OnClickListener) requireActivity()).onItemClick(bundle.getParcelable("episode"));
@@ -89,6 +92,19 @@ public class EpisodeGridDialog extends BaseBottomSheetDialog {
         setSpanCount();
         setTitles();
         setPager();
+    }
+
+    private void onEpisodeFileNameToggle(View view) {
+        Setting.putTmdbEpisodeShowScrapedName(!Setting.getTmdbEpisodeShowScrapedName());
+        updateEpisodeFileNameButton();
+        setPager();
+    }
+
+    private void updateEpisodeFileNameButton() {
+        binding.episodeFileName.setVisibility(tmdbCard ? View.VISIBLE : View.GONE);
+        if (!tmdbCard) return;
+        boolean showScraped = Setting.getTmdbEpisodeShowScrapedName();
+        binding.episodeFileName.setContentDescription(getString(showScraped ? R.string.detail_episode_file_name_original_action : R.string.detail_episode_file_name_scraped_action));
     }
 
     private void setSpanCount() {

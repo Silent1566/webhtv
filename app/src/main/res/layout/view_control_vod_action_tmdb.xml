@@ -52,11 +52,6 @@
             style="@style/Control"
             android:text="@string/play_repeat" />
 
-        <View
-            android:layout_width="0dp"
-            android:layout_height="0dp"
-            android:layout_weight="1" />
-
         <com.google.android.material.textview.MaterialTextView
             android:id="@+id/text"
             style="@style/Control"

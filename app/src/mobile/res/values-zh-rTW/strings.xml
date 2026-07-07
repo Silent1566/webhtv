@@ -48,6 +48,9 @@
     <string name="live_control_action">操作</string>
     <string name="live_control_pip">懸窗</string>
     <string name="live_control_preference">偏好</string>
+    <string name="live_control_display_style">顯示風格</string>
+    <string name="live_control_list_transparent">通透</string>
+    <string name="live_control_list_readable">易讀</string>
     <string name="live_control_player">播放</string>
     <string name="live_source_select">選擇直播源</string>
     <string name="live_epg_select">選擇EPG源</string>
@@ -84,6 +87,11 @@
         <item>關閉</item>
         <item>開啟</item>
         <item>子母畫面</item>
+    </string-array>
+
+    <string-array name="select_pad_live_mode">
+        <item>全屏</item>
+        <item>標準</item>
     </string-array>
 
 </resources>

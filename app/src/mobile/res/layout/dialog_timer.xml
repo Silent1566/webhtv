@@ -111,7 +111,8 @@
             android:singleLine="true"
             android:text="@string/timer_delay"
             android:textColor="@color/white"
-            app:backgroundTint="#FF4B4B4F" />
+            app:backgroundTint="@color/selector_dialog_glass_button_tint"
+            app:rippleColor="#33FFFFFF" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/reset"

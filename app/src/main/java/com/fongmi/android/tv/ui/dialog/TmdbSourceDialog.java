@@ -1,7 +1,9 @@
 package com.fongmi.android.tv.ui.dialog;
 
 import android.content.Context;
+import android.graphics.Rect;
 import android.text.TextUtils;
+import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.inputmethod.EditorInfo;
@@ -121,11 +123,72 @@ public class TmdbSourceDialog {
                 .setOnDismissListener(d -> { if (onDismiss != null) onDismiss.run(); })
                 .create();
         dialog.show();
+        wireConfigDialogFocus(dialog, ruleInput, addBtn, disabledRuleInput, addDisabledBtn, manageBtn, resetBtn);
         LightDialog.apply(dialog);
     }
 
     private MaterialAlertDialogBuilder builder() {
         return new MaterialAlertDialogBuilder(activity, R.style.Theme_WebHTV_LightDialog);
+    }
+
+    private void wireConfigDialogFocus(AlertDialog dialog, EditText ruleInput, View addBtn, EditText disabledRuleInput, View addDisabledBtn, View manageBtn, View resetBtn) {
+        View positive = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+        View negative = dialog.getButton(AlertDialog.BUTTON_NEGATIVE);
+        wireTextDpadFocus(apiKeyInput, null, languageInput, null, null);
+        wireTextDpadFocus(languageInput, apiKeyInput, apiHostInput, null, null);
+        wireTextDpadFocus(apiHostInput, languageInput, imageHostInput, null, null);
+        wireTextDpadFocus(imageHostInput, apiHostInput, omdbApiKeyInput, null, null);
+        wireTextDpadFocus(omdbApiKeyInput, imageHostInput, ruleInput, null, null);
+        wireTextDpadFocus(ruleInput, omdbApiKeyInput, disabledRuleInput, null, addBtn);
+        wireDpadFocus(addBtn, omdbApiKeyInput, addDisabledBtn, ruleInput, null);
+        wireTextDpadFocus(disabledRuleInput, ruleInput, manageBtn, null, addDisabledBtn);
+        wireDpadFocus(addDisabledBtn, addBtn, resetBtn, disabledRuleInput, null);
+        wireDpadFocus(manageBtn, disabledRuleInput, positive, null, resetBtn);
+        wireDpadFocus(resetBtn, addDisabledBtn, positive, manageBtn, null);
+        wireDpadFocus(negative, manageBtn, null, null, positive);
+        wireDpadFocus(positive, resetBtn, null, negative, null);
+    }
+
+    private static void wireDpadFocus(View view, View up, View down, View left, View right) {
+        if (view == null) return;
+        view.setOnKeyListener((v, keyCode, event) -> {
+            if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+            if (keyCode == KeyEvent.KEYCODE_DPAD_UP && up != null) return requestFocus(up);
+            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN && down != null) return requestFocus(down);
+            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT && left != null) return requestFocus(left);
+            if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && right != null) return requestFocus(right);
+            return false;
+        });
+    }
+
+    private static void wireTextDpadFocus(EditText view, View up, View down, View left, View right) {
+        if (view == null) return;
+        view.setOnKeyListener((v, keyCode, event) -> {
+            if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+            if (keyCode == KeyEvent.KEYCODE_DPAD_UP && up != null) return requestFocus(up);
+            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN && down != null) return requestFocus(down);
+            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT && left != null && isCursorAtStart(view)) return requestFocus(left);
+            if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && right != null && isCursorAtEnd(view)) return requestFocus(right);
+            return false;
+        });
+    }
+
+    private static boolean requestFocus(View view) {
+        if (view == null || view.getVisibility() != View.VISIBLE || !view.isEnabled()) return false;
+        boolean focused = view.requestFocus();
+        if (focused) {
+            view.post(() -> view.requestRectangleOnScreen(new Rect(0, 0, view.getWidth(), view.getHeight()), false));
+        }
+        return focused;
+    }
+
+    private static boolean isCursorAtStart(EditText view) {
+        return Math.max(0, view.getSelectionStart()) <= 0;
+    }
+
+    private static boolean isCursorAtEnd(EditText view) {
+        int length = view.getText() == null ? 0 : view.getText().length();
+        return Math.max(view.getSelectionStart(), view.getSelectionEnd()) >= length;
     }
 
     private void onSave() {

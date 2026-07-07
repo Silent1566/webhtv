@@ -1,10 +1,13 @@
 package com.fongmi.android.tv.ui.dialog;
 
 import android.content.Context;
+import android.text.Layout;
+import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.AutoCompleteTextView;
+import android.widget.Filter;
 import android.widget.TextView;
 
 import androidx.appcompat.app.AlertDialog;
@@ -12,7 +15,7 @@ import androidx.fragment.app.FragmentActivity;
 
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.bean.AiConfig;
-import com.fongmi.android.tv.service.AiRecommendationService;
+import com.fongmi.android.tv.service.AiCompletionClient;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.Task;
@@ -39,6 +42,7 @@ public class AiConfigDialog {
     private AiConfig config;
 
     private SwitchMaterial enabled;
+    private SwitchMaterial titleExtraction;
     private AutoCompleteTextView protocol;
     private TextInputEditText endpoint;
     private TextInputEditText apiKey;
@@ -64,19 +68,21 @@ public class AiConfigDialog {
         dialogContext = builder.getContext();
         View view = LayoutInflater.from(dialogContext).inflate(R.layout.dialog_ai_config, null);
         enabled = view.findViewById(R.id.enabled);
+        titleExtraction = view.findViewById(R.id.titleExtraction);
         protocol = view.findViewById(R.id.protocol);
         endpoint = view.findViewById(R.id.endpoint);
         apiKey = view.findViewById(R.id.apiKey);
         model = view.findViewById(R.id.model);
         userAgent = view.findViewById(R.id.userAgent);
         fetchModels = view.findViewById(R.id.fetchModels);
-        View prompt = view.findViewById(R.id.prompt);
+        MaterialButton prompt = view.findViewById(R.id.prompt);
         MaterialButton test = view.findViewById(R.id.test);
 
         config = AiConfig.objectFrom(Setting.getAiConfig());
         setupProtocolDropdown();
         setupModelDropdown(new ArrayList<>());
         enabled.setChecked(config.isEnabled());
+        titleExtraction.setChecked(Setting.isAiTitleExtraction());
         protocol.setText(protocolLabel(config.getProtocol()), false);
         endpoint.setText(config.getEndpoint());
         endpoint.setHint(AiConfig.defaultEndpoint(config.getProtocol()));
@@ -94,6 +100,7 @@ public class AiConfigDialog {
                 .setNegativeButton(R.string.dialog_negative, null)
                 .setOnDismissListener(d -> { if (onDismiss != null) onDismiss.run(); })
                 .show();
+        wireConfigDialogFocus(dialog, prompt, test);
         LightDialog.apply(dialog);
     }
 
@@ -105,7 +112,9 @@ public class AiConfigDialog {
         MaterialAlertDialogBuilder builder = builder();
         View view = LayoutInflater.from(builder.getContext()).inflate(R.layout.dialog_ai_prompt_config, null);
         TextInputEditText recommendPrompt = view.findViewById(R.id.recommendPrompt);
+        TextInputEditText titleExtractionPrompt = view.findViewById(R.id.titleExtractionPrompt);
         recommendPrompt.setText(config.getRecommendPrompt());
+        titleExtractionPrompt.setText(config.getTitleExtractionPrompt());
         AlertDialog dialog = builder
                 .setTitle(R.string.dialog_ai_prompt_config)
                 .setView(view)
@@ -114,41 +123,161 @@ public class AiConfigDialog {
                 .setNeutralButton(R.string.dialog_ai_prompt_reset, null)
                 .create();
         dialog.setOnShowListener(d -> {
+            View positive = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+            wirePromptEditorFocus(recommendPrompt, null, titleExtractionPrompt);
+            wirePromptEditorFocus(titleExtractionPrompt, recommendPrompt, positive);
+            wireButtonUp(dialog.getButton(AlertDialog.BUTTON_POSITIVE), titleExtractionPrompt);
+            wireButtonUp(dialog.getButton(AlertDialog.BUTTON_NEGATIVE), titleExtractionPrompt);
+            wireButtonUp(dialog.getButton(AlertDialog.BUTTON_NEUTRAL), titleExtractionPrompt);
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
                 config.setRecommendPrompt(text(recommendPrompt));
+                config.setTitleExtractionPrompt(text(titleExtractionPrompt));
                 dialog.dismiss();
             });
             dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(v -> {
                 recommendPrompt.setText(AiConfig.DEFAULT_RECOMMEND_PROMPT);
                 recommendPrompt.setSelection(recommendPrompt.length());
+                titleExtractionPrompt.setText(AiConfig.DEFAULT_TITLE_EXTRACTION_PROMPT);
+                titleExtractionPrompt.setSelection(titleExtractionPrompt.length());
             });
         });
         dialog.show();
         LightDialog.apply(dialog);
     }
 
-    private void setupProtocolDropdown() {
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(adapterContext(), android.R.layout.simple_dropdown_item_1line, protocolLabels());
-        protocol.setAdapter(adapter);
-        protocol.setThreshold(0);
-        protocol.setOnClickListener(v -> protocol.showDropDown());
-        protocol.setOnFocusChangeListener((v, hasFocus) -> { if (hasFocus) protocol.showDropDown(); });
-        protocol.setOnItemClickListener((parent, view, position, id) -> {
-            String oldProtocol = config.getProtocol();
-            String selected = position >= 0 && position < PROTOCOL_VALUES.length ? PROTOCOL_VALUES[position] : AiConfig.DEFAULT_PROTOCOL;
-            config.setProtocol(selected);
-            endpoint.setHint(AiConfig.defaultEndpoint(selected));
-            String currentEndpoint = text(endpoint);
-            if (currentEndpoint.isEmpty() || currentEndpoint.equals(AiConfig.defaultEndpoint(oldProtocol))) {
-                endpoint.setText(AiConfig.defaultEndpoint(selected));
+    private static void wirePromptEditorFocus(TextInputEditText input, View upTarget, View downTarget) {
+        input.setOnKeyListener((v, keyCode, event) -> {
+            if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+            if (keyCode == KeyEvent.KEYCODE_DPAD_UP && upTarget != null && isCursorAtFirstLine(input)) {
+                upTarget.requestFocus();
+                return true;
             }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN && downTarget != null && isCursorAtLastLine(input)) {
+                downTarget.requestFocus();
+                return true;
+            }
+            return false;
         });
     }
 
-    private void setupModelDropdown(List<AiRecommendationService.ModelInfo> models) {
+    private static void wireButtonUp(View button, View target) {
+        if (button == null || target == null) return;
+        button.setOnKeyListener((v, keyCode, event) -> {
+            if (event.getAction() == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+                target.requestFocus();
+                return true;
+            }
+            return false;
+        });
+    }
+
+    private void wireConfigDialogFocus(AlertDialog dialog, View prompt, View test) {
+        View positive = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+        View negative = dialog.getButton(AlertDialog.BUTTON_NEGATIVE);
+        wireDpadFocus(enabled, null, titleExtraction, null, null);
+        wireDpadFocus(titleExtraction, enabled, protocol, null, null);
+        wireDpadFocus(protocol, titleExtraction, endpoint, null, null);
+        wireDpadFocus(endpoint, protocol, apiKey, null, null);
+        wireDpadFocus(apiKey, endpoint, model, null, null);
+        wireDropdownDpadFocus(model, apiKey, userAgent, null, fetchModels);
+        wireDpadFocus(fetchModels, apiKey, userAgent, model, null);
+        wireDpadFocus(userAgent, model, prompt, null, null);
+        wireDpadFocus(prompt, userAgent, test, null, null);
+        wireDpadFocus(test, prompt, positive, null, null);
+        wireDpadFocus(positive, test, null, null, null);
+        wireDpadFocus(negative, test, null, null, null);
+    }
+
+    private static void wireDpadFocus(View view, View up, View down, View left, View right) {
+        if (view == null) return;
+        view.setOnKeyListener((v, keyCode, event) -> {
+            if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+            if (keyCode == KeyEvent.KEYCODE_DPAD_UP && up != null) return requestFocus(up);
+            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN && down != null) return requestFocus(down);
+            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT && left != null) return requestFocus(left);
+            if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && right != null) return requestFocus(right);
+            return false;
+        });
+    }
+
+    private static void wireDropdownDpadFocus(AutoCompleteTextView view, View up, View down, View left, View right) {
+        if (view == null) return;
+        view.setOnKeyListener((v, keyCode, event) -> {
+            if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+            // 下拉弹窗展开时，把上下键与确认键交给列表处理，以便遥控器选择选项。
+            if (view.isPopupShowing()) {
+                if (keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN
+                        || keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+                    return false;
+                }
+            }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_UP && up != null) return requestFocus(up);
+            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN && down != null) return requestFocus(down);
+            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT && left != null) return requestFocus(left);
+            if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && right != null) return requestFocus(right);
+            return false;
+        });
+    }
+
+    private static boolean requestFocus(View view) {
+        view.requestFocus();
+        return true;
+    }
+
+    private static boolean isCursorAtFirstLine(TextInputEditText input) {
+        Layout layout = input.getLayout();
+        if (layout == null) return false;
+        return layout.getLineForOffset(selection(input)) <= 0;
+    }
+
+    private static boolean isCursorAtLastLine(TextInputEditText input) {
+        Layout layout = input.getLayout();
+        if (layout == null) return false;
+        return layout.getLineForOffset(selection(input)) >= layout.getLineCount() - 1;
+    }
+
+    private static int selection(TextInputEditText input) {
+        return Math.max(0, input.getSelectionStart());
+    }
+
+    private void setupProtocolDropdown() {
+        protocol.setFocusable(true);
+        protocol.setKeyListener(null);
+        protocol.setOnClickListener(v -> showProtocolPicker());
+        protocol.setOnFocusChangeListener((v, hasFocus) -> { if (hasFocus) showProtocolPicker(); });
+    }
+
+    private void showProtocolPicker() {
+        String[] labels = protocolLabels();
+        int currentIndex = -1;
+        for (int i = 0; i < PROTOCOL_VALUES.length; i++) {
+            if (PROTOCOL_VALUES[i].equals(config.getProtocol())) {
+                currentIndex = i;
+                break;
+            }
+        }
+        new MaterialAlertDialogBuilder(dialogContext, R.style.Theme_WebHTV_LightDialog)
+                .setTitle(R.string.dialog_ai_protocol_label)
+                .setSingleChoiceItems(labels, currentIndex, (dialog, which) -> {
+                    String oldProtocol = config.getProtocol();
+                    String selected = which >= 0 && which < PROTOCOL_VALUES.length ? PROTOCOL_VALUES[which] : AiConfig.DEFAULT_PROTOCOL;
+                    config.setProtocol(selected);
+                    protocol.setText(labels[which]);
+                    endpoint.setHint(AiConfig.defaultEndpoint(selected));
+                    String currentEndpoint = text(endpoint);
+                    if (currentEndpoint.isEmpty() || currentEndpoint.equals(AiConfig.defaultEndpoint(oldProtocol))) {
+                        endpoint.setText(AiConfig.defaultEndpoint(selected));
+                    }
+                    dialog.dismiss();
+                })
+                .setNegativeButton(R.string.dialog_negative, null)
+                .show();
+    }
+
+    private void setupModelDropdown(List<AiCompletionClient.ModelInfo> models) {
         List<String> values = new ArrayList<>();
-        for (AiRecommendationService.ModelInfo item : models) if (!item.getId().isEmpty()) values.add(item.getId());
-        model.setAdapter(new ArrayAdapter<>(adapterContext(), android.R.layout.simple_dropdown_item_1line, values));
+        for (AiCompletionClient.ModelInfo item : models) if (!item.getId().isEmpty()) values.add(item.getId());
+        model.setAdapter(new NoFilterAdapter(adapterContext(), values));
         model.setThreshold(0);
         model.setOnClickListener(v -> {
             if (model.getAdapter() != null && model.getAdapter().getCount() > 0) model.showDropDown();
@@ -161,20 +290,23 @@ public class AiConfigDialog {
     private void onSave() {
         readConfigFromInput();
         Setting.putAiConfig(config.toJson());
+        Setting.putAiTitleExtraction(titleExtraction.isChecked());
     }
 
     private void testConfig(MaterialButton button) {
         readConfigFromInput();
         button.setEnabled(false);
         Notify.show(R.string.dialog_ai_test_running);
+        long start = System.currentTimeMillis();
         Task.execute(() -> {
-            AiRecommendationService.TestResult result = AiRecommendationService.testConfig(config);
+            AiCompletionClient.TestResult result = AiCompletionClient.testConfig(config);
+            String elapsed = formatElapsed(System.currentTimeMillis() - start);
             activity.runOnUiThread(() -> {
                 button.setEnabled(true);
                 if (result.isSuccess()) {
-                    Notify.show(activity.getString(R.string.dialog_ai_test_success, result.getCount(), result.getSampleTitle()));
+                    Notify.show(activity.getString(R.string.dialog_ai_test_success, result.getSampleTitle(), elapsed));
                 } else {
-                    Notify.show(activity.getString(R.string.dialog_ai_test_failed, result.getMessage()));
+                    Notify.show(activity.getString(R.string.dialog_ai_test_failed, result.getMessage(), elapsed));
                 }
             });
         });
@@ -185,7 +317,7 @@ public class AiConfigDialog {
         button.setEnabled(false);
         Notify.show(R.string.dialog_ai_fetch_models_running);
         Task.execute(() -> {
-            AiRecommendationService.ModelFetchResult result = AiRecommendationService.fetchModels(config);
+            AiCompletionClient.ModelFetchResult result = AiCompletionClient.fetchModels(config);
             activity.runOnUiThread(() -> {
                 button.setEnabled(true);
                 if (!result.isSuccess()) {
@@ -240,5 +372,44 @@ public class AiConfigDialog {
 
     private static String text(TextView input) {
         return input == null || input.getText() == null ? "" : input.getText().toString().trim();
+    }
+
+    private static String formatElapsed(long millis) {
+        if (millis < 1000) return millis + "ms";
+        return String.format(java.util.Locale.US, "%.1fs", millis / 1000f);
+    }
+
+    /**
+     * 不过滤的 ArrayAdapter，用于解决 AutoCompleteTextView 重新打开时因过滤导致列表空白的问题。
+     */
+    private static class NoFilterAdapter extends ArrayAdapter<String> {
+        private final List<String> items;
+
+        public NoFilterAdapter(Context context, List<String> items) {
+            super(context, android.R.layout.simple_dropdown_item_1line, items);
+            this.items = new ArrayList<>(items);
+        }
+
+        @Override
+        public Filter getFilter() {
+            return new Filter() {
+                @Override
+                protected FilterResults performFiltering(CharSequence constraint) {
+                    FilterResults results = new FilterResults();
+                    results.values = items;
+                    results.count = items.size();
+                    return results;
+                }
+
+                @Override
+                protected void publishResults(CharSequence constraint, FilterResults results) {
+                    if (results.count > 0) {
+                        notifyDataSetChanged();
+                    } else {
+                        notifyDataSetInvalidated();
+                    }
+                }
+            };
+        }
     }
 }

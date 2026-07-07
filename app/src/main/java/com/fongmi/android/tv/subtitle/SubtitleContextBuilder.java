@@ -3,6 +3,10 @@ package com.fongmi.android.tv.subtitle;
 import com.fongmi.android.tv.subtitle.model.ResolvedMediaIdentity;
 import com.fongmi.android.tv.subtitle.model.SubtitleContext;
 import com.fongmi.android.tv.subtitle.model.SubtitleRequest;
+import com.fongmi.android.tv.title.MediaTitleLearningExample;
+import com.fongmi.android.tv.title.MediaTitleRequest;
+import com.fongmi.android.tv.title.MediaTitleResolution;
+import com.fongmi.android.tv.title.MediaTitleResolver;
 
 import java.net.URI;
 import java.util.Locale;
@@ -22,8 +26,28 @@ public final class SubtitleContextBuilder {
     }
 
     public SubtitleContext build(SubtitleRequest request) {
+        return build(request, false);
+    }
+
+    public SubtitleContext buildWithAiFallback(SubtitleRequest request) {
+        return build(request, true);
+    }
+
+    private SubtitleContext build(SubtitleRequest request, boolean forceAi) {
         ResolvedMediaIdentity identity = resolver.resolve(request);
-        String canonicalTitle = !SubtitleStrings.isEmpty(identity.getCanonicalTitle()) ? identity.getCanonicalTitle() : parser.cleanTitle(request.getVodName());
+        MediaTitleRequest titleRequest = MediaTitleRequest.builder()
+                .siteKey(request.getSiteKey())
+                .vodId(request.getVodId())
+                .rawTitle(request.getVodName())
+                .rawRemarks(request.getVodRemarks())
+                .vodYear(request.getVodYear())
+                .episodeName(request.getEpisodeName())
+                .source(MediaTitleLearningExample.SOURCE_SUBTITLE_AUTO)
+                .allowAi(true)
+                .build();
+        MediaTitleResolver titleResolver = new MediaTitleResolver();
+        MediaTitleResolution titleResolution = forceAi ? titleResolver.resolveWithAiFallback(titleRequest) : titleResolver.resolve(titleRequest);
+        String canonicalTitle = forceAi && !identity.hasTmdbIdentity() && !SubtitleStrings.isEmpty(titleResolution.getCanonicalTitle()) ? titleResolution.getCanonicalTitle() : !SubtitleStrings.isEmpty(identity.getCanonicalTitle()) ? identity.getCanonicalTitle() : !SubtitleStrings.isEmpty(titleResolution.getCanonicalTitle()) ? titleResolution.getCanonicalTitle() : parser.cleanTitle(request.getVodName());
         String originalTitle = identity.getOriginalTitle();
         int year = identity.getYear() > 0 ? identity.getYear() : parser.firstYear(request.getVodYear());
         int seasonNumber = identity.getSeasonNumber() > 0 ? identity.getSeasonNumber() : request.getSeasonNumber();
@@ -52,6 +76,7 @@ public final class SubtitleContextBuilder {
                 .networkStream(SubtitleStrings.isEmpty(mediaPath));
 
         for (String alias : parser.aliases(request.getVodName(), request.getVodRemarks(), request.getEpisodeName())) builder.addAlias(alias);
+        for (String alias : titleResolution.queryTitles()) builder.addAlias(alias);
         return builder.build();
     }
 

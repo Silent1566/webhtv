@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.appcompat.widget.LinearLayoutCompat xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@drawable/shape_accent"
+    android:background="@drawable/shape_light_dialog_item"
     android:gravity="center_vertical"
     android:orientation="horizontal">
 
@@ -11,6 +12,7 @@
         android:id="@+id/type"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        app:tint="#5F6368"
         tools:src="@drawable/ic_cast_tv" />
 
     <androidx.appcompat.widget.LinearLayoutCompat
@@ -24,7 +26,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:singleLine="true"
-            android:textColor="?attr/colorOnSurface"
+            android:textColor="#202124"
             android:textSize="14sp"
             tools:text="Google Chrome Cast" />
 
@@ -34,7 +36,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="2dp"
             android:singleLine="true"
-            android:textColor="?attr/colorOnSurface"
+            android:textColor="#5F6368"
             android:textSize="12sp"
             tools:text="127.0.0.1" />
 

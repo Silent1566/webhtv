@@ -32,7 +32,9 @@
             android:layout_height="wrap_content"
             android:text="@string/danmaku_reset"
             android:textColor="@color/white"
-            app:backgroundTint="#FF4B4B4F" />
+            app:backgroundTint="@color/selector_dialog_glass_button_tint"
+            app:rippleColor="#33FFFFFF"
+            app:strokeColor="#4DFFFFFF" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 

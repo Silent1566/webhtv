@@ -44,9 +44,14 @@ public class IntroSkipService {
         if (!query.hasLookupKey()) return IntroSkipPlan.empty();
         String key = query.cacheKey();
         IntroSkipPlan cached = CACHE.get(key);
-        if (cached != null) return cached;
+        if (cached != null) {
+            SpiderDebug.log("intro-skip", "cache hit key=%s", key);
+            return cached;
+        }
+        SpiderDebug.log("intro-skip", "query start tmdbId=%d imdbId=%s mediaType=%s season=%d episode=%d durationMs=%d", query.tmdbId, query.imdbId, query.mediaType, query.season, query.episode, query.durationMs);
         IntroSkipPlan plan = loadRemote(query);
         CACHE.put(key, plan);
+        SpiderDebug.log("intro-skip", "query done openings=%d endings=%d", plan.getOpenings().size(), plan.getEndings().size());
         return plan;
     }
 
@@ -98,20 +103,21 @@ public class IntroSkipService {
 
     private IntroSkipPlan fetch(HttpUrl url, String provider, long durationMs) {
         long start = System.currentTimeMillis();
+        SpiderDebug.log("intro-skip", "%s request url=%s", provider, url.toString());
         Request request = new Request.Builder().url(url).get().build();
         try (Response response = OkHttp.client(TIMEOUT_MS).newCall(request).execute()) {
             if (response.body() == null || !response.isSuccessful()) {
-                SpiderDebug.log("intro-skip", "%s http=%d empty=%s", provider, response.code(), response.body() == null);
+                SpiderDebug.log("intro-skip", "%s http=%d empty=%s url=%s", provider, response.code(), response.body() == null, url.toString());
                 return IntroSkipPlan.empty();
             }
             String body = response.body().string();
             IntroSkipPlan plan = PROVIDER_INTRO_DB.equals(provider)
                     ? parseIntroDb(body, durationMs)
                     : parseTheIntroDb(body, durationMs);
-            SpiderDebug.log("intro-skip", "%s loaded openings=%d endings=%d cost=%dms", provider, plan.getOpenings().size(), plan.getEndings().size(), System.currentTimeMillis() - start);
+            SpiderDebug.log("intro-skip", "%s loaded openings=%d endings=%d cost=%dms url=%s", provider, plan.getOpenings().size(), plan.getEndings().size(), System.currentTimeMillis() - start, url.toString());
             return plan;
         } catch (Throwable e) {
-            SpiderDebug.log("intro-skip", "%s failed error=%s cost=%dms", provider, e.getMessage(), System.currentTimeMillis() - start);
+            SpiderDebug.log("intro-skip", "%s failed error=%s cost=%dms url=%s", provider, e.getMessage(), System.currentTimeMillis() - start, url.toString());
             return IntroSkipPlan.empty();
         }
     }

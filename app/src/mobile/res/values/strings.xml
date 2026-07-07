@@ -48,6 +48,9 @@
     <string name="live_control_action">Actions</string>
     <string name="live_control_pip">PiP</string>
     <string name="live_control_preference">Preference</string>
+    <string name="live_control_display_style">Display Style</string>
+    <string name="live_control_list_transparent">Transparent</string>
+    <string name="live_control_list_readable">Readable</string>
     <string name="live_control_player">Player</string>
     <string name="live_source_select">Select live source</string>
     <string name="live_epg_select">Select EPG source</string>
@@ -84,6 +87,11 @@
         <item>Off</item>
         <item>On</item>
         <item>PiP</item>
+    </string-array>
+
+    <string-array name="select_pad_live_mode">
+        <item>Fullscreen</item>
+        <item>Standard</item>
     </string-array>
 
 </resources>

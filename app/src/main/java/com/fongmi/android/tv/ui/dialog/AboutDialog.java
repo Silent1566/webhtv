@@ -1,5 +1,6 @@
 package com.fongmi.android.tv.ui.dialog;
 
+import android.app.Dialog;
 import android.content.Context;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
@@ -7,13 +8,11 @@ import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
-import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
 
 import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.FragmentActivity;
-import androidx.recyclerview.widget.RecyclerView;
 
 import com.fongmi.android.tv.BuildConfig;
 import com.fongmi.android.tv.R;
@@ -29,17 +28,17 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 public final class AboutDialog {
 
+    private static final int DIALOG_VERTICAL_SAFE_SPACE_DP = 96;
+    private static final float DIALOG_MAX_HEIGHT_RATIO = 0.86f;
+
     private AboutDialog() {
     }
 
     public static void show(FragmentActivity activity, Runnable updateAction) {
         DialogAboutBinding binding = DialogAboutBinding.inflate(LayoutInflater.from(activity));
         binding.version.setText(activity.getString(R.string.about_version, AppVersion.fullName(), BuildConfig.FLAVOR_mode, BuildConfig.FLAVOR_abi));
-        configureContentHeight(activity, binding);
 
-        AlertDialog dialog = new MaterialAlertDialogBuilder(activity, R.style.ThemeOverlay_WebHTV_LightDialog)
-                .setView(binding.getRoot())
-                .create();
+        Dialog dialog = LightDialog.create(activity, null, binding.getRoot());
         binding.confirm.setOnClickListener(v -> dialog.dismiss());
         binding.checkUpdate.setOnClickListener(v -> {
             dialog.dismiss();
@@ -47,12 +46,9 @@ public final class AboutDialog {
         });
         binding.githubProxy.setOnClickListener(v -> showGithubProxy(activity));
         dialog.setCanceledOnTouchOutside(false);
-        boolean configured = configureWindow(activity, dialog);
-        dialog.setOnShowListener(d -> {
-            if (!configured) configureWindow(activity, dialog);
-            binding.confirm.requestFocus();
-        });
         dialog.show();
+        configureWindow(activity, dialog);
+        binding.confirm.requestFocus();
     }
 
     private static void showGithubProxy(FragmentActivity activity) {
@@ -129,25 +125,23 @@ public final class AboutDialog {
         ((GithubProxyAdapter) binding.list.getAdapter()).setItems(GithubProxy.getSources(), GithubProxy.getActive());
     }
 
-    private static void configureContentHeight(FragmentActivity activity, DialogAboutBinding binding) {
-        int screenHeight = ResUtil.getScreenHeight(activity);
-        int maxHeight = (int) (screenHeight * (ResUtil.isLand(activity) ? 0.42f : 0.38f));
-        int minHeight = ResUtil.dp2px(220);
-        ViewGroup.LayoutParams params = binding.contentScroll.getLayoutParams();
-        params.height = Math.max(minHeight, Math.min(maxHeight, ResUtil.dp2px(420)));
-        binding.contentScroll.setLayoutParams(params);
-    }
-
-    private static boolean configureWindow(FragmentActivity activity, AlertDialog dialog) {
+    private static boolean configureWindow(FragmentActivity activity, Dialog dialog) {
         Window window = dialog.getWindow();
         if (window == null) return false;
         WindowManager.LayoutParams params = window.getAttributes();
         params.width = (int) (ResUtil.getScreenWidth(activity) * (ResUtil.isLand(activity) ? 0.62f : 0.92f));
-        params.height = WindowManager.LayoutParams.WRAP_CONTENT;
+        params.height = getDialogHeight(activity);
         params.gravity = Gravity.CENTER;
         window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         window.setAttributes(params);
-        window.setLayout(params.width, WindowManager.LayoutParams.WRAP_CONTENT);
+        window.setLayout(params.width, params.height);
         return true;
+    }
+
+    static int getDialogHeight(Context context) {
+        int screenHeight = ResUtil.getScreenHeight(context);
+        int safeHeight = screenHeight - ResUtil.dp2px(DIALOG_VERTICAL_SAFE_SPACE_DP);
+        int preferredHeight = (int) (screenHeight * DIALOG_MAX_HEIGHT_RATIO);
+        return Math.max(1, Math.min(safeHeight, preferredHeight));
     }
 }

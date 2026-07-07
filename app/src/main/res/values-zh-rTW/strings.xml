@@ -2,6 +2,7 @@
 
     <!-- App -->
     <string name="app_name">影視</string>
+    <string name="app_exit_confirm">再按一次退出應用</string>
 
     <!-- Live -->
     <string name="live_pass">密碼</string>
@@ -26,11 +27,18 @@
     <string name="detail_episode_view_list">列表</string>
     <string name="detail_episode_view_grid_action">切換到網格</string>
     <string name="detail_episode_view_list_action">切換到列表</string>
+    <string name="detail_episode_file_name_original">原文件名</string>
+    <string name="detail_episode_file_name_scraped">刮削文件名</string>
+    <string name="detail_episode_file_name_original_action">切換到原文件名</string>
+    <string name="detail_episode_file_name_scraped_action">切換到刮削文件名</string>
 
     <!-- Keep -->
     <string name="keep">收藏</string>
     <string name="keep_add">已收藏</string>
     <string name="keep_del">已取消收藏</string>
+    <string name="exit_confirm_title">確定退出應用？</string>
+    <string name="exit_confirm_message">目前頁面將關閉；如果正在播放，會繼續留在後台。</string>
+    <string name="exit_confirm_positive">確認退出</string>
 
     <!-- Play -->
     <string name="play">播放</string>
@@ -47,6 +55,15 @@
     <string name="play_speed">1.00</string>
     <string name="play_reset">刷新</string>
     <string name="play_decode">硬解</string>
+    <string name="play_params">播放參數</string>
+    <string name="codec_capability_short">硬解能力</string>
+    <string name="codec_capability_title">硬解能力</string>
+    <string name="codec_capability_search">搜尋 codec、mime、decoder、解析度、音訊...</string>
+    <string name="codec_capability_current">目前媒體</string>
+    <string name="codec_capability_all">全部</string>
+    <string name="codec_capability_video">影片</string>
+    <string name="codec_capability_audio">音訊</string>
+    <string name="codec_capability_copy">複製</string>
     <string name="play_timer">定時</string>
     <string name="play_title">章節</string>
     <string name="play_scale">原始</string>
@@ -141,6 +158,7 @@
     <string name="setting_vod">點播</string>
     <string name="setting_live">直播</string>
     <string name="setting_wall">壁紙</string>
+    <string name="setting_config_dialog_title">%1$s%2$s</string>
     <string name="setting_builtin_wall">內置壁紙</string>
     <string name="setting_player">播放設定</string>
     <string name="setting_danmaku">彈幕設定</string>
@@ -151,6 +169,10 @@
     <string name="setting_personal_recommendation">個性推薦</string>
     <string name="setting_tmdb_episode_file_size">TMDB 劇集保留檔案大小</string>
     <string name="setting_auto_skip_intro_outro">自動跳過片頭片尾</string>
+    <string name="intro_skip_confirm_title">跳過片頭/片尾？</string>
+    <string name="intro_skip_confirm_intro">跳過片頭</string>
+    <string name="intro_skip_confirm_recap">跳過前情提要</string>
+    <string name="intro_skip_confirm_outro">跳過片尾</string>
     <string name="personal_recommendation_confirm_title">啟用個性推薦</string>
     <string name="personal_recommendation_confirm_message">個性推薦會讀取本機觀看歷史中的影片名稱，並可能將當前影片名和歷史影片名作為搜尋關鍵詞發送到 TMDB 或豆瓣，用於生成相關作品列表。\n\n不會發送播放地址、帳號資訊、站源配置或播放進度。你可以隨時關閉此功能。</string>
     <string name="setting_search_ui">搜尋佈局</string>
@@ -376,6 +398,12 @@
     <string name="setting_web_home_extension">WebHome 擴展</string>
     <string name="setting_web_home_fullscreen">WebHome 主頁全屏</string>
     <string name="setting_csp_warmup">CSP init 預熱</string>
+    <string name="setting_csp_warmup_default">預設</string>
+    <string name="setting_csp_warmup_custom">自訂</string>
+    <string name="setting_csp_warmup_custom_count">自訂 · %1$d 個</string>
+    <string name="setting_csp_warmup_select_site">選擇 CSP 站點</string>
+    <string name="setting_csp_warmup_no_site">沒有可用的 Jar CSP 站點</string>
+    <string name="setting_csp_warmup_select_required">請至少選擇一個 CSP 站點</string>
     <string name="setting_playback_artwork_wall">播放介面劇照</string>
     <string name="setting_viewing_record_sync">觀影記錄同步</string>
     <string name="viewing_record_sync_entry_summary">%1$s · 遠端 %2$d/%3$d · Webhook %4$d/%5$d</string>
@@ -793,10 +821,14 @@
     <string name="player_render">渲染方式</string>
     <string name="player_button_config">播放器按鈕</string>
     <string name="player_button_config_summary">顯示 %1$d/%2$d</string>
+    <string name="player_pad_live">平板直播</string>
     <string name="player_button_up">上移</string>
     <string name="player_button_down">下移</string>
     <string name="play_episodes">選集</string>
-    <string name="player_exo_4k_compat">EXO增強模式</string>
+    <string name="player_exo_4k_compat">播放效能</string>
+    <string name="player_performance">播放效能</string>
+    <string name="player_performance_recommended">推薦</string>
+    <string name="player_performance_compatible">相容</string>
     <string name="player_kernel">播放器內核</string>
     <string name="player_scale">縮放比例</string>
     <string name="player_lut">LUT 調色</string>
@@ -806,6 +838,7 @@
     <string name="player_audio_decode">音訊軟解</string>
     <string name="player_audio_passthrough">音訊直通</string>
     <string name="player_video_decode">視訊軟解</string>
+    <string name="player_ffmpeg_mode">FFmpeg模式</string>
     <string name="player_aac_track">AAC優先</string>
     <string name="player_music_notification">音樂背景通知</string>
     <string name="player_audio_book_notification">有聲書背景通知</string>
@@ -821,6 +854,7 @@
     <string name="player_preload_size">預載容量</string>
     <string name="player_preload_time">預載時間</string>
     <string name="player_preload_time_value">%1$d 秒</string>
+    <string name="player_auto_play">自動播放</string>
     <string name="player_auto_change">自動換源</string>
     <string name="player_speed">長按倍速</string>
     <string name="player_ua">User-Agent</string>
@@ -1117,7 +1151,7 @@
     </string-array>
 
     <string name="setting_tmdb_source">TMDB 數據配置</string>
-    <string name="setting_ai_recommendation">AI 推薦配置</string>
+    <string name="setting_ai_recommendation">AI 通用配置</string>
     <string name="setting_tmdb_model">TMDB 交互模型</string>
     <string name="setting_tmdb_model_native">原生增強</string>
     <string name="setting_tmdb_match_mode">TMDB 匹配模式</string>
@@ -1157,6 +1191,9 @@
     <string name="dialog_tmdb_api_host_hint">例如 https://api.tmdb.org</string>
     <string name="dialog_tmdb_image_host_label">圖片域名</string>
     <string name="dialog_tmdb_image_host_hint">例如 https://image.tmdb.org</string>
+    <string name="dialog_tmdb_section_data">數據源</string>
+    <string name="dialog_tmdb_section_ratings">評分擴展</string>
+    <string name="dialog_tmdb_section_rules">站點規則</string>
     <string name="dialog_omdb_api_key_label">OMDb API Key（可選，用於 IMDB 評分）</string>
     <string name="dialog_omdb_api_key_hint">輸入 OMDb API Key</string>
     <string name="dialog_omdb_api_key_tip">免費獲取 API Key（每天1000次）: https://www.omdbapi.com/apikey.aspx</string>
@@ -1180,7 +1217,11 @@
     <string name="tmdb_personal_recommendations_tmdb_label">個性推薦 · TMDB</string>
     <string name="tmdb_personal_recommendations_douban_label">個性推薦 · 豆瓣</string>
     <string name="tmdb_personal_recommendations_ai_label">個性推薦 · 智能</string>
-    <string name="dialog_ai_enable">啟用智能推薦</string>
+    <string name="dialog_ai_enable">啟用 AI 服務</string>
+    <string name="dialog_ai_title_extraction">AI 真實劇名識別</string>
+    <string name="dialog_ai_section_service">服務</string>
+    <string name="dialog_ai_section_connection">連線參數</string>
+    <string name="dialog_ai_section_model">模型設定</string>
     <string name="dialog_ai_protocol_label">協議類型</string>
     <string-array name="dialog_ai_protocol_labels">
         <item>OpenAI Responses API</item>
@@ -1201,13 +1242,14 @@
     <string name="dialog_ai_fetch_models_failed">模型取得失敗：%1$s</string>
     <string name="dialog_ai_user_agent_label">自訂 User-Agent</string>
     <string name="dialog_ai_user_agent_hint">可選，用於有 UA 限制的供應商</string>
-    <string name="dialog_ai_prompt_config">提示詞設定</string>
+    <string name="dialog_ai_prompt_config">AI 提示詞配置</string>
     <string name="dialog_ai_recommend_prompt_label">推薦提示詞</string>
+    <string name="dialog_ai_title_extraction_prompt_label">名稱提取提示詞</string>
     <string name="dialog_ai_prompt_reset">重置預設</string>
     <string name="dialog_ai_test">測試配置</string>
     <string name="dialog_ai_test_running">正在測試 AI 配置...</string>
-    <string name="dialog_ai_test_success">AI 測試通過：解析到 %1$d 條，示例 %2$s</string>
-    <string name="dialog_ai_test_failed">AI 測試失敗：%1$s</string>
+    <string name="dialog_ai_test_success">AI 測試通過：%1$s（耗時 %2$s）</string>
+    <string name="dialog_ai_test_failed">AI 測試失敗：%1$s（耗時 %2$s）</string>
     <string name="ai_recommendation_info_title">智能推薦詳情</string>
     <string name="ai_recommendation_reason_label">推薦理由</string>
     <string name="ai_recommendation_reason_preview">推薦理由：%1$s</string>
@@ -1250,8 +1292,8 @@
     <string name="detail_source_empty">暫無可用站源</string>
     <string name="detail_source_episode_empty">暫無可用選集或站源</string>
     <string name="detail_source_searching">正在搜尋站源...</string>
-    <string name="detail_theme_dark">主題：深色</string>
-    <string name="detail_theme_light">主題：淺色</string>
+    <string name="detail_theme_dark">深色</string>
+    <string name="detail_theme_light">淺色</string>
     <string name="detail_tmdb_cast">演員</string>
     <string name="detail_tmdb_creators">主創團隊</string>
     <string name="detail_tmdb_works">猜你喜歡</string>
@@ -1294,6 +1336,12 @@
         <item>智能</item>
         <item>嚴格 + 彈窗</item>
         <item>智能 + 彈窗</item>
+    </string-array>
+
+    <string-array name="select_auto_skip_intro_outro">
+        <item>關閉</item>
+        <item>自動跳過</item>
+        <item>彈框確認</item>
     </string-array>
 
     <string-array name="select_site_column">

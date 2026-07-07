@@ -6,6 +6,7 @@ import android.text.TextUtils;
 import androidx.media3.ui.danmaku.DanmakuConfig;
 
 import com.fongmi.android.tv.api.config.VodConfig;
+import com.fongmi.android.tv.utils.Util;
 import com.github.catvod.utils.Prefers;
 
 public class DanmakuSetting {
@@ -155,19 +156,20 @@ public class DanmakuSetting {
     }
 
     public static int getMaxOnScreen() {
-        return Prefers.getInt("danmaku_max_on_screen", 150);
+        return Math.max(1, Prefers.getInt("danmaku_max_on_screen", getDefaultMaxOnScreen()));
     }
 
     public static void putMaxOnScreen(int value) {
-        Prefers.put("danmaku_max_on_screen", value);
+        Prefers.put("danmaku_max_on_screen", Math.max(1, value));
     }
 
     public static float getScrollAreaRatio() {
-        return Prefers.getFloat("danmaku_scroll_area_ratio", 0.5f);
+        float value = Prefers.getFloat("danmaku_scroll_area_ratio", getDefaultScrollAreaRatio());
+        return Math.max(0.01f, Math.min(1f, value));
     }
 
     public static void putScrollAreaRatio(float value) {
-        Prefers.put("danmaku_scroll_area_ratio", value);
+        Prefers.put("danmaku_scroll_area_ratio", Math.max(0.01f, Math.min(1f, value)));
     }
 
     public static int getMaxScrollLines() {
@@ -214,6 +216,14 @@ public class DanmakuSetting {
 
     private static int clampDisplayLines(int value) {
         return Math.max(1, Math.min(5, value));
+    }
+
+    private static int getDefaultMaxOnScreen() {
+        return Util.isLeanback() ? 80 : 150;
+    }
+
+    private static float getDefaultScrollAreaRatio() {
+        return Util.isLeanback() ? 0.42f : 0.5f;
     }
 
     public static float getLineSpacing() {
@@ -337,9 +347,9 @@ public class DanmakuSetting {
     }
 
     public static void resetDensity() {
+        putMaxOnScreen(getDefaultMaxOnScreen());
+        putScrollAreaRatio(getDefaultScrollAreaRatio());
         DanmakuConfig config = DanmakuConfig.DEFAULT;
-        putMaxOnScreen(config.maxOnScreen);
-        putScrollAreaRatio(config.scrollAreaRatio);
         putScrollGapRatio(config.scrollGapRatio);
         putLineSpacing(config.lineSpacing);
         putMaxScrollLines(config.maxScrollLines);
@@ -355,7 +365,6 @@ public class DanmakuSetting {
     }
 
     public static DanmakuConfig getConfig() {
-        DanmakuConfig defaults = DanmakuConfig.DEFAULT;
         return new DanmakuConfig.Builder()
                 .setTextScale(getTextScale())
                 .setTransparency(getTransparency())
@@ -370,8 +379,8 @@ public class DanmakuSetting {
                 .setDurationMs(getDurationMs())
                 .setFixedDurationMs(getFixedDurationMs())
                 .setTimeOffsetMs(getTimeOffsetMs())
-                .setMaxOnScreen(defaults.maxOnScreen)
-                .setScrollAreaRatio(defaults.scrollAreaRatio)
+                .setMaxOnScreen(getMaxOnScreen())
+                .setScrollAreaRatio(getScrollAreaRatio())
                 .setScrollGapRatio(getScrollGapRatio())
                 .setLineSpacing(getLineSpacing())
                 .setMaxScrollLines(getDisplayLines())

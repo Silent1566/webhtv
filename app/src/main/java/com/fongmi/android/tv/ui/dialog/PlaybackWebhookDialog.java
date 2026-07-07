@@ -18,7 +18,6 @@ import android.view.WindowManager;
 import android.widget.EditText;
 
 import androidx.annotation.NonNull;
-import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.widget.LinearLayoutCompat;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.Fragment;
@@ -79,15 +78,10 @@ public class PlaybackWebhookDialog extends BaseAlertDialog {
     }
 
     private static void showPrivacy(FragmentActivity activity, Runnable callback) {
-        new MaterialAlertDialogBuilder(activity, R.style.ThemeOverlay_WebHTV_LightDialog)
-                .setTitle(R.string.playback_webhook_privacy_title)
-                .setMessage(R.string.playback_webhook_privacy_message)
-                .setNegativeButton(R.string.dialog_negative, null)
-                .setPositiveButton(R.string.dialog_positive, (dialog, which) -> {
-                    PlaybackWebhookStore.acceptPrivacy();
-                    callback.run();
-                })
-                .show();
+        ChoiceDialog.showConfirm(activity, R.string.playback_webhook_privacy_title, activity.getString(R.string.playback_webhook_privacy_message), () -> {
+            PlaybackWebhookStore.acceptPrivacy();
+            callback.run();
+        });
     }
 
     @Override
@@ -341,22 +335,11 @@ public class PlaybackWebhookDialog extends BaseAlertDialog {
     }
 
     private void confirmDelete(WebhookConfig config) {
-        AlertDialog dialog = new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog)
-                .setTitle(R.string.playback_webhook_delete_title)
-                .setMessage(getString(R.string.playback_webhook_delete_message, config.displayName()))
-                .setNegativeButton(R.string.dialog_negative, null)
-                .setPositiveButton(R.string.setting_delete, null)
-                .create();
-        dialog.setOnShowListener(d -> {
-            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).requestFocus();
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(view -> {
-                PlaybackWebhookStore.remove(config.id);
-                if (callback != null) callback.run();
-                dialog.dismiss();
-                showList();
-            });
+        ChoiceDialog.showConfirm(this, R.string.playback_webhook_delete_title, getString(R.string.playback_webhook_delete_message, config.displayName()), R.string.setting_delete, () -> {
+            PlaybackWebhookStore.remove(config.id);
+            if (callback != null) callback.run();
+            showList();
         });
-        dialog.show();
     }
 
     private void updateEnabledButton() {
@@ -378,15 +361,11 @@ public class PlaybackWebhookDialog extends BaseAlertDialog {
     private void showFieldPicker() {
         boolean[] checked = new boolean[FIELD_KEYS.length];
         for (int i = 0; i < FIELD_KEYS.length; i++) checked[i] = customFields.contains(FIELD_KEYS[i]);
-        new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog)
-                .setTitle(R.string.playback_webhook_select_fields)
-                .setMultiChoiceItems(fieldItems(), checked, (dialog, which, isChecked) -> {
-                    if (isChecked) customFields.add(FIELD_KEYS[which]);
-                    else customFields.remove(FIELD_KEYS[which]);
-                })
-                .setNegativeButton(R.string.dialog_negative, null)
-                .setPositiveButton(R.string.dialog_positive, (dialog, which) -> updateFieldsPanel())
-                .show();
+        ChoiceDialog.showMulti(this, R.string.playback_webhook_select_fields, fieldItems(), checked, result -> {
+            customFields.clear();
+            for (int i = 0; i < FIELD_KEYS.length; i++) if (result[i]) customFields.add(FIELD_KEYS[i]);
+            updateFieldsPanel();
+        });
     }
 
     private int presetId(String preset) {
