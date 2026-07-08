@@ -47,6 +47,7 @@ public class EpisodeDetailDialog {
 
         ImageView still = view.findViewById(R.id.still);
         TextView title = view.findViewById(R.id.title);
+        TextView originalName = view.findViewById(R.id.originalName);
         TextView rating = view.findViewById(R.id.rating);
         TextView date = view.findViewById(R.id.date);
         TextView runtime = view.findViewById(R.id.runtime);
@@ -71,6 +72,17 @@ public class EpisodeDetailDialog {
 
         // 设置标题
         title.setText(tmdbEpisode.getDisplayTitle());
+
+        // 显示原始名称（刮削前的源站文件名）
+        String sourceName = episode.getName();
+        String displayTitle = tmdbEpisode.getDisplayTitle();
+        // 只有当原始名称非空且与刮削标题不完全相同时才显示
+        if (!android.text.TextUtils.isEmpty(sourceName) && !sourceName.equals(displayTitle)) {
+            originalName.setText("原始名称：" + sourceName);
+            originalName.setVisibility(View.VISIBLE);
+        } else {
+            originalName.setVisibility(View.GONE);
+        }
 
         // 设置评分
         if (tmdbEpisode.getVoteAverage() > 0) {

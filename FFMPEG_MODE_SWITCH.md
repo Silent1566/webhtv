@@ -3,8 +3,8 @@
 ## 功能说明
 
 用户现在可以在设置中切换**三种**播放器渲染器实现：
-- **Simple**（默认，推荐）：完全模仿 TV 项目，不使用 NextLib + 不使用自定义缓冲配置
-- **NextLib**：使用第三方 `nextlib-media3ext` 库的自定义 FFmpeg 渲染器
+- **Simple**（TV 默认）：使用默认视频渲染路径，不使用 NextLib 视频渲染器；保留 FFmpeg 音频兜底
+- **NextLib**（手机默认）：使用第三方 `nextlib-media3ext` 库的自定义 FFmpeg 音频/视频渲染器
 - **Official**：仅使用 Media3 官方渲染器（保留自定义缓冲配置）
 
 ## 使用方法
@@ -18,7 +18,7 @@
 显示：`Simple` → `NextLib` → `Official` → `Simple` ...  
 **注意**：切换后需退出视频重新播放才生效
 
-**默认模式**：Simple（与 TV 项目完全一致，最稳定）
+**默认模式**：手机端 NextLib，TV 端 Simple
 
 ---
 
@@ -26,14 +26,15 @@
 
 **如果遇到卡顿掉帧，请按此顺序尝试：**
 
-### 1. **Simple 模式**（默认，强烈推荐，最接近 TV 项目）
-✅ 完全模仿 TV 项目实现  
-✅ 无自定义 FFmpeg 渲染器  
+### 1. **Simple 模式**（TV 默认）
+✅ 默认视频渲染路径接近 TV 项目
+✅ 无自定义 FFmpeg 视频渲染器
+✅ 保留 FFmpeg 音频兜底，避免系统解码器不支持的 iOS/HLS 音轨无声
 ✅ 无自定义缓冲配置（使用 ExoPlayer 默认值）  
 ✅ 最简单、最稳定  
-✅ **现在是默认模式**
+✅ **TV 端默认模式**
 
-### 2. **NextLib 模式**
+### 2. **NextLib 模式**（手机默认）
 ⚠️ 使用第三方 FFmpeg 渲染器  
 ⚠️ 自定义缓冲配置  
 ⚠️ 最复杂，可能存在兼容性问题  
@@ -52,11 +53,11 @@
 
 | 特性 | NextLib | Official | Simple |
 |------|---------|----------|--------|
-| **FFmpeg 渲染器** | NextLib 第三方 | 无 | 无 |
+| **FFmpeg 渲染器** | NextLib 音频 + 视频 | 无 | 仅音频兜底 |
 | **LoadControl** | 自定义缓冲 | 自定义缓冲 | ExoPlayer 默认 |
 | **ExoEnhanced** | 支持 | 支持 | 不支持 |
 | **复杂度** | 高 | 中 | 低 |
-| **与 TV 项目对比** | 完全不同 | 部分相似 | **完全一致** |
+| **与 TV 项目对比** | 完全不同 | 部分相似 | 视频路径相近，音频兜底增强 |
 
 ### 1. NextLib 模式（mode = 0）
 
@@ -94,11 +95,11 @@ return factory
 builder.setLoadControl(buildLoadControl());
 ```
 
-### 3. Simple 模式（mode = 2，完全模仿 TV 项目）
+### 3. Simple 模式（mode = 2，TV 默认）
 
 ```java
-// 仅使用标准 DefaultRenderersFactory
-DefaultRenderersFactory factory = new DefaultRenderersFactory(App.get());
+// 使用默认视频路径，只追加 FFmpeg 音频兜底
+DefaultRenderersFactory factory = new FfmpegAudioFallbackRenderersFactory(App.get(), audioRenderMode, audioPrefer);
 return factory
     .setEnableDecoderFallback(true)
     .setExtensionRendererMode(Math.max(audioRenderMode, videoRenderMode));
@@ -107,7 +108,7 @@ return factory
 // builder.setLoadControl(...);  // 注释掉
 ```
 
-**关键**：Simple 模式在 `buildPlayer` 中跳过 `setLoadControl`，与 TV 项目完全一致。
+**关键**：Simple 模式在 `buildPlayer` 中跳过 `setLoadControl`，但仍保留 FFmpeg 音频兜底。
 
 ---
 
@@ -117,7 +118,7 @@ return factory
 - `app/src/main/java/com/fongmi/android/tv/setting/PlayerSetting.java`
   - 新增 `getFFmpegMode()` / `putFFmpegMode(int)` 方法
   - 支持 0=NextLib, 1=Official, 2=Simple
-  - **默认值：`2`（Simple 模式）**
+  - **默认值：手机端 `0`（NextLib），TV 端 `2`（Simple）**
 
 - `app/src/main/java/com/fongmi/android/tv/player/exo/ExoUtil.java`
   - `buildPlayer` - Simple 模式跳过 `setLoadControl`
@@ -151,11 +152,11 @@ return factory
    - 渲染器插入逻辑导致 AV 不同步
    - ExoEnhanced 参数过于激进
 
-**解决方案**：使用 **Simple 模式**
-- ✅ 保留 FFmpeg 软解能力（通过 ExtensionRendererMode）
-- ✅ 移除复杂的 NextLib 渲染器插入逻辑
+**解决方案**：按设备选择默认模式
+- ✅ 手机端默认 NextLib，优先保证 iOS/HLS 等格式的音视频兼容
+- ✅ TV 端默认 Simple，移除复杂的 NextLib 视频渲染器插入逻辑
+- ✅ Simple 模式仍保留 FFmpeg 音频兜底，避免系统音频解码器不支持时无声
 - ✅ 使用 ExoPlayer 默认缓冲策略
-- ✅ 与 TV 项目完全一致
 
 ---
 
@@ -194,30 +195,37 @@ builder.setLoadControl(new DefaultLoadControl.Builder()
 3. FfmpegVideoRenderer（NextLib）
 ```
 
-**Official / Simple 模式：**
+**Official 模式：**
 ```
 1. MediaCodec 硬解渲染器（系统）
 2. 无额外渲染器
 ```
 
-通过 `setExtensionRendererMode` 控制是否优先使用扩展渲染器（FFmpeg）。
+**Simple 模式：**
+```
+1. MediaCodec 硬解渲染器（系统）
+2. CompatFfmpegAudioRenderer（仅音频兜底）
+```
+
+通过 `setExtensionRendererMode` 控制是否优先使用扩展渲染器。
 
 ---
 
 ## 存储键
 
 ```java
-Prefers.getInt("ffmpeg_mode", 2)
+Prefers.getInt("ffmpeg_mode", getDefaultFFmpegMode())
 // 0 = NextLib
 // 1 = Official
-// 2 = Simple（默认）
+// 2 = Simple
+// getDefaultFFmpegMode(): mobile = 0, leanback/TV = 2
 ```
 
 ---
 
 ## 未来优化建议
 
-1. ~~**默认值调整**：如果 Simple 模式测试稳定，可以改为默认（`mode = 2`）~~ ✅ 已完成
+1. ~~**默认值调整**：手机端默认 NextLib，TV 端默认 Simple~~ ✅ 已完成
 2. **自动检测**：根据视频格式自动选择合适的模式
 3. **性能监控**：记录掉帧率，提示用户切换模式
 
@@ -225,5 +233,5 @@ Prefers.getInt("ffmpeg_mode", 2)
 
 **修改日期**: 2026-07-05  
 **相关 Issue**: 用户反馈 TV 项目能正常播放的剧，当前项目卡顿掉帧  
-**测试结论**: Official 从头卡到尾，NextLib 开始流畅后卡顿 → Simple 模式应该能解决  
-**默认模式**: Simple（已设为默认，与 TV 项目完全一致）
+**测试结论**: Official 从头卡到尾，NextLib 开始流畅后卡顿；Simple 保留音频兜底并移除 NextLib 视频渲染器
+**默认模式**: 手机端 NextLib，TV 端 Simple

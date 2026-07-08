@@ -164,6 +164,7 @@ import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -813,6 +814,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         binding.playerEnding.setOnLongClickListener(view -> resetInlineEnding());
         binding.playerDanmakuToggle.setOnClickListener(view -> toggleInlineDanmaku());
         binding.playerDanmaku.setOnClickListener(view -> showInlineDanmaku());
+        binding.playerDanmaku.setOnLongClickListener(view -> onPlayerDanmakuLongClick());
         binding.playerChapter.setOnClickListener(view -> showInlineTitle());
         binding.playerExternal.setOnClickListener(view -> showInlinePlayerChoice());
         binding.playerExternal.setOnLongClickListener(view -> showInlinePlayerChoice());
@@ -4342,6 +4344,15 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         dialogBinding.panel.setStrokeColor(colors.line);
         tintTextTree(dialogBinding.getRoot(), colors);
         dialogBinding.title.setText(episodeDetailTitle(episode, episodeNumber, detail));
+        String sourceName = episode == null ? "" : episode.getName();
+        CharSequence titleText = dialogBinding.title.getText();
+        boolean titleHasSource = !TextUtils.isEmpty(titleText) && titleText.toString().contains(sourceName);
+        if (!TextUtils.isEmpty(sourceName) && !titleHasSource) {
+            dialogBinding.originalName.setText(getString(R.string.detail_episode_original_name, sourceName));
+            dialogBinding.originalName.setVisibility(View.VISIBLE);
+        } else {
+            dialogBinding.originalName.setVisibility(View.GONE);
+        }
         dialogBinding.meta.setText(episodeMeta(detail));
         dialogBinding.meta.setVisibility(TextUtils.isEmpty(dialogBinding.meta.getText()) ? View.GONE : View.VISIBLE);
         String overview = string(detail, "overview");
@@ -5340,6 +5351,10 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         boolean playParamsSelected = binding.playerPlayParams.isSelected();
         binding.playerPlayParams.setTextColor(playParamsSelected ? yellow : white);
 
+        // 弹幕按钮：根据弹幕启用状态设置颜色
+        boolean danmakuShow = DanmakuSetting.isShow();
+        binding.playerDanmaku.setTextColor(danmakuShow ? yellow : white);
+
         // 其他所有按钮：白色
         binding.playerNext.setTextColor(white);
         binding.playerPrev.setTextColor(white);
@@ -5361,7 +5376,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         binding.playerVideoTrack.setTextColor(white);
         binding.playerOpening.setTextColor(white);
         binding.playerEnding.setTextColor(white);
-        // playerDanmakuToggle和playerDanmaku是ImageView，不设置textColor
+        // playerDanmakuToggle 是 ImageView，不设置 textColor
     }
 
     private void applyInlinePlayerButtonSettings() {
@@ -6176,8 +6191,15 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private boolean showInlinePlayerChoice() {
         if (service() == null || player().isEmpty()) return false;
         String[] kernels = ResUtil.getStringArray(R.array.select_player_kernel);
-        new MaterialAlertDialogBuilder(this).setTitle(R.string.player_kernel).setItems(kernels, (dialog, which) -> switchInlinePlayer(which)).show();
+        String[] items = Arrays.copyOf(kernels, kernels.length + 1);
+        items[kernels.length] = "外调";
+        new MaterialAlertDialogBuilder(this).setItems(items, (dialog, which) -> onInlinePlayerChoice(kernels, which)).show();
         return true;
+    }
+
+    private void onInlinePlayerChoice(String[] kernels, int which) {
+        if (which < kernels.length) switchInlinePlayer(which);
+        else openInlineExternal();
     }
 
     private void switchInlinePlayer(int playerType) {
@@ -6214,6 +6236,15 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private void toggleInlineDanmaku() {
         if (inlineControlController == null) return;
         inlineControlController.onDanmakuButton();
+    }
+
+    private boolean onPlayerDanmakuLongClick() {
+        if (service() == null || player().isEmpty() || !inlineControlController.hasDanmakuControl()) return false;
+        DanmakuSetting.putShow(!DanmakuSetting.isShow());
+        inlineControlController.applyDanmakuSetting();
+        updateInlineButtonColors();
+        Notify.show(DanmakuSetting.isShow() ? R.string.danmaku_show_on : R.string.danmaku_show_off);
+        return true;
     }
 
     private void toggleInlineRepeat() {
@@ -7845,8 +7876,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private void ensureInlineDanmakuController() {
         if (service() == null || inlineControlController == null) return;
         player().setDanmakuController(binding.exo.getDanmakuController());
-        if (!Util.isMobile()) player().setDanmakuEnabled(true);
-        else inlineControlController.applyDanmakuSetting();
+        inlineControlController.applyDanmakuSetting();
     }
 
     @Override

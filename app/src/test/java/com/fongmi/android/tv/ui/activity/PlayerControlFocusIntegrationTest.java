@@ -71,6 +71,31 @@ public class PlayerControlFocusIntegrationTest {
     }
 
     @Test
+    public void tmdbInlinePlayerChoiceOffersExternalDispatchLikeNativeEnhanced() throws Exception {
+        Path activityPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
+        String activity = new String(Files.readAllBytes(activityPath), StandardCharsets.UTF_8);
+
+        int show = activity.indexOf("private boolean showInlinePlayerChoice()");
+        int switchMethod = activity.indexOf("private void switchInlinePlayer", show);
+
+        assertTrue("inline player choice must build from the shared player kernel array",
+                show >= 0 && activity.indexOf("String[] kernels = ResUtil.getStringArray(R.array.select_player_kernel);", show) > show);
+        assertTrue("inline player choice must append an external dispatch option",
+                show >= 0
+                        && activity.indexOf("String[] items = Arrays.copyOf(kernels, kernels.length + 1);", show) > show
+                        && activity.indexOf("items[kernels.length] = \"外调\";", show) > show);
+        assertTrue("inline player choice dialog must show the expanded item list",
+                show >= 0 && activity.indexOf("setItems(items", show) > show);
+        assertTrue("inline player choice dialog should stay compact on mobile like native enhanced",
+                show >= 0 && switchMethod > show
+                        && activity.indexOf("setTitle(R.string.player_kernel)", show) < 0);
+        assertTrue("choosing the appended external option must dispatch to external player flow",
+                show >= 0 && switchMethod > show
+                        && activity.indexOf("openInlineExternal()", show) > show
+                        && activity.indexOf("openInlineExternal()", show) < switchMethod);
+    }
+
+    @Test
     public void regularPlaybackControlsTrapFocusOnMobileAndLeanback() throws Exception {
         Path mobilePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
         Path leanbackPath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));

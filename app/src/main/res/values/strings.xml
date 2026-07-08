@@ -95,6 +95,8 @@
 
     <!-- Danmaku Setting -->
     <string name="danmaku">Danmaku</string>
+    <string name="danmaku_show_on">Danmaku enabled</string>
+    <string name="danmaku_show_off">Danmaku disabled</string>
     <string name="danmaku_select">Select danmaku</string>
     <string name="danmaku_setting">Danmaku setting</string>
     <string name="danmaku_text_size">Text scale</string>
@@ -1396,6 +1398,7 @@
     <string name="detail_episode_detail_title">Episode %1$d · %2$s</string>
     <string name="detail_episode_guests">Guest Cast</string>
     <string name="detail_episode_crew">Crew</string>
+    <string name="detail_episode_original_name">Original: %1$s</string>
     <string name="detail_person_biography">Biography</string>
     <string name="detail_person_empty">No person information</string>
     <string name="detail_person_info">Personal Info</string>

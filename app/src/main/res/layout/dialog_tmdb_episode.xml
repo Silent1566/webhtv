@@ -41,6 +41,15 @@
                     android:textStyle="bold" />
 
                 <TextView
+                    android:id="@+id/originalName"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:textIsSelectable="true"
+                    android:textSize="12sp"
+                    android:visibility="gone" />
+
+                <TextView
                     android:id="@+id/meta"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"

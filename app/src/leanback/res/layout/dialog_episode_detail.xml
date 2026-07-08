@@ -50,6 +50,19 @@
                 android:textStyle="bold"
                 tools:text="第1集 - 去有鳳凰的地方" />
 
+            <!-- 原始名称（刮削前的源站集数名称） -->
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/originalName"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:textColor="#BBBBBB"
+                android:textIsSelectable="true"
+                android:textSize="15sp"
+                android:visibility="gone"
+                tools:text="原始名称：第01集.mp4"
+                tools:visibility="visible" />
+
             <!-- 日期和时长 - 横向排列 -->
             <LinearLayout
                 android:layout_width="match_parent"

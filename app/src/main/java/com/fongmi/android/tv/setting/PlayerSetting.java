@@ -4,6 +4,7 @@ import android.content.Intent;
 import android.provider.Settings;
 
 import com.fongmi.android.tv.App;
+import com.fongmi.android.tv.R;
 import com.github.catvod.utils.Prefers;
 
 public class PlayerSetting {
@@ -14,9 +15,13 @@ public class PlayerSetting {
     public static final int NONE = -1;
     public static final int RENDER_SURFACE = 0;
     public static final int RENDER_TEXTURE = 1;
+    public static final int FFMPEG_MODE_NEXTLIB = 0;
+    public static final int FFMPEG_MODE_OFFICIAL = 1;
+    public static final int FFMPEG_MODE_SIMPLE = 2;
     public static final int PAD_LIVE_FULLSCREEN = 0;
     public static final int PAD_LIVE_STANDARD = 1;
     private static final int DEFAULT_PLAY_CACHE_OPTION = 0;
+    private static final String KEY_FFMPEG_MODE = "ffmpeg_mode";
     private static final String KEY_DISPLAY_TIME = "display_time";
     private static final String KEY_DISPLAY_TRAFFIC = "display_traffic";
     private static final String KEY_DISPLAY_SIZE = "display_size";
@@ -388,19 +393,33 @@ public class PlayerSetting {
     }
 
     public static int getFFmpegMode() {
-        return Prefers.getInt("ffmpeg_mode", 2);
+        int defaultMode = getDefaultFFmpegMode();
+        return sanitizeFFmpegMode(Prefers.getInt(KEY_FFMPEG_MODE, defaultMode), defaultMode);
     }
 
     public static void putFFmpegMode(int mode) {
-        Prefers.put("ffmpeg_mode", mode);
+        Prefers.put(KEY_FFMPEG_MODE, sanitizeFFmpegMode(mode, getDefaultFFmpegMode()));
+    }
+
+    static int getDefaultFFmpegMode() {
+        return sanitizeFFmpegMode(App.get().getResources().getInteger(R.integer.default_ffmpeg_mode), FFMPEG_MODE_SIMPLE);
+    }
+
+    static int sanitizeFFmpegMode(int mode, int defaultMode) {
+        if (isFFmpegMode(mode)) return mode;
+        return isFFmpegMode(defaultMode) ? defaultMode : FFMPEG_MODE_SIMPLE;
+    }
+
+    private static boolean isFFmpegMode(int mode) {
+        return mode == FFMPEG_MODE_NEXTLIB || mode == FFMPEG_MODE_OFFICIAL || mode == FFMPEG_MODE_SIMPLE;
     }
 
     public static boolean useNextLibFFmpeg() {
-        return getFFmpegMode() == 0;
+        return getFFmpegMode() == FFMPEG_MODE_NEXTLIB;
     }
 
     public static void putUseNextLibFFmpeg(boolean useNextLib) {
-        putFFmpegMode(useNextLib ? 0 : 1);
+        putFFmpegMode(useNextLib ? FFMPEG_MODE_NEXTLIB : FFMPEG_MODE_OFFICIAL);
     }
 
     public static boolean isPreferAAC() {

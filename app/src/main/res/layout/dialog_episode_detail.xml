@@ -2,6 +2,7 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/root"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#B3000000"
@@ -53,6 +54,18 @@
                         android:textColor="#FFFFFF"
                         android:textSize="20sp"
                         android:textStyle="bold" />
+
+                    <!-- 原始名称（刮削前的源站集数名称） -->
+                    <com.google.android.material.textview.MaterialTextView
+                        android:id="@+id/originalName"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:textColor="#AAAAAA"
+                        android:textIsSelectable="true"
+                        android:textSize="13sp"
+                        android:visibility="gone"
+                        tools:text="原始名称：第01集.mp4" />
 
                     <!-- 元信息（评分、时长、日期） -->
                     <com.google.android.material.textview.MaterialTextView

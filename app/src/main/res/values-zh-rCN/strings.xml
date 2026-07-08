@@ -94,6 +94,8 @@
 
     <!-- Danmaku Setting -->
     <string name="danmaku">弹幕</string>
+    <string name="danmaku_show_on">弹幕已开启</string>
+    <string name="danmaku_show_off">弹幕已关闭</string>
     <string name="danmaku_select">选择弹幕</string>
     <string name="danmaku_setting">弹幕设置</string>
     <string name="danmaku_text_size">字体缩放</string>
@@ -1379,6 +1381,7 @@
     <string name="detail_episode_detail_title">第 %1$d 集 · %2$s</string>
     <string name="detail_episode_guests">客串演员</string>
     <string name="detail_episode_crew">职员</string>
+    <string name="detail_episode_original_name">原始名称：%1$s</string>
     <string name="detail_person_biography">简介</string>
     <string name="detail_person_empty">暂无人物信息</string>
     <string name="detail_person_info">个人信息</string>

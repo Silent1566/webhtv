@@ -51,6 +51,7 @@ public class EpisodeDetailDialog {
         View view = LayoutInflater.from(activity).inflate(R.layout.dialog_episode_detail, null);
         ImageView still = view.findViewById(R.id.still);
         TextView title = view.findViewById(R.id.title);
+        TextView originalName = view.findViewById(R.id.originalName);
         TextView meta = view.findViewById(R.id.meta);
         TextView overview = view.findViewById(R.id.overview);
         TextView photoTitle = view.findViewById(R.id.photoTitle);
@@ -60,7 +61,7 @@ public class EpisodeDetailDialog {
         boolean light = resolveLightTheme(activity);
 
         applyTheme(view, light);
-        bindBasicInfo(activity, tmdbEpisode, still, title, meta, overview);
+        bindBasicInfo(activity, episode, tmdbEpisode, still, title, originalName, meta, overview);
         bindHorizontalList(photoList, 12);
         bindHorizontalList(guestsList, 12);
 
@@ -82,11 +83,11 @@ public class EpisodeDetailDialog {
         window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
     }
 
-    private static void bindBasicInfo(Activity activity, TmdbEpisode episode, ImageView still, TextView title, TextView meta, TextView overview) {
-        if (!TextUtils.isEmpty(episode.getStillUrl())) {
+    private static void bindBasicInfo(Activity activity, Episode episode, TmdbEpisode tmdbEpisode, ImageView still, TextView title, TextView originalName, TextView meta, TextView overview) {
+        if (!TextUtils.isEmpty(tmdbEpisode.getStillUrl())) {
             still.setVisibility(View.VISIBLE);
             Glide.with(activity)
-                    .load(tmdbImageUrl(episode.getStillUrl(), "w780"))
+                    .load(tmdbImageUrl(tmdbEpisode.getStillUrl(), "w780"))
                     .placeholder(R.color.black)
                     .error(R.color.black)
                     .centerCrop()
@@ -94,14 +95,26 @@ public class EpisodeDetailDialog {
         } else {
             still.setVisibility(View.GONE);
         }
-        title.setText(episode.getDisplayTitle());
+        title.setText(tmdbEpisode.getDisplayTitle());
+
+        // 显示原始名称（刮削前的源站文件名）
+        String sourceName = episode.getName();
+        String displayTitle = tmdbEpisode.getDisplayTitle();
+        // 只有当原始名称非空且与刮削标题不完全相同时才显示
+        if (!TextUtils.isEmpty(sourceName) && !sourceName.equals(displayTitle)) {
+            originalName.setText("原始名称：" + sourceName);
+            originalName.setVisibility(View.VISIBLE);
+        } else {
+            originalName.setVisibility(View.GONE);
+        }
+
         List<String> metas = new ArrayList<>();
-        if (episode.getVoteAverage() > 0) metas.add(String.format(java.util.Locale.US, "%.1f", episode.getVoteAverage()));
-        if (!TextUtils.isEmpty(episode.getDate())) metas.add(episode.getDate());
-        if (episode.getRuntime() > 0) metas.add(episode.getRuntime() + "m");
+        if (tmdbEpisode.getVoteAverage() > 0) metas.add(String.format(java.util.Locale.US, "%.1f", tmdbEpisode.getVoteAverage()));
+        if (!TextUtils.isEmpty(tmdbEpisode.getDate())) metas.add(tmdbEpisode.getDate());
+        if (tmdbEpisode.getRuntime() > 0) metas.add(tmdbEpisode.getRuntime() + "m");
         meta.setText(TextUtils.join(" / ", metas));
         meta.setVisibility(metas.isEmpty() ? View.GONE : View.VISIBLE);
-        overview.setText(TextUtils.isEmpty(episode.getOverview()) ? "暂无简介" : episode.getOverview());
+        overview.setText(TextUtils.isEmpty(tmdbEpisode.getOverview()) ? "暂无简介" : tmdbEpisode.getOverview());
     }
 
     private static void applyTheme(View view, boolean light) {
@@ -109,6 +122,7 @@ public class EpisodeDetailDialog {
         MaterialCardView panel = view.findViewById(R.id.panel);
         ImageView still = view.findViewById(R.id.still);
         TextView title = view.findViewById(R.id.title);
+        TextView originalName = view.findViewById(R.id.originalName);
         TextView meta = view.findViewById(R.id.meta);
         TextView overview = view.findViewById(R.id.overview);
         TextView photoTitle = view.findViewById(R.id.photoTitle);
@@ -131,6 +145,7 @@ public class EpisodeDetailDialog {
         }
         if (still != null) still.setBackgroundColor(imageBg);
         title.setTextColor(primary);
+        originalName.setTextColor(secondary);
         meta.setTextColor(secondary);
         overview.setTextColor(body);
         photoTitle.setTextColor(primary);
