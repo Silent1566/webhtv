@@ -26,6 +26,7 @@ public class SettingPersonalActivity extends BaseActivity {
     private String[] homeMenuKey;
     private String[] searchUi;
     private String[] searchColumn;
+    private String[] searchResultSort;
     private String[] tmdbMatchMode;
 
     public static void start(Activity activity) {
@@ -60,6 +61,7 @@ public class SettingPersonalActivity extends BaseActivity {
         mBinding.tmdbEpisodeFileSize.setOnClickListener(this::setTmdbEpisodeFileSize);
         mBinding.searchThread.setOnClickListener(this::setSearchThread);
         mBinding.searchUi.setOnClickListener(this::setSearchUi);
+        mBinding.searchResultSort.setOnClickListener(this::setSearchResultSort);
         // mBinding.searchColumn.setOnClickListener(this::setSearchColumn); // 在搜索页面切换更方便
     }
 
@@ -75,6 +77,7 @@ public class SettingPersonalActivity extends BaseActivity {
         mBinding.tmdbEpisodeFileSizeText.setText(getSwitch(Setting.isTmdbEpisodeFileSize()));
         mBinding.searchThreadText.setText(String.valueOf(Setting.getSearchThread()));
         mBinding.searchUiText.setText((searchUi = getResources().getStringArray(R.array.select_search_ui))[Setting.getSearchUi()]);
+        mBinding.searchResultSortText.setText((searchResultSort = getResources().getStringArray(R.array.select_search_result_sort))[Setting.getSearchResultSort()]);
         // mBinding.searchColumnText.setText(getSearchColumnText()); // 在搜索页面切换更方便
     }
 
@@ -152,6 +155,11 @@ public class SettingPersonalActivity extends BaseActivity {
 
     private void setSearchUi(View view) {
         Setting.putSearchUi((Setting.getSearchUi() + 1) % searchUi.length);
+        setText();
+    }
+
+    private void setSearchResultSort(View view) {
+        Setting.putSearchResultSort((Setting.getSearchResultSort() + 1) % searchResultSort.length);
         setText();
     }
 

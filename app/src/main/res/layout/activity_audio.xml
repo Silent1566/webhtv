@@ -126,70 +126,147 @@
                 app:tint="@color/white" />
         </LinearLayout>
 
-        <LinearLayout
-            android:id="@+id/lyricPanel"
+        <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_marginTop="24dp"
-            android:layout_weight="1"
-            android:gravity="center"
-            android:orientation="vertical">
+            android:layout_marginTop="12dp"
+            android:layout_weight="1">
 
-            <TextView
-                android:id="@+id/lyricPrev2"
+            <FrameLayout
+                android:id="@+id/discContainer"
+                android:layout_width="220dp"
+                android:layout_height="220dp"
+                android:layout_gravity="center_horizontal|top"
+                android:layout_marginTop="16dp"
+                android:clickable="true"
+                android:focusable="true">
+
+                <View
+                    android:id="@+id/discRing"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="@drawable/shape_audio_disc" />
+
+                <ImageView
+                    android:id="@+id/discCover"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_margin="18dp"
+                    android:background="@drawable/shape_audio_disc_cover"
+                    android:clipToOutline="true"
+                    android:scaleType="centerCrop" />
+            </FrameLayout>
+
+            <LinearLayout
+                android:id="@+id/discLyricPreview"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:ellipsize="end"
-                android:gravity="center"
-                android:maxLines="1"
-                android:textColor="@color/white_40"
-                android:textSize="15sp" />
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="260dp"
+                android:orientation="vertical"
+                android:paddingHorizontal="24dp"
+                android:visibility="gone">
 
-            <TextView
-                android:id="@+id/lyricPrev"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:ellipsize="end"
-                android:gravity="center"
-                android:maxLines="1"
-                android:textColor="@color/white_60"
-                android:textSize="18sp" />
+                <TextView
+                    android:id="@+id/discLyricPrev"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:textColor="@color/white_40"
+                    android:textSize="14sp" />
 
-            <TextView
-                android:id="@+id/lyric"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                android:ellipsize="end"
-                android:gravity="center"
-                android:maxLines="2"
-                android:textColor="@color/white"
-                android:textSize="28sp"
-                android:textStyle="bold" />
+                <TextView
+                    android:id="@+id/discLyricCurrent"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:ellipsize="end"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:textColor="@color/white"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
 
-            <TextView
-                android:id="@+id/lyricNext"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                android:ellipsize="end"
-                android:gravity="center"
-                android:maxLines="1"
-                android:textColor="@color/white_60"
-                android:textSize="18sp" />
+                <TextView
+                    android:id="@+id/discLyricNext"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:ellipsize="end"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:textColor="@color/white_40"
+                    android:textSize="14sp" />
+            </LinearLayout>
 
-            <TextView
-                android:id="@+id/lyricNext2"
+            <LinearLayout
+                android:id="@+id/lyricPanel"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:ellipsize="end"
+                android:layout_height="match_parent"
+                android:clickable="true"
+                android:focusable="true"
                 android:gravity="center"
-                android:maxLines="1"
-                android:textColor="@color/white_40"
-                android:textSize="15sp" />
-        </LinearLayout>
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/lyricPrev2"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:textColor="@color/white_40"
+                    android:textSize="15sp" />
+
+                <TextView
+                    android:id="@+id/lyricPrev"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:ellipsize="end"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:textColor="@color/white_60"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:id="@+id/lyric"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:ellipsize="end"
+                    android:gravity="center"
+                    android:maxLines="2"
+                    android:textColor="@color/white"
+                    android:textSize="28sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/lyricNext"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:ellipsize="end"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:textColor="@color/white_60"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:id="@+id/lyricNext2"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:ellipsize="end"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:textColor="@color/white_40"
+                    android:textSize="15sp" />
+            </LinearLayout>
+        </FrameLayout>
 
         <com.fongmi.android.tv.ui.custom.CustomSeekView
             android:id="@+id/seek"
@@ -310,6 +387,18 @@
                 android:focusable="true"
                 android:padding="8dp"
                 android:src="@drawable/ic_audio_lyric_search"
+                android:nextFocusUp="@id/play"
+                app:tint="@color/white" />
+
+            <ImageView
+                android:id="@+id/discModeToggle"
+                android:layout_width="38dp"
+                android:layout_height="38dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/shape_audio_round_button"
+                android:focusable="true"
+                android:padding="8dp"
+                android:src="@drawable/ic_audio_disc_mode"
                 android:nextFocusUp="@id/play"
                 app:tint="@color/white" />
 

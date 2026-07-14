@@ -23,6 +23,7 @@ public class SettingPersonalFragment extends BaseFragment {
     private String[] searchColumn;
     private String[] siteColumn;
     private String[] tmdbMatchMode;
+    private String[] searchResultSort;
 
     public static SettingPersonalFragment newInstance() {
         return new SettingPersonalFragment();
@@ -52,6 +53,7 @@ public class SettingPersonalFragment extends BaseFragment {
         mBinding.searchUi.setOnClickListener(this::setSearchUi);
         mBinding.searchColumn.setOnClickListener(this::setSearchColumn);
         mBinding.siteColumn.setOnClickListener(this::setSiteColumn);
+        mBinding.searchResultSort.setOnClickListener(this::setSearchResultSort);
     }
 
     private void setText() {
@@ -63,6 +65,7 @@ public class SettingPersonalFragment extends BaseFragment {
         mBinding.searchUiText.setText((searchUi = getResources().getStringArray(R.array.select_search_ui))[Setting.getSearchUi()]);
         mBinding.searchColumnText.setText(getSearchColumnText());
         mBinding.siteColumnText.setText((siteColumn = getResources().getStringArray(R.array.select_site_column))[Setting.getSiteColumn() - 1]);
+        mBinding.searchResultSortText.setText((searchResultSort = getResources().getStringArray(R.array.select_search_result_sort))[Setting.getSearchResultSort()]);
     }
 
     private String getSearchColumnText() {
@@ -128,6 +131,11 @@ public class SettingPersonalFragment extends BaseFragment {
 
     private void setSiteColumn(View view) {
         Setting.putSiteColumn(Setting.getSiteColumn() == 1 ? 2 : 1);
+        setText();
+    }
+
+    private void setSearchResultSort(View view) {
+        Setting.putSearchResultSort((Setting.getSearchResultSort() + 1) % searchResultSort.length);
         setText();
     }
 

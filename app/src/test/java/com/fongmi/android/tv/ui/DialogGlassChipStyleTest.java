@@ -36,9 +36,27 @@ public class DialogGlassChipStyleTest {
                 usesSharedSelectors(title));
     }
 
+    @Test
+    public void mobileCategoryAndFilterDialogsShareTheControlSheetStyle() throws Exception {
+        String category = readMobileResource("layout", "adapter_type_dialog.xml");
+        String filter = readMobileResource("layout", "adapter_value.xml");
+
+        assertTrue("category rows must use the mobile control-sheet selectors",
+                usesControlSheetSelectors(category));
+        assertTrue("filter rows must use the same mobile control-sheet selectors",
+                usesControlSheetSelectors(filter));
+        assertTrue("filter rows must preserve a stable 34dp touch target",
+                filter.contains("android:layout_height=\"34dp\""));
+    }
+
     private static boolean usesSharedSelectors(String layout) {
         return layout.contains("android:background=\"@drawable/selector_dialog_glass_chip\"")
                 && layout.contains("android:textColor=\"@color/selector_dialog_glass_chip_text\"");
+    }
+
+    private static boolean usesControlSheetSelectors(String layout) {
+        return layout.contains("android:background=\"@drawable/selector_control_sheet_button\"")
+                && layout.contains("android:textColor=\"@color/selector_control_sheet_text\"");
     }
 
     private static int occurrences(String source, String value) {
@@ -57,6 +75,10 @@ public class DialogGlassChipStyleTest {
 
     private static String readLeanbackResource(String type, String file) throws Exception {
         return read(findAppPath().resolve(Path.of("src", "leanback", "res", type, file)));
+    }
+
+    private static String readMobileResource(String type, String file) throws Exception {
+        return read(findAppPath().resolve(Path.of("src", "mobile", "res", type, file)));
     }
 
     private static Path findAppPath() {

@@ -13,10 +13,12 @@ public class PlaybackPerformanceSettingSourceTest {
     @Test
     public void originalProfileKeepsPersistedCustomValueStable() throws Exception {
         String source = read(sourcePath("main", "java", "com", "fongmi", "android", "tv", "setting", "PlaybackPerformanceSetting.java"));
+        String method = methodBody(source, "public static void applyOriginal()", "public static void markCustom()");
 
         assertTrue(source.contains("PROFILE_CUSTOM = 2"));
         assertTrue(source.contains("PROFILE_ORIGINAL = 4"));
         assertTrue(source.contains("profile == PROFILE_ORIGINAL"));
+        assertTrue(method.contains("putCurrentProfile(PROFILE_ORIGINAL)"));
     }
 
     @Test
@@ -52,7 +54,7 @@ public class PlaybackPerformanceSettingSourceTest {
                 "Prefers.put(\"audio_prefer\", false)",
                 "Prefers.put(\"video_prefer\", false)",
                 "Prefers.put(\"exo_4k_compat\", false)",
-                "Prefers.put(KEY_PROFILE, PROFILE_ORIGINAL)");
+                "putCurrentProfile(PROFILE_ORIGINAL)");
     }
 
     @Test

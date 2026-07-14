@@ -560,6 +560,12 @@
                                     android:text="@string/play_params" />
 
                                 <com.google.android.material.textview.MaterialTextView
+                                    android:id="@+id/playerCodecCapability"
+                                    style="@style/Control"
+                                    android:layout_marginEnd="8dp"
+                                    android:text="@string/codec_capability_short" />
+
+                                <com.google.android.material.textview.MaterialTextView
                                     android:id="@+id/playerSpeed"
                                     style="@style/Control"
                                     android:layout_marginEnd="8dp"

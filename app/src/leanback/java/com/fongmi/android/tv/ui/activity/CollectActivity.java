@@ -246,7 +246,8 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
             if (!group.isEmpty() && !site.inGroup(group)) continue;
             mSites.add(site);
         }
-        SiteHealthStore.sortSites(mSites);
+        // 固定模式严格按配置顺序，跳过健康度排序
+        if (Setting.getSearchResultSort() != 1) SiteHealthStore.sortSites(mSites);
     }
 
     private void search() {
@@ -258,6 +259,11 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
         mBinding.result.setText(getResultTitle());
         if (mSites.isEmpty()) return;
         mCollectAdapter.add(Collect.all());
+        if (Setting.getSearchResultSort() == 1) {
+            for (Site site : mSites) {
+                mCollectAdapter.add(Collect.create(site));
+            }
+        }
         mViewModel.searchContent(mSites, getKeyword(), false);
     }
 
@@ -355,9 +361,24 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
     private void setCollect(Result result) {
         if (mLeavingForPlayback) return;
         if (result == null || result.getList().isEmpty()) return;
-        mCollectAdapter.add(Collect.create(result.getList()));
+        // "全部"聚合列表始终累加，选中"全部"时结果直接显示在右侧
         mCollectAdapter.add(result.getList());
         if (mCollectAdapter.getPosition() == 0) addSearchItems(result.getList());
+        if (Setting.getSearchResultSort() == 0) {
+            // 动态模式：谁先返回谁在前，动态追加站源到左侧
+            mCollectAdapter.add(Collect.create(result.getList()));
+        } else {
+            // 按源顺序模式：站源已预先铺满，只填充对应站源的数据
+            String siteKey = result.getVod().getSiteKey();
+            int index = mCollectAdapter.findCollectIndex(siteKey);
+            if (index >= 0) {
+                Collect collect = mCollectAdapter.get(index);
+                collect.getList().addAll(result.getList());
+                mCollectAdapter.update(index, collect);
+                // 如果当前选中的就是这个源，更新搜索结果
+                if (mCollectAdapter.getPosition() == index) addSearchItems(result.getList());
+            }
+        }
     }
 
     private void setSearch(Result result) {

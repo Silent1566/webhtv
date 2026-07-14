@@ -22,6 +22,7 @@ import com.fongmi.android.tv.setting.PreloadSetting;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.dialog.BufferDialog;
+import com.fongmi.android.tv.ui.dialog.ChoiceDialog;
 import com.fongmi.android.tv.ui.dialog.LutDialog;
 import com.fongmi.android.tv.ui.dialog.MpvConfigDialog;
 import com.fongmi.android.tv.ui.dialog.PlaybackPerformanceDialog;
@@ -43,6 +44,7 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
     private String[] backBuffer;
     private String[] bufferBytes;
     private String[] caption;
+    private String[] failureFallback;
     private String[] kernel;
     private String[] mpvRender;
     private String[] playCache;
@@ -84,6 +86,7 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
         setPreloadText();
         mBinding.autoPlayText.setText(getSwitch(PlayerSetting.isAutoPlay()));
         mBinding.autoChangeText.setText(getSwitch(PlayerSetting.isAutoChange()));
+        mBinding.failureFallbackText.setText((failureFallback = ResUtil.getStringArray(R.array.select_player_failure_fallback))[PlayerSetting.getFailureFallback()]);
         mBinding.autoSkipIntroOutroText.setText((introSkipMode = getResources().getStringArray(R.array.select_auto_skip_intro_outro))[Setting.getIntroSkipMode()]);
         mBinding.backgroundText.setText(getSwitch(PlayerSetting.isBackgroundOn()));
         mBinding.musicNotificationText.setText(getSwitch(PlayerSetting.isMusicNotification()));
@@ -125,6 +128,7 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
         mBinding.preloadTime.setOnClickListener(this::setPreloadTime);
         mBinding.autoPlay.setOnClickListener(this::setAutoPlay);
         mBinding.autoChange.setOnClickListener(this::setAutoChange);
+        mBinding.failureFallback.setOnClickListener(this::setFailureFallback);
         mBinding.autoSkipIntroOutro.setOnClickListener(this::setAutoSkipIntroOutro);
         mBinding.render.setOnClickListener(this::setRender);
         mBinding.tunnel.setOnClickListener(this::setTunnel);
@@ -331,6 +335,13 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
     private void setAutoChange(View view) {
         PlayerSetting.putAutoChange(!PlayerSetting.isAutoChange());
         mBinding.autoChangeText.setText(getSwitch(PlayerSetting.isAutoChange()));
+    }
+
+    private void setFailureFallback(View view) {
+        ChoiceDialog.showSingle(this, R.string.player_failure_fallback, failureFallback, PlayerSetting.getFailureFallback(), which -> {
+            PlayerSetting.putFailureFallback(which);
+            mBinding.failureFallbackText.setText(failureFallback[which]);
+        });
     }
 
     private void setAutoSkipIntroOutro(View view) {

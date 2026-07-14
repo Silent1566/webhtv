@@ -29,6 +29,7 @@ SOURCES=(
   "$SRC_DIR/property.cpp"
   "$SRC_DIR/event.cpp"
   "$SRC_DIR/thumbnail.cpp"
+  "$SRC_DIR/iso_dvd.cpp"
 )
 
 build_abi() {
@@ -41,6 +42,7 @@ build_abi() {
   local libcxx_shared
   local out="$assets/libplayer.so"
   local tmp="$out.tmp"
+  local dvd="$ROOT/build/dvd-native/$abi/prefix"
 
   case "$abi" in
     arm64-v8a) cxx_lib_abi="aarch64-linux-android" ;;
@@ -57,17 +59,22 @@ build_abi() {
     echo "Missing FFmpeg include directory: $ffmpeg/include" >&2
     exit 2
   fi
+  if [[ ! -s "$dvd/lib/libdvdnav.a" || ! -s "$dvd/lib/libdvdread.a" || ! -s "$dvd/lib/libbluray.a" ]]; then
+    echo "Missing DVD native dependencies for $abi. Run scripts/build_dvd_deps.sh first." >&2
+    exit 2
+  fi
 
   echo "Building libplayer.so for $abi"
   "$TOOLCHAIN/$cxx" \
     -fPIC -shared -O2 -std=c++11 -Werror \
     -I"$MPV_INCLUDE" \
     -I"$ffmpeg/include" \
+    -I"$dvd/include" \
     "${SOURCES[@]}" \
     -L"$assets" \
     -Wl,-rpath-link,"$assets" \
     -Wl,-soname,libplayer.so \
-    -lmwscale -lmvcodec -lmpv -llog -latomic "$libcxx_shared" \
+    -lmwscale -lmvcodec -lmpv "$dvd/lib/libdvdnav.a" "$dvd/lib/libdvdread.a" "$dvd/lib/libbluray.a" -llog -latomic -ldl -lz -lm "$libcxx_shared" \
     -nostdlib++ \
     -stdlib=libc++ \
     -o "$tmp"

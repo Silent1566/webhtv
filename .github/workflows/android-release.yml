@@ -38,8 +38,8 @@ env:
   TZ: Asia/Shanghai
   CNB_API_ENDPOINT: https://api.cnb.cool
   CNB_WEB_ENDPOINT: https://cnb.cool
-  CNB_REPO_SLUG: ${{ vars.CNB_REPO_SLUG || 'fish2018/webhtv' }}
-  CNB_REPO_URL: ${{ vars.CNB_REPO_URL || 'https://cnb.cool/fish2018/webhtv.git' }}
+  CNB_REPO_SLUG: fish2018/webhtv-release
+  CNB_REPO_URL: https://cnb.cool/fish2018/webhtv-release.git
 
 jobs:
   release:

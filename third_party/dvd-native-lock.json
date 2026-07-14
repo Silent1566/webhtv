@@ -1,0 +1,19 @@
+{
+  "libdvdread": {
+    "repository": "https://code.videolan.org/videolan/libdvdread.git",
+    "tag": "7.0.1",
+    "revision": "c7f373951bae9642e1ce1fbb2cd02f92c09756e0"
+  },
+  "libdvdnav": {
+    "repository": "https://code.videolan.org/videolan/libdvdnav.git",
+    "tag": "7.0.0",
+    "revision": "38238caf599dc9405eddf1531c858c725015f776"
+  },
+  "libbluray": {
+    "repository": "https://code.videolan.org/videolan/libbluray.git",
+    "revision": "8b4fb6e2562bb86601ea5a2c4140af6d8f3f1cf4",
+    "libudfread_revision": "139a2194525f2745b98a98e4d8fa627d07440176"
+  },
+  "ndk": "28.2.13676358",
+  "api": 24
+}

@@ -13,11 +13,16 @@ import androidx.fragment.app.FragmentActivity;
 import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.R;
+import com.fongmi.android.tv.App;
+import com.fongmi.android.tv.api.config.BuiltinHlsRuleLoader;
 import com.fongmi.android.tv.api.config.DisabledDefaultRuleStore;
+import com.fongmi.android.tv.api.config.HlsRuleConfig;
+import com.fongmi.android.tv.api.config.HlsRuleStateStore;
 import com.fongmi.android.tv.api.config.ImportedAdRuleCandidateStore;
 import com.fongmi.android.tv.api.config.RuleConfig;
 import com.fongmi.android.tv.api.config.UserAdRuleStore;
 import com.fongmi.android.tv.bean.ImportedAdRuleCandidate;
+import com.fongmi.android.tv.bean.HlsAdRule;
 import com.fongmi.android.tv.bean.Rule;
 import com.fongmi.android.tv.bean.UserAdRule;
 import com.fongmi.android.tv.databinding.DialogAdRuleManageBinding;
@@ -25,6 +30,9 @@ import com.fongmi.android.tv.ui.adapter.AdRuleAdapter;
 import com.fongmi.android.tv.ui.custom.SpaceItemDecoration;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -95,14 +103,20 @@ public class AdRuleManageDialog extends BaseAlertDialog implements AdRuleAdapter
             items.add(AdRuleAdapter.RuleItem.fromDefault(entry.getRule(), entry.getSource()));
         }
 
+        List<HlsRuleConfig.Entry> hlsRules = HlsRuleConfig.getEntries();
+        for (HlsRuleConfig.Entry entry : hlsRules) {
+            if ("builtin".equals(entry.source())) items.add(AdRuleAdapter.RuleItem.fromHls(entry));
+        }
+
         adapter.setItems(items);
 
         // 空态提示(仅当两部分都为空时显示)
-        boolean isEmpty = userRules.isEmpty() && defaultRules.isEmpty();
+        int builtinHlsCount = (int) hlsRules.stream().filter(entry -> "builtin".equals(entry.source())).count();
+        boolean isEmpty = userRules.isEmpty() && defaultRules.isEmpty() && builtinHlsCount == 0;
         binding.customEmpty.setVisibility(isEmpty ? View.VISIBLE : View.GONE);
 
         // 更新分区标题计数
-        binding.serverRules.setText(getString(R.string.ad_rule_section_summary, userRules.size(), defaultRules.size()));
+        binding.serverRules.setText(getString(R.string.ad_rule_section_summary, userRules.size(), defaultRules.size(), builtinHlsCount));
         int pending = ImportedAdRuleCandidateStore.pending().size();
         binding.importCandidates.setVisibility(pending == 0 ? View.GONE : View.VISIBLE);
         binding.importCandidates.setText(getString(R.string.ad_rule_import_candidates, pending));
@@ -150,26 +164,73 @@ public class AdRuleManageDialog extends BaseAlertDialog implements AdRuleAdapter
 
     @Override
     public void onUserRuleClick(UserAdRule item) {
-        if (UserAdRule.SOURCE_MANUAL.equals(item.getSource())) {
-            AdRuleEditDialog.create(item).show(requireActivity(), this::onRuleEdited);
-        } else {
-            showRuleDetail(item.getName(), item.getSummary(), item.getHosts(), item.getRegex(), item.getExclude());
-        }
+        Runnable editAction = UserAdRule.SOURCE_MANUAL.equals(item.getSource())
+                ? () -> AdRuleEditDialog.create(item).show(requireActivity(), this::onRuleEdited) : null;
+        showRuleDetail(item.getName(), item.getSummary(), item.getHosts(), item.getRegex(), item.getExclude(), editAction);
     }
 
     @Override
     public void onDefaultRuleClick(Rule rule, String ruleId, boolean currentEnabled) {
-        showRuleDetail(rule.getName(), "", rule.getHosts(), rule.getRegex(), rule.getExclude());
+        showRuleDetail(rule.getName(), "", rule.getHosts(), rule.getRegex(), rule.getExclude(), null);
     }
 
-    private void showRuleDetail(String name, String summary, List<String> hosts, List<String> regex, List<String> exclude) {
-        String message = (summary.isEmpty() ? "" : summary + "\n\n")
-                + "域名\n" + listText(hosts) + "\n\nURL 规则\n" + listText(regex) + "\n\n白名单\n" + listText(exclude);
+    @Override
+    public void onHlsRuleClick(HlsRuleConfig.Entry item) {
         new MaterialAlertDialogBuilder(requireActivity(), R.style.Theme_WebHTV_LightDialog)
-                .setTitle(name)
-                .setMessage(message)
+                .setTitle(item.name().isBlank() ? item.id() : item.name())
+                .setMessage(getHlsRuleDetail(item))
                 .setPositiveButton(android.R.string.ok, null)
                 .show();
+    }
+
+    private void showRuleDetail(String name, String summary, List<String> hosts, List<String> regex, List<String> exclude, Runnable editAction) {
+        String message = (summary.isEmpty() ? "" : summary + "\n\n")
+                + "域名\n" + listText(hosts) + "\n\nURL 规则\n" + listText(regex) + "\n\n白名单\n" + listText(exclude);
+        MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(requireActivity(), R.style.Theme_WebHTV_LightDialog)
+                .setTitle(name)
+                .setMessage(message)
+                .setPositiveButton(android.R.string.ok, null);
+        if (editAction != null) builder.setNeutralButton("编辑", (dialog, which) -> editAction.run());
+        builder.show();
+    }
+
+    private String getHlsRuleDetail(HlsRuleConfig.Entry item) {
+        String status = item.valid()
+                ? getString(item.enabled() ? R.string.ad_rule_hls_enabled : R.string.ad_rule_hls_disabled)
+                : getString(R.string.ad_rule_hls_invalid, item.error());
+        HlsAdRule rule = BuiltinHlsRuleLoader.getRules().stream().filter(value -> item.id().equals(value.getId())).findFirst().orElse(null);
+        if (rule == null) return getString(R.string.ad_rule_hls_builtin_summary, item.version(), status) + "\n\n规则 ID\n" + item.id();
+        JsonObject json = App.gson().toJsonTree(rule).getAsJsonObject();
+        return getString(R.string.ad_rule_hls_builtin_summary, item.version(), status)
+                + "\n\n规则 ID\n" + item.id()
+                + "\n\n播放列表域名\n" + jsonList(json, "playlistHostSuffixes", "playlistHostRegex")
+                + "\n\n分片域名\n" + jsonList(json, "hostSuffixes")
+                + "\n\n分片 URL 正则\n" + jsonList(json, "segmentUrlRegex")
+                + "\n\n时长范围\n" + jsonValue(json, "minDuration") + " ～ " + jsonValue(json, "maxDuration") + " 秒"
+                + "\n\n需要不连续标记\n" + yesNo(json, "requireDiscontinuity")
+                + "\n\n需要跨域\n" + yesNo(json, "requireCrossDomain")
+                + "\n\n最少命中信号\n" + jsonValue(json, "minimumSignals");
+    }
+
+    private String jsonList(JsonObject json, String... names) {
+        List<String> values = new ArrayList<>();
+        for (String name : names) {
+            JsonElement element = json.get(name);
+            if (element == null || !element.isJsonArray()) continue;
+            JsonArray array = element.getAsJsonArray();
+            for (JsonElement value : array) values.add(value.getAsString());
+        }
+        return listText(values);
+    }
+
+    private String jsonValue(JsonObject json, String name) {
+        JsonElement value = json.get(name);
+        return value == null || value.isJsonNull() ? "无" : value.getAsString();
+    }
+
+    private String yesNo(JsonObject json, String name) {
+        JsonElement value = json.get(name);
+        return value != null && value.getAsBoolean() ? "是" : "否";
     }
 
     private String listText(List<String> items) {
@@ -211,6 +272,13 @@ public class AdRuleManageDialog extends BaseAlertDialog implements AdRuleAdapter
 
     private void setDefaultEnabled(String ruleId, boolean enabled) {
         DisabledDefaultRuleStore.setDisabled(ruleId, !enabled);
+        loadData();
+        if (callback != null) callback.onRuleChanged();
+    }
+
+    @Override
+    public void onHlsToggleClick(HlsRuleConfig.Entry item, boolean enabled) {
+        HlsRuleStateStore.setEnabled(item.key(), enabled);
         loadData();
         if (callback != null) callback.onRuleChanged();
     }

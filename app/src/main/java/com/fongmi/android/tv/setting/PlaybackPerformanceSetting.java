@@ -143,7 +143,7 @@ public class PlaybackPerformanceSetting {
         Prefers.put("audio_prefer", false);
         Prefers.put("video_prefer", false);
         Prefers.put("exo_4k_compat", false);
-        Prefers.put(KEY_PROFILE, PROFILE_ORIGINAL);
+        putCurrentProfile(PROFILE_ORIGINAL);
     }
 
     public static void markCustom() {

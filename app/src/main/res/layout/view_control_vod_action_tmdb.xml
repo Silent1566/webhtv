@@ -15,6 +15,16 @@
         android:orientation="horizontal">
 
         <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/change2"
+            style="@style/Control"
+            android:text="@string/play_change" />
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/actionFullscreen"
+            style="@style/Control"
+            android:text="@string/play_fullscreen" />
+
+        <com.google.android.material.textview.MaterialTextView
             android:id="@+id/player"
             style="@style/Control"
             android:text="@string/play_exo" />
@@ -23,6 +33,21 @@
             android:id="@+id/decode"
             style="@style/Control"
             android:text="@string/play_decode" />
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/playParams"
+            style="@style/Control"
+            android:text="@string/play_params" />
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/codecCapability"
+            style="@style/Control"
+            android:text="@string/codec_capability_short" />
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/lut"
+            style="@style/Control"
+            android:text="@string/play_lut" />
 
         <com.google.android.material.textview.MaterialTextView
             android:id="@+id/speed"

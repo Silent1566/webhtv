@@ -183,6 +183,7 @@
     <string name="setting_search_ui">搜尋佈局</string>
     <string name="setting_search_column">搜尋結果列數</string>
     <string name="setting_site_column">站點展示模式</string>
+    <string name="setting_search_result_sort">搜尋結果模式</string>
     <string name="repo_github">GitHub 倉庫</string>
     <string name="repo_cnb">CNB 倉庫</string>
     <string name="setting_debug_log">調試日誌</string>
@@ -936,6 +937,7 @@
     <string name="player_preload_time_value">%1$d 秒</string>
     <string name="player_auto_play">自動播放</string>
     <string name="player_auto_change">自動換源</string>
+    <string name="player_failure_fallback">播放失敗回退</string>
     <string name="player_speed">長按倍速</string>
     <string name="player_ua">User-Agent</string>
     <string name="player_osd">屏顯設定</string>
@@ -1166,6 +1168,13 @@
     <string-array name="select_decode">
         <item>軟解</item>
         <item>硬解</item>
+    </string-array>
+
+    <string-array name="select_player_failure_fallback">
+        <item>軟解後切核心</item>
+        <item>僅切軟硬解</item>
+        <item>僅切播放核心</item>
+        <item>關閉</item>
     </string-array>
 
     <string-array name="select_player_kernel">
@@ -1475,6 +1484,11 @@
     <string-array name="select_site_column">
         <item>單行</item>
         <item>雙行</item>
+    </string-array>
+
+    <string-array name="select_search_result_sort">
+        <item>動態模式（誰快誰在前）</item>
+        <item>固定模式（按配置順序）</item>
     </string-array>
 
     <string name="menu_viewing_report">觀影報告</string>

@@ -64,8 +64,22 @@ public class PreCache implements Player.Listener {
 
     public void release() {
         stop();
-        releaseExecutor();
-        releaseWorker();
+        ExecutorService retiringExecutor = executor;
+        HandlerThread retiringWorker = worker;
+        executor = null;
+        worker = null;
+        threads = 0;
+        if (retiringWorker == null) {
+            shutdownExecutor(retiringExecutor);
+            return;
+        }
+        // PreCacheHelper.release() posts cancellation to this same looper.
+        // Queue resource teardown behind it so SegmentDownloader cannot submit
+        // work to an executor which has already entered SHUTTING_DOWN.
+        new Handler(retiringWorker.getLooper()).post(() -> {
+            shutdownExecutor(retiringExecutor);
+            retiringWorker.quitSafely();
+        });
     }
 
     @Override
@@ -175,15 +189,22 @@ public class PreCache implements Player.Listener {
     private Executor getExecutor() {
         int count = PreloadSetting.getPreloadThreads(PlayerSetting.EXO);
         if (executor != null && threads == count) return executor;
-        releaseExecutor();
+        retireExecutor();
         threads = count;
         return executor = Executors.newFixedThreadPool(count);
     }
 
-    private void releaseExecutor() {
+    private void retireExecutor() {
         if (executor == null) return;
-        executor.shutdownNow();
+        ExecutorService retiringExecutor = executor;
         executor = null;
+        if (worker == null) shutdownExecutor(retiringExecutor);
+        else new Handler(worker.getLooper()).post(() -> shutdownExecutor(retiringExecutor));
+    }
+
+    private void shutdownExecutor(ExecutorService target) {
+        if (target == null) return;
+        target.shutdownNow();
     }
 
     private HandlerThread getWorker() {
@@ -191,12 +212,6 @@ public class PreCache implements Player.Listener {
         worker = new HandlerThread("CurrentMediaPreCache");
         worker.start();
         return worker;
-    }
-
-    private void releaseWorker() {
-        if (worker == null) return;
-        worker.quitSafely();
-        worker = null;
     }
 
     private boolean isSeek(int reason) {

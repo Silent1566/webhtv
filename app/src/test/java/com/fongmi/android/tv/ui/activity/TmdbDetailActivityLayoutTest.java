@@ -133,6 +133,30 @@ public class TmdbDetailActivityLayoutTest {
     }
 
     @Test
+    public void fusionInlineSettingsButtonOpensFullPlayerControls() throws Exception {
+        String source = readJava("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java");
+        int setup = source.indexOf("private void setupMobileInlineControl()");
+        int setupEnd = source.indexOf("private void setupMobileInlineParse()", setup);
+        String body = source.substring(setup, setupEnd);
+
+        assertTrue("fusion settings button must open the full player control dialog",
+                body.contains("detailControlView(R.id.setting, View.class).setOnClickListener(guarded(this::showInlineControlDialog));"));
+        assertTrue("fusion settings button must not open the display-only dialog",
+                !body.contains("detailControlView(R.id.setting, View.class).setOnClickListener(guarded(this::showInlineDisplay));"));
+
+        Path dialogPath = Path.of("src", "mobile", "java", "com", "fongmi", "android", "tv", "ui", "dialog", "ControlDialog.java");
+        if (!Files.exists(dialogPath)) dialogPath = Path.of("app").resolve(dialogPath);
+        String dialog = new String(Files.readAllBytes(dialogPath), StandardCharsets.UTF_8);
+        int inline = dialog.indexOf("public ControlDialog inline(TmdbDetailActivity activity)");
+        int inlineEnd = dialog.indexOf("public ControlDialog history(History history)", inline);
+        String inlineBody = dialog.substring(inline, inlineEnd);
+
+        assertTrue("fusion control dialog must resolve duplicate button IDs from the inline action root",
+                inlineBody.contains("activity.inlineControlDialogAction(R.id.danmaku)")
+                        && !inlineBody.contains("activity.findViewById(R.id.danmaku)"));
+    }
+
+    @Test
     public void fusionInlinePlayerButtonOrderMatchesNativeLeanbackPlayer() throws Exception {
         String nativeLayout = readLeanbackLayout("view_control_vod_action.xml");
         String fusionLayout = readLayout("activity_tmdb_detail.xml");

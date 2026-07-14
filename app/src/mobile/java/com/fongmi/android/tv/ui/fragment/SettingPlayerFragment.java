@@ -47,6 +47,7 @@ public class SettingPlayerFragment extends BaseFragment implements UaListener, B
     private String[] backBuffer;
     private String[] bufferBytes;
     private String[] caption;
+    private String[] failureFallback;
     private String[] kernel;
     private String[] mpvRender;
     private String[] padLiveMode;
@@ -88,6 +89,7 @@ public class SettingPlayerFragment extends BaseFragment implements UaListener, B
         setPreloadText();
         mBinding.autoPlayText.setText(getSwitch(PlayerSetting.isAutoPlay()));
         mBinding.autoChangeText.setText(getSwitch(PlayerSetting.isAutoChange()));
+        mBinding.failureFallbackText.setText((failureFallback = ResUtil.getStringArray(R.array.select_player_failure_fallback))[PlayerSetting.getFailureFallback()]);
         mBinding.autoSkipIntroOutroText.setText((introSkipMode = ResUtil.getStringArray(R.array.select_auto_skip_intro_outro))[Setting.getIntroSkipMode()]);
         mBinding.musicNotificationText.setText(getSwitch(PlayerSetting.isMusicNotification()));
         mBinding.audioBookNotificationText.setText(getSwitch(PlayerSetting.isAudioBookNotification()));
@@ -131,6 +133,7 @@ public class SettingPlayerFragment extends BaseFragment implements UaListener, B
         mBinding.preloadTime.setOnClickListener(this::onPreloadTime);
         mBinding.autoPlay.setOnClickListener(this::setAutoPlay);
         mBinding.autoChange.setOnClickListener(this::setAutoChange);
+        mBinding.failureFallback.setOnClickListener(this::setFailureFallback);
         mBinding.autoSkipIntroOutro.setOnClickListener(this::setAutoSkipIntroOutro);
         mBinding.render.setOnClickListener(this::setRender);
         mBinding.tunnel.setOnClickListener(this::setTunnel);
@@ -380,6 +383,13 @@ public class SettingPlayerFragment extends BaseFragment implements UaListener, B
     private void setAutoChange(View view) {
         PlayerSetting.putAutoChange(!PlayerSetting.isAutoChange());
         mBinding.autoChangeText.setText(getSwitch(PlayerSetting.isAutoChange()));
+    }
+
+    private void setFailureFallback(View view) {
+        ChoiceDialog.showSingle(this, R.string.player_failure_fallback, failureFallback, PlayerSetting.getFailureFallback(), which -> {
+            PlayerSetting.putFailureFallback(which);
+            mBinding.failureFallbackText.setText(failureFallback[which]);
+        });
     }
 
     private void setAutoSkipIntroOutro(View view) {

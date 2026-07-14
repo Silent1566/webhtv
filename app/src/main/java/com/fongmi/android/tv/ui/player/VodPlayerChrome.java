@@ -47,6 +47,7 @@ public final class VodPlayerChrome {
     final View cast;
     final View info;
     final View controls;
+    final View codecCapability;
 
     public VodPlayerChrome(
             View osdRoot,
@@ -70,6 +71,7 @@ public final class VodPlayerChrome {
                 playParams,
                 clockView,
                 osdMiniSp,
+                null,
                 null,
                 null,
                 null,
@@ -132,7 +134,8 @@ public final class VodPlayerChrome {
             View fullscreen,
             View cast,
             View info,
-            View controls) {
+            View controls,
+            View codecCapability) {
         this(
                 osdRoot,
                 osdTopLeft,
@@ -169,7 +172,8 @@ public final class VodPlayerChrome {
                 fullscreen,
                 cast,
                 info,
-                controls);
+                controls,
+                codecCapability);
     }
 
     private VodPlayerChrome(
@@ -208,7 +212,8 @@ public final class VodPlayerChrome {
             View fullscreen,
             View cast,
             View info,
-            View controls) {
+            View controls,
+            View codecCapability) {
         this.osdRoot = osdRoot;
         this.osdTopLeft = osdTopLeft;
         this.osdTopRight = osdTopRight;
@@ -245,6 +250,7 @@ public final class VodPlayerChrome {
         this.cast = cast;
         this.info = info;
         this.controls = controls;
+        this.codecCapability = codecCapability;
     }
 
     public static VodPlayerChrome fromTmdbDetail(ActivityTmdbDetailBinding binding) {
@@ -282,7 +288,8 @@ public final class VodPlayerChrome {
                 binding.playerFullscreenAction,
                 binding.playerCast,
                 binding.playerInfo,
-                binding.playerControls);
+                binding.playerControls,
+                binding.playerCodecCapability);
     }
 
     public static VodPlayerChrome fromVideo(ActivityVideoBinding binding, TextView clockView, float osdMiniSp) {

@@ -84,6 +84,7 @@ public class VodPlayerUiController {
         chrome.display.setOnClickListener(view -> host.showDisplay());
         chrome.decode.setOnClickListener(view -> host.toggleDecode());
         chrome.playParams.setOnClickListener(view -> host.togglePlayParams());
+        if (chrome.codecCapability != null) chrome.codecCapability.setOnClickListener(view -> host.showCodecCapability());
         chrome.textTrack.setOnClickListener(host::showTrack);
         chrome.textTrack.setOnLongClickListener(view -> host.showSubtitle());
         chrome.audioTrack.setOnClickListener(host::showTrack);

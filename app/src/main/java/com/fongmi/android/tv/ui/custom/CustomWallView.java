@@ -179,7 +179,7 @@ public class CustomWallView extends FrameLayout implements DefaultLifecycleObser
         else binding.image.setImageDrawable(new ColorDrawable(DEFAULT_WALL_COLOR));
     }
 
-    private int getDesignResId(int wall) {
+    public static int getDesignResId(int wall) {
         return switch (wall) {
             case Setting.WALL_AURORA_GLASS -> R.drawable.wallpaper_design_10_aurora_glass;
             case Setting.WALL_SUNSET_PRISM -> R.drawable.wallpaper_design_11_sunset_prism;

@@ -170,7 +170,7 @@ public class SiteAdapter extends RecyclerView.Adapter<SiteAdapter.ViewHolder> {
         holder.binding.text.setEnabled(on);
         holder.binding.text.setFocusable(false);
         holder.binding.text.setSelected(block ? blocked : on && item.isSelected());
-        holder.binding.text.setAlpha(block && blocked ? 0.55f : 1.0f);
+        holder.binding.text.setAlpha(1.0f);
         holder.binding.health.setAlpha(block && blocked ? 0.55f : 1.0f);
         holder.binding.search.setImageResource(getSearchIcon(item));
         holder.binding.change.setImageResource(getChangeIcon(item));

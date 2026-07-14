@@ -23,7 +23,12 @@ public class PlayerSetting {
     public static final int MPV_RENDER_VULKAN = 1;
     public static final int PAD_LIVE_FULLSCREEN = 0;
     public static final int PAD_LIVE_STANDARD = 1;
+    public static final int FALLBACK_FULL = 0;
+    public static final int FALLBACK_DECODE_ONLY = 1;
+    public static final int FALLBACK_PLAYER_ONLY = 2;
+    public static final int FALLBACK_DISABLED = 3;
     private static final int DEFAULT_PLAY_CACHE_OPTION = 0;
+    private static final String KEY_FAILURE_FALLBACK = "player_failure_fallback";
     private static final String KEY_FFMPEG_MODE = "ffmpeg_mode";
     private static final String KEY_DISPLAY_TIME = "display_time";
     private static final String KEY_DISPLAY_TRAFFIC = "display_traffic";
@@ -229,6 +234,15 @@ public class PlayerSetting {
 
     public static void putAutoChange(boolean autoChange) {
         Prefers.put("player_auto_change", autoChange);
+    }
+
+    public static int getFailureFallback() {
+        int mode = Prefers.getInt(KEY_FAILURE_FALLBACK, FALLBACK_FULL);
+        return mode >= FALLBACK_FULL && mode <= FALLBACK_DISABLED ? mode : FALLBACK_FULL;
+    }
+
+    public static void putFailureFallback(int mode) {
+        Prefers.put(KEY_FAILURE_FALLBACK, mode >= FALLBACK_FULL && mode <= FALLBACK_DISABLED ? mode : FALLBACK_FULL);
     }
 
     public static boolean isAutoPlay() {

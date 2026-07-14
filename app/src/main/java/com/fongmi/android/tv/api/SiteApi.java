@@ -13,6 +13,7 @@ import com.fongmi.android.tv.bean.Result;
 import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.player.Source;
+import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.utils.PushParser;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.Sniffer;
@@ -143,6 +144,11 @@ public class SiteApi {
 
     @NonNull
     public static Result playerContent(@NonNull String key, @NonNull String flag, @NonNull String id) throws Exception {
+        return playerContent(key, flag, id, PlayerSetting.getPlayer());
+    }
+
+    @NonNull
+    public static Result playerContent(@NonNull String key, @NonNull String flag, @NonNull String id, int playerType) throws Exception {
         SpiderDebug.log("player", "key=%s,flag=%s,id=%s", key, flag, id);
         Source.get().stop();
         if (WebHomeInlineVodStore.KEY.equals(key)) return WebHomeInlineVodStore.player(flag, id);
@@ -152,7 +158,7 @@ public class SiteApi {
             SpiderDebug.log("player", playerContent);
             Result result = Result.fromJson(playerContent);
             if (result.getFlag().isEmpty()) result.setFlag(flag);
-            result.setUrl(Source.get().fetch(result));
+            result.setUrl(Source.get().fetch(result, playerType));
             result.setHeader(site.getHeader());
             result.setKey(key);
             return result;
@@ -164,7 +170,7 @@ public class SiteApi {
             SpiderDebug.log("player", playerContent);
             Result result = Result.fromJson(playerContent);
             if (result.getFlag().isEmpty()) result.setFlag(flag);
-            result.setUrl(Source.get().fetch(result));
+            result.setUrl(Source.get().fetch(result, playerType));
             result.setHeader(site.getHeader());
             return result;
         } else if (site.isEmpty() && "push_agent".equals(key)) {
@@ -172,7 +178,7 @@ public class SiteApi {
             result.setUrl(id);
             result.setParse(0);
             result.setFlag(flag);
-            result.setUrl(Source.get().fetch(result));
+            result.setUrl(Source.get().fetch(result, playerType));
             SpiderDebug.log("player", result.toString());
             return result;
         } else {
@@ -182,7 +188,7 @@ public class SiteApi {
             result.setHeader(site.getHeader());
             result.setPlayUrl(site.getPlayUrl());
             result.setParse(Sniffer.isVideoFormat(id) && result.getPlayUrl().isEmpty() ? 0 : 1);
-            result.setUrl(Source.get().fetch(result));
+            result.setUrl(Source.get().fetch(result, playerType));
             SpiderDebug.log("player", result.toString());
             return result;
         }

@@ -4,7 +4,9 @@ import android.media.AudioManager;
 import android.net.Uri;
 import android.os.Looper;
 import android.os.PowerManager;
+import android.os.SystemClock;
 import android.text.TextUtils;
+import android.util.Log;
 import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
@@ -28,6 +30,7 @@ import androidx.media3.common.util.UnstableApi;
 import androidx.media3.mpvplayer.MpvHlsProxy;
 
 import com.fongmi.android.tv.App;
+import com.fongmi.android.tv.BuildConfig;
 import com.fongmi.android.tv.player.exo.ExoUtil;
 import com.fongmi.android.tv.setting.IjkPerformanceSetting;
 import com.fongmi.android.tv.setting.PlayerSetting;
@@ -92,6 +95,7 @@ class IjkSimplePlayer extends SimpleBasePlayer implements IMediaPlayer.Listener 
     private int decode;
     private int subtitleSerial;
     private long pendingSeekPositionMs;
+    private long pendingSeekRequestedAtMs;
     private boolean playWhenReady;
     private boolean loading;
     private boolean repeatOne;
@@ -112,6 +116,7 @@ class IjkSimplePlayer extends SimpleBasePlayer implements IMediaPlayer.Listener 
         currentCues = CueGroup.EMPTY_TIME_ZERO;
         playbackState = Player.STATE_IDLE;
         pendingSeekPositionMs = C.TIME_UNSET;
+        pendingSeekRequestedAtMs = C.TIME_UNSET;
         playWhenReady = true;
         volume = 1f;
     }
@@ -167,7 +172,7 @@ class IjkSimplePlayer extends SimpleBasePlayer implements IMediaPlayer.Listener 
     protected ListenableFuture<?> handleSetMediaItems(List<MediaItem> mediaItems, int startIndex, long startPositionMs) {
         clearSubtitles();
         mediaItem = mediaItems.isEmpty() ? null : mediaItems.get(0);
-        pendingSeekPositionMs = mediaItem != null && startPositionMs > 0 ? startPositionMs : C.TIME_UNSET;
+        setPendingSeek(mediaItem != null && startPositionMs > 0 ? startPositionMs : C.TIME_UNSET);
         playbackState = mediaItem == null ? Player.STATE_IDLE : Player.STATE_IDLE;
         loading = false;
         currentTracks = Tracks.EMPTY;
@@ -238,10 +243,9 @@ class IjkSimplePlayer extends SimpleBasePlayer implements IMediaPlayer.Listener 
     @Override
     protected ListenableFuture<?> handleSeek(int mediaItemIndex, long positionMs, int seekCommand) {
         if (positionMs == C.TIME_UNSET) positionMs = 0;
+        setPendingSeek(positionMs > 0 ? positionMs : C.TIME_UNSET);
         if (playbackState == Player.STATE_READY || playbackState == Player.STATE_ENDED) {
             ijk.seekTo(positionMs);
-        } else {
-            pendingSeekPositionMs = positionMs;
         }
         updateCurrentCues(positionMs);
         invalidateState();
@@ -298,6 +302,7 @@ class IjkSimplePlayer extends SimpleBasePlayer implements IMediaPlayer.Listener 
 
     @Override
     public void onCompletion(IMediaPlayer mp) {
+        setPendingSeek(C.TIME_UNSET);
         playbackState = Player.STATE_ENDED;
         loading = false;
         currentCues = CueGroup.EMPTY_TIME_ZERO;
@@ -307,12 +312,14 @@ class IjkSimplePlayer extends SimpleBasePlayer implements IMediaPlayer.Listener 
 
     @Override
     public boolean onError(IMediaPlayer mp, int what, int extra) {
+        setPendingSeek(C.TIME_UNSET);
         playbackState = Player.STATE_IDLE;
         loading = false;
         stopStateRefresh();
         clearSubtitles();
         playerError = new PlaybackException("IJK error: " + what + ", " + extra, null, errorCode(what));
         SpiderDebug.log("ijk", "error what=%d extra=%d mapped=%d decode=%d state=%d loading=%s uri=%s", what, extra, playerError.errorCode, decode, playbackState, loading, summarizeUri());
+        if (BuildConfig.DEBUG) Log.e("WebHTV-IJK", "error what=" + what + " extra=" + extra + " uri=" + summarizeUri());
         invalidateState();
         return true;
     }
@@ -366,11 +373,18 @@ class IjkSimplePlayer extends SimpleBasePlayer implements IMediaPlayer.Listener 
             Uri sourceUri = mediaItem.localConfiguration.uri;
             Map<String, String> headers = ExoUtil.extractHeaders(mediaItem);
             String playableUrl = sourceUri.toString();
-            if (shouldProxyHls(mediaItem, playableUrl)) {
+            boolean dash = isLikelyDash(mediaItem, playableUrl);
+            if (BuildConfig.DEBUG) Log.e("WebHTV-IJK", "open dash=" + dash + " uri=" + playableUrl + " headers=" + headers.keySet());
+            if (dash) {
+                String originalUrl = playableUrl;
+                playableUrl = hlsProxy.proxyDash(playableUrl, headers);
+                SpiderDebug.log("ijk", "dash compatibility proxy enabled original=%s proxy=%s", originalUrl, playableUrl);
+            } else if (shouldProxyHls(mediaItem, playableUrl)) {
                 playableUrl = hlsProxy.proxy(playableUrl, headers);
                 SpiderDebug.log("ijk", "hls proxy enabled original=%s proxy=%s", sourceUri, playableUrl);
             }
-            configureOptions(sourceUri);
+            SpiderDebug.log("ijk", "open dash=%s decode=%d uri=%s mime=%s headers=%s", dash, decode, summarizeUri(), mediaItem.localConfiguration.mimeType, headers.keySet());
+            configureOptions(sourceUri, dash);
             bindVideoOutput();
             ijk.setDataSource(App.get(), Uri.parse(playableUrl), headers);
             ijk.setAudioStreamType(AudioManager.STREAM_MUSIC);
@@ -517,18 +531,20 @@ class IjkSimplePlayer extends SimpleBasePlayer implements IMediaPlayer.Listener 
         ownsSurface = false;
     }
 
-    private void configureOptions(Uri uri) {
+    private void configureOptions(Uri uri, boolean dash) {
         String url = uri.toString();
         boolean realtime = isRealtimeUrl(url);
+        if (dash) ijk.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "iformat", "dash");
         configureSoftDecodeOptions();
         ijk.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "dns_cache_clear", 1);
         ijk.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "dns_cache_timeout", -1);
         ijk.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "fflags", "fastseek");
-        ijk.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "http-detect-range-support", 0);
+        // SegmentBase MP4 relies on HTTP byte-range seeks for sidx/moof access.
+        ijk.setOption(IjkMediaPlayer.OPT_CATEGORY_FORMAT, "http-detect-range-support", dash ? 1 : 0);
         ijk.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "enable-accurate-seek", IjkPerformanceSetting.isAccurateSeek() ? 1 : 0);
         ijk.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "framedrop", IjkPerformanceSetting.getFrameDropValue());
         ijk.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "max-buffer-size", IjkPerformanceSetting.getBufferMb() * 1024L * 1024L);
-        ijk.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", IjkPerformanceSetting.isPacketBuffering() ? 1 : 0);
+        ijk.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "packet-buffering", dash ? 0 : (IjkPerformanceSetting.isPacketBuffering() ? 1 : 0));
         ijk.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "first-high-water-mark-ms", IjkPerformanceSetting.getFirstWaterMs());
         ijk.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "next-high-water-mark-ms", IjkPerformanceSetting.getNextWaterMs());
         ijk.setOption(IjkMediaPlayer.OPT_CATEGORY_PLAYER, "last-high-water-mark-ms", IjkPerformanceSetting.getLastWaterMs());
@@ -609,6 +625,19 @@ class IjkSimplePlayer extends SimpleBasePlayer implements IMediaPlayer.Listener 
         return lower.contains("m3u8");
     }
 
+    private boolean isLikelyDash(MediaItem item, String uri) {
+        if (item.localConfiguration != null) {
+            String mimeType = item.localConfiguration.mimeType;
+            if (MimeTypes.APPLICATION_MPD.equals(mimeType)
+                    || "application/dash+xml".equalsIgnoreCase(mimeType)
+                    || "dash".equalsIgnoreCase(mimeType)) {
+                return true;
+            }
+        }
+        String lower = uri == null ? "" : uri.toLowerCase(Locale.US);
+        return lower.contains(".mpd") || lower.contains("type=mpd") || lower.contains("format=mpd");
+    }
+
     private final SurfaceHolder.Callback surfaceCallback = new SurfaceHolder.Callback() {
 
         @Override
@@ -648,10 +677,23 @@ class IjkSimplePlayer extends SimpleBasePlayer implements IMediaPlayer.Listener 
 
     private long position() {
         try {
-            return Math.max(0, ijk.getCurrentPosition());
+            long actual = Math.max(0, ijk.getCurrentPosition());
+            if (pendingSeekPositionMs == C.TIME_UNSET) return actual;
+            boolean reached = Math.abs(actual - pendingSeekPositionMs) <= 1500;
+            boolean expired = pendingSeekRequestedAtMs != C.TIME_UNSET && SystemClock.elapsedRealtime() - pendingSeekRequestedAtMs >= 15_000;
+            if (reached || expired) {
+                setPendingSeek(C.TIME_UNSET);
+                return actual;
+            }
+            return pendingSeekPositionMs;
         } catch (Throwable ignored) {
-            return 0;
+            return pendingSeekPositionMs == C.TIME_UNSET ? 0 : pendingSeekPositionMs;
         }
+    }
+
+    private void setPendingSeek(long positionMs) {
+        pendingSeekPositionMs = positionMs;
+        pendingSeekRequestedAtMs = positionMs == C.TIME_UNSET ? C.TIME_UNSET : SystemClock.elapsedRealtime();
     }
 
     private long bufferedPosition(long duration) {

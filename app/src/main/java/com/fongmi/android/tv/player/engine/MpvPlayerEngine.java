@@ -107,7 +107,7 @@ public class MpvPlayerEngine implements PlayerEngine {
         this.spec = spec;
         this.playWhenReady = playWhenReady;
         this.retriedFormat = false;
-        SpiderDebug.log("player-engine", "start mpv decode=%d position=%d play=%s url=%s headers=%s", decode, position, playWhenReady, spec.getUrl(), spec.getHeaders());
+        SpiderDebug.log("player-engine", "start mpv decode=%d position=%d play=%s urlLen=%d headers=%d", decode, position, playWhenReady, spec.getUrl() == null ? 0 : spec.getUrl().length(), spec.getHeaders() == null ? 0 : spec.getHeaders().size());
         MediaItem item = ExoUtil.getMediaItem(spec, decode);
         if (position > 0) player.setMediaItem(item, position);
         else player.setMediaItem(item);
@@ -309,7 +309,7 @@ public class MpvPlayerEngine implements PlayerEngine {
 
     @Override
     public ErrorAction handleError(PlaybackException e) {
-        SpiderDebug.log("player-engine", "handleError mpv code=%d message=%s format=%s retried=%s url=%s", e.errorCode, e.getMessage(), spec == null ? null : spec.getFormat(), retriedFormat, spec == null ? null : spec.getUrl());
+        SpiderDebug.log("player-engine", "handleError mpv code=%d message=%s format=%s retried=%s urlLen=%d", e.errorCode, e.getMessage(), spec == null ? null : spec.getFormat(), retriedFormat, spec == null || spec.getUrl() == null ? 0 : spec.getUrl().length());
         if (shouldRetryFormat(e)) return retryFormat();
         return ErrorAction.FATAL;
     }

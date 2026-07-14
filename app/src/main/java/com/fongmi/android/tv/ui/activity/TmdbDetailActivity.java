@@ -108,6 +108,7 @@ import com.fongmi.android.tv.ui.custom.CustomSeekView;
 import com.fongmi.android.tv.ui.custom.EpisodeTitlePopup;
 import com.fongmi.android.tv.ui.custom.PlayerGesture;
 import com.fongmi.android.tv.ui.custom.PlayerOsdController;
+import com.fongmi.android.tv.ui.dialog.CodecCapabilityDialog;
 import com.fongmi.android.tv.ui.dialog.DanmakuDialog;
 import com.fongmi.android.tv.ui.dialog.DisplayDialog;
 import com.fongmi.android.tv.ui.dialog.SubtitleDialog;
@@ -859,6 +860,11 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             }
 
             @Override
+            public void showCodecCapability() {
+                TmdbDetailActivity.this.showInlineCodecCapability();
+            }
+
+            @Override
             public void showTrack(View view) {
                 TmdbDetailActivity.this.showInlineTrack(view);
             }
@@ -969,14 +975,19 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         detailControlView(R.id.cast, View.class).setOnClickListener(guarded(this::onInlineCast));
         detailControlView(R.id.info, View.class).setOnClickListener(guarded(this::onInlineInfo));
         detailControlView(R.id.keep, View.class).setOnClickListener(view -> onKeep());
-        detailControlView(R.id.setting, View.class).setOnClickListener(guarded(this::showInlineDisplay));
+        detailControlView(R.id.setting, View.class).setOnClickListener(guarded(this::showInlineControlDialog));
         detailControlView(R.id.danmaku, View.class).setOnClickListener(guarded(this::toggleInlineDanmaku));
         detailControlView(R.id.lock, View.class).setOnClickListener(guarded(this::toggleInlineLock));
         detailControlView(R.id.rotate, View.class).setOnClickListener(guarded(this::rotateInlineFullscreen));
         detailControlView(R.id.pip, View.class).setOnClickListener(guarded(() -> enterInlinePiP(true)));
+        detailActionView(R.id.change2, View.class).setOnClickListener(view -> changeSource());
+        detailActionView(R.id.actionFullscreen, View.class).setOnClickListener(guarded(this::toggleInlineFullscreen));
         detailActionView(R.id.player, View.class).setOnClickListener(guarded(this::showInlinePlayerChoice));
         detailActionView(R.id.player, View.class).setOnLongClickListener(view -> showInlinePlayerChoice());
         detailActionView(R.id.decode, View.class).setOnClickListener(guarded(this::toggleInlineDecode));
+        detailActionView(R.id.playParams, View.class).setOnClickListener(guarded(this::toggleInlinePlayParams));
+        detailActionView(R.id.codecCapability, View.class).setOnClickListener(guarded(this::showInlineCodecCapability));
+        detailActionView(R.id.lut, View.class).setOnClickListener(guarded(this::onInlineLut));
         detailActionView(R.id.speed, View.class).setOnClickListener(guarded(this::changeInlineSpeed));
         detailActionView(R.id.speed, View.class).setOnLongClickListener(view -> resetInlineSpeed());
         detailActionView(R.id.scale, View.class).setOnClickListener(guarded(this::cycleInlineScale));
@@ -1052,6 +1063,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         binding.playerExternal.setNextFocusUpId(R.id.playerExternal);
         binding.playerDecode.setNextFocusUpId(R.id.playerDecode);
         binding.playerPlayParams.setNextFocusUpId(R.id.playerPlayParams);
+        binding.playerCodecCapability.setNextFocusUpId(R.id.playerCodecCapability);
         binding.playerSpeed.setNextFocusUpId(R.id.playerSpeed);
         binding.playerScale.setNextFocusUpId(R.id.playerScale);
         binding.playerLut.setNextFocusUpId(R.id.playerLut);
@@ -1077,6 +1089,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             binding.playerNext, binding.playerPrev, binding.playerEpisodes,
             binding.playerRefresh, binding.playerChangeSource, binding.playerFullscreenAction,
             binding.playerExternal, binding.playerDecode, binding.playerPlayParams,
+            binding.playerCodecCapability,
             binding.playerSpeed, binding.playerScale, binding.playerQuality,
             binding.playerLut, binding.playerParse, binding.playerTextTrack,
             binding.playerAudioTrack, binding.playerVideoTrack, binding.playerOpening,
@@ -1116,6 +1129,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         setupInlineControl(binding.playerExternal);
         setupInlineControl(binding.playerDecode);
         setupInlineControl(binding.playerPlayParams);
+        setupInlineControl(binding.playerCodecCapability);
         setupInlineControl(binding.playerSpeed);
         setupInlineControl(binding.playerScale);
         setupInlineControl(binding.playerLut);
@@ -1149,6 +1163,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         binding.playerExternal.setTextColor(white);
         binding.playerDecode.setTextColor(white);
         binding.playerPlayParams.setTextColor(white);
+        binding.playerCodecCapability.setTextColor(white);
         binding.playerSpeed.setTextColor(white);
         binding.playerScale.setTextColor(white);
         binding.playerLut.setTextColor(white);
@@ -5649,6 +5664,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         binding.playerFullscreenAction.setTextColor(white);
         binding.playerExternal.setTextColor(white);
         binding.playerDecode.setTextColor(white);
+        binding.playerCodecCapability.setTextColor(white);
         binding.playerSpeed.setTextColor(white);
         binding.playerScale.setTextColor(white);
         binding.playerLut.setTextColor(white);
@@ -5691,6 +5707,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         buttons.put(PlayerButtonSetting.PLAYER, binding.playerExternal);
         buttons.put(PlayerButtonSetting.DECODE, binding.playerDecode);
         buttons.put(PlayerButtonSetting.PLAY_PARAMS, binding.playerPlayParams);
+        buttons.put(PlayerButtonSetting.CODEC_CAPABILITY, binding.playerCodecCapability);
         buttons.put(PlayerButtonSetting.SPEED, binding.playerSpeed);
         buttons.put(PlayerButtonSetting.SCALE, binding.playerScale);
         buttons.put(PlayerButtonSetting.LUT, binding.playerLut);
@@ -5707,8 +5724,13 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
 
     private Map<String, View> mobileInlinePlayerButtonMap() {
         Map<String, View> buttons = new LinkedHashMap<>();
+        buttons.put(PlayerButtonSetting.CHANGE, detailActionView(R.id.change2, View.class));
+        buttons.put(PlayerButtonSetting.FULLSCREEN, detailActionView(R.id.actionFullscreen, View.class));
         buttons.put(PlayerButtonSetting.PLAYER, detailActionView(R.id.player, View.class));
         buttons.put(PlayerButtonSetting.DECODE, detailActionView(R.id.decode, View.class));
+        buttons.put(PlayerButtonSetting.PLAY_PARAMS, detailActionView(R.id.playParams, View.class));
+        buttons.put(PlayerButtonSetting.CODEC_CAPABILITY, detailActionView(R.id.codecCapability, View.class));
+        buttons.put(PlayerButtonSetting.LUT, detailActionView(R.id.lut, View.class));
         buttons.put(PlayerButtonSetting.SPEED, detailActionView(R.id.speed, View.class));
         buttons.put(PlayerButtonSetting.SCALE, detailActionView(R.id.scale, View.class));
         buttons.put(PlayerButtonSetting.RESET, detailActionView(R.id.reset, View.class));
@@ -5778,8 +5800,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         detailControlView(R.id.rotate, View.class).setVisibility(inlineFullscreen && !locked && !inlineShortDramaMode ? View.VISIBLE : View.GONE);
         detailControlView(R.id.pip, View.class).setVisibility(canShowInlinePiP(hasPlayer, locked) ? View.VISIBLE : View.GONE);
         // 上集/下集按钮始终可见（只要有集数），点击时如果没有相邻集数会显示提示（与影视原生模式保持一致）
-        detailControlView(R.id.prev, View.class).setVisibility(!locked && hasPlayer && episodeCount > 0 ? View.VISIBLE : View.GONE);
-        detailControlView(R.id.next, View.class).setVisibility(!locked && hasPlayer && episodeCount > 0 ? View.VISIBLE : View.GONE);
+        detailControlView(R.id.prev, View.class).setVisibility(!locked && hasPlayer && episodeCount > 0 && PlayerButtonSetting.isVisible(PlayerButtonSetting.PREV) ? View.VISIBLE : View.GONE);
+        detailControlView(R.id.next, View.class).setVisibility(!locked && hasPlayer && episodeCount > 0 && PlayerButtonSetting.isVisible(PlayerButtonSetting.NEXT) ? View.VISIBLE : View.GONE);
         detailControlView(R.id.cast, View.class).setVisibility(!locked && hasInlineCast() ? View.VISIBLE : View.GONE);
         detailControlView(R.id.info, View.class).setVisibility(!locked && hasInlineInfo() ? View.VISIBLE : View.GONE);
         detailControlView(R.id.setting, View.class).setVisibility(!locked && hasPlayer ? View.VISIBLE : View.GONE);
@@ -5853,6 +5875,66 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         }
         battery.setVisibility(View.VISIBLE);
         battery.setImageResource(BatteryUtil.getIcon(level));
+    }
+
+    private void showInlineControlDialog() {
+        try {
+            Class<?> dialogClass = Class.forName("com.fongmi.android.tv.ui.dialog.ControlDialog");
+            Object dialog = dialogClass.getMethod("create").invoke(null);
+            dialog = dialogClass.getMethod("inline", TmdbDetailActivity.class).invoke(dialog, this);
+            dialogClass.getMethod("show", androidx.fragment.app.FragmentActivity.class).invoke(dialog, this);
+        } catch (Throwable ignored) {
+            showInlineDisplay();
+        }
+    }
+
+    public TextView inlineControlDialogAction(int id) {
+        return detailActionRoot == null ? null : detailActionRoot.findViewById(id);
+    }
+
+    public View inlineControlDialogControl(int id) {
+        return detailControlRoot == null ? null : detailControlRoot.findViewById(id);
+    }
+
+    public TextView inlineControlDialogLutView() {
+        return binding.playerLut;
+    }
+
+    public PlayerManager inlineControlDialogPlayer() {
+        return player();
+    }
+
+    public History inlineControlDialogHistory() {
+        return history;
+    }
+
+    public boolean inlineControlDialogUseParse() {
+        return useParse;
+    }
+
+    public void inlineControlDialogScale(int scale) {
+        setInlineScale(scale);
+    }
+
+    public void inlineControlDialogParse(Parse item) {
+        changeInlineParse(item);
+    }
+
+    public void inlineControlDialogLut() {
+        onInlineLut();
+    }
+
+    public void inlineControlDialogTrack(int type) {
+        View view = type == C.TRACK_TYPE_TEXT ? binding.playerTextTrack : type == C.TRACK_TYPE_AUDIO ? binding.playerAudioTrack : binding.playerVideoTrack;
+        showInlineTrack(view);
+    }
+
+    public void inlineControlDialogTitle() {
+        showInlineTitle();
+    }
+
+    public void inlineControlDialogDanmaku() {
+        showInlineDanmaku();
     }
 
     private void showInlineDisplay() {
@@ -6216,6 +6298,12 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         binding.playerPlayParams.setSelected(visible);
         // 设置文字颜色：选中时黄色，否则白色
         binding.playerPlayParams.setTextColor(visible ? 0xFFFFD700 : 0xFFFFFFFF);
+        hideInlineControls();
+    }
+
+    private void showInlineCodecCapability() {
+        if (service() == null || player().isEmpty()) return;
+        CodecCapabilityDialog.show(this, player());
         hideInlineControls();
     }
 

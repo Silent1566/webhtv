@@ -188,6 +188,7 @@
     <string name="setting_search_ui">搜索布局</string>
     <string name="setting_search_column">搜索结果列数</string>
     <string name="setting_site_column">站点展示模式</string>
+    <string name="setting_search_result_sort">搜索结果模式</string>
     <string name="repo_github">GitHub 仓库</string>
     <string name="repo_cnb">CNB 仓库</string>
     <string name="setting_debug_log">调试日志</string>
@@ -957,6 +958,7 @@
     <string name="player_preload_time_value">%1$d 秒</string>
     <string name="player_auto_play">自动播放</string>
     <string name="player_auto_change">自动换源</string>
+    <string name="player_failure_fallback">播放失败回退</string>
     <string name="player_speed">长按倍速</string>
     <string name="player_ua">User-Agent</string>
     <string name="player_osd">屏显设置</string>
@@ -1199,6 +1201,13 @@
         <item>硬解</item>
     </string-array>
 
+    <string-array name="select_player_failure_fallback">
+        <item>软解后切核心</item>
+        <item>仅切软硬解</item>
+        <item>仅切播放核心</item>
+        <item>关闭</item>
+    </string-array>
+
     <string-array name="select_player_kernel">
         <item>EXO</item>
         <item>IJK</item>
@@ -1281,6 +1290,11 @@
     <string-array name="select_site_column">
         <item>单行</item>
         <item>双行</item>
+    </string-array>
+
+    <string-array name="select_search_result_sort">
+        <item>动态模式（谁快谁在前）</item>
+        <item>固定模式（按配置顺序）</item>
     </string-array>
 
     <string-array name="select_ui_scale">

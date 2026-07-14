@@ -33,6 +33,7 @@ mpv_handle *g_mpv;
 std::atomic<bool> g_event_thread_request_exit(false);
 
 static pthread_t event_thread_id;
+bool register_iso_protocol(JNIEnv *env);
 
 static void prepare_environment(JNIEnv *env, jobject appctx) {
     setlocale(LC_NUMERIC, "C");
@@ -56,6 +57,9 @@ jni_func(void, create, jobject appctx) {
     g_mpv = mpv_create();
     if (!g_mpv)
         die("context init failed");
+
+    if (!register_iso_protocol(env))
+        ALOGE("DVD ISO protocol unavailable");
 
     // use terminal log level but request verbose messages
     // this way --msg-level can be used to adjust later

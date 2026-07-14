@@ -191,7 +191,7 @@ public class ConfigDialog extends BaseAlertDialog {
             config = Config.find(ori, type).url(url).name(name).update();
         } else {
             Config exists = AppDatabase.get().getConfigDao().find(url, type);
-            config = exists != null ? exists : Config.create(type).url(url).name(name).update();
+            config = exists != null ? exists.name(name).update() : Config.create(type).url(url).name(name).update();
         }
         return config;
     }

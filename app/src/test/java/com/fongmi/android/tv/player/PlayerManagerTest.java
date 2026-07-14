@@ -19,18 +19,23 @@ import java.util.List;
 public class PlayerManagerTest {
 
     @Test
-    public void fallbackDecode_resetsToHardWhenChangingPlayerCore() {
-        assertEquals(PlayerEngine.HARD, PlayerManager.fallbackDecode(PlayerSetting.EXO, PlayerSetting.IJK, PlayerEngine.SOFT));
+    public void nextFallbackAction_obeysConfiguredMode() {
+        assertEquals(PlayerManager.FALLBACK_DECODE, PlayerManager.nextFallbackAction(PlayerSetting.FALLBACK_FULL, PlayerEngine.HARD));
+        assertEquals(PlayerManager.FALLBACK_PLAYER, PlayerManager.nextFallbackAction(PlayerSetting.FALLBACK_FULL, PlayerEngine.SOFT));
+        assertEquals(PlayerManager.FALLBACK_DECODE, PlayerManager.nextFallbackAction(PlayerSetting.FALLBACK_DECODE_ONLY, PlayerEngine.HARD));
+        assertEquals(PlayerManager.FALLBACK_NONE, PlayerManager.nextFallbackAction(PlayerSetting.FALLBACK_DECODE_ONLY, PlayerEngine.SOFT));
+        assertEquals(PlayerManager.FALLBACK_PLAYER, PlayerManager.nextFallbackAction(PlayerSetting.FALLBACK_PLAYER_ONLY, PlayerEngine.HARD));
+        assertEquals(PlayerManager.FALLBACK_PLAYER, PlayerManager.nextFallbackAction(PlayerSetting.FALLBACK_PLAYER_ONLY, PlayerEngine.SOFT));
+        assertEquals(PlayerManager.FALLBACK_NONE, PlayerManager.nextFallbackAction(PlayerSetting.FALLBACK_DISABLED, PlayerEngine.HARD));
+        assertEquals(PlayerManager.FALLBACK_NONE, PlayerManager.nextFallbackAction(PlayerSetting.FALLBACK_DISABLED, PlayerEngine.SOFT));
     }
 
     @Test
-    public void fallbackDecode_keepsCurrentDecodeWhenCoreDoesNotChange() {
-        assertEquals(PlayerEngine.SOFT, PlayerManager.fallbackDecode(PlayerSetting.EXO, PlayerSetting.EXO, PlayerEngine.SOFT));
-    }
-
-    @Test
-    public void fallbackDecode_sanitizesUnknownDecodeToHard() {
-        assertEquals(PlayerEngine.HARD, PlayerManager.fallbackDecode(PlayerSetting.EXO, PlayerSetting.EXO, 99));
+    public void fallbackDecode_obeysConfiguredMode() {
+        assertEquals(PlayerEngine.HARD, PlayerManager.fallbackDecode(PlayerSetting.FALLBACK_FULL, PlayerSetting.EXO, PlayerSetting.IJK, PlayerEngine.SOFT));
+        assertEquals(PlayerEngine.SOFT, PlayerManager.fallbackDecode(PlayerSetting.FALLBACK_PLAYER_ONLY, PlayerSetting.EXO, PlayerSetting.IJK, PlayerEngine.SOFT));
+        assertEquals(PlayerEngine.SOFT, PlayerManager.fallbackDecode(PlayerSetting.FALLBACK_FULL, PlayerSetting.EXO, PlayerSetting.EXO, PlayerEngine.SOFT));
+        assertEquals(PlayerEngine.HARD, PlayerManager.fallbackDecode(PlayerSetting.FALLBACK_PLAYER_ONLY, PlayerSetting.EXO, PlayerSetting.IJK, 99));
     }
 
     @Test

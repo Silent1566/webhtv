@@ -1247,4 +1247,12 @@ public class Setting {
     private static int clampSearchColumn(int column) {
         return column < 0 || column > 2 ? 0 : column;
     }
+
+    public static int getSearchResultSort() {
+        return Prefers.getInt("search_result_sort", 0);
+    }
+
+    public static void putSearchResultSort(int sort) {
+        Prefers.put("search_result_sort", sort == 0 ? 0 : 1);
+    }
 }

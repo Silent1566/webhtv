@@ -106,6 +106,43 @@ public class AdRuleManageDialogLayoutTest {
         assertDeleteConfirmation(mobile, false);
     }
 
+    @Test
+    public void leanbackRuleRowsKeepCommittedToggleStateAndOpenScrollableDetails() throws Exception {
+        String adapter = read(projectRoot().resolve("app/src/leanback/java/com/fongmi/android/tv/ui/adapter/AdRuleAdapter.java"));
+        String dialog = read(projectRoot().resolve("app/src/leanback/java/com/fongmi/android/tv/ui/dialog/AdRuleManageDialog.java"));
+        String row = read(projectRoot().resolve("app/src/leanback/res/layout/adapter_ad_rule.xml"));
+        String detail = read(projectRoot().resolve("app/src/leanback/res/layout/dialog_ad_rule_detail.xml"));
+
+        assertTrue("TV switches must visually keep the persisted value until confirmation succeeds",
+                adapter.contains("binding.toggle.setChecked(item.isEnabled());")
+                        && adapter.contains("listener.onUserToggleClick(item.getUserRule(), !item.isEnabled())")
+                        && adapter.contains("listener.onDefaultToggleClick(item.getDefaultRuleId(), !item.isEnabled())")
+                        && adapter.contains("listener.onHlsToggleClick(item.getHlsRule(), !item.isEnabled())"));
+        assertTrue("every TV rule type should open the shared detail surface",
+                dialog.contains("showUserRuleDetail(item)")
+                        && dialog.contains("showDefaultRuleDetail(rule)")
+                        && dialog.contains("showHlsRuleDetail(item)"));
+        assertTrue("rule details must expose all legacy sections including scripts",
+                dialog.contains("rule.getScript()")
+                        && dialog.contains("R.string.ad_rule_detail_script"));
+        assertTrue("HLS detail must contain the complete serialized rule",
+                dialog.contains("item.detail()"));
+        assertTrue("long rule content must be readable with a remote",
+                detail.contains("androidx.core.widget.NestedScrollView")
+                        && detail.contains("android:scrollbars=\"vertical\"")
+                        && detail.contains("android:focusable=\"true\""));
+        assertTrue("TV detail scroll must hand focus to the confirm button at the bottom",
+                dialog.contains("detail.scroll.setNextFocusDownId(positive.getId())")
+                        && dialog.contains("positive.setNextFocusUpId(detail.scroll.getId())")
+                        && dialog.contains("detail.scroll.canScrollVertically(1)")
+                        && dialog.contains("positive.requestFocus()"));
+        assertFalse("TV detail must not initially trap focus inside the scroll view",
+                dialog.contains("detail.scroll.requestFocus()"));
+        assertTrue("TV rule rows should render as one coherent card with a detail affordance",
+                row.contains("android:background=\"@drawable/shape_ad_rule_card\"")
+                        && row.contains("@string/ad_rule_detail_hint"));
+    }
+
     private static void assertDeleteConfirmation(String source, boolean expectSafeTvFocus) {
         int start = source.indexOf("public void onDeleteClick(UserAdRule item)");
         int end = source.indexOf("\n    @Override", start + 1);
@@ -121,7 +158,7 @@ public class AdRuleManageDialogLayoutTest {
     }
 
     private static String read(Path path) throws Exception {
-        return new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
+        return new String(Files.readAllBytes(path), StandardCharsets.UTF_8).replace("\r\n", "\n");
     }
 
     private static Path projectRoot() {

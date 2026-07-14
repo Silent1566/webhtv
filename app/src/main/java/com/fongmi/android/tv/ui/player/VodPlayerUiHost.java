@@ -75,6 +75,9 @@ public interface VodPlayerUiHost {
     default void togglePlayParams() {
     }
 
+    default void showCodecCapability() {
+    }
+
     default void showTrack(View view) {
     }
 

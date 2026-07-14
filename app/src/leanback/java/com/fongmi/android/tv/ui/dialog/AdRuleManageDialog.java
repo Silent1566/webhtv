@@ -18,6 +18,8 @@ import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.api.config.DisabledDefaultRuleStore;
+import com.fongmi.android.tv.api.config.HlsRuleConfig;
+import com.fongmi.android.tv.api.config.HlsRuleStateStore;
 import com.fongmi.android.tv.api.config.ImportedAdRuleCandidateStore;
 import com.fongmi.android.tv.api.config.RuleConfig;
 import com.fongmi.android.tv.api.config.UserAdRuleStore;
@@ -25,6 +27,7 @@ import com.fongmi.android.tv.bean.ImportedAdRuleCandidate;
 import com.fongmi.android.tv.bean.Rule;
 import com.fongmi.android.tv.bean.UserAdRule;
 import com.fongmi.android.tv.databinding.DialogAdRuleManageBinding;
+import com.fongmi.android.tv.databinding.DialogAdRuleDetailBinding;
 import com.fongmi.android.tv.ui.adapter.AdRuleAdapter;
 import com.fongmi.android.tv.ui.custom.SpaceItemDecoration;
 import com.fongmi.android.tv.utils.ResUtil;
@@ -133,14 +136,20 @@ public class AdRuleManageDialog extends BaseAlertDialog implements AdRuleAdapter
             items.add(AdRuleAdapter.RuleItem.fromDefault(entry.getRule(), entry.getSource()));
         }
 
+        List<HlsRuleConfig.Entry> hlsRules = HlsRuleConfig.getEntries();
+        for (HlsRuleConfig.Entry entry : hlsRules) {
+            if ("builtin".equals(entry.source())) items.add(AdRuleAdapter.RuleItem.fromHls(entry));
+        }
+
         adapter.setItems(items);
 
         // 空态提示(仅当两部分都为空时显示)
-        boolean isEmpty = userRules.isEmpty() && defaultRules.isEmpty();
+        int builtinHlsCount = (int) hlsRules.stream().filter(entry -> "builtin".equals(entry.source())).count();
+        boolean isEmpty = userRules.isEmpty() && defaultRules.isEmpty() && builtinHlsCount == 0;
         binding.customEmpty.setVisibility(isEmpty ? View.VISIBLE : View.GONE);
 
         // 更新分区标题计数
-        binding.serverRules.setText(getString(R.string.ad_rule_section_summary, userRules.size(), defaultRules.size()));
+        binding.serverRules.setText(getString(R.string.ad_rule_section_summary, userRules.size(), defaultRules.size(), builtinHlsCount));
         int pending = ImportedAdRuleCandidateStore.pending().size();
         binding.importCandidates.setVisibility(pending == 0 ? View.GONE : View.VISIBLE);
         binding.importCandidates.setText(getString(R.string.ad_rule_import_candidates, pending));
@@ -188,26 +197,75 @@ public class AdRuleManageDialog extends BaseAlertDialog implements AdRuleAdapter
 
     @Override
     public void onUserRuleClick(UserAdRule item) {
-        if (UserAdRule.SOURCE_MANUAL.equals(item.getSource())) {
-            AdRuleEditDialog.create(item).show(requireActivity(), this::onRuleEdited);
-        } else {
-            showRuleDetail(item.getName(), item.getSummary(), item.getHosts(), item.getRegex(), item.getExclude());
-        }
+        showUserRuleDetail(item);
     }
 
     @Override
     public void onDefaultRuleClick(Rule rule, String ruleId, boolean currentEnabled) {
-        showRuleDetail(rule.getName(), "", rule.getHosts(), rule.getRegex(), rule.getExclude());
+        showDefaultRuleDetail(rule);
     }
 
-    private void showRuleDetail(String name, String summary, List<String> hosts, List<String> regex, List<String> exclude) {
+    @Override
+    public void onHlsRuleClick(HlsRuleConfig.Entry item) {
+        showHlsRuleDetail(item);
+    }
+
+    private void showUserRuleDetail(UserAdRule item) {
+        Runnable edit = UserAdRule.SOURCE_MANUAL.equals(item.getSource())
+                ? () -> AdRuleEditDialog.create(item).show(requireActivity(), this::onRuleEdited)
+                : null;
+        showRuleDetail(item.getName(), item.getSummary(), item.getHosts(), item.getRegex(), List.of(), item.getExclude(), edit);
+    }
+
+    private void showDefaultRuleDetail(Rule rule) {
+        showRuleDetail(rule.getName(), "", rule.getHosts(), rule.getRegex(), rule.getScript(), rule.getExclude(), null);
+    }
+
+    private void showHlsRuleDetail(HlsRuleConfig.Entry item) {
+        String name = item.name().isBlank() ? item.id() : item.name();
+        String status = item.valid()
+                ? getString(item.enabled() ? R.string.ad_rule_hls_enabled : R.string.ad_rule_hls_disabled)
+                : getString(R.string.ad_rule_hls_invalid, item.error());
+        String content = getString(R.string.ad_rule_hls_builtin_summary, item.version(), status)
+                + "\n" + getString(R.string.ad_rule_detail_id, item.id())
+                + "\n" + getString(R.string.ad_rule_detail_source, item.source())
+                + "\n\n" + getString(R.string.ad_rule_detail_json) + "\n" + item.detail();
+        showTextDetail(name, content, null);
+    }
+
+    private void showRuleDetail(String name, String summary, List<String> hosts, List<String> regex,
+                                List<String> script, List<String> exclude, Runnable editAction) {
         String message = (summary.isEmpty() ? "" : summary + "\n\n")
-                + "域名\n" + listText(hosts) + "\n\nURL 规则\n" + listText(regex) + "\n\n白名单\n" + listText(exclude);
-        new MaterialAlertDialogBuilder(requireActivity(), R.style.Theme_WebHTV_LightDialog)
+                + getString(R.string.ad_rule_detail_hosts) + "\n" + listText(hosts)
+                + "\n\n" + getString(R.string.ad_rule_detail_regex) + "\n" + listText(regex)
+                + "\n\n" + getString(R.string.ad_rule_detail_script) + "\n" + listText(script)
+                + "\n\n" + getString(R.string.ad_rule_detail_exclude) + "\n" + listText(exclude);
+        showTextDetail(name, message, editAction);
+    }
+
+    private void showTextDetail(String name, String content, Runnable editAction) {
+        DialogAdRuleDetailBinding detail = DialogAdRuleDetailBinding.inflate(getLayoutInflater());
+        detail.content.setText(content);
+        MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(requireActivity(), R.style.Theme_WebHTV_LightDialog)
                 .setTitle(name)
-                .setMessage(message)
-                .setPositiveButton(android.R.string.ok, null)
-                .show();
+                .setView(detail.getRoot())
+                .setPositiveButton(android.R.string.ok, null);
+        if (editAction != null) builder.setNeutralButton(R.string.ad_rule_edit_title, (dialog, which) -> editAction.run());
+        AlertDialog alert = builder.create();
+        alert.setOnShowListener(dialog -> {
+            View positive = alert.getButton(DialogInterface.BUTTON_POSITIVE);
+            detail.scroll.setNextFocusDownId(positive.getId());
+            positive.setNextFocusUpId(detail.scroll.getId());
+            detail.scroll.setOnKeyListener((view, keyCode, event) -> {
+                if (event.getAction() != KeyEvent.ACTION_DOWN || keyCode != KeyEvent.KEYCODE_DPAD_DOWN) return false;
+                if (detail.scroll.canScrollVertically(1)) return false;
+                return positive.requestFocus();
+            });
+            // 部分 Android TV 版本会把 NestedScrollView 变成焦点陷阱。
+            // 默认聚焦明确的操作按钮；需要阅读内容时按上即可进入滚动区。
+            positive.requestFocus();
+        });
+        alert.show();
     }
 
     private String listText(List<String> items) {
@@ -253,6 +311,22 @@ public class AdRuleManageDialog extends BaseAlertDialog implements AdRuleAdapter
 
     private void setDefaultEnabled(String ruleId, boolean enabled) {
         DisabledDefaultRuleStore.setDisabled(ruleId, !enabled);
+        loadData();
+        if (callback != null) callback.onRuleChanged();
+    }
+
+    @Override
+    public void onHlsToggleClick(HlsRuleConfig.Entry item, boolean enabled) {
+        if (!enabled) {
+            confirmDisable(item.name().isBlank() ? item.id() : item.name(), R.string.ad_rule_default_disable_confirm,
+                    () -> setHlsEnabled(item.key(), false));
+        } else {
+            setHlsEnabled(item.key(), true);
+        }
+    }
+
+    private void setHlsEnabled(String key, boolean enabled) {
+        HlsRuleStateStore.setEnabled(key, enabled);
         loadData();
         if (callback != null) callback.onRuleChanged();
     }

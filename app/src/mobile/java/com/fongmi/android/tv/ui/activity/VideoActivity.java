@@ -898,6 +898,10 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         mBinding.control.action.title.setOnClickListener(guarded(this::onTitle));
         mBinding.control.action.player.setOnClickListener(guarded(this::onPlayerKernel));
         mBinding.control.action.player.setOnLongClickListener(view -> onPlayerKernelLong());
+        mBinding.control.action.change2.setOnClickListener(view -> onChange());
+        mBinding.control.action.fullscreen.setOnClickListener(guarded(this::onFullscreen));
+        mBinding.control.action.playParams.setOnClickListener(guarded(this::onPlayParams));
+        mBinding.control.action.codecCapability.setOnClickListener(guarded(this::onCodecCapabilityPanel));
         mBinding.control.action.prev.setOnClickListener(view -> checkPrev());
         mBinding.control.action.next.setOnClickListener(view -> checkNext());
         mBinding.control.action.decode.setOnClickListener(guarded(this::onDecode));
@@ -1112,8 +1116,12 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
 
     private void setupActionButtons() {
         mActionButtons = new HashMap<>();
+        addActionButton(PlayerButtonSetting.CHANGE, mBinding.control.action.change2);
+        addActionButton(PlayerButtonSetting.FULLSCREEN, mBinding.control.action.fullscreen);
         addActionButton(PlayerButtonSetting.PLAYER, mBinding.control.action.player);
         addActionButton(PlayerButtonSetting.DECODE, mBinding.control.action.decode);
+        addActionButton(PlayerButtonSetting.PLAY_PARAMS, mBinding.control.action.playParams);
+        addActionButton(PlayerButtonSetting.CODEC_CAPABILITY, mBinding.control.action.codecCapability);
         addActionButton(PlayerButtonSetting.SPEED, mBinding.control.action.speed);
         addActionButton(PlayerButtonSetting.SCALE, mBinding.control.action.scale);
         addActionButton(PlayerButtonSetting.LUT, mBinding.control.action.lut);
@@ -1130,6 +1138,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         addActionButton(PlayerButtonSetting.NEXT, mBinding.control.action.next);
         addActionButton(PlayerButtonSetting.EPISODES, mBinding.control.action.episodes);
         applyActionButtonSettings();
+        setPlayParamsState();
     }
 
     private void addActionButton(String id, View view) {
@@ -2517,12 +2526,11 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         SpiderDebug.log("video-flow", "switch player refresh start type=%d key=%s flag=%s episode=%s", type, key, flag, episode);
         Task.execute(() -> {
             try {
-                Result result = SiteApi.playerContent(key, flag, episode);
+                Result result = SiteApi.playerContent(key, flag, episode, type);
                 App.post(() -> switchPlayerKernelWithResult(requestId, type, result, position, speed, repeat, metadata));
             } catch (Throwable e) {
                 App.post(() -> {
                     if (requestId != playerKernelSwitchRequestId) return;
-                    player().switchPlayerManually(type);
                     setPlayerKernel();
                     setDecode();
                     setR1Callback();
@@ -2536,7 +2544,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
     private void switchPlayerKernelWithResult(int requestId, int type, Result result, long position, float speed, boolean repeat, MediaMetadata metadata) {
         if (requestId != playerKernelSwitchRequestId) return;
         if (result == null || result.hasMsg() || result.getRealUrl().isEmpty()) {
-            player().switchPlayerManually(type);
+            Notify.show(result != null && result.hasMsg() ? result.getMsg() : getString(R.string.error_play_url));
         } else {
             player().switchPlayer(type, result, getHistoryKey(), metadata, isUseParse(), position, speed, repeat);
         }
@@ -2783,6 +2791,19 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         if (mOsd == null) return;
         mOsd.toggleDiagnostics();
         hideControl();
+    }
+
+    private void onPlayParams() {
+        if (mOsd == null) return;
+        boolean visible = !mOsd.isDiagnosticsVisible();
+        PlayerSetting.putOsdDiagnostics(visible);
+        mOsd.setDiagnosticsVisible(visible);
+        setPlayParamsState();
+        hideControl();
+    }
+
+    private void setPlayParamsState() {
+        mBinding.control.action.playParams.setSelected(mOsd != null && mOsd.isDiagnosticsVisible());
     }
 
     private void hideWidgetOverlay() {

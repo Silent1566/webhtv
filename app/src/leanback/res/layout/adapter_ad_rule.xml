@@ -4,10 +4,11 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:layout_marginHorizontal="4dp"
+    android:background="@drawable/shape_ad_rule_card"
     android:gravity="center_vertical"
     android:orientation="horizontal"
-    android:paddingHorizontal="8dp"
-    android:paddingVertical="6dp">
+    android:padding="10dp">
 
     <androidx.appcompat.widget.LinearLayoutCompat
         android:id="@+id/text"
@@ -18,7 +19,9 @@
         android:clickable="true"
         android:focusable="true"
         android:focusableInTouchMode="true"
-        android:orientation="vertical">
+        android:orientation="vertical"
+        android:paddingHorizontal="14dp"
+        android:paddingVertical="10dp">
 
         <com.google.android.material.textview.MaterialTextView
             android:id="@+id/name"
@@ -41,27 +44,38 @@
             android:textSize="13sp"
             tools:text="AI 生成 · 域名 2 · 广告规则 1" />
 
+        <com.google.android.material.textview.MaterialTextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="@string/ad_rule_detail_hint"
+            android:textColor="#174EA6"
+            android:textSize="12sp" />
+
     </androidx.appcompat.widget.LinearLayoutCompat>
 
     <com.google.android.material.materialswitch.MaterialSwitch
         android:id="@+id/toggle"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="16dp"
-        android:background="@drawable/selector_dialog_switch"
-        android:clickable="true"
-        android:focusable="true"
-        android:focusableInTouchMode="true" />
-
-    <androidx.appcompat.widget.AppCompatImageView
-        android:id="@+id/delete"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="16dp"
+        android:layout_width="72dp"
+        android:layout_height="48dp"
+        android:layout_marginStart="12dp"
         android:background="@drawable/selector_dialog_switch"
         android:clickable="true"
         android:focusable="true"
         android:focusableInTouchMode="true"
+        android:gravity="center"
+        android:paddingHorizontal="8dp" />
+
+    <androidx.appcompat.widget.AppCompatImageView
+        android:id="@+id/delete"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_marginStart="8dp"
+        android:background="@drawable/selector_dialog_switch"
+        android:clickable="true"
+        android:focusable="true"
+        android:focusableInTouchMode="true"
+        android:padding="12dp"
         android:src="@drawable/ic_setting_delete"
         app:tint="@color/dialog_outlined_button_text" />
 
