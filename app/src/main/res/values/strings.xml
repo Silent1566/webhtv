@@ -95,6 +95,11 @@
     <string name="play_switch_flag">Switching flag to <xliff:g name="name">%s</xliff:g></string>
     <string name="play_switch_site">Switching site to <xliff:g name="name">%s</xliff:g></string>
     <string name="play_switch_parse">Switching parse to <xliff:g name="name">%s</xliff:g></string>
+    <string name="play_night_mode">Night mode</string>
+    <string name="night_mode_off">Night mode off</string>
+    <string name="night_mode_low">Night mode: Low</string>
+    <string name="night_mode_medium">Night mode: Medium</string>
+    <string name="night_mode_high">Night mode: High</string>
 
     <!-- Danmaku Setting -->
     <string name="danmaku">Danmaku</string>

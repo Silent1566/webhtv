@@ -21,6 +21,7 @@ import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.common.Tracks;
 import androidx.media3.common.VideoSize;
+import androidx.media3.datasource.HttpDataSource;
 import androidx.media3.effect.ColorLut;
 import androidx.media3.ui.danmaku.DanmakuConfig;
 import androidx.media3.ui.danmaku.DanmakuController;
@@ -69,6 +70,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class PlayerManager implements ParseCallback {
 
@@ -86,6 +89,7 @@ public class PlayerManager implements ParseCallback {
     private static final long DANMAKU_FORCE_RELOAD_DEBOUNCE_MS = 10000;
     private static final float[] SPEED_PRESETS = new float[]{0.5f, 0.75f, 1f, 1.2f, 1.25f, 1.5f, 1.75f, 2f, 2.5f, 3f, 5f};
     private static final DecimalFormat SPEED_FORMAT = new DecimalFormat("0.##x");
+    private static final Pattern HTTP_STATUS = Pattern.compile("(?i)(?:response code|http status|http error)\\D+(\\d{3})");
 
     private final Runnable runnable;
     private final Callback callback;
@@ -1855,6 +1859,10 @@ public class PlayerManager implements ParseCallback {
 
         void onTitlesChanged();
 
+        default boolean onSourceHttpError(int statusCode, String msg) {
+            return false;
+        }
+
         void onError(String msg);
 
         void onReload(String msg);
@@ -1903,18 +1911,21 @@ public class PlayerManager implements ParseCallback {
         public void onPlayerError(@NonNull PlaybackException e) {
             App.removeCallbacks(runnable);
             PlayerEngine.ErrorAction action = engine.handleError(e);
-            if (SpiderDebug.isEnabled()) SpiderDebug.log("player", "error code=%d message=%s action=%s spec=%s cause=%s", e.errorCode, e.getMessage(), action, debugSpec(), causeChain(e));
+            int statusCode = httpStatus(e);
+            String errorMessage = engine.getErrorMessage(e);
+            if (SpiderDebug.isEnabled()) SpiderDebug.log("player", "error code=%d http=%d message=%s action=%s spec=%s cause=%s", e.errorCode, statusCode, e.getMessage(), action, debugSpec(), causeChain(e));
             LocalProxyDebug.dumpIfLocalFailure(spec == null ? null : spec.getUrl(), e);
+            if (statusCode > 0 && callback.onSourceHttpError(statusCode, errorMessage)) return;
             if (retryLutFailure(e)) return;
             if (retryLutWarmupByRefresh(action, e)) return;
             if (action == PlayerEngine.ErrorAction.DECODE && retryHardDecodeSwitch(e)) return;
             if (action == PlayerEngine.ErrorAction.FATAL && retryLocalProxy(e)) return;
             if (shouldStopOnManualSwitchFailure(manualPlayerSwitchPending, action)) {
-                callback.onError(engine.getErrorMessage(e));
+                callback.onError(errorMessage);
                 return;
             }
             if (action == PlayerEngine.ErrorAction.RELOAD) {
-                callback.onReload(engine.getErrorMessage(e));
+                callback.onReload(errorMessage);
                 return;
             }
             if (action == PlayerEngine.ErrorAction.RECOVERED) {
@@ -1922,7 +1933,7 @@ public class PlayerManager implements ParseCallback {
                 return;
             }
             if (fallbackPlayback(e)) return;
-            callback.onError(engine.getErrorMessage(e));
+            callback.onError(errorMessage);
         }
     };
 
@@ -2119,5 +2130,21 @@ public class PlayerManager implements ParseCallback {
 
     static boolean shouldStopOnManualSwitchFailure(boolean manualSwitchPending, PlayerEngine.ErrorAction action) {
         return manualSwitchPending && action != PlayerEngine.ErrorAction.RECOVERED;
+    }
+
+    static int httpStatus(Throwable error) {
+        int depth = 0;
+        for (Throwable cause = error; cause != null && depth++ < 8; cause = cause.getCause()) {
+            if (cause instanceof HttpDataSource.InvalidResponseCodeException response) return response.responseCode;
+            String message = cause.getMessage();
+            if (TextUtils.isEmpty(message)) continue;
+            Matcher matcher = HTTP_STATUS.matcher(message);
+            if (!matcher.find()) continue;
+            try {
+                return Integer.parseInt(matcher.group(1));
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return 0;
     }
 }

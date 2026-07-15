@@ -26,6 +26,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewConfiguration;
+import android.view.WindowManager;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.ImageView;
 import android.widget.RelativeLayout;
@@ -239,6 +240,8 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
     private androidx.appcompat.app.AlertDialog mIntroSkipConfirmDialog;
     private ValueAnimator mAnimator;
     private CustomKeyDown mKeyDown;
+    private View mNightModeOverlay;
+    private int mNightModeLevel = PlayerSetting.NIGHT_MODE_OFF;
     private List<String> mBroken;
     private History mHistory;
     private boolean fullscreen;
@@ -835,6 +838,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         mBinding.progressLayout.showProgress();
         showProgress();
         setAnimator();
+        initNightModeOverlay();
         if (isShortDramaSource()) enterShortDramaFullscreen();
         setupIntroSkipConfirmListener();
     }
@@ -875,6 +879,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         mBinding.control.cast.setOnClickListener(guarded(this::onCast));
         mBinding.control.info.setOnClickListener(guarded(this::onInfo));
         mBinding.control.keep.setOnClickListener(view -> onKeep());
+        mBinding.control.nightMode.setOnClickListener(view -> toggleNightMode());
         mBinding.control.display.setOnClickListener(view -> onDisplay());
         mBinding.control.osdDiagnostics.setOnClickListener(view -> onOsdDiagnostics());
         mBinding.control.play.setOnClickListener(guarded(this::checkPlay));
@@ -1170,6 +1175,95 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
             mFrameParams.height = (int) animation.getAnimatedValue();
             mBinding.video.setLayoutParams(mFrameParams);
         });
+    }
+
+    private void initNightModeOverlay() {
+        mNightModeOverlay = new View(this);
+        mNightModeOverlay.setLayoutParams(new ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT
+        ));
+        mNightModeOverlay.setBackgroundColor(0x00000000);
+        mNightModeOverlay.setClickable(false);
+        mNightModeOverlay.setFocusable(false);
+        // 插在 exo 之上、widget 之下(index 1),只压暗视频画面,不盖住控制栏
+        ((ViewGroup) mBinding.video).addView(mNightModeOverlay, 1);
+
+        int defaultMode = PlayerSetting.getNightModeDefault();
+        if (defaultMode == PlayerSetting.NIGHT_MODE_ALWAYS_ON) {
+            mNightModeLevel = PlayerSetting.getNightModeLevel();
+            if (mNightModeLevel == PlayerSetting.NIGHT_MODE_OFF) {
+                mNightModeLevel = PlayerSetting.NIGHT_MODE_LOW;
+            }
+        } else {
+            mNightModeLevel = PlayerSetting.NIGHT_MODE_OFF;
+        }
+        applyNightMode();
+    }
+
+    private void toggleNightMode() {
+        mNightModeLevel++;
+        if (mNightModeLevel > PlayerSetting.NIGHT_MODE_HIGH) {
+            mNightModeLevel = PlayerSetting.NIGHT_MODE_OFF;
+        }
+        PlayerSetting.putNightModeLevel(mNightModeLevel);
+        applyNightMode();
+        showNightModeToast();
+    }
+
+    private void applyNightMode() {
+        if (mNightModeOverlay == null) return;
+        int alpha;
+        float maxBrightness;
+        int iconRes;
+        switch (mNightModeLevel) {
+            case PlayerSetting.NIGHT_MODE_LOW:
+                alpha = (int) (255 * 0.15f);
+                maxBrightness = 0.6f; // 亮度上限 60%
+                iconRes = R.drawable.ic_control_night_mode_on;
+                break;
+            case PlayerSetting.NIGHT_MODE_MEDIUM:
+                alpha = (int) (255 * 0.30f);
+                maxBrightness = 0.4f; // 亮度上限 40%
+                iconRes = R.drawable.ic_control_night_mode_on;
+                break;
+            case PlayerSetting.NIGHT_MODE_HIGH:
+                alpha = (int) (255 * 0.45f);
+                maxBrightness = 0.25f; // 亮度上限 25%
+                iconRes = R.drawable.ic_control_night_mode_on;
+                break;
+            default:
+                alpha = 0;
+                maxBrightness = -1f; // -1 表示恢复系统亮度
+                iconRes = R.drawable.ic_control_night_mode_off;
+                break;
+        }
+        // 双重策略:View 覆盖层(压 TextureView) + 窗口亮度上限(压 SurfaceView)
+        mNightModeOverlay.setBackgroundColor((alpha << 24) | 0x000000);
+        WindowManager.LayoutParams lp = getWindow().getAttributes();
+        lp.screenBrightness = maxBrightness;
+        getWindow().setAttributes(lp);
+        // 更新按钮图标
+        mBinding.control.nightMode.setImageResource(iconRes);
+    }
+
+    private void showNightModeToast() {
+        int messageId;
+        switch (mNightModeLevel) {
+            case PlayerSetting.NIGHT_MODE_LOW:
+                messageId = R.string.night_mode_low;
+                break;
+            case PlayerSetting.NIGHT_MODE_MEDIUM:
+                messageId = R.string.night_mode_medium;
+                break;
+            case PlayerSetting.NIGHT_MODE_HIGH:
+                messageId = R.string.night_mode_high;
+                break;
+            default:
+                messageId = R.string.night_mode_off;
+                break;
+        }
+        Notify.show(messageId);
     }
 
     private void setDecode() {
@@ -2642,6 +2736,17 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
             mBinding.exo.requestLayout();
             mBinding.scroll.requestLayout();
         }, 180);
+        mBinding.episode.post(this::refreshEpisodeLayoutAfterFullscreen);
+        mBinding.episode.postDelayed(this::refreshEpisodeLayoutAfterFullscreen, 180);
+    }
+
+    private void refreshEpisodeLayoutAfterFullscreen() {
+        // Detail data can bind holders against the temporary fullscreen width; rebind after rotation settles.
+        if (isFullscreen() || mEpisodeAdapter == null || mEpisodeAdapter.isEmpty()) return;
+        updateEpisodeLayout(mEpisodeAdapter.getItems());
+        mEpisodeAdapter.notifyItemRangeChanged(0, mEpisodeAdapter.getItemCount());
+        mBinding.episode.requestLayout();
+        mBinding.episode.post(this::updateEpisodeViewportHeight);
     }
 
     private void setTransition() {
@@ -2741,6 +2846,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         mBinding.control.right.pip.setVisibility(showPiP ? View.VISIBLE : View.GONE);
         mBinding.control.fullscreen.setVisibility(isLock() || shortDrama ? View.GONE : View.VISIBLE);
         mBinding.control.keep.setVisibility(mHistory == null ? View.GONE : View.VISIBLE);
+        mBinding.control.nightMode.setVisibility(mHistory == null ? View.GONE : View.VISIBLE);
         mBinding.control.osdDiagnostics.setVisibility(PlayerSetting.isOsdDiagnostics() && !player().isEmpty() ? View.VISIBLE : View.GONE);
         mBinding.control.osdDiagnostics.setAlpha(mOsd != null && mOsd.isDiagnosticsVisible() ? 1f : 0.72f);
         mBinding.control.parse.setVisibility(isFullscreen() && isUseParse() ? View.VISIBLE : View.GONE);
@@ -4884,6 +4990,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
             applyTmdbTabletVideoLayoutIfNeeded();
             if (mVod != null) bindTmdbTabletTopSummary(mVod);
         }
+        if (!isFullscreen()) refreshEpisodeLayoutAfterFullscreen();
         if (isFullscreen()) {
             Util.hideSystemUI(this);
             if (isVisible(mBinding.control.getRoot())) showControl();

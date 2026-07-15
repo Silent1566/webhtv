@@ -130,29 +130,48 @@ public class PlayerButtonSetting {
             View view = views.get(id);
             if (view != null) ordered.add(view);
         }
-        for (View view : ordered) if (view.getParent() == container) container.removeView(view);
-        for (View view : ordered) container.addView(view);
+        reorderViewsPreservingUnmanagedChildren(container, ordered);
         applyVisibility(views);
-        updateFocusNavigation(ordered);
     }
 
-    private static void updateFocusNavigation(List<View> ordered) {
-        // 过滤出所有可见且可聚焦的按钮
-        List<View> focusable = new ArrayList<>();
-        for (View view : ordered) {
-            if (view.getVisibility() == View.VISIBLE && view.isFocusable()) {
-                focusable.add(view);
-            }
-        }
+    private static void reorderViewsPreservingUnmanagedChildren(ViewGroup container, List<View> ordered) {
+        // Action rows also contain fixed spacers and feature buttons; replace only managed slots.
+        List<View> managedOrder = new ArrayList<>();
+        for (View view : ordered) if (view.getParent() == container) managedOrder.add(view);
+        if (managedOrder.isEmpty()) return;
 
-        // 重新设置焦点导航链
+        Set<View> managed = new HashSet<>(managedOrder);
+        List<View> children = new ArrayList<>();
+        int managedIndex = 0;
+        for (int i = 0; i < container.getChildCount(); i++) {
+            View child = container.getChildAt(i);
+            if (managed.contains(child)) children.add(managedOrder.get(managedIndex++));
+            else children.add(child);
+        }
+        container.removeAllViews();
+        for (View child : children) container.addView(child);
+    }
+
+    private static void updateFocusNavigation(Map<String, View> views) {
+        Set<ViewGroup> containers = new HashSet<>();
+        for (View view : views.values()) {
+            if (view.getParent() instanceof ViewGroup container) containers.add(container);
+        }
+        for (ViewGroup container : containers) updateFocusNavigation(container);
+    }
+
+    private static void updateFocusNavigation(ViewGroup container) {
+        List<View> focusable = new ArrayList<>();
+        for (int i = 0; i < container.getChildCount(); i++) {
+            View view = container.getChildAt(i);
+            if (view.getVisibility() == View.VISIBLE && view.isFocusable()) focusable.add(view);
+        }
         for (int i = 0; i < focusable.size(); i++) {
             View current = focusable.get(i);
             View prev = i > 0 ? focusable.get(i - 1) : null;
             View next = i < focusable.size() - 1 ? focusable.get(i + 1) : null;
-
-            if (prev != null) current.setNextFocusLeftId(prev.getId());
-            if (next != null) current.setNextFocusRightId(next.getId());
+            current.setNextFocusLeftId(prev == null ? View.NO_ID : prev.getId());
+            current.setNextFocusRightId(next == null ? View.NO_ID : next.getId());
         }
     }
 
@@ -161,6 +180,7 @@ public class PlayerButtonSetting {
         for (Map.Entry<String, View> entry : views.entrySet()) {
             if (hidden.contains(entry.getKey())) entry.getValue().setVisibility(View.GONE);
         }
+        updateFocusNavigation(views);
     }
 
     private static List<String> getOrder() {

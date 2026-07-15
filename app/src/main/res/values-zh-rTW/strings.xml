@@ -94,6 +94,11 @@
     <string name="play_switch_flag">正在切換線路至「<xliff:g name="name">%s</xliff:g>」</string>
     <string name="play_switch_site">正在切換站源至「<xliff:g name="name">%s</xliff:g>」</string>
     <string name="play_switch_parse">正在切换解析至「<xliff:g name="name">%s</xliff:g>」</string>
+    <string name="play_night_mode">夜間護眼</string>
+    <string name="night_mode_off">護眼關閉</string>
+    <string name="night_mode_low">輕度護眼</string>
+    <string name="night_mode_medium">中度護眼</string>
+    <string name="night_mode_high">重度護眼</string>
 
     <!-- Danmaku Setting -->
     <string name="danmaku">彈幕</string>

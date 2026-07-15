@@ -16,6 +16,7 @@ import android.os.Bundle;
 import android.os.SystemClock;
 import android.text.TextUtils;
 import android.util.TypedValue;
+import android.view.FocusFinder;
 import android.view.GestureDetector;
 import android.view.Gravity;
 import android.view.KeyEvent;
@@ -150,6 +151,7 @@ import com.fongmi.android.tv.utils.FileChooser;
 import com.fongmi.android.tv.player.lut.LutPreset;
 import com.fongmi.android.tv.player.lut.LutStore;
 import com.fongmi.android.tv.player.PlayerManager;
+import com.fongmi.android.tv.web.WebHomeInlineVodStore;
 import com.google.android.flexbox.FlexboxLayout;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
@@ -274,6 +276,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private boolean overviewExpanded;
     private boolean useParse;
     private boolean inlineStarted;
+    private boolean inlineHttpRefreshAttempted;
     private boolean detailPlayerActive;
     private boolean autoPlayed;
     private boolean inlineFullscreen;
@@ -3608,7 +3611,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         if (KeyUtil.isLeftKey(event) || KeyUtil.isRightKey(event)) return onDetailHorizontalButtonGroupKey(binding.episodeRangeContainer, binding.episodeRangeScroll, view, event);
         if (!KeyUtil.isUpKey(event) && !KeyUtil.isDownKey(event)) return false;
         if (!KeyUtil.isActionDown(event)) return true;
-        if (KeyUtil.isUpKey(event)) return focusDetailEpisodeToolButton(View.FOCUS_UP) || focusDetailFlagButton();
+        if (KeyUtil.isUpKey(event)) return focusDetailSeasonButton() || focusDetailEpisodeToolButton(View.FOCUS_UP) || focusDetailFlagButton();
         return focusDetailEpisodeBelow(view);
     }
 
@@ -3617,7 +3620,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         if (!KeyUtil.isActionDown(event)) return true;
         if (KeyUtil.isLeftKey(event) || KeyUtil.isRightKey(event)) return onDetailHorizontalButtonGroupKey(binding.episodeHeader, null, view, event);
         if (KeyUtil.isUpKey(event)) return focusDetailFlagButton();
-        return focusDetailEpisodeRangeButton() || focusDetailEpisode();
+        return focusDetailSeasonButton() || focusDetailEpisodeRangeButton() || focusDetailEpisode();
     }
 
     private boolean onDetailEpisodeKey(View view, int keyCode, KeyEvent event) {
@@ -3757,6 +3760,35 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         return binding != null && (view == binding.episodeReverse || view == binding.episodeFileName || view == binding.episodeViewMode);
     }
 
+    private boolean focusDetailSeasonButton() {
+        if (binding == null || binding.seasonScroll.getVisibility() != View.VISIBLE || binding.seasonContainer.getChildCount() == 0) return false;
+        int target = Math.max(0, seasonNumbers.indexOf(selectedSeasonNumber));
+        target = Math.min(target, binding.seasonContainer.getChildCount() - 1);
+        View child = binding.seasonContainer.getChildAt(target);
+        if (child == null) return false;
+        child.post(() -> {
+            scrollDetailChildIntoViewNow(child, 12);
+            child.requestFocus();
+        });
+        return true;
+    }
+
+    private boolean onDetailSeasonKey(View focus, KeyEvent event) {
+        if (KeyUtil.isLeftKey(event) || KeyUtil.isRightKey(event)) return onDetailHorizontalButtonGroupKey(binding.seasonContainer, null, focus, event);
+        if (!KeyUtil.isUpKey(event) && !KeyUtil.isDownKey(event)) return false;
+        if (!KeyUtil.isActionDown(event)) return true;
+        if (KeyUtil.isUpKey(event)) return focusDetailSeasonSibling(focus, true) || focusDetailEpisodeToolButton(View.FOCUS_UP) || focusDetailFlagButton();
+        return focusDetailSeasonSibling(focus, false) || focusDetailEpisodeRangeButton() || focusDetailEpisode();
+    }
+
+    private boolean focusDetailSeasonSibling(View focus, boolean up) {
+        if (binding == null || focus == null) return false;
+        int direction = up ? View.FOCUS_UP : View.FOCUS_DOWN;
+        View target = FocusFinder.getInstance().findNextFocus(binding.seasonContainer, focus, direction);
+        if (target == null) return false;
+        scrollDetailChildIntoViewNow(target, 12);
+        return target.requestFocus(direction);
+    }
     private boolean focusDetailFlagButton() {
         if (binding == null || binding.flagContainer.getChildCount() == 0) return false;
         int target = 0;
@@ -5270,6 +5302,11 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private void playInline() {
+        inlineHttpRefreshAttempted = false;
+        playInline(C.TIME_UNSET, "", "");
+    }
+
+    private void playInline(long resumePosition, String failedUrl, String failureMessage) {
         if (selectedFlag == null || selectedEpisode == null) return;
         inlinePlaybackLoading = true;
         int generation = ++inlinePlaybackGeneration;
@@ -5285,13 +5322,21 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
                 Result result = SiteApi.playerContent(key, flag, episodeUrl);
                 runOnAliveUi(() -> {
                     if (!isInlinePlaybackRequestCurrent(generation, key, flag, episodeUrl)) return;
-                    startInlinePlayer(result);
+                    String resolvedUrl = result.getUrl() == null ? "" : result.getUrl().v();
+                    if (!TextUtils.isEmpty(failedUrl) && TextUtils.equals(failedUrl, resolvedUrl)) {
+                        inlinePlaybackLoading = false;
+                        SpiderDebug.log("webhome-inline", "http refresh rejected unchanged url key=%s id=%s", key, episodeUrl);
+                        showInlineError(failureMessage);
+                        return;
+                    }
+                    startInlinePlayer(result, resumePosition);
                 });
             } catch (Throwable e) {
                 String message = e.getMessage();
                 runOnAliveUi(() -> {
                     if (!isInlinePlaybackRequestCurrent(generation, key, flag, episodeUrl)) return;
-                    showInlineError(TextUtils.isEmpty(message) ? getString(R.string.error_play_url) : message);
+                    String fallback = TextUtils.isEmpty(failureMessage) ? getString(R.string.error_play_url) : failureMessage;
+                    showInlineError(TextUtils.isEmpty(message) ? fallback : message);
                 });
             }
         });
@@ -5317,6 +5362,10 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private void startInlinePlayer(Result result) {
+        startInlinePlayer(result, C.TIME_UNSET);
+    }
+
+    private void startInlinePlayer(Result result, long resumePosition) {
         currentInlineResult = result;
         useParse = result.shouldUseParse();
         if (result.hasPosition() && history != null) history.setPosition(result.getPosition());
@@ -5342,7 +5391,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         updateInlineButtons(false);
         player().stop();
         player().clear();
-        inlineStartPosition = getInlineResumePosition();
+        inlineStartPosition = resumePosition == C.TIME_UNSET ? getInlineResumePosition() : Math.max(0, resumePosition);
         inlineStartPositionApplied = false;
         player().switchPlayer(PlayerSetting.getPlayer());
         updateInlineHistoryPlayer();
@@ -7931,7 +7980,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         if (isFocusInside(focus, binding.headerBar)) return onDetailHorizontalButtonGroupKey(binding.headerBar, null, focus, event);
         if (isFocusInside(focus, binding.fusionActions)) return onDetailHorizontalButtonGroupKey(binding.fusionActions, null, focus, event);
         if (isFocusInside(focus, binding.detailActions)) return onDetailHorizontalButtonGroupKey(binding.detailActions, null, focus, event);
-        if (isFocusInside(focus, binding.seasonContainer)) return onDetailHorizontalButtonGroupKey(binding.seasonContainer, null, focus, event);
+        if (isFocusInside(focus, binding.seasonContainer)) return onDetailSeasonKey(focus, event);
         if (isFocusInside(focus, binding.externalLinksContainer)) return onDetailExternalLinksKey(focus, event);
         return false;
     }
@@ -8358,6 +8407,22 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         updateInlineButtons(service() != null && player() != null && !player().isEmpty() && player().isPlaying());
         updateInlineDisplayPanel();
         updateDetailThemeButtonVisibility();
+    }
+
+    @Override
+    protected boolean onSourceHttpError(int statusCode, String msg) {
+        if (!isInlinePlayerMode() || !isOwner() || !isCurrentInlinePlayback(selectedEpisode)) return false;
+        String episodeUrl = selectedEpisode.getUrl();
+        if (!WebHomeInlineVodStore.shouldRefreshYoutubeEpisode(getKeyText(), episodeUrl, statusCode, inlineHttpRefreshAttempted)) return false;
+        String failedUrl = currentInlineResult.getUrl() == null ? "" : currentInlineResult.getUrl().v();
+        if (!WebHomeInlineVodStore.invalidateResolvedEpisode(episodeUrl)) return false;
+        long position = player() == null ? C.TIME_UNSET : player().getPosition();
+        inlineHttpRefreshAttempted = true;
+        String status = String.valueOf(statusCode);
+        String failureMessage = TextUtils.isEmpty(msg) ? "HTTP " + status : msg.contains(status) ? msg : msg + " (" + status + ")";
+        SpiderDebug.log("webhome-inline", "http refresh start status=%d position=%d id=%s", statusCode, position, episodeUrl);
+        playInline(position, failedUrl, failureMessage);
+        return true;
     }
 
     @Override

@@ -650,7 +650,10 @@ public class LiveActivity extends PlaybackActivity implements GroupAdapter.OnCli
 
     private void showControl(View view) {
         mBinding.control.getRoot().setVisibility(View.VISIBLE);
-        mBinding.widget.top.setVisibility(View.VISIBLE);
+        // OSD 启用时，不显示 widget.top（避免与 OSD 的 topLeft/topRight 重影）
+        if (!PlayerSetting.isOsdEnabled()) {
+            mBinding.widget.top.setVisibility(View.VISIBLE);
+        }
         if (mOsd != null) mOsd.setControlsVisible(true);
         App.post(view::requestFocus, 25);
         setR1Callback();

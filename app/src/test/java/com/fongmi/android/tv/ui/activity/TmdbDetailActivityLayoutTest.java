@@ -1306,6 +1306,7 @@ public class TmdbDetailActivityLayoutTest {
         int rangeKey = activity.indexOf("private boolean onDetailEpisodeRangeKey");
         int toolKey = activity.indexOf("private boolean onDetailEpisodeToolKey");
         int episodeKey = activity.indexOf("private boolean onDetailEpisodeKey");
+        int seasonKey = activity.indexOf("private boolean onDetailSeasonKey");
         int horizontal = activity.indexOf("private boolean onDetailHorizontalButtonGroupKey");
         int vertical = activity.indexOf("private boolean onDetailExternalLinksKey");
         int focusTarget = activity.indexOf("private View horizontalFocusTarget");
@@ -1313,6 +1314,7 @@ public class TmdbDetailActivityLayoutTest {
         String flagKeyBody = flagKey >= 0 && rangeKey > flagKey ? activity.substring(flagKey, rangeKey) : "";
         String rangeKeyBody = rangeKey >= 0 && toolKey > rangeKey ? activity.substring(rangeKey, toolKey) : "";
         String toolKeyBody = toolKey >= 0 && episodeKey > toolKey ? activity.substring(toolKey, episodeKey) : "";
+        String seasonKeyBody = seasonKey >= 0 && horizontal > seasonKey ? activity.substring(seasonKey, horizontal) : "";
         String horizontalBody = horizontal >= 0 && vertical > horizontal ? activity.substring(horizontal, vertical) : "";
         String verticalBody = vertical >= 0 && focusTarget > vertical ? activity.substring(vertical, focusTarget) : "";
 
@@ -1326,13 +1328,20 @@ public class TmdbDetailActivityLayoutTest {
                         && navigationBody.contains("isFocusInside(focus, binding.detailActions)")
                         && navigationBody.contains("onDetailHorizontalButtonGroupKey(binding.detailActions, null, focus, event)")
                         && navigationBody.contains("isFocusInside(focus, binding.seasonContainer)")
-                        && navigationBody.contains("onDetailHorizontalButtonGroupKey(binding.seasonContainer, null, focus, event)")
+                        && navigationBody.contains("onDetailSeasonKey(focus, event)")
                         && navigationBody.contains("isFocusInside(focus, binding.externalLinksContainer)")
                         && navigationBody.contains("onDetailExternalLinksKey(focus, event)"));
-        assertTrue("line, episode-page, and episode-tool buttons should handle DPAD_LEFT/RIGHT inside their own row",
+        assertTrue("line, episode-page, episode-tool, and season buttons should handle DPAD_LEFT/RIGHT inside their own row",
                 flagKeyBody.contains("onDetailHorizontalButtonGroupKey(binding.flagContainer, binding.flagScroll, focus, event)")
                         && rangeKeyBody.contains("onDetailHorizontalButtonGroupKey(binding.episodeRangeContainer, binding.episodeRangeScroll, view, event)")
-                        && toolKeyBody.contains("onDetailHorizontalButtonGroupKey(binding.episodeHeader, null, view, event)"));
+                        && toolKeyBody.contains("onDetailHorizontalButtonGroupKey(binding.episodeHeader, null, view, event)")
+                        && seasonKeyBody.contains("onDetailHorizontalButtonGroupKey(binding.seasonContainer, null, focus, event)"));
+        assertTrue("season buttons should move vertically inside the season grid before leaving it",
+                seasonKeyBody.contains("if (KeyUtil.isUpKey(event)) return focusDetailSeasonSibling(focus, true) || focusDetailEpisodeToolButton(View.FOCUS_UP) || focusDetailFlagButton();")
+                        && seasonKeyBody.contains("return focusDetailSeasonSibling(focus, false) || focusDetailEpisodeRangeButton() || focusDetailEpisode();")
+                        && seasonKeyBody.contains("private boolean focusDetailSeasonSibling(View focus, boolean up)")
+                        && seasonKeyBody.contains("View target = FocusFinder.getInstance().findNextFocus(binding.seasonContainer, focus, direction);")
+                        && seasonKeyBody.contains("return target.requestFocus(direction);"));
         assertTrue("horizontal button groups should move only to same-row neighbors and consume row boundaries",
                 horizontalBody.contains("if (!KeyUtil.isLeftKey(event) && !KeyUtil.isRightKey(event)) return false;")
                         && horizontalBody.contains("if (!KeyUtil.isActionDown(event)) return true;")
@@ -1478,13 +1487,11 @@ public class TmdbDetailActivityLayoutTest {
         assertTrue("detail episode view-mode button must stay visible on TV detail pages",
                 activity.contains("binding.episodeViewMode.setVisibility(View.VISIBLE);")
                         && !activity.contains("binding.episodeViewMode.setVisibility(shouldForceAdaptiveEpisodeGrid() ? View.GONE : View.VISIBLE);"));
-        assertTrue("line-row DPAD_DOWN should reach the episode header tool button before episode pages",
+        assertTrue("line-row DPAD_DOWN should still reach the episode header tool button before episode pages",
                 flagKeyBody.contains("if (focusDetailEpisodeToolButton(View.FOCUS_DOWN)) return true;")
-                        && flagKeyBody.indexOf("focusDetailEpisodeToolButton(View.FOCUS_DOWN)") < flagKeyBody.indexOf("focusDetailEpisodeRangeButton()")
-                        && activity.contains("button.setNextFocusDownId(R.id.episodeReverse);"));
-        assertTrue("episode-page DPAD_UP should reach the episode header tool button",
-                rangeKeyBody.contains("if (KeyUtil.isUpKey(event)) return focusDetailEpisodeToolButton(View.FOCUS_UP) || focusDetailFlagButton();")
-                        && activity.contains("button.setNextFocusUpId(R.id.episodeReverse);"));
+                        && flagKeyBody.indexOf("focusDetailEpisodeToolButton(View.FOCUS_DOWN)") < flagKeyBody.indexOf("focusDetailEpisodeRangeButton()"));
+        assertTrue("episode-page DPAD_UP should return to seasons before header tools or lines",
+                rangeKeyBody.contains("if (KeyUtil.isUpKey(event)) return focusDetailSeasonButton() || focusDetailEpisodeToolButton(View.FOCUS_UP) || focusDetailFlagButton();"));
         assertTrue("top-row episode DPAD_UP should fall back to the header tools before lines",
                 episodeKeyBody.contains("if (focusDetailEpisodeRangeButton()) return true;")
                         && episodeKeyBody.contains("if (focusDetailEpisodeToolButton(View.FOCUS_UP)) return true;")
@@ -1495,11 +1502,12 @@ public class TmdbDetailActivityLayoutTest {
                         && helperBody.contains("|| focusDetailButton(binding.episodeFileName, direction)")
                         && helperBody.contains("|| focusDetailButton(binding.episodeViewMode, direction);")
                         && helperBody.contains("button.requestFocus(direction);"));
-        assertTrue("episode header tools should let remote users move back up or down",
+        assertTrue("episode header tools should move down to seasons or episode ranges without returning to lines",
                 activity.contains("binding.episodeReverse.setOnKeyListener((view, keyCode, event) -> onDetailEpisodeToolKey(view, keyCode, event));")
                         && activity.contains("binding.episodeFileName.setOnKeyListener((view, keyCode, event) -> onDetailEpisodeToolKey(view, keyCode, event));")
                         && activity.contains("binding.episodeViewMode.setOnKeyListener((view, keyCode, event) -> onDetailEpisodeToolKey(view, keyCode, event));")
-                        && activity.contains("if (KeyUtil.isLeftKey(event) || KeyUtil.isRightKey(event)) return onDetailHorizontalButtonGroupKey(binding.episodeHeader, null, view, event);"));
+                        && activity.contains("if (KeyUtil.isLeftKey(event) || KeyUtil.isRightKey(event)) return onDetailHorizontalButtonGroupKey(binding.episodeHeader, null, view, event);")
+                        && activity.contains("return focusDetailSeasonButton() || focusDetailEpisodeRangeButton() || focusDetailEpisode();"));
         assertTrue("activity-level key dispatch should guard the detail episode focus chain when child listeners are bypassed",
                 dispatchBody.contains("if (handleDetailEpisodeNavigationKey(event)) return true;")
                         && dispatchBody.contains("isFocusInside(focus, binding.flagScroll)") && dispatchBody.contains("onDetailFlagKey(event.getKeyCode(), event)")

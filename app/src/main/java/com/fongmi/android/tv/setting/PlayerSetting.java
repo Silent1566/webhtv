@@ -27,6 +27,13 @@ public class PlayerSetting {
     public static final int FALLBACK_DECODE_ONLY = 1;
     public static final int FALLBACK_PLAYER_ONLY = 2;
     public static final int FALLBACK_DISABLED = 3;
+    public static final int NIGHT_MODE_OFF = 0;
+    public static final int NIGHT_MODE_LOW = 1;
+    public static final int NIGHT_MODE_MEDIUM = 2;
+    public static final int NIGHT_MODE_HIGH = 3;
+    public static final int NIGHT_MODE_AUTO = 0;
+    public static final int NIGHT_MODE_ALWAYS_OFF = 1;
+    public static final int NIGHT_MODE_ALWAYS_ON = 2;
     private static final int DEFAULT_PLAY_CACHE_OPTION = 0;
     private static final String KEY_FAILURE_FALLBACK = "player_failure_fallback";
     private static final String KEY_FFMPEG_MODE = "ffmpeg_mode";
@@ -605,5 +612,23 @@ public class PlayerSetting {
     private static boolean hasAny(String... keys) {
         for (String key : keys) if (Prefers.getPrefers().contains(key)) return true;
         return false;
+    }
+
+    public static int getNightModeLevel() {
+        int level = Prefers.getInt("night_mode_level", NIGHT_MODE_OFF);
+        return level >= NIGHT_MODE_OFF && level <= NIGHT_MODE_HIGH ? level : NIGHT_MODE_OFF;
+    }
+
+    public static void putNightModeLevel(int level) {
+        Prefers.put("night_mode_level", Math.min(Math.max(level, NIGHT_MODE_OFF), NIGHT_MODE_HIGH));
+    }
+
+    public static int getNightModeDefault() {
+        int mode = Prefers.getInt("night_mode_default", NIGHT_MODE_AUTO);
+        return mode >= NIGHT_MODE_AUTO && mode <= NIGHT_MODE_ALWAYS_ON ? mode : NIGHT_MODE_AUTO;
+    }
+
+    public static void putNightModeDefault(int mode) {
+        Prefers.put("night_mode_default", Math.min(Math.max(mode, NIGHT_MODE_AUTO), NIGHT_MODE_ALWAYS_ON));
     }
 }

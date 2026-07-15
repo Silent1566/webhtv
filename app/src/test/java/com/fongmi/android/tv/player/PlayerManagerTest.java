@@ -14,6 +14,7 @@ import com.fongmi.android.tv.setting.PlayerSetting;
 
 import org.junit.Test;
 
+import java.io.IOException;
 import java.util.List;
 
 public class PlayerManagerTest {
@@ -84,5 +85,17 @@ public class PlayerManagerTest {
         Sub manual = Sub.create("Manual", "/tmp/manual.srt", "zh-Hans", MimeTypes.APPLICATION_SUBRIP);
 
         assertSame(manual, PlayerManager.findSelectedSubtitleSub(List.of(manual), Tracks.EMPTY));
+    }
+
+    @Test
+    public void httpStatus_findsNestedResponseCode() {
+        IOException error = new IOException("source", new IOException("Response code: 403"));
+
+        assertEquals(403, PlayerManager.httpStatus(error));
+    }
+
+    @Test
+    public void httpStatus_returnsZeroWithoutResponseCode() {
+        assertEquals(0, PlayerManager.httpStatus(new IOException("Socket closed")));
     }
 }

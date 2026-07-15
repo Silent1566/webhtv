@@ -195,6 +195,10 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
     protected void onTitlesChanged() {
     }
 
+    protected boolean onSourceHttpError(int statusCode, String msg) {
+        return false;
+    }
+
     protected void onError(String msg) {
     }
 
@@ -579,6 +583,11 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
         @Override
         public void onTitlesChanged() {
             if (isOwner()) PlaybackActivity.this.onTitlesChanged();
+        }
+
+        @Override
+        public boolean onSourceHttpError(int statusCode, String msg) {
+            return isOwner() && PlaybackActivity.this.onSourceHttpError(statusCode, msg);
         }
 
         @Override
