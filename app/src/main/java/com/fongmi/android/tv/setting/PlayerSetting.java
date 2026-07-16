@@ -12,15 +12,30 @@ public class PlayerSetting {
     public static final int EXO = 0;
     public static final int IJK = 1;
     public static final int SYSTEM = 2;
+    public static final int MPV = 3;
     public static final int NONE = -1;
     public static final int RENDER_SURFACE = 0;
     public static final int RENDER_TEXTURE = 1;
     public static final int FFMPEG_MODE_NEXTLIB = 0;
     public static final int FFMPEG_MODE_OFFICIAL = 1;
     public static final int FFMPEG_MODE_SIMPLE = 2;
+    public static final int MPV_RENDER_OPENGL = 0;
+    public static final int MPV_RENDER_VULKAN = 1;
     public static final int PAD_LIVE_FULLSCREEN = 0;
     public static final int PAD_LIVE_STANDARD = 1;
+    public static final int FALLBACK_FULL = 0;
+    public static final int FALLBACK_DECODE_ONLY = 1;
+    public static final int FALLBACK_PLAYER_ONLY = 2;
+    public static final int FALLBACK_DISABLED = 3;
+    public static final int NIGHT_MODE_OFF = 0;
+    public static final int NIGHT_MODE_LOW = 1;
+    public static final int NIGHT_MODE_MEDIUM = 2;
+    public static final int NIGHT_MODE_HIGH = 3;
+    public static final int NIGHT_MODE_AUTO = 0;
+    public static final int NIGHT_MODE_ALWAYS_OFF = 1;
+    public static final int NIGHT_MODE_ALWAYS_ON = 2;
     private static final int DEFAULT_PLAY_CACHE_OPTION = 0;
+    private static final String KEY_FAILURE_FALLBACK = "player_failure_fallback";
     private static final String KEY_FFMPEG_MODE = "ffmpeg_mode";
     private static final String KEY_DISPLAY_TIME = "display_time";
     private static final String KEY_DISPLAY_TRAFFIC = "display_traffic";
@@ -48,7 +63,7 @@ public class PlayerSetting {
     }
 
     public static boolean isPlayer(int player) {
-        return player == EXO || player == IJK || player == SYSTEM;
+        return player == EXO || player == IJK || player == SYSTEM || player == MPV;
     }
 
     public static int sanitizePlayer(int player) {
@@ -67,6 +82,15 @@ public class PlayerSetting {
         return true;
     }
 
+    public static int nextPlayer(int player) {
+        return switch (sanitizePlayer(player)) {
+            case EXO -> IJK;
+            case IJK -> SYSTEM;
+            case SYSTEM -> MPV;
+            default -> EXO;
+        };
+    }
+
     public static int getRender() {
         return Math.min(Math.max(Prefers.getInt("render", RENDER_SURFACE), RENDER_SURFACE), RENDER_TEXTURE);
     }
@@ -76,7 +100,7 @@ public class PlayerSetting {
     }
 
     public static boolean useNativeVideoOutput(int player) {
-        return player == IJK || player == SYSTEM;
+        return player == IJK || player == SYSTEM || player == MPV;
     }
 
     public static void putRender(int render) {
@@ -84,6 +108,15 @@ public class PlayerSetting {
         Prefers.put("render", value);
         if (isTunnel() && value == RENDER_TEXTURE) Prefers.put("tunnel", false);
         if (isExoEnhanced() && value == RENDER_TEXTURE) Prefers.put("exo_4k_compat", false);
+    }
+
+    public static int getMpvRender() {
+        int render = Prefers.getInt("mpv_render", MPV_RENDER_OPENGL);
+        return render == MPV_RENDER_VULKAN ? MPV_RENDER_VULKAN : MPV_RENDER_OPENGL;
+    }
+
+    public static void putMpvRender(int render) {
+        Prefers.put("mpv_render", render == MPV_RENDER_VULKAN ? MPV_RENDER_VULKAN : MPV_RENDER_OPENGL);
     }
 
     public static int getPadLiveMode() {
@@ -123,23 +156,31 @@ public class PlayerSetting {
     }
 
     public static int getBuffer() {
-        return Math.min(Math.max(Prefers.getInt("buffer"), 1), 10);
+        return getBuffer(getPlayer());
+    }
+
+    public static int getBuffer(int kernel) {
+        return KernelPerformanceSetting.getBuffer(sanitizePlayer(kernel));
     }
 
     public static void putBuffer(int buffer) {
-        Prefers.put("buffer", buffer);
+        KernelPerformanceSetting.putBuffer(getPlayer(), buffer);
     }
 
     public static int getBufferBytesOption() {
-        return Math.min(Math.max(Prefers.getInt("buffer_bytes"), 0), 3);
+        return KernelPerformanceSetting.getBufferBytesOption(getPlayer());
     }
 
     public static void putBufferBytesOption(int option) {
-        Prefers.put("buffer_bytes", Math.min(Math.max(option, 0), 3));
+        KernelPerformanceSetting.putBufferBytesOption(getPlayer(), option);
     }
 
     public static int getBufferBytes() {
-        return switch (getBufferBytesOption()) {
+        return getBufferBytes(getPlayer());
+    }
+
+    public static int getBufferBytes(int kernel) {
+        return switch (KernelPerformanceSetting.getBufferBytesOption(sanitizePlayer(kernel))) {
             case 1 -> 64 * 1024 * 1024;
             case 2 -> 128 * 1024 * 1024;
             case 3 -> 256 * 1024 * 1024;
@@ -148,15 +189,23 @@ public class PlayerSetting {
     }
 
     public static int getBackBufferOption() {
-        return Math.min(Math.max(Prefers.getInt("back_buffer"), 0), 3);
+        return getBackBufferOption(getPlayer());
+    }
+
+    public static int getBackBufferOption(int kernel) {
+        return KernelPerformanceSetting.getBackBufferOption(sanitizePlayer(kernel));
     }
 
     public static void putBackBufferOption(int option) {
-        Prefers.put("back_buffer", Math.min(Math.max(option, 0), 3));
+        KernelPerformanceSetting.putBackBufferOption(getPlayer(), option);
     }
 
     public static int getBackBufferMs() {
-        return switch (getBackBufferOption()) {
+        return getBackBufferMs(getPlayer());
+    }
+
+    public static int getBackBufferMs(int kernel) {
+        return switch (KernelPerformanceSetting.getBackBufferOption(sanitizePlayer(kernel))) {
             case 1 -> 15_000;
             case 2 -> 30_000;
             case 3 -> 60_000;
@@ -165,15 +214,19 @@ public class PlayerSetting {
     }
 
     public static int getPlayCacheOption() {
-        return Math.min(Math.max(Prefers.getInt("play_cache", DEFAULT_PLAY_CACHE_OPTION), 0), 4);
+        return KernelPerformanceSetting.getPlayCacheOption(getPlayer());
     }
 
     public static void putPlayCacheOption(int option) {
-        Prefers.put("play_cache", Math.min(Math.max(option, 0), 4));
+        KernelPerformanceSetting.putPlayCacheOption(getPlayer(), option);
     }
 
     public static long getPlayCacheSize() {
-        return switch (getPlayCacheOption()) {
+        return getPlayCacheSize(getPlayer());
+    }
+
+    public static long getPlayCacheSize(int kernel) {
+        return switch (KernelPerformanceSetting.getPlayCacheOption(sanitizePlayer(kernel))) {
             case 1 -> 256L * 1024 * 1024;
             case 2 -> 512L * 1024 * 1024;
             case 3 -> 1024L * 1024 * 1024;
@@ -188,6 +241,15 @@ public class PlayerSetting {
 
     public static void putAutoChange(boolean autoChange) {
         Prefers.put("player_auto_change", autoChange);
+    }
+
+    public static int getFailureFallback() {
+        int mode = Prefers.getInt(KEY_FAILURE_FALLBACK, FALLBACK_FULL);
+        return mode >= FALLBACK_FULL && mode <= FALLBACK_DISABLED ? mode : FALLBACK_FULL;
+    }
+
+    public static void putFailureFallback(int mode) {
+        Prefers.put(KEY_FAILURE_FALLBACK, mode >= FALLBACK_FULL && mode <= FALLBACK_DISABLED ? mode : FALLBACK_FULL);
     }
 
     public static boolean isAutoPlay() {
@@ -369,27 +431,39 @@ public class PlayerSetting {
     }
 
     public static boolean isAudioPrefer() {
-        return Prefers.getBoolean("audio_prefer");
+        return isAudioPrefer(getPlayer());
+    }
+
+    public static boolean isAudioPrefer(int kernel) {
+        return KernelPerformanceSetting.isAudioPrefer(sanitizePlayer(kernel));
     }
 
     public static void putAudioPrefer(boolean audioPrefer) {
-        Prefers.put("audio_prefer", audioPrefer);
+        KernelPerformanceSetting.putAudioPrefer(getPlayer(), audioPrefer);
     }
 
     public static boolean isAudioPassThrough() {
-        return Prefers.getBoolean("audio_pass_through", true);
+        return isAudioPassThrough(getPlayer());
+    }
+
+    public static boolean isAudioPassThrough(int kernel) {
+        return KernelPerformanceSetting.isAudioPassThrough(sanitizePlayer(kernel));
     }
 
     public static void putAudioPassThrough(boolean audioPassThrough) {
-        Prefers.put("audio_pass_through", audioPassThrough);
+        KernelPerformanceSetting.putAudioPassThrough(getPlayer(), audioPassThrough);
     }
 
     public static boolean isVideoPrefer() {
-        return Prefers.getBoolean("video_prefer");
+        return isVideoPrefer(getPlayer());
+    }
+
+    public static boolean isVideoPrefer(int kernel) {
+        return KernelPerformanceSetting.isVideoPrefer(sanitizePlayer(kernel));
     }
 
     public static void putVideoPrefer(boolean videoPrefer) {
-        Prefers.put("video_prefer", videoPrefer);
+        KernelPerformanceSetting.putVideoPrefer(getPlayer(), videoPrefer);
     }
 
     public static int getFFmpegMode() {
@@ -423,11 +497,15 @@ public class PlayerSetting {
     }
 
     public static boolean isPreferAAC() {
-        return Prefers.getBoolean("prefer_aac");
+        return isPreferAAC(getPlayer());
+    }
+
+    public static boolean isPreferAAC(int kernel) {
+        return KernelPerformanceSetting.isPreferAac(sanitizePlayer(kernel));
     }
 
     public static void putPreferAAC(boolean preferAAC) {
-        Prefers.put("prefer_aac", preferAAC);
+        KernelPerformanceSetting.putPreferAac(getPlayer(), preferAAC);
     }
 
     public static float getSubtitleTextSize() {
@@ -534,5 +612,23 @@ public class PlayerSetting {
     private static boolean hasAny(String... keys) {
         for (String key : keys) if (Prefers.getPrefers().contains(key)) return true;
         return false;
+    }
+
+    public static int getNightModeLevel() {
+        int level = Prefers.getInt("night_mode_level", NIGHT_MODE_OFF);
+        return level >= NIGHT_MODE_OFF && level <= NIGHT_MODE_HIGH ? level : NIGHT_MODE_OFF;
+    }
+
+    public static void putNightModeLevel(int level) {
+        Prefers.put("night_mode_level", Math.min(Math.max(level, NIGHT_MODE_OFF), NIGHT_MODE_HIGH));
+    }
+
+    public static int getNightModeDefault() {
+        int mode = Prefers.getInt("night_mode_default", NIGHT_MODE_AUTO);
+        return mode >= NIGHT_MODE_AUTO && mode <= NIGHT_MODE_ALWAYS_ON ? mode : NIGHT_MODE_AUTO;
+    }
+
+    public static void putNightModeDefault(int mode) {
+        Prefers.put("night_mode_default", Math.min(Math.max(mode, NIGHT_MODE_AUTO), NIGHT_MODE_ALWAYS_ON));
     }
 }

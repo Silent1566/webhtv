@@ -1,0 +1,229 @@
+package com.fongmi.android.tv.setting;
+
+import com.github.catvod.utils.Prefers;
+
+public final class KernelPerformanceSetting {
+
+    private static final String KEY_MIGRATED = "perf_kernel_shared_migrated";
+
+    private KernelPerformanceSetting() {
+    }
+
+    public static int getBuffer(int kernel) {
+        ensureMigrated();
+        return clamp(Prefers.getInt(key(kernel, "buffer"), 1), 1, 10);
+    }
+
+    public static void putBuffer(int kernel, int value) {
+        ensureMigrated();
+        Prefers.put(key(kernel, "buffer"), clamp(value, 1, 10));
+    }
+
+    public static int getBufferBytesOption(int kernel) {
+        ensureMigrated();
+        return clamp(Prefers.getInt(key(kernel, "buffer_bytes"), 0), 0, 3);
+    }
+
+    public static void putBufferBytesOption(int kernel, int value) {
+        ensureMigrated();
+        Prefers.put(key(kernel, "buffer_bytes"), clamp(value, 0, 3));
+    }
+
+    public static int getBackBufferOption(int kernel) {
+        ensureMigrated();
+        return clamp(Prefers.getInt(key(kernel, "back_buffer"), 0), 0, 3);
+    }
+
+    public static void putBackBufferOption(int kernel, int value) {
+        ensureMigrated();
+        Prefers.put(key(kernel, "back_buffer"), clamp(value, 0, 3));
+    }
+
+    public static int getPlayCacheOption(int kernel) {
+        ensureMigrated();
+        return clamp(Prefers.getInt(key(kernel, "play_cache"), 0), 0, 4);
+    }
+
+    public static void putPlayCacheOption(int kernel, int value) {
+        ensureMigrated();
+        Prefers.put(key(kernel, "play_cache"), clamp(value, 0, 4));
+    }
+
+    public static boolean isPreload(int kernel) {
+        ensureMigrated();
+        return Prefers.getBoolean(key(kernel, "preload"));
+    }
+
+    public static void putPreload(int kernel, boolean value) {
+        ensureMigrated();
+        Prefers.put(key(kernel, "preload"), value);
+    }
+
+    public static int getPreloadThreads(int kernel) {
+        ensureMigrated();
+        return clamp(Prefers.getInt(key(kernel, "preload_threads"), PreloadSetting.MIN_THREADS), PreloadSetting.MIN_THREADS, PreloadSetting.MAX_THREADS);
+    }
+
+    public static void putPreloadThreads(int kernel, int value) {
+        ensureMigrated();
+        Prefers.put(key(kernel, "preload_threads"), clamp(value, PreloadSetting.MIN_THREADS, PreloadSetting.MAX_THREADS));
+    }
+
+    public static int getPreloadSizeMb(int kernel) {
+        ensureMigrated();
+        return closestPreloadSize(Prefers.getInt(key(kernel, "preload_size"), PreloadSetting.MIN_SIZE_MB));
+    }
+
+    public static void putPreloadSizeMb(int kernel, int value) {
+        ensureMigrated();
+        Prefers.put(key(kernel, "preload_size"), closestPreloadSize(value));
+    }
+
+    public static int getPreloadTimeSeconds(int kernel) {
+        ensureMigrated();
+        int seconds = clamp(Prefers.getInt(key(kernel, "preload_time"), PreloadSetting.MAX_TIME_SECONDS), PreloadSetting.MIN_TIME_SECONDS, PreloadSetting.MAX_TIME_SECONDS);
+        int steps = Math.round((float) (seconds - PreloadSetting.MIN_TIME_SECONDS) / PreloadSetting.STEP_TIME_SECONDS);
+        return clamp(PreloadSetting.MIN_TIME_SECONDS + steps * PreloadSetting.STEP_TIME_SECONDS, PreloadSetting.MIN_TIME_SECONDS, PreloadSetting.MAX_TIME_SECONDS);
+    }
+
+    public static void putPreloadTimeSeconds(int kernel, int value) {
+        ensureMigrated();
+        Prefers.put(key(kernel, "preload_time"), clamp(value, PreloadSetting.MIN_TIME_SECONDS, PreloadSetting.MAX_TIME_SECONDS));
+    }
+
+    public static boolean isAudioPassThrough(int kernel) {
+        ensureMigrated();
+        return Prefers.getBoolean(key(kernel, "audio_pass_through"), true);
+    }
+
+    public static void putAudioPassThrough(int kernel, boolean value) {
+        ensureMigrated();
+        Prefers.put(key(kernel, "audio_pass_through"), value);
+    }
+
+    public static boolean isPreferAac(int kernel) {
+        ensureMigrated();
+        return Prefers.getBoolean(key(kernel, "prefer_aac"));
+    }
+
+    public static void putPreferAac(int kernel, boolean value) {
+        ensureMigrated();
+        Prefers.put(key(kernel, "prefer_aac"), value);
+    }
+
+    public static boolean isAudioPrefer(int kernel) {
+        ensureMigrated();
+        return Prefers.getBoolean(key(kernel, "audio_prefer"));
+    }
+
+    public static void putAudioPrefer(int kernel, boolean value) {
+        ensureMigrated();
+        Prefers.put(key(kernel, "audio_prefer"), value);
+    }
+
+    public static boolean isVideoPrefer(int kernel) {
+        ensureMigrated();
+        return Prefers.getBoolean(key(kernel, "video_prefer"));
+    }
+
+    public static void putVideoPrefer(int kernel, boolean value) {
+        ensureMigrated();
+        Prefers.put(key(kernel, "video_prefer"), value);
+    }
+
+    public static void applyPreset(int kernel, int profile) {
+        if (profile == PlaybackPerformanceSetting.PROFILE_LIGHTWEIGHT) {
+            putBuffer(kernel, 5);
+            putBufferBytesOption(kernel, 1);
+            putBackBufferOption(kernel, 0);
+            putPlayCacheOption(kernel, 0);
+            putPreload(kernel, false);
+            putPreloadThreads(kernel, PreloadSetting.MIN_THREADS);
+            putPreloadSizeMb(kernel, PreloadSetting.MIN_SIZE_MB);
+            putPreloadTimeSeconds(kernel, PreloadSetting.MIN_TIME_SECONDS);
+            putAudioPassThrough(kernel, false);
+            putPreferAac(kernel, true);
+            putAudioPrefer(kernel, false);
+            putVideoPrefer(kernel, false);
+        } else if (profile == PlaybackPerformanceSetting.PROFILE_COMPATIBLE) {
+            putBuffer(kernel, 5);
+            putBufferBytesOption(kernel, 1);
+            putBackBufferOption(kernel, 1);
+            putPlayCacheOption(kernel, 1);
+            putPreload(kernel, false);
+            putPreloadThreads(kernel, 1);
+            putPreloadSizeMb(kernel, 128);
+            putPreloadTimeSeconds(kernel, 60);
+            putAudioPassThrough(kernel, false);
+            putPreferAac(kernel, true);
+            putAudioPrefer(kernel, false);
+            putVideoPrefer(kernel, false);
+        } else {
+            putBuffer(kernel, 10);
+            putBufferBytesOption(kernel, 3);
+            putBackBufferOption(kernel, 2);
+            putPlayCacheOption(kernel, 2);
+            putPreload(kernel, true);
+            putPreloadThreads(kernel, Math.max(2, Math.min(3, Runtime.getRuntime().availableProcessors() / 2)));
+            putPreloadSizeMb(kernel, 512);
+            putPreloadTimeSeconds(kernel, 120);
+            putAudioPassThrough(kernel, false);
+            putPreferAac(kernel, false);
+            putAudioPrefer(kernel, false);
+            putVideoPrefer(kernel, false);
+        }
+    }
+
+    private static synchronized void ensureMigrated() {
+        if (Prefers.getBoolean(KEY_MIGRATED)) return;
+        int buffer = clamp(Prefers.getInt("buffer"), 1, 10);
+        int bufferBytes = clamp(Prefers.getInt("buffer_bytes"), 0, 3);
+        int backBuffer = clamp(Prefers.getInt("back_buffer"), 0, 3);
+        int playCache = clamp(Prefers.getInt("play_cache"), 0, 4);
+        boolean preload = Prefers.getBoolean("preload");
+        int preloadThreads = clamp(Prefers.getInt("preload_threads", PreloadSetting.MIN_THREADS), PreloadSetting.MIN_THREADS, PreloadSetting.MAX_THREADS);
+        int preloadSize = closestPreloadSize(Prefers.getInt("preload_size", PreloadSetting.MIN_SIZE_MB));
+        int preloadTime = clamp(Prefers.getInt("preload_time", PreloadSetting.MAX_TIME_SECONDS), PreloadSetting.MIN_TIME_SECONDS, PreloadSetting.MAX_TIME_SECONDS);
+        boolean audioPass = Prefers.getBoolean("audio_pass_through", true);
+        boolean preferAac = Prefers.getBoolean("prefer_aac");
+        boolean audioPrefer = Prefers.getBoolean("audio_prefer");
+        boolean videoPrefer = Prefers.getBoolean("video_prefer");
+        for (int kernel : new int[]{PlayerSetting.EXO, PlayerSetting.MPV, PlayerSetting.IJK}) {
+            Prefers.put(key(kernel, "buffer"), buffer);
+            Prefers.put(key(kernel, "buffer_bytes"), bufferBytes);
+            Prefers.put(key(kernel, "back_buffer"), backBuffer);
+            Prefers.put(key(kernel, "play_cache"), playCache);
+            Prefers.put(key(kernel, "preload"), preload);
+            Prefers.put(key(kernel, "preload_threads"), preloadThreads);
+            Prefers.put(key(kernel, "preload_size"), preloadSize);
+            Prefers.put(key(kernel, "preload_time"), preloadTime);
+            Prefers.put(key(kernel, "audio_pass_through"), audioPass);
+            Prefers.put(key(kernel, "prefer_aac"), preferAac);
+            Prefers.put(key(kernel, "audio_prefer"), audioPrefer);
+            Prefers.put(key(kernel, "video_prefer"), videoPrefer);
+        }
+        Prefers.put(KEY_MIGRATED, true);
+    }
+
+    private static String key(int kernel, String suffix) {
+        String prefix = kernel == PlayerSetting.MPV ? "perf_mpv_" : kernel == PlayerSetting.IJK ? "perf_ijk_" : "perf_exo_";
+        return prefix + suffix;
+    }
+
+    private static int closestPreloadSize(int value) {
+        int[] options = {128, 256, 512, 1024, 2048, 4096};
+        int closest = options[0];
+        int distance = Math.abs(value - closest);
+        for (int option : options) {
+            int current = Math.abs(value - option);
+            if (current >= distance) continue;
+            closest = option;
+            distance = current;
+        }
+        return closest;
+    }
+
+    private static int clamp(int value, int min, int max) {
+        return Math.min(Math.max(value, min), max);
+    }
+}

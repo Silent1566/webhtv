@@ -56,4 +56,15 @@ public class Migrations {
             database.execSQL("ALTER TABLE History ADD COLUMN wallPic TEXT DEFAULT NULL");
         }
     };
+
+    public static final Migration MIGRATION_36_37 = new Migration(36, 37) {
+        @Override
+        public void migrate(@NonNull SupportSQLiteDatabase database) {
+            database.execSQL("ALTER TABLE History ADD COLUMN typeName TEXT DEFAULT NULL");
+            database.execSQL("ALTER TABLE History ADD COLUMN area TEXT DEFAULT NULL");
+            database.execSQL("ALTER TABLE History ADD COLUMN actor TEXT DEFAULT NULL");
+            database.execSQL("ALTER TABLE History ADD COLUMN director TEXT DEFAULT NULL");
+            database.execSQL("ALTER TABLE History ADD COLUMN year TEXT DEFAULT NULL");
+        }
+    };
 }

@@ -50,7 +50,7 @@ public class LiveProgramAdapter extends RecyclerView.Adapter<LiveProgramAdapter.
         EpgData item = items.get(position);
         holder.binding.time.setText(item.getTime());
         holder.binding.title.setText(item.getTitle());
-        holder.binding.status.setVisibility(item.isSelected() ? View.VISIBLE : View.INVISIBLE);
+        holder.binding.status.setVisibility(item.isSelected() ? View.VISIBLE : View.GONE);
         holder.binding.status.setText(holder.itemView.getContext().getString(R.string.live_program_current));
         holder.binding.getRoot().setSelected(item.isSelected());
     }

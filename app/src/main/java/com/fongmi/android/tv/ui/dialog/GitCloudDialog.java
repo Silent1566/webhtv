@@ -64,11 +64,11 @@ import com.fongmi.android.tv.gitcloud.provider.GitCloudProviders;
 import com.fongmi.android.tv.gitcloud.secure.GitCloudTokenStore;
 import com.fongmi.android.tv.ui.custom.SafeScrollEditText;
 import com.fongmi.android.tv.ui.custom.SettingClipboardOverlay;
-import com.fongmi.android.tv.utils.Formatters;
+import com.fongmi.android.tv.utils.AppBackup;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
-import com.fongmi.android.tv.utils.SyncFiles;
 import com.fongmi.android.tv.utils.Task;
+import com.github.catvod.crawler.SpiderDebug;
 import com.github.catvod.net.OkHttp;
 import com.github.catvod.utils.Path;
 import com.google.android.material.button.MaterialButton;
@@ -77,7 +77,6 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.textfield.TextInputLayout;
 import com.google.android.material.textview.MaterialTextView;
-import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
 import java.io.ByteArrayOutputStream;
@@ -86,8 +85,6 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
-import java.time.Instant;
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -259,6 +256,7 @@ public class GitCloudDialog extends BaseAlertDialog {
         clipboardOverlay = null;
         if (callback != null) callback.run();
         super.onDestroyView();
+        binding = null;
     }
 
     private View buildView() {
@@ -410,8 +408,12 @@ public class GitCloudDialog extends BaseAlertDialog {
         binding.editFile = toolButton(R.drawable.ic_git_cloud_edit, "编辑");
         binding.download = toolButton(R.drawable.ic_git_cloud_download, "下载");
         binding.deleteFiles = toolButton(R.drawable.ic_action_delete, "删除");
-        binding.backup = toolButton(R.drawable.ic_git_cloud_backup, "备份");
-        binding.restore = toolButton(R.drawable.ic_git_cloud_restore, "恢复");
+        binding.backup = tonal("备份");
+        binding.restore = tonal("恢复");
+        binding.backup.setMinWidth(0);
+        binding.restore.setMinWidth(0);
+        binding.backup.setPadding(dp(2), 0, dp(2), 0);
+        binding.restore.setPadding(dp(2), 0, dp(2), 0);
         fileActions.addView(binding.uploadText, new LinearLayoutCompat.LayoutParams(0, dp(32), 1));
         LinearLayoutCompat.LayoutParams uploadFileParams = new LinearLayoutCompat.LayoutParams(0, dp(32), 1);
         uploadFileParams.leftMargin = dp(5);
@@ -905,13 +907,13 @@ public class GitCloudDialog extends BaseAlertDialog {
 
     private void showFiles(String path, List<GitFile> files) {
         String key = path == null ? "" : path;
-        fileTree.put(key, files);
+        fileTree.put(key, visibleFiles(key, files));
         if (isCoveredBySelectedDirectory(key)) selectLoadedDescendants(key);
         renderFileTree();
     }
 
     private void renderFileTree() {
-        if (binding == null || binding.fileList == null) return;
+        if (!isAdded() || binding == null || binding.fileList == null) return;
         binding.fileList.removeAllViews();
         if (repo == null) {
             restoreTreeFocus();
@@ -1769,22 +1771,48 @@ public class GitCloudDialog extends BaseAlertDialog {
         if (!requireAccount("备份需要先添加账号")) return;
         if (repo == null || !repo.privateRepo) return;
         run("生成备份中", () -> {
-            SyncFiles.Archive archive = SyncFiles.createArchive(SyncFiles.getPaths(SyncFiles.DEFAULT_PATHS));
-            if (archive == null) throw new IllegalStateException("没有可备份文件");
-            String stamp = Formatters.LOCAL_DATETIME.format(Instant.ofEpochMilli(System.currentTimeMillis()).atZone(ZoneId.systemDefault())).replace(":", "").replace(" ", "-");
-            String zip = GitCloudPaths.backupDir() + "/webhtv-backup-" + stamp + ".zip";
-            String manifest = GitCloudPaths.backupDir() + "/webhtv-backup-" + stamp + ".json";
-            CommitResult result = driveEngine.commitAndPush(driveConfig(), List.of(
-                    new FileChange(zip, Path.readToByte(archive.getFile())),
-                    new FileChange(manifest, manifest(zip, archive).getBytes(StandardCharsets.UTF_8))));
-            archive.delete();
-            List<GitFile> files = provider().listFiles(account, token(), repo, repo.defaultBranch, GitCloudPaths.backupDir());
+            File archive = AppBackup.createTemp((stage, percent, bytes, total) -> updateProgress(progressText(stage, bytes, total), percent, percent <= 0));
+            String name = AppBackup.fileName();
+            String zip = GitCloudPaths.backupDir() + "/" + name;
+            CommitResult result;
+            try {
+                List<FileChange> changes = new ArrayList<>();
+                changes.add(new FileChange(zip, Path.readToByte(archive)));
+                try {
+                    for (GitFile file : provider().listFiles(account, token(), repo, repo.defaultBranch, GitCloudPaths.backupDir())) {
+                        if (!isBackupManifest(file)) continue;
+                        FileChange delete = new FileChange(file.path, new byte[0]);
+                        delete.delete = true;
+                        changes.add(delete);
+                    }
+                } catch (Throwable ignored) {
+                }
+                updateProgress("准备 Git 云盘工作区", 0, true);
+                Path.clear(GitCloudPaths.worktree(account, repo));
+                updateProgress("上传完整备份 · " + size(archive.length()), 80, true);
+                result = driveEngine.commitAndPush(driveConfig(), changes);
+            } finally {
+                Path.clear(archive);
+            }
+            List<GitFile> rootFiles = provider().listFiles(account, token(), repo, repo.defaultBranch, "");
+            List<GitFile> appFiles = provider().listFiles(account, token(), repo, repo.defaultBranch, "apps");
+            List<GitFile> webhtvFiles = provider().listFiles(account, token(), repo, repo.defaultBranch, "apps/webhtv");
+            List<GitFile> backupFiles = visibleFiles(GitCloudPaths.backupDir(), provider().listFiles(account, token(), repo, repo.defaultBranch, GitCloudPaths.backupDir()));
             App.post(() -> {
                 Notify.show(result.pushed ? "备份已上传" : result.message);
-                invalidateTree(GitCloudPaths.backupDir());
+                if (!isAdded() || binding == null) return;
+                fileTree.clear();
+                fileTree.put("", rootFiles);
+                fileTree.put("apps", appFiles);
+                fileTree.put("apps/webhtv", webhtvFiles);
+                fileTree.put(GitCloudPaths.backupDir(), backupFiles);
+                expandedPaths.clear();
+                expandedPaths.add("");
+                expandedPaths.add("apps");
+                expandedPaths.add("apps/webhtv");
                 expandedPaths.add(GitCloudPaths.backupDir());
                 currentPath = GitCloudPaths.backupDir();
-                showFiles(GitCloudPaths.backupDir(), files);
+                renderFileTree();
             });
         });
     }
@@ -1792,31 +1820,35 @@ public class GitCloudDialog extends BaseAlertDialog {
     private void confirmRestore() {
         if (!requireAccount("恢复备份需要先添加账号")) return;
         if (repo == null || !repo.privateRepo) return;
-        ChoiceDialog.showConfirm(getChildFragmentManager(), "恢复备份", "将从选中的备份，或最新备份，恢复 TV、TVBox、TVData。已有同名文件会被覆盖。", "恢复", this::restoreBackup);
+        GitFile selected = validSelectedBackup();
+        String source;
+        if (selected != null) source = "将恢复已勾选的备份：\n" + selected.name;
+        else if (selectedFiles.isEmpty()) source = "未勾选备份，将自动使用最新一次备份。";
+        else source = "当前勾选包含文件夹、非备份文件或多个项目，将忽略当前选择并自动使用最新一次备份。";
+        ChoiceDialog.showConfirm(getChildFragmentManager(), "恢复备份", source + "\n\n恢复内容包括数据库、设置、登录态、MPV 配置及共享数据文件。已有同名数据会被覆盖。", "恢复", this::restoreBackup);
     }
 
     private void restoreBackup() {
         run("查找备份中", () -> {
-            GitFile backup = selectedBackup();
+            GitFile backup = validSelectedBackup();
             if (backup == null) backup = latestBackup();
             if (backup == null) throw new IllegalStateException("未找到可恢复的备份");
             File archive = File.createTempFile("webhtv-git-restore-", ".zip", Path.cache());
             try {
                 downloadRemoteFile(backup, archive);
                 updateProgress("恢复 " + backup.name, 100, true);
-                int count = SyncFiles.restoreArchive(archive);
-                App.post(() -> Notify.show("恢复完成：" + count + " 个文件"));
+                AppBackup.RestoreResult result = AppBackup.restore(archive, (stage, percent, bytes, total) -> updateProgress(progressText(stage, bytes, total), percent, percent <= 0));
+                App.post(() -> Notify.show("恢复完成：" + result.fileCount() + " 个文件及完整应用数据"));
             } finally {
                 Path.clear(archive);
             }
         });
     }
 
-    private GitFile selectedBackup() {
-        for (GitFile file : selectedFiles.values()) {
-            if (isBackupZip(file)) return file;
-        }
-        return null;
+    private GitFile validSelectedBackup() {
+        if (selectedFiles.size() != 1) return null;
+        GitFile file = selectedFiles.values().iterator().next();
+        return isBackupZip(file) ? file : null;
     }
 
     private GitFile latestBackup() throws Exception {
@@ -1830,7 +1862,11 @@ public class GitCloudDialog extends BaseAlertDialog {
     }
 
     private boolean isBackupZip(GitFile file) {
-        return file != null && !file.directory && !TextUtils.isEmpty(file.name) && file.name.startsWith("webhtv-backup-") && file.name.endsWith(".zip");
+        return file != null && !file.directory && !TextUtils.isEmpty(file.name) && file.name.startsWith(AppBackup.PREFIX) && file.name.endsWith(AppBackup.SUFFIX);
+    }
+
+    private boolean isBackupManifest(GitFile file) {
+        return file != null && !file.directory && !TextUtils.isEmpty(file.name) && file.name.startsWith(AppBackup.PREFIX) && file.name.endsWith(".json");
     }
 
     private void downloadRemoteFile(GitFile file, File target) throws Exception {
@@ -1850,19 +1886,20 @@ public class GitCloudDialog extends BaseAlertDialog {
         }
     }
 
-    private String manifest(String archive, SyncFiles.Archive data) {
-        JsonObject object = new JsonObject();
-        object.addProperty("app", "WebHTV");
-        object.addProperty("version", 1);
-        object.addProperty("createdAt", Instant.now().toString());
-        object.addProperty("archive", archive);
-        object.addProperty("fileCount", data.getCount());
-        object.addProperty("rawSize", data.getRawSize());
-        object.addProperty("zipSize", data.getZipSize());
-        JsonArray items = new JsonArray();
-        for (String path : data.getPaths()) items.add(path);
-        object.add("items", items);
-        return App.gson().toJson(object);
+    private String progressText(String stage, long bytes, long total) {
+        if (total > 0) return stage + " · " + size(bytes) + " / " + size(total);
+        if (bytes > 0) return stage + " · " + size(bytes);
+        return stage;
+    }
+
+    private List<GitFile> visibleFiles(String path, List<GitFile> files) {
+        if (!TextUtils.equals(GitCloudPaths.backupDir(), path)) return files == null ? new ArrayList<>() : files;
+        List<GitFile> result = new ArrayList<>();
+        for (GitFile file : files == null ? List.<GitFile>of() : files) {
+            if (isBackupManifest(file)) continue;
+            result.add(file);
+        }
+        return result;
     }
 
     private void clearCache() {
@@ -2041,6 +2078,7 @@ public class GitCloudDialog extends BaseAlertDialog {
                     setStatus("完成");
                 });
             } catch (Throwable e) {
+                SpiderDebug.log("git-cloud", e);
                 App.post(() -> {
                     updateProgress("", 0, false);
                     setStatus(e.getMessage());

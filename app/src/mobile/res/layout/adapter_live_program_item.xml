@@ -2,23 +2,23 @@
 <androidx.appcompat.widget.LinearLayoutCompat xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="58dp"
-    android:layout_marginBottom="8dp"
+    android:layout_height="44dp"
+    android:layout_marginBottom="5dp"
     android:background="@drawable/selector_control_sheet_button"
     android:gravity="center_vertical"
     android:orientation="horizontal"
-    android:paddingStart="14dp"
-    android:paddingEnd="12dp">
+    android:paddingStart="10dp"
+    android:paddingEnd="8dp">
 
     <com.google.android.material.textview.MaterialTextView
         android:id="@+id/time"
-        android:layout_width="92dp"
+        android:layout_width="86dp"
         android:layout_height="match_parent"
         android:duplicateParentState="true"
         android:gravity="center_vertical"
         android:singleLine="true"
         android:textColor="@color/selector_control_sheet_text"
-        android:textSize="13sp"
+        android:textSize="12sp"
         tools:text="20:00 ~ 21:00" />
 
     <com.google.android.material.textview.MaterialTextView
@@ -30,17 +30,19 @@
         android:duplicateParentState="true"
         android:ellipsize="end"
         android:gravity="center_vertical"
-        android:maxLines="2"
+        android:singleLine="true"
         android:textColor="@color/selector_control_sheet_text"
-        android:textSize="14sp"
+        android:textSize="13sp"
         tools:text="新闻联播" />
 
     <com.google.android.material.textview.MaterialTextView
         android:id="@+id/status"
-        android:layout_width="56dp"
+        android:layout_width="wrap_content"
         android:layout_height="match_parent"
+        android:layout_marginStart="6dp"
         android:duplicateParentState="true"
         android:gravity="center"
+        android:minWidth="40dp"
         android:textColor="@color/selector_control_sheet_text"
         android:textSize="12sp"
         tools:text="直播中" />

@@ -3,10 +3,12 @@ package com.fongmi.android.tv.api.config;
 import android.text.TextUtils;
 
 import com.fongmi.android.tv.App;
+import com.fongmi.android.tv.api.CspWarmup;
 import com.fongmi.android.tv.api.Decoder;
 import com.fongmi.android.tv.api.loader.BaseLoader;
 import com.fongmi.android.tv.bean.Config;
 import com.fongmi.android.tv.bean.Depot;
+import com.fongmi.android.tv.bean.HlsAdRule;
 import com.fongmi.android.tv.bean.Parse;
 import com.fongmi.android.tv.bean.Rule;
 import com.fongmi.android.tv.bean.Site;
@@ -38,6 +40,7 @@ public class VodConfig extends BaseConfig {
     private Parse parse;
     private List<Doh> doh;
     private List<Rule> rules;
+    private List<HlsAdRule> hlsRules;
     private List<Site> sites;
     private List<String> ads;
     private List<String> flags;
@@ -89,10 +92,12 @@ public class VodConfig extends BaseConfig {
         sites = null;
         flags = null;
         rules = null;
+        hlsRules = null;
         parses = null;
         WebHomeExtensionRegistry.get().setGlobalSources(null, "");
         BaseLoader.get().clear();
         RuleConfig.get().invalidate();
+        HlsRuleConfig.invalidate();
         return this;
     }
 
@@ -121,6 +126,17 @@ public class VodConfig extends BaseConfig {
     @Override
     protected boolean isLoaded() {
         return !getSites().isEmpty();
+    }
+
+    @Override
+    protected void beforeLoad() {
+        CspWarmup.reset();
+    }
+
+    @Override
+    protected void onLoadSuccess() {
+        CspWarmup.schedule("vod-config-loaded");
+        InterfaceAdRuleLearningService.schedule(getConfig().getDesc(), getConfig().getUrl(), getAds(), getRules());
     }
 
     private void checkJson(Config config, JsonObject object) throws Throwable {
@@ -159,6 +175,7 @@ public class VodConfig extends BaseConfig {
         setHeaders(Header.arrayFrom(fetchArray(object, "headers")));
         setProxy(Proxy.arrayFrom(fetchArray(object, "proxy")));
         setRules(Rule.arrayFrom(fetchArray(object, "rules")));
+        setHlsRules(HlsAdRule.arrayFrom(fetchArray(object, "hlsRules")));
         setDoh(Doh.arrayFrom(fetchArray(object, "doh")));
         setFlags(Json.safeListString(object, "flags"));
         setHosts(Json.safeListString(object, "hosts"));
@@ -227,6 +244,15 @@ public class VodConfig extends BaseConfig {
 
     public List<Rule> getRules() {
         return rules == null ? Collections.emptyList() : rules;
+    }
+
+    public List<HlsAdRule> getHlsRules() {
+        return hlsRules == null ? Collections.emptyList() : hlsRules;
+    }
+
+    private void setHlsRules(List<HlsAdRule> rules) {
+        this.hlsRules = rules;
+        HlsRuleConfig.invalidate();
     }
 
     private void setRules(List<Rule> rules) {

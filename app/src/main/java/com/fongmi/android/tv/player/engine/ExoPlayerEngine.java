@@ -21,14 +21,19 @@ import com.fongmi.android.tv.player.exo.TrackUtil;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.github.catvod.crawler.SpiderDebug;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 public class ExoPlayerEngine implements PlayerEngine {
 
     private final ErrorMsgProvider provider;
     private final PreCache preCache;
+    private final Set<String> attemptedFormats;
     private PlaySpec spec;
+    private String activeFormat;
     private ExoPlayer player;
     private int decode;
     private boolean playWhenReady;
@@ -37,6 +42,7 @@ public class ExoPlayerEngine implements PlayerEngine {
         this.player = ExoUtil.buildPlayer(decode, listener);
         this.provider = new ErrorMsgProvider();
         this.preCache = new PreCache();
+        this.attemptedFormats = new HashSet<>();
         this.decode = decode;
     }
 
@@ -97,7 +103,9 @@ public class ExoPlayerEngine implements PlayerEngine {
     @Override
     public void start(PlaySpec spec, boolean playWhenReady) {
         this.spec = spec;
+        this.activeFormat = spec.getFormat();
         this.playWhenReady = playWhenReady;
+        resetAttemptedFormats();
         SpiderDebug.log("player-engine", "start decode=%d format=%s play=%s headers=%s urlLen=%d", decode, spec.getFormat(), playWhenReady, spec.getHeaders() == null ? 0 : spec.getHeaders().size(), spec.getUrl() == null ? 0 : spec.getUrl().length());
         startInternal(C.TIME_UNSET, playWhenReady);
     }
@@ -105,7 +113,9 @@ public class ExoPlayerEngine implements PlayerEngine {
     @Override
     public void start(PlaySpec spec, long position, boolean playWhenReady) {
         this.spec = spec;
+        this.activeFormat = spec.getFormat();
         this.playWhenReady = playWhenReady;
+        resetAttemptedFormats();
         SpiderDebug.log("player-engine", "start decode=%d format=%s position=%d play=%s headers=%s urlLen=%d", decode, spec.getFormat(), position, playWhenReady, spec.getHeaders() == null ? 0 : spec.getHeaders().size(), spec.getUrl() == null ? 0 : spec.getUrl().length());
         startInternal(position, playWhenReady);
     }
@@ -113,7 +123,9 @@ public class ExoPlayerEngine implements PlayerEngine {
     @Override
     public void restart(PlaySpec spec, long position, boolean playWhenReady) {
         this.spec = spec;
+        this.activeFormat = spec.getFormat();
         this.playWhenReady = playWhenReady;
+        resetAttemptedFormats();
         SpiderDebug.log("player-engine", "restart decode=%d format=%s position=%d play=%s headers=%s urlLen=%d", decode, spec.getFormat(), position, playWhenReady, spec.getHeaders() == null ? 0 : spec.getHeaders().size(), spec.getUrl() == null ? 0 : spec.getUrl().length());
         preCache.stop();
         player.stop();
@@ -183,6 +195,11 @@ public class ExoPlayerEngine implements PlayerEngine {
     }
 
     @Override
+    public long getDroppedFrames() {
+        return PlaybackAnalyticsListener.getSnapshot().droppedFrames();
+    }
+
+    @Override
     public boolean haveTitle() {
         return !player.getCurrentMediaEditions().isEmpty();
     }
@@ -210,7 +227,7 @@ public class ExoPlayerEngine implements PlayerEngine {
             case PlaybackException.ERROR_CODE_IO_UNSPECIFIED, PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED, PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED, PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED, PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED -> retryFormat(e.errorCode);
             default -> ErrorAction.FATAL;
         };
-        SpiderDebug.log("player-engine", "handleError code=%d action=%s decode=%d format=%s", e.errorCode, action, decode, spec == null ? null : spec.getFormat());
+        SpiderDebug.log("player-engine", "handleError code=%d action=%s decode=%d format=%s originalFormat=%s", e.errorCode, action, decode, activeFormat, spec == null ? null : spec.getFormat());
         return action;
     }
 
@@ -224,10 +241,10 @@ public class ExoPlayerEngine implements PlayerEngine {
 
     private void startInternal(long position, boolean playWhenReady) {
         this.playWhenReady = playWhenReady;
-        SpiderDebug.log("player-engine", "prepare position=%d decode=%d format=%s play=%s", position, decode, spec.getFormat(), playWhenReady);
+        SpiderDebug.log("player-engine", "prepare position=%d decode=%d format=%s originalFormat=%s play=%s", position, decode, activeFormat, spec.getFormat(), playWhenReady);
         PlaybackAnalyticsListener.reset();
         if (!playWhenReady) player.pause();
-        MediaItem item = ExoUtil.getMediaItem(spec, decode);
+        MediaItem item = ExoUtil.getMediaItem(spec.copyWithFormat(activeFormat), decode);
         player.setMediaItem(item, position);
         preCache.start(player, item);
         player.prepare();
@@ -241,9 +258,25 @@ public class ExoPlayerEngine implements PlayerEngine {
     }
 
     private ErrorAction retryFormat(int errorCode) {
-        spec.setFormat(ExoUtil.getMimeType(errorCode));
-        SpiderDebug.log("player-engine", "retryFormat errorCode=%d newFormat=%s position=%d", errorCode, spec.getFormat(), player.getCurrentPosition());
+        String format = ExoUtil.getMimeType(errorCode);
+        String key = formatKey(format);
+        if (format == null || attemptedFormats.contains(key)) {
+            SpiderDebug.log("player-engine", "retryFormat stopped errorCode=%d attempted=%s", errorCode, attemptedFormats);
+            return ErrorAction.FATAL;
+        }
+        attemptedFormats.add(key);
+        activeFormat = format;
+        SpiderDebug.log("player-engine", "retryFormat errorCode=%d newFormat=%s position=%d", errorCode, format, player.getCurrentPosition());
         startInternal(player.getCurrentPosition());
         return ErrorAction.RECOVERED;
+    }
+
+    private void resetAttemptedFormats() {
+        attemptedFormats.clear();
+        attemptedFormats.add(formatKey(activeFormat));
+    }
+
+    private String formatKey(String format) {
+        return format == null || format.isBlank() ? "<auto>" : format.toLowerCase(Locale.ROOT);
     }
 }

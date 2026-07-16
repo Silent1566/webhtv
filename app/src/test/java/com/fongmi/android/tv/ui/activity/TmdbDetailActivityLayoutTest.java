@@ -133,6 +133,30 @@ public class TmdbDetailActivityLayoutTest {
     }
 
     @Test
+    public void fusionInlineSettingsButtonOpensFullPlayerControls() throws Exception {
+        String source = readJava("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java");
+        int setup = source.indexOf("private void setupMobileInlineControl()");
+        int setupEnd = source.indexOf("private void setupMobileInlineParse()", setup);
+        String body = source.substring(setup, setupEnd);
+
+        assertTrue("fusion settings button must open the full player control dialog",
+                body.contains("detailControlView(R.id.setting, View.class).setOnClickListener(guarded(this::showInlineControlDialog));"));
+        assertTrue("fusion settings button must not open the display-only dialog",
+                !body.contains("detailControlView(R.id.setting, View.class).setOnClickListener(guarded(this::showInlineDisplay));"));
+
+        Path dialogPath = Path.of("src", "mobile", "java", "com", "fongmi", "android", "tv", "ui", "dialog", "ControlDialog.java");
+        if (!Files.exists(dialogPath)) dialogPath = Path.of("app").resolve(dialogPath);
+        String dialog = new String(Files.readAllBytes(dialogPath), StandardCharsets.UTF_8);
+        int inline = dialog.indexOf("public ControlDialog inline(TmdbDetailActivity activity)");
+        int inlineEnd = dialog.indexOf("public ControlDialog history(History history)", inline);
+        String inlineBody = dialog.substring(inline, inlineEnd);
+
+        assertTrue("fusion control dialog must resolve duplicate button IDs from the inline action root",
+                inlineBody.contains("activity.inlineControlDialogAction(R.id.danmaku)")
+                        && !inlineBody.contains("activity.findViewById(R.id.danmaku)"));
+    }
+
+    @Test
     public void fusionInlinePlayerButtonOrderMatchesNativeLeanbackPlayer() throws Exception {
         String nativeLayout = readLeanbackLayout("view_control_vod_action.xml");
         String fusionLayout = readLayout("activity_tmdb_detail.xml");
@@ -305,14 +329,18 @@ public class TmdbDetailActivityLayoutTest {
     public void inlinePlayerPersistentDisplayUsesPlayerOsdOnTvAndLegacyPanelOnMobile() throws Exception {
         Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        String controller = readJava("com", "fongmi", "android", "tv", "ui", "player", "VodPlayerUiController.java");
         int method = source.indexOf("private void updateInlineDisplayPanel()");
         int end = source.indexOf("private void setButtonEnabled", method);
         String body = method >= 0 && end > method ? source.substring(method, end) : "";
-        int initOsd = source.indexOf("inlineOsd = new PlayerOsdController(");
+        int initOsd = controller.indexOf("this.osd = new PlayerOsdController(");
 
         assertTrue(sourcePath + " is missing updateInlineDisplayPanel", method >= 0);
         assertTrue("mobile inline playback must suppress PlayerOsdController persistent corner labels to avoid duplicate display",
-                initOsd >= 0 && source.indexOf("inlineOsd.setPersistentSuppressed(Util.isMobile());", initOsd) > initOsd);
+                initOsd >= 0
+                        && controller.indexOf("this.osd.setPersistentSuppressed(host.suppressPersistentOsd());", initOsd) > initOsd
+                        && source.contains("public boolean suppressPersistentOsd()")
+                        && source.contains("return Util.isMobile();"));
         assertTrue("TV inline playback should clear the legacy panel and let PlayerOsdController render persistent OSD",
                 body.contains("if (!Util.isMobile()) {") && body.contains("hideInlineDisplayPanel();") && body.contains("return;"));
         assertTrue("mobile inline playback should keep the legacy display panel for persistent screen display",
@@ -644,7 +672,8 @@ public class TmdbDetailActivityLayoutTest {
         assertTrue("compact immersive/cinema title area must share the row with the poster instead of occupying full width",
                 body.contains("new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)")
                         && body.contains("infoParams.setMarginStart(compact ? ResUtil.dp2px(14) : 0);")
-                        && body.contains("if (compact) setWidthMatch(binding.detailActions);"));
+                        && body.contains("if (compact)")
+                        && containsMethodCallIgnoringReceiver(body, "setWidthMatch(binding.detailActions)"));
     }
 
     @Test
@@ -1277,6 +1306,7 @@ public class TmdbDetailActivityLayoutTest {
         int rangeKey = activity.indexOf("private boolean onDetailEpisodeRangeKey");
         int toolKey = activity.indexOf("private boolean onDetailEpisodeToolKey");
         int episodeKey = activity.indexOf("private boolean onDetailEpisodeKey");
+        int seasonKey = activity.indexOf("private boolean onDetailSeasonKey");
         int horizontal = activity.indexOf("private boolean onDetailHorizontalButtonGroupKey");
         int vertical = activity.indexOf("private boolean onDetailExternalLinksKey");
         int focusTarget = activity.indexOf("private View horizontalFocusTarget");
@@ -1284,6 +1314,7 @@ public class TmdbDetailActivityLayoutTest {
         String flagKeyBody = flagKey >= 0 && rangeKey > flagKey ? activity.substring(flagKey, rangeKey) : "";
         String rangeKeyBody = rangeKey >= 0 && toolKey > rangeKey ? activity.substring(rangeKey, toolKey) : "";
         String toolKeyBody = toolKey >= 0 && episodeKey > toolKey ? activity.substring(toolKey, episodeKey) : "";
+        String seasonKeyBody = seasonKey >= 0 && horizontal > seasonKey ? activity.substring(seasonKey, horizontal) : "";
         String horizontalBody = horizontal >= 0 && vertical > horizontal ? activity.substring(horizontal, vertical) : "";
         String verticalBody = vertical >= 0 && focusTarget > vertical ? activity.substring(vertical, focusTarget) : "";
 
@@ -1297,13 +1328,20 @@ public class TmdbDetailActivityLayoutTest {
                         && navigationBody.contains("isFocusInside(focus, binding.detailActions)")
                         && navigationBody.contains("onDetailHorizontalButtonGroupKey(binding.detailActions, null, focus, event)")
                         && navigationBody.contains("isFocusInside(focus, binding.seasonContainer)")
-                        && navigationBody.contains("onDetailHorizontalButtonGroupKey(binding.seasonContainer, null, focus, event)")
+                        && navigationBody.contains("onDetailSeasonKey(focus, event)")
                         && navigationBody.contains("isFocusInside(focus, binding.externalLinksContainer)")
                         && navigationBody.contains("onDetailExternalLinksKey(focus, event)"));
-        assertTrue("line, episode-page, and episode-tool buttons should handle DPAD_LEFT/RIGHT inside their own row",
+        assertTrue("line, episode-page, episode-tool, and season buttons should handle DPAD_LEFT/RIGHT inside their own row",
                 flagKeyBody.contains("onDetailHorizontalButtonGroupKey(binding.flagContainer, binding.flagScroll, focus, event)")
                         && rangeKeyBody.contains("onDetailHorizontalButtonGroupKey(binding.episodeRangeContainer, binding.episodeRangeScroll, view, event)")
-                        && toolKeyBody.contains("onDetailHorizontalButtonGroupKey(binding.episodeHeader, null, view, event)"));
+                        && toolKeyBody.contains("onDetailHorizontalButtonGroupKey(binding.episodeHeader, null, view, event)")
+                        && seasonKeyBody.contains("onDetailHorizontalButtonGroupKey(binding.seasonContainer, null, focus, event)"));
+        assertTrue("season buttons should move vertically inside the season grid before leaving it",
+                seasonKeyBody.contains("if (KeyUtil.isUpKey(event)) return focusDetailSeasonSibling(focus, true) || focusDetailEpisodeToolButton(View.FOCUS_UP) || focusDetailFlagButton();")
+                        && seasonKeyBody.contains("return focusDetailSeasonSibling(focus, false) || focusDetailEpisodeRangeButton() || focusDetailEpisode();")
+                        && seasonKeyBody.contains("private boolean focusDetailSeasonSibling(View focus, boolean up)")
+                        && seasonKeyBody.contains("View target = FocusFinder.getInstance().findNextFocus(binding.seasonContainer, focus, direction);")
+                        && seasonKeyBody.contains("return target.requestFocus(direction);"));
         assertTrue("horizontal button groups should move only to same-row neighbors and consume row boundaries",
                 horizontalBody.contains("if (!KeyUtil.isLeftKey(event) && !KeyUtil.isRightKey(event)) return false;")
                         && horizontalBody.contains("if (!KeyUtil.isActionDown(event)) return true;")
@@ -1442,36 +1480,38 @@ public class TmdbDetailActivityLayoutTest {
         int inlineKey = activity.indexOf("private boolean handleInlineKey(KeyEvent event)", dispatch);
         String dispatchBody = dispatch >= 0 && inlineKey > dispatch ? activity.substring(dispatch, inlineKey) : "";
 
-        assertTrue("detail layout must include both reverse and grid/list controls",
+        assertTrue("detail layout must include reverse, filename, and grid/list controls",
                 layout.indexOf("android:id=\"@+id/episodeReverse\"") >= 0
-                        && layout.indexOf("android:id=\"@+id/episodeReverse\"") < layout.indexOf("android:id=\"@+id/episodeViewMode\""));
+                        && layout.indexOf("android:id=\"@+id/episodeReverse\"") < layout.indexOf("android:id=\"@+id/episodeFileName\"")
+                        && layout.indexOf("android:id=\"@+id/episodeFileName\"") < layout.indexOf("android:id=\"@+id/episodeViewMode\""));
         assertTrue("detail episode view-mode button must stay visible on TV detail pages",
                 activity.contains("binding.episodeViewMode.setVisibility(View.VISIBLE);")
                         && !activity.contains("binding.episodeViewMode.setVisibility(shouldForceAdaptiveEpisodeGrid() ? View.GONE : View.VISIBLE);"));
-        assertTrue("line-row DPAD_DOWN should reach the episode header tool button before episode pages",
+        assertTrue("line-row DPAD_DOWN should still reach the episode header tool button before episode pages",
                 flagKeyBody.contains("if (focusDetailEpisodeToolButton(View.FOCUS_DOWN)) return true;")
-                        && flagKeyBody.indexOf("focusDetailEpisodeToolButton(View.FOCUS_DOWN)") < flagKeyBody.indexOf("focusDetailEpisodeRangeButton()")
-                        && activity.contains("button.setNextFocusDownId(R.id.episodeReverse);"));
-        assertTrue("episode-page DPAD_UP should reach the episode header tool button",
-                rangeKeyBody.contains("if (KeyUtil.isUpKey(event)) return focusDetailEpisodeToolButton(View.FOCUS_UP) || focusDetailFlagButton();")
-                        && activity.contains("button.setNextFocusUpId(R.id.episodeReverse);"));
+                        && flagKeyBody.indexOf("focusDetailEpisodeToolButton(View.FOCUS_DOWN)") < flagKeyBody.indexOf("focusDetailEpisodeRangeButton()"));
+        assertTrue("episode-page DPAD_UP should return to seasons before header tools or lines",
+                rangeKeyBody.contains("if (KeyUtil.isUpKey(event)) return focusDetailSeasonButton() || focusDetailEpisodeToolButton(View.FOCUS_UP) || focusDetailFlagButton();"));
         assertTrue("top-row episode DPAD_UP should fall back to the header tools before lines",
                 episodeKeyBody.contains("if (focusDetailEpisodeRangeButton()) return true;")
                         && episodeKeyBody.contains("if (focusDetailEpisodeToolButton(View.FOCUS_UP)) return true;")
                         && episodeKeyBody.indexOf("focusDetailEpisodeRangeButton()") < episodeKeyBody.indexOf("focusDetailEpisodeToolButton(View.FOCUS_UP)")
                         && episodeKeyBody.indexOf("focusDetailEpisodeToolButton(View.FOCUS_UP)") < episodeKeyBody.indexOf("focusDetailFlagButton()"));
-        assertTrue("episode header tool focusing should prefer reverse and expose the grid/list toggle",
+        assertTrue("episode header tool focusing should include every visible header tool",
                 helperBody.contains("return focusDetailButton(binding.episodeReverse, direction)")
+                        && helperBody.contains("|| focusDetailButton(binding.episodeFileName, direction)")
                         && helperBody.contains("|| focusDetailButton(binding.episodeViewMode, direction);")
                         && helperBody.contains("button.requestFocus(direction);"));
-        assertTrue("episode header tools should let remote users move back up or down",
+        assertTrue("episode header tools should move down to seasons or episode ranges without returning to lines",
                 activity.contains("binding.episodeReverse.setOnKeyListener((view, keyCode, event) -> onDetailEpisodeToolKey(view, keyCode, event));")
+                        && activity.contains("binding.episodeFileName.setOnKeyListener((view, keyCode, event) -> onDetailEpisodeToolKey(view, keyCode, event));")
                         && activity.contains("binding.episodeViewMode.setOnKeyListener((view, keyCode, event) -> onDetailEpisodeToolKey(view, keyCode, event));")
-                        && activity.contains("if (KeyUtil.isLeftKey(event) || KeyUtil.isRightKey(event)) return onDetailHorizontalButtonGroupKey(binding.episodeHeader, null, view, event);"));
+                        && activity.contains("if (KeyUtil.isLeftKey(event) || KeyUtil.isRightKey(event)) return onDetailHorizontalButtonGroupKey(binding.episodeHeader, null, view, event);")
+                        && activity.contains("return focusDetailSeasonButton() || focusDetailEpisodeRangeButton() || focusDetailEpisode();"));
         assertTrue("activity-level key dispatch should guard the detail episode focus chain when child listeners are bypassed",
                 dispatchBody.contains("if (handleDetailEpisodeNavigationKey(event)) return true;")
                         && dispatchBody.contains("isFocusInside(focus, binding.flagScroll)") && dispatchBody.contains("onDetailFlagKey(event.getKeyCode(), event)")
-                        && dispatchBody.contains("focus == binding.episodeReverse || focus == binding.episodeViewMode") && dispatchBody.contains("onDetailEpisodeToolKey(focus, event.getKeyCode(), event)")
+                        && dispatchBody.contains("isEpisodeToolButton(focus)") && dispatchBody.contains("onDetailEpisodeToolKey(focus, event.getKeyCode(), event)")
                         && dispatchBody.contains("isFocusInside(focus, binding.episodeRangeScroll)") && dispatchBody.contains("onDetailEpisodeRangeKey(focus, event.getKeyCode(), event)")
                         && dispatchBody.contains("isFocusInside(focus, binding.episodeContainer)") && dispatchBody.contains("onDetailEpisodeContainerKey(focus, event)")
                         && activity.contains("binding.episodeContainer.findContainingViewHolder(focus)")
@@ -1580,7 +1620,8 @@ public class TmdbDetailActivityLayoutTest {
 
         assertTrue("detail episodes should bind matched TMDB objects back onto source Episode items for playback cards and dialogs",
                 bindBody.contains("bindTmdbEpisodes(sourceEpisodes, tmdbSeason);")
-                        && activity.contains("episode.setTmdbEpisode(tmdbEpisodes.get(position.number()));"));
+                        && activity.contains("TmdbEpisode tmdbEpisode = tmdbEpisodes.get(position.number());")
+                        && activity.contains("episode.setTmdbEpisode(TmdbEpisodeMatcher.shouldApply(episode, tmdbEpisode) ? tmdbEpisode : null);"));
         assertTrue("season fetch completion should refresh against the active TMDB data season, not only the selected source season",
                 fetchBody.contains("seasonNumber == tmdbEpisodeDataSeason(selectedFlag == null ? null : selectedFlag.getEpisodes())"));
         assertTrue("stale split-season TMDB caches should trigger a one-shot fresh first-season probe for long single-season shows",
@@ -1591,7 +1632,8 @@ public class TmdbDetailActivityLayoutTest {
                         && activity.contains("fetchSeasonIfNeeded(firstSeason, true);")
                         && activity.contains("seasonEpisodeCounts.put(seasonNumber, episodes.size());")
                         && service.contains("season(@NonNull TmdbItem item, int seasonNumber, @NonNull TmdbConfig config, JsonObject detail, boolean refresh)")
-                        && service.contains("refresh ? null : readCache(file, ttl)"));
+                        && service.contains("refresh ? null : readFirstCache(lookupFiles, ttl)")
+                        && service.contains("readFirstCache(lookupFiles, Long.MAX_VALUE)"));
     }
 
     @Test
@@ -1767,6 +1809,55 @@ public class TmdbDetailActivityLayoutTest {
                         && startBody.contains("inlinePlaybackFlag = selectedFlag == null ? \"\" : selectedFlag.getFlag();"));
     }
 
+    @Test
+    public void fusionInlinePlayerDelegatesSharedUiSetup() throws Exception {
+        String activity = readJava("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java");
+        String chrome = readJava("com", "fongmi", "android", "tv", "ui", "player", "VodPlayerChrome.java");
+        String controller = readJava("com", "fongmi", "android", "tv", "ui", "player", "VodPlayerUiController.java");
+        int method = activity.indexOf("private void initFusionPlayer()");
+        int mobile = activity.indexOf("private void setupMobileInlineControl()", method);
+        String body = activity.substring(method, mobile);
+
+        assertTrue("fusion inline player should delegate shared UI setup to VodPlayerUiController",
+                body.contains("inlinePlayerUi = new VodPlayerUiController"));
+        assertTrue("fusion inline player should pass a chrome object instead of wiring OSD views inline",
+                body.contains("VodPlayerChrome.fromTmdbDetail(binding)"));
+        assertTrue("fusion inline player should keep legacy fields backed by the shared controller during migration",
+                body.contains("inlineControlController = inlinePlayerUi.controlController();")
+                        && body.contains("inlinePiP = inlinePlayerUi.pip();")
+                        && body.contains("inlineClock = inlinePlayerUi.clock();")
+                        && body.contains("inlineOsd = inlinePlayerUi.osd();"));
+        assertTrue("fusion inline player should delegate reusable TV control bindings to VodPlayerUiController",
+                body.contains("inlinePlayerUi.bindInlineActions();")
+                        && !body.contains("binding.playerPrev.setOnClickListener")
+                        && !body.contains("binding.playerControls.setOnTouchListener(this::onInlineControlTouch);"));
+        assertTrue("shared chrome must expose the reusable TV control views",
+                chrome.contains("binding.playerPrev")
+                        && chrome.contains("binding.playerQuality")
+                        && chrome.contains("binding.playerDanmaku")
+                        && chrome.contains("binding.playerFullscreenAction")
+                        && chrome.contains("binding.playerControls"));
+        assertTrue("shared player UI controller must bind reusable TV control actions through the host contract",
+                controller.contains("public void bindInlineActions()")
+                        && controller.contains("chrome.prev.setOnClickListener(view -> host.playPrevious());")
+                        && controller.contains("chrome.quality.setOnClickListener(view -> host.showQuality());")
+                        && controller.contains("chrome.speed.setOnLongClickListener(view -> host.resetSpeed());")
+                        && controller.contains("chrome.textTrack.setOnClickListener(host::showTrack);")
+                        && controller.contains("chrome.danmaku.setOnLongClickListener(view -> host.onDanmakuLongClick());")
+                        && controller.contains("chrome.fullscreen.setOnClickListener(view -> host.toggleFullscreen());")
+                        && controller.contains("chrome.controls.setOnTouchListener(host::onControlsTouch);"));
+        assertTrue("shared player UI controller must own the reusable playback UI helpers",
+                controller.contains("new VodPlayerControlController")
+                        && controller.contains("new PlayerOsdController")
+                        && controller.contains("Clock.create()")
+                        && controller.contains("new PiP()"));
+        assertTrue("shared player UI lifecycle must own OSD start/stop/release",
+                controller.contains("osd.setDiagnosticsVisible(PlayerSetting.isOsdDiagnostics())")
+                        && controller.contains("osd.start();")
+                        && controller.contains("osd.stop();")
+                        && controller.contains("osd.release();"));
+    }
+
     private static Path findMainJavaPath() {
         Path moduleRelative = Path.of("src", "main", "java");
         if (Files.exists(moduleRelative)) return moduleRelative;
@@ -1836,5 +1927,35 @@ public class TmdbDetailActivityLayoutTest {
         int tagEnd = layout.indexOf("/>", idIndex);
         if (tagEnd < 0) tagEnd = layout.indexOf(">", idIndex);
         return tagEnd > idIndex && layout.substring(idIndex, tagEnd).contains(attribute);
+    }
+
+    /**
+     * 检查源码中是否包含方法调用,忽略接收者前缀(this. / TmdbDetailLayoutUtils. / 等)
+     *
+     * 让文本断言只关心"做了什么"(结果),不关心"怎么调用的"(实现细节)。
+     * 例如: containsMethodCallIgnoringReceiver(body, "setWidthMatch(binding.detailActions)")
+     * 会匹配:
+     *   - setWidthMatch(binding.detailActions)
+     *   - this.setWidthMatch(binding.detailActions)
+     *   - TmdbDetailLayoutUtils.setWidthMatch(binding.detailActions)
+     *
+     * 方案 1 核心:让重构搬方法时,只要行为不变,测试就不误伤。
+     */
+    private static boolean containsMethodCallIgnoringReceiver(String source, String methodCallWithArgs) {
+        // 从输入里剥掉接收者前缀,只保留 "方法名(参数...)"。
+        // 例如输入 "TmdbDetailLayoutUtils.setWidthMatch(binding.detailActions)"
+        // 或 "this.setWidthMatch(binding.detailActions)" 都归一化成
+        // "setWidthMatch(binding.detailActions)"。
+        int openParen = methodCallWithArgs.indexOf('(');
+        if (openParen < 0) return false;
+
+        String receiverAndName = methodCallWithArgs.substring(0, openParen);
+        String argsAndRest = methodCallWithArgs.substring(openParen);
+        int lastDot = receiverAndName.lastIndexOf('.');
+        String methodName = lastDot < 0 ? receiverAndName : receiverAndName.substring(lastDot + 1);
+
+        // 源码侧的接收者(this. / ClassName.)只是方法名前面的前缀,
+        // 子串匹配 "methodName(args)" 天然忽略它 —— 无需正则、无需截断。
+        return source.contains(methodName + argsAndRest);
     }
 }

@@ -234,7 +234,7 @@ public final class CodecCapabilityDialog {
     private void renderReport(String text) {
         list.removeAllViews();
         if (TextUtils.isEmpty(text)) {
-            addItem("无内容", false, false);
+            addItem("无内容", false, false, false);
             return;
         }
         String[] blocks = text.split("\\n\\n");
@@ -242,7 +242,7 @@ public final class CodecCapabilityDialog {
             String block = blocks[i].trim();
             if (TextUtils.isEmpty(block)) continue;
             if (i == 0 && blocks.length > 1 && !block.contains("\n")) addHeader(block);
-            else addItem(block, isSelectedBlock(block), isRelatedBlock(block));
+            else addItem(block, isSelectedBlock(block), isRelatedBlock(block), isRiskBlock(block));
         }
     }
 
@@ -277,7 +277,7 @@ public final class CodecCapabilityDialog {
         list.addView(header, params);
     }
 
-    private void addItem(String text, boolean selected, boolean matched) {
+    private void addItem(String text, boolean selected, boolean matched, boolean risk) {
         MaterialButton item = new MaterialButton(activity);
         item.setAllCaps(false);
         item.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
@@ -295,10 +295,10 @@ public final class CodecCapabilityDialog {
         item.setCornerRadius(ResUtil.dp2px(6));
         item.setFocusable(true);
         item.setFocusableInTouchMode(Util.isLeanback());
-        item.setOnFocusChangeListener((view, hasFocus) -> styleItem(item, selected, matched, hasFocus));
+        item.setOnFocusChangeListener((view, hasFocus) -> styleItem(item, selected, matched, risk, hasFocus));
         item.setOnKeyListener((view, keyCode, event) -> onScrollKey(keyCode, event));
         item.setOnClickListener(view -> copyText(text));
-        styleItem(item, selected, matched, false);
+        styleItem(item, selected, matched, risk, false);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         params.bottomMargin = ResUtil.dp2px(8);
         list.addView(item, params);
@@ -312,14 +312,24 @@ public final class CodecCapabilityDialog {
         return block.contains(" / 未选中") || block.contains("可解当前媒体");
     }
 
-    private void styleItem(MaterialButton item, boolean selected, boolean related, boolean focused) {
-        int textColor = selected ? Color.parseColor("#174EA6") : related ? Color.parseColor("#137333") : Color.parseColor("#202124");
-        int bgColor = selected ? Color.parseColor("#D2E3FC") : related ? Color.parseColor("#E6F4EA") : focused ? Color.parseColor("#F8F9FA") : Color.WHITE;
-        int strokeColor = focused ? Color.parseColor("#202124") : selected ? Color.parseColor("#1A73E8") : related ? Color.parseColor("#34A853") : Color.parseColor("#DADCE0");
+    private boolean isRiskBlock(String block) {
+        if (!block.contains("Media3轨道状态")) return false;
+        return block.contains("超出设备声明能力")
+                || block.contains("不支持，")
+                || block.contains("未声明")
+                || block.contains("没有该 MIME")
+                || block.contains("无法识别 MIME")
+                || block.contains("查询失败");
+    }
+
+    private void styleItem(MaterialButton item, boolean selected, boolean related, boolean risk, boolean focused) {
+        int textColor = risk ? Color.parseColor("#A50E0E") : selected ? Color.parseColor("#174EA6") : related ? Color.parseColor("#137333") : Color.parseColor("#202124");
+        int bgColor = risk ? Color.parseColor("#FCE8E6") : selected ? Color.parseColor("#D2E3FC") : related ? Color.parseColor("#E6F4EA") : focused ? Color.parseColor("#F8F9FA") : Color.WHITE;
+        int strokeColor = focused ? Color.parseColor("#202124") : risk ? Color.parseColor("#D93025") : selected ? Color.parseColor("#1A73E8") : related ? Color.parseColor("#34A853") : Color.parseColor("#DADCE0");
         item.setTextColor(ColorStateList.valueOf(textColor));
         item.setBackgroundTintList(ColorStateList.valueOf(bgColor));
         item.setStrokeColor(ColorStateList.valueOf(strokeColor));
-        item.setStrokeWidth(ResUtil.dp2px(focused ? 3 : selected ? 2 : 1));
+        item.setStrokeWidth(ResUtil.dp2px(focused ? 3 : selected || risk ? 2 : 1));
     }
 
     private boolean onScrollKey(int keyCode, KeyEvent event) {

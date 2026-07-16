@@ -38,6 +38,15 @@ public class EpisodeDetailDialog {
     public static void show(FragmentActivity activity, Episode episode, Site site) {
         TmdbEpisode tmdbEpisode = episode.getTmdbEpisode();
         if (tmdbEpisode == null) {
+            // 电影没有分集对象，尝试从宿主获取影片级数据
+            if (activity instanceof com.fongmi.android.tv.ui.host.TmdbDetailHost) {
+                com.fongmi.android.tv.ui.host.TmdbDetailHost host = (com.fongmi.android.tv.ui.host.TmdbDetailHost) activity;
+                com.fongmi.android.tv.bean.TmdbItem movieItem = host.getMatchedTmdbItem();
+                if (movieItem != null && movieItem.isMovie()) {
+                    showMovieDetail(activity, episode, movieItem);
+                    return;
+                }
+            }
             // 没有TMDB数据，显示简单信息
             showSimpleDialog(activity, episode);
             return;
@@ -142,10 +151,100 @@ public class EpisodeDetailDialog {
         }
     }
 
+    /**
+     * 电影场景（TV版简化版）：长按线路展示 TmdbItem 基本信息
+     * TV端 VideoActivity 只持有 TmdbItem，没有 detail JSON，
+     * 所以不加载演员与剧照，只显示标题/评分/简介。
+     */
+    private static void showMovieDetail(FragmentActivity activity, Episode episode, com.fongmi.android.tv.bean.TmdbItem movieItem) {
+        View view = LayoutInflater.from(activity).inflate(R.layout.dialog_episode_detail, null);
+
+        ImageView still = view.findViewById(R.id.still);
+        TextView title = view.findViewById(R.id.title);
+        TextView originalName = view.findViewById(R.id.originalName);
+        TextView rating = view.findViewById(R.id.rating);
+        TextView date = view.findViewById(R.id.date);
+        TextView runtime = view.findViewById(R.id.runtime);
+        TextView overview = view.findViewById(R.id.overview);
+        TextView photosLabel = view.findViewById(R.id.photosLabel);
+        androidx.leanback.widget.HorizontalGridView photosGrid = view.findViewById(R.id.photosGrid);
+        TextView guestsLabel = view.findViewById(R.id.guestsLabel);
+        androidx.leanback.widget.HorizontalGridView guestsGrid = view.findViewById(R.id.guestsGrid);
+
+        // 背景图：影片 backdrop
+        String backdrop = movieItem.getBackdropUrl();
+        if (!android.text.TextUtils.isEmpty(backdrop)) {
+            Glide.with(activity)
+                    .load(backdrop)
+                    .placeholder(R.color.black)
+                    .error(R.color.black)
+                    .fitCenter()
+                    .into(still);
+            still.setVisibility(View.VISIBLE);
+        } else {
+            still.setVisibility(View.GONE);
+        }
+
+        // 标题：影片名
+        String movieTitle = movieItem.getTitle();
+        title.setText(android.text.TextUtils.isEmpty(movieTitle) ? episode.getName() : movieTitle);
+
+        // 原始名称：源站文件名，完整多行展示
+        String sourceName = episode.getName();
+        if (!android.text.TextUtils.isEmpty(sourceName) && !sourceName.equals(movieTitle)) {
+            originalName.setText("原始名称：" + sourceName);
+            originalName.setVisibility(View.VISIBLE);
+        } else {
+            originalName.setVisibility(View.GONE);
+        }
+
+        // 评分
+        if (movieItem.getRating() > 0) {
+            rating.setText(String.format("★ %.1f", movieItem.getRating()));
+            rating.setVisibility(View.VISIBLE);
+        } else {
+            rating.setVisibility(View.GONE);
+        }
+
+        // 日期/时长：TmdbItem 里没有，隐藏
+        date.setVisibility(View.GONE);
+        runtime.setVisibility(View.GONE);
+
+        // 简介
+        String movieOverview = movieItem.getOverview();
+        if (!android.text.TextUtils.isEmpty(movieOverview)) {
+            overview.setText(movieOverview);
+        } else {
+            overview.setText("暂无简介");
+        }
+
+        // 演员与剧照：VideoActivity 没有 detail JSON，无法加载，隐藏
+        photosLabel.setVisibility(View.GONE);
+        photosGrid.setVisibility(View.GONE);
+        guestsLabel.setVisibility(View.GONE);
+        guestsGrid.setVisibility(View.GONE);
+
+        MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(activity)
+                .setView(view);
+
+        AlertDialog alertDialog = builder.create();
+        alertDialog.show();
+
+        // 设置全屏显示
+        if (alertDialog.getWindow() != null) {
+            alertDialog.getWindow().setLayout(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            );
+            alertDialog.getWindow().setBackgroundDrawableResource(android.R.color.black);
+        }
+    }
+
     private static void showSimpleDialog(FragmentActivity activity, Episode episode) {
+        // 标题放固定文案，源站文件名放可换行的正文，避免长名被单行标题截断
         new MaterialAlertDialogBuilder(activity)
-                .setTitle(episode.getName())
-                .setMessage("暂无 TMDB 详细信息")
+                .setTitle(R.string.detail_tmdb_empty)
+                .setMessage(episode.getName())
                 .setPositiveButton("关闭", null)
                 .show();
     }

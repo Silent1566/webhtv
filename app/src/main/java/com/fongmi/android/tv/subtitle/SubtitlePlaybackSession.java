@@ -9,6 +9,7 @@ import com.fongmi.android.tv.bean.TmdbEpisode;
 import com.fongmi.android.tv.bean.TmdbItem;
 import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.player.PlayerManager;
+import com.fongmi.android.tv.subtitle.model.SubtitleAsset;
 import com.fongmi.android.tv.subtitle.model.SubtitleCandidate;
 import com.fongmi.android.tv.subtitle.model.SubtitleMatchResult;
 import com.fongmi.android.tv.subtitle.model.SubtitleMatchStatus;
@@ -171,6 +172,11 @@ public final class SubtitlePlaybackSession {
         });
     }
 
+    public boolean applySubtitleAsset(Host host, SubtitleAsset asset) {
+        if (!isActive(host)) return false;
+        return applyAsset(host, asset);
+    }
+
     private void onSubtitleResult(Host host, SubtitleRequest request, SubtitleMatchResult result) {
         if (host == null || request == null || result == null) return;
         if (request != currentRequest) return;
@@ -186,7 +192,11 @@ public final class SubtitlePlaybackSession {
 
     private boolean applyMatchedSubtitle(Host host, SubtitleMatchResult result) {
         if (result == null || result.getStatus() != SubtitleMatchStatus.MATCHED || result.getAsset() == null) return false;
-        Sub sub = injector.toSub(result.getAsset());
+        return applyAsset(host, result.getAsset());
+    }
+
+    private boolean applyAsset(Host host, SubtitleAsset asset) {
+        Sub sub = injector.toSub(asset);
         if (sub == null) return false;
         return resultApplier.apply(host, sub);
     }

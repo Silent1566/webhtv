@@ -120,6 +120,22 @@ public class VideoActivityLayoutTest {
     }
 
     @Test
+    public void mobileEpisodeNameToggleRestoresFallbackArtworkAfterAdapterRecreation() throws Exception {
+        Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int method = source.indexOf("private void toggleEpisodeFileName()");
+        int methodEnd = source.indexOf("private void updateEpisodeFileNameButton()", method);
+        String methodBody = method >= 0 && methodEnd > method ? source.substring(method, methodEnd) : "";
+        int recreateAdapter = methodBody.indexOf("mEpisodeAdapter = new EpisodeAdapter");
+        int restoreFallback = methodBody.indexOf("updateEpisodeFallbackStillUrl();", recreateAdapter);
+        int attachAdapter = methodBody.indexOf("mBinding.episode.setAdapter(mEpisodeAdapter);", recreateAdapter);
+
+        assertTrue(sourcePath + " is missing toggleEpisodeFileName", method >= 0);
+        assertTrue("name toggle must restore fallback artwork on the recreated episode adapter",
+                recreateAdapter >= 0 && restoreFallback > recreateAdapter && restoreFallback < attachAdapter);
+    }
+
+    @Test
     public void mobileVideoKeepsParseRowHiddenInEmbeddedPlayerWhenPlaybackStarts() throws Exception {
         Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
@@ -130,6 +146,102 @@ public class VideoActivityLayoutTest {
 
         assertTrue(sourcePath + " is missing setPlayer", method >= 0);
         assertTrue("parse row must only become visible in fullscreen during playback start", guardedParseRow > setUseParse && guardedParseRow < startPlayer);
+    }
+
+    @Test
+    public void mobilePlayerKernelClickOpensChooserBeforeSwitching() throws Exception {
+        Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int clickMethod = source.indexOf("private void onPlayerKernel()");
+        int clickMethodEnd = source.indexOf("private boolean onPlayerKernelLong()", clickMethod);
+        String clickBody = clickMethod >= 0 && clickMethodEnd > clickMethod ? source.substring(clickMethod, clickMethodEnd) : "";
+        int chooseMethod = source.indexOf("private void onChoose()");
+        int chooseMethodEnd = source.indexOf("private void onPlayerKernel()", chooseMethod);
+        String chooseBody = chooseMethod >= 0 && chooseMethodEnd > chooseMethod ? source.substring(chooseMethod, chooseMethodEnd) : "";
+        int invalidateInternalRefresh = chooseBody.indexOf("playerKernelSwitchRequestId++;");
+        int launchExternalPlayer = chooseBody.indexOf("PlayerHelper.choose", invalidateInternalRefresh);
+
+        assertTrue(sourcePath + " is missing onPlayerKernel", clickMethod >= 0);
+        assertTrue("player kernel click must open the shared chooser", clickBody.contains("onChoose();"));
+        assertFalse("player kernel click must not switch to the next core before user selection", clickBody.contains("refreshAndSwitchPlayerKernel"));
+        assertTrue("the selected core must retain the refreshed-source switch path", chooseBody.contains("refreshAndSwitchPlayerKernel(which)"));
+        assertFalse("a later core selection must not be discarded while an earlier refresh is running", source.contains("if (playerKernelSwitchRefreshing) return true;"));
+        assertTrue("only the latest core selection may apply its refreshed result", source.contains("if (requestId != playerKernelSwitchRequestId) return;"));
+        assertTrue("external playback selection must invalidate an in-flight internal core refresh", invalidateInternalRefresh >= 0 && launchExternalPlayer > invalidateInternalRefresh);
+        assertTrue("an internal selection without refresh metadata must still invalidate an older request", source.indexOf("int requestId = ++playerKernelSwitchRequestId;") < source.indexOf("Flag currentFlag = getFlag();"));
+    }
+
+    @Test
+    public void refreshedPlayerKernelSwitchKeepsManualFailureSemantics() throws Exception {
+        Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "player", "PlayerManager.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int method = source.indexOf("public void switchPlayer(int type, Result result");
+        int methodEnd = source.indexOf("private void switchPlayer(int type, boolean persist)", method);
+        String methodBody = method >= 0 && methodEnd > method ? source.substring(method, methodEnd) : "";
+
+        assertTrue(sourcePath + " is missing refreshed-result player switching", method >= 0);
+        assertTrue("a user-selected refreshed core must stop instead of auto-falling back on its first failure", methodBody.contains("manualPlayerSwitchPending = true;"));
+    }
+
+    @Test
+    public void videoActivitiesDelegateSharedPlayerUiSetup() throws Exception {
+        String leanback = new String(Files.readAllBytes(findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"))), StandardCharsets.UTF_8);
+        String mobile = new String(Files.readAllBytes(findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"))), StandardCharsets.UTF_8);
+        String host = new String(Files.readAllBytes(findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "player", "VodPlayerUiHost.java"))), StandardCharsets.UTF_8);
+        String controller = new String(Files.readAllBytes(findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "player", "VodPlayerUiController.java"))), StandardCharsets.UTF_8);
+        String chrome = new String(Files.readAllBytes(findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "player", "VodPlayerChrome.java"))), StandardCharsets.UTF_8);
+
+        assertVideoActivityDelegatesSharedPlayerUiSetup("leanback VideoActivity", leanback, "VodPlayerChrome.fromVideo(mBinding, mBinding.widget.clock, 14f)");
+        assertVideoActivityDelegatesSharedPlayerUiSetup("mobile VideoActivity", mobile, "VodPlayerChrome.fromVideo(mBinding, null, 12f)");
+        assertTrue("shared video chrome factory must expose OSD, optional clock and optional diagnostics button",
+                chrome.contains("fromVideo(ActivityVideoBinding binding, TextView clockView, float osdMiniSp)")
+                        && chrome.contains("binding.osd.getRoot()")
+                        && chrome.contains("clockView")
+                        && chrome.contains("osdMiniSp"));
+        assertTrue("shared player UI controller must create Clock with the optional chrome clock view",
+                controller.contains("chrome.clockView == null ? Clock.create() : Clock.create(chrome.clockView)"));
+        assertTrue("shared host should let activities preserve their previous diagnostics restore behavior",
+                host.contains("default boolean restoreDiagnosticsOnStart()") && host.contains("return true;"));
+        assertTrue("shared controller should only restore diagnostics visibility when the host opts in",
+                controller.contains("if (host.restoreDiagnosticsOnStart()) osd.setDiagnosticsVisible(PlayerSetting.isOsdDiagnostics());"));
+        int mobileRestore = mobile.indexOf("public boolean restoreDiagnosticsOnStart()");
+        int mobileRestoreEnd = mobile.indexOf("}", mobileRestore);
+        String mobileRestoreBody = mobileRestore >= 0 && mobileRestoreEnd > mobileRestore ? mobile.substring(mobileRestore, mobileRestoreEnd) : "";
+        assertTrue("mobile VideoActivity must keep diagnostics as a manual transient overlay",
+                mobileRestoreBody.contains("return false;"));
+        assertTrue("leanback VideoActivity should keep persistent diagnostics restore via the host default",
+                !leanback.contains("public boolean restoreDiagnosticsOnStart()"));
+    }
+
+    private static void assertVideoActivityDelegatesSharedPlayerUiSetup(String label, String source, String chromeFactory) {
+        int init = source.indexOf("protected void initView(Bundle savedInstanceState)");
+        int initEnd = source.indexOf("private void setRecyclerView()", init);
+        int start = source.indexOf("protected void onStart()");
+        int startEnd = source.indexOf("protected void onStop()", start);
+        int stopEnd = source.indexOf("\n    @Override", startEnd + 1);
+        int destroy = source.indexOf("protected void onDestroy()");
+        int destroyEnd = source.indexOf("private boolean isOwner()", destroy);
+        if (stopEnd < 0) stopEnd = destroy;
+        if (destroyEnd < 0) destroyEnd = source.length();
+        String initBody = source.substring(init, initEnd);
+        String startBody = source.substring(start, startEnd);
+        String stopBody = source.substring(startEnd, stopEnd);
+        String destroyBody = source.substring(destroy, destroyEnd);
+
+        assertTrue(label + " must own a shared player UI controller field", source.contains("private VodPlayerUiController mPlayerUi;"));
+        assertTrue(label + " must create shared player UI controller with the variant chrome", initBody.contains("mPlayerUi = new VodPlayerUiController") && initBody.contains(chromeFactory));
+        assertTrue(label + " must backfill legacy playback UI fields during migration",
+                initBody.contains("mClock = mPlayerUi.clock();")
+                        && initBody.contains("mOsd = mPlayerUi.osd();")
+                        && initBody.contains("mPiP = mPlayerUi.pip();"));
+        assertTrue(label + " should not instantiate duplicate OSD/Clock/PiP helpers in initView",
+                !initBody.contains("new PlayerOsdController")
+                        && !initBody.contains("Clock.create(")
+                        && !initBody.contains("new PiP()"));
+        assertTrue(label + " must delegate shared UI lifecycle",
+                startBody.contains("mPlayerUi.onStart();")
+                        && stopBody.contains("mPlayerUi.onStop();")
+                        && destroyBody.contains("mPlayerUi.release();"));
     }
 
     @Test
@@ -145,6 +257,51 @@ public class VideoActivityLayoutTest {
         assertTrue(sourcePath + " is missing showControl", showControl >= 0);
         assertTrue("short drama mode must keep the standard setting button visible while fullscreen", setting > shortDrama);
         assertTrue("short drama floating controls must include the standard setting button", dockedSetting > shortDramaViews);
+    }
+
+    @Test
+    public void mobileFullscreenButtonRevealsControlsAfterNativeEnhancedLayoutSettles() throws Exception {
+        Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+
+        int onFullscreen = source.indexOf("private void onFullscreen()");
+        int onFullscreenEnd = source.indexOf("private void onPiP()", onFullscreen);
+        int enterFullscreen = source.indexOf("private void enterFullscreen()");
+        int schedule = source.indexOf("private void scheduleFullscreenControlReveal()", enterFullscreen);
+        int guard = source.indexOf("private void showControlIfFullscreen()", schedule);
+        int exitFullscreen = source.indexOf("private void exitFullscreen()", guard);
+        int configChanged = source.indexOf("public void onConfigurationChanged(@NonNull Configuration newConfig)");
+        int configEnd = source.indexOf("public void onWindowFocusChanged(boolean hasFocus)", configChanged);
+
+        assertTrue(sourcePath + " is missing onFullscreen", onFullscreen >= 0 && onFullscreenEnd > onFullscreen);
+        assertTrue(sourcePath + " is missing enterFullscreen", enterFullscreen >= 0 && schedule > enterFullscreen);
+        assertTrue(sourcePath + " is missing scheduleFullscreenControlReveal", schedule >= 0 && guard > schedule);
+        assertTrue(sourcePath + " is missing showControlIfFullscreen", guard >= 0 && exitFullscreen > guard);
+        assertTrue(sourcePath + " is missing onConfigurationChanged", configChanged >= 0 && configEnd > configChanged);
+
+        String onFullscreenBody = source.substring(onFullscreen, onFullscreenEnd);
+        String enterFullscreenBody = source.substring(enterFullscreen, schedule);
+        String scheduleBody = source.substring(schedule, guard);
+        String guardBody = source.substring(guard, exitFullscreen);
+        String configBody = source.substring(configChanged, configEnd);
+
+        assertTrue("fullscreen button must reveal controls after the immediate showControl call",
+                onFullscreenBody.contains("boolean exit = isFullscreen();")
+                        && onFullscreenBody.contains("showControl();")
+                        && onFullscreenBody.contains("if (!exit) scheduleFullscreenControlReveal();")
+                        && onFullscreenBody.indexOf("showControl();") < onFullscreenBody.indexOf("scheduleFullscreenControlReveal();"));
+        assertTrue("fullscreen player layer must sit above native enhanced detail content",
+                enterFullscreenBody.contains("mBinding.video.bringToFront();"));
+        assertTrue("fullscreen control reveal must run once after layout and once after orientation settles",
+                scheduleBody.contains("mBinding.video.post(this::showControlIfFullscreen);")
+                        && scheduleBody.contains("mBinding.video.postDelayed(this::showControlIfFullscreen, 300);"));
+        assertTrue("delayed fullscreen control reveal must not run after exit, lock, or PiP",
+                guardBody.contains("if (!isFullscreen() || isLock() || isInPictureInPictureMode()) return;")
+                        && guardBody.contains("showControl();"));
+        assertTrue("orientation changes must refresh visible fullscreen controls after landscape state is applied",
+                configBody.contains("if (isFullscreen()) {")
+                        && configBody.contains("Util.hideSystemUI(this);")
+                        && configBody.contains("if (isVisible(mBinding.control.getRoot())) showControl();"));
     }
 
     @Test
@@ -380,6 +537,7 @@ public class VideoActivityLayoutTest {
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
         int handle = source.indexOf("private void handleControllerConnected()");
         int addListener = source.indexOf("mController.addListener(this);", handle);
+        int reconcile = source.indexOf("reconcileControllerReadyState();", addListener);
         int seekListener = source.indexOf("getSeekView().setSeekListener(this::onSeekStarted);", handle);
         int controllerHook = source.indexOf("onControllerConnected();", addListener);
         int serviceConnected = source.indexOf("public void onServiceConnected");
@@ -388,10 +546,13 @@ public class VideoActivityLayoutTest {
         assertTrue(sourcePath + " is missing handleControllerConnected", handle >= 0);
         assertTrue("controller seek events must be bridged to playback activities", seekListener > handle && seekListener < addListener);
         assertTrue("controller listener must be registered before the controller hook", addListener > handle && addListener < controllerHook);
+        assertTrue("current-item READY must be reconciled after listener registration", reconcile > addListener && reconcile < controllerHook);
         assertTrue("controller-specific hook must still run", controllerHook > addListener);
         assertTrue("service-specific hook must still run", serviceHook > serviceConnected);
         assertFalse("controller connection must not replay stale READY/playing state and hide loading early",
                 source.contains("syncControllerPlaybackState()"));
+        assertFalse("READY reconciliation must not replay the full state callback with side effects",
+                source.contains("onStateChanged(mController.getPlaybackState())"));
     }
 
     @Test
@@ -499,11 +660,38 @@ public class VideoActivityLayoutTest {
         int loaded = source.indexOf("if (loaded) {", method);
         int fallback = source.indexOf("} else {", loaded);
         String loadedBody = loaded >= 0 && fallback > loaded ? source.substring(loaded, fallback) : "";
+        int helper = source.indexOf("private void bindLoadedTmdbDetail()");
+        int helperEnd = source.indexOf("private void updateFlag(", helper);
+        String helperBody = helper >= 0 && helperEnd > helper ? source.substring(helper, helperEnd) : "";
 
         assertTrue(sourcePath + " is missing updateVod", method >= 0);
-        assertTrue("TMDB VOD refresh must still bind the loaded header", loadedBody.contains("mTmdbHeaderView.bind(mTmdbUIAdapter);"));
+        assertTrue("TMDB VOD refresh must still bind the loaded header", loadedBody.contains("bindLoadedTmdbDetail();") && helperBody.contains("mTmdbHeaderView.bind(mTmdbUIAdapter);"));
         assertFalse("TMDB VOD refresh must not reveal detail content outside onTmdbContentReady", loadedBody.contains("mBinding.progressLayout.showContent();"));
         assertFalse("TMDB VOD refresh must not clear the independent video loading overlay", loadedBody.contains("hideProgress();"));
+    }
+
+    @Test
+    public void mobileTmdbDetailLoadingHasTimeoutFallback() throws Exception {
+        Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int getDetail = source.indexOf("private void getDetail()");
+        int cancelStart = source.indexOf("cancelTmdbDetailFallback();", getDetail);
+        int detailCall = source.indexOf("mViewModel.detailContent(getKey(), getId());", getDetail);
+        int setDetail = source.indexOf("private void setDetail(Vod item)");
+        int schedule = source.indexOf("scheduleTmdbDetailFallback();", setDetail);
+        int ready = source.indexOf("private void onTmdbContentReady()");
+        int cancelReady = source.indexOf("cancelTmdbDetailFallback();", ready);
+        int fallback = source.indexOf("private void showTmdbDetailFallback()");
+        int end = source.indexOf("private void showNativeDetailFallback(Vod item)", fallback);
+        String fallbackBody = fallback >= 0 && end > fallback ? source.substring(fallback, end) : "";
+
+        assertTrue("mobile TMDB detail loading must use the same timeout as TV", source.contains("TMDB_DETAIL_LOAD_TIMEOUT = 15000"));
+        assertTrue("new detail requests must cancel stale TMDB loading timeouts", cancelStart > getDetail && cancelStart < detailCall);
+        assertTrue("mobile TMDB detail loading must schedule a timeout after the source detail arrives", schedule > setDetail);
+        assertTrue("TMDB content-ready must cancel the timeout", cancelReady > ready);
+        assertTrue(sourcePath + " is missing showTmdbDetailFallback", fallback >= 0);
+        assertTrue("timeout should first bind already-loaded TMDB data, covering missed VOD refresh events", fallbackBody.contains("bindLoadedTmdbDetail();"));
+        assertTrue("timeout must fall back to native details instead of leaving the content area blank", fallbackBody.contains("showNativeDetailFallback(mVod);"));
     }
 
     @Test
@@ -646,6 +834,18 @@ public class VideoActivityLayoutTest {
                         && "true".equals(row.getAttribute("android:layout_alignParentEnd")));
         assertTrue("leanback detail action row should hide scrollbars",
                 "none".equals(row.getAttribute("android:scrollbars")));
+    }
+
+    @Test
+    public void leanbackTmdbPlaybackOverviewWrapsWithinRightPane() throws Exception {
+        Path layoutFile = findLeanbackResPath().resolve(Path.of("layout", "activity_video.xml"));
+        Element overview = findAndroidId(layoutFile.toFile(), "tmdbOverview");
+
+        assertTrue(layoutFile + " is missing @+id/tmdbOverview", overview != null);
+        assertTrue("TMDB playback overview must be measured between the title column and screen edge so it wraps instead of ellipsizing as one long line",
+                "match_parent".equals(overview.getAttribute("android:layout_width"))
+                        && "@+id/name".equals(overview.getAttribute("android:layout_alignStart"))
+                        && "true".equals(overview.getAttribute("android:layout_alignParentEnd")));
     }
 
     @Test
@@ -1028,7 +1228,7 @@ public class VideoActivityLayoutTest {
             Element action = findAndroidId(layoutPath.toFile(), id);
             assertTrue(layoutPath + " is missing @+id/" + id, action != null);
             assertTrue(id + " must use the shared TMDB header action width",
-                    "72dp".equals(action.getAttribute("android:minWidth")));
+                    "60dp".equals(action.getAttribute("android:minWidth")));
         }
     }
 

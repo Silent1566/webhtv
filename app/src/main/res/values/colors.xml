@@ -35,5 +35,8 @@
     <color name="display_option_stroke_selected">#FFFFFFFF</color>
     <color name="display_option_stroke_default">#33FFFFFF</color>
     <color name="display_dialog_panel_bg">#E61F2A31</color>
+    <color name="site_health_good">#0B8043</color>
+    <color name="site_health_warn">#B7791F</color>
+    <color name="site_health_bad">#C53030</color>
 
 </resources>

@@ -25,6 +25,7 @@ import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 import androidx.fragment.app.Fragment;
+import androidx.lifecycle.Lifecycle;
 import androidx.lifecycle.Observer;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.media3.common.C;
@@ -69,6 +70,7 @@ import com.fongmi.android.tv.setting.LiveSetting;
 import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.CustomCspSetting;
 import com.fongmi.android.tv.ui.adapter.ChannelAdapter;
+import com.fongmi.android.tv.ui.helper.PipExitDecision;
 import com.fongmi.android.tv.ui.adapter.EpgDataAdapter;
 import com.fongmi.android.tv.ui.adapter.GroupAdapter;
 import com.fongmi.android.tv.ui.custom.CustomKeyDown;
@@ -614,7 +616,7 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
     }
 
     private int getFullscreenOrient() {
-        return ResUtil.isPad() ? ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE : PlaybackOrientation.getEnterFullscreenOrientation(false);
+        return ResUtil.isPad() ? ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE : PlaybackOrientation.getEnterFullscreenOrientation(player().isPortrait());
     }
 
     private int getEmbeddedOrient() {
@@ -1403,6 +1405,7 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
         videoSize = size;
         updateVideoHeight(size);
         applyLiveResizeMode(LiveSetting.getScale());
+        if (!isEmbeddedLiveUi() && !isLock() && !ResUtil.isPad()) setRequestedOrientation(getFullscreenOrient());
         setSizeText();
     }
 
@@ -1424,7 +1427,7 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
 
     @Override
     public void onSubtitleClick() {
-        SubtitleDialog.create().view(mBinding.exo.getSubtitleView()).show(this);
+        SubtitleDialog.create().view(mBinding.exo.getSubtitleView()).player(player()).show(this);
         hideControl();
     }
 
@@ -1712,6 +1715,28 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
     }
 
     @Override
+    public void onSingleTap(float x, float width) {
+        if (width <= 0 || isEmbeddedLiveUi()) {
+            onToggle();
+            return;
+        }
+        hideInfo();
+        if (x < width / 2f) {
+            if (isVisible(mBinding.recycler)) hideUI();
+            else {
+                hideControl();
+                showUI();
+            }
+        } else {
+            if (isVisible(mBinding.control.getRoot())) hideControl();
+            else {
+                hideUI(false);
+                showControl();
+            }
+        }
+    }
+
+    @Override
     public void onDoubleTap() {
         if (isVisible(mBinding.recycler)) hideUI();
         if (isVisible(mBinding.control.getRoot())) hideControl();
@@ -1770,8 +1795,9 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
             hideUI();
         } else {
             hideInfo();
-            // PiP 窗口点 × 关闭时，主动停止播放，避免声音继续
-            if (isStop()) finishLivePlayback();
+            // PiP 窗口点 × 关闭时，主动停止播放，避免声音继续。
+            // 不能依赖 isStop() 时序，改为等生命周期 settle 后按最终状态判定。
+            App.post(this::finishIfPipClosed, 0);
         }
     }
 
@@ -1779,6 +1805,11 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
         if (service() == null || !player().haveTrack(C.TRACK_TYPE_VIDEO)) return false;
         dismissLiveControlDialog();
         return mPiP.enter(this, LIVE_PIP_WIDTH, LIVE_PIP_HEIGHT, LiveSetting.getScale());
+    }
+
+    private void finishIfPipClosed() {
+        boolean atLeastStarted = getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.STARTED);
+        if (PipExitDecision.shouldFinishAfterPipExit(atLeastStarted, isFinishing(), isDestroyed())) finishLivePlayback();
     }
 
     private void dismissLiveControlDialog() {

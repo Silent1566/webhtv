@@ -1,0 +1,18 @@
+{
+  "ijkplayer": {
+    "repository": "https://github.com/ShikinChen/ijkplayer-android.git",
+    "revision": "be89479c77c52acfb023d3b3acefccc5d8b9a101",
+    "ffmpeg4_config_revision": "96598d75",
+    "ffmpeg_repository": "https://github.com/ShikinChen/FFmpeg.git",
+    "ffmpeg_tag": "ff4.0--ijk0.8.8--20210426--001"
+  },
+  "toolchain": {
+    "arm64-v8a": "27.2.12479018",
+    "armeabi-v7a": "21.4.7075529"
+  },
+  "outputs": [
+    "libijkffmpeg.so",
+    "libijksdl.so",
+    "libijkplayer.so"
+  ]
+}

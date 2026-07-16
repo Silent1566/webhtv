@@ -6,6 +6,7 @@ import android.view.DisplayCutout;
 
 import com.fongmi.android.tv.bean.Style;
 import com.fongmi.android.tv.setting.PlayerSetting;
+import com.fongmi.android.tv.utils.MobileWindow;
 import com.fongmi.android.tv.utils.ResUtil;
 
 public class Product {
@@ -15,7 +16,7 @@ public class Product {
     }
 
     public static int getColumn(Context context) {
-        int count = ResUtil.isLand(context) ? 7 : 5;
+        int count = MobileWindow.isWide(context) ? 7 : 5;
         count = count + (ResUtil.isPad() ? 1 : 0);
         return Math.abs(PlayerSetting.getSize() - count);
     }
@@ -28,6 +29,12 @@ public class Product {
         return getSpec(context, Style.rect());
     }
 
+    public static int[] getSpec(Context context, int column) {
+        Style style = Style.rect();
+        int space = ResUtil.dp2px(32) + ResUtil.dp2px(16 * (column - 1)) + getCutout(context);
+        return getSpec(context, space, column, style);
+    }
+
     public static int[] getSpec(Context context, Style style) {
         int column = getColumn(context, style);
         int space = ResUtil.dp2px(32) + ResUtil.dp2px(16 * (column - 1)) + getCutout(context);
@@ -36,7 +43,7 @@ public class Product {
     }
 
     private static int[] getSpec(Context context, int space, int column, Style style) {
-        int base = ResUtil.getScreenWidth(context) - space;
+        int base = MobileWindow.getWidth(context) - space;
         int width = base / column;
         int height = (int) (width / style.getRatio());
         return new int[]{width, height};

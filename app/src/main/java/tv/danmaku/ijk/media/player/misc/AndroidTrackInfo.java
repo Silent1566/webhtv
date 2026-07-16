@@ -87,6 +87,26 @@ public class AndroidTrackInfo implements ITrackInfo {
     }
 
     @Override // tv.danmaku.ijk.media.player.misc.ITrackInfo
+    public String getColorPrimaries() {
+        return "";
+    }
+
+    @Override // tv.danmaku.ijk.media.player.misc.ITrackInfo
+    public String getColorRange() {
+        return "";
+    }
+
+    @Override // tv.danmaku.ijk.media.player.misc.ITrackInfo
+    public String getColorSpace() {
+        return "";
+    }
+
+    @Override // tv.danmaku.ijk.media.player.misc.ITrackInfo
+    public String getColorTransfer() {
+        return "";
+    }
+
+    @Override // tv.danmaku.ijk.media.player.misc.ITrackInfo
     public int getHeight() {
         try {
             MediaPlayer.TrackInfo trackInfo = this.mTrackInfo;

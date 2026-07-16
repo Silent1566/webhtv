@@ -8,6 +8,7 @@ import androidx.media3.common.TrackGroup;
 import androidx.media3.common.TrackSelectionOverride;
 import androidx.media3.common.TrackSelectionParameters;
 import androidx.media3.common.Tracks;
+import androidx.media3.exoplayer.trackselection.DefaultTrackSelector;
 
 import com.fongmi.android.tv.bean.Track;
 import com.fongmi.android.tv.player.PlayerHelper;
@@ -20,6 +21,22 @@ public class TrackUtil {
 
     public static int count(Tracks tracks, int type) {
         return tracks.getGroups().stream().filter(trackGroup -> trackGroup.getType() == type).mapToInt(trackGroup -> trackGroup.length).sum();
+    }
+
+    public static Format selectedFormat(Tracks tracks, int type) {
+        if (tracks == null || tracks.isEmpty()) return null;
+        Format first = null;
+        Format supported = null;
+        for (Tracks.Group group : tracks.getGroups()) {
+            if (group.getType() != type) continue;
+            for (int i = 0; i < group.length; i++) {
+                Format format = group.getTrackFormat(i);
+                if (first == null) first = format;
+                if (supported == null && group.isTrackSupported(i)) supported = format;
+                if (group.isTrackSelected(i)) return format;
+            }
+        }
+        return supported != null ? supported : first;
     }
 
     public static void reset(Player player) {
@@ -51,7 +68,6 @@ public class TrackUtil {
         for (Tracks.Group trackGroup : currentTracks.getGroups()) {
             if (trackGroup.getType() != track.getType()) continue;
             for (int i = 0; i < trackGroup.length; i++) {
-                if (!trackGroup.isTrackSupported(i)) continue;
                 Format format = trackGroup.getTrackFormat(i);
                 if (track.getFormat().equals(PlayerHelper.describeFormat(format))) {
                     return new TrackInfo(trackGroup, i);
@@ -99,6 +115,11 @@ public class TrackUtil {
             if (track.isSelected()) selectedIndexMapByType.put(type, info.trackIndex);
         }
         TrackSelectionParameters.Builder builder = player.getTrackSelectionParameters().buildUpon();
+        if (builder instanceof DefaultTrackSelector.Parameters.Builder exoBuilder) {
+            exoBuilder.setExceedRendererCapabilitiesIfNecessary(true);
+            exoBuilder.setExceedVideoConstraintsIfNecessary(true);
+            exoBuilder.setExceedAudioConstraintsIfNecessary(true);
+        }
         mediaGroupMapByType.forEach((type, mediaGroup) -> {
             builder.setTrackTypeDisabled(type, mediaGroup == null);
             if (mediaGroup == null) return;

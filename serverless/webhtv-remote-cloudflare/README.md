@@ -4,6 +4,8 @@
 
 Cloudflare Worker 普通全局变量不能保证两台设备命中同一个运行实例，所以默认配置使用 Durable Object 统一承载绑定码、在线设备快照和命令队列，并保存轻量状态快照。长期绑定状态仍保存在 App/主控端本地，`deviceId/groupId/grantId` 由 `serverOrigin + token` 派生。同步文件分片仍是短期中转数据，不适合作为长期备份存储。需要离线队列、大文件暂存或长期备份时，再换完整版 Go/Rust 服务端或给 serverless 版本加 R2 等存储增强。
 
+新版 App 会在请求头中自动携带 `X-WebHTV-Origin`，服务端优先用该值作为 `serverOrigin`。因此 Cloudflare 同时存在 `*.workers.dev` 和自定义域名时，只要 App 中填写的是同一个自定义域名，就不需要额外配置环境变量，也不会因为平台默认域名参与 ID 派生而导致绑定码校验失败。旧客户端未携带该头时仍回退到请求实际 origin。
+
 ## 部署
 
 ```bash

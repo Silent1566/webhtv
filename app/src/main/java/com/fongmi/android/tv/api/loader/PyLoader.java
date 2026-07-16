@@ -1,5 +1,7 @@
 package com.fongmi.android.tv.api.loader;
 
+import android.text.TextUtils;
+
 import com.fongmi.android.tv.App;
 import com.fongmi.chaquo.Loader;
 import com.github.catvod.crawler.Spider;
@@ -34,13 +36,21 @@ public class PyLoader {
             try {
                 Spider spider = loader.spider(api);
                 spider.siteKey = key;
-                spider.init(App.get(), ext);
+                spider.init(App.get(), normalizeExt(ext));
                 return spider;
             } catch (Throwable e) {
                 e.printStackTrace();
                 return new SpiderNull();
             }
         });
+    }
+
+    private String normalizeExt(String ext) {
+        String value = TextUtils.isEmpty(ext) ? "" : ext.trim();
+        // Many live Python spiders treat ext as an option object and call .get().
+        // TV-style configs commonly express an empty extension as [], which would
+        // otherwise deserialize to a list and crash those spiders during init.
+        return "[]".equals(value) ? "{}" : ext;
     }
 
     public Object[] proxy(Map<String, String> params) throws Exception {

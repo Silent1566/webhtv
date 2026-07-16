@@ -35,6 +35,7 @@ import com.fongmi.android.tv.ui.dialog.ConfigDialog;
 import com.fongmi.android.tv.ui.dialog.HistoryDialog;
 import com.fongmi.android.tv.ui.dialog.LiveDialog;
 import com.fongmi.android.tv.ui.dialog.RestoreDialog;
+import com.fongmi.android.tv.ui.dialog.BackupProgressDialog;
 import com.fongmi.android.tv.ui.dialog.SiteDialog;
 import com.fongmi.android.tv.ui.dialog.ThemeDialog;
 import com.fongmi.android.tv.utils.AppVersion;
@@ -357,17 +358,22 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
     }
 
     private void onBackup(View view) {
-        PermissionUtil.requestFile(this, allGranted -> AppDatabase.backup(new Callback() {
+        PermissionUtil.requestFile(this, allGranted -> {
+            BackupProgressDialog progress = BackupProgressDialog.open(getParentFragmentManager(), "备份应用数据");
+            AppDatabase.backup(new Callback() {
             @Override
             public void success() {
+                progress.finish();
                 Notify.show(R.string.backup_success);
             }
 
             @Override
             public void error() {
+                progress.finish();
                 Notify.show(R.string.backup_fail);
             }
-        }));
+            }, progress::update);
+        });
     }
 
     private void onRestore(View view) {
@@ -376,7 +382,6 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
             public void success() {
                 Notify.show(R.string.restore_success);
                 setOtherText();
-                initConfig();
             }
 
             @Override

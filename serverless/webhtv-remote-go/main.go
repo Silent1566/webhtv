@@ -1245,6 +1245,9 @@ func httpErrorf(status int, format string, args ...any) error {
 }
 
 func serverOrigin(r *http.Request) string {
+	if origin := normalizeOrigin(r.Header.Get("x-webhtv-origin")); origin != "" {
+		return origin
+	}
 	scheme := r.Header.Get("x-forwarded-proto")
 	if scheme == "" {
 		if r.TLS != nil {
@@ -1258,6 +1261,31 @@ func serverOrigin(r *http.Request) string {
 		host = r.Host
 	}
 	return strings.ToLower(scheme + "://" + host)
+}
+
+func normalizeOrigin(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	lower := strings.ToLower(value)
+	if !strings.HasPrefix(lower, "http://") && !strings.HasPrefix(lower, "https://") {
+		return ""
+	}
+	rest := strings.TrimPrefix(strings.TrimPrefix(lower, "https://"), "http://")
+	if rest == "" {
+		return ""
+	}
+	if index := strings.IndexAny(rest, "/?#"); index >= 0 {
+		rest = rest[:index]
+	}
+	if rest == "" {
+		return ""
+	}
+	if strings.HasPrefix(lower, "https://") {
+		return "https://" + rest
+	}
+	return "http://" + rest
 }
 
 func readDeviceToken(r *http.Request, body map[string]any) string {

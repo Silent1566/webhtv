@@ -63,7 +63,7 @@ public final class CodecCapabilityInspector {
     }
 
     public static String buildCurrentMediaReport(Context context, PlayerManager player, String keyword) {
-        if (player == null || player.isIjk()) return "当前播放器不是 Exo，无法读取 Media3 轨道支持信息";
+        if (player == null) return "当前播放器不可用";
         Tracks tracks = player.getCurrentTracks();
         if (tracks == null || tracks.isEmpty()) return "当前还没有读取到媒体轨道，请开始播放后再查询";
         String query = normalize(keyword);
@@ -175,7 +175,7 @@ public final class CodecCapabilityInspector {
     }
 
     private static List<TrackRef> getTrackRefs(Context context, PlayerManager player) {
-        if (context == null || player == null || player.isIjk()) return List.of();
+        if (context == null || player == null) return List.of();
         Tracks tracks = player.getCurrentTracks();
         if (tracks == null || tracks.isEmpty()) return List.of();
         List<TrackRef> refs = new ArrayList<>();
@@ -237,7 +237,7 @@ public final class CodecCapabilityInspector {
         parts.add(empty(getSampleMimeType(format)));
         if (format.width > 0 && format.height > 0) parts.add(format.width + "x" + format.height);
         if (format.frameRate > 0) parts.add("@" + DECIMAL.format(format.frameRate) + "fps");
-        if (format.bitrate > 0) parts.add(formatBitrate(format.bitrate));
+        if (bitrateValue(format) > 0) parts.add(formatBitrate(bitrateValue(format)));
         if (!TextUtils.isEmpty(format.codecs)) parts.add("codecs " + format.codecs);
         if (format.colorInfo != null) parts.add("color " + format.colorInfo.toLogString());
         return TextUtils.join(" ", parts);
@@ -249,7 +249,7 @@ public final class CodecCapabilityInspector {
         parts.add(empty(getSampleMimeType(format)));
         if (format.channelCount > 0) parts.add(format.channelCount + "ch");
         if (format.sampleRate > 0) parts.add(format.sampleRate + "Hz");
-        if (format.bitrate > 0) parts.add(formatBitrate(format.bitrate));
+        if (bitrateValue(format) > 0) parts.add(formatBitrate(bitrateValue(format)));
         if (!TextUtils.isEmpty(format.language)) parts.add(format.language);
         if (!TextUtils.isEmpty(format.codecs)) parts.add("codecs " + format.codecs);
         return TextUtils.join(" ", parts);
@@ -260,6 +260,14 @@ public final class CodecCapabilityInspector {
         if (!TextUtils.isEmpty(format.sampleMimeType)) return normalizeAudioMime(format.sampleMimeType);
         if (TextUtils.isEmpty(format.codecs)) return null;
         return MimeTypes.getMediaMimeType(format.codecs);
+    }
+
+    private static int bitrateValue(Format format) {
+        if (format == null) return 0;
+        if (format.bitrate > 0) return format.bitrate;
+        if (format.averageBitrate > 0) return format.averageBitrate;
+        if (format.peakBitrate > 0) return format.peakBitrate;
+        return 0;
     }
 
     private static String normalizeAudioMime(String mime) {
@@ -378,13 +386,13 @@ public final class CodecCapabilityInspector {
                 List<String> parts = new ArrayList<>();
                 if (format.width > 0 && format.height > 0) parts.add(format.width + "x" + format.height);
                 if (format.frameRate > 0) parts.add("@" + DECIMAL.format(format.frameRate) + "fps");
-                if (format.bitrate > 0) parts.add(formatBitrate(format.bitrate));
+                if (bitrateValue(format) > 0) parts.add(formatBitrate(bitrateValue(format)));
                 return TextUtils.join(" ", parts);
             }
             List<String> parts = new ArrayList<>();
             if (format.channelCount > 0) parts.add(format.channelCount + "ch");
             if (format.sampleRate > 0) parts.add(format.sampleRate + "Hz");
-            if (format.bitrate > 0) parts.add(formatBitrate(format.bitrate));
+            if (bitrateValue(format) > 0) parts.add(formatBitrate(bitrateValue(format)));
             if (!TextUtils.isEmpty(format.language)) parts.add(format.language);
             return TextUtils.join(" ", parts);
         }

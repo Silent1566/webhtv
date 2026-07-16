@@ -37,7 +37,7 @@ public class PlayerHelper {
     }
 
     public static String resolveUa(String ua, Supplier<String> fallback) {
-        return ua == null || ua.isEmpty() ? fallback.get() : ua;
+        return TextUtils.isEmpty(ua) ? fallback.get() : ua;
     }
 
     public static String getSubtitleMimeType(String path) {

@@ -1475,6 +1475,9 @@ fn header_value(value: &str) -> Result<header::HeaderValue, AppError> {
 }
 
 fn server_origin(headers: &HeaderMap) -> String {
+    if let Some(origin) = normalize_origin(&header_string(headers, "x-webhtv-origin")) {
+        return origin;
+    }
     let scheme = header_string(headers, "x-forwarded-proto")
         .split(',')
         .next()
@@ -1491,6 +1494,22 @@ fn server_origin(headers: &HeaderMap) -> String {
     .trim()
     .to_lowercase();
     format!("{}://{}", scheme, host)
+}
+
+fn normalize_origin(value: &str) -> Option<String> {
+    let value = value.trim().to_lowercase();
+    if value.is_empty() || (!value.starts_with("http://") && !value.starts_with("https://")) {
+        return None;
+    }
+    let scheme = if value.starts_with("https://") { "https://" } else { "http://" };
+    let mut rest = value.trim_start_matches("https://").trim_start_matches("http://");
+    if let Some(index) = rest.find(&['/', '?', '#'][..]) {
+        rest = &rest[..index];
+    }
+    if rest.is_empty() {
+        return None;
+    }
+    Some(format!("{}{}", scheme, rest))
 }
 
 fn read_device_token(headers: Option<&HeaderMap>, body: &JsonMap) -> String {

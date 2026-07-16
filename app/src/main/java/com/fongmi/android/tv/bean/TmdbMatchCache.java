@@ -12,6 +12,8 @@ import java.util.Map;
 
 public class TmdbMatchCache {
 
+    private static final String TITLE_SCOPE = "__title__";
+
     private Map<String, Entry> items;
 
     public static TmdbMatchCache objectFrom(String str) {
@@ -39,7 +41,9 @@ public class TmdbMatchCache {
         Entry entry = getItems().get(key(siteKey, vodId, sourceTitle));
         if (entry != null) return entry.toItem();
         Entry legacy = getItems().get(key(siteKey, vodId));
-        return isCompatible(legacy, sourceTitle) ? legacy.toItem() : null;
+        if (isCompatible(legacy, sourceTitle)) return legacy.toItem();
+        Entry title = getItems().get(titleKey(sourceTitle));
+        return isCompatible(title, sourceTitle) ? title.toItem() : null;
     }
 
     public void put(String siteKey, String vodId, TmdbItem item) {
@@ -53,7 +57,9 @@ public class TmdbMatchCache {
             return;
         }
         if (TextUtils.isEmpty(siteKey) || TextUtils.isEmpty(vodId) || item == null || item.getTmdbId() <= 0) return;
-        getItems().put(key(siteKey, vodId, sourceTitle), Entry.from(item));
+        Entry entry = Entry.from(item);
+        getItems().put(key(siteKey, vodId, sourceTitle), entry);
+        putTitle(sourceTitle, entry);
     }
 
     public Map<String, Entry> getItems() {
@@ -69,8 +75,29 @@ public class TmdbMatchCache {
         return key(siteKey, vodId) + AppDatabase.SYMBOL + sourceKey(sourceTitle);
     }
 
+    private String titleKey(String sourceTitle) {
+        String title = matchTitle(sourceTitle);
+        return TextUtils.isEmpty(title) ? "" : TITLE_SCOPE + AppDatabase.SYMBOL + title;
+    }
+
+    private void putTitle(String sourceTitle, Entry entry) {
+        String key = titleKey(sourceTitle);
+        if (TextUtils.isEmpty(key) || entry == null) return;
+        Entry cached = getItems().get(key);
+        if (cached == null || sameTmdb(cached, entry)) {
+            getItems().put(key, entry);
+        } else {
+            getItems().put(key, Entry.conflict(sourceTitle));
+        }
+    }
+
+    private boolean sameTmdb(Entry first, Entry second) {
+        if (first == null || second == null) return false;
+        return first.tmdbId > 0 && first.tmdbId == second.tmdbId && normalize(first.mediaType).equals(normalize(second.mediaType));
+    }
+
     private boolean isCompatible(Entry entry, String sourceTitle) {
-        if (entry == null || TextUtils.isEmpty(sourceTitle)) return false;
+        if (entry == null || entry.tmdbId <= 0 || TextUtils.isEmpty(sourceTitle)) return false;
         String source = matchTitle(sourceTitle);
         String cached = matchTitle(entry.title);
         return TextUtils.isEmpty(source) || (!TextUtils.isEmpty(cached) && cached.equals(source));
@@ -102,6 +129,14 @@ public class TmdbMatchCache {
         private String originalLanguage;
         private String originCountry;
         private String department;
+
+        public static Entry conflict(String title) {
+            Entry entry = new Entry();
+            entry.tmdbId = -1;
+            entry.mediaType = "";
+            entry.title = title;
+            return entry;
+        }
 
         public static Entry from(TmdbItem item) {
             Entry entry = new Entry();

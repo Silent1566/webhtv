@@ -25,6 +25,19 @@
             android:textSize="16sp"
             tools:text="選擇字幕" />
 
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/secondary"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:gravity="center"
+            android:paddingHorizontal="12dp"
+            android:text="@string/play_track_secondary_subtitle"
+            android:textColor="@color/white_90"
+            android:textSize="13sp"
+            android:visibility="gone"
+            tools:visibility="visible" />
+
         <androidx.appcompat.widget.AppCompatImageView
             android:id="@+id/choose"
             android:layout_width="wrap_content"
@@ -45,6 +58,30 @@
             android:src="@drawable/ic_action_search"
             app:tint="@color/white_90"
             android:visibility="gone"
+            tools:visibility="visible" />
+
+        <androidx.appcompat.widget.AppCompatImageView
+            android:id="@+id/ai"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/subtitle_ai_translate_action"
+            android:src="@drawable/ic_action_ai"
+            android:visibility="gone"
+            app:tint="@color/white_90"
+            tools:visibility="visible" />
+
+        <androidx.appcompat.widget.AppCompatImageView
+            android:id="@+id/aiRegenerate"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/subtitle_ai_regenerate_action"
+            android:src="@drawable/ic_action_refresh"
+            android:visibility="gone"
+            app:tint="@color/white_90"
             tools:visibility="visible" />
 
         <androidx.appcompat.widget.AppCompatImageView
@@ -70,6 +107,19 @@
             tools:visibility="visible" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
+
+    <com.google.android.material.textview.MaterialTextView
+        android:id="@+id/aiStatus"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:paddingBottom="12dp"
+        android:textColor="@color/white_70"
+        android:textSize="13sp"
+        android:visibility="gone"
+        tools:text="AI 正在翻译：1/3 分块，约剩 20s"
+        tools:visibility="visible" />
 
     <com.fongmi.android.tv.ui.custom.CustomRecyclerView
         android:id="@+id/recycler"

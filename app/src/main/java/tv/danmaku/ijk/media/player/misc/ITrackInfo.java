@@ -13,6 +13,14 @@ public interface ITrackInfo {
 
     float getFps();
 
+    String getColorPrimaries();
+
+    String getColorRange();
+
+    String getColorSpace();
+
+    String getColorTransfer();
+
     int getHeight();
 
     String getLanguage();

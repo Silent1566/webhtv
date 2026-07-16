@@ -76,9 +76,63 @@ public class TmdbEpisodeAdapterTest {
         int notify = source.indexOf("notifyDataSetChanged();", clear);
 
         assertTrue("TMDB episode adapter must skip full rebinds when the page data is unchanged",
-                source.indexOf("if (!forceRefresh && sameItems(episodes, tmdbEpisodes, numbers))", method) > method
+                source.indexOf("if (!forceRefresh && !displaySettingsChanged && sameItems(episodes, tmdbEpisodes, numbers))", method) > method
                         && source.indexOf("setSelected(selected);", method) > method
                         && source.indexOf("private boolean sameItems(", notify) > notify);
+    }
+
+    @Test
+    public void episodeDisplaySettingChangesRebindUnchangedViewport() throws Exception {
+        String source = tmdbEpisodeAdapterSource();
+        int method = source.indexOf("public void setItems(List<Episode> episodes, Map<Integer, TmdbEpisode> tmdbEpisodes, Map<Episode, Integer> numbers, Episode selected, boolean forceRefresh)");
+        int update = source.indexOf("boolean displaySettingsChanged = updateDisplaySettings();", method);
+        int skip = source.indexOf("sameItems(episodes, tmdbEpisodes, numbers)", method);
+        int displayMethod = source.indexOf("private boolean updateDisplaySettings()");
+        int displayMethodEnd = source.indexOf("private boolean sameEpisodes", displayMethod);
+        String displayBody = displayMethod >= 0 && displayMethodEnd > displayMethod ? source.substring(displayMethod, displayMethodEnd) : "";
+
+        assertTrue("TMDB episode adapter must not skip rebinds when filename/file-size display settings changed",
+                method >= 0
+                        && update > method
+                        && update < skip
+                        && source.indexOf("if (!forceRefresh && !displaySettingsChanged && sameItems(episodes, tmdbEpisodes, numbers))", method) > method
+                        && displayBody.contains("Setting.getTmdbEpisodeShowScrapedName()")
+                        && displayBody.contains("Setting.isTmdbEpisodeFileSize()")
+                        && displayBody.contains("showScrapedName = currentShowScrapedName;")
+                        && displayBody.contains("showFileSize = currentShowFileSize;"));
+    }
+
+    @Test
+    public void episodeDisplaySettingRefreshRebindsVisibleItems() throws Exception {
+        String source = tmdbEpisodeAdapterSource();
+        int method = source.indexOf("public void refreshDisplaySettings(RecyclerView recyclerView)");
+        int methodEnd = source.indexOf("public int getPosition", method);
+        String body = method >= 0 && methodEnd > method ? source.substring(method, methodEnd) : "";
+
+        assertTrue("TMDB episode adapter must expose an immediate display refresh for visible holders after dialogs",
+                body.contains("updateDisplaySettings();")
+                        && body.contains("recyclerView.getChildViewHolder(recyclerView.getChildAt(index))")
+                        && body.contains("onBindViewHolder((ViewHolder) holder, position);"));
+    }
+
+    @Test
+    public void episodeFileNameToggleAfterEpisodeDialogPostsVisibleItemRefresh() throws Exception {
+        Path activityPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
+        String source = new String(Files.readAllBytes(activityPath), StandardCharsets.UTF_8);
+        int method = source.indexOf("private void toggleEpisodeFileName()");
+        int methodEnd = source.indexOf("private void updateEpisodeViewModeButton", method);
+        String body = method >= 0 && methodEnd > method ? source.substring(method, methodEnd) : "";
+        int persistSetting = body.indexOf("Setting.putTmdbEpisodeShowScrapedName(showScraped);");
+        int updateButton = body.indexOf("updateEpisodeFileNameButton();");
+        int updatePlayLabel = body.indexOf("updatePlayLabel();");
+        int postedRefresh = body.indexOf("binding.episodeContainer.post(() -> episodeAdapter.refreshDisplaySettings(binding.episodeContainer));");
+
+        assertTrue("TMDB detail filename toggle must update labels, then post one visible-card refresh after a dialog closes",
+                persistSetting >= 0
+                        && persistSetting < updateButton
+                        && updateButton < updatePlayLabel
+                        && updatePlayLabel < postedRefresh
+                        && !body.contains("rerenderEpisodeViewportOnly(false, false, true);"));
     }
 
     @Test

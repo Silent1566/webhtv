@@ -21,10 +21,13 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import okhttp3.HttpUrl;
@@ -35,6 +38,7 @@ public class TmdbService {
 
     private static final long DAY = TimeUnit.DAYS.toMillis(1);
     private static final long DETAIL_CACHE_TTL = DAY * 7;
+    private static final long SEARCH_CACHE_TTL = DAY;
     private static final long PERSON_CACHE_TTL = DAY * 7;
     private static final long SEASON_CACHE_TTL = DAY * 3;
     private static final long CN_ON_AIR_SEASON_CACHE_TTL = DAY;
@@ -56,16 +60,8 @@ public class TmdbService {
 
     public JsonObject searchRaw(@NonNull String keyword, @NonNull TmdbConfig config) throws Exception {
         ensureReady(config);
-        try (Response response = execute(searchUrl(keyword, config), config)) {
-            if (response.body() == null) throw new IllegalStateException("TMDB 搜索返回为空");
-            if (!response.isSuccessful()) throw new IllegalStateException("TMDB 搜索失败: HTTP " + response.code());
-            try {
-                return App.gson().fromJson(response.body().string(), JsonObject.class);
-            } catch (ClassCastException e) {
-                SpiderDebug.log("TmdbService", "ClassCastException in searchRaw parsing: " + e.getMessage());
-                throw new IllegalStateException("TMDB 搜索数据解析失败: " + e.getMessage(), e);
-            }
-        }
+        String url = searchUrl(keyword, config);
+        return requestJson(url, config, "search", searchCacheKey(keyword, config), SEARCH_CACHE_TTL, "TMDB 搜索返回为空", "TMDB 搜索失败: HTTP ");
     }
 
     public List<TmdbItem> search(@NonNull String keyword, @NonNull TmdbConfig config) throws Exception {
@@ -98,18 +94,11 @@ public class TmdbService {
 
     public JsonObject detail(@NonNull TmdbItem item, @NonNull TmdbConfig config, boolean includeRelated) throws Exception {
         ensureReady(config);
-        String append = detailAppend(item, includeRelated);
-        HttpUrl url = apiBuilder(config.getApiBase() + "/" + item.getMediaType() + "/" + item.getTmdbId(), config)
-                .addQueryParameter("language", config.getLanguage())
-                .addQueryParameter("append_to_response", append)
-                .addQueryParameter("include_image_language", config.getLanguage() + ",null")
-                .build();
-        if (System.currentTimeMillis() >= 0) return requestJson(url.toString(), config, "detail", DETAIL_CACHE_TTL, "TMDB 详情返回为空", "TMDB 详情失败: HTTP ");
-        try (Response response = execute(url.toString(), config)) {
-            if (response.body() == null) throw new IllegalStateException("TMDB 详情返回为空");
-            if (!response.isSuccessful()) throw new IllegalStateException("TMDB 详情失败: HTTP " + response.code());
-            return App.gson().fromJson(response.body().string(), JsonObject.class);
-        }
+        String url = detailUrl(item, config, includeRelated);
+        List<String> fallbackKeys = detailCacheKeys(item, config, includeRelated);
+        String cacheKey = fallbackKeys.remove(0);
+        if (!includeRelated) fallbackKeys.add(detailUrl(item, config, true));
+        return requestJson(url, config, "detail", cacheKey, fallbackKeys, DETAIL_CACHE_TTL, "TMDB 详情返回为空", "TMDB 详情失败: HTTP ", false);
     }
 
     private String detailAppend(@NonNull TmdbItem item, boolean includeRelated) {
@@ -120,6 +109,15 @@ public class TmdbService {
         return includeRelated ? append + ",recommendations,similar" : append;
     }
 
+    private String detailUrl(@NonNull TmdbItem item, @NonNull TmdbConfig config, boolean includeRelated) {
+        return apiBuilder(config.getApiBase() + "/" + item.getMediaType() + "/" + item.getTmdbId(), config)
+                .addQueryParameter("language", config.getLanguage())
+                .addQueryParameter("append_to_response", detailAppend(item, includeRelated))
+                .addQueryParameter("include_image_language", config.getLanguage() + ",null")
+                .build()
+                .toString();
+    }
+
     public JsonObject season(@NonNull TmdbItem item, int seasonNumber, @NonNull TmdbConfig config) throws Exception {
         ensureReady(config);
         HttpUrl url = apiBuilder(config.getApiBase() + "/tv/" + item.getTmdbId() + "/season/" + seasonNumber, config)
@@ -127,12 +125,7 @@ public class TmdbService {
                 .addQueryParameter("append_to_response", "images,credits,aggregate_credits,translations")
                 .addQueryParameter("include_image_language", config.getLanguage() + ",null")
                 .build();
-        if (System.currentTimeMillis() >= 0) return requestJson(url.toString(), config, "season", SEASON_CACHE_TTL, "TMDB 分季返回为空", "TMDB 分季失败: HTTP ");
-        try (Response response = execute(url.toString(), config)) {
-            if (response.body() == null) throw new IllegalStateException("TMDB 分季返回为空");
-            if (!response.isSuccessful()) throw new IllegalStateException("TMDB 分季失败: HTTP " + response.code());
-            return App.gson().fromJson(response.body().string(), JsonObject.class);
-        }
+        return requestJson(url.toString(), config, "season", seasonCacheKey(item, seasonNumber, config), SEASON_CACHE_TTL, "TMDB 分季返回为空", "TMDB 分季失败: HTTP ");
     }
 
     public JsonObject season(@NonNull TmdbItem item, int seasonNumber, @NonNull TmdbConfig config, JsonObject detail) throws Exception {
@@ -146,7 +139,7 @@ public class TmdbService {
                 .addQueryParameter("append_to_response", "images,credits,aggregate_credits,translations")
                 .addQueryParameter("include_image_language", config.getLanguage() + ",null")
                 .build();
-        return requestJson(url.toString(), config, "season", seasonCacheTtl(detail), "TMDB 分季返回为空", "TMDB 分季失败: HTTP ", refresh);
+        return requestJson(url.toString(), config, "season", seasonCacheKey(item, seasonNumber, config), seasonCacheTtl(detail), "TMDB 分季返回为空", "TMDB 分季失败: HTTP ", refresh);
     }
 
     public JsonObject episode(@NonNull TmdbItem item, int seasonNumber, int episodeNumber, @NonNull TmdbConfig config, JsonObject detail) throws Exception {
@@ -156,7 +149,7 @@ public class TmdbService {
                 .addQueryParameter("append_to_response", "images,credits,translations")
                 .addQueryParameter("include_image_language", config.getLanguage() + ",null")
                 .build();
-        return requestJson(url.toString(), config, "episode", seasonCacheTtl(detail), "TMDB 单集返回为空", "TMDB 单集失败: HTTP ");
+        return requestJson(url.toString(), config, "episode", episodeCacheKey(item, seasonNumber, episodeNumber, config), seasonCacheTtl(detail), "TMDB 单集返回为空", "TMDB 单集失败: HTTP ");
     }
 
     public JsonObject episode(int tmdbId, int seasonNumber, int episodeNumber, @NonNull TmdbConfig config) throws Exception {
@@ -166,7 +159,7 @@ public class TmdbService {
                 .addQueryParameter("append_to_response", "images,credits,translations")
                 .addQueryParameter("include_image_language", config.getLanguage() + ",null")
                 .build();
-        return requestJson(url.toString(), config, "episode", SEASON_CACHE_TTL, "TMDB 单集返回为空", "TMDB 单集失败: HTTP ");
+        return requestJson(url.toString(), config, "episode", episodeCacheKey(tmdbId, seasonNumber, episodeNumber, config), SEASON_CACHE_TTL, "TMDB 单集返回为空", "TMDB 单集失败: HTTP ");
     }
 
     public JsonObject person(int personId, @NonNull TmdbConfig config) throws Exception {
@@ -505,9 +498,22 @@ public class TmdbService {
     }
 
     private JsonObject requestJson(String url, TmdbConfig config, String type, long ttl, String emptyMessage, String failurePrefix, boolean refresh) throws Exception {
+        return requestJson(url, config, type, url, ttl, emptyMessage, failurePrefix, refresh);
+    }
+
+    private JsonObject requestJson(String url, TmdbConfig config, String type, String cacheKey, long ttl, String emptyMessage, String failurePrefix) throws Exception {
+        return requestJson(url, config, type, cacheKey, ttl, emptyMessage, failurePrefix, false);
+    }
+
+    private JsonObject requestJson(String url, TmdbConfig config, String type, String cacheKey, long ttl, String emptyMessage, String failurePrefix, boolean refresh) throws Exception {
+        return requestJson(url, config, type, cacheKey, Collections.emptyList(), ttl, emptyMessage, failurePrefix, refresh);
+    }
+
+    private JsonObject requestJson(String url, TmdbConfig config, String type, String cacheKey, List<String> fallbackCacheKeys, long ttl, String emptyMessage, String failurePrefix, boolean refresh) throws Exception {
         long start = System.currentTimeMillis();
-        File file = cacheFile(type, url);
-        JsonObject cached = refresh ? null : readCache(file, ttl);
+        File file = cacheFile(type, cacheKey);
+        List<File> lookupFiles = cacheFiles(type, cacheKey, fallbackCacheKeys, url);
+        JsonObject cached = refresh ? null : readFirstCache(lookupFiles, ttl);
         if (cached != null) {
             SpiderDebug.log("tmdb", "requestJson type=%s source=cache cost=%dms", type, System.currentTimeMillis() - start);
             return cached;
@@ -527,13 +533,37 @@ public class TmdbService {
             SpiderDebug.log("tmdb", "requestJson type=%s source=network cost=%dms", type, System.currentTimeMillis() - start);
             return object;
         } catch (Throwable e) {
-            cached = readCache(file, Long.MAX_VALUE);
+            cached = readFirstCache(lookupFiles, Long.MAX_VALUE);
             if (cached != null) {
                 SpiderDebug.log("tmdb", "requestJson type=%s source=stale-cache cost=%dms error=%s", type, System.currentTimeMillis() - start, e.getMessage());
                 return cached;
             }
             throw e;
         }
+    }
+
+    private List<File> cacheFiles(String type, String cacheKey, List<String> fallbackCacheKeys, String legacyUrl) {
+        List<File> files = new ArrayList<>();
+        Set<String> keys = new HashSet<>();
+        addCacheFile(files, keys, type, cacheKey);
+        if (fallbackCacheKeys != null) {
+            for (String key : fallbackCacheKeys) addCacheFile(files, keys, type, key);
+        }
+        addCacheFile(files, keys, type, legacyUrl);
+        return files;
+    }
+
+    private void addCacheFile(List<File> files, Set<String> keys, String type, String key) {
+        if (TextUtils.isEmpty(key) || !keys.add(key)) return;
+        files.add(cacheFile(type, key));
+    }
+
+    private JsonObject readFirstCache(List<File> files, long ttl) {
+        for (File file : files) {
+            JsonObject cached = readCache(file, ttl);
+            if (cached != null) return cached;
+        }
+        return null;
     }
 
     private File cacheFile(String type, String key) {
@@ -567,6 +597,51 @@ public class TmdbService {
 
     private long seasonCacheTtl(JsonObject detail) {
         return isMainlandChina(detail) && isOnAir(detail) ? CN_ON_AIR_SEASON_CACHE_TTL : SEASON_CACHE_TTL;
+    }
+
+    String detailCacheKey(@NonNull TmdbItem item, @NonNull TmdbConfig config, boolean includeRelated) {
+        return cacheKey("detail", item.getMediaType(), item.getTmdbId(), cacheLanguage(config), includeRelated ? "full" : "core");
+    }
+
+    String searchCacheKey(@NonNull String keyword, @NonNull TmdbConfig config) {
+        return cacheKey("search", keyword, cacheLanguage(config));
+    }
+
+    List<String> detailCacheKeys(@NonNull TmdbItem item, @NonNull TmdbConfig config, boolean includeRelated) {
+        List<String> keys = new ArrayList<>();
+        keys.add(detailCacheKey(item, config, includeRelated));
+        if (!includeRelated) keys.add(detailCacheKey(item, config, true));
+        return keys;
+    }
+
+    String seasonCacheKey(@NonNull TmdbItem item, int seasonNumber, @NonNull TmdbConfig config) {
+        return seasonCacheKey(item.getTmdbId(), seasonNumber, config);
+    }
+
+    private String seasonCacheKey(int tmdbId, int seasonNumber, @NonNull TmdbConfig config) {
+        return cacheKey("season", "tv", tmdbId, seasonNumber, cacheLanguage(config));
+    }
+
+    String episodeCacheKey(@NonNull TmdbItem item, int seasonNumber, int episodeNumber, @NonNull TmdbConfig config) {
+        return episodeCacheKey(item.getTmdbId(), seasonNumber, episodeNumber, config);
+    }
+
+    private String episodeCacheKey(int tmdbId, int seasonNumber, int episodeNumber, @NonNull TmdbConfig config) {
+        return cacheKey("episode", "tv", tmdbId, seasonNumber, episodeNumber, cacheLanguage(config));
+    }
+
+    private String cacheKey(Object... parts) {
+        StringBuilder builder = new StringBuilder();
+        for (Object part : parts) {
+            if (builder.length() > 0) builder.append('|');
+            builder.append(String.valueOf(part).replace('|', ' ').trim().toLowerCase(Locale.ROOT));
+        }
+        return builder.toString();
+    }
+
+    private String cacheLanguage(TmdbConfig config) {
+        String language = config == null ? "" : config.getLanguage();
+        return TextUtils.isEmpty(language) ? "zh-CN" : language;
     }
 
     private boolean isOnAir(JsonObject detail) {

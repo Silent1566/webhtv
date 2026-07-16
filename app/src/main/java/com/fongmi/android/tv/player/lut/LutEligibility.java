@@ -18,11 +18,11 @@ import java.util.Locale;
 public class LutEligibility {
 
     public static String getUnavailableReason(PlayerEngine engine, PlaySpec spec) {
-        if (engine == null || !engine.supportsVideoEffects()) return ResUtil.getString(R.string.lut_unavailable_player);
+        if (engine == null || !engine.supportsLut()) return ResUtil.getString(R.string.lut_unavailable_player);
         if (spec != null && spec.getDrm() != null) return ResUtil.getString(R.string.lut_unavailable_drm);
-        if (PlayerSetting.isTunnel()) return ResUtil.getString(R.string.lut_unavailable_tunnel);
-        if (engine.getDecode() == PlayerEngine.SOFT) return ResUtil.getString(R.string.lut_unavailable_soft_decode);
-        if (PlayerSetting.isVideoPrefer()) return ResUtil.getString(R.string.lut_unavailable_video_prefer);
+        if (!engine.supportsNativeLut() && PlayerSetting.isTunnel()) return ResUtil.getString(R.string.lut_unavailable_tunnel);
+        if (!engine.supportsNativeLut() && engine.getDecode() == PlayerEngine.SOFT) return ResUtil.getString(R.string.lut_unavailable_soft_decode);
+        if (!engine.supportsNativeLut() && PlayerSetting.isVideoPrefer()) return ResUtil.getString(R.string.lut_unavailable_video_prefer);
         if (isHdr(engine.getVideoFormat()) || isHdr(engine.getCurrentTracks())) return ResUtil.getString(R.string.lut_unavailable_hdr);
         if (isKnownAudioOnly(engine.getCurrentTracks())) return ResUtil.getString(R.string.lut_unavailable_no_video);
         return null;

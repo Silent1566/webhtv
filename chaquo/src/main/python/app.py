@@ -4,8 +4,8 @@ from importlib.machinery import SourceFileLoader
 import json
 
 
-def spider(cache, api):
-    name = os.path.basename(api)
+def spider(cache, api, file_name=None):
+    name = file_name or os.path.basename(api)
     path = cache + '/' + name
     download(path, api)
     name = name.split('.')[0]

@@ -30,6 +30,7 @@ import androidx.viewbinding.ViewBinding;
 
 import com.google.android.material.textview.MaterialTextView;
 
+import com.fongmi.android.tv.Product;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Collect;
@@ -47,10 +48,13 @@ import com.fongmi.android.tv.ui.adapter.CollectAdapter;
 import com.fongmi.android.tv.ui.adapter.SearchAdapter;
 import com.fongmi.android.tv.ui.base.BaseFragment;
 import com.fongmi.android.tv.ui.custom.CustomScroller;
+import com.fongmi.android.tv.utils.MobileWindow;
 import com.fongmi.android.tv.utils.ResUtil;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class CollectFragment extends BaseFragment implements MenuProvider, CollectAdapter.OnClickListener, SearchAdapter.OnClickListener, CustomScroller.Callback {
 
@@ -60,7 +64,6 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
     private static final int GROUP_POPUP_MAX_ITEMS = 8;
     private static final int GRID_ITEM_MARGIN_DP = 4;
     private static final int GRID_TOP_PADDING_DP = 8;
-    private static final int RESULT_END_PADDING_DP = 8;
 
     private FragmentCollectBinding mBinding;
     private CollectAdapter mCollectAdapter;
@@ -70,12 +73,14 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
     private List<Site> mSites;
     private List<String> mGroups;
     private final List<Collect> mAllCollectItems;
+    private final Map<String, Integer> mSiteOrder;
     private String mFilterGroup;
     private PopupWindow groupPopup;
     private int collectWidth;
 
     public CollectFragment() {
         mAllCollectItems = new ArrayList<>();
+        mSiteOrder = new HashMap<>();
         mFilterGroup = "";
     }
 
@@ -181,6 +186,7 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
         mBinding.recycler.addOnScrollListener(mScroller);
         mBinding.recycler.setAdapter(mSearchAdapter = new SearchAdapter(this));
         setResultLayout(false);
+        mBinding.recycler.post(() -> setResultLayout(false));
     }
 
     private void setViewModel() {
@@ -200,7 +206,10 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
             if (!TextUtils.isEmpty(group) && !site.inGroup(group)) continue;
             mSites.add(site);
         }
-        SiteHealthStore.sortSites(mSites);
+        // 固定模式严格按配置顺序,跳过健康度排序
+        if (Setting.getSearchResultSort() != 1) SiteHealthStore.sortSites(mSites);
+        mSiteOrder.clear();
+        for (int i = 0; i < mSites.size(); i++) mSiteOrder.put(mSites.get(i).getKey(), i);
         mGroups = isSiteSearch() || isGroupSearch() ? new ArrayList<>() : Site.getGroups(mSites);
     }
 
@@ -223,7 +232,21 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
         Collect all = Collect.all();
         mAllCollectItems.clear();
         mAllCollectItems.add(all);
-        mCollectAdapter.setItems(List.of(all), () -> mViewModel.searchContent(mSites, getKeyword(), false));
+
+        if (Setting.getSearchResultSort() == 1) {
+            // 模式1：预先铺满所有源（按配置顺序）
+            List<Collect> initialCollects = new ArrayList<>();
+            initialCollects.add(all);
+            for (Site site : mSites) {
+                Collect empty = new Collect(site, new ArrayList<>());
+                mAllCollectItems.add(empty);
+                initialCollects.add(empty);
+            }
+            mCollectAdapter.setItems(initialCollects, () -> mViewModel.searchContent(mSites, getKeyword(), false));
+        } else {
+            // 模式0：动态增量模式（现状）
+            mCollectAdapter.setItems(List.of(all), () -> mViewModel.searchContent(mSites, getKeyword(), false));
+        }
     }
 
     private int getCount() {
@@ -236,19 +259,38 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
         return getCount() == 2;
     }
 
+    private int getSpanCount() {
+        if (!isGrid()) return 1;
+        if (!MobileWindow.isWide(requireActivity())) return 2;
+        int column = Product.getColumn(requireActivity());
+        int targetWidth = Product.getSpec(requireActivity(), column)[0];
+        int available = getResultWidth() - getResultPadding();
+        int span = targetWidth > 0 ? available / targetWidth : 2;
+        return Math.max(2, Math.min(column, span));
+    }
+
+    private int getResultWidth() {
+        int width = mBinding.recycler.getWidth();
+        return width > 0 ? width : ResUtil.getScreenWidth(requireActivity()) - collectWidth;
+    }
+
+    private int getResultPadding() {
+        return mBinding.recycler.getPaddingStart() + mBinding.recycler.getPaddingEnd();
+    }
+
     private int[] getGridSize() {
-        int span = getCount();
+        int span = getSpanCount();
         int margin = ResUtil.dp2px(GRID_ITEM_MARGIN_DP);
-        int space = ResUtil.dp2px(RESULT_END_PADDING_DP) + margin * 2 * span;
-        int width = (ResUtil.getScreenWidth(requireActivity()) - collectWidth - space) / span;
+        int space = getResultPadding() + margin * 2 * span;
+        int width = (getResultWidth() - space) / span;
         width = Math.max(ResUtil.dp2px(96), width);
         return new int[]{width, (int) (width / 0.75f), margin};
     }
 
     private void setResultLayout(boolean scrollTop) {
         setWidth();
-        int count = getCount();
-        ((GridLayoutManager) (mBinding.recycler.getLayoutManager())).setSpanCount(count);
+        int span = getSpanCount();
+        ((GridLayoutManager) (mBinding.recycler.getLayoutManager())).setSpanCount(span);
         setResultPadding();
         mSearchAdapter.setGrid(isGrid(), getGridSize());
         if (scrollTop) mBinding.recycler.scrollToPosition(0);
@@ -270,8 +312,23 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
         Collect collect = addMasterCollect(result.getList());
         if (!matchFilter(collect.getSite())) return;
         if (mCollectAdapter.getPosition() == 0) mSearchAdapter.addAll(result.getList());
-        if (!hasCollect(mCollectAdapter.getItems(), collect)) mCollectAdapter.add(Collect.create(result.getList()));
-        mCollectAdapter.add(result.getList());
+
+        if (Setting.getSearchResultSort() == 1) {
+            // 模式1：源已预先铺满，addMasterCollect 已填充数据，这里只刷新对应位置
+            int index = findCollectIndex(mCollectAdapter.getItems(), collect.getSite().getKey());
+            if (index != -1) mCollectAdapter.notifyItemChanged(index);
+        } else {
+            // 模式0：动态添加站点到左侧列表
+            if (!hasCollect(mCollectAdapter.getItems(), collect)) mCollectAdapter.add(Collect.create(result.getList()));
+            mCollectAdapter.add(result.getList());
+        }
+    }
+
+    private int findCollectIndex(List<Collect> items, String siteKey) {
+        for (int i = 0; i < items.size(); i++) {
+            if (items.get(i).getSite().getKey().equals(siteKey)) return i;
+        }
+        return -1;
     }
 
     private Collect addMasterCollect(List<Vod> items) {

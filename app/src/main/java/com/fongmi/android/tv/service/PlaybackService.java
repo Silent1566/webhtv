@@ -570,6 +570,14 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
     }
 
     @Override
+    public boolean onSourceHttpError(int statusCode, String msg) {
+        for (PlayerCallback callback : playerCallbacks) {
+            if (callback.onSourceHttpError(statusCode, msg)) return true;
+        }
+        return false;
+    }
+
+    @Override
     public void onError(String msg) {
         playerCallbacks.forEach(callback -> callback.onError(msg));
     }
@@ -672,6 +680,10 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
         }
 
         default void onTitlesChanged() {
+        }
+
+        default boolean onSourceHttpError(int statusCode, String msg) {
+            return false;
         }
 
         default void onError(String msg) {

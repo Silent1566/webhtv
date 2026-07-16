@@ -41,6 +41,13 @@ public class EpisodeDisplayPolicyTest {
     }
 
     @Test
+    public void originalEnhancedMode_keepsScrapedEpisodeDataAcrossDifferentlyNamedSourceLines() {
+        assertTrue(EpisodeDisplayPolicy.hasTmdbEpisodeData(Collections.singletonList(mismatchedTmdbEpisode())));
+        assertTrue(EpisodeDisplayPolicy.shouldUseTmdbEpisodeCards(true, Collections.singletonList(mismatchedTmdbEpisode())));
+        assertTrue(EpisodeDisplayPolicy.shouldShowTmdbEpisodeChrome(true, false, Collections.singletonList(mismatchedTmdbEpisode())));
+    }
+
+    @Test
     public void episodeGroup_showsInTmdbDetailLayout() {
         assertTrue(EpisodeDisplayPolicy.shouldShowEpisodeGroup(2, false));
         assertTrue(EpisodeDisplayPolicy.shouldShowEpisodeGroup(2, true));
@@ -54,6 +61,12 @@ public class EpisodeDisplayPolicyTest {
     private static Episode tmdbEpisode() {
         Episode episode = Episode.create("第2集", "http://example.test/2");
         episode.setTmdbEpisode(new TmdbEpisode(2, "Title", "", "", "", 0, 0));
+        return episode;
+    }
+
+    private static Episode mismatchedTmdbEpisode() {
+        Episode episode = Episode.create("2. Source Title", "http://example.test/2");
+        episode.setTmdbEpisode(new TmdbEpisode(2, "Different Title", "", "", "", 0, 0));
         return episode;
     }
 }

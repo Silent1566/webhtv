@@ -1,0 +1,31 @@
+# MPV player JNI
+
+This directory contains the maintainable source for the `libplayer.so` JNI
+bridge loaded by `is.xyz.mpv.MPVLib`.
+
+Source baseline:
+
+- `FongMi/mpv-android`
+- Local reference directory: `/Users/macbookpro/Desktop/github/mpv-android-reference`
+- Observed reference commit: `4c57302c655b2973c8112941e6a9d3ff571fab8e`
+- Source license: see `LICENSE`
+
+Project-specific changes:
+
+- `MPV_EVENT_END_FILE` reads `mpv_event_end_file.reason` and
+  `mpv_event_end_file.error`.
+- Native calls `MPVLib.endFile(reason, error, errorText)` instead of only
+  forwarding the event id.
+- The build links against this project's bundled MPV assets, whose FFmpeg
+  libraries use renamed SONAMEs such as `libmvcodec.so` and `libmwscale.so`.
+
+Build:
+
+```bash
+scripts/build_mpv_player_jni.sh
+```
+
+The script rebuilds and replaces:
+
+- `app/src/arm64_v8a/assets/mpv-libs/arm64-v8a/libplayer.so`
+- `app/src/armeabi_v7a/assets/mpv-libs/armeabi-v7a/libplayer.so`

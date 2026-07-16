@@ -16,6 +16,7 @@ import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.adapter.HistoryAdapter;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.custom.SpaceItemDecoration;
+import com.fongmi.android.tv.ui.dialog.ViewingReportRangeDialog;
 
 import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
@@ -38,6 +39,13 @@ public class HistoryActivity extends BaseActivity implements HistoryAdapter.OnCl
     protected void initView(Bundle savedInstanceState) {
         setRecyclerView();
         getHistory();
+        mBinding.reportButton.setOnClickListener(v -> onReport());
+    }
+
+    private void onReport() {
+        ViewingReportRangeDialog.create(this)
+                .callback(range -> ViewingReportActivity.start(this, range))
+                .show();
     }
 
     private void setRecyclerView() {

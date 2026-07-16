@@ -83,6 +83,9 @@
     <string name="play_track_audio">Audio</string>
     <string name="play_track_video">Video</string>
     <string name="play_track_disable_subtitle">Subtitle off</string>
+    <string name="play_track_disable_secondary_subtitle">Secondary subtitle off</string>
+    <string name="play_track_secondary_subtitle">Secondary</string>
+    <string name="play_track_primary_subtitle">Main</string>
     <string name="offset_text">Text offset</string>
     <string name="offset_audio">Audio offset</string>
     <string name="offset_setting">Offset settings</string>
@@ -92,6 +95,11 @@
     <string name="play_switch_flag">Switching flag to <xliff:g name="name">%s</xliff:g></string>
     <string name="play_switch_site">Switching site to <xliff:g name="name">%s</xliff:g></string>
     <string name="play_switch_parse">Switching parse to <xliff:g name="name">%s</xliff:g></string>
+    <string name="play_night_mode">Night mode</string>
+    <string name="night_mode_off">Night mode off</string>
+    <string name="night_mode_low">Night mode: Low</string>
+    <string name="night_mode_medium">Night mode: Medium</string>
+    <string name="night_mode_high">Night mode: High</string>
 
     <!-- Danmaku Setting -->
     <string name="danmaku">Danmaku</string>
@@ -187,6 +195,7 @@
     <string name="setting_search_ui">Search layout</string>
     <string name="setting_search_column">Search results per row</string>
     <string name="setting_site_column">Site display mode</string>
+    <string name="setting_search_result_sort">Search result mode</string>
     <string name="repo_github">GitHub repository</string>
     <string name="repo_cnb">CNB repository</string>
     <string name="setting_debug_log">Debug log</string>
@@ -404,9 +413,63 @@
     <string name="setting_site_health_enable">Enable site health ranking</string>
     <string name="setting_site_health_dialog_sort">Sort site dialog</string>
     <string name="site_health_clear_done">Site health data cleared</string>
+    <string name="site_health_report_view">View report</string>
+    <string name="site_health_report_title">Playback chain health</string>
+    <string name="site_health_report_empty">No site health samples yet</string>
+    <string name="site_health_report_filter_empty">No matching site health samples</string>
+    <string name="site_health_filter_all">All</string>
+    <string name="site_health_filter_bad">Bad</string>
+    <string name="site_health_filter_warn">Degraded</string>
+    <string name="site_health_sort_failures">Failures</string>
+    <string name="site_health_sort_recent">Recent</string>
+    <string name="site_health_sort_rate">Success</string>
+    <string name="site_health_sort_samples">Samples</string>
+    <string name="site_health_report_summary">%1$d sites · %2$d samples · %3$d failures · %4$d degraded</string>
+    <string name="site_health_report_summary_reason">%1$d sites · %2$d samples · %3$d failures · %4$d degraded · Top %5$s x%6$d</string>
+    <string name="site_health_report_setting_summary">%1$d sites · %2$d samples</string>
+    <string name="site_health_report_row_meta">%1$d samples · %2$d failures</string>
+    <string name="site_health_report_ad_blocked">广告拦截 · %1$d 次</string>
+    <string name="site_health_report_stage">%1$s · %2$s · %3$d/%4$d</string>
+    <string name="site_health_report_rate">%1$d%%</string>
+    <string name="site_health_report_no_data">No data</string>
+    <string name="site_health_report_empty_count">empty %1$d</string>
+    <string name="site_health_report_cost">%1$dms</string>
+    <string name="site_health_report_reason">Reason: %1$s x%2$d</string>
+    <string name="site_health_report_reason_tag">%1$s x%2$d</string>
+    <string name="site_health_report_recent_errors">Recent errors</string>
+    <string name="site_health_report_recent_error">%1$s: %2$s</string>
+    <string name="site_health_report_recent_error_time">%1$s · %2$s · %3$s</string>
+    <string name="site_health_clear_site">Clear this site</string>
+    <string name="site_health_clear_site_title">Clear site health?</string>
+    <string name="site_health_clear_site_message">Clear health samples for %1$s?</string>
+    <string name="site_health_stage_search">Search</string>
+    <string name="site_health_stage_detail">Detail</string>
+    <string name="site_health_stage_parse">Parse</string>
+    <string name="site_health_stage_play">Play</string>
+    <string name="site_health_status_good">Healthy</string>
+    <string name="site_health_status_warn">Degraded</string>
+    <string name="site_health_status_bad">Bad</string>
+    <string name="site_health_status_unknown">Unknown</string>
+    <string name="site_health_reason_empty_result">No search results</string>
+    <string name="site_health_reason_timeout">Timeout</string>
+    <string name="site_health_reason_http_403">HTTP 403</string>
+    <string name="site_health_reason_http_404">HTTP 404</string>
+    <string name="site_health_reason_http_429">HTTP 429</string>
+    <string name="site_health_reason_http_5xx">HTTP 5xx</string>
+    <string name="site_health_reason_network">Network error</string>
+    <string name="site_health_reason_parse_failed">Parse failed</string>
+    <string name="site_health_reason_vip_required">VIP required</string>
+    <string name="site_health_reason_geo_blocked">Region blocked</string>
+    <string name="site_health_reason_drm_or_encrypted">DRM or encrypted</string>
+    <string name="site_health_reason_manifest_failed">Manifest failed</string>
+    <string name="site_health_reason_codec_unsupported">Codec unsupported</string>
+    <string name="site_health_reason_cors_blocked">CORS blocked</string>
+    <string name="site_health_reason_search_failed">Search failed</string>
+    <string name="site_health_reason_detail_failed">Detail failed</string>
+    <string name="site_health_reason_play_failed">Playback failed</string>
     <string name="setting_web_home_extension">WebHome extensions</string>
     <string name="setting_web_home_fullscreen">WebHome homepage fullscreen</string>
-    <string name="setting_csp_warmup">CSP init warmup</string>
+    <string name="setting_csp_warmup">CSP warmup</string>
     <string name="setting_csp_warmup_default">Default</string>
     <string name="setting_csp_warmup_custom">Custom</string>
     <string name="setting_csp_warmup_custom_count">Custom · %1$d sites</string>
@@ -854,9 +917,31 @@
     <string name="player_performance">Playback performance</string>
     <string name="player_performance_recommended">Recommended</string>
     <string name="player_performance_compatible">Compatible</string>
+    <string name="player_performance_lightweight">Light</string>
+    <string name="player_performance_original">Original</string>
+    <string name="player_performance_help">Guide</string>
+    <string name="player_performance_help_title">Playback performance guide</string>
+    <string name="player_performance_help_close">Close</string>
     <string name="player_kernel">Player engine</string>
     <string name="player_scale">Scale</string>
     <string name="player_lut">LUT color</string>
+    <string name="player_mpv_config">MPV config manager</string>
+    <string name="player_mpv_render">MPV renderer</string>
+    <string name="mpv_render_native_unavailable">Unavailable</string>
+    <string name="mpv_config_target">%1$s · %2$s</string>
+    <string name="mpv_config_default">Default</string>
+    <string name="mpv_config_local">Local mpv.conf</string>
+    <string name="mpv_config_url">URL mpv.conf</string>
+    <string name="mpv_config_name_hint">Name (optional)</string>
+    <string name="mpv_config_history">History</string>
+    <string name="mpv_config_history_empty">No MPV config history</string>
+    <string name="mpv_config_script_hint">Script URL or choose local script</string>
+    <string name="mpv_config_scripts_count">%1$d scripts</string>
+    <string name="mpv_config_saved">MPV config saved. Reopen playback to apply it.</string>
+    <string name="mpv_config_empty">MPV config is empty</string>
+    <string name="mpv_config_file_invalid">Invalid mpv.conf file</string>
+    <string name="mpv_config_url_invalid">Invalid mpv.conf URL</string>
+    <string name="mpv_config_download_empty">Downloaded mpv.conf is empty</string>
     <string name="player_libass">libass</string>
     <string name="player_caption">Caption style</string>
     <string name="player_background">Background play</string>
@@ -881,12 +966,15 @@
     <string name="player_preload_time_value">%1$d seconds</string>
     <string name="player_auto_play">Auto play</string>
     <string name="player_auto_change">Auto source change</string>
+    <string name="player_failure_fallback">Failure fallback</string>
     <string name="player_speed">Press speed</string>
     <string name="player_ua">User-Agent</string>
     <string name="player_osd">On-screen display</string>
     <string name="player_subtitle_auto_match">Auto subtitle match</string>
     <string name="player_subtitle_language">Preferred subtitle language</string>
     <string name="player_subtitle_assrt_token">ASSRT token</string>
+    <string name="player_subtitle_ai_max_concurrency">AI subtitle max concurrency</string>
+    <string name="player_subtitle_ai_chunk_count">AI subtitle chunks</string>
     <string name="subtitle_auto_match_hit">Subtitle matched: %1$s</string>
     <string name="subtitle_auto_match_hit_not_applied">Subtitle found but not applied: %1$s</string>
     <string name="subtitle_auto_match_empty">No matching subtitle found</string>
@@ -902,6 +990,25 @@
     <string name="subtitle_manual_applied">Subtitle applied: %1$s</string>
     <string name="subtitle_manual_apply_failed">Subtitle found but could not be applied</string>
     <string name="subtitle_manual_inactive">Start playback before searching subtitles</string>
+    <string name="subtitle_ai_translate_title">AI subtitle translation</string>
+    <string name="subtitle_ai_translate_message">Translate this subtitle to Chinese with the current AI configuration?</string>
+    <string name="subtitle_ai_translate_action">AI translate to Chinese</string>
+    <string name="subtitle_ai_regenerate_action">Regenerate AI subtitle</string>
+    <string name="subtitle_ai_translating">Translating subtitle...</string>
+    <string name="subtitle_ai_preparing">Preparing AI subtitle translation...</string>
+    <string name="subtitle_ai_regenerating">Regenerating AI subtitle...</string>
+    <string name="subtitle_ai_progress">AI translating: %1$d/%2$d chunks</string>
+    <string name="subtitle_ai_progress_eta">AI translating: %1$d/%2$d chunks, about %3$s left</string>
+    <string name="subtitle_ai_cache_hit">Using cached AI subtitle...</string>
+    <string name="subtitle_ai_applied">AI subtitle applied: %1$s</string>
+    <string name="subtitle_ai_apply_failed">AI subtitle generated but could not be applied</string>
+    <string name="subtitle_ai_failed">AI subtitle translation failed: %1$s</string>
+    <string name="subtitle_ai_config_required">Configure and enable AI first</string>
+    <string name="subtitle_ai_no_selected_subtitle">Select a subtitle first</string>
+    <string name="subtitle_ai_local_srt_required">Select a local SRT subtitle first</string>
+    <string name="subtitle_ai_unsupported_format">AI subtitle translation currently supports SRT only</string>
+    <string name="subtitle_ai_stale_result">Playback changed, AI subtitle result was ignored</string>
+    <string name="subtitle_ai_unknown_reason">unknown error</string>
     <string name="lut_original">Original</string>
     <string name="lut_missing">Preset missing</string>
     <string name="lut_summary">%1$s · %2$d%%</string>
@@ -992,6 +1099,15 @@
     <string name="error_play_parse">Unable to parse url</string>
     <string name="error_play_drm">This device does not support the required DRM scheme</string>
     <string name="error_play_url">Unable to load url</string>
+    <string name="error_play_mpv_hls_unsupported">MPV failed to play this HLS stream. Switch player manually or choose another line.</string>
+    <string name="error_play_mpv_load_failed">MPV failed to load media. Check the network or choose another line.</string>
+    <string name="error_play_mpv_network_failed">MPV network loading failed. Check the network, headers, or choose another line.</string>
+    <string name="error_play_mpv_drm_unsupported">MPV does not support this DRM protected media. Switch player manually or choose another line.</string>
+    <string name="error_play_mpv_unexpected_image">MPV loaded an image instead of video. Choose another line.</string>
+    <string name="error_play_mpv_no_av">MPV did not find playable audio or video data.</string>
+    <string name="error_play_mpv_invalid_data">MPV found invalid media data. Choose another line or switch player manually.</string>
+    <string name="error_play_mpv_decode_failed">MPV failed to decode this media. Try switching soft/hard decode or choose another line.</string>
+    <string name="error_play_mpv_video_output">MPV failed to initialize video output. Try switching decode mode or reopen playback.</string>
     <string name="error_play_flag">No flag data</string>
     <string name="error_play_timeout">Timed out</string>
     <string name="error_play_fallback">%1$s playback failed, switched to %2$s</string>
@@ -1030,6 +1146,14 @@
     <string name="update_status_unavailable">Unavailable</string>
     <string name="update_expand">Expand</string>
     <string name="update_collapse">Collapse</string>
+    <string name="update_backup_title">Backup Before Update</string>
+    <string name="update_backup_message">It is recommended to backup your current configuration before updating. Would you like to backup first?</string>
+    <string name="update_backup_positive">Backup &amp; Update</string>
+    <string name="update_backup_negative">Update Directly</string>
+    <string name="update_backup_running">Backing up…</string>
+    <string name="update_backup_done">Backup completed, starting update</string>
+    <string name="update_backup_failed">Backup failed, will continue update anyway</string>
+    <string name="update_backup_permission_denied">Storage permission denied, cannot backup, will continue update anyway</string>
 
     <!-- Crash -->
     <string name="crash_info">An unexpected error occurred.\nSorry for the inconvenience.</string>
@@ -1087,11 +1211,19 @@
         <item>EXO</item>
         <item>IJK</item>
         <item>System</item>
+        <item>MPV</item>
     </string-array>
 
     <string-array name="select_decode">
         <item>Soft</item>
         <item>Hard</item>
+    </string-array>
+
+    <string-array name="select_player_failure_fallback">
+        <item>Decoder, then core</item>
+        <item>Decoder only</item>
+        <item>Core only</item>
+        <item>Off</item>
     </string-array>
 
     <string-array name="select_render">
@@ -1103,6 +1235,11 @@
         <item>EXO</item>
         <item>IJK</item>
         <item>System</item>
+        <item>MPV</item>
+    </string-array>
+    <string-array name="select_mpv_render">
+        <item>OpenGL</item>
+        <item>Vulkan</item>
     </string-array>
     <string-array name="select_buffer_bytes">
         <item>Auto</item>
@@ -1178,6 +1315,11 @@
         <item>Double row</item>
     </string-array>
 
+    <string-array name="select_search_result_sort">
+        <item>Dynamic (first returned first)</item>
+        <item>Fixed (by source order)</item>
+    </string-array>
+
     <string-array name="select_ui_scale">
         <item>Follow system</item>
         <item>Standard</item>
@@ -1246,6 +1388,7 @@
         <item>Select video track</item>
         <item>Select subtitle track</item>
     </string-array>
+    <string name="select_secondary_subtitle_track">Select secondary subtitle</string>
 
     <string name="setting_tmdb_source">TMDB data config</string>
     <string name="setting_ai_recommendation">AI configuration</string>
@@ -1342,6 +1485,8 @@
     <string name="dialog_ai_prompt_config">AI prompt configuration</string>
     <string name="dialog_ai_recommend_prompt_label">Recommendation prompt</string>
     <string name="dialog_ai_title_extraction_prompt_label">Title extraction prompt</string>
+    <string name="dialog_ai_viewing_report_prompt_label">Viewing report prompt</string>
+    <string name="dialog_ai_ad_detection_prompt_label">Ad detection prompt</string>
     <string name="dialog_ai_prompt_reset">Reset default</string>
     <string name="dialog_ai_test">Test configuration</string>
     <string name="dialog_ai_test_running">Testing AI configuration...</string>
@@ -1417,5 +1562,126 @@
     <string name="detail_image_previous">Previous</string>
     <string name="detail_image_next">Next</string>
     <string name="detail_image_close">Close</string>
+
+    <!-- Viewing Report -->
+    <string name="menu_viewing_report">Viewing Report</string>
+    <string name="viewing_report_title">🎬 Your Viewing Report</string>
+    <string name="viewing_report_select_range">Select Report Range</string>
+    <string name="viewing_report_generate">Generate Report</string>
+    <string name="viewing_report_refresh">Refresh</string>
+    <string name="viewing_report_refreshing">Refreshing report...</string>
+    <string name="viewing_report_loading_local">Loading cached report...</string>
+    <string name="viewing_report_generating">Generating report...</string>
+    <string name="viewing_report_ai_analyzing">AI analyzing...</string>
+    <string name="viewing_report_empty">No viewing records in this time range</string>
+    <string name="viewing_report_unit_hours">hours</string>
+    <string name="viewing_report_unit_vods">titles</string>
+    <string name="viewing_report_unit_episodes">episodes</string>
+    <string name="viewing_report_unit_minutes">minutes</string>
+    <string name="viewing_report_unit_times">times</string>
+    <string name="viewing_report_watched">Watched</string>
+    <string name="viewing_report_completion_rate">Completion Rate</string>
+    <string name="viewing_report_overview_watch">Total Watch Time</string>
+    <string name="viewing_report_time_pattern">⏰ Time Pattern</string>
+    <string name="viewing_report_top_time_slot">Favorite Time</string>
+    <string name="viewing_report_weekend_ratio">Weekend Ratio</string>
+    <string name="viewing_report_avg_watch">Avg. Session</string>
+    <string name="viewing_report_late_night">Late Night</string>
+    <string name="viewing_report_content_preference">🎭 Content Preference</string>
+    <string name="viewing_report_tv_movie_ratio">TV / Movie</string>
+    <string name="viewing_report_people_preference">👤 People Preference</string>
+    <string name="viewing_report_top_actors">Top Actors</string>
+    <string name="viewing_report_top_directors">Top Directors</string>
+    <string name="viewing_report_ai_persona">✨ Your Viewing Persona</string>
+    <string name="viewing_report_badges">🏆 Achievements</string>
+
+    <!-- AI 智能去广 -->
+    <string name="setting_ai_ad_detection">AI 智能去广</string>
+    <string name="setting_ad_rule_manage">规则管理</string>
+    <string name="ad_rule_add_manual">手动添加规则</string>
+    <string name="ad_rule_import_candidates">待审核接口规则（%d）</string>
+    <string name="ad_rule_import_title">导入接口去广规则</string>
+    <string name="ad_rule_import_action">导入（默认停用）</string>
+    <string name="ad_rule_ignore_all">忽略全部</string>
+    <string name="ad_rule_import_empty">暂无待审核接口规则</string>
+    <string name="ad_rule_section_custom">自定义规则</string>
+    <string name="ad_rule_section_server">接口配置规则</string>
+    <string name="ad_rule_empty">暂无规则</string>
+    <string name="ad_rule_delete_confirm">删除规则</string>
+    <string name="ad_rule_delete_message">确定删除“%1$s”吗？接口导入规则删除后可在待审核规则中重新导入。</string>
+    <string name="ad_rule_server_empty">来自配置 · 暂无</string>
+    <string name="ad_rule_server_summary">来自配置 · 共 %d 条（只读）</string>
+    <string name="ad_rule_edit_title">编辑规则</string>
+    <string name="ad_rule_field_name">规则名称（可选）</string>
+    <string name="ad_rule_field_hosts">域名列表（每行一个）</string>
+    <string name="ad_rule_field_hosts_hint">仅对这些域名生效，留空表示全局</string>
+    <string name="ad_rule_field_regex">广告规则（每行一个正则）</string>
+    <string name="ad_rule_field_regex_hint">匹配的 URL 会被屏蔽</string>
+    <string name="ad_rule_field_exclude">白名单（每行一个正则）</string>
+    <string name="ad_rule_field_exclude_hint">匹配的 URL 不会被屏蔽</string>
+    <string name="ad_rule_empty_input">至少填写一项</string>
+    <string name="ad_rule_invalid_regex">正则表达式无效：%s</string>
+    <string name="ad_rule_count">%d 条规则</string>
+    <string name="ad_rule_count_with_pending">%1$d 条规则 · %2$d 条待审核</string>
+    <string name="play_ad_feedback">有广告</string>
+    <string name="ad_feedback_analyzing">AI 正在分析广告特征…</string>
+    <string name="ad_feedback_no_url">当前没有可分析的播放地址</string>
+    <string name="ad_feedback_ai_disabled">请先在增强设置中开启 AI 与智能去广</string>
+    <string name="ad_feedback_failed">分析失败：%s</string>
+    <string name="ad_feedback_empty_result">AI 未识别到明显的广告特征</string>
+    <string name="ad_feedback_preview_title">AI 广告分析结果</string>
+    <string name="ad_feedback_confidence">置信度 %d%%</string>
+    <string name="ad_feedback_reasoning">分析说明</string>
+    <string name="ad_feedback_apply">应用并屏蔽</string>
+    <string name="ad_feedback_applied">已添加去广规则</string>
+    <string name="ad_feedback_low_confidence">置信度较低，建议人工核对后再应用</string>
+    <string name="ad_feedback_no_ad">AI 未识别到明显的广告特征</string>
+    <string name="ad_feedback_saved">已添加去广规则</string>
+    <string name="ad_rule_preview_title">AI 广告分析结果</string>
+    <string name="ad_rule_confidence_value">置信度：%d%%</string>
+    <string name="ad_rule_low_confidence_warning">置信度较低，证据不足，建议人工核对后再应用</string>
+    <string name="ad_rule_preview_hosts">屏蔽域名</string>
+    <string name="ad_rule_preview_regex">广告规则（正则）</string>
+    <string name="ad_block_stats">广告拦截统计</string>
+    <string name="ad_block_total">总拦截次数</string>
+    <string name="ad_feedback_count">AI 反馈次数</string>
+    <string name="ad_ai_success_rate">AI 分析成功率</string>
+    <string name="ad_site_rank">站点拦截排行</string>
+    <string name="ad_rule_rank">规则命中排行</string>
+    <string name="ad_stats_reset">重置统计</string>
+    <string name="ad_stats_reset_confirm">确定重置所有统计数据吗？</string>
+    <string name="ad_stats_empty">暂无统计数据</string>
+    <string name="ad_stats_overview">统计概览</string>
+    <string name="ad_stats_times">次</string>
+    <string name="ad_stats_percent">%.1f%%</string>
+    <string name="ad_stats_site_name">站点</string>
+    <string name="ad_stats_rule_name">规则</string>
+    <string name="ad_stats_count">次数</string>
+    <string name="ad_stats_source">来源</string>
+    <string name="ad_stats_source_default">默认</string>
+    <string name="ad_stats_source_ai">AI</string>
+    <string name="ad_stats_source_manual">手动</string>
+    <string name="ad_stats_source_unknown">未知</string>
+    <string name="ad_rule_preview_exclude">白名单（正则）</string>
+    <string name="ad_rule_preview_none">（无）</string>
+    <string name="ad_rule_preview_confirm">应用并屏蔽</string>
+    <string name="ad_rule_section_summary">AI/自定义 %1$d 条 · 接口配置 %2$d 条 · 内置 HLS %3$d 条</string>
+    <string name="ad_rule_hls_builtin_summary">内置 HLS · v%1$d · %2$s</string>
+    <string name="ad_rule_hls_enabled">已启用</string>
+    <string name="ad_rule_hls_disabled">默认关闭</string>
+    <string name="ad_rule_hls_invalid">规则异常：%1$s</string>
+    <string name="ad_rule_detail_hint">查看完整规则</string>
+    <string name="ad_rule_detail_hosts">适用域名</string>
+    <string name="ad_rule_detail_regex">匹配规则</string>
+    <string name="ad_rule_detail_script">自动化脚本</string>
+    <string name="ad_rule_detail_exclude">白名单 / 正片保护</string>
+    <string name="ad_rule_detail_json">完整规则（JSON）</string>
+    <string name="ad_rule_detail_id">规则 ID：%1$s</string>
+    <string name="ad_rule_detail_source">来源：%1$s</string>
+    <string name="ad_rule_default_disable_confirm">临时停用此接口配置规则？\n可能导致部分广告无法过滤，可随时重新启用。</string>
+    <string name="ad_rule_imported_disable_confirm">临时停用此接口导入规则？\n可随时重新启用，删除后也可从待审核规则重新导入。</string>
+    <string name="ad_rule_ai_disable_confirm">临时停用此 AI 识别规则？\n可随时重新启用。</string>
+    <string name="ad_rule_manual_disable_confirm">临时停用此手动规则？\n可随时重新启用。</string>
+    <string name="ad_rule_default_enable_confirm">重新启用此默认规则？</string>
 
 </resources>

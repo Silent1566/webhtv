@@ -13,7 +13,9 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.common.net.HttpHeaders;
 
+import java.net.URI;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -52,6 +54,26 @@ public class WebHomeInlineVodStore {
         if (entry == null || TextUtils.isEmpty(entry.vod)) return Result.error("WebHome inline VOD not found");
         SpiderDebug.log("webhome-inline", "detail id=%s found=%s", id, true);
         return Result.vod(Vod.objectFrom(entry.vod));
+    }
+
+    public static boolean shouldRefreshYoutubeEpisode(String key, String episodeUrl, int statusCode, boolean attempted) {
+        if (!KEY.equals(key) || attempted || (statusCode != 403 && statusCode != 410)) return false;
+        try {
+            String host = URI.create(episodeUrl).getHost();
+            if (host != null) host = host.toLowerCase(Locale.ROOT);
+            return host != null && (host.equals("youtu.be") || host.equals("youtube.com") || host.endsWith(".youtube.com"));
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    public static boolean invalidateResolvedEpisode(String id) {
+        EpisodeSpec episodeSpec = URL_EPISODES.get(id);
+        if (episodeSpec == null || episodeSpec.resolver == null || TextUtils.isEmpty(episodeSpec.mediaUrl)) return false;
+        URL_HEADERS.remove(episodeSpec.mediaUrl);
+        URL_EPISODES.put(id, new EpisodeSpec(episodeSpec.payload.deepCopy(), episodeSpec.headerSpec, episodeSpec.resolver, true, "", episodeSpec.format));
+        SpiderDebug.log("webhome-inline", "invalidate resolved episode id=%s", id);
+        return true;
     }
 
     public static Result player(String flag, String id) throws Exception {

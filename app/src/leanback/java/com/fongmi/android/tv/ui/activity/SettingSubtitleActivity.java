@@ -42,6 +42,7 @@ public class SettingSubtitleActivity extends BaseActivity {
         mBinding.subtitleAutoMatchText.setText(getSwitch(Setting.isSubtitleAutoMatchEnabled()));
         mBinding.subtitleLanguageText.setText(getSubtitleLanguageText());
         mBinding.subtitleAssrtTokenText.setText(getSubtitleAssrtTokenText());
+        setAiSubtitleSettings();
     }
 
     @Override
@@ -49,6 +50,8 @@ public class SettingSubtitleActivity extends BaseActivity {
         mBinding.subtitleAutoMatch.setOnClickListener(this::setSubtitleAutoMatch);
         mBinding.subtitleLanguage.setOnClickListener(this::onSubtitleLanguage);
         mBinding.subtitleAssrtToken.setOnClickListener(this::onSubtitleAssrtToken);
+        mBinding.subtitleAiMaxConcurrency.setOnClickListener(this::onSubtitleAiMaxConcurrency);
+        mBinding.subtitleAiChunkCount.setOnClickListener(this::onSubtitleAiChunkCount);
     }
 
     private void setSubtitleAutoMatch(View view) {
@@ -68,6 +71,27 @@ public class SettingSubtitleActivity extends BaseActivity {
             Setting.putSubtitleAssrtToken(value);
             mBinding.subtitleAssrtTokenText.setText(getSubtitleAssrtTokenText());
         });
+    }
+
+    private void onSubtitleAiMaxConcurrency(View view) {
+        SubtitleSettingsDialog.showNumber(this, R.string.player_subtitle_ai_max_concurrency, Setting.getSubtitleAiMaxConcurrency(), 1, 8, value -> {
+            Setting.putSubtitleAiMaxConcurrency(value);
+            mBinding.subtitleAiMaxConcurrencyText.setText(String.valueOf(Setting.getSubtitleAiMaxConcurrency()));
+        });
+    }
+
+    private void onSubtitleAiChunkCount(View view) {
+        SubtitleSettingsDialog.showNumber(this, R.string.player_subtitle_ai_chunk_count, Setting.getSubtitleAiChunkCount(), 1, 32, value -> {
+            Setting.putSubtitleAiChunkCount(value);
+            mBinding.subtitleAiChunkCountText.setText(String.valueOf(Setting.getSubtitleAiChunkCount()));
+        });
+    }
+
+    private void setAiSubtitleSettings() {
+        boolean visible = Setting.isAiConfigReady();
+        mBinding.subtitleAiSettings.setVisibility(visible ? View.VISIBLE : View.GONE);
+        mBinding.subtitleAiMaxConcurrencyText.setText(String.valueOf(Setting.getSubtitleAiMaxConcurrency()));
+        mBinding.subtitleAiChunkCountText.setText(String.valueOf(Setting.getSubtitleAiChunkCount()));
     }
 
     private String getSubtitleLanguageText() {

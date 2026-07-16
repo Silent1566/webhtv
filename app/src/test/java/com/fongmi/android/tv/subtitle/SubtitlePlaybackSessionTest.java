@@ -77,7 +77,7 @@ public class SubtitlePlaybackSessionTest {
         controller.emit(current, SubtitleMatchResult.matched(null, asset, Collections.emptyList()));
 
         assertEquals(1, applier.applied.size());
-        assertEquals("file:///subtitle.srt", applier.applied.get(0).getUrl());
+        assertEquals("/tmp/subtitle.srt", applier.applied.get(0).getUrl());
         assertEquals(List.of(SubtitleMatchStatus.MATCHED), notifier.statuses);
         assertEquals(List.of(true), notifier.applied);
 
@@ -166,7 +166,7 @@ public class SubtitlePlaybackSessionTest {
         FakeHost host = new FakeHost();
         SubtitlePlaybackSession session = new SubtitlePlaybackSession(host, controller, requestFactory, new SubtitleInjector(), applier);
         SubtitleCandidate candidate = new SubtitleCandidate("assrt", "sub-1", "匹配字幕", "zh", "srt", "", 88, 2024, 1, 1, null, "query", true, "payload");
-        SubtitleAsset asset = new SubtitleAsset("file:///manual.srt", "/tmp/manual.srt", "手动字幕", "zh", "application/x-subrip", 0, false, 0L);
+        SubtitleAsset asset = new SubtitleAsset("https://provider.example/manual.srt", "/tmp/manual.srt", "手动字幕", "zh", "application/x-subrip", 0, false, 0L);
         controller.resolveResult = SubtitleMatchResult.matched(candidate, asset, List.of(candidate));
         List<Boolean> applied = new ArrayList<>();
 
@@ -175,8 +175,25 @@ public class SubtitlePlaybackSessionTest {
 
         assertEquals(List.of(candidate), controller.resolveCandidates);
         assertEquals(1, applier.applied.size());
-        assertEquals("file:///manual.srt", applier.applied.get(0).getUrl());
+        assertEquals("/tmp/manual.srt", applier.applied.get(0).getUrl());
         assertEquals(List.of(true), applied);
+    }
+
+    @Test
+    public void applySubtitleAsset_appliesGeneratedSubtitleForActiveSession() {
+        FakeController controller = new FakeController();
+        FakeRequestFactory requestFactory = new FakeRequestFactory();
+        FakeResultApplier applier = new FakeResultApplier();
+        FakeHost host = new FakeHost();
+        SubtitlePlaybackSession session = new SubtitlePlaybackSession(host, controller, requestFactory, new SubtitleInjector(), applier);
+        SubtitleAsset asset = new SubtitleAsset("file:///translated.srt", "/tmp/translated.srt", "AI 中文字幕", "zh-Hans", "application/x-subrip", 0, true, 0L);
+
+        session.onPlaybackStarted(host, result("https://play/1.m3u8"));
+        boolean applied = session.applySubtitleAsset(host, asset);
+
+        assertTrue(applied);
+        assertEquals(1, applier.applied.size());
+        assertEquals("/tmp/translated.srt", applier.applied.get(0).getUrl());
     }
 
     private Result result(String playUrl) {

@@ -23,6 +23,7 @@ import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.bean.Episode;
 import com.fongmi.android.tv.bean.TmdbConfig;
 import com.fongmi.android.tv.bean.TmdbEpisode;
+import com.fongmi.android.tv.bean.TmdbItem;
 import com.fongmi.android.tv.bean.TmdbPerson;
 import com.fongmi.android.tv.service.TmdbService;
 import com.fongmi.android.tv.setting.Setting;
@@ -44,6 +45,16 @@ public class EpisodeDetailDialog {
         if (activity == null || episode == null) return;
         TmdbEpisode tmdbEpisode = episode.getTmdbEpisode();
         if (tmdbEpisode == null) {
+            // 电影没有分集对象，尝试从详情页获取影片级数据
+            if (activity instanceof com.fongmi.android.tv.ui.host.TmdbDetailHost) {
+                com.fongmi.android.tv.ui.host.TmdbDetailHost host = (com.fongmi.android.tv.ui.host.TmdbDetailHost) activity;
+                TmdbItem movieItem = host.getMatchedTmdbItem();
+                JsonObject movieDetail = host.getMatchedTmdbDetail();
+                if (movieItem != null && movieItem.isMovie()) {
+                    showMovieDetail(activity, episode, movieItem, movieDetail);
+                    return;
+                }
+            }
             showSimpleDialog(activity, episode);
             return;
         }
@@ -72,6 +83,126 @@ public class EpisodeDetailDialog {
         applyWindowSize(dialog);
 
         loadEpisodeMedia(activity, tmdbEpisode, light, photoTitle, photoList, guestsTitle, guestsList);
+    }
+
+    /**
+     * 电影场景：长按线路/清晰度时展示影片级 TMDB 详情。
+     * 复用剧集详情布局，标题=影片名，原始名称=源站文件名（完整多行展示），
+     * meta=评分/上映日期/时长，简介=影片简介，剧照/演员异步加载。
+     */
+    private static void showMovieDetail(FragmentActivity activity, Episode episode, TmdbItem movieItem, JsonObject movieDetail) {
+        View view = LayoutInflater.from(activity).inflate(R.layout.dialog_episode_detail, null);
+        ImageView still = view.findViewById(R.id.still);
+        TextView title = view.findViewById(R.id.title);
+        TextView originalName = view.findViewById(R.id.originalName);
+        TextView meta = view.findViewById(R.id.meta);
+        TextView overview = view.findViewById(R.id.overview);
+        TextView photoTitle = view.findViewById(R.id.photoTitle);
+        RecyclerView photoList = view.findViewById(R.id.photoList);
+        TextView guestsTitle = view.findViewById(R.id.guestsTitle);
+        RecyclerView guestsList = view.findViewById(R.id.guestsList);
+        boolean light = resolveLightTheme(activity);
+
+        applyTheme(view, light);
+
+        // 剧照区域展示影片背景图
+        String backdrop = movieItem.getBackdropUrl();
+        if (!TextUtils.isEmpty(backdrop)) {
+            still.setVisibility(View.VISIBLE);
+            Glide.with(activity)
+                    .load(tmdbImageUrl(backdrop, "w780"))
+                    .placeholder(R.color.black)
+                    .error(R.color.black)
+                    .centerCrop()
+                    .into(still);
+        } else {
+            still.setVisibility(View.GONE);
+        }
+
+        // 标题：影片名（TMDB 归一化标题）
+        String movieTitle = movieItem.getTitle();
+        title.setText(TextUtils.isEmpty(movieTitle) ? episode.getName() : movieTitle);
+
+        // 原始名称：源站文件名，完整多行展示（解决长名截断问题）
+        String sourceName = episode.getName();
+        if (!TextUtils.isEmpty(sourceName) && !sourceName.equals(movieTitle)) {
+            originalName.setText("原始名称：" + sourceName);
+            originalName.setVisibility(View.VISIBLE);
+        } else {
+            originalName.setVisibility(View.GONE);
+        }
+
+        // meta：评分 / 上映日期 / 时长
+        meta.setText(movieMeta(movieItem, movieDetail));
+        meta.setVisibility(TextUtils.isEmpty(meta.getText()) ? View.GONE : View.VISIBLE);
+
+        // 简介
+        String movieOverview = movieItem.getOverview();
+        if (TextUtils.isEmpty(movieOverview) && movieDetail != null) movieOverview = jsonString(movieDetail, "overview");
+        overview.setText(TextUtils.isEmpty(movieOverview) ? "暂无简介" : movieOverview);
+
+        // 演员区域改用“演员”标题（电影没有客串演员概念）
+        guestsTitle.setText(R.string.detail_tmdb_cast);
+
+        bindHorizontalList(photoList, 12);
+        bindHorizontalList(guestsList, 12);
+
+        Dialog dialog = new Dialog(activity, android.R.style.Theme_Black_NoTitleBar_Fullscreen);
+        dialog.setContentView(view);
+        view.findViewById(R.id.close).setOnClickListener(v -> dialog.dismiss());
+        dialog.show();
+        applyWindowSize(dialog);
+
+        loadMovieMedia(activity, movieDetail, light, photoTitle, photoList, guestsTitle, guestsList);
+    }
+
+    private static String movieMeta(TmdbItem movieItem, JsonObject detail) {
+        List<String> metas = new ArrayList<>();
+        double rating = movieItem.getRating();
+        if (rating <= 0 && detail != null) rating = jsonDouble(detail, "vote_average");
+        if (rating > 0) metas.add(String.format(java.util.Locale.US, "%.1f", rating));
+        if (detail != null) {
+            String date = jsonString(detail, "release_date");
+            if (!TextUtils.isEmpty(date)) metas.add(date);
+            int runtime = (int) jsonDouble(detail, "runtime");
+            if (runtime > 0) metas.add(runtime + "m");
+        }
+        return TextUtils.join(" / ", metas);
+    }
+
+    private static void loadMovieMedia(FragmentActivity activity, JsonObject movieDetail, boolean light, TextView photoTitle, RecyclerView photoList, TextView guestsTitle, RecyclerView guestsList) {
+        if (movieDetail == null) return;
+        Task.execute(() -> {
+            try {
+                TmdbConfig config = TmdbConfig.objectFrom(Setting.getTmdbConfig());
+                if (config == null || !config.isReady()) return;
+                TmdbService service = new TmdbService();
+                List<String> photos = service.photos(movieDetail, config);
+                List<TmdbPerson> cast = service.cast(movieDetail, config);
+                activity.runOnUiThread(() -> {
+                    if (activity.isFinishing() || activity.isDestroyed()) return;
+                    bindMedia(activity, photos, cast, light, photoTitle, photoList, guestsTitle, guestsList);
+                });
+            } catch (Exception e) {
+                android.util.Log.w("EpisodeDetailDialog", "load movie detail failed", e);
+            }
+        });
+    }
+
+    private static String jsonString(JsonObject obj, String key) {
+        try {
+            if (obj != null && obj.has(key) && !obj.get(key).isJsonNull()) return obj.get(key).getAsString();
+        } catch (Exception ignored) {
+        }
+        return "";
+    }
+
+    private static double jsonDouble(JsonObject obj, String key) {
+        try {
+            if (obj != null && obj.has(key) && !obj.get(key).isJsonNull()) return obj.get(key).getAsDouble();
+        } catch (Exception ignored) {
+        }
+        return 0;
     }
 
     private static void applyWindowSize(Dialog dialog) {
@@ -209,9 +340,10 @@ public class EpisodeDetailDialog {
     }
 
     private static void showSimpleDialog(FragmentActivity activity, Episode episode) {
+        // 标题放固定文案，源站文件名放可换行的正文，避免长名被单行标题截断
         new MaterialAlertDialogBuilder(activity)
-                .setTitle(episode.getName())
-                .setMessage("暂无 TMDB 详细信息")
+                .setTitle(R.string.detail_tmdb_empty)
+                .setMessage(episode.getName())
                 .setPositiveButton(R.string.dialog_negative, null)
                 .show();
     }

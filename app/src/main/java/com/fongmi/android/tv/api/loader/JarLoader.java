@@ -23,6 +23,9 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 import dalvik.system.DexClassLoader;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
 
 public class JarLoader {
 
@@ -72,9 +75,49 @@ public class JarLoader {
         SpiderDebug.log("jar-loader", "load start key=%s file=%s size=%s cache=%s", key, file.getAbsolutePath(), file.length(), cachePath);
         DexClassLoader loader = new DexClassLoader(file.getAbsolutePath(), cachePath, cachePath, App.get().getClassLoader());
         invokeInit(key, loader);
+        invokeNetworkCompat(key, loader);
         invokeProxy(key, loader);
         loaders.put(key, loader);
         SpiderDebug.log("jar-loader", "load done key=%s cost=%sms", key, System.currentTimeMillis() - start);
+    }
+
+    private void invokeNetworkCompat(String key, DexClassLoader loader) {
+        try {
+            Class<?> clz = loader.loadClass("com.github.catvod.parser.merge.j0.b");
+            Method method = clz.getMethod("b", okhttp3.OkHttpClient.class);
+            OkHttpClient client = OkHttp.client().newBuilder().addInterceptor(chain -> {
+                Request request = chain.request();
+                boolean iframe = request.url().host().endsWith("youtube.com") && request.url().encodedPath().contains("iframe_api");
+                long start = System.currentTimeMillis();
+                try {
+                    Response response = chain.proceed(request);
+                    if (iframe) SpiderDebug.log("youtube-iframe", "response code=%s final=%s type=%s encoding=%s length=%s cost=%sms", response.code(), response.request().url(), response.header("Content-Type"), response.header("Content-Encoding"), response.header("Content-Length"), System.currentTimeMillis() - start);
+                    return response;
+                } catch (Throwable e) {
+                    if (iframe) SpiderDebug.log("youtube-iframe", "failed url=%s cost=%sms error=%s", request.url(), System.currentTimeMillis() - start, error(e));
+                    throw e;
+                }
+            }).build();
+            Class<?> environment = loader.loadClass("com.github.catvod.parser.merge.j0.c");
+            environment.getConstructor(okhttp3.OkHttpClient.class).newInstance(client);
+            SpiderDebug.log("jar-loader", "network client injected key=%s", key);
+            try {
+                Class<?> provider = loader.loadClass("com.github.catvod.parser.merge.P1.P");
+                Object fetcher = provider.getMethod("b").invoke(null);
+                Object response = clz.getMethod("a", String.class).invoke(fetcher, "https://www.youtube.com/iframe_api");
+                String body = (String) response.getClass().getMethod("a").invoke(response);
+                SpiderDebug.log("youtube-iframe", "probe success chars=%s", body == null ? -1 : body.length());
+            } catch (Throwable e) {
+                Throwable cause = e;
+                while (cause.getCause() != null) cause = cause.getCause();
+                SpiderDebug.log("youtube-iframe", "probe failed error=%s", cause.getClass().getName() + ":" + cause.getMessage());
+                SpiderDebug.log("youtube-iframe", cause);
+            }
+        } catch (ClassNotFoundException | NoSuchMethodException ignored) {
+            // Optional compatibility hook used only by jars which expose it.
+        } catch (Throwable e) {
+            SpiderDebug.log("jar-loader", "network client inject failed key=%s error=%s", key, error(e));
+        }
     }
 
     private void invokeInit(String key, DexClassLoader loader) {

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#101419">
-  <title>Nostr推荐</title>
+  <title>推荐</title>
   <script>
     window.WEBHOME_PAGE_OPENED_AT = Date.now();
     if (window.fongmiBridge) document.documentElement.classList.add("fm-native");
@@ -4408,7 +4408,7 @@
 
     <section class="section" id="recommendSection">
       <div class="section-head">
-        <h3>Nostr推荐</h3>
+        <h3>推荐</h3>
         <aside class="connection-dock" id="connectionDock">
           <button class="connection-toggle focusable" id="connectionToggle" type="button" aria-expanded="false" aria-controls="connectionBody">
             <span class="dot warn" id="connectionDot"></span>
@@ -4425,6 +4425,10 @@
               <div class="connection-item"><b>身份</b><span class="mono" id="statusIdentity">未就绪</span></div>
               <div class="connection-item refresh-progress"><b>刷新</b><span id="statusRefresh">未执行</span></div>
               <div class="connection-item"><b>Relays</b><span id="statusRelays">未连接</span></div>
+              <div class="connection-item"><b>推荐源</b><div class="detail-style-segmented" id="recommendationModeSegmented" role="group" aria-label="推荐源">
+                <button class="detail-style-option focusable" id="recommendationNostrBtn" type="button" data-recommendation-mode="nostr">Nostr推荐</button>
+                <button class="detail-style-option focusable" id="recommendationTrendBtn" type="button" data-recommendation-mode="trend">趋势推荐</button>
+              </div></div>
               <div class="connection-item"><b>分级限制</b><div class="detail-style-segmented" id="ratingLimitSegmented" role="group" aria-label="分级限制">
                 <button class="detail-style-option focusable" id="ratingLimitOnBtn" type="button" data-rating-limit="on">开启</button>
                 <button class="detail-style-option focusable" id="ratingLimitOffBtn" type="button" data-rating-limit="off">关闭</button>
@@ -4760,7 +4764,7 @@
       },
       deleteState: { loaded: false, users: {} },
       tmdb: { config: null, configDirty: false },
-      uiPrefs: { loaded: false, mobileDetailStyle: "immersive", homeFullscreenEnabled: true, ratingLimitEnabled: true, highResBackdropEnabled: true },
+      uiPrefs: { loaded: false, recommendationMode: "trend", mobileDetailStyle: "immersive", homeFullscreenEnabled: true, ratingLimitEnabled: true, highResBackdropEnabled: true },
       autoBlocked: { loaded: false, items: {}, pending: {}, queue: [], queued: {}, active: 0, timer: 0, viewportTimer: 0, refreshTimer: 0, saveTimer: 0, version: 0 },
       blocked: { loaded: false, items: {}, selecting: false, holdTimer: 0, holdTarget: null, longPressFired: false, pointer: null, suppressClickUntil: 0, saveTimer: 0, lastPosition: null, restoring: false, restoreSeq: 0 },
       pan: { config: null, configDirty: false, loading: false, keyword: "", activeType: "", results: [], health: {}, pending: {}, queued: new Map(), inFlight: new Set(), observer: null, flushTimer: 0, pollTimers: [], pollRound: 0, viewToken: "", renderKeys: "", tabKeys: "", checkEnabled: false, focusKey: "", focusMode: "", playbackReturn: null },
@@ -5036,6 +5040,7 @@
       const raw = value && typeof value === "object" ? value : {};
       const style = raw.mobileDetailStyle === "translucent" ? "translucent" : "immersive";
       return {
+        recommendationMode: raw.recommendationMode === "nostr" ? "nostr" : "trend",
         mobileDetailStyle: style,
         homeFullscreenEnabled: raw.homeFullscreenEnabled === false ? false : true,
         ratingLimitEnabled: raw.ratingLimitEnabled === false ? false : true,
@@ -5053,6 +5058,10 @@
 
     function isHighResBackdropEnabled() {
       return !state.uiPrefs || state.uiPrefs.highResBackdropEnabled !== false;
+    }
+
+    function recommendationMode() {
+      return state.uiPrefs && state.uiPrefs.recommendationMode === "nostr" ? "nostr" : "trend";
     }
 
     function applyUiPrefs() {
@@ -5078,6 +5087,12 @@
     }
 
     function renderUiPrefsControls() {
+      const recommendMode = recommendationMode();
+      document.querySelectorAll("[data-recommendation-mode]").forEach((button) => {
+        const active = button.dataset.recommendationMode === recommendMode;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-pressed", active ? "true" : "false");
+      });
       const style = state.uiPrefs && state.uiPrefs.mobileDetailStyle === "translucent" ? "translucent" : "immersive";
       document.querySelectorAll("[data-mobile-detail-style]").forEach((button) => {
         const active = button.dataset.mobileDetailStyle === style;
@@ -5135,10 +5150,35 @@
       scheduleUiSnapshotSave();
     }
 
+    async function setRecommendationMode(mode) {
+      const next = mode === "nostr" ? "nostr" : "trend";
+      const position = state.activeList === "all" ? captureHomePositionSnapshot() : null;
+      state.uiPrefs = Object.assign({}, state.uiPrefs || {}, sanitizeUiPrefs(state.uiPrefs || {}), { recommendationMode: next, loaded: true });
+      applyUiPrefs();
+      if (window.fongmiBridge && !window.fm) await waitForNativeSdk(1200);
+      try { await sdk().cache.set(cacheKey("uiPrefs"), JSON.stringify(sanitizeUiPrefs(state.uiPrefs))); } catch (e) {}
+      if (next === "nostr") {
+        state.recommendationSource = "pending";
+        if (preferenceItems().length) useNostrRecommendationsIfReady();
+        else armFallbackTimers();
+      } else {
+        clearTimeout(state.relay.fallbackTimer);
+        clearTimeout(state.relay.fallbackPrefetchTimer);
+        state.recommendationSource = "fallback";
+        prefetchRecommendationFallback();
+      }
+      if (state.activeList === "all") renderActiveGrid();
+      if (position) restoreHomePositionSnapshot(position);
+      toast("推荐方式已切换");
+      scheduleUiSnapshotSave();
+    }
+
     function refreshRatingLimitedRecommendations() {
       const position = captureHomePositionSnapshot();
       state.hot.items = buildHotItemsFromIndex();
-      if (state.recommendationSource === "nostr") {
+      if (recommendationMode() === "trend") {
+        if (state.activeList === "all") renderActiveGrid();
+      } else if (state.recommendationSource === "nostr") {
         if (state.activeList === "all") renderActiveGrid();
       } else {
         useNostrRecommendationsIfReady();
@@ -6228,6 +6268,7 @@
     }
 
     function nostrReadyForFallback() {
+      if (recommendationMode() === "trend") return true;
       const relays = window.WEBHOME_CONFIG.nostr.relays;
       return state.recommendationSource === "fallback"
         || relayFailedAll()
@@ -6873,6 +6914,11 @@
     function armFallbackTimers() {
       clearTimeout(state.relay.fallbackTimer);
       clearTimeout(state.relay.fallbackPrefetchTimer);
+      if (recommendationMode() === "trend") {
+        state.recommendationSource = "fallback";
+        prefetchRecommendationFallback();
+        return;
+      }
       const elapsed = Date.now() - PAGE_OPENED_AT;
       state.relay.fallbackPrefetchTimer = setTimeout(() => {
         if (!preferenceItems().length) prefetchRecommendationFallback();
@@ -6906,8 +6952,7 @@
 
     async function loadRecommendationFallback() {
       const sources = [
-        { type: "trending", id: "tmdb-trending", title: "今日趋势" },
-        { type: "airing", id: "tv-airing-today", title: "今日播出", mediaType: "tv" }
+        { type: "trending", id: "tmdb-trending", title: "推荐" }
       ];
       if (preferenceItems().length) {
         useNostrRecommendationsIfReady();
@@ -6915,7 +6960,7 @@
       }
       state.fallback = [];
       state.fallbackPage = { sourceIndex: 0, page: 0, loading: true, loaded: false, done: false };
-      setStatus("tmdb", "请求推荐兜底");
+      setStatus("tmdb", "请求推荐");
       if (state.recommendationSource === "fallback") renderActiveGrid();
       for (let index = 0; index < sources.length; index++) {
         const source = sources[index];
@@ -6932,17 +6977,17 @@
           if (items.length) {
             state.fallback = uniqueMedia(items);
             state.fallbackPage = { sourceIndex: index, page: 1, total: body.total_pages || 1, loading: false, loaded: true, done: false };
-            setStatus("tmdb", "推荐兜底已加载");
+            setStatus("tmdb", "推荐已加载");
             if (state.recommendationSource === "fallback") renderActiveGrid();
             return;
           }
         } catch (e) {}
       }
-      state.fallback = ranked(allItems());
+      state.fallback = [];
       state.fallbackPage.loaded = true;
       state.fallbackPage.loading = false;
       state.fallbackPage.done = true;
-      setStatus("tmdb", state.fallback.length ? "本地兜底已加载" : "推荐为空");
+      setStatus("tmdb", "推荐为空");
       if (state.recommendationSource === "fallback") renderActiveGrid();
     }
 
@@ -6967,8 +7012,7 @@
 
     async function loadMoreFallback() {
       const sources = [
-        { type: "trending", id: "tmdb-trending", title: "今日趋势" },
-        { type: "airing", id: "tv-airing-today", title: "今日播出", mediaType: "tv" }
+        { type: "trending", id: "tmdb-trending", title: "推荐" }
       ];
       if (preferenceItems().length) {
         useNostrRecommendationsIfReady();
@@ -8078,7 +8122,7 @@
     }
 
     function renderChips() {
-      const chips = [{ id: "live", title: "直播" }, { id: "all", title: "Nostr推荐" }, { id: "recent", title: "最近" }]
+      const chips = [{ id: "live", title: "直播" }, { id: "all", title: "推荐" }, { id: "recent", title: "最近" }]
         .concat(visibleTmdbLists().map((item) => ({ id: item.id, title: item.title })));
       const root = $("chips");
       const keys = chips.map((chip) => chip.id + ":" + chip.title).join("\n");
@@ -8132,15 +8176,20 @@
       }
       if (state.recommendationSource === "nostr") state.recommendationSource = "pending";
       if (state.recommendationSource === "pending" && !nostrReadyForFallback()) {
-        showGridStatus($("recommendRail"), "Nostr 推荐同步中...");
+        showGridStatus($("recommendRail"), "推荐同步中...");
       } else {
         state.recommendationSource = "fallback";
         ensureRecommendationFallback();
         if (state.fallbackPage.loading && !state.fallback.length) {
-          showGridStatus($("recommendRail"), "推荐兜底加载中...");
+          showGridStatus($("recommendRail"), "推荐加载中...");
           return;
         }
-        fillGrid($("recommendRail"), filterBlockedForRecommendations(state.fallback.length ? state.fallback : ranked(allItems())));
+        const fallbackItems = state.fallback.length ? state.fallback : recommendationMode() === "nostr" ? ranked(allItems()) : [];
+        if (!fallbackItems.length && state.fallbackPage.done) {
+          showGridStatus($("recommendRail"), "暂无推荐");
+          return;
+        }
+        fillGrid($("recommendRail"), filterBlockedForRecommendations(fallbackItems));
         updateBlockSelectUi();
       }
     }
@@ -8423,7 +8472,7 @@
 
     function itemsForGrid(gridId) {
       if (gridId === "recommendRail" || gridId === "all") {
-        const source = preferenceItems().length ? preferenceItems() : state.fallback.length ? state.fallback : ranked(allItems());
+        const source = preferenceItems().length ? preferenceItems() : state.fallback.length ? state.fallback : recommendationMode() === "nostr" ? ranked(allItems()) : [];
         return uniqueMedia(filterBlocked(source)).filter(hasPoster);
       }
       if (gridId === "recent") return uniqueMedia(state.recent.items || []).filter(hasPoster);
@@ -8785,7 +8834,7 @@
     }
 
     function preferenceItems() {
-      return state.hot.items;
+      return recommendationMode() === "nostr" ? state.hot.items : [];
     }
 
     function normalizeSnapshot(item) {
@@ -12614,6 +12663,20 @@ nsec: ${state.identity.nsec}` : "身份未就绪";
       });
       $("savePanConfigBtn").addEventListener("click", () => {
         savePanConfig().catch((e) => toast(e.message || "保存失败"));
+      });
+      document.querySelectorAll("[data-recommendation-mode]").forEach((button) => {
+        button.addEventListener("click", () => {
+          setRecommendationMode(button.dataset.recommendationMode).catch(() => {});
+        });
+        button.addEventListener("keydown", (event) => {
+          if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+          event.preventDefault();
+          const next = event.key === "ArrowRight" ? "trend" : "nostr";
+          setRecommendationMode(next).then(() => {
+            const target = document.querySelector(`[data-recommendation-mode="${next}"]`);
+            if (target) focusRemoteTarget(target);
+          }).catch(() => {});
+        });
       });
       document.querySelectorAll("[data-mobile-detail-style]").forEach((button) => {
         button.addEventListener("click", () => {

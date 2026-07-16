@@ -43,11 +43,6 @@ public class SiteDialog extends BaseAlertDialog implements SiteAdapter.OnClickLi
 
     private static final int GRID_COUNT = 3;
     private static final String TAG = "site_dialog";
-    private static final int ITEM_HEIGHT = 46;
-    private static final int ITEM_SPACE = 16;
-    private static final int MAX_VISIBLE_ROWS = 6;
-    private static final int HORIZONTAL_SAFE_SPACE = 240;
-    private static final int VERTICAL_SAFE_SPACE = 240;
     private static final int INITIAL_BATCH = 48;
 
     private static String selectedGroup = "";
@@ -89,10 +84,6 @@ public class SiteDialog extends BaseAlertDialog implements SiteAdapter.OnClickLi
 
     private int getCount() {
         return GRID_COUNT;
-    }
-
-    private float getWidth() {
-        return action ? 0.86f : 0.84f;
     }
 
     @Override
@@ -199,6 +190,7 @@ public class SiteDialog extends BaseAlertDialog implements SiteAdapter.OnClickLi
         runAfterFirstPreDraw("list preDraw", () -> {
             if (adapter != null) adapter.showAll();
             log("list expanded total=%sms items=%s", cost(), adapter == null ? -1 : adapter.getItemCount());
+            focusSelectedSite();
         });
     }
 
@@ -241,36 +233,18 @@ public class SiteDialog extends BaseAlertDialog implements SiteAdapter.OnClickLi
     }
 
     private void setRecyclerHeight(int count) {
-        int rows = Math.max(1, (int) Math.ceil((double) Math.max(1, count) / getCount()));
-        int height = rows * ResUtil.dp2px(ITEM_HEIGHT) + Math.max(0, rows - 1) * ResUtil.dp2px(ITEM_SPACE) + binding.recycler.getPaddingTop() + binding.recycler.getPaddingBottom();
-        int maxHeight = getRecyclerMaxHeight();
+        // 全屏模式下，recycler 由布局 layout_weight 决定高度，无需动态计算
         ViewGroup.LayoutParams params = binding.recycler.getLayoutParams();
-        binding.recycler.setMaxHeight(maxHeight);
-        params.height = Math.min(height, maxHeight);
+        params.height = ViewGroup.LayoutParams.MATCH_PARENT;
         binding.recycler.setLayoutParams(params);
-    }
-
-    private int getRecyclerMaxHeight() {
-        int rowHeight = ResUtil.dp2px(ITEM_HEIGHT);
-        int rowSpace = ResUtil.dp2px(ITEM_SPACE);
-        int maxRowsHeight = MAX_VISIBLE_ROWS * rowHeight + (MAX_VISIBLE_ROWS - 1) * rowSpace + binding.recycler.getPaddingTop() + binding.recycler.getPaddingBottom();
-        int screenHeight = ResUtil.getScreenHeight(getDialogActivity());
-        int safeHeight = screenHeight - ResUtil.dp2px(VERTICAL_SAFE_SPACE);
-        return Math.max(rowHeight + binding.recycler.getPaddingTop() + binding.recycler.getPaddingBottom(), Math.min(maxRowsHeight, safeHeight));
+        binding.recycler.setMaxHeight(Integer.MAX_VALUE);
     }
 
     private void setRootWidth() {
         ViewGroup.LayoutParams params = binding.getRoot().getLayoutParams();
         if (params == null) params = new ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        params.width = getDialogWidth();
+        params.width = ViewGroup.LayoutParams.MATCH_PARENT;
         binding.getRoot().setLayoutParams(params);
-    }
-
-    private int getDialogWidth() {
-        int screenWidth = ResUtil.getScreenWidth(getDialogActivity());
-        int factorWidth = (int) (screenWidth * getWidth());
-        int safeWidth = screenWidth - ResUtil.dp2px(HORIZONTAL_SAFE_SPACE);
-        return Math.min(factorWidth, Math.max(ResUtil.dp2px(480), safeWidth));
     }
 
     private void setType(int type) {
@@ -342,8 +316,8 @@ public class SiteDialog extends BaseAlertDialog implements SiteAdapter.OnClickLi
         window.setWindowAnimations(0);
         window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         WindowManager.LayoutParams params = window.getAttributes();
-        params.width = getDialogWidth();
-        params.height = WindowManager.LayoutParams.WRAP_CONTENT;
+        params.width = WindowManager.LayoutParams.MATCH_PARENT;
+        params.height = WindowManager.LayoutParams.MATCH_PARENT;
         window.setAttributes(params);
         window.setLayout(params.width, params.height);
     }
@@ -504,4 +478,36 @@ public class SiteDialog extends BaseAlertDialog implements SiteAdapter.OnClickLi
             current.groupScroll.smoothScrollTo(Math.max(0, view.getLeft() + view.getWidth() / 2 - current.groupScroll.getWidth() / 2), 0);
         });
     }
+
+    private void focusSelectedSite() {
+        if (binding == null || adapter == null) return;
+        int selectedPosition = getSelectedPosition();
+        if (selectedPosition >= 0) {
+            binding.recycler.post(() -> {
+                if (binding == null) return;
+                RecyclerView.LayoutManager manager = binding.recycler.getLayoutManager();
+                if (manager != null) manager.scrollToPosition(selectedPosition);
+                binding.recycler.post(() -> {
+                    if (binding == null) return;
+                    RecyclerView.ViewHolder holder = binding.recycler.findViewHolderForAdapterPosition(selectedPosition);
+                    if (holder != null && holder.itemView != null) {
+                        holder.itemView.requestFocus();
+                        log("focused selected site position=%s total=%sms", selectedPosition, cost());
+                    }
+                });
+            });
+        } else {
+            requestGroupFocus();
+        }
+    }
+
+    private int getSelectedPosition() {
+        if (adapter == null) return -1;
+        List<Site> items = adapter.getItems();
+        for (int i = 0; i < items.size(); i++) {
+            if (items.get(i).isSelected()) return i;
+        }
+        return -1;
+    }
 }
+

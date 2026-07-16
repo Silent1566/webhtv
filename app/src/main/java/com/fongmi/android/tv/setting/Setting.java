@@ -800,6 +800,14 @@ public class Setting {
         Prefers.put("ai_title_extraction", enabled);
     }
 
+    public static boolean isAiAdDetection() {
+        return Prefers.getBoolean("ai_ad_detection", false);
+    }
+
+    public static void putAiAdDetection(boolean enabled) {
+        Prefers.put("ai_ad_detection", enabled);
+    }
+
     public static TmdbMatchCache getTmdbMatchCache() {
         return TmdbMatchCache.objectFrom(AppCache.get(AppCache.KEY_TMDB_MATCH));
     }
@@ -1164,6 +1172,30 @@ public class Setting {
         Prefers.put("subtitle_assrt_token", token);
     }
 
+    public static int getSubtitleAiMaxConcurrency() {
+        return clampSubtitleAiMaxConcurrency(Prefers.getInt("subtitle_ai_max_concurrency", 2));
+    }
+
+    public static void putSubtitleAiMaxConcurrency(int value) {
+        Prefers.put("subtitle_ai_max_concurrency", clampSubtitleAiMaxConcurrency(value));
+    }
+
+    public static int getSubtitleAiChunkCount() {
+        return clampSubtitleAiChunkCount(Prefers.getInt("subtitle_ai_chunk_count", 2));
+    }
+
+    public static void putSubtitleAiChunkCount(int value) {
+        Prefers.put("subtitle_ai_chunk_count", clampSubtitleAiChunkCount(value));
+    }
+
+    private static int clampSubtitleAiMaxConcurrency(int value) {
+        return Math.max(1, Math.min(value, 8));
+    }
+
+    private static int clampSubtitleAiChunkCount(int value) {
+        return Math.max(1, Math.min(value, 32));
+    }
+
     public static int getIntroSkipMode() {
         return Prefers.getInt("intro_skip_mode", INTRO_SKIP_OFF);
     }
@@ -1214,5 +1246,13 @@ public class Setting {
 
     private static int clampSearchColumn(int column) {
         return column < 0 || column > 2 ? 0 : column;
+    }
+
+    public static int getSearchResultSort() {
+        return Prefers.getInt("search_result_sort", 0);
+    }
+
+    public static void putSearchResultSort(int sort) {
+        Prefers.put("search_result_sort", sort == 0 ? 0 : 1);
     }
 }

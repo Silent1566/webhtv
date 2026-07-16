@@ -67,7 +67,20 @@ public class RestoreDialog extends BaseAlertDialog implements RestoreAdapter.OnC
 
     @Override
     public void onItemClick(File item) {
-        AppDatabase.restore(item, callback);
+        BackupProgressDialog progress = BackupProgressDialog.open(getParentFragmentManager(), "恢复应用数据");
+        AppDatabase.restore(item, new Callback() {
+            @Override
+            public void success() {
+                progress.finish();
+                if (callback != null) callback.success();
+            }
+
+            @Override
+            public void error() {
+                progress.finish();
+                if (callback != null) callback.error();
+            }
+        }, progress::update);
         dismiss();
     }
 

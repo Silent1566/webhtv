@@ -7,7 +7,8 @@ import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.fongmi.android.tv.databinding.AdapterRestoreBinding;
-import com.fongmi.android.tv.utils.BackupFiles;
+import com.fongmi.android.tv.utils.AppBackup;
+import com.fongmi.android.tv.utils.FileUtil;
 import com.github.catvod.utils.Path;
 
 import java.io.File;
@@ -35,7 +36,7 @@ public class RestoreAdapter extends RecyclerView.Adapter<RestoreAdapter.ViewHold
     private void addAll() {
         File[] files = Path.tv().listFiles();
         if (files == null) files = new File[0];
-        for (File file : files) if (BackupFiles.isBackup(file)) mItems.add(file);
+        for (File file : files) if (AppBackup.isBackup(file)) mItems.add(file);
         if (!mItems.isEmpty()) mItems.sort((f1, f2) -> Long.compare(f2.lastModified(), f1.lastModified()));
     }
 
@@ -67,7 +68,7 @@ public class RestoreAdapter extends RecyclerView.Adapter<RestoreAdapter.ViewHold
     @Override
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         File item = mItems.get(position);
-        holder.binding.text.setText(item.getName());
+        holder.binding.text.setText(item.getName() + " · " + FileUtil.byteCountToDisplaySize(item.length()));
         holder.binding.text.setOnClickListener(v -> listener.onItemClick(item));
         holder.binding.delete.setOnClickListener(v -> listener.onDeleteClick(item));
     }

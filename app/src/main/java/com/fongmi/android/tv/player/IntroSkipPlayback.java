@@ -27,6 +27,7 @@ public class IntroSkipPlayback {
     private String loadingKey = "";
     private int generation;
     private boolean loading;
+    private long resumeMs;
     private SkipConfirmListener skipConfirmListener;
 
     public void reset() {
@@ -36,6 +37,15 @@ public class IntroSkipPlayback {
         loadingKey = "";
         plan = IntroSkipPlan.empty();
         skipped.clear();
+        resumeMs = 0;
+    }
+
+    /**
+     * 记录本次续播基准位置。起点在该位置及之前的片头段视为"用户已越过或正处于"，
+     * 不再触发自动跳过/确认提示，避免 seekTo 尚未落地时误弹确认框。
+     */
+    public void setResumePosition(long ms) {
+        resumeMs = Math.max(0, ms);
     }
 
     public void setSkipConfirmListener(SkipConfirmListener listener) {
@@ -79,6 +89,11 @@ public class IntroSkipPlayback {
             String id = id(segment);
             long end = segment.getEndMs();
             if (skipped.contains(id) || end <= 0) continue;
+            // 续播时用户已越过/正处于该片头（起点在续播位置之前），标记跳过，不再提示
+            if (resumeMs > 0 && segment.getStartMs() <= resumeMs) {
+                skipped.add(id);
+                continue;
+            }
             if (position >= end - MIN_SKIP_DELTA_MS) {
                 skipped.add(id);
                 continue;

@@ -43,6 +43,19 @@ public class CollectAdapter extends RecyclerView.Adapter<CollectAdapter.ViewHold
         mItems.get(0).getList().addAll(items);
     }
 
+    public int findCollectIndex(String siteKey) {
+        for (int i = 0; i < mItems.size(); i++) {
+            if (mItems.get(i).getSite().getKey().equals(siteKey)) return i;
+        }
+        return -1;
+    }
+
+    public void update(int position, Collect item) {
+        if (position < 0 || position >= mItems.size()) return;
+        mItems.set(position, item);
+        notifyChanged(position);
+    }
+
     public void clear() {
         mItems.clear();
         notifyDataSetChanged();

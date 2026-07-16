@@ -20,6 +20,7 @@ import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.ui.adapter.HistoryAdapter;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.dialog.SyncDialog;
+import com.fongmi.android.tv.utils.MobileWindow;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import org.greenrobot.eventbus.Subscribe;
@@ -53,10 +54,11 @@ public class HistoryActivity extends BaseActivity implements HistoryAdapter.OnCl
     }
 
     private void setRecyclerView() {
+        int column = MobileWindow.isWide(this) ? Product.getColumn(this) : 3;
         mBinding.recycler.setHasFixedSize(true);
-        mBinding.recycler.setLayoutManager(new GridLayoutManager(this, Product.getColumn(this)));
+        mBinding.recycler.setLayoutManager(new GridLayoutManager(this, column));
         mBinding.recycler.setAdapter(mAdapter = new HistoryAdapter(this));
-        mAdapter.setSize(Product.getSpec(this));
+        mAdapter.setSize(Product.getSpec(this, column));
     }
 
     private void getHistory() {
@@ -112,7 +114,14 @@ public class HistoryActivity extends BaseActivity implements HistoryAdapter.OnCl
         if (item.getItemId() == android.R.id.home) onBackInvoked();
         else if (item.getItemId() == R.id.delete) onDelete();
         else if (item.getItemId() == R.id.sync) onSync();
+        else if (item.getItemId() == R.id.report) onReport();
         return super.onOptionsItemSelected(item);
+    }
+
+    private void onReport() {
+        com.fongmi.android.tv.ui.dialog.ViewingReportRangeDialog.create(this)
+                .callback(range -> com.fongmi.android.tv.ui.activity.ViewingReportActivity.start(this, range))
+                .show();
     }
 
     @Override

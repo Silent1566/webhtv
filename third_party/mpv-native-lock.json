@@ -1,0 +1,74 @@
+{
+  "builder": {
+    "repo": "https://github.com/marlboro-advance/mpv-android.git",
+    "commit": "eb6d70c8c291bea72b7cab0df8bfc09de0cad23c"
+  },
+  "android": {
+    "ndk_version": "28.2.13676358",
+    "ndk_label": "r28c",
+    "api_level": 24
+  },
+  "python_tools": {
+    "meson": "1.11.2",
+    "ninja": "1.11.1.1"
+  },
+  "sources": {
+    "mbedtls": {
+      "repo": "https://github.com/Mbed-TLS/mbedtls.git",
+      "commit": "e185d7fd85499c8ce5ca2a54f5cf8fe7dbe3f8df",
+      "version": "3.6.5",
+      "submodules": true
+    },
+    "dav1d": {
+      "repo": "https://github.com/videolan/dav1d.git",
+      "commit": "daef39627713a3e09873e78df65b268386cb4c20"
+    },
+    "ffmpeg": {
+      "repo": "https://github.com/FFmpeg/FFmpeg.git",
+      "commit": "5ba2525c7affc29cbd99e6266946b382d3fffe8b",
+      "version": "8.0.git"
+    },
+    "freetype2": {
+      "repo": "https://github.com/freetype/freetype.git",
+      "commit": "526ec5c47b9ebccc4754c85ac0c0cdf7c85a5e9b",
+      "version": "2.14.1"
+    },
+    "fribidi": {
+      "repo": "https://github.com/fribidi/fribidi.git",
+      "commit": "68162babff4f39c4e2dc164a5e825af93bda9983",
+      "version": "1.0.16"
+    },
+    "harfbuzz": {
+      "repo": "https://github.com/harfbuzz/harfbuzz.git",
+      "commit": "b42511e071162fe76102f613a6ccc009726c99af",
+      "version": "12.3.2"
+    },
+    "unibreak": {
+      "url": "https://github.com/adah1972/libunibreak/releases/download/libunibreak_6_1/libunibreak-6.1.tar.gz",
+      "sha256": "cc4de0099cf7ff05005ceabff4afed4c582a736abc38033e70fdac86335ce93f",
+      "version": "6.1"
+    },
+    "libass": {
+      "repo": "https://github.com/libass/libass.git",
+      "commit": "fadc390583f24eb5cf98f16925fd3adee50bca88"
+    },
+    "lua": {
+      "url": "https://www.lua.org/ftp/lua-5.2.4.tar.gz",
+      "sha256": "b9e2e4aad6789b3b63a056d442f7b39f0ecfca3ae0f1fc0ae4e9614401b69f4b",
+      "version": "5.2.4"
+    },
+    "libplacebo": {
+      "repo": "https://github.com/haasn/libplacebo.git",
+      "commit": "82224764a98164ce9d2d9a10e4fefca934e475fb",
+      "version": "7.362.0",
+      "submodules": true
+    },
+    "mpv": {
+      "repo": "https://github.com/mpv-player/mpv.git",
+      "commit": "9ce79bcaa0132660a2e45b6bfc1fb0c199665277",
+      "version": "0.41.0-556-g9ce79bcaa",
+      "describe_tag": "v0.41.0",
+      "history_depth": 600
+    }
+  }
+}

@@ -97,4 +97,41 @@ public class AiConfigTest {
         assertEquals(AiConfig.DEFAULT_TITLE_EXTRACTION_PROMPT, config.getTitleExtractionPrompt());
         assertFalse(config.isTitleExtractionPromptCustom());
     }
+
+    @Test
+    public void objectFrom_defaultsAdDetectionPrompt() {
+        AiConfig config = AiConfig.objectFrom("{}");
+
+        assertEquals(AiConfig.DEFAULT_AD_DETECTION_PROMPT, config.getAdDetectionPrompt());
+        assertEquals(AiConfig.DEFAULT_AD_DETECTION_PROMPT_VERSION, config.getAdDetectionPromptVersion());
+        assertFalse(config.isAdDetectionPromptCustom());
+    }
+
+    @Test
+    public void setAdDetectionPrompt_preservesCustomValue() {
+        AiConfig config = AiConfig.objectFrom("{}");
+        config.setAdDetectionPrompt("只屏蔽 preroll 前贴片广告");
+
+        assertEquals("只屏蔽 preroll 前贴片广告", config.getAdDetectionPrompt());
+        assertTrue(config.isAdDetectionPromptCustom());
+    }
+
+    @Test
+    public void setAdDetectionPrompt_marksCurrentDefaultAsSystemPrompt() {
+        AiConfig config = AiConfig.objectFrom("{}");
+        config.setAdDetectionPrompt("只屏蔽 preroll 前贴片广告");
+        config.setAdDetectionPrompt(AiConfig.DEFAULT_AD_DETECTION_PROMPT);
+
+        assertEquals(AiConfig.DEFAULT_AD_DETECTION_PROMPT, config.getAdDetectionPrompt());
+        assertFalse(config.isAdDetectionPromptCustom());
+    }
+
+    @Test
+    public void setAdDetectionPrompt_recognizesLegacyV1AsSystemPrompt() {
+        AiConfig config = AiConfig.objectFrom("{}");
+        config.setAdDetectionPrompt(AiConfig.DEFAULT_AD_DETECTION_PROMPT_V1);
+
+        assertEquals(AiConfig.DEFAULT_AD_DETECTION_PROMPT, config.getAdDetectionPrompt());
+        assertFalse(config.isAdDetectionPromptCustom());
+    }
 }

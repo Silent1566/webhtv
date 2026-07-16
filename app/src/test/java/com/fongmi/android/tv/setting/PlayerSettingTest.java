@@ -9,16 +9,26 @@ import static org.junit.Assert.assertTrue;
 public class PlayerSettingTest {
 
     @Test
-    public void nativeVideoOutput_includesIjkAndSystemPlayers() {
+    public void nativeVideoOutput_includesNativePlayers() {
         assertFalse(PlayerSetting.useNativeVideoOutput(PlayerSetting.EXO));
         assertTrue(PlayerSetting.useNativeVideoOutput(PlayerSetting.IJK));
         assertTrue(PlayerSetting.useNativeVideoOutput(PlayerSetting.SYSTEM));
+        assertTrue(PlayerSetting.useNativeVideoOutput(PlayerSetting.MPV));
     }
 
     @Test
     public void nativeVideoOutput_forcesSurfaceRender() {
         assertEquals(0, PlayerSetting.getRender(PlayerSetting.IJK));
         assertEquals(0, PlayerSetting.getRender(PlayerSetting.SYSTEM));
+        assertEquals(0, PlayerSetting.getRender(PlayerSetting.MPV));
+    }
+
+    @Test
+    public void nextPlayer_cyclesThroughAllAvailablePlayers() {
+        assertEquals(PlayerSetting.IJK, PlayerSetting.nextPlayer(PlayerSetting.EXO));
+        assertEquals(PlayerSetting.SYSTEM, PlayerSetting.nextPlayer(PlayerSetting.IJK));
+        assertEquals(PlayerSetting.MPV, PlayerSetting.nextPlayer(PlayerSetting.SYSTEM));
+        assertEquals(PlayerSetting.EXO, PlayerSetting.nextPlayer(PlayerSetting.MPV));
     }
 
     @Test

@@ -26,6 +26,7 @@ import androidx.media3.extractor.ts.TsExtractor;
 
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.setting.PlaybackPerformanceSetting;
+import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.PreloadSetting;
 import com.fongmi.android.tv.utils.FileUtil;
 import com.fongmi.android.tv.utils.UrlUtil;
@@ -60,8 +61,8 @@ public class MediaSourceFactory implements MediaSource.Factory {
     }
 
     static DataSource.Factory createUpstreamDataSourceFactory(Map<String, String> headers) {
-        HttpDataSource.Factory factory = new OkHttpDataSource.Factory(OkHttp.player());
-        factory.setDefaultRequestProperties(headers);
+        OkHttpDataSource.Factory factory = new OkHttpDataSource.Factory(OkHttp.player());
+        applyHeaders(factory, headers);
         return new DefaultDataSource.Factory(App.get(), factory);
     }
 
@@ -80,7 +81,7 @@ public class MediaSourceFactory implements MediaSource.Factory {
         long usedBytes = FileUtil.getDirectorySize(dir);
         long availableBytes = Math.max(0, FileUtil.getAvailableStorageSpace(dir));
         long storageBudget = (usedBytes + availableBytes) * CACHE_SPACE_PERCENT / 100;
-        return Math.min(PreloadSetting.getPreloadSizeBytes(), storageBudget);
+        return Math.min(PreloadSetting.getPreloadSizeBytes(PlayerSetting.EXO), storageBudget);
     }
 
     static boolean isConcatenatingUrl(String url) {
@@ -108,7 +109,7 @@ public class MediaSourceFactory implements MediaSource.Factory {
     @NonNull
     @Override
     public MediaSource createMediaSource(@NonNull MediaItem mediaItem) {
-        applyHeaders(ExoUtil.extractHeaders(mediaItem));
+        applyHeaders(getHttpDataSourceFactory(), ExoUtil.extractHeaders(mediaItem));
         String url = mediaItem.requestMetadata.mediaUri != null ? mediaItem.requestMetadata.mediaUri.toString() : "";
         if (isConcatenatingUrl(url)) return createConcatenatingMediaSource(mediaItem, url);
         else return defaultMediaSourceFactory.createMediaSource(mediaItem);
@@ -142,10 +143,10 @@ public class MediaSourceFactory implements MediaSource.Factory {
         return httpDataSourceFactory;
     }
 
-    private void applyHeaders(Map<String, String> headers) {
+    private static void applyHeaders(OkHttpDataSource.Factory factory, Map<String, String> headers) {
         Map<String, String> sanitized = sanitizeHeaders(headers);
         String userAgent = removeUserAgentHeader(sanitized);
-        getHttpDataSourceFactory().setUserAgent(userAgent).setDefaultRequestProperties(sanitized);
+        factory.setUserAgent(userAgent).setDefaultRequestProperties(sanitized);
     }
 
     static Map<String, String> sanitizeHeaders(Map<String, String> headers) {
@@ -173,8 +174,24 @@ public class MediaSourceFactory implements MediaSource.Factory {
         return userAgent;
     }
 
-    private static boolean isLocalProxy(String url) {
-        return url.startsWith("http://127.0.0.1") || url.startsWith("http://localhost");
+    static boolean isLocalProxyUrl(String url) {
+        if (url == null || url.isEmpty()) return false;
+        try {
+            URI uri = URI.create(url);
+            if (!"http".equalsIgnoreCase(uri.getScheme())) return false;
+            if (!"/proxy".equals(uri.getPath())) return false;
+            return isLoopbackHost(uri.getHost());
+        } catch (IllegalArgumentException ignored) {
+            return false;
+        }
+    }
+
+    private static boolean isLoopbackHost(String host) {
+        if (host == null || host.isEmpty()) return false;
+        String value = host;
+        if (value.startsWith("[") && value.endsWith("]")) value = value.substring(1, value.length() - 1);
+        value = value.toLowerCase(Locale.ROOT);
+        return "localhost".equals(value) || "127.0.0.1".equals(value) || "0.0.0.0".equals(value) || "::1".equals(value);
     }
 
     private static boolean isHls(MediaItem mediaItem, String url) {
@@ -183,7 +200,7 @@ public class MediaSourceFactory implements MediaSource.Factory {
         return isHlsUrl(url);
     }
 
-    static boolean isHlsUrl(String url) {
+    public static boolean isHlsUrl(String url) {
         String lower = url == null ? "" : url.toLowerCase(Locale.ROOT);
         if (lower.contains("m3u8") || lower.contains("type=hls") || lower.contains("format=hls")) return true;
         String path = getUrlPath(lower);

@@ -2,12 +2,17 @@ package com.fongmi.android.tv.server.process;
 
 import android.text.TextUtils;
 
+import com.fongmi.android.tv.App;
+import com.fongmi.android.tv.bean.AiConfig;
 import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.server.impl.Process;
+import com.fongmi.android.tv.service.AiLogDiagnosisService;
 import com.fongmi.android.tv.setting.Setting;
 import com.github.catvod.crawler.DebugLogStore;
 
 import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.io.FileInputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
@@ -19,7 +24,7 @@ public class DebugLogs implements Process {
 
     @Override
     public boolean isRequest(IHTTPSession session, String url) {
-        return url.startsWith("/debug/logs") || url.startsWith("/debug/stream") || url.startsWith("/debug/clear") || url.startsWith("/debug/enable") || url.startsWith("/debug/disable");
+        return url.startsWith("/debug/logs") || url.startsWith("/debug/diagnose") || url.startsWith("/debug/mpd") || url.startsWith("/debug/stream") || url.startsWith("/debug/clear") || url.startsWith("/debug/enable") || url.startsWith("/debug/disable");
     }
 
     @Override
@@ -36,9 +41,20 @@ public class DebugLogs implements Process {
             DebugLogStore.clear();
             return noCache(NanoHTTPD.newFixedLengthResponse(Response.Status.REDIRECT, NanoHTTPD.MIME_HTML, ""), "/debug/logs");
         }
+        if (url.startsWith("/debug/diagnose")) return diagnose();
         if (url.startsWith("/debug/stream")) return stream(session);
+        if (url.startsWith("/debug/mpd")) return mpd();
         if (url.startsWith("/debug/logs.txt")) return download();
         return page();
+    }
+
+    private Response mpd() {
+        try {
+            File file = new File(App.get().getCacheDir(), "youtube-mpd.xml");
+            return noCache(NanoHTTPD.newFixedLengthResponse(Response.Status.OK, "application/dash+xml", new FileInputStream(file), file.length()), null);
+        } catch (Exception e) {
+            return noCache(NanoHTTPD.newFixedLengthResponse(Response.Status.NOT_FOUND, NanoHTTPD.MIME_PLAINTEXT, "MPD unavailable"), null);
+        }
     }
 
     private Response page() {
@@ -53,6 +69,14 @@ public class DebugLogs implements Process {
         response.addHeader("Content-Disposition", "attachment; filename=webhtv-debug-log.txt");
         response.addHeader("X-Content-Type-Options", "nosniff");
         return noCache(response, null);
+    }
+
+    private Response diagnose() {
+        String result = new AiLogDiagnosisService(AiConfig.objectFrom(Setting.getAiConfig())).diagnose(DebugLogStore.text());
+        String html = "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1,viewport-fit=cover\"><title>AI诊断</title><style>" + css() + "</style></head><body>"
+                + "<main><section class=\"topbar\"><h1>AI诊断</h1><a href=\"/debug/logs\">返回日志</a><a href=\"/debug/logs.txt\" download=\"webhtv-debug-log.txt\">下载日志</a></section>"
+                + "<pre class=\"fallback\">" + escape(result) + "</pre></main></body></html>";
+        return noCache(NanoHTTPD.newFixedLengthResponse(Response.Status.OK, "text/html; charset=utf-8", html), null);
     }
 
     private Response stream(IHTTPSession session) {
@@ -88,7 +112,7 @@ public class DebugLogs implements Process {
                 + "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1,viewport-fit=cover\">"
                 + "<title>调试日志</title>"
                 + "<style>" + css() + "</style></head><body>"
-                + "<main><section class=\"topbar\"><h1>调试日志</h1><a href=\"/debug/logs\">刷新</a><a id=\"download\" href=\"/debug/logs.txt\" download=\"webhtv-debug-log.txt\">下载</a><a href=\"/debug/clear\">清空</a><a href=\"" + (enabled ? "/debug/disable" : "/debug/enable") + "\">" + (enabled ? "关闭" : "开启") + "</a><span id=\"meta\" class=\"meta\" data-version=\"" + DebugLogStore.version() + "\">" + (enabled ? "开启" : "关闭") + " · " + DebugLogStore.size() + " 行 · " + DebugLogStore.bytes() / 1024 + " KB</span></section>"
+                + "<main><section class=\"topbar\"><h1>调试日志</h1><a href=\"/debug/logs\">刷新</a><a id=\"download\" href=\"/debug/logs.txt\" download=\"webhtv-debug-log.txt\">下载</a><a href=\"/debug/diagnose\">AI诊断</a><a href=\"/debug/clear\">清空</a><a href=\"" + (enabled ? "/debug/disable" : "/debug/enable") + "\">" + (enabled ? "关闭" : "开启") + "</a><span id=\"meta\" class=\"meta\" data-version=\"" + DebugLogStore.version() + "\">" + (enabled ? "开启" : "关闭") + " · " + DebugLogStore.size() + " 行 · " + DebugLogStore.bytes() / 1024 + " KB</span></section>"
                 + "<details class=\"info\"><summary>地址和说明</summary><p class=\"hint\">本页显示 App 当前进程内调试日志。开启后记录安卓系统版本、设备型号、WebView 版本、WebHome、SDK、HTTP 服务、爬虫请求和播放链路；关闭会自动清空。</p>"
                 + "<div class=\"addr\"><a href=\"" + escape(localUrl) + "\">本机地址：" + escape(localUrl) + "</a><a href=\"" + escape(lanUrl) + "\">局域网地址：" + escape(lanUrl) + "</a></div></details>"
                 + "<section class=\"tools\"><div class=\"chips\"><button class=\"chip on\" data-mode=\"all\">全部</button><button class=\"chip\" data-mode=\"ai\">AI</button><button class=\"chip\" data-mode=\"proxy\">代理</button><button class=\"chip\" data-mode=\"player\">播放</button><button class=\"chip\" data-mode=\"webhome\">WebHome</button><button class=\"chip\" data-mode=\"console\">Console</button><button class=\"chip\" data-mode=\"webview\">WebView</button><button class=\"chip\" data-mode=\"api\">站源</button><button class=\"chip\" data-mode=\"pan\">网盘</button><button class=\"chip\" data-mode=\"server\">服务</button><button class=\"chip\" data-mode=\"sync\">同步</button><button class=\"chip\" data-mode=\"startup\">启动</button><button class=\"chip\" data-mode=\"error\">错误</button></div>"
@@ -124,10 +148,9 @@ public class DebugLogs implements Process {
                 + "function proxyName(s){return between(s,'proxy=[',']').replace('SOCKS @ ','SOCKS ').replace('/<unresolved>','')}"
                 + "function parse(line){const a=line.indexOf(' ['),b=line.indexOf('] ',a+2),c=line.indexOf(': ',b+2);return{line,time:a>0?line.slice(0,a):'',thread:a>0&&b>0?line.slice(a+2,b):'',tag:b>0&&c>0?line.slice(b+2,c):'',msg:c>0?line.slice(c+2):line}}"
                 + "function base(r){return{kind:'raw',state:'raw',badge:r.tag||'日志',title:r.tag||'原始日志',detail:r.msg||r.line,raw:r.line,time:r.time}}"
-                + "function explain(r){const text=(r.tag+': '+r.msg),low=text.toLowerCase();let e=base(r);if(r.tag==='webview-console'||r.tag==='webhome-console'){e.kind='console';e.state=(low.includes('error')||low.includes('exception')||low.includes('uncaught'))?'err':(low.includes('warning')||low.includes('warn'))?'warn':'ok';e.badge='Console';e.title=r.tag==='webhome-console'?'WebHome 控制台输出':'网页控制台输出';e.detail=r.msg;return e}if(r.tag==='server'){e.kind='server';e.state='raw';e.badge='服务';e.title='App 本机 HTTP 服务收到请求';e.detail=r.msg;return e}if(low.includes('error')||low.includes('exception')||low.includes('failed')||low.includes('timeout')||low.includes('失败')||low.includes('崩溃')||low.includes('异常')){e.kind='error';e.state='err';e.badge='错误';e.title='发现错误或异常';return e}"
+                + "function explain(r){const text=(r.tag+': '+r.msg),low=text.toLowerCase();let e=base(r);if(r.tag==='webview-console'||r.tag==='webhome-console'){e.kind='console';e.state=(low.includes('error')||low.includes('exception')||low.includes('uncaught'))?'err':(low.includes('warning')||low.includes('warn'))?'warn':'ok';e.badge='Console';e.title=r.tag==='webhome-console'?'WebHome 控制台输出':'网页控制台输出';e.detail=r.msg;return e}if(r.tag==='server'){e.kind='server';e.state='raw';e.badge='服务';e.title='App 本机 HTTP 服务收到请求';e.detail=r.msg;return e}if(r.tag&&r.tag.startsWith('ai-')){e.kind='ai';e.state=low.includes('failed')||low.includes('error')||low.includes('success=false')?'err':'ok';e.badge='AI';e.title=r.msg.includes('ai request')?'AI 调用入参':r.msg.includes('ai response')?'AI 调用出参':r.msg.includes('ai error')?'AI 调用异常':'AI 调用状态';e.detail=r.msg;return e}if(low.includes('error')||low.includes('exception')||low.includes('failed')||low.includes('timeout')||low.includes('失败')||low.includes('崩溃')||low.includes('异常')){e.kind='error';e.state='err';e.badge='错误';e.title='发现错误或异常';return e}"
                 + "if(r.tag==='startup'){e.kind='startup';e.state='ok';e.badge='启动';e.title='启动阶段耗时';e.detail=r.msg;return e}"
                 + "if(r.tag==='debug'){e.kind='server';e.state='ok';e.badge='调试';e.title=r.msg.includes('ready')?'调试日志服务已准备':'调试日志状态变化';e.detail=r.msg;return e}"
-                + "if(r.tag&&r.tag.startsWith('ai-')){e.kind='ai';e.state=low.includes('failed')||low.includes('error')||low.includes('success=false')?'err':'ok';e.badge='AI';e.title=r.msg.includes('ai request')?'AI 调用入参':r.msg.includes('ai response')?'AI 调用出参':r.msg.includes('ai error')?'AI 调用异常':'AI 调用状态';e.detail=r.msg;return e}"
                 + "if(r.tag==='env'){e.kind='startup';e.state='ok';e.badge='环境';e.title='设备和系统环境';e.detail=r.msg;return e}"
                 + "if(r.tag==='web-resource'){e.kind='server';e.state=r.msg.includes('->')?'ok':'raw';e.badge='资源';e.title=r.msg.includes('->')?'Web 资源代理返回响应':'Web 资源代理发起请求';e.detail=r.msg;return e}"
                 + "if(r.tag==='sync'){e.kind='sync';e.state='ok';e.badge='同步';e.title=r.msg.includes('archive')?'正在打包同步目录':r.msg.includes('restore')?'正在恢复同步目录':'一键同步';e.detail=r.msg;return e}"

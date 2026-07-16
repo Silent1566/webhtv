@@ -21,26 +21,44 @@ public final class CspWarmup {
     private static final Object LOCK = new Object();
 
     private static final Set<String> attemptedKeys = new HashSet<>();
+    private static long generation;
 
     private CspWarmup() {
+    }
+
+    public static void reset() {
+        long currentGeneration;
+        synchronized (LOCK) {
+            currentGeneration = ++generation;
+            attemptedKeys.clear();
+        }
+        SpiderDebug.log("csp-warmup", "reset generation=%s", currentGeneration);
     }
 
     public static void schedule(String reason) {
         if (!Setting.isCspWarmup()) return;
         String key = configKey();
+        long currentGeneration;
         synchronized (LOCK) {
             if (!attemptedKeys.add(key)) {
                 SpiderDebug.log("csp-warmup", "skip duplicate reason=%s config=%s", reason, key);
                 return;
             }
+            currentGeneration = generation;
         }
-        SpiderDebug.log("csp-warmup", "schedule reason=%s config=%s delay=%sms", reason, key, DELAY_MS);
-        App.post(() -> Task.execute(() -> run(key, reason)), DELAY_MS);
+        SpiderDebug.log("csp-warmup", "schedule reason=%s config=%s generation=%s delay=%sms", reason, key, currentGeneration, DELAY_MS);
+        App.post(() -> Task.execute(() -> run(key, reason, currentGeneration)), DELAY_MS);
     }
 
-    private static void run(String key, String reason) {
+    private static void run(String key, String reason, long scheduledGeneration) {
         long start = System.currentTimeMillis();
         try {
+            synchronized (LOCK) {
+                if (scheduledGeneration != generation) {
+                    SpiderDebug.log("csp-warmup", "skip stale reason=%s config=%s scheduled=%s current=%s", reason, key, scheduledGeneration, generation);
+                    return;
+                }
+            }
             if (!Setting.isCspWarmup()) {
                 SpiderDebug.log("csp-warmup", "cancel disabled reason=%s", reason);
                 return;

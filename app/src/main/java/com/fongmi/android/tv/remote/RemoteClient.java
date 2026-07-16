@@ -264,6 +264,7 @@ public final class RemoteClient {
 
     private Request.Builder authedRequest(String url) {
         Request.Builder builder = new Request.Builder().url(url);
+        if (!TextUtils.isEmpty(profile.serverOrigin)) builder.header("x-webhtv-origin", profile.serverOrigin);
         if (!TextUtils.isEmpty(profile.deviceId)) builder.header("x-device-id", profile.deviceId);
         if (!TextUtils.isEmpty(profile.deviceToken)) builder.header("x-device-token", profile.deviceToken);
         return builder;
@@ -282,6 +283,7 @@ public final class RemoteClient {
 
     private JsonObject requestJson(String method, String path, JsonObject payload, String groupToken) throws IOException {
         Request.Builder builder = new Request.Builder().url(profile.serverOrigin + path);
+        if (!TextUtils.isEmpty(profile.serverOrigin)) builder.header("x-webhtv-origin", profile.serverOrigin);
         if (!TextUtils.isEmpty(profile.deviceId)) builder.header("x-device-id", profile.deviceId);
         if (!TextUtils.isEmpty(profile.deviceToken)) builder.header("x-device-token", profile.deviceToken);
         if (!TextUtils.isEmpty(groupToken)) builder.header("x-group-token", groupToken);

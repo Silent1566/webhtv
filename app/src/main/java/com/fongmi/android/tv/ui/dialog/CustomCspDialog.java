@@ -55,7 +55,9 @@ import com.fongmi.android.tv.ui.custom.SettingClipboardOverlay;
 import com.fongmi.android.tv.utils.FileChooser;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
+import com.fongmi.android.tv.utils.Task;
 import com.fongmi.android.tv.utils.Util;
+import com.github.catvod.net.OkHttp;
 import com.github.catvod.utils.Path;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
@@ -107,6 +109,7 @@ public class CustomCspDialog extends BaseAlertDialog {
     private boolean reverseOrder;
     private boolean saved;
     private boolean jsonDirty = true;
+    private boolean recognizing;
     private long lastAddTime;
     private String cachedJsonText;
     private SettingClipboardOverlay clipboardOverlay;
@@ -634,29 +637,34 @@ public class CustomCspDialog extends BaseAlertDialog {
     }
 
     private boolean saveRecognize() {
-        if (recognizeInput == null) return false;
-        if (!importRecognizedText(recognizeInput.getText() == null ? "" : recognizeInput.getText().toString())) return false;
-        showList();
-        return true;
-    }
-
-    private boolean importRecognizedText(String text) {
+        if (recognizeInput == null || recognizing) return false;
+        String text = recognizeInput.getText() == null ? "" : recognizeInput.getText().toString();
         if (TextUtils.isEmpty(text) || TextUtils.isEmpty(text.trim())) {
             Notify.show(R.string.setting_custom_csp_recognize_empty);
             return false;
         }
-        List<CustomCspSetting.Item> items;
-        try {
-            items = recognizedItems(text);
-        } catch (Exception e) {
+        recognizing = true;
+        binding.positive.setEnabled(false);
+        Task.execute(() -> {
+            try {
+                List<CustomCspSetting.Item> items = recognizedItems(text);
+                App.post(() -> finishRecognize(items, null));
+            } catch (Exception e) {
+                App.post(() -> finishRecognize(Collections.emptyList(), e));
+            }
+        });
+        return true;
+    }
+
+    private void finishRecognize(List<CustomCspSetting.Item> items, Exception error) {
+        if (!isAdded() || binding == null) return;
+        recognizing = false;
+        binding.positive.setEnabled(true);
+        if (error != null || items.isEmpty()) {
             Notify.show(R.string.setting_custom_csp_recognize_invalid);
-            return false;
+            return;
         }
-        if (items.isEmpty()) {
-            Notify.show(R.string.setting_custom_csp_recognize_invalid);
-            return false;
-        }
-        if (textMode && !syncFormFromJson(true)) return false;
+        if (textMode && !syncFormFromJson(true)) return;
         else if (!textMode) syncAllVisibleRows();
         List<CustomCspSetting.Item> next = new ArrayList<>(adapter.getItems());
         int firstAdded = next.size();
@@ -665,7 +673,7 @@ public class CustomCspDialog extends BaseAlertDialog {
         if (textMode) syncJsonFromForm(false);
         scrollToItem(adapter.displayPosition(reverseOrder ? next.size() - 1 : firstAdded));
         Notify.show(getString(R.string.setting_custom_csp_recognize_done, items.size()));
-        return true;
+        showList();
     }
 
     private void markJsonDirty() {
@@ -700,6 +708,7 @@ public class CustomCspDialog extends BaseAlertDialog {
             try {
                 CustomCspSetting.Registry parsed = CustomCspSetting.parse(candidate);
                 List<CustomCspSetting.Item> items = new ArrayList<>(parsed.getItems());
+                if (allowsRemoteLiveRecognition(candidate)) recognizeRemoteLive(items);
                 items.removeIf(item -> item == null || !item.isValid());
                 if (!items.isEmpty()) return items;
             } catch (Exception e) {
@@ -708,6 +717,48 @@ public class CustomCspDialog extends BaseAlertDialog {
         }
         if (failure != null) throw failure;
         return Collections.emptyList();
+    }
+
+    private boolean allowsRemoteLiveRecognition(String candidate) {
+        try {
+            JsonElement element = CustomCspSetting.parseFlexible(candidate);
+            if (hasExplicitKind(element)) return false;
+            if (!element.isJsonObject()) return true;
+            JsonObject object = element.getAsJsonObject();
+            if (object.has("sites") || object.has("items")) return false;
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private boolean hasExplicitKind(JsonElement element) {
+        if (element == null || element.isJsonNull()) return false;
+        if (element.isJsonObject()) {
+            JsonObject object = element.getAsJsonObject();
+            if (object.has("kind") && object.get("kind").isJsonPrimitive() && !TextUtils.isEmpty(object.get("kind").getAsString())) return true;
+            if (object.has("items") && hasExplicitKind(object.get("items"))) return true;
+            return false;
+        }
+        if (!element.isJsonArray()) return false;
+        for (JsonElement child : element.getAsJsonArray()) if (hasExplicitKind(child)) return true;
+        return false;
+    }
+
+    private void recognizeRemoteLive(List<CustomCspSetting.Item> items) {
+        for (CustomCspSetting.Item item : items) {
+            if (item == null || item.isLive() || item.isWebHome() || item.isOther()) continue;
+            String api = item.getApi();
+            if (!CustomCspSetting.isRemoteScript(api)) continue;
+            String script = OkHttp.string(api, 8000);
+            if (!CustomCspSetting.hasLiveMethod(api, script)) continue;
+            String ext = item.getExt();
+            String jar = item.getJar();
+            item.setKind(KIND_LIVE);
+            item.setApi(api);
+            item.setExt(ext);
+            item.setJar(jar);
+        }
     }
 
     private void addRecognizeCandidate(List<String> candidates, String value) {

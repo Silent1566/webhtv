@@ -9,6 +9,7 @@ import androidx.media3.common.Player;
 import androidx.media3.common.Tracks;
 
 import com.fongmi.android.tv.bean.Track;
+import com.fongmi.android.tv.player.lut.MpvLutShader;
 
 import java.util.Collections;
 import java.util.List;
@@ -75,8 +76,57 @@ public interface PlayerEngine {
     default void setVideoEffects(List<Effect> effects) {
     }
 
+    default boolean supportsNativeLut() {
+        return false;
+    }
+
+    default boolean supportsLut() {
+        return supportsVideoEffects() || supportsNativeLut();
+    }
+
+    default void setNativeLutShader(MpvLutShader shader) {
+    }
+
     default Format getVideoFormat() {
         return null;
+    }
+
+    default PlayerCacheState getCacheState() {
+        return PlayerCacheState.empty();
+    }
+
+    default String getRenderDiagnostics() {
+        return "";
+    }
+
+    default String getRuntimeDiagnostics() {
+        return "";
+    }
+
+    default long getDroppedFrames() {
+        return 0;
+    }
+
+    default boolean supportsSubtitleStyle() {
+        return false;
+    }
+
+    default String getAudioSpdifCodecs() {
+        return "";
+    }
+
+    default void setSubtitleStyle(float textSize, float position) {
+    }
+
+    default boolean supportsSecondarySubtitle() {
+        return false;
+    }
+
+    default boolean isSecondarySubtitleSelected(Format format) {
+        return false;
+    }
+
+    default void setSecondarySubtitleTrack(Track track) {
     }
 
     default boolean haveTitle() {

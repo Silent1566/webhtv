@@ -31,11 +31,15 @@ public class EpisodeGridHolder extends BaseEpisodeHolder {
     private final AdapterEpisodeGridBinding binding;
     private boolean useTmdbCard;
     private String fallbackStillUrl = "";
+    private final int maxSingleWidth;
+    private final int horizontalPadding;
 
     public EpisodeGridHolder(@NonNull AdapterEpisodeGridBinding binding, EpisodeAdapter.OnClickListener listener) {
         super(binding.getRoot());
         this.binding = binding;
         this.listener = listener;
+        this.maxSingleWidth = ResUtil.getScreenWidth();
+        this.horizontalPadding = ResUtil.dp2px(12);
     }
 
     @Override
@@ -50,6 +54,7 @@ public class EpisodeGridHolder extends BaseEpisodeHolder {
 
     @Override
     public void initView(Episode item) {
+        updateLayout();
         TmdbEpisode episode = item.getTmdbEpisode();
         if (EpisodeCardPolicy.shouldShowCard(useTmdbCard, episode != null, !TextUtils.isEmpty(fallbackStillUrl))) bindCard(item, episode);
         else bindText(item);
@@ -128,6 +133,18 @@ public class EpisodeGridHolder extends BaseEpisodeHolder {
             marginParams.topMargin = ResUtil.dp2px(belowMeta ? 36 : 8);
             binding.fileSize.setLayoutParams(marginParams);
         }
+    }
+
+    private void updateLayout() {
+        boolean single = getBindingAdapter() != null && getBindingAdapter().getItemCount() == 1;
+        ViewGroup.LayoutParams params = binding.text.getLayoutParams();
+        int width = single ? ViewGroup.LayoutParams.WRAP_CONTENT : ViewGroup.LayoutParams.MATCH_PARENT;
+        if (params.width != width) {
+            params.width = width;
+            binding.text.setLayoutParams(params);
+        }
+        binding.text.setMaxWidth(single ? maxSingleWidth : Integer.MAX_VALUE);
+        binding.text.setPadding(horizontalPadding, 0, horizontalPadding, 0);
     }
 
     private void setMarquee(boolean focused) {

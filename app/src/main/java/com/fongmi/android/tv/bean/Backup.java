@@ -1,9 +1,12 @@
 package com.fongmi.android.tv.bean;
 
+import android.content.SharedPreferences;
+
 import androidx.annotation.NonNull;
 
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.api.config.LiveConfig;
+import com.fongmi.android.tv.api.config.HlsRuleConfig;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.api.config.WallConfig;
 import com.fongmi.android.tv.api.loader.BaseLoader;
@@ -25,7 +28,7 @@ import java.util.Set;
 
 public class Backup {
 
-    private static final Set<String> APP_PREFS = Set.of("doh", "ua", "wall", "wall_type", "reset", "site_mode", "site_block_keys", "search_column", "sync_mode", "sync_paths", "incognito", "drive_check", "drive_check_cache", "compact_episode_title", "web_home_fullscreen", "audio_config", "short_drama_config", "tmdb_enabled", "tmdb_config", "tmdb_model", "ai_config", "ai_title_extraction", "detail_open_mode", "detail_interaction_mode", "detail_theme_mode", "tmdb_detail_theme", "tmdb_detail_backdrop_slide", "personal_recommendation", "ai_recommendation", "auto_skip_intro_outro", "viewing_record_sync_enabled", "viewing_record_sync_local_write", "playback_remote_sync_config", "playback_webhook_config", "playback_webhook_privacy_accepted", "shell_proxy", "shell_proxy_rules", "shell_proxy_url", "shell_proxy_hosts", "github_proxy", "update", "adblock", "zhuyin", "theme_color", "wall_color", "crash", "render", "ffmpeg_mode", "pad_live_mode", "size", "scale", "buffer", "buffer_bytes", "back_buffer", "play_cache", "preload", "preload_threads", "preload_size", "preload_time", "player_auto_change", "background", "speed", "play_speed", "caption", "tunnel", "exo_4k_compat", "playback_performance_profile", "playback_performance_initialized", "perf_codec_async_queueing", "perf_dynamic_scheduling", "perf_video_duration_progress", "perf_late_drop_input", "perf_track_limit", "perf_adaptive_downgrade", "perf_load_only_selected_tracks", "perf_surface_fixed_size", "perf_decoder_fallback", "perf_soft_video_tune", "perf_high_buffer", "perf_bandwidth_meter", "player_button_order", "player_button_hidden", "audio_prefer", "video_prefer", "prefer_aac", "subtitle_text_size", "subtitle_position", "display_time", "display_traffic", "display_size", "display_progress", "display_mini", "display_title", "player_osd_title", "player_osd_resolution", "player_osd_time", "player_osd_progress", "player_osd_traffic", "player_osd_mini", "player_osd_diagnostics", "boot_live", "across", "change", "invert", "scale_live", "live_epg_url", "live_epg_history");
+    private static final Set<String> APP_PREFS = Set.of("doh", "ua", "wall", "wall_type", "reset", "site_mode", "site_block_keys", "search_column", "sync_mode", "sync_paths", "incognito", "drive_check", "drive_check_cache", "compact_episode_title", "web_home_fullscreen", "audio_config", "short_drama_config", "tmdb_enabled", "tmdb_config", "tmdb_model", "ai_config", "ai_title_extraction", "ai_ad_detection", "user_ad_rules", "disabled_default_rule_ids", "builtin_hls_rule_overrides", "subtitle_ai_max_concurrency", "subtitle_ai_chunk_count", "detail_open_mode", "detail_interaction_mode", "detail_theme_mode", "tmdb_detail_theme", "tmdb_detail_backdrop_slide", "personal_recommendation", "ai_recommendation", "auto_skip_intro_outro", "viewing_record_sync_enabled", "viewing_record_sync_local_write", "playback_remote_sync_config", "playback_webhook_config", "playback_webhook_privacy_accepted", "shell_proxy", "shell_proxy_rules", "shell_proxy_url", "shell_proxy_hosts", "github_proxy", "update", "adblock", "zhuyin", "theme_color", "wall_color", "crash", "render", "ffmpeg_mode", "pad_live_mode", "size", "scale", "buffer", "buffer_bytes", "back_buffer", "play_cache", "preload", "preload_threads", "preload_size", "preload_time", "player_auto_change", "player_failure_fallback", "background", "speed", "play_speed", "caption", "tunnel", "exo_4k_compat", "playback_performance_profile", "playback_performance_initialized", "perf_codec_async_queueing", "perf_dynamic_scheduling", "perf_video_duration_progress", "perf_late_drop_input", "perf_track_limit", "perf_adaptive_downgrade", "perf_load_only_selected_tracks", "perf_surface_fixed_size", "perf_decoder_fallback", "perf_soft_video_tune", "perf_high_buffer", "perf_bandwidth_meter", "player_button_order", "player_button_hidden", "audio_prefer", "video_prefer", "prefer_aac", "subtitle_text_size", "subtitle_position", "display_time", "display_traffic", "display_size", "display_progress", "display_mini", "display_title", "player_osd_title", "player_osd_resolution", "player_osd_time", "player_osd_progress", "player_osd_traffic", "player_osd_mini", "player_osd_diagnostics", "boot_live", "across", "change", "invert", "scale_live", "live_epg_url", "live_epg_history");
 
     @SerializedName("site")
     private List<Site> site;
@@ -37,6 +40,10 @@ public class Backup {
     private List<Config> config;
     @SerializedName("history")
     private List<History> history;
+    @SerializedName("track")
+    private List<Track> track;
+    @SerializedName("device")
+    private List<Device> device;
     @SerializedName("prefers")
     private Map<String, ?> prefers;
 
@@ -48,6 +55,8 @@ public class Backup {
         backup.setKeep(AppDatabase.get().getKeepDao().findAll());
         backup.setConfig(AppDatabase.get().getConfigDao().findAll());
         backup.setHistory(AppDatabase.get().getHistoryDao().findAll());
+        backup.setTrack(AppDatabase.get().getTrackDao().findAll());
+        backup.setDevice(AppDatabase.get().getDeviceDao().findAll());
         return backup;
     }
 
@@ -81,7 +90,9 @@ public class Backup {
         AppDatabase.get().getKeepDao().insertOrUpdate(getKeep());
         AppDatabase.get().getConfigDao().insertOrUpdate(getConfig());
         AppDatabase.get().getHistoryDao().insertOrUpdate(getHistory());
-        for (Map.Entry<String, ?> entry : getPrefers().entrySet()) Prefers.put(entry.getKey(), entry.getValue());
+        AppDatabase.get().getTrackDao().insertOrUpdate(getTrack());
+        AppDatabase.get().getDeviceDao().insertOrUpdate(getDevice());
+        restorePrefers(getPrefers(), true);
     }
 
     public void restore(SyncOptions options, boolean force) {
@@ -106,7 +117,7 @@ public class Backup {
             for (History item : getHistory()) if (cids.containsKey(item.getCid())) item.setCid(cids.get(item.getCid()));
             AppDatabase.get().getHistoryDao().insertOrUpdate(getHistory());
         }
-        for (Map.Entry<String, ?> entry : filter(getPrefers(), options).entrySet()) Prefers.put(entry.getKey(), entry.getValue());
+        restorePrefers(filter(getPrefers(), options), false);
         if (options.isSpider() || options.isLoginState()) BaseLoader.get().clear();
         if (options.isConfig() || options.isSpider() || options.isLoginState()) reloadConfig();
         if (options.isKeep()) RefreshEvent.keep();
@@ -155,7 +166,27 @@ public class Backup {
     }
 
     private static boolean isAppPref(String key) {
-        return APP_PREFS.contains(key) || key.startsWith("danmaku_");
+        return APP_PREFS.contains(key) || key.startsWith("danmaku_") || key.startsWith("playback_performance_") || key.startsWith("perf_exo_") || key.startsWith("perf_mpv_") || key.startsWith("perf_ijk_") || key.startsWith("perf_kernel_");
+    }
+
+    private static void restorePrefers(Map<String, ?> values, boolean clear) {
+        SharedPreferences.Editor editor = Prefers.getPrefers().edit();
+        if (clear) editor.clear();
+        for (Map.Entry<String, ?> entry : values.entrySet()) {
+            Object value = entry.getValue();
+            if (value instanceof String) editor.putString(entry.getKey(), (String) value);
+            else if (value instanceof Boolean) editor.putBoolean(entry.getKey(), (Boolean) value);
+            else if (value instanceof Float) editor.putFloat(entry.getKey(), (Float) value);
+            else if (value instanceof Integer) editor.putInt(entry.getKey(), (Integer) value);
+            else if (value instanceof Long) editor.putLong(entry.getKey(), (Long) value);
+            else if (value instanceof Number) {
+                Number number = (Number) value;
+                if (number.toString().contains(".")) editor.putFloat(entry.getKey(), number.floatValue());
+                else editor.putInt(entry.getKey(), number.intValue());
+            }
+        }
+        editor.commit();
+        HlsRuleConfig.invalidate();
     }
 
     public List<Site> getSite() {
@@ -196,6 +227,22 @@ public class Backup {
 
     public void setHistory(List<History> history) {
         this.history = history;
+    }
+
+    public List<Track> getTrack() {
+        return track == null ? Collections.emptyList() : track;
+    }
+
+    public void setTrack(List<Track> track) {
+        this.track = track;
+    }
+
+    public List<Device> getDevice() {
+        return device == null ? Collections.emptyList() : device;
+    }
+
+    public void setDevice(List<Device> device) {
+        this.device = device;
     }
 
     public Map<String, ?> getPrefers() {

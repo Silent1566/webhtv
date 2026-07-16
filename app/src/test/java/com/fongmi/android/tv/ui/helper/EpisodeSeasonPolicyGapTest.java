@@ -1,0 +1,61 @@
+package com.fongmi.android.tv.ui.helper;
+
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+
+/**
+ * 测试有缺口的集数列表（如 [11, 13, 13, 14]）的编号计算
+ */
+public class EpisodeSeasonPolicyGapTest {
+
+    @Test
+    public void preservesSourceNumberWhenGapExists() {
+        // 场景：源站返回 [11.mp4, 13.mkv, 13_duplicate, 14.mkv]（缺12集）
+        // "13.mkv" 在 index=1，应该保留编号 13，不应该被当成 12
+
+        int sourceNumber = 13;  // 从 "13.mkv" 提取的编号
+        int index = 1;          // 在列表中的位置（0-based）
+
+        int result = EpisodeSeasonPolicy.linearEpisodeNumber(sourceNumber, index);
+
+        // 期望：保留源编号 13（因为 13 >= 1+1）
+        assertEquals(13, result);
+    }
+
+    @Test
+    public void firstEpisodeAfterGap() {
+        // 场景：[1..11, 13, 14...]，第一个13在index=11
+        int sourceNumber = 13;
+        int index = 11;
+
+        int result = EpisodeSeasonPolicy.linearEpisodeNumber(sourceNumber, index);
+
+        // 期望：13（因为 13 >= 11+1 = 12）
+        assertEquals(13, result);
+    }
+
+    @Test
+    public void boundaryCase() {
+        // 边界：sourceNumber 刚好等于 index+1
+        int sourceNumber = 12;
+        int index = 11;
+
+        int result = EpisodeSeasonPolicy.linearEpisodeNumber(sourceNumber, index);
+
+        // 12 >= 12 → true → 保留 12
+        assertEquals(12, result);
+    }
+
+    @Test
+    public void fallsBackToPositionWhenSourceNumberIsSmall() {
+        // 源编号 < index+1 时，使用位置编号
+        int sourceNumber = 1;
+        int index = 5;
+
+        int result = EpisodeSeasonPolicy.linearEpisodeNumber(sourceNumber, index);
+
+        // 1 >= 5+1? → false → 使用位置编号 6
+        assertEquals(6, result);
+    }
+}

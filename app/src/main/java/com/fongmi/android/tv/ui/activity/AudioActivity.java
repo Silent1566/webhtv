@@ -3,6 +3,7 @@ package com.fongmi.android.tv.ui.activity;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.Gravity;
@@ -40,21 +41,26 @@ import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.player.PlayerManager;
 import com.fongmi.android.tv.service.PlaybackService;
 import com.fongmi.android.tv.setting.PlayerSetting;
+import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.audio.AudioHistory;
 import com.fongmi.android.tv.ui.audio.AudioMiniPlayer;
 import com.fongmi.android.tv.ui.custom.CustomSeekView;
+import com.fongmi.android.tv.ui.custom.CustomWallView;
 import com.fongmi.android.tv.ui.dialog.AudioCommentDialog;
 import com.fongmi.android.tv.utils.AudioUtil;
+import com.fongmi.android.tv.utils.FileUtil;
 import com.fongmi.android.tv.utils.ImgUtil;
 import com.fongmi.android.tv.utils.LyricUtil;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.Task;
 import com.fongmi.android.tv.utils.Util;
+import com.bumptech.glide.Glide;
 import com.github.catvod.utils.Prefers;
 import com.google.common.util.concurrent.FluentFuture;
 import com.google.common.util.concurrent.MoreExecutors;
 
+import java.io.File;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
@@ -125,6 +131,10 @@ public class AudioActivity extends PlaybackActivity {
     private boolean lyricEnabled = true;
     private boolean lyricBrowsing;
     private boolean lyricTouchMoved;
+    private boolean discMode = true;
+    private boolean discSpinning = false;
+    private boolean resumeApplied;
+    private android.view.animation.Animation discRotateAnimation;
     private long lyricOffset;
     private int index;
     private int lyricBrowseIndex;
@@ -277,6 +287,15 @@ public class AudioActivity extends PlaybackActivity {
         binding.playlist.setAdapter(playlistAdapter);
         playlistAdapter.setItems(episodes);
         binding.title.setSelected(true);
+        discRotateAnimation = android.view.animation.AnimationUtils.loadAnimation(this, R.anim.rotate_disc);
+        discMode = true;
+        binding.discCover.setOutlineProvider(new android.view.ViewOutlineProvider() {
+            @Override
+            public void getOutline(View view, android.graphics.Outline outline) {
+                outline.setOval(0, 0, view.getWidth(), view.getHeight());
+            }
+        });
+        binding.discCover.setClipToOutline(true);
         applyAudioInsets();
         setText();
         setCover();
@@ -336,6 +355,8 @@ public class AudioActivity extends PlaybackActivity {
         binding.lyricPanel.setOnTouchListener(this::onLyricTouch);
         binding.commentButton.setOnClickListener(view -> showComments());
         binding.coverBackground.setOnClickListener(view -> toggleCoverBackground());
+        binding.discModeToggle.setOnClickListener(view -> toggleDiscLyricMode());
+        binding.discContainer.setOnClickListener(view -> toggleDiscLyricMode());
         binding.playlistButton.setOnClickListener(view -> showPlaylist(true));
         binding.playlistClose.setOnClickListener(view -> showPlaylist(false));
         binding.playlistMask.setOnClickListener(view -> showPlaylist(false));
@@ -377,21 +398,27 @@ public class AudioActivity extends PlaybackActivity {
 
     private void restoreCurrent(PlayerManager manager) {
         started = true;
-        binding.loading.setVisibility(manager.getPlaybackState() == Player.STATE_BUFFERING ? View.VISIBLE : View.GONE);
         lyricEnabled = shouldEnableLyrics(initialResult);
         lyricOffset = getSavedLyricOffset();
         setText();
         setCover();
         updateAudioToolState();
         updateKeepState();
-        updatePlayIcon();
         updatePlaylistState();
+        syncPlaybackUI();
         if (lyricEnabled) {
             loadLyrics(initialResult);
             loadArtwork();
         } else {
             disableLyrics();
         }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        discSpinning = false;
+        if (started) syncPlaybackUI();
     }
 
     @Override
@@ -408,6 +435,8 @@ public class AudioActivity extends PlaybackActivity {
     @Override
     protected void onPlayingChanged(boolean isPlaying) {
         updatePlayIcon(isPlaying);
+        updateDiscRotation();
+        if (isPlaying) binding.loading.setVisibility(View.GONE);
     }
 
     @Override
@@ -417,6 +446,7 @@ public class AudioActivity extends PlaybackActivity {
         if (state == Player.STATE_READY && manager != null) {
             manager.reset();
             updateHistoryForTrack(manager);
+            applyResumePositionOnce(manager);
         }
         if (state == Player.STATE_ENDED && mode != 2) playNext(false);
         updatePlayIcon();
@@ -458,6 +488,7 @@ public class AudioActivity extends PlaybackActivity {
         PlayerManager manager = player();
         if (manager == null) return;
         started = true;
+        resumeApplied = false;
         initialResult = Result.fromJson(Objects.toString(target, ""));
         if (target.hasArtwork()) getIntent().putExtra(EXTRA_PIC, target.getArtwork());
         lyricEnabled = shouldEnableLyrics(target);
@@ -803,18 +834,69 @@ public class AudioActivity extends PlaybackActivity {
         Notify.show(coverBackground ? "已使用封面背景" : "已关闭封面背景");
     }
 
+    private void toggleDiscLyricMode() {
+        if (!lyricEnabled) {
+            Notify.show("当前音频暂无歌词");
+            return;
+        }
+        setDiscMode(!discMode);
+    }
+
+    private void setDiscMode(boolean disc) {
+        discMode = disc;
+        if (!disc && discSpinning) {
+            binding.discCover.clearAnimation();
+            discSpinning = false;
+        }
+        updateAudioToolState();
+        updateDiscRotation();
+    }
+
+    private void updateDiscRotation() {
+        if (discRotateAnimation == null) return;
+        PlayerManager manager = player();
+        boolean shouldRotate = discMode && manager != null && !manager.isReleased() && manager.isPlaying();
+        if (shouldRotate) {
+            if (!discSpinning) {
+                binding.discCover.clearAnimation();
+                binding.discCover.startAnimation(discRotateAnimation);
+                discSpinning = true;
+            }
+        } else {
+            if (discSpinning) {
+                binding.discCover.clearAnimation();
+                discSpinning = false;
+            }
+        }
+    }
+
+    private void syncPlaybackUI() {
+        PlayerManager manager = player();
+        if (manager == null || manager.isReleased()) return;
+        int state = manager.getPlaybackState();
+        binding.loading.setVisibility(state == Player.STATE_BUFFERING ? View.VISIBLE : View.GONE);
+        updatePlayIcon();
+        updateDiscRotation();
+    }
+
     private void updateAudioToolState() {
-        binding.lyricPanel.setVisibility(lyricEnabled ? View.VISIBLE : View.INVISIBLE);
+        binding.discContainer.setVisibility(discMode ? View.VISIBLE : View.GONE);
+        binding.discLyricPreview.setVisibility(discMode && lyricEnabled ? View.VISIBLE : View.GONE);
+        binding.lyricPanel.setVisibility(!discMode && lyricEnabled ? View.VISIBLE : View.GONE);
         binding.lyricAdvance.setVisibility(lyricEnabled ? View.VISIBLE : View.GONE);
         binding.lyricDelay.setVisibility(lyricEnabled ? View.VISIBLE : View.GONE);
         binding.lyricSearch.setVisibility(lyricEnabled ? View.VISIBLE : View.GONE);
+        binding.discModeToggle.setVisibility(lyricEnabled ? View.VISIBLE : View.GONE);
         binding.lyricAdvance.setFocusable(lyricEnabled);
         binding.lyricDelay.setFocusable(lyricEnabled);
         binding.lyricSearch.setFocusable(lyricEnabled);
+        binding.discModeToggle.setFocusable(lyricEnabled);
         if (!lyricEnabled) return;
         binding.lyricAdvance.setAlpha(lyricOffset < 0 ? 1f : 0.72f);
         binding.lyricDelay.setAlpha(lyricOffset > 0 ? 1f : 0.72f);
         binding.lyricSearch.setAlpha(0.82f);
+        binding.discModeToggle.setAlpha(discMode ? 1f : 0.72f);
+        binding.discModeToggle.setImageResource(discMode ? R.drawable.ic_audio_lyric_mode : R.drawable.ic_audio_disc_mode);
         binding.coverBackground.setAlpha(coverBackground ? 1f : 0.48f);
     }
 
@@ -835,18 +917,71 @@ public class AudioActivity extends PlaybackActivity {
         binding.lyric.setText(current);
         binding.lyricNext.setText(next);
         binding.lyricNext2.setText(next2);
+        updateDiscLyricPreview(prev, current, next);
+    }
+
+    private void updateDiscLyricPreview(String prev, String current, String next) {
+        boolean show = discMode && lyricEnabled && !TextUtils.isEmpty(current);
+        binding.discLyricPreview.setVisibility(show ? View.VISIBLE : View.INVISIBLE);
+        if (show) {
+            binding.discLyricPrev.setText(TextUtils.isEmpty(prev) ? "" : prev);
+            binding.discLyricCurrent.setText(current);
+            binding.discLyricNext.setText(TextUtils.isEmpty(next) ? "" : next);
+        }
     }
 
     private void setCover() {
         String pic = getPic();
         if (TextUtils.isEmpty(pic)) {
             binding.cover.setImageResource(R.drawable.ic_audio_note);
-            binding.backdrop.setImageResource(R.drawable.wallpaper_4);
+            binding.discCover.setImageResource(R.drawable.ic_audio_note);
+            loadDefaultBackdrop();
             return;
         }
         ImgUtil.load(getDisplayTitleText(), pic, binding.cover);
+        ImgUtil.load(getDisplayTitleText(), pic, binding.discCover);
         if (coverBackground) ImgUtil.load(getDisplayTitleText(), pic, binding.backdrop);
-        else binding.backdrop.setImageResource(R.drawable.wallpaper_4);
+        else loadDefaultBackdrop();
+    }
+
+    private void loadDefaultBackdrop() {
+        int wall = Setting.getWall();
+        int type = Setting.getWallType();
+
+        // Built-in color
+        if (type == 0 && Setting.isBuiltInColorWall(wall)) {
+            binding.backdrop.setImageDrawable(new ColorDrawable(Setting.getBuiltInWallColor(wall)));
+            return;
+        }
+
+        // Built-in design
+        if (type == 0 && Setting.isBuiltInDesignWall(wall)) {
+            int resId = CustomWallView.getDesignResId(wall);
+            if (resId != 0) {
+                binding.backdrop.setImageResource(resId);
+                return;
+            }
+        }
+
+        // Green (legacy)
+        if (type == 0 && wall == Setting.WALL_GREEN) {
+            binding.backdrop.setImageResource(R.drawable.wallpaper_1);
+            return;
+        }
+
+        // Custom image cache
+        File wallCache = FileUtil.getWallCache();
+        if (wallCache.exists()) {
+            try {
+                Glide.with(this).load(wallCache).centerCrop().into(binding.backdrop);
+                return;
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+
+        // Fallback
+        binding.backdrop.setImageResource(R.drawable.wallpaper_4);
     }
 
     private void updatePlayIcon() {
@@ -1060,6 +1195,25 @@ public class AudioActivity extends PlaybackActivity {
 
     private String getLyricText(int index) {
         return lyrics == null || index < 0 || index >= lyrics.size() ? "" : lyrics.get(index).text;
+    }
+
+    private void applyResumePositionOnce(PlayerManager manager) {
+        if (resumeApplied) return;
+        resumeApplied = true;
+        if (!canUseVodRecord()) return;
+        History history = AudioHistory.find(getSiteKey(), getVodIdFromPlaybackKey());
+        if (history == null) return;
+        Episode episode = getCurrentEpisode();
+        String remarks = episode == null ? getSubtitleText() : episode.getDisplayName();
+        String episodeUrl = episode == null ? "" : episode.getUrl();
+        boolean sameTrack = (!TextUtils.isEmpty(episodeUrl) && TextUtils.equals(episodeUrl, history.getEpisodeUrl()))
+                || (!TextUtils.isEmpty(remarks) && TextUtils.equals(remarks, history.getVodRemarks()));
+        if (!sameTrack) return;
+        long position = history.getPosition();
+        long duration = manager.getDuration();
+        if (position <= 0) return;
+        if (duration > 0 && position >= duration - 5000) return;
+        manager.seekTo(position);
     }
 
     private void updateHistoryForTrack(PlayerManager manager) {

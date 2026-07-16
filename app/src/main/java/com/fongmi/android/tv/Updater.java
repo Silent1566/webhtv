@@ -1,5 +1,6 @@
 package com.fongmi.android.tv;
 
+import android.os.SystemClock;
 import android.text.TextUtils;
 import android.view.View;
 
@@ -8,10 +9,12 @@ import androidx.lifecycle.Lifecycle;
 import androidx.lifecycle.LifecycleEventObserver;
 
 import com.fongmi.android.tv.bean.Update;
+import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.impl.UpdateListener;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.dialog.UpdateDialog;
 import com.fongmi.android.tv.utils.Download;
+import com.fongmi.android.tv.utils.PermissionUtil;
 import com.fongmi.android.tv.utils.FileUtil;
 import com.fongmi.android.tv.utils.AppVersion;
 import com.fongmi.android.tv.utils.GithubProxy;
@@ -30,13 +33,20 @@ import java.io.FileInputStream;
 import java.lang.ref.WeakReference;
 import java.security.MessageDigest;
 import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 public class Updater implements Download.Callback, UpdateListener {
 
     private static final String DEFAULT_RELEASE_NOTES = "手动触发 GitHub Actions 构建发布。";
     private static final String SOURCE_CNB = "cnb";
     private static final String SOURCE_GITHUB = "github";
+    private static final long UPDATE_CHECK_TIMEOUT_MS = TimeUnit.SECONDS.toMillis(10);
+    private static final long GITHUB_REQUEST_TIMEOUT_MS = TimeUnit.SECONDS.toMillis(4);
+    private static final Map<String, String> GITHUB_API_HEADERS = Map.of("Accept", "application/vnd.github+json", "X-GitHub-Api-Version", "2022-11-28");
+    private static final Map<String, String> GITHUB_ASSET_HEADERS = Map.of("Accept", "application/octet-stream", "X-GitHub-Api-Version", "2022-11-28");
     private static final Updater INSTANCE = new Updater();
 
     private final LifecycleEventObserver lifecycleObserver = (source, event) -> {
@@ -100,10 +110,11 @@ public class Updater implements Download.Callback, UpdateListener {
     }
 
     private void doInBackground(FragmentActivity activity, boolean forceCheck) {
+        long deadline = SystemClock.elapsedRealtime() + UPDATE_CHECK_TIMEOUT_MS;
         Future<Update> stableFuture = Task.executor().submit(() -> getUpdate(Update.CHANNEL_STABLE));
         Future<Update> betaFuture = Task.executor().submit(() -> getUpdate(Update.CHANNEL_BETA));
-        stable = awaitUpdate(stableFuture, Update.CHANNEL_STABLE);
-        beta = awaitUpdate(betaFuture, Update.CHANNEL_BETA);
+        stable = awaitUpdate(stableFuture, Update.CHANNEL_STABLE, deadline);
+        beta = awaitUpdate(betaFuture, Update.CHANNEL_BETA, deadline);
         if (!stable.hasUpdate() && !beta.hasUpdate()) {
             if (forceCheck && (stable.hasManifest() || beta.hasManifest())) {
                 selected = stable;
@@ -117,10 +128,13 @@ public class Updater implements Download.Callback, UpdateListener {
         App.post(() -> show(activity));
     }
 
-    private Update awaitUpdate(Future<Update> future, String channel) {
+    private Update awaitUpdate(Future<Update> future, String channel, long deadline) {
         try {
-            return future.get();
+            long remaining = deadline - SystemClock.elapsedRealtime();
+            if (remaining <= 0) throw new TimeoutException("Update check timed out");
+            return future.get(remaining, TimeUnit.MILLISECONDS);
         } catch (Exception e) {
+            future.cancel(true);
             e.printStackTrace();
             Update update = Update.empty(channel);
             update.error = e.getMessage();
@@ -130,23 +144,29 @@ public class Updater implements Download.Callback, UpdateListener {
 
     private Update getUpdate(String channel) {
         Update cnb = readUpdate(channel, Github.getCnbAsset(getManifestName(channel)), SOURCE_CNB);
-        Update github = Update.CHANNEL_BETA.equals(channel) ? getGithubBetaUpdate(channel) : readUpdate(channel, Github.getGithubLatestAsset(getManifestName(channel)), SOURCE_GITHUB);
+        Update github = Update.CHANNEL_BETA.equals(channel) ? getGithubBetaUpdate(channel) : getGithubStableUpdate(channel);
         return newer(cnb, github);
+    }
+
+    private Update getGithubStableUpdate(String channel) {
+        try {
+            JSONObject release = new JSONObject(OkHttp.string(Github.getLatestReleaseApi(), GITHUB_API_HEADERS, GITHUB_REQUEST_TIMEOUT_MS));
+            return readGithubReleaseUpdate(channel, release);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return Update.empty(channel);
+        }
     }
 
     private Update getGithubBetaUpdate(String channel) {
         String manifestName = getManifestName(channel);
         try {
-            JSONArray releases = new JSONArray(OkHttp.string(Github.getReleasesApi()));
+            JSONArray releases = new JSONArray(OkHttp.string(Github.getReleasesApi(), GITHUB_API_HEADERS, GITHUB_REQUEST_TIMEOUT_MS));
             for (int i = 0; i < releases.length(); i++) {
                 JSONObject release = releases.optJSONObject(i);
                 if (release == null || !isBetaRelease(release)) continue;
-                String tag = release.optString("tag_name");
-                String url = findAssetUrl(release.optJSONArray("assets"), manifestName);
-                if (TextUtils.isEmpty(url) && !TextUtils.isEmpty(tag)) url = Github.getGithubReleaseAsset(tag, manifestName);
-                if (TextUtils.isEmpty(url)) continue;
-                Update update = readUpdate(channel, url, SOURCE_GITHUB);
-                if (update.hasManifest()) return update;
+                if (findAsset(release.optJSONArray("assets"), manifestName) == null) continue;
+                return readGithubReleaseUpdate(channel, release);
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -159,20 +179,32 @@ public class Updater implements Download.Callback, UpdateListener {
         return release.optBoolean("prerelease") || tag.contains("-beta-");
     }
 
-    private String findAssetUrl(JSONArray assets, String name) {
-        if (assets == null) return "";
+    private JSONObject findAsset(JSONArray assets, String name) {
+        if (assets == null) return null;
         for (int i = 0; i < assets.length(); i++) {
             JSONObject asset = assets.optJSONObject(i);
             if (asset == null || !name.equals(asset.optString("name"))) continue;
-            return asset.optString("browser_download_url");
+            return asset;
         }
-        return "";
+        return null;
+    }
+
+    private Update readGithubReleaseUpdate(String channel, JSONObject release) {
+        JSONObject asset = findAsset(release.optJSONArray("assets"), getManifestName(channel));
+        long assetId = asset == null ? 0 : asset.optLong("id");
+        if (assetId <= 0) return Update.empty(channel);
+        return readUpdate(channel, Github.getReleaseAssetApi(assetId), SOURCE_GITHUB, GITHUB_ASSET_HEADERS, release.optString("body"));
     }
 
     private Update readUpdate(String channel, String manifestUrl, String source) {
+        return readUpdate(channel, manifestUrl, source, null, "");
+    }
+
+    private Update readUpdate(String channel, String manifestUrl, String source, Map<String, String> headers, String fallbackNotes) {
         Update update = Update.empty(channel);
         try {
-            String text = OkHttp.string(GithubProxy.apply(manifestUrl));
+            String proxiedUrl = GithubProxy.apply(manifestUrl);
+            String text = headers == null ? OkHttp.string(proxiedUrl, GITHUB_REQUEST_TIMEOUT_MS) : OkHttp.string(proxiedUrl, headers, GITHUB_REQUEST_TIMEOUT_MS);
             if (TextUtils.isEmpty(text)) throw new IllegalStateException("Empty update manifest: " + manifestUrl);
             JSONObject object = new JSONObject(text);
             update.name = object.optString("name");
@@ -186,7 +218,7 @@ public class Updater implements Download.Callback, UpdateListener {
             update.apkUrl = getApkUrl(update, source);
             if (isDefaultReleaseNotes(update.notes)) update.notes = "";
             if (TextUtils.isEmpty(update.notes) && TextUtils.isEmpty(update.desc)) {
-                String notes = getReleaseNotes(update.name);
+                String notes = TextUtils.isEmpty(fallbackNotes) ? getReleaseNotes(update.name) : fallbackNotes;
                 if (!TextUtils.isEmpty(notes)) update.notes = normalizeText(notes);
             }
         } catch (Exception e) {
@@ -251,7 +283,7 @@ public class Updater implements Download.Callback, UpdateListener {
 
     private String readReleaseNotes(String tag) {
         try {
-            return new JSONObject(OkHttp.string(GithubProxy.apply(Github.getReleaseApi(tag)))).optString("body");
+            return new JSONObject(OkHttp.string(GithubProxy.apply(Github.getReleaseApi(tag)), GITHUB_API_HEADERS, GITHUB_REQUEST_TIMEOUT_MS)).optString("body");
         } catch (Exception ignored) {
             return "";
         }
@@ -278,6 +310,48 @@ public class Updater implements Download.Callback, UpdateListener {
             return;
         }
         view.setEnabled(false);
+        showBackupConfirmDialog(view);
+    }
+
+    private void showBackupConfirmDialog(View view) {
+        FragmentActivity activity = activityRef == null ? null : activityRef.get();
+        if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
+
+        new com.google.android.material.dialog.MaterialAlertDialogBuilder(activity, R.style.ThemeOverlay_WebHTV_LightDialog)
+                .setTitle(R.string.update_backup_title)
+                .setMessage(R.string.update_backup_message)
+                .setPositiveButton(R.string.update_backup_positive, (dialog, which) -> startBackupAndUpdate(view))
+                .setNegativeButton(R.string.update_backup_negative, (dialog, which) -> startUpdate(view))
+                .setNeutralButton(R.string.dialog_negative, (dialog, which) -> view.setEnabled(true))
+                .setCancelable(false)
+                .show();
+    }
+
+    private void startBackupAndUpdate(View view) {
+        Notify.show(R.string.update_backup_running);
+        PermissionUtil.requestFile(activityRef.get(), allGranted -> {
+            if (!allGranted) {
+                Notify.show(R.string.update_backup_permission_denied);
+                startUpdate(view);
+                return;
+            }
+            AppDatabase.backup(new com.fongmi.android.tv.impl.Callback() {
+                @Override
+                public void success() {
+                    Notify.show(R.string.update_backup_done);
+                    startUpdate(view);
+                }
+
+                @Override
+                public void error() {
+                    Notify.show(R.string.update_backup_failed);
+                    startUpdate(view);
+                }
+            });
+        });
+    }
+
+    private void startUpdate(View view) {
         downloading = true;
         canceled = false;
         resetProgress();

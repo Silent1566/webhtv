@@ -70,6 +70,16 @@ public class History implements Diffable<History> {
     private int scale;
     @SerializedName("cid")
     private int cid;
+    @SerializedName("typeName")
+    private String typeName;
+    @SerializedName("area")
+    private String area;
+    @SerializedName("actor")
+    private String actor;
+    @SerializedName("director")
+    private String director;
+    @SerializedName("year")
+    private String year;
 
     private transient int player = PlayerSetting.NONE;
     private transient long updateTime;
@@ -102,6 +112,11 @@ public class History implements Diffable<History> {
         item.speed = speed;
         item.scale = scale;
         item.cid = cid;
+        item.typeName = typeName;
+        item.area = area;
+        item.actor = actor;
+        item.director = director;
+        item.year = year;
         item.player = player;
         item.updateTime = updateTime;
         return item;
@@ -367,6 +382,62 @@ public class History implements Diffable<History> {
     public History cid(int cid) {
         setCid(cid);
         return this;
+    }
+
+    public String getTypeName() {
+        return typeName == null ? "" : typeName;
+    }
+
+    public void setTypeName(String typeName) {
+        this.typeName = typeName;
+    }
+
+    public String getArea() {
+        return area == null ? "" : area;
+    }
+
+    public void setArea(String area) {
+        this.area = area;
+    }
+
+    public String getActor() {
+        return actor == null ? "" : actor;
+    }
+
+    public void setActor(String actor) {
+        this.actor = actor;
+    }
+
+    public String getDirector() {
+        return director == null ? "" : director;
+    }
+
+    public void setDirector(String director) {
+        this.director = director;
+    }
+
+    public String getYear() {
+        return year == null ? "" : year;
+    }
+
+    public void setYear(String year) {
+        this.year = year;
+    }
+
+    /**
+     * 仅在本记录对应字段为空时补齐富集元数据（题材/地区/演员/主创/年份）。
+     * 用于老记录重新播放时逐步补全，供观影报告统计使用。避免用空值覆盖已有数据。
+     *
+     * @return 是否有任一字段被补齐
+     */
+    public boolean enrichMeta(String typeName, String area, String actor, String director, String year) {
+        boolean changed = false;
+        if (getTypeName().isEmpty() && !android.text.TextUtils.isEmpty(typeName)) { this.typeName = typeName; changed = true; }
+        if (getArea().isEmpty() && !android.text.TextUtils.isEmpty(area)) { this.area = area; changed = true; }
+        if (getActor().isEmpty() && !android.text.TextUtils.isEmpty(actor)) { this.actor = actor; changed = true; }
+        if (getDirector().isEmpty() && !android.text.TextUtils.isEmpty(director)) { this.director = director; changed = true; }
+        if (getYear().isEmpty() && !android.text.TextUtils.isEmpty(year)) { this.year = year; changed = true; }
+        return changed;
     }
 
     public String getSiteName() {

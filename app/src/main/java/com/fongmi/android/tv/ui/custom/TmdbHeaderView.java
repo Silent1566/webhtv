@@ -838,7 +838,7 @@ public class TmdbHeaderView {
     /**
      * 添加评分展示区域（在简介上方）
      */
-    private void addRatingsDisplay(ViewGroup container, String tmdbRating, com.google.gson.JsonObject externalIds, int tmdbId, String mediaType, String title, int year, com.google.android.material.textview.MaterialTextView doubanRatingView) {
+    private void addRatingsDisplay(ViewGroup container, String tmdbRating, com.google.gson.JsonObject externalIds, int tmdbId, String mediaType, String title, int year, com.google.android.material.textview.MaterialTextView doubanRatingView, com.google.gson.JsonObject detail) {
         container.removeAllViews();
         String displayKey = ratingDisplayKey(title, mediaType, year, tmdbId);
         container.setTag(displayKey);
@@ -847,6 +847,8 @@ public class TmdbHeaderView {
         if (!TextUtils.isEmpty(tmdbRating)) {
             baseChips.add(new String[]{"TMDB", tmdbRating + "/10", "#21D07A"});
         }
+        String[] boxOffice = boxOfficeChip(detail, mediaType);
+        if (boxOffice != null) baseChips.add(boxOffice);
         setRatingDisplayChips(displayKey, baseChips);
         renderRatingChips(container, getRatingDisplayChips(displayKey));
         fetchDoubanRatingForDisplay(title, mediaType, year, displayKey, container, doubanRatingView);
@@ -1053,11 +1055,39 @@ public class TmdbHeaderView {
 
     private int ratingChipOrder(String platform) {
         if ("TMDB".equals(platform)) return 0;
-        if ("豆瓣".equals(platform)) return 1;
-        if ("IMDB".equals(platform)) return 2;
-        if ("烂番茄".equals(platform)) return 3;
-        if ("Metacritic".equals(platform) || "Metascore".equals(platform)) return 4;
-        return 5;
+        if ("票房".equals(platform)) return 1;
+        if ("豆瓣".equals(platform)) return 2;
+        if ("IMDB".equals(platform)) return 3;
+        if ("烂番茄".equals(platform)) return 4;
+        if ("Metacritic".equals(platform) || "Metascore".equals(platform)) return 5;
+        return 6;
+    }
+
+    /**
+     * 构建票房 Chip（仅电影，有票房数据时）。返回 {platform, value, color} 或 null。
+     */
+    private String[] boxOfficeChip(com.google.gson.JsonObject detail, String mediaType) {
+        if (detail == null) return null;
+        if (!"movie".equalsIgnoreCase(mediaType)) return null;
+        long revenue = 0;
+        try {
+            if (detail.has("revenue") && !detail.get("revenue").isJsonNull()) {
+                revenue = detail.get("revenue").getAsLong();
+            }
+        } catch (Exception ignored) {
+        }
+        if (revenue <= 0) return null;
+        return new String[]{"票房", formatBoxOffice(revenue), "#9C27B0"};
+    }
+
+    private String formatBoxOffice(long revenue) {
+        if (revenue >= 1_000_000_000L) {
+            return String.format(java.util.Locale.US, "$%.2fB", revenue / 1_000_000_000.0);
+        } else if (revenue >= 1_000_000L) {
+            return String.format(java.util.Locale.US, "$%.2fM", revenue / 1_000_000.0);
+        } else {
+            return String.format(java.util.Locale.US, "$%,d", revenue);
+        }
     }
 
     private String ratingDisplayKey(String title, String mediaType, int year, int tmdbId) {
@@ -1997,7 +2027,7 @@ public class TmdbHeaderView {
         // 评分展示区域（在简介区域）
         ViewGroup ratingsContainer = headerRoot.findViewById(R.id.tmdbRatingsContainer);
         String doubanTitle = item == null ? detailTitle(detail, mediaType, false) : item.getTitle();
-        addRatingsDisplay(ratingsContainer, adapter.getRatingText(), externalIds, tmdbId, mediaType, doubanTitle, parseYear(extractYear(detail)), doubanRatingView);
+        addRatingsDisplay(ratingsContainer, adapter.getRatingText(), externalIds, tmdbId, mediaType, doubanTitle, parseYear(extractYear(detail)), doubanRatingView, detail);
 
         if (linkCount > 0) {
             label.setVisibility(View.VISIBLE);

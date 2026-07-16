@@ -51,4 +51,4 @@ proxy_set_header X-Forwarded-Host $host;
 proxy_set_header X-Forwarded-Proto $scheme;
 ```
 
-`serverOrigin` 会参与设备和设备组 ID 派生，反向代理时必须保证外部访问的 scheme/host 被正确传给服务端。
+新版 App 会自动发送 `X-WebHTV-Origin`，服务端优先使用该值作为 `serverOrigin`；没有该头时才回退到 `X-Forwarded-Host` / `Host`。因此新版 App 通常不需要额外配置，反向代理仍建议正确透传外部访问的 scheme/host，兼容旧客户端和手动调试请求。

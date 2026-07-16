@@ -128,13 +128,14 @@ public final class LightDialog {
         button.setGravity(Gravity.CENTER);
         button.setTextSize(compact ? 14 : 15);
         button.setIncludeFontPadding(false);
-        button.setPadding(ResUtil.dp2px(compact ? 6 : 16), 0, ResUtil.dp2px(compact ? 6 : 16), 0);
+        button.setPadding(ResUtil.dp2px(compact ? 12 : 16), 0, ResUtil.dp2px(compact ? 12 : 16), 0);
         if (compact) TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(button, 10, 14, 1, TypedValue.COMPLEX_UNIT_SP);
-        button.setMinWidth(compact ? 0 : ResUtil.dp2px(88));
+        button.setMinWidth(ResUtil.dp2px(compact ? 64 : 88));
         button.setMinimumWidth(0);
-        button.setMinHeight(ResUtil.dp2px(40));
+        button.setMinHeight(ResUtil.dp2px(compact ? 36 : 40));
         button.setInsetTop(0);
         button.setInsetBottom(0);
+        button.setCornerRadius(ResUtil.dp2px(6));
         button.setFocusable(true);
         button.setFocusableInTouchMode(Util.isLeanback());
         button.setTextColor(ContextCompat.getColorStateList(context, primary ? R.color.dialog_primary_button_text : R.color.dialog_outlined_button_text));
@@ -142,7 +143,7 @@ public final class LightDialog {
         button.setStrokeColor(ContextCompat.getColorStateList(context, R.color.dialog_outlined_button_stroke));
         button.setStrokeWidth(primary ? 0 : ResUtil.dp2px(1));
         button.setOnClickListener(listener);
-        LinearLayout.LayoutParams params = compact ? new LinearLayout.LayoutParams(0, ResUtil.dp2px(40), 1) : new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ResUtil.dp2px(40));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ResUtil.dp2px(compact ? 36 : 40));
         params.leftMargin = first ? 0 : ResUtil.dp2px(compact ? 6 : 12);
         button.setLayoutParams(params);
         return button;

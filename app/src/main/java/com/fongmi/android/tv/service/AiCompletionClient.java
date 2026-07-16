@@ -150,6 +150,28 @@ public final class AiCompletionClient {
         return builder.build();
     }
 
+    /**
+     * 记录 AI 请求日志。委托给 {@link AiDebugLog}，供 service 包外的调用方（如观影报告）复用统一日志埋点。
+     * 仅在 SpiderDebug 开启时输出，API key 等敏感头会被脱敏。
+     */
+    public static void logRequest(String tag, String scene, AiConfig config, RequestSpec spec, String extra) {
+        AiDebugLog.request(tag, scene, config, spec, extra);
+    }
+
+    /**
+     * 记录 AI 响应日志。委托给 {@link AiDebugLog}。
+     */
+    public static void logResponse(String tag, String scene, int code, long cost, String body, String extra) {
+        AiDebugLog.response(tag, scene, code, cost, body, extra);
+    }
+
+    /**
+     * 记录 AI 异常日志。委托给 {@link AiDebugLog}。
+     */
+    public static void logError(String tag, String scene, long cost, Throwable error, String extra) {
+        AiDebugLog.error(tag, scene, cost, error, extra);
+    }
+
     public static String extractOutputText(String body) {
         if (isBlank(body)) return "";
         try {

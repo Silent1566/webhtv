@@ -72,6 +72,15 @@
                 android:src="@drawable/ic_control_cast" />
 
             <androidx.appcompat.widget.AppCompatImageView
+                android:id="@+id/nightMode"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/play_night_mode"
+                android:scaleType="center"
+                android:src="@drawable/ic_control_night_mode_off" />
+
+            <androidx.appcompat.widget.AppCompatImageView
                 android:id="@+id/keep"
                 android:layout_width="48dp"
                 android:layout_height="48dp"

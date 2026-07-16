@@ -19,6 +19,24 @@ public class SettingPlaybackDefaultsTest {
     }
 
     @Test
+    public void subtitleAiConcurrencyDefaultsToTwo() throws Exception {
+        String source = read(sourcePath().resolve(Path.of("com", "fongmi", "android", "tv", "setting", "Setting.java")));
+
+        assertTrue(source.contains("Prefers.getInt(\"subtitle_ai_max_concurrency\", 2)"));
+        assertTrue(source.contains("Prefers.getInt(\"subtitle_ai_chunk_count\", 2)"));
+    }
+
+    @Test
+    public void subtitleAiSettingsLiveUnderSubtitleSettings() throws Exception {
+        Path root = moduleRoot();
+
+        assertTrue(read(root.resolve(Path.of("src", "mobile", "res", "layout", "fragment_setting_subtitle.xml"))).contains("@+id/subtitleAiSettings"));
+        assertTrue(read(root.resolve(Path.of("src", "leanback", "res", "layout", "activity_setting_subtitle.xml"))).contains("@+id/subtitleAiSettings"));
+        assertTrue(read(root.resolve(Path.of("src", "mobile", "java", "com", "fongmi", "android", "tv", "ui", "fragment", "SettingSubtitleFragment.java"))).contains("Setting.isAiConfigReady()"));
+        assertTrue(read(root.resolve(Path.of("src", "leanback", "java", "com", "fongmi", "android", "tv", "ui", "activity", "SettingSubtitleActivity.java"))).contains("Setting.isAiConfigReady()"));
+    }
+
+    @Test
     public void autoSkipIntroOutro_defaultsOff() throws Exception {
         String source = read(sourcePath().resolve(Path.of("com", "fongmi", "android", "tv", "setting", "Setting.java")));
 

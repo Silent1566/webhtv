@@ -82,6 +82,9 @@
     <string name="play_track_audio">音轨</string>
     <string name="play_track_video">视轨</string>
     <string name="play_track_disable_subtitle">关闭字幕</string>
+    <string name="play_track_disable_secondary_subtitle">关闭第二字幕</string>
+    <string name="play_track_secondary_subtitle">第二字幕</string>
+    <string name="play_track_primary_subtitle">主字幕</string>
     <string name="offset_text">字幕偏移</string>
     <string name="offset_audio">音轨偏移</string>
     <string name="offset_setting">偏移设置</string>
@@ -91,6 +94,11 @@
     <string name="play_switch_flag">正在切换线路至「<xliff:g name="name">%s</xliff:g>」</string>
     <string name="play_switch_site">正在切换站源至「<xliff:g name="name">%s</xliff:g>」</string>
     <string name="play_switch_parse">正在切换解析至「<xliff:g name="name">%s</xliff:g>」</string>
+    <string name="play_night_mode">夜间护眼</string>
+    <string name="night_mode_off">护眼关闭</string>
+    <string name="night_mode_low">轻度护眼</string>
+    <string name="night_mode_medium">中度护眼</string>
+    <string name="night_mode_high">重度护眼</string>
 
     <!-- Danmaku Setting -->
     <string name="danmaku">弹幕</string>
@@ -185,6 +193,7 @@
     <string name="setting_search_ui">搜索布局</string>
     <string name="setting_search_column">搜索结果列数</string>
     <string name="setting_site_column">站点展示模式</string>
+    <string name="setting_search_result_sort">搜索结果模式</string>
     <string name="repo_github">GitHub 仓库</string>
     <string name="repo_cnb">CNB 仓库</string>
     <string name="setting_debug_log">调试日志</string>
@@ -402,9 +411,62 @@
     <string name="setting_site_health_enable">启用站点健康排序</string>
     <string name="setting_site_health_dialog_sort">站点弹窗排序</string>
     <string name="site_health_clear_done">站点健康记录已清空</string>
+    <string name="site_health_report_view">查看报表</string>
+    <string name="site_health_report_title">播放链路健康报表</string>
+    <string name="site_health_report_empty">暂无站点健康样本</string>
+    <string name="site_health_report_filter_empty">当前筛选暂无站点样本</string>
+    <string name="site_health_filter_all">全部</string>
+    <string name="site_health_filter_bad">异常</string>
+    <string name="site_health_filter_warn">降级</string>
+    <string name="site_health_sort_failures">失败</string>
+    <string name="site_health_sort_recent">最近</string>
+    <string name="site_health_sort_rate">成功率</string>
+    <string name="site_health_sort_samples">样本</string>
+    <string name="site_health_report_summary">%1$d 个站点 · %2$d 条样本 · %3$d 次失败 · %4$d 个降级</string>
+    <string name="site_health_report_summary_reason">%1$d 个站点 · %2$d 条样本 · %3$d 次失败 · %4$d 个降级 · 主要原因 %5$s x%6$d</string>
+    <string name="site_health_report_setting_summary">%1$d 个站点 · %2$d 条样本</string>
+    <string name="site_health_report_row_meta">%1$d 条样本 · %2$d 次失败</string>
+    <string name="site_health_report_stage">%1$s · %2$s · %3$d/%4$d</string>
+    <string name="site_health_report_rate">%1$d%%</string>
+    <string name="site_health_report_no_data">暂无数据</string>
+    <string name="site_health_report_empty_count">空结果 %1$d</string>
+    <string name="site_health_report_cost">%1$dms</string>
+    <string name="site_health_report_reason">原因：%1$s x%2$d</string>
+    <string name="site_health_report_reason_tag">%1$s x%2$d</string>
+    <string name="site_health_report_recent_errors">最近错误</string>
+    <string name="site_health_report_recent_error">%1$s：%2$s</string>
+    <string name="site_health_report_recent_error_time">%1$s · %2$s · %3$s</string>
+    <string name="site_health_clear_site">清空本站</string>
+    <string name="site_health_clear_site_title">清空站点统计？</string>
+    <string name="site_health_clear_site_message">清空“%1$s”的健康样本？</string>
+    <string name="site_health_stage_search">搜索</string>
+    <string name="site_health_stage_detail">详情</string>
+    <string name="site_health_stage_parse">解析</string>
+    <string name="site_health_stage_play">播放</string>
+    <string name="site_health_status_good">健康</string>
+    <string name="site_health_status_warn">降级</string>
+    <string name="site_health_status_bad">异常</string>
+    <string name="site_health_status_unknown">未知</string>
+    <string name="site_health_reason_empty_result">搜索无结果</string>
+    <string name="site_health_reason_timeout">请求超时</string>
+    <string name="site_health_reason_http_403">HTTP 403</string>
+    <string name="site_health_reason_http_404">HTTP 404</string>
+    <string name="site_health_reason_http_429">HTTP 429</string>
+    <string name="site_health_reason_http_5xx">HTTP 5xx</string>
+    <string name="site_health_reason_network">网络错误</string>
+    <string name="site_health_reason_parse_failed">解析失败</string>
+    <string name="site_health_reason_vip_required">需要会员</string>
+    <string name="site_health_reason_geo_blocked">地区限制</string>
+    <string name="site_health_reason_drm_or_encrypted">加密或 DRM</string>
+    <string name="site_health_reason_manifest_failed">播放清单异常</string>
+    <string name="site_health_reason_codec_unsupported">解码不支持</string>
+    <string name="site_health_reason_cors_blocked">CORS 拦截</string>
+    <string name="site_health_reason_search_failed">搜索失败</string>
+    <string name="site_health_reason_detail_failed">详情失败</string>
+    <string name="site_health_reason_play_failed">播放失败</string>
     <string name="setting_web_home_extension">WebHome 扩展</string>
     <string name="setting_web_home_fullscreen">WebHome 主页全屏</string>
-    <string name="setting_csp_warmup">CSP init 预热</string>
+    <string name="setting_csp_warmup">CSP预热</string>
     <string name="setting_csp_warmup_default">默认</string>
     <string name="setting_csp_warmup_custom">自定义</string>
     <string name="setting_csp_warmup_custom_count">自定义 · %1$d 个</string>
@@ -852,9 +914,31 @@
     <string name="player_performance">播放性能</string>
     <string name="player_performance_recommended">推荐</string>
     <string name="player_performance_compatible">兼容</string>
+    <string name="player_performance_lightweight">轻量</string>
+    <string name="player_performance_original">原版</string>
+    <string name="player_performance_help">说明</string>
+    <string name="player_performance_help_title">播放性能参数说明</string>
+    <string name="player_performance_help_close">关闭</string>
     <string name="player_kernel">播放器内核</string>
     <string name="player_scale">缩放比例</string>
     <string name="player_lut">LUT 调色</string>
+    <string name="player_mpv_config">MPV 配置管理</string>
+    <string name="player_mpv_render">MPV 渲染后端</string>
+    <string name="mpv_render_native_unavailable">当前不可用</string>
+    <string name="mpv_config_target">%1$s · %2$s</string>
+    <string name="mpv_config_default">默认</string>
+    <string name="mpv_config_local">本地 mpv.conf</string>
+    <string name="mpv_config_url">URL mpv.conf</string>
+    <string name="mpv_config_name_hint">名称（可选）</string>
+    <string name="mpv_config_history">历史</string>
+    <string name="mpv_config_history_empty">暂无 MPV 配置历史</string>
+    <string name="mpv_config_script_hint">脚本 URL 或选择本地脚本</string>
+    <string name="mpv_config_scripts_count">%1$d 个脚本</string>
+    <string name="mpv_config_saved">MPV 配置已保存，重新进入播放后生效</string>
+    <string name="mpv_config_empty">MPV 配置为空</string>
+    <string name="mpv_config_file_invalid">mpv.conf 文件无效</string>
+    <string name="mpv_config_url_invalid">mpv.conf URL 无效</string>
+    <string name="mpv_config_download_empty">下载到的 mpv.conf 为空</string>
     <string name="player_libass">字幕渲染</string>
     <string name="player_caption">字幕样式</string>
     <string name="player_background">后台播放</string>
@@ -879,12 +963,15 @@
     <string name="player_preload_time_value">%1$d 秒</string>
     <string name="player_auto_play">自动播放</string>
     <string name="player_auto_change">自动换源</string>
+    <string name="player_failure_fallback">播放失败回退</string>
     <string name="player_speed">长按倍速</string>
     <string name="player_ua">User-Agent</string>
     <string name="player_osd">屏显设置</string>
     <string name="player_subtitle_auto_match">自动匹配字幕</string>
     <string name="player_subtitle_language">字幕偏好语言</string>
     <string name="player_subtitle_assrt_token">射手网 Token</string>
+    <string name="player_subtitle_ai_max_concurrency">AI字幕最大并发数</string>
+    <string name="player_subtitle_ai_chunk_count">AI字幕分块数量</string>
     <string name="subtitle_auto_match_hit">已自动匹配字幕：%1$s</string>
     <string name="subtitle_auto_match_hit_not_applied">已找到字幕但未应用：%1$s</string>
     <string name="subtitle_auto_match_empty">未找到匹配字幕</string>
@@ -900,6 +987,25 @@
     <string name="subtitle_manual_applied">已应用字幕：%1$s</string>
     <string name="subtitle_manual_apply_failed">已找到字幕但无法应用</string>
     <string name="subtitle_manual_inactive">请先开始播放再搜索字幕</string>
+    <string name="subtitle_ai_translate_title">AI 字幕翻译</string>
+    <string name="subtitle_ai_translate_message">使用当前 AI 配置将该字幕翻译为中文字幕？</string>
+    <string name="subtitle_ai_translate_action">AI 翻译为中文</string>
+    <string name="subtitle_ai_regenerate_action">重新生成 AI 字幕</string>
+    <string name="subtitle_ai_translating">正在翻译字幕...</string>
+    <string name="subtitle_ai_preparing">正在准备 AI 字幕翻译...</string>
+    <string name="subtitle_ai_regenerating">正在重新生成 AI 字幕...</string>
+    <string name="subtitle_ai_progress">AI 正在翻译：%1$d/%2$d 分块</string>
+    <string name="subtitle_ai_progress_eta">AI 正在翻译：%1$d/%2$d 分块，约剩 %3$s</string>
+    <string name="subtitle_ai_cache_hit">已命中 AI 字幕缓存，正在应用...</string>
+    <string name="subtitle_ai_applied">已应用 AI 中文字幕：%1$s</string>
+    <string name="subtitle_ai_apply_failed">已生成 AI 字幕但无法应用</string>
+    <string name="subtitle_ai_failed">AI 字幕翻译失败：%1$s</string>
+    <string name="subtitle_ai_config_required">请先启用并配置 AI</string>
+    <string name="subtitle_ai_no_selected_subtitle">请先选择一个字幕</string>
+    <string name="subtitle_ai_local_srt_required">请先选择一个本地 SRT 字幕</string>
+    <string name="subtitle_ai_unsupported_format">AI 字幕翻译暂时仅支持 SRT</string>
+    <string name="subtitle_ai_stale_result">播放内容已切换，已忽略本次 AI 字幕结果</string>
+    <string name="subtitle_ai_unknown_reason">未知错误</string>
     <string name="lut_original">原色</string>
     <string name="lut_missing">预设不存在</string>
     <string name="lut_summary">%1$s · %2$d%%</string>
@@ -980,6 +1086,15 @@
     <string name="error_play_parse">播放地址解析失败</string>
     <string name="error_play_drm">此设备不支持所需的 DRM scheme</string>
     <string name="error_play_url">播放地址加载失败</string>
+    <string name="error_play_mpv_hls_unsupported">MPV 播放此 HLS 失败，请手动切换播放器或更换线路</string>
+    <string name="error_play_mpv_load_failed">MPV 加载媒体失败，请检查网络或更换线路</string>
+    <string name="error_play_mpv_network_failed">MPV 网络加载失败，请检查网络、请求头或更换线路</string>
+    <string name="error_play_mpv_drm_unsupported">MPV 不支持此 DRM 保护媒体，请手动切换播放器或更换线路</string>
+    <string name="error_play_mpv_unexpected_image">MPV 加载到了图片而不是视频，请更换线路</string>
+    <string name="error_play_mpv_no_av">MPV 没有读取到可播放的音视频数据</string>
+    <string name="error_play_mpv_invalid_data">MPV 识别到异常媒体数据，请更换线路或手动切换播放器</string>
+    <string name="error_play_mpv_decode_failed">MPV 解码失败，请尝试切换软硬解或更换线路</string>
+    <string name="error_play_mpv_video_output">MPV 视频输出初始化失败，请尝试切换解码或重新进入播放</string>
     <string name="error_play_flag">暂无线路数据</string>
     <string name="error_play_timeout">连接超时</string>
     <string name="error_play_fallback">%1$s 播放失败，已切换到 %2$s</string>
@@ -1018,6 +1133,14 @@
     <string name="update_status_unavailable">暂无</string>
     <string name="update_expand">展开</string>
     <string name="update_collapse">收起</string>
+    <string name="update_backup_title">更新前备份</string>
+    <string name="update_backup_message">建议在更新前备份当前配置，以便更新后出现问题时可以恢复。是否先备份？</string>
+    <string name="update_backup_positive">备份并更新</string>
+    <string name="update_backup_negative">直接更新</string>
+    <string name="update_backup_running">正在备份…</string>
+    <string name="update_backup_done">备份完成，开始更新</string>
+    <string name="update_backup_failed">备份失败，仍将继续更新</string>
+    <string name="update_backup_permission_denied">未授予存储权限，无法备份，仍将继续更新</string>
 
     <!-- Crash -->
     <string name="crash_info">发生意外错误\n抱歉给您带来不便</string>
@@ -1075,6 +1198,7 @@
         <item>EXO</item>
         <item>IJK</item>
         <item>系统</item>
+        <item>MPV</item>
     </string-array>
 
     <string-array name="select_decode">
@@ -1082,10 +1206,22 @@
         <item>硬解</item>
     </string-array>
 
+    <string-array name="select_player_failure_fallback">
+        <item>软解后切核心</item>
+        <item>仅切软硬解</item>
+        <item>仅切播放核心</item>
+        <item>关闭</item>
+    </string-array>
+
     <string-array name="select_player_kernel">
         <item>EXO</item>
         <item>IJK</item>
         <item>系统</item>
+        <item>MPV</item>
+    </string-array>
+    <string-array name="select_mpv_render">
+        <item>OpenGL</item>
+        <item>Vulkan</item>
     </string-array>
     <string-array name="select_buffer_bytes">
         <item>自动</item>
@@ -1161,6 +1297,11 @@
         <item>双行</item>
     </string-array>
 
+    <string-array name="select_search_result_sort">
+        <item>动态模式（谁快谁在前）</item>
+        <item>固定模式（按配置顺序）</item>
+    </string-array>
+
     <string-array name="select_ui_scale">
         <item>跟随系统</item>
         <item>标准</item>
@@ -1229,6 +1370,7 @@
         <item>选择视轨</item>
         <item>选择字幕</item>
     </string-array>
+    <string name="select_secondary_subtitle_track">选择第二字幕</string>
 
     <string name="setting_tmdb_source">TMDB 数据配置</string>
     <string name="setting_ai_recommendation">AI 通用配置</string>
@@ -1325,6 +1467,8 @@
     <string name="dialog_ai_prompt_config">AI 提示词配置</string>
     <string name="dialog_ai_recommend_prompt_label">推荐提示词</string>
     <string name="dialog_ai_title_extraction_prompt_label">名称提取提示词</string>
+    <string name="dialog_ai_viewing_report_prompt_label">观影报告提示词</string>
+    <string name="dialog_ai_ad_detection_prompt_label">广告检测提示词</string>
     <string name="dialog_ai_prompt_reset">重置默认</string>
     <string name="dialog_ai_test">测试配置</string>
     <string name="dialog_ai_test_running">正在测试 AI 配置...</string>
@@ -1401,4 +1545,36 @@
     <string name="detail_image_next">下一张</string>
     <string name="detail_image_close">关闭</string>
 
+    <string name="menu_viewing_report">观影报告</string>
+    <string name="viewing_report_title">观影报告</string>
+    <string name="viewing_report_select_range">选择报告时间范围</string>
+    <string name="viewing_report_generate">生成报告</string>
+    <string name="viewing_report_refresh">刷新</string>
+    <string name="viewing_report_loading_local">正在读取观看记录…</string>
+    <string name="viewing_report_generating">正在生成报告…</string>
+    <string name="viewing_report_ai_analyzing">AI 正在分析你的观影画像…</string>
+    <string name="viewing_report_empty">该时间段暂无观看记录</string>
+    <string name="viewing_report_overview_watch">累计观影</string>
+    <string name="viewing_report_ai_persona">AI 观影画像</string>
+    <string name="viewing_report_time_pattern">观影时间分布</string>
+    <string name="viewing_report_content_preference">内容偏好</string>
+    <string name="viewing_report_people_preference">人物偏好</string>
+    <string name="viewing_report_badges">成就徽章</string>
+    <string name="viewing_report_watched">观看了</string>
+    <string name="viewing_report_completion_rate">完播率</string>
+    <string name="viewing_report_top_time_slot">最常观影时段</string>
+    <string name="viewing_report_weekend_ratio">周末观影占比</string>
+    <string name="viewing_report_avg_watch">平均单次观看</string>
+    <string name="viewing_report_late_night">深夜观影次数</string>
+    <string name="viewing_report_tv_movie_ratio">剧集 / 电影占比</string>
+    <string name="viewing_report_top_actors">最爱演员</string>
+    <string name="viewing_report_top_directors">最爱导演</string>
+    <string name="viewing_report_unit_hours">小时</string>
+    <string name="viewing_report_unit_vods">部</string>
+    <string name="viewing_report_unit_episodes">集</string>
+    <string name="viewing_report_unit_minutes">分钟</string>
+    <string name="viewing_report_unit_times">次</string>
+
+    <string name="ad_rule_delete_confirm">删除规则</string>
+    <string name="ad_rule_delete_message">确定删除“%1$s”吗？接口导入规则删除后可在待审核规则中重新导入。</string>
 </resources>

@@ -14,6 +14,7 @@ import com.fongmi.android.tv.impl.BufferListener;
 import com.fongmi.android.tv.impl.SpeedListener;
 import com.fongmi.android.tv.impl.UaListener;
 import com.fongmi.android.tv.player.lut.LutSetting;
+import com.fongmi.android.tv.player.mpv.MpvConfigStore;
 import com.fongmi.android.tv.setting.PlaybackPerformanceSetting;
 import com.fongmi.android.tv.setting.PlayerButtonSetting;
 import com.fongmi.android.tv.setting.PlayerSetting;
@@ -21,7 +22,9 @@ import com.fongmi.android.tv.setting.PreloadSetting;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.dialog.BufferDialog;
+import com.fongmi.android.tv.ui.dialog.ChoiceDialog;
 import com.fongmi.android.tv.ui.dialog.LutDialog;
+import com.fongmi.android.tv.ui.dialog.MpvConfigDialog;
 import com.fongmi.android.tv.ui.dialog.PlaybackPerformanceDialog;
 import com.fongmi.android.tv.ui.dialog.PlayerOsdDialog;
 import com.fongmi.android.tv.ui.dialog.PlayerButtonConfigDialog;
@@ -32,6 +35,8 @@ import com.fongmi.android.tv.utils.ResUtil;
 
 import java.text.DecimalFormat;
 
+import is.xyz.mpv.MPVLib;
+
 public class SettingPlayerActivity extends BaseActivity implements UaListener, BufferListener, SpeedListener {
 
     private ActivitySettingPlayerBinding mBinding;
@@ -39,7 +44,9 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
     private String[] backBuffer;
     private String[] bufferBytes;
     private String[] caption;
+    private String[] failureFallback;
     private String[] kernel;
+    private String[] mpvRender;
     private String[] playCache;
     private String[] render;
     private String[] scale;
@@ -79,6 +86,7 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
         setPreloadText();
         mBinding.autoPlayText.setText(getSwitch(PlayerSetting.isAutoPlay()));
         mBinding.autoChangeText.setText(getSwitch(PlayerSetting.isAutoChange()));
+        mBinding.failureFallbackText.setText((failureFallback = ResUtil.getStringArray(R.array.select_player_failure_fallback))[PlayerSetting.getFailureFallback()]);
         mBinding.autoSkipIntroOutroText.setText((introSkipMode = getResources().getStringArray(R.array.select_auto_skip_intro_outro))[Setting.getIntroSkipMode()]);
         mBinding.backgroundText.setText(getSwitch(PlayerSetting.isBackgroundOn()));
         mBinding.musicNotificationText.setText(getSwitch(PlayerSetting.isMusicNotification()));
@@ -89,8 +97,10 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
         mBinding.ffmpegModeText.setText(getFFmpegModeText());
         mBinding.osdText.setText(getOsdText(osd = ResUtil.getStringArray(R.array.select_player_osd)));
         mBinding.kernelText.setText((kernel = ResUtil.getStringArray(R.array.select_player_kernel))[PlayerSetting.getPlayer()]);
+        mpvRender = ResUtil.getStringArray(R.array.select_mpv_render);
         mBinding.scaleText.setText((scale = ResUtil.getStringArray(R.array.select_scale))[PlayerSetting.getScale()]);
         mBinding.lutText.setText(LutSetting.getSummary());
+        setMpvRows();
         mBinding.renderText.setText((render = ResUtil.getStringArray(R.array.select_render))[PlayerSetting.getRender()]);
         mBinding.captionText.setText((caption = ResUtil.getStringArray(R.array.select_caption))[PlayerSetting.isCaption() ? 1 : 0]);
         hidePerformanceRows();
@@ -103,6 +113,8 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
         mBinding.kernel.setOnClickListener(this::setKernel);
         mBinding.scale.setOnClickListener(this::setScale);
         mBinding.lut.setOnClickListener(this::onLut);
+        mBinding.mpvConfig.setOnClickListener(view -> MpvConfigDialog.show(this, () -> mBinding.mpvConfigText.setText(MpvConfigStore.summary())));
+        mBinding.mpvRender.setOnClickListener(this::setMpvRender);
         mBinding.osd.setOnClickListener(this::onOsd);
         mBinding.playerButtons.setOnClickListener(view -> PlayerButtonConfigDialog.show(this, this::setPlayerButtonsText));
         mBinding.speed.setOnClickListener(this::onSpeed);
@@ -116,6 +128,7 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
         mBinding.preloadTime.setOnClickListener(this::setPreloadTime);
         mBinding.autoPlay.setOnClickListener(this::setAutoPlay);
         mBinding.autoChange.setOnClickListener(this::setAutoChange);
+        mBinding.failureFallback.setOnClickListener(this::setFailureFallback);
         mBinding.autoSkipIntroOutro.setOnClickListener(this::setAutoSkipIntroOutro);
         mBinding.render.setOnClickListener(this::setRender);
         mBinding.tunnel.setOnClickListener(this::setTunnel);
@@ -155,9 +168,11 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
     }
 
     private void setKernel(View view) {
-        int index = (PlayerSetting.getPlayer() + 1) % kernel.length;
+        int index = PlayerSetting.nextPlayer(PlayerSetting.getPlayer());
         mBinding.kernelText.setText(kernel[index]);
         PlayerSetting.putPlayer(index);
+        setMpvRows();
+        setPerformanceText();
     }
 
     private void setScale(View view) {
@@ -168,6 +183,29 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
 
     private void onLut(View view) {
         LutDialog.show(this, null, () -> mBinding.lutText.setText(LutSetting.getSummary()));
+    }
+
+    private void setMpvRows() {
+        boolean visible = PlayerSetting.getPlayer() == PlayerSetting.MPV;
+        mBinding.mpvConfig.setVisibility(visible ? View.VISIBLE : View.GONE);
+        mBinding.mpvRender.setVisibility(visible ? View.VISIBLE : View.GONE);
+        mBinding.mpvConfigText.setText(MpvConfigStore.summary());
+        mBinding.mpvRenderText.setText(getMpvRenderText());
+    }
+
+    private void setMpvRender(View view) {
+        int index = (PlayerSetting.getMpvRender() + 1) % mpvRender.length;
+        PlayerSetting.putMpvRender(index);
+        mBinding.mpvRenderText.setText(getMpvRenderText());
+    }
+
+    private String getMpvRenderText() {
+        int render = PlayerSetting.getMpvRender();
+        String text = mpvRender[render];
+        if (render == PlayerSetting.MPV_RENDER_VULKAN && !MPVLib.isVulkanRendererAvailable(this)) {
+            text += " (" + getString(R.string.mpv_render_native_unavailable) + ")";
+        }
+        return text;
     }
 
     private void onOsd(View view) {
@@ -263,9 +301,7 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
     }
 
     private void setPreloadSize(View view) {
-        int value = PreloadSetting.getPreloadSizeMb() + PreloadSetting.STEP_SIZE_MB;
-        if (value > PreloadSetting.MAX_SIZE_MB) value = PreloadSetting.MIN_SIZE_MB;
-        PreloadSetting.putPreloadSizeMb(value);
+        PreloadSetting.putPreloadSizeMb(PreloadSetting.getNextPreloadSizeMb());
         PlaybackPerformanceSetting.markCustom();
         setPreloadText();
         setPerformanceText();
@@ -299,6 +335,13 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
     private void setAutoChange(View view) {
         PlayerSetting.putAutoChange(!PlayerSetting.isAutoChange());
         mBinding.autoChangeText.setText(getSwitch(PlayerSetting.isAutoChange()));
+    }
+
+    private void setFailureFallback(View view) {
+        ChoiceDialog.showSingle(this, R.string.player_failure_fallback, failureFallback, PlayerSetting.getFailureFallback(), which -> {
+            PlayerSetting.putFailureFallback(which);
+            mBinding.failureFallbackText.setText(failureFallback[which]);
+        });
     }
 
     private void setAutoSkipIntroOutro(View view) {

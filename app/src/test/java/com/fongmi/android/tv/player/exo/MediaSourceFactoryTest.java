@@ -46,4 +46,17 @@ public class MediaSourceFactoryTest {
         assertTrue(MediaSourceFactory.isHlsUrl("https://example.test/tv/live.php?id=1"));
         assertFalse(MediaSourceFactory.isHlsUrl("https://example.test/video.mp4"));
     }
+
+    @Test
+    public void isLocalProxyUrl_recognizesOnlyLoopbackProxyEndpoint() {
+        assertTrue(MediaSourceFactory.isLocalProxyUrl("http://127.0.0.1:9978/proxy?do=js&url=https%3A%2F%2Fvideo.test%2Fmovie.mkv"));
+        assertTrue(MediaSourceFactory.isLocalProxyUrl("http://localhost:9978/proxy?siteKey=drive"));
+        assertTrue(MediaSourceFactory.isLocalProxyUrl("http://[::1]:9978/proxy?do=py"));
+        assertTrue(MediaSourceFactory.isLocalProxyUrl("http://0.0.0.0:9978/proxy?do=jar"));
+
+        assertFalse(MediaSourceFactory.isLocalProxyUrl("https://cdn.example.test/movie.mkv"));
+        assertFalse(MediaSourceFactory.isLocalProxyUrl("http://127.0.0.1.evil.test:9978/proxy?do=js"));
+        assertFalse(MediaSourceFactory.isLocalProxyUrl("http://127.0.0.1:9978/file/movie.mkv"));
+        assertFalse(MediaSourceFactory.isLocalProxyUrl(null));
+    }
 }

@@ -113,8 +113,12 @@ public class AiConfigDialog {
         View view = LayoutInflater.from(builder.getContext()).inflate(R.layout.dialog_ai_prompt_config, null);
         TextInputEditText recommendPrompt = view.findViewById(R.id.recommendPrompt);
         TextInputEditText titleExtractionPrompt = view.findViewById(R.id.titleExtractionPrompt);
+        TextInputEditText viewingReportPrompt = view.findViewById(R.id.viewingReportPrompt);
+        TextInputEditText adDetectionPrompt = view.findViewById(R.id.adDetectionPrompt);
         recommendPrompt.setText(config.getRecommendPrompt());
         titleExtractionPrompt.setText(config.getTitleExtractionPrompt());
+        viewingReportPrompt.setText(config.getViewingReportPrompt());
+        adDetectionPrompt.setText(config.getAdDetectionPrompt());
         AlertDialog dialog = builder
                 .setTitle(R.string.dialog_ai_prompt_config)
                 .setView(view)
@@ -125,24 +129,53 @@ public class AiConfigDialog {
         dialog.setOnShowListener(d -> {
             View positive = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
             wirePromptEditorFocus(recommendPrompt, null, titleExtractionPrompt);
-            wirePromptEditorFocus(titleExtractionPrompt, recommendPrompt, positive);
-            wireButtonUp(dialog.getButton(AlertDialog.BUTTON_POSITIVE), titleExtractionPrompt);
-            wireButtonUp(dialog.getButton(AlertDialog.BUTTON_NEGATIVE), titleExtractionPrompt);
-            wireButtonUp(dialog.getButton(AlertDialog.BUTTON_NEUTRAL), titleExtractionPrompt);
+            wirePromptEditorFocus(titleExtractionPrompt, recommendPrompt, viewingReportPrompt);
+            wirePromptEditorFocus(viewingReportPrompt, titleExtractionPrompt, adDetectionPrompt);
+            wirePromptEditorFocus(adDetectionPrompt, viewingReportPrompt, positive);
+            wireButtonUp(dialog.getButton(AlertDialog.BUTTON_POSITIVE), adDetectionPrompt);
+            wireButtonUp(dialog.getButton(AlertDialog.BUTTON_NEGATIVE), adDetectionPrompt);
+            wireButtonUp(dialog.getButton(AlertDialog.BUTTON_NEUTRAL), adDetectionPrompt);
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
                 config.setRecommendPrompt(text(recommendPrompt));
                 config.setTitleExtractionPrompt(text(titleExtractionPrompt));
+                config.setViewingReportPrompt(text(viewingReportPrompt));
+                config.setAdDetectionPrompt(text(adDetectionPrompt));
                 dialog.dismiss();
             });
             dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(v -> {
-                recommendPrompt.setText(AiConfig.DEFAULT_RECOMMEND_PROMPT);
-                recommendPrompt.setSelection(recommendPrompt.length());
-                titleExtractionPrompt.setText(AiConfig.DEFAULT_TITLE_EXTRACTION_PROMPT);
-                titleExtractionPrompt.setSelection(titleExtractionPrompt.length());
+                showPromptResetPicker(recommendPrompt, titleExtractionPrompt, viewingReportPrompt, adDetectionPrompt);
             });
         });
         dialog.show();
         LightDialog.apply(dialog);
+    }
+
+    private void showPromptResetPicker(TextInputEditText recommendPrompt, TextInputEditText titleExtractionPrompt, TextInputEditText viewingReportPrompt, TextInputEditText adDetectionPrompt) {
+        String[] labels = {
+                dialogContext.getString(R.string.dialog_ai_recommend_prompt_label),
+                dialogContext.getString(R.string.dialog_ai_title_extraction_prompt_label),
+                dialogContext.getString(R.string.dialog_ai_viewing_report_prompt_label),
+                dialogContext.getString(R.string.dialog_ai_ad_detection_prompt_label)
+        };
+        boolean[] checked = {true, true, true, true};
+        AlertDialog picker = new MaterialAlertDialogBuilder(dialogContext, R.style.Theme_WebHTV_LightDialog)
+                .setTitle(R.string.dialog_ai_prompt_reset)
+                .setMultiChoiceItems(labels, checked, (d, which, isChecked) -> checked[which] = isChecked)
+                .setPositiveButton(R.string.dialog_positive, (d, w) -> {
+                    if (checked[0]) resetPromptField(recommendPrompt, AiConfig.DEFAULT_RECOMMEND_PROMPT);
+                    if (checked[1]) resetPromptField(titleExtractionPrompt, AiConfig.DEFAULT_TITLE_EXTRACTION_PROMPT);
+                    if (checked[2]) resetPromptField(viewingReportPrompt, AiConfig.DEFAULT_VIEWING_REPORT_PROMPT);
+                    if (checked[3]) resetPromptField(adDetectionPrompt, AiConfig.DEFAULT_AD_DETECTION_PROMPT);
+                })
+                .setNegativeButton(R.string.dialog_negative, null)
+                .create();
+        picker.show();
+        LightDialog.apply(picker);
+    }
+
+    private static void resetPromptField(TextInputEditText input, String value) {
+        input.setText(value);
+        input.setSelection(input.length());
     }
 
     private static void wirePromptEditorFocus(TextInputEditText input, View upTarget, View downTarget) {

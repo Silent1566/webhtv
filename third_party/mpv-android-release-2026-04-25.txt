@@ -1,0 +1,46 @@
+MPV Android native assets
+=========================
+
+Source:
+- Reference code: https://github.com/FongMi/mpv-android
+- Native binary baseline: https://github.com/mpv-android/mpv-android/releases/tag/2026-04-25
+- Vulkan native refresh: https://github.com/marlboro-advance/mpvEx
+  - app/libs/mpv-android-lib-v0.0.1.aar
+
+Downloaded APKs:
+- https://github.com/mpv-android/mpv-android/releases/download/2026-04-25/app-default-arm64-v8a-release.apk
+  SHA-256: 4400bcba6be9cec1128e24d1eba153d8727384926b0639fa7fe44d4e36b04f81
+- https://github.com/mpv-android/mpv-android/releases/download/2026-04-25/app-default-armeabi-v7a-release.apk
+  SHA-256: 95a863eddc407f95bb1e5917957d7a9b0e6e290109ee5709b7eb3bc90458a024
+
+Bundled files:
+- app/src/arm64_v8a/assets/mpv-libs/arm64-v8a/*.so
+- app/src/armeabi_v7a/assets/mpv-libs/armeabi-v7a/*.so
+- app/src/main/assets/cacert.pem
+
+Current native split:
+- libplayer.so is still built from third_party/mpv-player-jni so this project
+  keeps the structured END_FILE reason/error bridge.
+- libmpv.so and its FFmpeg/libc++ dependencies are refreshed from mpvEx's
+  mpv-android-lib-v0.0.1.aar because that build enables libplacebo Vulkan.
+- The refreshed libmpv.so feature list contains "vulkan" and the Android
+  Vulkan context string "androidvk".
+
+Packaging note:
+The project already depends on nextlib-media3ext, whose AAR contains libavcodec.so,
+libavutil.so, libswresample.so and libswscale.so. MPV libraries are therefore
+stored as assets and loaded from the app private directory at runtime instead of
+being packaged through jniLibs.
+
+The MPV FFmpeg dependency names are patched in-place with equal-length names to
+avoid Android linker reuse of nextlib's libraries:
+- libavcodec.so -> libmvcodec.so
+- libavdevice.so -> libmvdevice.so
+- libavfilter.so -> libmvfilter.so
+- libavformat.so -> libmvformat.so
+- libavutil.so -> libmvutil.so
+- libswresample.so -> libmwresample.so
+- libswscale.so -> libmwscale.so
+
+After importing external MPV/FFmpeg binaries, verify with NDK llvm-readelf that
+DT_NEEDED uses the renamed libraries and does not point to libav*.so/libsw*.so.

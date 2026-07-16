@@ -18,6 +18,7 @@ import com.fongmi.android.tv.bean.TmdbEpisode;
 import com.fongmi.android.tv.databinding.AdapterTmdbEpisodeBinding;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.helper.TmdbEpisodeGridPolicy;
+import com.fongmi.android.tv.ui.helper.TmdbEpisodeMatcher;
 import com.fongmi.android.tv.utils.EpisodeTitleFormatter;
 import com.fongmi.android.tv.utils.ImgUtil;
 import com.fongmi.android.tv.utils.ResUtil;
@@ -57,6 +58,8 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
     private boolean light;
     private boolean compactPlain;
     private boolean nativeEnhanced;
+    private boolean showScrapedName = Setting.getTmdbEpisodeShowScrapedName();
+    private boolean showFileSize = Setting.isTmdbEpisodeFileSize();
     private int activeStrokeColor = 0xFF2CC56F;
     private int gridSpanCount = 2;
     private String fallbackStillUrl = "";
@@ -76,7 +79,8 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
     }
 
     public void setItems(List<Episode> episodes, Map<Integer, TmdbEpisode> tmdbEpisodes, Map<Episode, Integer> numbers, Episode selected, boolean forceRefresh) {
-        if (!forceRefresh && sameItems(episodes, tmdbEpisodes, numbers)) {
+        boolean displaySettingsChanged = updateDisplaySettings();
+        if (!forceRefresh && !displaySettingsChanged && sameItems(episodes, tmdbEpisodes, numbers)) {
             if (Objects.equals(this.selected, selected)) return;
             setSelected(selected);
             return;
@@ -167,6 +171,16 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
         notifyDataSetChanged();
     }
 
+    public void refreshDisplaySettings(RecyclerView recyclerView) {
+        updateDisplaySettings();
+        for (int index = 0; index < recyclerView.getChildCount(); index++) {
+            RecyclerView.ViewHolder holder = recyclerView.getChildViewHolder(recyclerView.getChildAt(index));
+            int position = holder.getBindingAdapterPosition();
+            if (!(holder instanceof ViewHolder) || position == RecyclerView.NO_POSITION || position >= items.size()) continue;
+            onBindViewHolder((ViewHolder) holder, position);
+        }
+    }
+
     public int getPosition(Episode episode) {
         return items.indexOf(episode);
     }
@@ -182,6 +196,7 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
         Episode episode = items.get(position);
         int episodeNumber = episodeNumber(episode, position);
         TmdbEpisode tmdbEpisode = tmdbItems.get(episodeNumber);
+        if (!TmdbEpisodeMatcher.shouldApply(episode, tmdbEpisode, episodeNumber)) tmdbEpisode = null;
         String tmdbTitle = tmdbEpisode != null ? tmdbEpisode.getTitle() : "";
         String cleanTitle = getCleanTitle(episode, episodeNumber, tmdbTitle);
         String title = titleWithFileSize(episode, cleanTitle);
@@ -381,6 +396,15 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
 
     private boolean sameItems(List<Episode> episodes, Map<Integer, TmdbEpisode> tmdbEpisodes, Map<Episode, Integer> numbers) {
         return sameEpisodes(episodes) && sameTmdbEpisodes(tmdbEpisodes) && sameEpisodeNumbers(numbers);
+    }
+
+    private boolean updateDisplaySettings() {
+        boolean currentShowScrapedName = Setting.getTmdbEpisodeShowScrapedName();
+        boolean currentShowFileSize = Setting.isTmdbEpisodeFileSize();
+        boolean changed = showScrapedName != currentShowScrapedName || showFileSize != currentShowFileSize;
+        showScrapedName = currentShowScrapedName;
+        showFileSize = currentShowFileSize;
+        return changed;
     }
 
     private boolean sameEpisodes(List<Episode> episodes) {

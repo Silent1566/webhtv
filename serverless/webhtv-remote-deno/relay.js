@@ -582,7 +582,7 @@ function cors(response) {
   const headers = new Headers(response.headers);
   headers.set('access-control-allow-origin', '*');
   headers.set('access-control-allow-methods', 'GET,POST,OPTIONS');
-  headers.set('access-control-allow-headers', 'authorization,content-type,x-device-id,x-device-token,x-group-token,x-family-token');
+  headers.set('access-control-allow-headers', 'authorization,content-type,x-webhtv-origin,x-device-id,x-device-token,x-group-token,x-family-token');
   headers.set('access-control-max-age', '86400');
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
@@ -647,7 +647,21 @@ function randomCapability(prefix) {
 }
 
 function serverOrigin(request) {
+  const declared = normalizeOrigin(request.headers.get('x-webhtv-origin'));
+  if (declared) return declared;
   return new URL(request.url).origin;
+}
+
+function normalizeOrigin(value) {
+  value = String(value || '').trim();
+  if (!value) return '';
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return '';
+    return url.origin.toLowerCase();
+  } catch {
+    return '';
+  }
 }
 
 async function deriveId(prefix, origin, token) {

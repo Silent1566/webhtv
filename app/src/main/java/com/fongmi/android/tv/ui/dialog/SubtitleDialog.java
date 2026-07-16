@@ -14,6 +14,7 @@ import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.databinding.DialogSubtitleBinding;
+import com.fongmi.android.tv.player.PlayerManager;
 import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.Util;
@@ -21,9 +22,14 @@ import com.github.bassaer.library.MDColor;
 
 public final class SubtitleDialog extends BaseBottomSheetDialog {
 
+    private static final float DEFAULT_TEXT_SIZE = 0.0533f;
+    private static final float TEXT_STEP = 0.002f;
+    private static final float POSITION_STEP = 0.005f;
+
     private DialogSubtitleBinding binding;
     private SubtitleView subtitleView;
     private Runnable searchAction;
+    private PlayerManager player;
 
     public static SubtitleDialog create() {
         return new SubtitleDialog();
@@ -36,6 +42,11 @@ public final class SubtitleDialog extends BaseBottomSheetDialog {
 
     public SubtitleDialog search(Runnable searchAction) {
         this.searchAction = searchAction;
+        return this;
+    }
+
+    public SubtitleDialog player(PlayerManager player) {
+        this.player = player;
         return this;
     }
 
@@ -76,29 +87,74 @@ public final class SubtitleDialog extends BaseBottomSheetDialog {
     }
 
     private void onUp(View view) {
-        subtitleView.addPosition(0.005f);
+        if (isNativeSubtitleStyle()) {
+            setNativePosition(PlayerSetting.getSubtitlePosition() + POSITION_STEP);
+            return;
+        }
+        if (subtitleView == null) return;
+        subtitleView.addPosition(POSITION_STEP);
         PlayerSetting.putSubtitlePosition(subtitleView.getPosition());
     }
 
     private void onDown(View view) {
-        subtitleView.subPosition(0.005f);
+        if (isNativeSubtitleStyle()) {
+            setNativePosition(PlayerSetting.getSubtitlePosition() - POSITION_STEP);
+            return;
+        }
+        if (subtitleView == null) return;
+        subtitleView.subPosition(POSITION_STEP);
         PlayerSetting.putSubtitlePosition(subtitleView.getPosition());
     }
 
     private void onLarge(View view) {
-        subtitleView.addTextSize(0.002f);
+        if (isNativeSubtitleStyle()) {
+            setNativeTextSize(currentTextSize() + TEXT_STEP);
+            return;
+        }
+        if (subtitleView == null) return;
+        subtitleView.addTextSize(TEXT_STEP);
         PlayerSetting.putSubtitleTextSize(subtitleView.getTextSize());
     }
 
     private void onSmall(View view) {
-        subtitleView.subTextSize(0.002f);
+        if (isNativeSubtitleStyle()) {
+            setNativeTextSize(currentTextSize() - TEXT_STEP);
+            return;
+        }
+        if (subtitleView == null) return;
+        subtitleView.subTextSize(TEXT_STEP);
         PlayerSetting.putSubtitleTextSize(subtitleView.getTextSize());
     }
 
     private void onReset(View view) {
         PlayerSetting.putSubtitleTextSize(0.0f);
         PlayerSetting.putSubtitlePosition(0.0f);
-        subtitleView.reset();
+        if (isNativeSubtitleStyle()) {
+            player.setSubtitleStyle(0.0f, 0.0f);
+        } else if (subtitleView != null) {
+            subtitleView.reset();
+        }
+    }
+
+    private boolean isNativeSubtitleStyle() {
+        return player != null && player.supportsSubtitleStyle();
+    }
+
+    private float currentTextSize() {
+        float value = PlayerSetting.getSubtitleTextSize();
+        return value <= 0 ? DEFAULT_TEXT_SIZE : value;
+    }
+
+    private void setNativeTextSize(float value) {
+        value = Math.max(0.02f, Math.min(0.12f, value));
+        PlayerSetting.putSubtitleTextSize(value);
+        player.setSubtitleStyle(value, PlayerSetting.getSubtitlePosition());
+    }
+
+    private void setNativePosition(float value) {
+        value = Math.max(-0.5f, Math.min(1.0f, value));
+        PlayerSetting.putSubtitlePosition(value);
+        player.setSubtitleStyle(PlayerSetting.getSubtitleTextSize(), value);
     }
 
     private void onSearch(View view) {

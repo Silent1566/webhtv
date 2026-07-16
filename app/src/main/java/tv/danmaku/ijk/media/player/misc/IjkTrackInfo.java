@@ -70,7 +70,33 @@ public class IjkTrackInfo implements ITrackInfo {
         if (ijkStreamMeta == null || (i8 = ijkStreamMeta.mFpsNum) == 0 || (i9 = ijkStreamMeta.mFpsDen) == 0) {
             return 0.0f;
         }
-        return i8 / i9;
+        return (float) i8 / i9;
+    }
+
+    @Override // tv.danmaku.ijk.media.player.misc.ITrackInfo
+    public String getColorPrimaries() {
+        return getStreamString("color_primaries");
+    }
+
+    @Override // tv.danmaku.ijk.media.player.misc.ITrackInfo
+    public String getColorRange() {
+        return getStreamString("color_range");
+    }
+
+    @Override // tv.danmaku.ijk.media.player.misc.ITrackInfo
+    public String getColorSpace() {
+        String value = getStreamString("color_space");
+        return TextUtils.isEmpty(value) ? getStreamString("colorspace") : value;
+    }
+
+    @Override // tv.danmaku.ijk.media.player.misc.ITrackInfo
+    public String getColorTransfer() {
+        return getStreamString("color_transfer");
+    }
+
+    private String getStreamString(String key) {
+        IjkMediaMeta.IjkStreamMeta ijkStreamMeta = this.mStreamMeta;
+        return ijkStreamMeta == null || ijkStreamMeta.mMeta == null ? "" : ijkStreamMeta.getString(key);
     }
 
     @Override // tv.danmaku.ijk.media.player.misc.ITrackInfo
