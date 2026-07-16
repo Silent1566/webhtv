@@ -55,7 +55,10 @@ public class CollectAdapter extends BaseDiffAdapter<Collect, CollectAdapter.View
         Collect item = getItem(position);
         holder.binding.text.setSelected(item.isSelected());
         holder.binding.text.setText(item.getSite().getName());
-        holder.binding.text.setOnClickListener(v -> listener.onItemClick(position, item));
+        holder.binding.text.setOnClickListener(v -> {
+            int pos = holder.getBindingAdapterPosition();
+            if (pos != RecyclerView.NO_POSITION) listener.onItemClick(pos, getItem(pos));
+        });
     }
 
     public class ViewHolder extends RecyclerView.ViewHolder {

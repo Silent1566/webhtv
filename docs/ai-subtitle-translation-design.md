@@ -1,5 +1,12 @@
 # AI 字幕翻译设计
 
+> **状态：✅ MVP 已完成（2026-07-14 核实）**
+> - `AiSubtitleTranslationService` 已实现（分块、上下文、失败重试、输出校验、进度回调）。
+> - `subtitle/translate/` 包完整：`SubtitleCue` / `SrtSubtitleCueParser` / `SrtSubtitleCueWriter` / `SubtitleTranslationCache` / `SubtitleTranslationRequest` / `SubtitleTranslationResult`。
+> - 已接入 `TrackDialog`：用户可对当前 SRT 字幕手动触发"AI 翻译为中文"，带进度监听。
+> - 含单元测试 `SrtSubtitleCueParserTest` / `SubtitleTranslationCacheTest` / `AiSubtitleTranslationServiceTest`。
+> - **剩余增强（未做）**：VTT / ASS 格式支持、双语输出、自动兜底翻译开关、英文兜底搜索策略、术语表/上一集上下文。
+
 ## 背景
 
 项目已经具备一条较完整的字幕链路：

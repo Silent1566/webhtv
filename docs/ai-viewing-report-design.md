@@ -1,5 +1,12 @@
 # AI 观影报告设计文档
 
+> **状态：✅ 已完成（2026-07-14 核实）**
+> - `viewing/` 包完整：`ViewingReportGenerator` / `ViewingReportAiAnalyzer` / `ViewingReportCache` / `ViewingReportRange` / `ViewingReport`。
+> - `ViewingReportActivity` + `ViewingReportRangeDialog` 已实现。
+> - 入口已接入：mobile `HistoryActivity.onReport()`、leanback `HistoryActivity.onReport()`。
+> - DB 迁移 `MIGRATION_36_37` 已为 `History` 增 typeName/area/actor/director/year 字段。
+> - 字符串资源含 values / zh-rCN / zh-rTW。
+
 ## 1. 概述
 
 ### 1.1 功能定位

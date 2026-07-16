@@ -2,6 +2,7 @@ package com.fongmi.android.tv.ui.activity;
 
 import android.app.Activity;
 import android.app.Dialog;
+import android.content.Context;
 import android.content.pm.ActivityInfo;
 import android.content.res.ColorStateList;
 import android.content.res.Configuration;
@@ -50,6 +51,7 @@ import androidx.media3.ui.PlayerView;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.Constant;
@@ -77,6 +79,11 @@ import com.fongmi.android.tv.databinding.ActivityTmdbDetailBinding;
 import com.fongmi.android.tv.databinding.DialogTmdbEpisodeBinding;
 import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.event.RefreshEvent;
+import com.fongmi.android.tv.ui.detail.DetailModeHost;
+import com.fongmi.android.tv.ui.detail.EnhancedDetailController;
+import com.fongmi.android.tv.ui.detail.FusionDetailController;
+import com.fongmi.android.tv.ui.detail.PlayerDetailController;
+import com.fongmi.android.tv.ui.detail.TmdbDetailModeController;
 import com.fongmi.android.tv.ui.host.TmdbDetailHost;
 import com.fongmi.android.tv.playback.PlaybackOrientation;
 import com.fongmi.android.tv.player.IntroSkipPlayback;
@@ -250,6 +257,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private ActivityTmdbDetailBinding binding;
     @androidx.annotation.Keep
     private ActivityTmdbDetailBinding mBinding;
+    private TmdbDetailModeController modeController;
     private Vod vod;
     private String sourceVodName;
     private History history;
@@ -314,6 +322,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private boolean inlineStartPositionApplied;
     private boolean inlineFirstReady;
     private boolean inlineButtonsReordered;
+    private View mNightModeOverlay;
+    private int mNightModeLevel = PlayerSetting.NIGHT_MODE_OFF;
     private boolean inlinePiPLayout;
     private boolean inlinePiPLayoutRequested;
     private boolean inlinePiPSourceFrozen;
@@ -482,6 +492,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         applyDetailEdgeToEdge();
         applySystemBarInsets();
         initPage();
+        initModeController();
         setLoadingOnlyBeforeDefaultPlayback(shouldUseLoadingOnlyBeforeDefaultPlayback());
         loadContent(null);
     }
@@ -593,14 +604,10 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         binding.keep.setText(R.string.keep);
         lightTheme = resolveLightTheme();
         updateThemeModeButtonLabels();
-        binding.playerPanel.setVisibility(isFusionMode() ? View.VISIBLE : View.GONE);
-        binding.heroSpacer.setVisibility(isFusionMode() ? View.GONE : View.VISIBLE);
         binding.keepTop.setVisibility(View.GONE);
         binding.rematchTop.setVisibility(View.GONE);
         binding.headerBar.setVisibility(Util.isMobile() ? View.VISIBLE : View.GONE);
         updateDetailThemeButtonVisibility();
-        binding.fusionActions.setVisibility(isFusionMode() ? View.VISIBLE : View.GONE);
-        binding.detailActions.setVisibility(isFusionMode() ? View.GONE : View.VISIBLE);
         applyDetailTemplate();
         initFusionPlayer();
         binding.episodeEmpty.setText(R.string.detail_source_episode_empty);
@@ -669,6 +676,32 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         binding.personalAiList.setNestedScrollingEnabled(false);
         binding.personalAiList.setAdapter(personalAiAdapter);
         applyDetailTheme();
+    }
+
+    private void initModeController() {
+        // Phase 3: 三种模式全部接入 Controller（准备删除旧逻辑）
+        DetailModeHost host = new DetailModeHost() {
+            @Override
+            public Context context() {
+                return TmdbDetailActivity.this;
+            }
+
+            @Override
+            public ViewBinding binding() {
+                return binding;
+            }
+        };
+
+        if (isFusionMode()) {
+            modeController = new FusionDetailController(host);
+        } else if (isPlayerMode()) {
+            modeController = new PlayerDetailController(host);
+        } else {
+            modeController = new EnhancedDetailController(host);
+        }
+
+        modeController.bind();
+        modeController.applyInitialLayout();
     }
 
     private void setupOverviewInteraction() {
@@ -978,6 +1011,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         detailControlView(R.id.cast, View.class).setOnClickListener(guarded(this::onInlineCast));
         detailControlView(R.id.info, View.class).setOnClickListener(guarded(this::onInlineInfo));
         detailControlView(R.id.keep, View.class).setOnClickListener(view -> onKeep());
+        detailControlView(R.id.nightMode, View.class).setOnClickListener(guarded(this::toggleNightMode));
         detailControlView(R.id.setting, View.class).setOnClickListener(guarded(this::showInlineControlDialog));
         detailControlView(R.id.danmaku, View.class).setOnClickListener(guarded(this::toggleInlineDanmaku));
         detailControlView(R.id.lock, View.class).setOnClickListener(guarded(this::toggleInlineLock));
@@ -1010,6 +1044,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         detailActionView(R.id.episodes, View.class).setOnClickListener(guarded(this::showInlineEpisodes));
         setupMobileInlineParse();
         detailControlRoot.setOnTouchListener(this::onInlineControlTouch);
+        mNightModeLevel = PlayerSetting.getNightModeLevel();
+        setNightMode();
     }
 
     private void setupMobileInlineParse() {
@@ -1268,6 +1304,60 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         if (progress < 35) binding.gestureBrightIcon.setImageResource(R.drawable.ic_widget_bright_low);
         else if (progress < 70) binding.gestureBrightIcon.setImageResource(R.drawable.ic_widget_bright_medium);
         else binding.gestureBrightIcon.setImageResource(R.drawable.ic_widget_bright_high);
+    }
+
+    private void toggleNightMode() {
+        mNightModeLevel = (mNightModeLevel + 1) % 4;
+        PlayerSetting.putNightModeLevel(mNightModeLevel);
+        setNightMode();
+    }
+
+    private void setNightMode() {
+        if (binding == null || binding.playerPanel == null) return;
+        if (detailControlRoot != null) {
+            ImageView nightIcon = detailControlView(R.id.nightMode, ImageView.class);
+            if (nightIcon != null) {
+                switch (mNightModeLevel) {
+                    case PlayerSetting.NIGHT_MODE_OFF:
+                        nightIcon.setImageResource(R.drawable.ic_control_night_mode_off);
+                        break;
+                    case PlayerSetting.NIGHT_MODE_LOW:
+                        nightIcon.setImageResource(R.drawable.ic_control_night_mode_low);
+                        break;
+                    case PlayerSetting.NIGHT_MODE_MEDIUM:
+                        nightIcon.setImageResource(R.drawable.ic_control_night_mode_medium);
+                        break;
+                    case PlayerSetting.NIGHT_MODE_HIGH:
+                        nightIcon.setImageResource(R.drawable.ic_control_night_mode_high);
+                        break;
+                }
+            }
+        }
+        if (mNightModeLevel == PlayerSetting.NIGHT_MODE_OFF) {
+            if (mNightModeOverlay != null) {
+                binding.playerPanel.removeView(mNightModeOverlay);
+                mNightModeOverlay = null;
+            }
+            return;
+        }
+        if (mNightModeOverlay == null) {
+            mNightModeOverlay = new View(this);
+            FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+            );
+            mNightModeOverlay.setLayoutParams(params);
+            mNightModeOverlay.setClickable(false);
+            mNightModeOverlay.setFocusable(false);
+            binding.playerPanel.addView(mNightModeOverlay);
+        }
+        int alpha = switch (mNightModeLevel) {
+            case PlayerSetting.NIGHT_MODE_LOW -> (int) (255 * 0.3f);
+            case PlayerSetting.NIGHT_MODE_MEDIUM -> (int) (255 * 0.5f);
+            case PlayerSetting.NIGHT_MODE_HIGH -> (int) (255 * 0.7f);
+            default -> 0;
+        };
+        mNightModeOverlay.setBackgroundColor(Color.argb(alpha, 0, 0, 0));
     }
 
     @Override
@@ -4024,7 +4114,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             int index = indices.getOrDefault(episode, -1);
             if (index < 0 && allEpisodes != null) index = allEpisodes.indexOf(episode);
             EpisodePosition position = episodePosition(episode, allEpisodes, index);
-            numbers.put(episode, position.number() > 0 ? position.number() : i + 1);
+            int finalNumber = position.number() > 0 ? position.number() : i + 1;
+            numbers.put(episode, finalNumber);
         }
         return numbers;
     }
@@ -4107,7 +4198,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             EpisodePosition position = episodePosition(episode, sourceEpisodes, index);
             if (position.season() == tmdbSeason) {
                 TmdbEpisode tmdbEpisode = tmdbEpisodes.get(position.number());
-                episode.setTmdbEpisode(TmdbEpisodeMatcher.shouldApply(episode, tmdbEpisode) ? tmdbEpisode : null);
+                episode.setTmdbEpisode(TmdbEpisodeMatcher.shouldApply(episode, tmdbEpisode, position.number()) ? tmdbEpisode : null);
             }
         }
     }
@@ -7259,27 +7350,48 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
 
     private EpisodePosition episodePosition(Episode episode, List<Episode> episodes, int index) {
         int sourceNumber = sourceEpisodeNumber(episode);
-        if (usesSingleTmdbSeasonEpisodeData(episodes)) return new EpisodePosition(firstSeasonNumber(matchedTmdbDetail), linearEpisodeNumber(sourceNumber, index));
+        String epName = episode == null ? "null" : episode.getName();
+        if (usesSingleTmdbSeasonEpisodeData(episodes)) {
+            EpisodePosition p = new EpisodePosition(firstSeasonNumber(matchedTmdbDetail), linearEpisodeNumber(sourceNumber, index));
+            android.util.Log.d("EPPOS", "[" + epName + "] idx=" + index + " src=" + sourceNumber + " branch=singleTmdbSeason -> s" + p.season() + "e" + p.number());
+            return p;
+        }
         int sourceSeason = sourceSeasonNumber(episode);
         if (useSourceEpisodeNumber(sourceNumber, sourceSeason)) {
             int season = seasonNumbers.contains(sourceSeason) ? sourceSeason : selectedSeasonNumber;
             if (season < 0 && seasonNumbers.size() == 1) season = seasonNumbers.get(0);
-            return new EpisodePosition(season, seasonNumbers.size() <= 1 ? linearEpisodeNumber(sourceNumber, index) : sourceNumber);
+            EpisodePosition p = new EpisodePosition(season, seasonNumbers.size() <= 1 ? linearEpisodeNumber(sourceNumber, index) : sourceNumber);
+            android.util.Log.d("EPPOS", "[" + epName + "] idx=" + index + " src=" + sourceNumber + " branch=useSourceNumber -> s" + p.season() + "e" + p.number());
+            return p;
         }
         if (index < 0) return new EpisodePosition(selectedSeasonNumber, -1);
-        if (seasonNumbers.size() <= 1 || selectedSeasonNumber < 0) return new EpisodePosition(selectedSeasonNumber, linearEpisodeNumber(sourceNumber, index));
+        if (seasonNumbers.size() <= 1 || selectedSeasonNumber < 0) {
+            EpisodePosition p = new EpisodePosition(selectedSeasonNumber, linearEpisodeNumber(sourceNumber, index));
+            android.util.Log.d("EPPOS", "[" + epName + "] idx=" + index + " src=" + sourceNumber + " branch=singleSeasonLinear -> s" + p.season() + "e" + p.number());
+            return p;
+        }
         int titleSeason = sourceTitleSeasonNumber();
-        if (!hasExplicitSeasonNumbers(episodes) && seasonNumbers.contains(titleSeason)) return new EpisodePosition(titleSeason, index + 1);
-        if (!EpisodeSeasonPolicy.canSliceBySeasonCounts(episodes.size(), seasonNumbers, seasonEpisodeCounts)) return new EpisodePosition(selectedSeasonNumber, index + 1);
+        if (!hasExplicitSeasonNumbers(episodes) && seasonNumbers.contains(titleSeason)) {
+            android.util.Log.d("EPPOS", "[" + epName + "] idx=" + index + " src=" + sourceNumber + " branch=titleSeasonIndexPlus1 -> s" + titleSeason + "e" + (index + 1));
+            return new EpisodePosition(titleSeason, index + 1);
+        }
+        if (!EpisodeSeasonPolicy.canSliceBySeasonCounts(episodes.size(), seasonNumbers, seasonEpisodeCounts)) {
+            android.util.Log.d("EPPOS", "[" + epName + "] idx=" + index + " src=" + sourceNumber + " branch=noSliceIndexPlus1 -> s" + selectedSeasonNumber + "e" + (index + 1));
+            return new EpisodePosition(selectedSeasonNumber, index + 1);
+        }
         int start = 0;
         for (int i = 0; i < seasonNumbers.size(); i++) {
             Integer season = seasonNumbers.get(i);
             int count = Math.max(0, seasonEpisodeCounts.getOrDefault(season, 0));
             if (count <= 0) continue;
             int end = i == seasonNumbers.size() - 1 ? episodes.size() : Math.min(episodes.size(), start + count);
-            if (index >= start && index < end) return new EpisodePosition(season, index - start + 1);
+            if (index >= start && index < end) {
+                android.util.Log.d("EPPOS", "[" + epName + "] idx=" + index + " src=" + sourceNumber + " branch=sliceBySeason -> s" + season + "e" + (index - start + 1));
+                return new EpisodePosition(season, index - start + 1);
+            }
             start += count;
         }
+        android.util.Log.d("EPPOS", "[" + epName + "] idx=" + index + " src=" + sourceNumber + " branch=fallbackIndexPlus1 -> s" + selectedSeasonNumber + "e" + (index + 1));
         return new EpisodePosition(selectedSeasonNumber, index + 1);
     }
 
@@ -7734,6 +7846,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         if (surface != null) surface.requestLayout();
         binding.danmaku.requestLayout();
         binding.scroll.requestLayout();
+        setNightMode();
     }
 
     private void scheduleInlinePlayerPanelRestoreAfterOverlay() {
@@ -8496,6 +8609,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             stopPlayback();
         }
         if (inlinePlayerUi != null) inlinePlayerUi.release();
+        if (modeController != null) modeController.release();
         DanmakuApi.cancel();
         super.onDestroy();
     }

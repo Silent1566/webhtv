@@ -1,5 +1,15 @@
 # AI 真实剧名提取设计
 
+> **状态：✅ 已完成（2026-07-14 核实）**
+> - `MediaTitleResolver` + `MediaTitleParser` + `MediaTitleCache` + `MediaTitleRequest` / `MediaTitleResolution` / `MediaTitleCandidate` 已实现。
+> - 已接入三大调用方：
+>   - `TmdbUIAdapter.autoMatch()` (line 232)：TMDB 自动匹配。
+>   - `SubtitleContextBuilder.buildWithAiFallback()` (line 48)：字幕自动匹配。
+>   - `DanmakuApi.search()` (line 116)：弹幕搜索。
+> - `Setting.isAiTitleExtraction()` 开关已实现。
+> - 含单元测试 `MediaTitleResolverTest` / `MediaTitleResolverSourceTest`。
+> - **剩余增强（未做）**：`MediaTitleLearningStore`（学习样本持久化）、`DanmakuMatchCache`、弹幕手动选择沉淀、术语表。
+
 ## 背景
 
 项目里已经有多处功能依赖“剧名”做自动匹配：

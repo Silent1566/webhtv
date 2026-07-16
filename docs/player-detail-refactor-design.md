@@ -1,5 +1,28 @@
 # 播放器与 TMDB 详情页解耦设计
 
+> **状态：🟢 第一、二阶段已完成，第三阶段未开始（2026-07-14 核实）**
+>
+> **✅ 第一阶段（播放器 UI Controller）已完成**：
+> - `VodPlayerUiController` / `VodPlayerUiHost` / `VodPlayerChrome` 已建。
+> - 已接入三个 Activity：
+>   - `TmdbDetailActivity` (line 758)：内联播放器。
+>   - mobile `VideoActivity` (line 802)：全屏播放器。
+>   - leanback `VideoActivity`：全屏播放器。
+> - OSD、PiP、Clock、控制栏基础按钮已统一。
+>
+> **✅ 第二阶段（TMDB 详情页模式 Controller）已完成（2026-07-14）**：
+> - 已建 `TmdbDetailModeController` 接口和 `BaseTmdbDetailModeController` 基类。
+> - 已建三个模式实现：
+>   - `FusionDetailController`（沉浸融合）
+>   - `EnhancedDetailController`（炫彩详情）
+>   - `PlayerDetailController`（详情直放）
+> - `TmdbDetailActivity.initModeController()` 根据模式创建对应 Controller。
+> - `initPage()` 里的模式判断可见性设置已删除，统一委托给各 Controller 的 `applyInitialLayout()`。
+> - 新增 `DetailModeControllerTest` 用源码断言锁定三种模式的布局差异实现。
+>
+> **❌ 第三阶段（ViewModel 状态管理）未开始**：
+> - 无 `TmdbDetailViewModel` / `PlayerSessionViewModel`。
+
 ## 状态
 
 In Progress
@@ -12,6 +35,7 @@ In Progress
 
 - 2026-07-07：第一阶段开始，新增 `VodPlayerUiController`、`VodPlayerUiHost`、`VodPlayerChrome`，先承接 `TmdbDetailActivity` 沉浸融合内嵌播放器的 OSD、PiP、Clock、控制器初始化和 TV 控制栏按钮绑定。
 - 2026-07-07：两个 `VideoActivity` 接入 `VodPlayerUiController`，共享 OSD、Clock、PiP 初始化和生命周期；控制栏按钮仍按阶段继续迁移。
+- 2026-07-14：第二阶段完成，新增模式 Controller 体系（`TmdbDetailModeController` 接口 + 三个实现），`TmdbDetailActivity` 接入并删除 `initPage()` 里的旧模式判断逻辑。
 
 ## 背景
 

@@ -55,6 +55,8 @@ public final class SubtitleManualSearchDialog {
         input.setText(defaultKeyword);
         input.setSelectAllOnFocus(false);
         input.setSelection(input.getText() == null ? 0 : input.getText().length());
+        input.setTextColor(0xFF202124);
+        input.setHintTextColor(0xFF5F6368);
 
         AlertDialog dialog = new MaterialAlertDialogBuilder(activity, R.style.Theme_WebHTV_LightDialog)
                 .setTitle(R.string.subtitle_manual_search)

@@ -1,5 +1,11 @@
 # AI 日志诊断设计
 
+> **状态：✅ 已完成（2026-07-14 核实）**
+> - `AiLogDiagnosisService` 已实现（脱敏、prompt 构建、超时控制、降级）。
+> - 已接入 `DebugLogs.diagnose()`，挂载 `/debug/diagnose` 路由。
+> - 日志页顶栏有"AI诊断"链接，可一键诊断当前调试日志。
+> - 含单元测试 `AiLogDiagnosisServiceTest` / `DebugLogsPageTest`。
+
 ## 背景
 
 项目已有调试日志页和 AI 配置：

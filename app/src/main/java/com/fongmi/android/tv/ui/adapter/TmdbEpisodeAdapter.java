@@ -196,7 +196,7 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
         Episode episode = items.get(position);
         int episodeNumber = episodeNumber(episode, position);
         TmdbEpisode tmdbEpisode = tmdbItems.get(episodeNumber);
-        if (!TmdbEpisodeMatcher.shouldApply(episode, tmdbEpisode)) tmdbEpisode = null;
+        if (!TmdbEpisodeMatcher.shouldApply(episode, tmdbEpisode, episodeNumber)) tmdbEpisode = null;
         String tmdbTitle = tmdbEpisode != null ? tmdbEpisode.getTitle() : "";
         String cleanTitle = getCleanTitle(episode, episodeNumber, tmdbTitle);
         String title = titleWithFileSize(episode, cleanTitle);
