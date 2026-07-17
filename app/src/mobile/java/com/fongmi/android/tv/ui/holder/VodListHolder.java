@@ -18,6 +18,7 @@ public class VodListHolder extends BaseVodHolder {
         super(binding.getRoot());
         this.binding = binding;
         this.listener = listener;
+        binding.remark.setSelected(true);
     }
 
     @Override

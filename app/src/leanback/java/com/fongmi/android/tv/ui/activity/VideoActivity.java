@@ -1778,7 +1778,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         setText(mBinding.year, R.string.detail_year, item.getYear());
         setText(mBinding.area, R.string.detail_area, item.getArea());
         setText(mBinding.type, R.string.detail_type, item.getTypeName());
-        setText(mBinding.site, R.string.detail_site, getSite().getName());
+        setText(mBinding.site, R.string.detail_site, getSite().getDisplayName());
         setText(mBinding.director, R.string.detail_director, item.getDirector());
         setText(mBinding.actor, R.string.detail_actor, item.getActor());
         setText(mBinding.remark, 0, item.getRemarks());
@@ -3571,7 +3571,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         keep.setCid(VodConfig.getCid());
         keep.setVodPic(mHistory.getVodPic());
         keep.setVodName(mHistory.getVodName());
-        keep.setSiteName(getSite().getName());
+        keep.setSiteName(getSite().getDisplayName());
         keep.setCreateTime(System.currentTimeMillis());
         keep.save();
     }

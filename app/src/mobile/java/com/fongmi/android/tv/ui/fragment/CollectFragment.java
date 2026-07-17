@@ -38,6 +38,7 @@ import com.fongmi.android.tv.bean.Result;
 import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.databinding.FragmentCollectBinding;
+import com.fongmi.android.tv.model.SearchProgress;
 import com.fongmi.android.tv.model.SiteViewModel;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.setting.SiteHealthStore;
@@ -192,6 +193,7 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
     private void setViewModel() {
         mViewModel = new ViewModelProvider(this).get(SiteViewModel.class).init();
         mViewModel.getSearch().observe(this, this::setCollect);
+        mViewModel.getSearchProgress().observe(this, this::setSearchProgress);
         mViewModel.getResult().observe(this, this::setSearch);
     }
 
@@ -217,7 +219,7 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
         int width = 0;
         int space = ResUtil.dp2px(48);
         int maxWidth = ResUtil.getScreenWidth() / 2 - ResUtil.dp2px(40);
-        for (Site site : mSites) width = Math.max(width, ResUtil.getTextWidth(site.getName(), 14));
+        for (Site site : mSites) width = Math.max(width, ResUtil.getTextWidth(site.getDisplayName(), 14));
         int contentWidth = width + space;
         int minWidth = ResUtil.dp2px(120);
         int finalWidth = Math.max(minWidth, Math.min(contentWidth, maxWidth));
@@ -242,10 +244,10 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
                 mAllCollectItems.add(empty);
                 initialCollects.add(empty);
             }
-            mCollectAdapter.setItems(initialCollects, () -> mViewModel.searchContent(mSites, getKeyword(), false));
+            mCollectAdapter.setItems(new ArrayList<>(initialCollects), () -> mViewModel.searchContent(mSites, getKeyword(), false));
         } else {
             // 模式0：动态增量模式（现状）
-            mCollectAdapter.setItems(List.of(all), () -> mViewModel.searchContent(mSites, getKeyword(), false));
+            mCollectAdapter.setItems(new ArrayList<>(mAllCollectItems), () -> mViewModel.searchContent(mSites, getKeyword(), false));
         }
     }
 
@@ -309,26 +311,17 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
 
     private void setCollect(Result result) {
         if (result == null || result.getList().isEmpty()) return;
-        Collect collect = addMasterCollect(result.getList());
+        List<Vod> items = new ArrayList<>(result.getList());
+        String activeSiteKey = getActiveSiteKey();
+        Collect collect = addMasterCollect(items);
         if (!matchFilter(collect.getSite())) return;
-        if (mCollectAdapter.getPosition() == 0) mSearchAdapter.addAll(result.getList());
 
-        if (Setting.getSearchResultSort() == 1) {
-            // 模式1：源已预先铺满，addMasterCollect 已填充数据，这里只刷新对应位置
-            int index = findCollectIndex(mCollectAdapter.getItems(), collect.getSite().getKey());
-            if (index != -1) mCollectAdapter.notifyItemChanged(index);
-        } else {
-            // 模式0：动态添加站点到左侧列表
-            if (!hasCollect(mCollectAdapter.getItems(), collect)) mCollectAdapter.add(Collect.create(result.getList()));
-            mCollectAdapter.add(result.getList());
+        List<Collect> collects = getFilteredCollectItems(activeSiteKey);
+        Collect activated = getSelectedCollect(collects);
+        mCollectAdapter.setItems(collects);
+        if ("all".equals(activeSiteKey) || collect.getSite().getKey().equals(activeSiteKey)) {
+            mSearchAdapter.setItems(new ArrayList<>(activated.getList()));
         }
-    }
-
-    private int findCollectIndex(List<Collect> items, String siteKey) {
-        for (int i = 0; i < items.size(); i++) {
-            if (items.get(i).getSite().getKey().equals(siteKey)) return i;
-        }
-        return -1;
     }
 
     private Collect addMasterCollect(List<Vod> items) {
@@ -343,10 +336,6 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
         return collect;
     }
 
-    private boolean hasCollect(List<Collect> items, Collect collect) {
-        return findCollect(items, collect.getSite().getKey()) != null;
-    }
-
     private Collect findCollect(List<Collect> items, String siteKey) {
         for (Collect item : items) if (item.getSite().getKey().equals(siteKey)) return item;
         return null;
@@ -356,12 +345,16 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
         return TextUtils.isEmpty(mFilterGroup) || site.inGroup(mFilterGroup);
     }
 
+    private void setSearchProgress(SearchProgress progress) {
+        if (progress != null) mCollectAdapter.setProgress(progress.current(), progress.total());
+    }
+
     private void setSearch(Result result) {
         if (result == null) return;
         mScroller.endLoading(result);
         boolean same = !result.getList().isEmpty() && mCollectAdapter.getActivated().getSite().equals(result.getVod().getSite());
         if (same) mCollectAdapter.getActivated().getList().addAll(result.getList());
-        if (same) mSearchAdapter.addAll(result.getList());
+        if (same) mSearchAdapter.setItems(new ArrayList<>(mCollectAdapter.getActivated().getList()));
     }
 
     @Override

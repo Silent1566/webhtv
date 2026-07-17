@@ -108,6 +108,10 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
         return navigationCallback != null;
     }
 
+    private boolean isPlayerAvailable() {
+        return running && player != null && !player.isReleased();
+    }
+
     @Override
     public void onCreate() {
         long start = System.currentTimeMillis();
@@ -157,6 +161,7 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
     }
 
     private void handleAction(String action) {
+        if (!isPlayerAvailable()) return;
         if (ActionEvent.PLAY.equals(action)) player.play();
         else if (ActionEvent.PAUSE.equals(action)) player.pause();
         else if (ActionEvent.PREV.equals(action)) dispatchPrev();
@@ -392,7 +397,7 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
     }
 
     private boolean isNavigationOwner() {
-        return navigationKey == null || navigationKey.equals(player.getKey());
+        return isPlayerAvailable() && (navigationKey == null || navigationKey.equals(player.getKey()));
     }
 
     public void addPlayerCallback(PlayerCallback callback) {
@@ -416,21 +421,25 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
     }
 
     private void dispatchNavigate(Consumer<NavigationCallback> action, int delta) {
+        if (!isPlayerAvailable()) return;
         if (hasNavigationCallback() && isNavigationOwner()) dispatch(action);
         else navigateItem(delta);
     }
 
     public void dispatchStop() {
+        if (!isPlayerAvailable()) return;
         if (player.getPlaybackState() == Player.STATE_IDLE) return;
         if (hasNavigationCallback() && isNavigationOwner()) dispatch(NavigationCallback::onStop);
         else stopAndClear();
     }
 
     public void dispatchRepeat() {
+        if (!isPlayerAvailable()) return;
         player.setRepeatOne(!player.isRepeatOne());
     }
 
     public void dispatchReplay() {
+        if (!isPlayerAvailable()) return;
         if (hasNavigationCallback() && isNavigationOwner()) dispatch(NavigationCallback::onReplay);
         else {
             player.seekTo(0);
@@ -439,6 +448,7 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
     }
 
     public void dispatchAudio() {
+        if (!isPlayerAvailable()) return;
         dispatch(NavigationCallback::onAudio);
     }
 

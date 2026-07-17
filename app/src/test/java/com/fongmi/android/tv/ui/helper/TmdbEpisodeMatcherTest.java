@@ -90,11 +90,14 @@ public class TmdbEpisodeMatcherTest {
     }
 
     @Test
-    public void allowsMultiSeasonSlicingWhenMappedNumberMatchesTmdb() {
+    public void rejectsWhenSourceNumberMismatchesTmdb() {
+        // 新逻辑：文件名有明确集号时，必须与 TMDB 集号一致才匹配
+        // 即使 mappedNumber 说它是第1集，但文件名是"第14集"，就不应该匹配到 TMDB 第1集
         Episode episode14 = Episode.create("第14集", "http://example.test/14");
         TmdbEpisode tmdbS2E1 = new TmdbEpisode(1, "Season 2 Episode 1", "", "", "", 0, 0);
 
         assertEquals(14, episode14.getNumber());
-        assertTrue(TmdbEpisodeMatcher.shouldApply(episode14, tmdbS2E1, 1));
+        // episode.getNumber() (14) != tmdbEpisode.getNumber() (1) → 拒绝匹配
+        assertFalse(TmdbEpisodeMatcher.shouldApply(episode14, tmdbS2E1, 1));
     }
 }

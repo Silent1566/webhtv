@@ -106,7 +106,7 @@ public class ShortDramaSourceDialog {
 
         for (int i = 0; i < sites.size(); i++) {
             Site site = sites.get(i);
-            labels[i] = TextUtils.isEmpty(site.getName()) ? site.getKey() : site.getName() + "  " + site.getKey();
+            labels[i] = site.getDisplayName() + "  " + site.getKey();
             boolean inBlacklist = disabledSites.contains(site.getKey());
             boolean matchedByRule = matchesRule(enabledRules, site);
             checked[i] = matchedByRule && !inBlacklist;
@@ -222,7 +222,7 @@ public class ShortDramaSourceDialog {
     }
 
     private String displayName(Site site) {
-        return TextUtils.isEmpty(site.getName()) ? site.getKey() : site.getName();
+        return site.getDisplayName();
     }
 
     private List<String> splitRules(String text) {

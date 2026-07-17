@@ -16,7 +16,13 @@ import java.io.IOException;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 
 public final class MpvConfigStore {
 
@@ -24,15 +30,22 @@ public final class MpvConfigStore {
     private static final String KEY_SOURCE = "mpv_config_source";
     private static final String KEY_TYPE = "mpv_config_type";
     private static final String KEY_HISTORY = "mpv_config_history";
+    private static final String KEY_PROFILES = "mpv_config_profiles";
+    private static final String KEY_SELECTED = "mpv_config_selected";
+    private static final String KEY_MIGRATED = "mpv_config_profiles_migrated";
     public static final String TARGET_MPV_CONF = "mpv.conf";
     public static final String TARGET_INPUT_CONF = "input.conf";
     public static final String TARGET_SCRIPTS = "scripts";
     private static final String TYPE_DEFAULT = "default";
     private static final String TYPE_FILE = "file";
     private static final String TYPE_URL = "url";
+    private static final String TYPE_TEXT = "text";
     private static final String CONFIG_DIR = "mpv";
     private static final String CONFIG_FILE = "mpv.conf";
+    private static final String PROFILE_DIR = "profiles";
+    private static final int MAX_PROFILE_BYTES = 1024 * 1024;
     private static final Type HISTORY_LIST = new TypeToken<List<History>>() {}.getType();
+    private static final Type PROFILE_LIST = new TypeToken<List<ConfigProfile>>() {}.getType();
 
     private MpvConfigStore() {
     }
@@ -40,10 +53,11 @@ public final class MpvConfigStore {
     public static File configDir() {
         File dir = new File(App.get().getFilesDir(), CONFIG_DIR);
         if (!dir.exists()) dir.mkdirs();
-        ensureSubDir("scripts");
+        ensureSubDir(TARGET_SCRIPTS);
         ensureSubDir("script-opts");
         ensureSubDir("fonts");
         ensureSubDir("shaders");
+        ensureSubDir(PROFILE_DIR);
         return dir;
     }
 
@@ -105,14 +119,14 @@ public final class MpvConfigStore {
         if (!TextUtils.isEmpty(name)) return name;
         if (TYPE_FILE.equals(type)) return TextUtils.isEmpty(source) ? ResUtil.getString(R.string.mpv_config_local) : fileName(source);
         if (TYPE_URL.equals(type)) return TextUtils.isEmpty(source) ? ResUtil.getString(R.string.mpv_config_url) : source;
-        return ResUtil.getString(R.string.mpv_config_default);
+        return ResUtil.getString(R.string.mpv_config_untitled);
     }
 
     public static void applyDefault() {
         applyDefault(TARGET_MPV_CONF);
     }
 
-    public static void applyDefault(String target) {
+    public static synchronized void applyDefault(String target) {
         if (TARGET_SCRIPTS.equals(target)) {
             clearScripts();
             putDefault(target);
@@ -121,51 +135,223 @@ public final class MpvConfigStore {
         if (TARGET_INPUT_CONF.equals(target)) {
             File file = targetFile(target);
             if (file.isFile()) file.delete();
-            putDefault(target);
-            return;
+        } else {
+            writeText(defaultConfig());
         }
-        writeText(defaultConfig());
         putDefault(target);
+        Prefers.put(selectedKey(target), "default");
     }
 
     public static void applyFile(String path, String name) throws IOException {
         applyFile(TARGET_MPV_CONF, path, name);
     }
 
-    public static void applyFile(String target, String path, String name) throws IOException {
-        if (TextUtils.isEmpty(path)) throw new IOException(App.get().getString(R.string.mpv_config_empty));
-        File source = Path.local(path);
-        if (!source.isFile()) source = new File(path);
-        if (!source.isFile() || source.length() == 0) throw new IOException(App.get().getString(R.string.mpv_config_file_invalid));
-        byte[] data = Path.readToByte(source);
-        if (data.length == 0) throw new IOException(App.get().getString(R.string.mpv_config_file_invalid));
-        File out = TARGET_SCRIPTS.equals(target) ? scriptFile(path, name) : targetFile(target);
-        writeBytes(out, data);
-        Prefers.put(key(KEY_NAME, target), TextUtils.isEmpty(name) ? fileName(path) : name);
+    public static synchronized void applyFile(String target, String path, String name) throws IOException {
+        String text = readLocal(path);
+        validateContent(text);
+        String displayName = TextUtils.isEmpty(name) ? fileName(path) : name;
+        if (TARGET_SCRIPTS.equals(target)) {
+            writeTextChecked(scriptFile(path, displayName), text);
+        } else {
+            writeTargetChecked(target, text);
+            recordAppliedProfile(target, TYPE_FILE, path, displayName, text);
+        }
+        Prefers.put(key(KEY_NAME, target), displayName);
         Prefers.put(key(KEY_SOURCE, target), path);
         Prefers.put(key(KEY_TYPE, target), TYPE_FILE);
-        addHistory(target, TYPE_FILE, TextUtils.isEmpty(name) ? fileName(path) : name, path);
+        addHistory(target, TYPE_FILE, displayName, path);
     }
 
     public static void applyUrl(String url, String name) throws IOException {
         applyUrl(TARGET_MPV_CONF, url, name);
     }
 
-    public static void applyUrl(String target, String url, String name) throws IOException {
+    public static synchronized void applyUrl(String target, String url, String name) throws IOException {
         if (!isHttpUrl(url)) throw new IOException(App.get().getString(R.string.mpv_config_url_invalid));
-        String text = OkHttp.string(url, 15000);
-        if (TextUtils.isEmpty(text)) throw new IOException(App.get().getString(R.string.mpv_config_download_empty));
-        File out = TARGET_SCRIPTS.equals(target) ? scriptFile(url, name) : targetFile(target);
-        writeText(out, text);
-        Prefers.put(key(KEY_NAME, target), TextUtils.isEmpty(name) ? fileName(url) : name);
+        String text = readUrl(url);
+        validateContent(text);
+        String displayName = TextUtils.isEmpty(name) ? fileName(url) : name;
+        if (TARGET_SCRIPTS.equals(target)) {
+            writeTextChecked(scriptFile(url, displayName), text);
+        } else {
+            writeTargetChecked(target, text);
+            recordAppliedProfile(target, TYPE_URL, url, displayName, text);
+        }
+        Prefers.put(key(KEY_NAME, target), displayName);
         Prefers.put(key(KEY_SOURCE, target), url);
         Prefers.put(key(KEY_TYPE, target), TYPE_URL);
-        addHistory(target, TYPE_URL, TextUtils.isEmpty(name) ? fileName(url) : name, url);
+        addHistory(target, TYPE_URL, displayName, url);
     }
 
     public static void applySource(String target, String source, String name) throws IOException {
         if (isHttpUrl(source)) applyUrl(target, source, name);
         else applyFile(target, source, name);
+    }
+
+    public static synchronized List<ConfigProfile> profiles(String target) {
+        if (TARGET_SCRIPTS.equals(target)) return scriptProfiles();
+        ensureProfiles(target);
+        List<ConfigProfile> result = new ArrayList<>();
+        if (TARGET_MPV_CONF.equals(target)) {
+            ConfigProfile defaultProfile = new ConfigProfile();
+            defaultProfile.id = "default";
+            defaultProfile.name = ResUtil.getString(R.string.mpv_config_default);
+            defaultProfile.type = TYPE_DEFAULT;
+            result.add(defaultProfile);
+        }
+        List<ConfigProfile> saved = readProfiles(target);
+        Collections.sort(saved, (a, b) -> Long.compare(b.time, a.time));
+        result.addAll(saved);
+        String selected = selectedId(target);
+        for (ConfigProfile profile : result) profile.active = TextUtils.equals(profile.id, selected);
+        return result;
+    }
+
+    public static synchronized String selectedProfileId(String target) {
+        if (TARGET_SCRIPTS.equals(target)) return "";
+        ensureProfiles(target);
+        return selectedId(target);
+    }
+
+    public static synchronized String profileContent(String target, String id) throws IOException {
+        if (TARGET_SCRIPTS.equals(target)) {
+            File file = safeScriptFile(id);
+            if (!file.isFile()) throw missingProfile();
+            return readText(file);
+        }
+        ensureProfiles(target);
+        if ("default".equals(id)) return defaultContent(target);
+        List<ConfigProfile> profiles = readProfiles(target);
+        ConfigProfile profile = findProfile(profiles, id);
+        if (profile == null) throw missingProfile();
+        File snapshot = profileSnapshot(target, id);
+        if (snapshot.isFile()) return readText(snapshot);
+        if (!TextUtils.isEmpty(profile.content)) {
+            writeTextChecked(snapshot, profile.content);
+            profile.content = null;
+            saveProfiles(target, profiles);
+            return readText(snapshot);
+        }
+        String content = readSource(profile.type, profile.source);
+        validateContent(content);
+        writeTextChecked(snapshot, content);
+        return content;
+    }
+
+    public static synchronized String saveTextProfile(String target, String id, String name, String content) throws IOException {
+        validateContent(content);
+        if (TextUtils.isEmpty(content) && !TARGET_INPUT_CONF.equals(target)) throw new IOException(App.get().getString(R.string.mpv_config_empty));
+        String displayName = TextUtils.isEmpty(name) ? ResUtil.getString(R.string.mpv_config_untitled) : name.trim();
+        if (TARGET_SCRIPTS.equals(target)) return saveScript(id, displayName, content);
+        ensureProfiles(target);
+        List<ConfigProfile> profiles = readProfiles(target);
+        ConfigProfile profile = "default".equals(id) ? null : findProfile(profiles, id);
+        if (profile == null) {
+            profile = new ConfigProfile();
+            profile.id = UUID.randomUUID().toString();
+            profiles.add(profile);
+        }
+        File snapshot = profileSnapshot(target, profile.id);
+        writeTextChecked(snapshot, content);
+        profile.name = displayName;
+        profile.type = TYPE_TEXT;
+        profile.source = "";
+        profile.content = null;
+        profile.time = System.currentTimeMillis();
+        if (TextUtils.equals(profile.id, selectedId(target))) writeTargetChecked(target, content);
+        saveProfiles(target, profiles);
+        return profile.id;
+    }
+
+    public static synchronized String importProfile(String target, String source, String name) throws IOException {
+        String type = isHttpUrl(source) ? TYPE_URL : TYPE_FILE;
+        String content = readSource(type, source);
+        validateContent(content);
+        String displayName = TextUtils.isEmpty(name) ? fileName(source) : name.trim();
+        if (TARGET_SCRIPTS.equals(target)) {
+            File file = uniqueScriptFile(displayName);
+            writeTextChecked(file, content);
+            return file.getName();
+        }
+        ensureProfiles(target);
+        List<ConfigProfile> profiles = readProfiles(target);
+        ConfigProfile profile = new ConfigProfile();
+        profile.id = UUID.randomUUID().toString();
+        profile.name = displayName;
+        profile.type = type;
+        profile.source = source;
+        profile.time = System.currentTimeMillis();
+        writeTextChecked(profileSnapshot(target, profile.id), content);
+        profiles.add(profile);
+        saveProfiles(target, profiles);
+        return profile.id;
+    }
+
+    public static synchronized void selectProfile(String target, String id) throws IOException {
+        if (TARGET_SCRIPTS.equals(target)) return;
+        ensureProfiles(target);
+        if ("default".equals(id)) {
+            writeTargetChecked(target, defaultContent(target));
+            putDefault(target);
+            Prefers.put(selectedKey(target), "default");
+            return;
+        }
+        ConfigProfile profile = findProfile(readProfiles(target), id);
+        if (profile == null) throw missingProfile();
+        String content = profileContent(target, id);
+        writeTargetChecked(target, content);
+        Prefers.put(key(KEY_NAME, target), profile.name);
+        Prefers.put(key(KEY_SOURCE, target), profile.source == null ? "" : profile.source);
+        Prefers.put(key(KEY_TYPE, target), profile.type);
+        Prefers.put(selectedKey(target), profile.id);
+    }
+
+    public static synchronized boolean deleteProfile(String target, String id) throws IOException {
+        if (TARGET_SCRIPTS.equals(target)) {
+            File file = safeScriptFile(id);
+            if (!file.exists()) return true;
+            if (!file.delete()) throw writeFailed();
+            return true;
+        }
+        if (TextUtils.isEmpty(id) || "default".equals(id)) return false;
+        ensureProfiles(target);
+        List<ConfigProfile> profiles = readProfiles(target);
+        ConfigProfile profile = findProfile(profiles, id);
+        if (profile == null) return false;
+        if (TextUtils.equals(selectedId(target), id)) selectProfile(target, "default");
+        profiles.remove(profile);
+        File snapshot = profileSnapshot(target, id);
+        if (snapshot.exists() && !snapshot.delete()) throw writeFailed();
+        saveProfiles(target, profiles);
+        return true;
+    }
+
+    public static synchronized String renameProfile(String target, String id, String name) throws IOException {
+        String displayName = name == null ? "" : name.trim();
+        if (TextUtils.isEmpty(displayName)) throw new IOException(App.get().getString(R.string.mpv_config_name_required));
+        if (TARGET_SCRIPTS.equals(target)) {
+            File source = safeScriptFile(id);
+            if (!source.isFile()) throw missingProfile();
+            String fileName = safeScriptName(displayName);
+            File output = new File(scriptsDir(), fileName);
+            if (source.equals(output)) return source.getName();
+            if (output.exists()) throw new IOException(App.get().getString(R.string.mpv_config_script_exists));
+            writeTextChecked(output, readText(source));
+            if (!source.delete()) {
+                output.delete();
+                throw writeFailed();
+            }
+            return output.getName();
+        }
+        if (TextUtils.isEmpty(id) || "default".equals(id)) throw missingProfile();
+        ensureProfiles(target);
+        List<ConfigProfile> profiles = readProfiles(target);
+        ConfigProfile profile = findProfile(profiles, id);
+        if (profile == null) throw missingProfile();
+        profile.name = displayName;
+        saveProfiles(target, profiles);
+        if (TextUtils.equals(selectedId(target), id)) Prefers.put(key(KEY_NAME, target), displayName);
+        return profile.id;
     }
 
     public static boolean hasHistory(String target) {
@@ -196,10 +382,211 @@ public final class MpvConfigStore {
         return true;
     }
 
+    private static void ensureProfiles(String target) {
+        List<ConfigProfile> profiles = readProfiles(target);
+        boolean changed = normalizeProfiles(target, profiles);
+        if (!Prefers.getBoolean(migratedKey(target))) {
+            String currentType = Prefers.getString(key(KEY_TYPE, target), TYPE_DEFAULT);
+            String currentSource = getSource(target);
+            String selected = "default";
+            if (!TYPE_DEFAULT.equals(currentType) && !TextUtils.isEmpty(currentSource)) {
+                String id = legacyId(currentType, currentSource);
+                ConfigProfile profile = upsertLegacy(profiles, id, currentType, currentSource, getName(target), System.currentTimeMillis());
+                copyCurrentToSnapshot(target, profile.id);
+                selected = profile.id;
+                changed = true;
+            }
+            for (History history : getHistory(target)) {
+                if (history == null || TextUtils.isEmpty(history.source)) continue;
+                String id = legacyId(history.type, history.source);
+                if (findProfile(profiles, id) != null) continue;
+                upsertLegacy(profiles, id, history.type, history.source, history.name, history.time);
+                changed = true;
+            }
+            Prefers.put(selectedKey(target), selected);
+            Prefers.put(migratedKey(target), true);
+        }
+        if (TextUtils.isEmpty(selectedId(target)) || (!"default".equals(selectedId(target)) && findProfile(profiles, selectedId(target)) == null)) {
+            Prefers.put(selectedKey(target), "default");
+        }
+        if (changed || TextUtils.isEmpty(Prefers.getString(profilesKey(target)))) saveProfiles(target, profiles);
+    }
+
+    private static boolean normalizeProfiles(String target, List<ConfigProfile> profiles) {
+        boolean changed = false;
+        Set<String> ids = new HashSet<>();
+        for (Iterator<ConfigProfile> iterator = profiles.iterator(); iterator.hasNext(); ) {
+            ConfigProfile profile = iterator.next();
+            if (profile == null || !isSafeProfileId(profile.id) || "default".equals(profile.id) || !ids.add(profile.id)) {
+                iterator.remove();
+                changed = true;
+                continue;
+            }
+            if (TextUtils.isEmpty(profile.name)) {
+                profile.name = ResUtil.getString(R.string.mpv_config_untitled);
+                changed = true;
+            }
+            if (!TextUtils.isEmpty(profile.content)) {
+                File snapshot = profileSnapshot(target, profile.id);
+                if (!snapshot.isFile()) writeText(snapshot, profile.content);
+                profile.content = null;
+                changed = true;
+            }
+        }
+        return changed;
+    }
+
+    private static ConfigProfile upsertLegacy(List<ConfigProfile> profiles, String id, String type, String source, String name, long time) {
+        ConfigProfile profile = findProfile(profiles, id);
+        if (profile == null) {
+            profile = new ConfigProfile();
+            profile.id = id;
+            profiles.add(profile);
+        }
+        profile.name = TextUtils.isEmpty(name) ? fileName(source) : name;
+        profile.type = type;
+        profile.source = source;
+        profile.time = time <= 0 ? System.currentTimeMillis() : time;
+        return profile;
+    }
+
+    private static void recordAppliedProfile(String target, String type, String source, String name, String content) throws IOException {
+        ensureProfiles(target);
+        List<ConfigProfile> profiles = readProfiles(target);
+        String id = legacyId(type, source);
+        ConfigProfile profile = upsertLegacy(profiles, id, type, source, name, System.currentTimeMillis());
+        writeTextChecked(profileSnapshot(target, id), content);
+        saveProfiles(target, profiles);
+        Prefers.put(selectedKey(target), profile.id);
+    }
+
+    private static void copyCurrentToSnapshot(String target, String id) {
+        try {
+            File current = targetFile(target);
+            if (current.isFile()) writeTextChecked(profileSnapshot(target, id), readText(current));
+        } catch (IOException ignored) {
+        }
+    }
+
+    private static String saveScript(String id, String name, String content) throws IOException {
+        String fileName = safeScriptName(name);
+        File previous = TextUtils.isEmpty(id) ? null : safeScriptFile(id);
+        File output = previous == null || !safeScriptName(id).equals(fileName) ? new File(scriptsDir(), fileName) : previous;
+        if (previous != null && !previous.equals(output) && output.exists()) throw new IOException(App.get().getString(R.string.mpv_config_script_exists));
+        writeTextChecked(output, content);
+        if (previous != null && !previous.equals(output) && previous.exists() && !previous.delete()) throw writeFailed();
+        return output.getName();
+    }
+
+    private static List<ConfigProfile> scriptProfiles() {
+        List<ConfigProfile> result = new ArrayList<>();
+        File[] files = scriptsDir().listFiles(file -> file.isFile() && isScriptName(file.getName()));
+        if (files == null) return result;
+        for (File file : files) {
+            ConfigProfile profile = new ConfigProfile();
+            profile.id = file.getName();
+            profile.name = file.getName();
+            profile.type = TYPE_TEXT;
+            profile.source = file.getAbsolutePath();
+            profile.time = file.lastModified();
+            result.add(profile);
+        }
+        Collections.sort(result, Comparator.comparing(item -> item.name.toLowerCase()));
+        return result;
+    }
+
+    private static File profileSnapshot(String target, String id) {
+        File dir = new File(configDir(), PROFILE_DIR + File.separator + safeTarget(target));
+        if (!dir.exists()) dir.mkdirs();
+        return new File(dir, id + ".conf");
+    }
+
+    private static File safeScriptFile(String id) throws IOException {
+        if (TextUtils.isEmpty(id) || !TextUtils.equals(id, fileName(id)) || !isScriptName(id)) throw missingProfile();
+        return new File(scriptsDir(), id);
+    }
+
+    private static File uniqueScriptFile(String name) {
+        String safe = safeScriptName(name);
+        File file = new File(scriptsDir(), safe);
+        if (!file.exists()) return file;
+        int dot = safe.lastIndexOf('.');
+        String base = dot > 0 ? safe.substring(0, dot) : safe;
+        String extension = dot > 0 ? safe.substring(dot) : ".lua";
+        for (int i = 2; i < 1000; i++) {
+            file = new File(scriptsDir(), base + " (" + i + ")" + extension);
+            if (!file.exists()) return file;
+        }
+        return new File(scriptsDir(), base + "-" + System.currentTimeMillis() + extension);
+    }
+
+    private static String safeScriptName(String name) {
+        String file = fileName(name).replaceAll("[^\\p{L}\\p{N}._ -]", "_").trim();
+        if (TextUtils.isEmpty(file) || ".".equals(file) || "..".equals(file)) file = "script-" + System.currentTimeMillis();
+        if (!isScriptName(file)) file += ".lua";
+        return file;
+    }
+
+    private static boolean isScriptName(String name) {
+        return name != null && (name.toLowerCase().endsWith(".lua") || name.toLowerCase().endsWith(".js"));
+    }
+
+    private static String readSource(String type, String source) throws IOException {
+        if (TYPE_URL.equals(type)) return readUrl(source);
+        if (TYPE_FILE.equals(type)) return readLocal(source);
+        throw missingProfile();
+    }
+
+    private static String readUrl(String url) throws IOException {
+        String text = OkHttp.string(url, 15000);
+        if (TextUtils.isEmpty(text)) throw new IOException(App.get().getString(R.string.mpv_config_download_empty));
+        return text;
+    }
+
+    private static String readLocal(String path) throws IOException {
+        if (TextUtils.isEmpty(path)) throw new IOException(App.get().getString(R.string.mpv_config_empty));
+        File file = Path.local(path);
+        if (!file.isFile()) file = new File(path);
+        if (!file.isFile() || file.length() == 0) throw new IOException(App.get().getString(R.string.mpv_config_file_invalid));
+        String text = readText(file);
+        if (TextUtils.isEmpty(text)) throw new IOException(App.get().getString(R.string.mpv_config_file_invalid));
+        return text;
+    }
+
+    private static String defaultContent(String target) {
+        return TARGET_MPV_CONF.equals(target) ? defaultConfig() : "";
+    }
+
+    private static void writeTargetChecked(String target, String content) throws IOException {
+        File file = targetFile(target);
+        if (TARGET_INPUT_CONF.equals(target) && TextUtils.isEmpty(content)) {
+            if (file.exists() && !file.delete()) throw writeFailed();
+        } else {
+            writeTextChecked(file, content);
+        }
+    }
+
+    private static void validateContent(String content) throws IOException {
+        int size = (content == null ? "" : content).getBytes(StandardCharsets.UTF_8).length;
+        if (size > MAX_PROFILE_BYTES) throw new IOException(App.get().getString(R.string.mpv_config_too_large));
+    }
+
+    private static IOException missingProfile() {
+        return new IOException(App.get().getString(R.string.mpv_config_profile_missing));
+    }
+
+    private static IOException writeFailed() {
+        return new IOException(App.get().getString(R.string.mpv_config_write_failed));
+    }
+
     private static void putDefault(String target) {
         Prefers.put(key(KEY_NAME, target), "");
         Prefers.put(key(KEY_SOURCE, target), "");
         Prefers.put(key(KEY_TYPE, target), TYPE_DEFAULT);
+    }
+
+    private static String readText(File file) throws IOException {
+        return new String(Path.readToByte(file), StandardCharsets.UTF_8);
     }
 
     private static void writeText(String text) {
@@ -207,11 +594,7 @@ public final class MpvConfigStore {
     }
 
     private static void writeText(File file, String text) {
-        writeBytes(file, text.getBytes(StandardCharsets.UTF_8));
-    }
-
-    private static void writeBytes(byte[] data) {
-        writeBytes(configFile(), data);
+        writeBytes(file, (text == null ? "" : text).getBytes(StandardCharsets.UTF_8));
     }
 
     private static void writeBytes(File file, byte[] data) {
@@ -221,6 +604,17 @@ public final class MpvConfigStore {
             output.write(data);
             output.flush();
         } catch (IOException ignored) {
+        }
+    }
+
+    private static void writeTextChecked(File file, String text) throws IOException {
+        File parent = file.getParentFile();
+        if (parent != null && !parent.exists() && !parent.mkdirs()) throw writeFailed();
+        try (FileOutputStream output = new FileOutputStream(file)) {
+            output.write((text == null ? "" : text).getBytes(StandardCharsets.UTF_8));
+            output.flush();
+        } catch (IOException e) {
+            throw writeFailed();
         }
     }
 
@@ -241,9 +635,54 @@ public final class MpvConfigStore {
     }
 
     private static File scriptFile(String source, String name) {
-        String file = TextUtils.isEmpty(name) ? fileName(source) : name;
-        if (!file.endsWith(".lua") && !file.endsWith(".js")) file = file + ".lua";
-        return new File(scriptsDir(), file);
+        return new File(scriptsDir(), safeScriptName(TextUtils.isEmpty(name) ? fileName(source) : name));
+    }
+
+    private static List<ConfigProfile> readProfiles(String target) {
+        try {
+            List<ConfigProfile> profiles = App.gson().fromJson(Prefers.getString(profilesKey(target), "[]"), PROFILE_LIST);
+            return profiles == null ? new ArrayList<>() : profiles;
+        } catch (Exception e) {
+            return new ArrayList<>();
+        }
+    }
+
+    private static void saveProfiles(String target, List<ConfigProfile> profiles) {
+        Prefers.put(profilesKey(target), App.gson().toJson(profiles));
+    }
+
+    private static ConfigProfile findProfile(List<ConfigProfile> profiles, String id) {
+        if (profiles == null || TextUtils.isEmpty(id)) return null;
+        for (ConfigProfile profile : profiles) if (profile != null && TextUtils.equals(profile.id, id)) return profile;
+        return null;
+    }
+
+    private static String profilesKey(String target) {
+        return key(KEY_PROFILES, target);
+    }
+
+    private static String selectedKey(String target) {
+        return key(KEY_SELECTED, target);
+    }
+
+    private static String migratedKey(String target) {
+        return key(KEY_MIGRATED, target);
+    }
+
+    private static String selectedId(String target) {
+        return Prefers.getString(selectedKey(target));
+    }
+
+    private static String legacyId(String type, String source) {
+        return "legacy-" + Integer.toHexString((String.valueOf(type) + "|" + source).hashCode());
+    }
+
+    private static boolean isSafeProfileId(String id) {
+        return !TextUtils.isEmpty(id) && id.matches("[A-Za-z0-9_-]+");
+    }
+
+    private static String safeTarget(String target) {
+        return target.replace('.', '_').replace('/', '_');
     }
 
     private static List<History> getHistory(String target) {
@@ -294,21 +733,21 @@ public final class MpvConfigStore {
     }
 
     private static String scriptsSummary() {
-        File[] files = scriptsDir().listFiles(file -> file.isFile() && (file.getName().endsWith(".lua") || file.getName().endsWith(".js")));
+        File[] files = scriptsDir().listFiles(file -> file.isFile() && isScriptName(file.getName()));
         int count = files == null ? 0 : files.length;
         if (count <= 0) return ResUtil.getString(R.string.mpv_config_default);
         return ResUtil.getString(R.string.mpv_config_scripts_count, count);
     }
 
     private static void clearScripts() {
-        File[] files = scriptsDir().listFiles(file -> file.isFile() && (file.getName().endsWith(".lua") || file.getName().endsWith(".js")));
+        File[] files = scriptsDir().listFiles(file -> file.isFile() && isScriptName(file.getName()));
         if (files == null) return;
         for (File file : files) file.delete();
     }
 
     private static String key(String base, String target) {
         if (TARGET_MPV_CONF.equals(target)) return base;
-        return base + "_" + target.replace('.', '_').replace('/', '_');
+        return base + "_" + safeTarget(target);
     }
 
     private static void ensureSubDir(String name) {
@@ -346,5 +785,30 @@ public final class MpvConfigStore {
         String name;
         String source;
         long time;
+    }
+
+    public static final class ConfigProfile {
+        public String id;
+        public String name;
+        public String type;
+        public String source;
+        public String content;
+        public long time;
+        public boolean active;
+
+        public boolean isDefault() {
+            return TYPE_DEFAULT.equals(type);
+        }
+
+        public boolean isImported() {
+            return TYPE_FILE.equals(type) || TYPE_URL.equals(type);
+        }
+
+        public String typeLabel() {
+            if (isDefault()) return ResUtil.getString(R.string.mpv_config_default);
+            if (TYPE_URL.equals(type)) return ResUtil.getString(R.string.mpv_config_url);
+            if (TYPE_FILE.equals(type)) return ResUtil.getString(R.string.mpv_config_local);
+            return ResUtil.getString(R.string.mpv_config_text);
+        }
     }
 }

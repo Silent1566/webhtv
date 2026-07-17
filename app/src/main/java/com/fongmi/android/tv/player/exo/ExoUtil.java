@@ -15,6 +15,7 @@ import android.view.accessibility.CaptioningManager;
 
 import androidx.annotation.NonNull;
 import androidx.media3.common.AudioAttributes;
+import androidx.media3.common.audio.AudioProcessor;
 import androidx.media3.common.C;
 import androidx.media3.common.Format;
 import androidx.media3.common.MediaItem;
@@ -28,6 +29,7 @@ import androidx.media3.exoplayer.LoadControl;
 import androidx.media3.exoplayer.Renderer;
 import androidx.media3.exoplayer.RenderersFactory;
 import androidx.media3.exoplayer.audio.AudioSink;
+import androidx.media3.exoplayer.audio.AudioOutputProvider;
 import androidx.media3.exoplayer.audio.AudioRendererEventListener;
 import androidx.media3.exoplayer.audio.AudioTrackAudioOutputProvider;
 import androidx.media3.exoplayer.audio.DefaultAudioSink;
@@ -56,6 +58,9 @@ import com.fongmi.android.tv.player.track.LangUtil;
 import com.fongmi.android.tv.setting.PlaybackPerformanceSetting;
 import com.fongmi.android.tv.setting.ExoPerformanceSetting;
 import com.fongmi.android.tv.setting.PlayerSetting;
+import com.fongmi.android.tv.subtitle.RealtimeSubtitleAudioOutputProvider;
+import com.fongmi.android.tv.subtitle.RealtimeSubtitleBufferSizeProvider;
+import com.fongmi.android.tv.subtitle.RealtimeSubtitleController;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.UrlUtil;
@@ -391,20 +396,20 @@ public class ExoUtil {
     }
 
     private static RenderersFactory buildPlaybackRenderersFactory(int decode) {
-        return buildRenderersFactory(getAudioRenderMode(), getVideoRenderMode(decode), isAudioPrefer(decode), PlayerSetting.isVideoPrefer(PlayerSetting.EXO), decode == PlayerEngine.SOFT && PlaybackPerformanceSetting.isSoftVideoTuneEnabled());
+        return buildRenderersFactory(getAudioRenderMode(), getVideoRenderMode(decode), isAudioPrefer(decode), PlayerSetting.isVideoPrefer(PlayerSetting.EXO), decode == PlayerEngine.SOFT && PlaybackPerformanceSetting.isSoftVideoTuneEnabled(), true);
     }
 
     static RenderersFactory buildRenderersFactory() {
-        return buildRenderersFactory(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER, DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER, PlayerSetting.isAudioPrefer(PlayerSetting.EXO), PlayerSetting.isVideoPrefer(PlayerSetting.EXO), false);
+        return buildRenderersFactory(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER, DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER, PlayerSetting.isAudioPrefer(PlayerSetting.EXO), PlayerSetting.isVideoPrefer(PlayerSetting.EXO), false, false);
     }
 
-    private static RenderersFactory buildRenderersFactory(int audioRenderMode, int videoRenderMode, boolean audioPrefer, boolean videoPrefer, boolean softVideoTune) {
+    private static RenderersFactory buildRenderersFactory(int audioRenderMode, int videoRenderMode, boolean audioPrefer, boolean videoPrefer, boolean softVideoTune, boolean realtimePipeline) {
         int mode = PlayerSetting.getFFmpegMode();
         if (useFfmpegVideoRenderer(mode)) {
-            return buildNextLibRenderersFactory(audioRenderMode, videoRenderMode, audioPrefer, videoPrefer, softVideoTune);
+            return buildNextLibRenderersFactory(audioRenderMode, videoRenderMode, audioPrefer, videoPrefer, softVideoTune, realtimePipeline);
         }
-        if (useFfmpegAudioFallback(mode)) return buildSimpleRenderersFactory(audioRenderMode, videoRenderMode, audioPrefer, videoPrefer);
-        return buildOfficialRenderersFactory(audioRenderMode, videoRenderMode, audioPrefer, videoPrefer);
+        if (useFfmpegAudioFallback(mode)) return buildSimpleRenderersFactory(audioRenderMode, videoRenderMode, audioPrefer, videoPrefer, realtimePipeline);
+        return buildOfficialRenderersFactory(audioRenderMode, videoRenderMode, audioPrefer, videoPrefer, realtimePipeline);
     }
 
     static boolean useFfmpegAudioFallback(int mode) {
@@ -415,11 +420,11 @@ public class ExoUtil {
         return mode == PlayerSetting.FFMPEG_MODE_NEXTLIB;
     }
 
-    private static RenderersFactory buildNextLibRenderersFactory(int audioRenderMode, int videoRenderMode, boolean audioPrefer, boolean videoPrefer, boolean softVideoTune) {
+    private static RenderersFactory buildNextLibRenderersFactory(int audioRenderMode, int videoRenderMode, boolean audioPrefer, boolean videoPrefer, boolean softVideoTune, boolean realtimePipeline) {
         DefaultRenderersFactory factory = new FfmpegRenderersFactory(App.get(), audioRenderMode, videoRenderMode, audioPrefer, videoPrefer, softVideoTune) {
             @Override
             protected AudioSink buildAudioSink(@NonNull Context context, boolean enableFloatOutput, boolean enableAudioOutputPlaybackParams) {
-                return ExoUtil.buildAudioSink(context, enableFloatOutput, enableAudioOutputPlaybackParams);
+                return ExoUtil.buildAudioSink(context, enableFloatOutput, enableAudioOutputPlaybackParams, realtimePipeline);
             }
         };
         if (ExoPerformanceSetting.getCodecQueueMode() == ExoPerformanceSetting.CODEC_QUEUE_ASYNC) factory.forceEnableMediaCodecAsynchronousQueueing();
@@ -429,11 +434,11 @@ public class ExoUtil {
         return factory.setEnableDecoderFallback(PlaybackPerformanceSetting.isDecoderFallbackEnabled()).setExtensionRendererMode(Math.max(audioRenderMode, videoRenderMode));
     }
 
-    private static RenderersFactory buildAudioFallbackRenderersFactory(int audioRenderMode, int videoRenderMode, boolean audioPrefer) {
+    private static RenderersFactory buildAudioFallbackRenderersFactory(int audioRenderMode, int videoRenderMode, boolean audioPrefer, boolean realtimePipeline) {
         DefaultRenderersFactory factory = new FfmpegAudioFallbackRenderersFactory(App.get(), audioRenderMode, audioPrefer) {
             @Override
             protected AudioSink buildAudioSink(@NonNull Context context, boolean enableFloatOutput, boolean enableAudioOutputPlaybackParams) {
-                return ExoUtil.buildAudioSink(context, enableFloatOutput, enableAudioOutputPlaybackParams);
+                return ExoUtil.buildAudioSink(context, enableFloatOutput, enableAudioOutputPlaybackParams, realtimePipeline);
             }
         };
         return factory
@@ -441,11 +446,11 @@ public class ExoUtil {
             .setExtensionRendererMode(Math.max(audioRenderMode, videoRenderMode));
     }
 
-    private static RenderersFactory buildOfficialRenderersFactory(int audioRenderMode, int videoRenderMode, boolean audioPrefer, boolean videoPrefer) {
+    private static RenderersFactory buildOfficialRenderersFactory(int audioRenderMode, int videoRenderMode, boolean audioPrefer, boolean videoPrefer, boolean realtimePipeline) {
         DefaultRenderersFactory factory = new DefaultRenderersFactory(App.get()) {
             @Override
             protected AudioSink buildAudioSink(@NonNull Context context, boolean enableFloatOutput, boolean enableAudioOutputPlaybackParams) {
-                return ExoUtil.buildAudioSink(context, enableFloatOutput, enableAudioOutputPlaybackParams);
+                return ExoUtil.buildAudioSink(context, enableFloatOutput, enableAudioOutputPlaybackParams, realtimePipeline);
             }
         };
         if (PlayerSetting.isExoEnhanced()) {
@@ -459,13 +464,32 @@ public class ExoUtil {
             .setExtensionRendererMode(Math.max(audioRenderMode, videoRenderMode));
     }
 
-    private static RenderersFactory buildSimpleRenderersFactory(int audioRenderMode, int videoRenderMode, boolean audioPrefer, boolean videoPrefer) {
-        return buildAudioFallbackRenderersFactory(audioRenderMode, videoRenderMode, audioPrefer);
+    private static RenderersFactory buildSimpleRenderersFactory(int audioRenderMode, int videoRenderMode, boolean audioPrefer, boolean videoPrefer, boolean realtimePipeline) {
+        return buildAudioFallbackRenderersFactory(audioRenderMode, videoRenderMode, audioPrefer, realtimePipeline);
     }
 
-    private static AudioSink buildAudioSink(Context context, boolean enableFloatOutput, boolean enableAudioOutputPlaybackParams) {
-        DefaultAudioSink.Builder builder = new DefaultAudioSink.Builder(context).setEnableFloatOutput(enableFloatOutput).setEnableAudioOutputPlaybackParameters(enableAudioOutputPlaybackParams);
-        if (!PlayerSetting.isAudioPassThrough(PlayerSetting.EXO)) builder.setAudioOutputProvider(new AudioTrackAudioOutputProvider.Builder(null).build());
+    private static AudioSink buildAudioSink(Context context, boolean enableFloatOutput, boolean enableAudioOutputPlaybackParams, boolean realtimePipeline) {
+        RealtimeSubtitleController controller = realtimePipeline ? RealtimeSubtitleController.get() : null;
+        boolean lookahead = controller != null && controller.isAudioPipelineRequested();
+        if (!lookahead) {
+            if (controller != null) controller.createAudioPipeline(false);
+            DefaultAudioSink.Builder builder = new DefaultAudioSink.Builder(context)
+                    .setEnableFloatOutput(enableFloatOutput)
+                    .setEnableAudioOutputPlaybackParameters(enableAudioOutputPlaybackParams);
+            if (!PlayerSetting.isAudioPassThrough(PlayerSetting.EXO)) builder.setAudioOutputProvider(new AudioTrackAudioOutputProvider.Builder(null).build());
+            return builder.build();
+        }
+        RealtimeSubtitleController.AudioPipeline realtime = controller.createAudioPipeline(true);
+        DefaultAudioSink.Builder builder = new DefaultAudioSink.Builder(context)
+                .setEnableFloatOutput(enableFloatOutput)
+                .setEnableAudioOutputPlaybackParameters(enableAudioOutputPlaybackParams)
+                .setAudioProcessors(new AudioProcessor[]{realtime.audioProcessor()});
+        if (!PlayerSetting.isAudioPassThrough(PlayerSetting.EXO)) {
+            AudioTrackAudioOutputProvider.Builder outputBuilder = new AudioTrackAudioOutputProvider.Builder(null);
+            if (lookahead) outputBuilder.setAudioTrackBufferSizeProvider(new RealtimeSubtitleBufferSizeProvider());
+            AudioOutputProvider output = outputBuilder.build();
+            builder.setAudioOutputProvider(new RealtimeSubtitleAudioOutputProvider(output, realtime.clockSink()));
+        }
         return builder.build();
     }
 

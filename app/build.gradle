@@ -121,7 +121,7 @@ androidComponents {
 }
 
 dependencies {
-    implementation fileTree(dir: "libs", include: ["*.aar"])
+    implementation fileTree(dir: "libs", include: ["*.aar", "*.jar"])
     implementation project(':catvod')
     implementation project(':chaquo')
     implementation project(':quickjs')

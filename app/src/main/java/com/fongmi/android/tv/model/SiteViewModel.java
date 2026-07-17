@@ -4,6 +4,7 @@ import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModel;
 
+import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.Constant;
 import com.fongmi.android.tv.api.SiteApi;
 import com.fongmi.android.tv.api.config.VodConfig;
@@ -133,7 +134,7 @@ public class SiteViewModel extends ViewModel {
                     result -> {
                         if (searchEpoch.get() != epoch) return;
                         SiteHealthStore.recordSearch(site, true, result.getList().size(), System.currentTimeMillis() - start, "");
-                        search.postValue(result);
+                        postSearchResult(epoch, result);
                         postSearchProgress(epoch, completed, total);
                     },
                     error -> {
@@ -145,6 +146,12 @@ public class SiteViewModel extends ViewModel {
                     }
             ), MoreExecutors.directExecutor());
         }
+    }
+
+    private void postSearchResult(int epoch, Result result) {
+        App.post(() -> {
+            if (searchEpoch.get() == epoch) search.setValue(result);
+        });
     }
 
     private void postSearchProgress(int epoch, AtomicInteger completed, int total) {

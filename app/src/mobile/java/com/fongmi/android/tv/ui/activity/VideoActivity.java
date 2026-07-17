@@ -1464,7 +1464,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
             applyFusionNativeTextColors();
             return;
         }
-        setText(mBinding.site, R.string.detail_site, getSite().getName());
+        setText(mBinding.site, R.string.detail_site, getSite().getDisplayName());
 
         // 非 TMDB 模式才填充原生字段
         // 基于 TMDB 开关和配置是否就绪
@@ -1552,7 +1552,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         if (!shouldUseTmdbTabletWideLayout()) return;
         setPlainText(mBinding.name, item.getName());
         setPlainText(mBinding.remark, item.getRemarks());
-        setPlainText(mBinding.site, getString(R.string.detail_site, getSite().getName()));
+        setPlainText(mBinding.site, getString(R.string.detail_site, getSite().getDisplayName()));
         setOther(mBinding.other, item);
         mBinding.director.setVisibility(View.GONE);
         mBinding.actor.setVisibility(View.GONE);
@@ -3308,7 +3308,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         keep.setCid(VodConfig.getCid());
         keep.setVodPic(mHistory.getVodPic());
         keep.setVodName(mHistory.getVodName());
-        keep.setSiteName(getSite().getName());
+        keep.setSiteName(getSite().getDisplayName());
         keep.setCreateTime(System.currentTimeMillis());
         keep.save();
     }

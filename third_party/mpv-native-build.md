@@ -125,10 +125,11 @@ scripts/build_mpv_native.sh --abi arm64-v8a --jobs 8 --work-dir /tmp/webhtv-mpv-
 2. 检查 NDK revision 和 LLVM 工具。
 3. 在独立 Python venv 中安装固定版本 Meson/Ninja及 MbedTLS 生成工具依赖。
 4. 下载构建框架和每个固定 commit，初始化 MbedTLS、libplacebo 子模块，并校验 Lua/libunibreak tar 包 SHA-256。
-5. 按依赖顺序构建 MbedTLS、libunibreak、dav1d、FFmpeg、FreeType、FriBidi、HarfBuzz、libass、Lua、shaderc、libplacebo 和 MPV。
-6. 把 FFmpeg 的文件名、ELF `SONAME` 和 `DT_NEEDED` 从 `libav*`/`libsw*` 等长修改为 `libmv*`/`libmw*`。
-7. 使用 NDK `llvm-strip --strip-unneeded` 处理最终库。
-8. 使用 NDK `llvm-readelf` 检查每个 SONAME、MPV 的完整依赖和 Vulkan依赖，并检查 MPV/libplacebo版本字符串。
+5. 对固定 MPV commit 应用 `third_party/patches/mpv-stream-cb-disc-controls.patch`，为自定义 Blu-ray ISO stream 暴露光盘时间轴控制。
+6. 按依赖顺序构建 MbedTLS、libunibreak、dav1d、FFmpeg、FreeType、FriBidi、HarfBuzz、libass、Lua、shaderc、libplacebo 和 MPV。
+7. 把 FFmpeg 的文件名、ELF `SONAME` 和 `DT_NEEDED` 从 `libav*`/`libsw*` 等长修改为 `libmv*`/`libmw*`。
+8. 使用 NDK `llvm-strip --strip-unneeded` 处理最终库。
+9. 使用 NDK `llvm-readelf` 检查每个 SONAME、MPV 的完整依赖和 Vulkan 依赖，并检查 MPV/libplacebo 版本字符串及光盘控制补丁标识。
 
 未指定 `--install` 时，输出位于：
 
@@ -176,6 +177,7 @@ scripts/build_mpv_player_jni.sh
 
 - `third_party/mpv-player-jni/src/**`
 - `third_party/mpv-player-jni/include/mpv/client.h`
+- `third_party/mpv-player-jni/include/mpv/stream_cb.h`
 - 新 `libmpv.so` 的 client API 与当前头文件不兼容
 
 只重编相同 client API 的 MPV/FFmpeg 时，不需要重建 `libplayer.so`。

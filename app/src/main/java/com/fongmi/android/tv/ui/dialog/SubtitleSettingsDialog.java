@@ -70,6 +70,59 @@ public final class SubtitleSettingsDialog {
         LightDialog.apply(dialog);
     }
 
+    public static void showRealtimeModel(FragmentActivity activity, String[] labels, int checked, boolean canDelete, IntCallback selection, Runnable deleteAction) {
+        if (activity == null || labels == null || labels.length == 0) return;
+        MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(activity, R.style.Theme_WebHTV_LightDialog)
+                .setTitle(R.string.subtitle_realtime_model_select_title)
+                .setNegativeButton(R.string.dialog_negative, null)
+                .setSingleChoiceItems(labels, checked, (d, which) -> {
+                    if (selection != null) selection.onValue(which);
+                    d.dismiss();
+                });
+        if (canDelete) builder.setNeutralButton(R.string.subtitle_realtime_model_delete_action, (d, which) -> showDeleteRealtimeModel(activity, deleteAction));
+        AlertDialog dialog = builder.show();
+        LightDialog.apply(dialog);
+    }
+
+    public static void showDeleteRealtimeModel(FragmentActivity activity, Runnable action) {
+        if (activity == null) return;
+        AlertDialog dialog = new MaterialAlertDialogBuilder(activity, R.style.Theme_WebHTV_LightDialog)
+                .setTitle(R.string.subtitle_realtime_model_delete_title)
+                .setMessage(R.string.subtitle_realtime_model_delete_message)
+                .setNegativeButton(R.string.dialog_negative, null)
+                .setPositiveButton(R.string.dialog_positive, (d, which) -> {
+                    if (action != null) action.run();
+                })
+                .show();
+        LightDialog.apply(dialog);
+    }
+
+    public static void showRealtimeCompatibility(FragmentActivity activity, Runnable action) {
+        if (activity == null) return;
+        AlertDialog dialog = new MaterialAlertDialogBuilder(activity, R.style.Theme_WebHTV_LightDialog)
+                .setTitle(R.string.subtitle_realtime_pcm_title)
+                .setMessage(R.string.subtitle_realtime_pcm_required)
+                .setNegativeButton(R.string.dialog_negative, null)
+                .setPositiveButton(R.string.dialog_positive, (d, which) -> {
+                    if (action != null) action.run();
+                })
+                .show();
+        LightDialog.apply(dialog);
+    }
+
+    public static void showRealtimeSpeedCompatibility(FragmentActivity activity, Runnable action) {
+        if (activity == null) return;
+        AlertDialog dialog = new MaterialAlertDialogBuilder(activity, R.style.Theme_WebHTV_LightDialog)
+                .setTitle(R.string.subtitle_realtime_speed_title)
+                .setMessage(R.string.subtitle_realtime_speed_required)
+                .setNegativeButton(R.string.dialog_negative, null)
+                .setPositiveButton(R.string.dialog_positive, (d, which) -> {
+                    if (action != null) action.run();
+                })
+                .show();
+        LightDialog.apply(dialog);
+    }
+
     public static void showNumber(FragmentActivity activity, int titleRes, int currentValue, int minValue, int maxValue, IntCallback callback) {
         if (activity == null) return;
         TextInputEditText input = new TextInputEditText(activity);

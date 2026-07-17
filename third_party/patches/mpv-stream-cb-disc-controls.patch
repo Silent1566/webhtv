@@ -1,0 +1,163 @@
+diff --git a/demux/demux_lavf.c b/demux/demux_lavf.c
+index 414c127..095bbb4 100644
+--- a/demux/demux_lavf.c
++++ b/demux/demux_lavf.c
+@@ -1321,11 +1321,13 @@ static int demux_open_lavf(demuxer_t *demuxer, enum demux_check check)
+ 
+     if (priv->stream) {
+         const char *sname = priv->stream->info->name;
++        const char *forced_demuxer = priv->stream->demuxer;
+         priv->is_dvd_bd = strcmp(sname, "dvdnav") == 0 ||
+                           strcmp(sname, "ifo_dvdnav") == 0 ||
+                           strcmp(sname, "bd") == 0 ||
+                           strcmp(sname, "bdnav") == 0 ||
+-                          strcmp(sname, "bdmv/bluray") == 0;
++                          strcmp(sname, "bdmv/bluray") == 0 ||
++                          (forced_demuxer && strcmp(forced_demuxer, "+disc") == 0);
+     }
+ 
+     return 0;
+diff --git a/include/mpv/stream_cb.h b/include/mpv/stream_cb.h
+index 9ae6f31..0f86a8b 100644
+--- a/include/mpv/stream_cb.h
++++ b/include/mpv/stream_cb.h
+@@ -163,6 +163,52 @@ typedef void (*mpv_stream_cb_close_fn)(void *cookie);
+  */
+ typedef void (*mpv_stream_cb_cancel_fn)(void *cookie);
+ 
++/**
++ * Optional control commands for custom streams which expose an optical-disc
++ * timeline. These are consumed by mpv's disc demux wrapper instead of by the
++ * byte-oriented demuxer directly.
++ */
++typedef enum mpv_stream_cb_control {
++    MPV_STREAM_CB_CTRL_GET_TIME_LENGTH = 1,
++    MPV_STREAM_CB_CTRL_GET_CURRENT_TIME = 2,
++    MPV_STREAM_CB_CTRL_SEEK_TO_TIME = 3,
++    MPV_STREAM_CB_CTRL_GET_NUM_CHAPTERS = 4,
++    MPV_STREAM_CB_CTRL_GET_CHAPTER_TIME = 5,
++    MPV_STREAM_CB_CTRL_GET_LANG = 6,
++} mpv_stream_cb_control;
++
++enum {
++    MPV_STREAM_CB_CONTROL_UNSUPPORTED = -1,
++    MPV_STREAM_CB_CONTROL_ERROR = 0,
++    MPV_STREAM_CB_CONTROL_OK = 1,
++};
++
++typedef enum mpv_stream_cb_track_type {
++    MPV_STREAM_CB_TRACK_VIDEO = 0,
++    MPV_STREAM_CB_TRACK_AUDIO = 1,
++    MPV_STREAM_CB_TRACK_SUBTITLE = 2,
++} mpv_stream_cb_track_type;
++
++/** Argument layout for MPV_STREAM_CB_CTRL_GET_LANG. */
++typedef struct mpv_stream_cb_lang_req {
++    int type; /* mpv_stream_cb_track_type */
++    int id;   /* demuxer stream id, normally the MPEG-TS PID */
++    char name[50];
++} mpv_stream_cb_lang_req;
++
++/**
++ * Optional stream control callback.
++ *
++ * Arguments:
++ * - GET_TIME_LENGTH: double *out_seconds
++ * - GET_CURRENT_TIME: double *out_seconds
++ * - SEEK_TO_TIME: const double *seconds
++ * - GET_NUM_CHAPTERS: int *out_count
++ * - GET_CHAPTER_TIME: double *in_index_out_seconds
++ * - GET_LANG: mpv_stream_cb_lang_req *request
++ */
++typedef int (*mpv_stream_cb_control_fn)(void *cookie, int command, void *arg);
++
+ /**
+  * See mpv_stream_cb_open_ro_fn callback.
+  */
+@@ -187,6 +233,10 @@ typedef struct mpv_stream_cb_info {
+     mpv_stream_cb_size_fn size_fn;
+     mpv_stream_cb_close_fn close_fn;
+     mpv_stream_cb_cancel_fn cancel_fn; /* since API 1.106 */
++    /** WebHTV extension: optional optical-disc timeline controls. */
++    mpv_stream_cb_control_fn control_fn;
++    /** WebHTV extension: optional forced demuxer, for example "+disc". */
++    const char *demuxer;
+ } mpv_stream_cb_info;
+ 
+ /**
+diff --git a/stream/stream_cb.c b/stream/stream_cb.c
+index 27e04a9..2befcab 100644
+--- a/stream/stream_cb.c
++++ b/stream/stream_cb.c
+@@ -45,6 +45,56 @@ static int64_t get_size(stream_t *s)
+     return -1;
+ }
+ 
++static int control(stream_t *s, int cmd, void *arg)
++{
++    struct priv *p = s->priv;
++    int cb_cmd = 0;
++    void *cb_arg = arg;
++    mpv_stream_cb_lang_req lang_req = {0};
++
++    switch (cmd) {
++    case STREAM_CTRL_GET_TIME_LENGTH:
++        cb_cmd = MPV_STREAM_CB_CTRL_GET_TIME_LENGTH;
++        break;
++    case STREAM_CTRL_GET_CURRENT_TIME:
++        cb_cmd = MPV_STREAM_CB_CTRL_GET_CURRENT_TIME;
++        break;
++    case STREAM_CTRL_SEEK_TO_TIME:
++        cb_cmd = MPV_STREAM_CB_CTRL_SEEK_TO_TIME;
++        break;
++    case STREAM_CTRL_GET_NUM_CHAPTERS:
++        cb_cmd = MPV_STREAM_CB_CTRL_GET_NUM_CHAPTERS;
++        break;
++    case STREAM_CTRL_GET_CHAPTER_TIME:
++        cb_cmd = MPV_STREAM_CB_CTRL_GET_CHAPTER_TIME;
++        break;
++    case STREAM_CTRL_GET_LANG: {
++        struct stream_lang_req *req = arg;
++        cb_cmd = MPV_STREAM_CB_CTRL_GET_LANG;
++        lang_req.type = req->type;
++        lang_req.id = req->id;
++        cb_arg = &lang_req;
++        break;
++    }
++    default:
++        return STREAM_UNSUPPORTED;
++    }
++
++    int result = p->info.control_fn(p->info.cookie, cb_cmd, cb_arg);
++    if (result == MPV_STREAM_CB_CONTROL_OK) {
++        if (cmd == STREAM_CTRL_GET_LANG) {
++            struct stream_lang_req *req = arg;
++            snprintf(req->name, sizeof(req->name), "%s", lang_req.name);
++        }
++        if (cmd == STREAM_CTRL_SEEK_TO_TIME)
++            stream_drop_buffers(s);
++        return STREAM_OK;
++    }
++    if (result == MPV_STREAM_CB_CONTROL_ERROR)
++        return STREAM_ERROR;
++    return STREAM_UNSUPPORTED;
++}
++
+ static void s_close(stream_t *s)
+ {
+     struct priv *p = s->priv;
+@@ -90,6 +140,14 @@ static int open_cb(stream_t *stream)
+     stream->get_size = get_size;
+     stream->close = s_close;
+ 
++    if (p->info.control_fn)
++        stream->control = control;
++    if (p->info.demuxer && p->info.demuxer[0]) {
++        stream->demuxer = talloc_strdup(stream, p->info.demuxer);
++        MP_VERBOSE(stream, "WebHTV stream_cb controls enabled, demuxer=%s\n",
++                   stream->demuxer);
++    }
++
+     if (p->info.cancel_fn && stream->cancel) {
+         p->cancel = mp_cancel_new(p);
+         mp_cancel_set_parent(p->cancel, stream->cancel);

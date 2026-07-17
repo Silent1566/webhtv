@@ -755,6 +755,15 @@
     <string name="setting_incognito">无痕模式</string>
     <string name="setting_drive_check">网盘检测</string>
     <string name="setting_audio_source">音频源配置</string>
+    <string name="setting_site_name">站源名称与分组</string>
+    <string name="setting_site_name_summary">已自定义 %1$d 个</string>
+    <string name="site_name_custom">自定义名称</string>
+    <string name="site_name_original">原始名称：%1$s</string>
+    <string name="site_name_key">站源 Key：%1$s</string>
+    <string name="site_name_group_hint">在自定义名称中使用 [标签] 创建分组</string>
+    <string name="site_name_empty">当前接口暂无可用站源</string>
+    <string name="site_name_reset_title">重置自定义站源名称？</string>
+    <string name="site_name_reset_message">将清除当前接口的全部自定义名称和分组。</string>
     <string name="setting_short_drama_source">短剧源配置</string>
     <string name="setting_theme_color">主题色彩</string>
     <string name="setting_auto">自动</string>
@@ -939,6 +948,48 @@
     <string name="mpv_config_file_invalid">mpv.conf 文件无效</string>
     <string name="mpv_config_url_invalid">mpv.conf URL 无效</string>
     <string name="mpv_config_download_empty">下载到的 mpv.conf 为空</string>
+    <string name="mpv_config_new">新建</string>
+    <string name="mpv_config_in_use">使用中</string>
+    <string name="mpv_config_more">更多操作</string>
+    <string name="mpv_config_edit">编辑</string>
+    <string name="mpv_config_rename">重命名</string>
+    <string name="mpv_config_rename_title">重命名配置</string>
+    <string name="mpv_config_new_name">新名称</string>
+    <string name="mpv_config_renamed">配置已重命名</string>
+    <string name="mpv_config_delete">删除</string>
+    <string name="mpv_config_delete_title">删除配置</string>
+    <string name="mpv_config_delete_message">确定删除“%1$s”吗？此操作无法撤销。</string>
+    <string name="mpv_config_create_title">新建配置</string>
+    <string name="mpv_config_create_desc">选择一种方式开始；名称可以留空，系统会自动生成。</string>
+    <string name="mpv_config_done">完成</string>
+    <string name="mpv_config_name">名称</string>
+    <string name="mpv_config_name_optional">名称（选填）</string>
+    <string name="mpv_config_name_example">例如：4K 播放优化</string>
+    <string name="mpv_config_name_required">请输入配置名称</string>
+    <string name="mpv_config_method">配置方式</string>
+    <string name="mpv_config_choose_action">选择创建方式</string>
+    <string name="mpv_config_text_edit">新建文本配置</string>
+    <string name="mpv_config_text_edit_desc">打开编辑器，输入并保存配置内容</string>
+    <string name="mpv_config_import_file">导入配置文件</string>
+    <string name="mpv_config_import_file_desc">从本地选择已有配置文件</string>
+    <string name="mpv_config_editor_new">新建配置</string>
+    <string name="mpv_config_editor_edit">编辑配置</string>
+    <string name="mpv_config_save">保存</string>
+    <string name="mpv_config_encoding">编码  UTF-8</string>
+    <string name="mpv_config_stats">行数：%1$d    字符数：%2$d</string>
+    <string name="mpv_config_no_profiles">暂无配置，点击“新建”创建或导入配置。</string>
+    <string name="mpv_config_profile_missing">配置文件已不存在</string>
+    <string name="mpv_config_profile_saved">配置已保存</string>
+    <string name="mpv_config_switched">已切换为“%1$s”，重新进入播放后生效</string>
+    <string name="mpv_config_text">文本配置</string>
+    <string name="mpv_config_untitled">未命名配置</string>
+    <string name="mpv_config_too_large">配置文本不能超过 1 MB</string>
+    <string name="mpv_config_write_failed">无法写入 MPV 配置文件</string>
+    <string name="mpv_config_script_exists">同名脚本已存在</string>
+    <string name="mpv_config_default_copy">默认配置副本</string>
+    <string name="mpv_config_current">当前使用：%1$s</string>
+    <string name="mpv_config_apply_selected">应用所选</string>
+    <string name="mpv_config_close">关闭</string>
     <string name="player_libass">字幕渲染</string>
     <string name="player_caption">字幕样式</string>
     <string name="player_background">后台播放</string>
@@ -987,6 +1038,41 @@
     <string name="subtitle_manual_applied">已应用字幕：%1$s</string>
     <string name="subtitle_manual_apply_failed">已找到字幕但无法应用</string>
     <string name="subtitle_manual_inactive">请先开始播放再搜索字幕</string>
+    <string name="player_subtitle_realtime_model">实时识别语言</string>
+    <string name="subtitle_realtime_model_status">%1$s · %2$s</string>
+    <string name="subtitle_realtime_model_select_title">选择音频原语言</string>
+    <string name="subtitle_realtime_model_delete_action">删除模型</string>
+    <string name="subtitle_realtime_model_missing">未下载（点击下载）</string>
+    <string name="subtitle_realtime_model_ready">已下载（点击删除）</string>
+    <string name="subtitle_realtime_model_downloading">下载中...</string>
+    <string name="subtitle_realtime_model_downloading_progress">正在下载 %1$d%%</string>
+    <string name="subtitle_realtime_model_deleting">删除中...</string>
+    <string name="subtitle_realtime_model_download_success">实时字幕模型下载完成</string>
+    <string name="subtitle_realtime_model_download_failed">模型下载失败：%1$s</string>
+    <string name="subtitle_realtime_model_delete_title">删除实时字幕模型</string>
+    <string name="subtitle_realtime_model_delete_message">删除已下载的模型并关闭实时 AI 字幕？</string>
+    <string name="subtitle_realtime_model_delete_success">实时字幕模型已删除</string>
+    <string name="subtitle_realtime_model_delete_failed">模型删除失败：%1$s</string>
+    <string name="subtitle_realtime_action">实时 AI 字幕</string>
+    <string name="subtitle_realtime_preparing">正在准备所选实时字幕模型...</string>
+    <string name="subtitle_realtime_preparing_progress">正在准备字幕模型 %1$d%%</string>
+    <string name="subtitle_realtime_on">实时 AI 字幕已开启</string>
+    <string name="subtitle_realtime_off">实时 AI 字幕已关闭</string>
+    <string name="subtitle_realtime_failed">实时字幕失败：%1$s</string>
+    <string name="subtitle_realtime_pcm_title">关闭冲突的音频模式</string>
+    <string name="subtitle_realtime_pcm_required">实时 AI 字幕需要获取 PCM 音频，因此必须关闭音频直通和隧道模式。是否立即关闭并继续开启？</string>
+    <string name="subtitle_realtime_speed_title">恢复正常播放速度</string>
+    <string name="subtitle_realtime_speed_required">同步实时字幕目前需要 1 倍速播放。是否恢复为 1 倍速后继续？</string>
+    <string name="subtitle_realtime_speed_disabled">播放速度已变化，实时字幕已关闭</string>
+    <string name="subtitle_realtime_model_delete_error">无法删除字幕模型</string>
+    <string name="subtitle_realtime_model_directory_error">无法创建字幕模型目录</string>
+    <string name="subtitle_realtime_model_partial_error">无法替换未完成的模型文件</string>
+    <string name="subtitle_realtime_model_incomplete">模型文件不完整：%1$s</string>
+    <string name="subtitle_realtime_model_checksum_error">模型文件校验失败：%1$s</string>
+    <string name="subtitle_realtime_model_install_error">无法安装模型文件：%1$s</string>
+    <string name="subtitle_realtime_model_memory_low">该模型至少需要 %1$d MB 设备内存</string>
+    <string name="subtitle_realtime_model_memory_available_low">当前可用内存不足，请关闭后台应用后重试</string>
+    <string name="subtitle_realtime_model_storage_low">至少需要 %1$d MB 可用存储空间</string>
     <string name="subtitle_ai_translate_title">AI 字幕翻译</string>
     <string name="subtitle_ai_translate_message">使用当前 AI 配置将该字幕翻译为中文字幕？</string>
     <string name="subtitle_ai_translate_action">AI 翻译为中文</string>
@@ -1335,6 +1421,26 @@
         <item>系统</item>
     </string-array>
 
+    <string-array name="select_realtime_subtitle_model">
+        <item>普通话（约 31 MB）</item>
+        <item>粤语（约 135 MB）</item>
+        <item>英语（约 45 MB）</item>
+        <item>德语（约 71 MB）</item>
+        <item>法语（约 71 MB）</item>
+        <item>西班牙语（约 156 MB）</item>
+        <item>日语（约 73 MB）</item>
+        <item>中英混合（约 199 MB）</item>
+    </string-array>
+    <string-array name="select_realtime_subtitle_model_value">
+        <item>zh</item>
+        <item>yue</item>
+        <item>en</item>
+        <item>de</item>
+        <item>fr</item>
+        <item>es</item>
+        <item>ja</item>
+        <item>zh-en</item>
+    </string-array>
     <string-array name="select_subtitle_language">
         <item>中文优先</item>
         <item>简体中文</item>

@@ -73,6 +73,19 @@
             tools:visibility="visible" />
 
         <androidx.appcompat.widget.AppCompatImageView
+            android:id="@+id/realtimeAi"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/subtitle_realtime_action"
+            android:focusable="true"
+            android:src="@drawable/ic_action_realtime_subtitle"
+            android:visibility="gone"
+            app:tint="@color/white_90"
+            tools:visibility="visible" />
+
+        <androidx.appcompat.widget.AppCompatImageView
             android:id="@+id/aiRegenerate"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"

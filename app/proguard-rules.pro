@@ -105,3 +105,6 @@
 
 # Zxing
 -keep class com.google.zxing.** { *; }
+
+# sherpa-onnx JNI resolves Java class and method names directly.
+-keep class com.k2fsa.sherpa.onnx.** { *; }

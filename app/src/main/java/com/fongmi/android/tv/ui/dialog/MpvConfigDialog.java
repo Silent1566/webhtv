@@ -1,321 +1,333 @@
 package com.fongmi.android.tv.ui.dialog;
 
-import android.app.Activity;
-import android.content.Intent;
-import android.content.res.ColorStateList;
+import android.app.Dialog;
 import android.graphics.Color;
-import android.os.Bundle;
+import android.graphics.Rect;
+import android.graphics.drawable.ColorDrawable;
 import android.text.TextUtils;
+import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
-import android.view.inputmethod.EditorInfo;
+import android.view.ViewGroup;
+import android.view.Window;
+import android.view.WindowManager;
+import android.widget.LinearLayout;
+import android.widget.PopupWindow;
 
-import androidx.activity.result.ActivityResultLauncher;
-import androidx.activity.result.contract.ActivityResultContracts;
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import androidx.core.widget.TextViewCompat;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
+import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
+import com.fongmi.android.tv.databinding.DialogMpvConfigManagerBinding;
 import com.fongmi.android.tv.player.mpv.MpvConfigStore;
-import com.fongmi.android.tv.ui.custom.CustomTextListener;
-import com.fongmi.android.tv.utils.FileChooser;
+import com.fongmi.android.tv.ui.adapter.MpvConfigProfileAdapter;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.Task;
 import com.fongmi.android.tv.utils.Util;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.tabs.TabLayout;
-import com.google.android.material.button.MaterialButton;
-import com.google.android.material.textfield.TextInputEditText;
-import com.google.android.material.textfield.TextInputLayout;
+import com.google.android.material.textview.MaterialTextView;
 
-import java.util.Objects;
+import java.util.List;
 
-public class MpvConfigDialog extends BaseAlertDialog {
+public class MpvConfigDialog extends BaseAlertDialog implements MpvConfigProfileAdapter.Listener, MpvConfigCreateDialog.Listener {
 
-    private TextInputLayout nameLayout;
-    private TextInputLayout urlLayout;
-    private TextInputEditText nameInput;
-    private TextInputEditText urlInput;
-    private MaterialButton historyButton;
-    private TabLayout tabLayout;
+    private DialogMpvConfigManagerBinding binding;
+    private MpvConfigProfileAdapter adapter;
     private Runnable callback;
-    private boolean append = true;
     private String target = MpvConfigStore.TARGET_MPV_CONF;
 
     public static void show(Fragment fragment, Runnable callback) {
         MpvConfigDialog dialog = new MpvConfigDialog();
         dialog.callback = callback;
-        dialog.show(fragment.getChildFragmentManager(), null);
+        dialog.show(fragment.getChildFragmentManager(), "mpv-config-manager");
     }
 
     public static void show(FragmentActivity activity, Runnable callback) {
         MpvConfigDialog dialog = new MpvConfigDialog();
         dialog.callback = callback;
-        dialog.show(activity.getSupportFragmentManager(), null);
+        dialog.show(activity.getSupportFragmentManager(), "mpv-config-manager");
     }
 
     @Override
-    @NonNull
-    public android.app.Dialog onCreateDialog(@Nullable Bundle savedInstanceState) {
-        android.app.Dialog dialog = LightDialog.create(requireContext(), getString(R.string.player_mpv_config), createContent(), getString(R.string.dialog_positive), this::applySource, getString(R.string.dialog_negative), null, getString(R.string.lut_reset), this::resetDefault);
-        initView();
-        initEvent();
-        return dialog;
+    protected ViewBinding getBinding() {
+        return binding = DialogMpvConfigManagerBinding.inflate(getLayoutInflater());
     }
 
     @Override
-    protected androidx.viewbinding.ViewBinding getBinding() {
-        return null;
+    protected MaterialAlertDialogBuilder getBuilder() {
+        return new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog).setView(getBinding().getRoot());
     }
 
     @Override
-    protected com.google.android.material.dialog.MaterialAlertDialogBuilder getBuilder() {
-        return null;
+    protected void initView() {
+        adapter = new MpvConfigProfileAdapter(this);
+        binding.recycler.setItemAnimator(null);
+        binding.recycler.setAdapter(adapter);
+        setupTabs();
+        reload();
     }
 
-    private View createContent() {
-        androidx.appcompat.widget.LinearLayoutCompat root = new androidx.appcompat.widget.LinearLayoutCompat(requireContext());
-        root.setOrientation(androidx.appcompat.widget.LinearLayoutCompat.VERTICAL);
-
-        root.addView(createTabs(), new androidx.appcompat.widget.LinearLayoutCompat.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, ResUtil.dp2px(44)));
-
-        nameLayout = inputLayout(R.string.mpv_config_name_hint);
-        nameInput = editText();
-        nameInput.setMaxLines(1);
-        nameInput.setSingleLine(true);
-        nameInput.setMaxEms(10);
-        nameLayout.addView(nameInput);
-        androidx.appcompat.widget.LinearLayoutCompat.LayoutParams nameParams = new androidx.appcompat.widget.LinearLayoutCompat.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT);
-        nameParams.topMargin = ResUtil.dp2px(10);
-        root.addView(nameLayout, nameParams);
-
-        urlLayout = inputLayout(R.string.dialog_config_hint);
-        urlLayout.setEndIconMode(TextInputLayout.END_ICON_CUSTOM);
-        urlLayout.setEndIconDrawable(R.drawable.ic_action_choose);
-        urlLayout.setEndIconTintList(android.content.res.ColorStateList.valueOf(Color.parseColor("#1A73E8")));
-        urlInput = editText();
-        urlInput.setSingleLine(true);
-        urlInput.setHorizontallyScrolling(true);
-        urlLayout.addView(urlInput);
-
-        historyButton = historyButton();
-        androidx.appcompat.widget.LinearLayoutCompat sourceRow = new androidx.appcompat.widget.LinearLayoutCompat(requireContext());
-        sourceRow.setGravity(Gravity.CENTER_VERTICAL);
-        sourceRow.setOrientation(androidx.appcompat.widget.LinearLayoutCompat.HORIZONTAL);
-        sourceRow.addView(urlLayout, new androidx.appcompat.widget.LinearLayoutCompat.LayoutParams(0, android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        androidx.appcompat.widget.LinearLayoutCompat.LayoutParams historyParams = new androidx.appcompat.widget.LinearLayoutCompat.LayoutParams(ResUtil.dp2px(40), ResUtil.dp2px(56));
-        historyParams.leftMargin = ResUtil.dp2px(8);
-        sourceRow.addView(historyButton, historyParams);
-        androidx.appcompat.widget.LinearLayoutCompat.LayoutParams rowParams = new androidx.appcompat.widget.LinearLayoutCompat.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT);
-        rowParams.topMargin = ResUtil.dp2px(12);
-        root.addView(sourceRow, rowParams);
-        return root;
+    @Override
+    protected void initEvent() {
+        binding.close.setOnClickListener(view -> dismiss());
+        binding.create.setOnClickListener(view -> MpvConfigCreateDialog.show(getChildFragmentManager(), target, this));
     }
 
-    private MaterialButton historyButton() {
-        MaterialButton button = new MaterialButton(requireContext());
-        button.setAllCaps(false);
-        button.setSingleLine(true);
-        button.setText("");
-        button.setContentDescription(getString(R.string.mpv_config_history));
-        button.setIconResource(R.drawable.ic_setting_history);
-        button.setIconGravity(MaterialButton.ICON_GRAVITY_TEXT_START);
-        button.setIconSize(ResUtil.dp2px(24));
-        button.setIconPadding(0);
-        button.setIconTint(ColorStateList.valueOf(Color.parseColor("#1A73E8")));
-        button.setMinWidth(0);
-        button.setMinimumWidth(0);
-        button.setInsetTop(0);
-        button.setInsetBottom(0);
-        button.setPadding(0, 0, 0, 0);
-        button.setCornerRadius(ResUtil.dp2px(20));
-        button.setFocusable(Util.isLeanback());
-        button.setFocusableInTouchMode(false);
-        button.setStrokeWidth(0);
-        button.setBackgroundTintList(ColorStateList.valueOf(Color.TRANSPARENT));
-        button.setOnClickListener(this::showHistory);
-        return button;
-    }
-
-    private View createTabs() {
-        tabLayout = new TabLayout(requireContext());
-        tabLayout.setTabMode(TabLayout.MODE_FIXED);
-        tabLayout.setTabGravity(TabLayout.GRAVITY_FILL);
-        tabLayout.setSelectedTabIndicatorColor(Color.parseColor("#1A73E8"));
-        tabLayout.setSelectedTabIndicatorHeight(ResUtil.dp2px(2));
-        tabLayout.setTabTextColors(Color.parseColor("#5F6368"), Color.parseColor("#1A73E8"));
-        tabLayout.setTabRippleColor(ColorStateList.valueOf(Color.TRANSPARENT));
-        tabLayout.setUnboundedRipple(false);
-        tabLayout.setBackgroundColor(Color.TRANSPARENT);
-        tabLayout.setFocusable(Util.isLeanback());
-        tabLayout.setFocusableInTouchMode(false);
-        for (String label : getTargetLabels()) tabLayout.addTab(tabLayout.newTab().setText(label), TextUtils.equals(label, target));
-        tabLayout.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
+    private void setupTabs() {
+        binding.tabs.setTabMode(TabLayout.MODE_FIXED);
+        binding.tabs.setTabGravity(TabLayout.GRAVITY_FILL);
+        binding.tabs.setSelectedTabIndicatorColor(Color.parseColor("#1A73E8"));
+        binding.tabs.setTabTextColors(Color.parseColor("#5F6368"), Color.parseColor("#1A73E8"));
+        binding.tabs.setTabRippleColor(android.content.res.ColorStateList.valueOf(Color.TRANSPARENT));
+        binding.tabs.setUnboundedRipple(false);
+        for (String label : targets()) binding.tabs.addTab(binding.tabs.newTab().setText(label));
+        binding.tabs.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
             @Override
             public void onTabSelected(TabLayout.Tab tab) {
-                String[] labels = getTargetLabels();
-                if (tab.getPosition() < 0 || tab.getPosition() >= labels.length) return;
-                target = labels[tab.getPosition()];
-                bindTarget();
+                String[] targets = targets();
+                if (tab.getPosition() < 0 || tab.getPosition() >= targets.length) return;
+                target = targets[tab.getPosition()];
+                reload();
             }
 
-            @Override
-            public void onTabUnselected(TabLayout.Tab tab) {
-            }
-
-            @Override
-            public void onTabReselected(TabLayout.Tab tab) {
-            }
-        });
-        return tabLayout;
-    }
-
-    private TextInputLayout inputLayout(int hint) {
-        TextInputLayout layout = new TextInputLayout(requireContext());
-        layout.setHint(getString(hint));
-        layout.setBoxBackgroundColor(Color.WHITE);
-        layout.setBoxStrokeColor(Color.parseColor("#DADCE0"));
-        layout.setHintTextColor(android.content.res.ColorStateList.valueOf(Color.parseColor("#5F6368")));
-        return layout;
-    }
-
-    private TextInputEditText editText() {
-        TextInputEditText input = new TextInputEditText(requireContext());
-        input.setImeOptions(EditorInfo.IME_ACTION_DONE);
-        input.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
-        input.setInputType(android.text.InputType.TYPE_CLASS_TEXT);
-        input.setTextColor(Color.parseColor("#202124"));
-        input.setHintTextColor(Color.parseColor("#8A8F98"));
-        return input;
-    }
-
-    protected void initView() {
-        bindTarget();
-    }
-
-    protected void initEvent() {
-        urlLayout.setEndIconOnClickListener(this::chooseFile);
-        urlInput.addTextChangedListener(new CustomTextListener() {
-            @Override
-            public void onTextChanged(CharSequence s, int start, int before, int count) {
-                detect(s.toString());
-            }
-        });
-        urlInput.setOnEditorActionListener((textView, actionId, event) -> {
-            if (actionId == EditorInfo.IME_ACTION_DONE) applySource(textView);
-            return true;
-        });
-        nameInput.setOnEditorActionListener((textView, actionId, event) -> {
-            if (actionId == EditorInfo.IME_ACTION_DONE) applySource(textView);
-            return true;
+            @Override public void onTabUnselected(TabLayout.Tab tab) { }
+            @Override public void onTabReselected(TabLayout.Tab tab) { }
         });
     }
 
-    private void chooseFile(View view) {
-        FileChooser.from(launcher).show("text/*", new String[]{"text/*", "application/octet-stream", "*/*"});
-    }
-
-    private void showHistory(View view) {
-        CharSequence[] items = MpvConfigStore.historyLabels(target);
-        if (items.length == 0) {
-            Notify.show(R.string.mpv_config_history_empty);
-            return;
-        }
-        MpvConfigHistoryDialog.show(getChildFragmentManager(), target, new MpvConfigHistoryDialog.Listener() {
-            @Override
-            public void onHistoryClick(int position) {
-                runAsync(() -> MpvConfigStore.applyHistory(target, position));
-            }
-
-            @Override
-            public void onHistoryChanged() {
-                historyButton.setEnabled(MpvConfigStore.hasHistory(target));
-            }
-        });
-    }
-
-    private void applySource(View view) {
-        String source = Objects.toString(urlInput.getText(), "").trim();
-        String name = Objects.toString(nameInput.getText(), "").trim();
-        if (TextUtils.isEmpty(source)) {
-            Notify.show(R.string.remote_trust_config_url_required);
-            urlInput.requestFocus();
-            return;
-        }
-        runAsync(() -> MpvConfigStore.applySource(target, source, name));
-    }
-
-    private void resetDefault(View view) {
-        runAsync(() -> MpvConfigStore.applyDefault(target));
-    }
-
-    private void bindTarget() {
-        TabLayout.Tab tab = tabLayout.getTabAt(getTargetIndex());
-        if (tab != null && !tab.isSelected()) tab.select();
-        nameInput.setText(MpvConfigStore.getName(target));
-        urlInput.setText(MpvConfigStore.getSource(target));
-        urlInput.setSelection(urlInput.length());
-        urlLayout.setHint(MpvConfigStore.TARGET_SCRIPTS.equals(target) ? getString(R.string.mpv_config_script_hint) : getString(R.string.dialog_config_hint));
-        historyButton.setEnabled(MpvConfigStore.hasHistory(target));
-    }
-
-    private String[] getTargetLabels() {
+    private String[] targets() {
         return new String[]{MpvConfigStore.TARGET_MPV_CONF, MpvConfigStore.TARGET_INPUT_CONF, MpvConfigStore.TARGET_SCRIPTS};
     }
 
-    private int getTargetIndex() {
-        if (MpvConfigStore.TARGET_INPUT_CONF.equals(target)) return 1;
-        if (MpvConfigStore.TARGET_SCRIPTS.equals(target)) return 2;
-        return 0;
+    private void reload() {
+        List<MpvConfigStore.ConfigProfile> profiles = MpvConfigStore.profiles(target);
+        boolean scripts = MpvConfigStore.TARGET_SCRIPTS.equals(target);
+        adapter.submit(profiles, scripts);
+        binding.recycler.setVisibility(profiles.isEmpty() ? View.GONE : View.VISIBLE);
+        binding.empty.setVisibility(profiles.isEmpty() ? View.VISIBLE : View.GONE);
     }
 
-    private void detect(String s) {
-        if (append && "h".equalsIgnoreCase(s)) {
-            append = false;
-            urlInput.append("ttp://");
-        } else if (append && "f".equalsIgnoreCase(s)) {
-            append = false;
-            urlInput.append("ile://");
-        } else if (s.length() > 1) {
-            append = false;
-        } else if (s.isEmpty()) {
-            append = true;
+    @Override
+    public void onSelect(MpvConfigStore.ConfigProfile profile) {
+        if (MpvConfigStore.TARGET_SCRIPTS.equals(target)) {
+            openEditor(profile);
+            return;
         }
+        if (profile.active) return;
+        String selectedTarget = target;
+        runAsync(() -> {
+            MpvConfigStore.selectProfile(selectedTarget, profile.id);
+            return profile.name;
+        }, name -> {
+            if (TextUtils.equals(target, selectedTarget)) reload();
+            Notify.show(getString(R.string.mpv_config_switched, name));
+            notifyChanged();
+        });
     }
 
-    private void runAsync(ThrowingRunnable runnable) {
+    @Override
+    public void onMore(View anchor, MpvConfigStore.ConfigProfile profile) {
+        LinearLayout content = new LinearLayout(requireContext());
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setBackgroundResource(R.drawable.shape_mpv_action_menu);
+        PopupWindow popup = new PopupWindow(content, ResUtil.dp2px(176), WindowManager.LayoutParams.WRAP_CONTENT, true);
+        content.addView(actionItem(R.string.mpv_config_edit, R.drawable.ic_git_cloud_edit, false, () -> {
+            popup.dismiss();
+            openEditor(profile);
+        }));
+        if (!profile.isDefault()) content.addView(actionItem(R.string.mpv_config_rename, R.drawable.ic_mpv_rename, false, () -> {
+            popup.dismiss();
+            showRename(profile);
+        }));
+        if (!profile.isDefault()) content.addView(actionItem(R.string.mpv_config_delete, R.drawable.ic_setting_delete, true, () -> {
+            popup.dismiss();
+            confirmDelete(profile);
+        }));
+        popup.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        popup.setOutsideTouchable(true);
+        popup.setElevation(ResUtil.dp2px(10));
+        showActionMenu(popup, content, anchor);
+    }
+
+    private void showActionMenu(PopupWindow popup, LinearLayout content, View anchor) {
+        int menuWidth = ResUtil.dp2px(176);
+        int menuHeight = ResUtil.dp2px(48 * content.getChildCount());
+        int edgeMargin = ResUtil.dp2px(12);
+        int[] location = new int[2];
+        Rect visibleFrame = new Rect();
+        anchor.getLocationOnScreen(location);
+        anchor.getWindowVisibleDisplayFrame(visibleFrame);
+        int belowTop = location[1] + anchor.getHeight() / 2;
+        boolean showAbove = belowTop + menuHeight + edgeMargin > visibleFrame.bottom;
+        int yOffset = showAbove ? -menuHeight - anchor.getHeight() / 2 : -anchor.getHeight() / 2;
+        popup.showAsDropDown(anchor, anchor.getWidth() - menuWidth, yOffset);
+    }
+
+    private View actionItem(int textRes, int iconRes, boolean danger, Runnable action) {
+        MaterialTextView item = new MaterialTextView(requireContext());
+        item.setText(textRes);
+        item.setTextSize(14);
+        item.setGravity(Gravity.CENTER_VERTICAL);
+        item.setPadding(ResUtil.dp2px(14), 0, ResUtil.dp2px(14), 0);
+        item.setCompoundDrawablePadding(ResUtil.dp2px(12));
+        item.setCompoundDrawablesRelativeWithIntrinsicBounds(iconRes, 0, 0, 0);
+        int color = Color.parseColor(danger ? "#C5221F" : "#202124");
+        item.setTextColor(color);
+        TextViewCompat.setCompoundDrawableTintList(item, android.content.res.ColorStateList.valueOf(color));
+        TypedValue value = new TypedValue();
+        requireContext().getTheme().resolveAttribute(android.R.attr.selectableItemBackground, value, true);
+        item.setBackgroundResource(value.resourceId);
+        item.setClickable(true);
+        item.setFocusable(true);
+        item.setOnClickListener(view -> action.run());
+        item.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ResUtil.dp2px(48)));
+        return item;
+    }
+
+    private void confirmDelete(MpvConfigStore.ConfigProfile profile) {
+        ChoiceDialog.showConfirm(this, R.string.mpv_config_delete_title, getString(R.string.mpv_config_delete_message, profile.name), R.string.mpv_config_delete, () -> runAsync(() -> MpvConfigStore.deleteProfile(target, profile.id), ignored -> {
+            reload();
+            notifyChanged();
+        }));
+    }
+
+    private void showRename(MpvConfigStore.ConfigProfile profile) {
+        String selectedTarget = target;
+        MpvConfigRenameDialog.show(getChildFragmentManager(), profile.name, name -> {
+            try {
+                MpvConfigStore.renameProfile(selectedTarget, profile.id, name);
+                if (TextUtils.equals(target, selectedTarget)) reload();
+                Notify.show(R.string.mpv_config_renamed);
+                notifyChanged();
+                return true;
+            } catch (Throwable e) {
+                Notify.show(message(e));
+                return false;
+            }
+        });
+    }
+
+    @Override
+    public void onText(String name) {
+        String template;
+        if (MpvConfigStore.TARGET_SCRIPTS.equals(target)) template = "-- WebHTV MPV script\n\n";
+        else if (MpvConfigStore.TARGET_INPUT_CONF.equals(target)) template = "# WebHTV input.conf\n\n";
+        else template = "# WebHTV mpv.conf\n\n";
+        String displayName = TextUtils.isEmpty(name) ? getString(R.string.mpv_config_untitled) : name;
+        showEditor(null, displayName, template, true);
+    }
+
+    @Override
+    public void onImport(String name, String path) {
+        String selectedTarget = target;
+        runAsync(() -> {
+            String id = MpvConfigStore.importProfile(selectedTarget, path, name);
+            if (!MpvConfigStore.TARGET_SCRIPTS.equals(selectedTarget)) MpvConfigStore.selectProfile(selectedTarget, id);
+            return id;
+        }, id -> {
+            if (TextUtils.equals(target, selectedTarget)) reload();
+            Notify.show(R.string.mpv_config_profile_saved);
+            notifyChanged();
+        });
+    }
+
+    private void openEditor(MpvConfigStore.ConfigProfile profile) {
         Notify.progress(requireContext());
         Task.execute(() -> {
             try {
-                runnable.run();
+                String content = MpvConfigStore.profileContent(target, profile.id);
                 App.post(() -> {
                     Notify.dismiss();
-                    Notify.show(R.string.mpv_config_saved);
-                    if (callback != null) callback.run();
-                    dismissAllowingStateLoss();
+                    String name = profile.isDefault() ? getString(R.string.mpv_config_default_copy) : profile.name;
+                    showEditor(profile.id, name, content, profile.isDefault());
                 });
             } catch (Throwable e) {
                 App.post(() -> {
                     Notify.dismiss();
-                    Notify.show(e.getMessage());
+                    Notify.show(message(e));
                 });
             }
         });
     }
 
-    private final ActivityResultLauncher<Intent> launcher = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
-        if (result.getResultCode() != Activity.RESULT_OK || result.getData() == null || result.getData().getData() == null) return;
-        String path = FileChooser.getPathFromUri(result.getData().getData());
-        if (TextUtils.isEmpty(path)) return;
-        String name = Objects.toString(nameInput.getText(), "").trim();
-        runAsync(() -> MpvConfigStore.applyFile(target, path, name));
-    });
-
-    private interface ThrowingRunnable {
-        void run() throws Exception;
+    private void showEditor(String id, String name, String content, boolean creating) {
+        MpvConfigEditorDialog.show(getChildFragmentManager(), name, content, creating, text -> {
+            try {
+                String savedId = MpvConfigStore.saveTextProfile(target, id, name, text);
+                if (creating && !MpvConfigStore.TARGET_SCRIPTS.equals(target)) MpvConfigStore.selectProfile(target, savedId);
+                reload();
+                Notify.show(R.string.mpv_config_profile_saved);
+                notifyChanged();
+                return true;
+            } catch (Throwable e) {
+                Notify.show(message(e));
+                return false;
+            }
+        });
     }
 
+    private void notifyChanged() {
+        if (callback != null) callback.run();
+    }
+
+    private <T> void runAsync(ThrowingSupplier<T> supplier, Success<T> success) {
+        Notify.progress(requireContext());
+        Task.execute(() -> {
+            try {
+                T value = supplier.get();
+                App.post(() -> {
+                    Notify.dismiss();
+                    success.accept(value);
+                });
+            } catch (Throwable e) {
+                App.post(() -> {
+                    Notify.dismiss();
+                    Notify.show(message(e));
+                });
+            }
+        });
+    }
+
+    private String message(Throwable error) {
+        return TextUtils.isEmpty(error.getMessage()) ? error.getClass().getSimpleName() : error.getMessage();
+    }
+
+    @Override
+    public void onStart() {
+        super.onStart();
+        Dialog dialog = getDialog();
+        Window window = dialog == null ? null : dialog.getWindow();
+        if (window == null) return;
+        boolean land = ResUtil.isLand(requireContext());
+        WindowManager.LayoutParams params = window.getAttributes();
+        float width = Util.isLeanback() ? 0.68f : land ? 0.62f : 0.94f;
+        params.width = Math.min((int) (ResUtil.getScreenWidth(requireContext()) * width), ResUtil.dp2px(760));
+        params.height = (int) (ResUtil.getScreenHeight(requireContext()) * (land ? 0.88f : 0.82f));
+        params.dimAmount = 0.58f;
+        window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        window.getDecorView().setPadding(0, 0, 0, 0);
+        window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
+        window.setAttributes(params);
+        window.setLayout(params.width, params.height);
+        ViewGroup.LayoutParams rootParams = binding.getRoot().getLayoutParams();
+        if (rootParams != null) {
+            rootParams.height = params.height;
+            binding.getRoot().setLayoutParams(rootParams);
+        }
+        binding.getRoot().post(() -> window.setLayout(params.width, params.height));
+        if (Util.isLeanback()) binding.recycler.post(() -> binding.recycler.requestFocus());
+    }
+
+    private interface ThrowingSupplier<T> {
+        T get() throws Exception;
+    }
+
+    private interface Success<T> {
+        void accept(T value);
+    }
 }

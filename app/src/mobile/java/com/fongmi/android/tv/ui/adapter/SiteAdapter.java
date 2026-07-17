@@ -17,6 +17,7 @@ import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.setting.SiteHealthStore;
 import com.fongmi.android.tv.setting.SiteBlockSetting;
 import com.fongmi.android.tv.setting.SiteOrderStore;
+import com.fongmi.android.tv.setting.SiteNameStore;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -114,12 +115,8 @@ public class SiteAdapter extends RecyclerView.Adapter<SiteAdapter.ViewHolder> {
         boolean searching = !TextUtils.isEmpty(text);
         mItems.clear();
         for (Site site : mAllItems) {
-            String name = site.getName();
-            String key = site.getKey();
             boolean matchGroup = searching || site.inGroup(group);
-            boolean matchName = !TextUtils.isEmpty(name) && name.toLowerCase(Locale.ROOT).contains(text);
-            boolean matchKey = !TextUtils.isEmpty(key) && key.toLowerCase(Locale.ROOT).contains(text);
-            boolean matchKeyword = !searching || matchName || matchKey;
+            boolean matchKeyword = !searching || SiteNameStore.matchesSearch(site, text);
             if (matchGroup && matchKeyword) mItems.add(site);
         }
         notifyDataSetChanged();
@@ -165,7 +162,7 @@ public class SiteAdapter extends RecyclerView.Adapter<SiteAdapter.ViewHolder> {
         boolean blocked = SiteBlockSetting.isBlocked(item);
         boolean on = block || !search || change;
         boolean singleColumn = column == 1;
-        holder.binding.text.setText(item.getName());
+        holder.binding.text.setText(item.getDisplayName());
         holder.binding.health.setBackgroundTintList(ColorStateList.valueOf(SiteHealthStore.getColor(item)));
         holder.binding.text.setEnabled(on);
         holder.binding.text.setFocusable(false);

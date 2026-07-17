@@ -16,6 +16,8 @@ Project-specific changes:
   `mpv_event_end_file.error`.
 - Native calls `MPVLib.endFile(reason, error, errorText)` instead of only
   forwarding the event id.
+- Blu-ray ISO streams expose libbluray duration/current-time/time-seek,
+  chapters, and PID language controls to the patched MPV `stream_cb` API.
 - The build links against this project's bundled MPV assets, whose FFmpeg
   libraries use renamed SONAMEs such as `libmvcodec.so` and `libmwscale.so`.
 

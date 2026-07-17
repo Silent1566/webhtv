@@ -715,7 +715,7 @@ public class Manage implements Process {
             if (site.isEmpty()) continue;
             JsonObject item = new JsonObject();
             item.addProperty("key", site.getKey());
-            item.addProperty("name", TextUtils.isEmpty(site.getName()) ? site.getKey() : site.getName());
+            item.addProperty("name", site.getDisplayName());
             item.addProperty("home", site.getKey().equals(homeKey));
             array.add(item);
         }

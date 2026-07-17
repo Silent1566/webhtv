@@ -451,7 +451,11 @@ public class PlayerSetting {
     }
 
     public static void putAudioPassThrough(boolean audioPassThrough) {
-        KernelPerformanceSetting.putAudioPassThrough(getPlayer(), audioPassThrough);
+        putAudioPassThrough(getPlayer(), audioPassThrough);
+    }
+
+    public static void putAudioPassThrough(int kernel, boolean audioPassThrough) {
+        KernelPerformanceSetting.putAudioPassThrough(sanitizePlayer(kernel), audioPassThrough);
     }
 
     public static boolean isVideoPrefer() {

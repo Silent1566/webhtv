@@ -758,6 +758,15 @@
     <string name="setting_incognito">Incognito mode</string>
     <string name="setting_drive_check">Drive link check</string>
     <string name="setting_audio_source">Audio source config</string>
+    <string name="setting_site_name">Site names and groups</string>
+    <string name="setting_site_name_summary">%1$d customized</string>
+    <string name="site_name_custom">Custom name</string>
+    <string name="site_name_original">Original: %1$s</string>
+    <string name="site_name_key">Key: %1$s</string>
+    <string name="site_name_group_hint">Use [tag] in the custom name to create groups</string>
+    <string name="site_name_empty">No sites available</string>
+    <string name="site_name_reset_title">Reset custom site names?</string>
+    <string name="site_name_reset_message">All custom names and groups for the current interface will be removed.</string>
     <string name="setting_short_drama_source">Short drama source config</string>
     <string name="setting_theme_color">Theme color</string>
     <string name="setting_auto">Auto</string>
@@ -942,6 +951,48 @@
     <string name="mpv_config_file_invalid">Invalid mpv.conf file</string>
     <string name="mpv_config_url_invalid">Invalid mpv.conf URL</string>
     <string name="mpv_config_download_empty">Downloaded mpv.conf is empty</string>
+    <string name="mpv_config_new">New</string>
+    <string name="mpv_config_in_use">In use</string>
+    <string name="mpv_config_more">More actions</string>
+    <string name="mpv_config_edit">Edit</string>
+    <string name="mpv_config_rename">Rename</string>
+    <string name="mpv_config_rename_title">Rename config</string>
+    <string name="mpv_config_new_name">New name</string>
+    <string name="mpv_config_renamed">Config renamed</string>
+    <string name="mpv_config_delete">Delete</string>
+    <string name="mpv_config_delete_title">Delete config</string>
+    <string name="mpv_config_delete_message">Delete “%1$s”? This cannot be undone.</string>
+    <string name="mpv_config_create_title">New config</string>
+    <string name="mpv_config_create_desc">Choose how to start. Leave the name blank to generate one automatically.</string>
+    <string name="mpv_config_done">Done</string>
+    <string name="mpv_config_name">Name</string>
+    <string name="mpv_config_name_optional">Name (optional)</string>
+    <string name="mpv_config_name_example">For example: 4K playback</string>
+    <string name="mpv_config_name_required">Enter a config name</string>
+    <string name="mpv_config_method">Config method</string>
+    <string name="mpv_config_choose_action">Choose a creation method</string>
+    <string name="mpv_config_text_edit">Create text config</string>
+    <string name="mpv_config_text_edit_desc">Open the editor to enter and save config content</string>
+    <string name="mpv_config_import_file">Import config file</string>
+    <string name="mpv_config_import_file_desc">Choose an existing config file from this device</string>
+    <string name="mpv_config_editor_new">New config</string>
+    <string name="mpv_config_editor_edit">Edit config</string>
+    <string name="mpv_config_save">Save</string>
+    <string name="mpv_config_encoding">Encoding  UTF-8</string>
+    <string name="mpv_config_stats">Lines: %1$d    Characters: %2$d</string>
+    <string name="mpv_config_no_profiles">No configs yet. Tap New to create or import one.</string>
+    <string name="mpv_config_profile_missing">The config no longer exists</string>
+    <string name="mpv_config_profile_saved">Config saved</string>
+    <string name="mpv_config_switched">Now using “%1$s”. Reopen playback to apply it.</string>
+    <string name="mpv_config_text">Text config</string>
+    <string name="mpv_config_untitled">Untitled config</string>
+    <string name="mpv_config_too_large">Config text must be smaller than 1 MB</string>
+    <string name="mpv_config_write_failed">Unable to write the MPV config file</string>
+    <string name="mpv_config_script_exists">A script with this name already exists</string>
+    <string name="mpv_config_default_copy">Default config copy</string>
+    <string name="mpv_config_current">Currently using: %1$s</string>
+    <string name="mpv_config_apply_selected">Apply selected</string>
+    <string name="mpv_config_close">Close</string>
     <string name="player_libass">libass</string>
     <string name="player_caption">Caption style</string>
     <string name="player_background">Background play</string>
@@ -990,6 +1041,41 @@
     <string name="subtitle_manual_applied">Subtitle applied: %1$s</string>
     <string name="subtitle_manual_apply_failed">Subtitle found but could not be applied</string>
     <string name="subtitle_manual_inactive">Start playback before searching subtitles</string>
+    <string name="player_subtitle_realtime_model">Real-time recognition language</string>
+    <string name="subtitle_realtime_model_status">%1$s · %2$s</string>
+    <string name="subtitle_realtime_model_select_title">Select audio source language</string>
+    <string name="subtitle_realtime_model_delete_action">Delete model</string>
+    <string name="subtitle_realtime_model_missing">Not downloaded (tap to download)</string>
+    <string name="subtitle_realtime_model_ready">Downloaded (tap to delete)</string>
+    <string name="subtitle_realtime_model_downloading">Downloading...</string>
+    <string name="subtitle_realtime_model_downloading_progress">Downloading %1$d%%</string>
+    <string name="subtitle_realtime_model_deleting">Deleting...</string>
+    <string name="subtitle_realtime_model_download_success">Real-time subtitle model downloaded</string>
+    <string name="subtitle_realtime_model_download_failed">Model download failed: %1$s</string>
+    <string name="subtitle_realtime_model_delete_title">Delete real-time subtitle model</string>
+    <string name="subtitle_realtime_model_delete_message">Delete the downloaded model and disable real-time AI subtitles?</string>
+    <string name="subtitle_realtime_model_delete_success">Real-time subtitle model deleted</string>
+    <string name="subtitle_realtime_model_delete_failed">Model deletion failed: %1$s</string>
+    <string name="subtitle_realtime_action">Real-time AI subtitles</string>
+    <string name="subtitle_realtime_preparing">Preparing the selected real-time subtitle model...</string>
+    <string name="subtitle_realtime_preparing_progress">Preparing subtitle model %1$d%%</string>
+    <string name="subtitle_realtime_on">Real-time AI subtitles enabled</string>
+    <string name="subtitle_realtime_off">Real-time AI subtitles disabled</string>
+    <string name="subtitle_realtime_failed">Real-time subtitle failed: %1$s</string>
+    <string name="subtitle_realtime_pcm_title">Disable incompatible audio modes</string>
+    <string name="subtitle_realtime_pcm_required">Real-time AI subtitles require PCM audio. Disable audio passthrough and tunnel mode now, then continue?</string>
+    <string name="subtitle_realtime_speed_title">Reset playback speed</string>
+    <string name="subtitle_realtime_speed_required">Synchronized real-time subtitles currently require 1x playback. Reset the speed and continue?</string>
+    <string name="subtitle_realtime_speed_disabled">Real-time subtitles were disabled because playback speed changed</string>
+    <string name="subtitle_realtime_model_delete_error">Cannot delete the subtitle model</string>
+    <string name="subtitle_realtime_model_directory_error">Cannot create the subtitle model directory</string>
+    <string name="subtitle_realtime_model_partial_error">Cannot replace the partial model download</string>
+    <string name="subtitle_realtime_model_incomplete">Incomplete model file: %1$s</string>
+    <string name="subtitle_realtime_model_checksum_error">Model file checksum failed: %1$s</string>
+    <string name="subtitle_realtime_model_install_error">Cannot install model file: %1$s</string>
+    <string name="subtitle_realtime_model_memory_low">This model requires at least %1$d MB of device memory</string>
+    <string name="subtitle_realtime_model_memory_available_low">Available memory is low. Close background apps and try again</string>
+    <string name="subtitle_realtime_model_storage_low">At least %1$d MB of free storage is required</string>
     <string name="subtitle_ai_translate_title">AI subtitle translation</string>
     <string name="subtitle_ai_translate_message">Translate this subtitle to Chinese with the current AI configuration?</string>
     <string name="subtitle_ai_translate_action">AI translate to Chinese</string>
@@ -1353,6 +1439,26 @@
         <item>System</item>
     </string-array>
 
+    <string-array name="select_realtime_subtitle_model">
+        <item>Mandarin (about 31 MB)</item>
+        <item>Cantonese (about 135 MB)</item>
+        <item>English (about 45 MB)</item>
+        <item>German (about 71 MB)</item>
+        <item>French (about 71 MB)</item>
+        <item>Spanish (about 156 MB)</item>
+        <item>Japanese (about 73 MB)</item>
+        <item>Chinese + English (about 199 MB)</item>
+    </string-array>
+    <string-array name="select_realtime_subtitle_model_value">
+        <item>zh</item>
+        <item>yue</item>
+        <item>en</item>
+        <item>de</item>
+        <item>fr</item>
+        <item>es</item>
+        <item>ja</item>
+        <item>zh-en</item>
+    </string-array>
     <string-array name="select_subtitle_language">
         <item>Chinese first</item>
         <item>Simplified Chinese</item>

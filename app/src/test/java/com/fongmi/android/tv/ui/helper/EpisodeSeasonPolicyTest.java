@@ -58,8 +58,9 @@ public class EpisodeSeasonPolicyTest {
     }
 
     @Test
-    public void linearEpisodeNumber_usesListPositionWhenArcNumberWouldMoveEpisodeBackwards() {
-        assertEquals(18, EpisodeSeasonPolicy.linearEpisodeNumber(1, 17));
+    public void linearEpisodeNumber_trustsSourceNumberRegardlessOfPosition() {
+        // 新逻辑：文件名有集号时，直接使用它（真实场景：S01E01 在 index=17）
+        assertEquals(1, EpisodeSeasonPolicy.linearEpisodeNumber(1, 17));
     }
 
     @Test

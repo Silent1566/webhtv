@@ -624,6 +624,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
 
             @Override
             public void onItemLongClick(View anchor, Episode episode, int episodeNumber) {
+                anchor.setPressed(false);
                 showTmdbEpisodeDetail(episode, episodeNumber);
             }
         });
@@ -2448,13 +2449,19 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             try {
                 List<TmdbItem> items = searchTmdbItems(query, fallback);
                 runOnAliveUi(() -> {
-                    if (generation != loadGeneration || dialogGeneration != tmdbDialogGeneration) return;
+                    if (generation != loadGeneration || dialogGeneration != tmdbDialogGeneration) {
+                        binding.loading.setVisibility(View.GONE);
+                        return;
+                    }
                     binding.loading.setVisibility(View.GONE);
                     showTmdbMatchDialog(items, false);
                 });
             } catch (Throwable e) {
                 runOnAliveUi(() -> {
-                    if (generation != loadGeneration || dialogGeneration != tmdbDialogGeneration) return;
+                    if (generation != loadGeneration || dialogGeneration != tmdbDialogGeneration) {
+                        binding.loading.setVisibility(View.GONE);
+                        return;
+                    }
                     binding.loading.setVisibility(View.GONE);
                     Notify.show(TextUtils.isEmpty(e.getMessage()) ? getString(R.string.detail_tmdb_empty) : e.getMessage());
                 });
@@ -2647,7 +2654,11 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             try {
                 TmdbBundle bundle = loadTmdbBundle(item);
                 runOnAliveUi(() -> {
-                    if (generation != loadGeneration || applyGeneration != tmdbApplyGeneration || vod == null) return;
+                    if (generation != loadGeneration || applyGeneration != tmdbApplyGeneration || vod == null) {
+                        // guard 失败时也要隐藏 loading，否则覆盖层会阻挡所有界面交互
+                        binding.loading.setVisibility(View.GONE);
+                        return;
+                    }
                     binding.loading.setVisibility(View.GONE);
                     applyTmdbBundle(bundle);
                     saveTmdbMatch(bundle.item());
@@ -2659,7 +2670,10 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
                 });
             } catch (Throwable e) {
                 runOnAliveUi(() -> {
-                    if (generation != loadGeneration || applyGeneration != tmdbApplyGeneration) return;
+                    if (generation != loadGeneration || applyGeneration != tmdbApplyGeneration) {
+                        binding.loading.setVisibility(View.GONE);
+                        return;
+                    }
                     binding.loading.setVisibility(View.GONE);
                     Notify.show(TextUtils.isEmpty(e.getMessage()) ? getString(R.string.detail_tmdb_empty) : e.getMessage());
                 });
@@ -3470,7 +3484,28 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private List<EpisodeRangePolicy.Range> buildCardEpisodeRanges(List<Episode> episodes, Episode selected) {
-        return EpisodeRangePolicy.build(episodes.size(), episodes.indexOf(selected), episodeReverse, episodeCardPageMaxSize());
+        List<EpisodeRangePolicy.Range> ranges = EpisodeRangePolicy.build(episodes.size(), episodes.indexOf(selected), episodeReverse, episodeCardPageMaxSize());
+        // 修正分组范围标签：用实际集号而非列表索引
+        List<Episode> allEpisodes = selectedFlag == null ? null : selectedFlag.getEpisodes();
+        if (allEpisodes != null && !allEpisodes.isEmpty()) {
+            Map<Episode, Integer> numbers = episodeNumbers(episodes, allEpisodes);
+            List<EpisodeRangePolicy.Range> correctedRanges = new ArrayList<>();
+            for (EpisodeRangePolicy.Range range : ranges) {
+                List<Episode> rangeEpisodes = EpisodeRangePolicy.slice(episodes, range);
+                if (rangeEpisodes.isEmpty()) {
+                    correctedRanges.add(range);
+                    continue;
+                }
+                Episode first = rangeEpisodes.get(0);
+                Episode last = rangeEpisodes.get(rangeEpisodes.size() - 1);
+                int firstNumber = numbers.getOrDefault(first, range.start() + 1);
+                int lastNumber = numbers.getOrDefault(last, range.end());
+                String correctedLabel = firstNumber == lastNumber ? String.valueOf(firstNumber) : firstNumber + "-" + lastNumber;
+                correctedRanges.add(new EpisodeRangePolicy.Range(correctedLabel, range.start(), range.end(), range.selected()));
+            }
+            return correctedRanges;
+        }
+        return ranges;
     }
 
     private int episodeCardPageMaxSize() {
@@ -4114,7 +4149,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             int index = indices.getOrDefault(episode, -1);
             if (index < 0 && allEpisodes != null) index = allEpisodes.indexOf(episode);
             EpisodePosition position = episodePosition(episode, allEpisodes, index);
-            int finalNumber = position.number() > 0 ? position.number() : i + 1;
+            // 修正：fallback 时使用 allEpisodes 的索引而不是 visibleEpisodes 的索引
+            int finalNumber = position.number() > 0 ? position.number() : (index >= 0 ? index + 1 : i + 1);
             numbers.put(episode, finalNumber);
         }
         return numbers;
@@ -4183,6 +4219,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         if (episodes != null) {
             for (TmdbEpisode episode : episodes) tmdbEpisodes.put(episode.getNumber(), episode);
         }
+        android.util.Log.d("EPPOS", "bindSeasonEpisodes tmdbSeason=" + tmdbSeason + " listSize=" + (episodes == null ? -1 : episodes.size()) + " mapKeys=" + tmdbEpisodes.keySet());
         bindTmdbEpisodes(sourceEpisodes, tmdbSeason);
         bindSeasonTmdbMedia(tmdbSeason);
         fetchSeasonIfNeeded(tmdbSeason);
@@ -4598,9 +4635,20 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private void showTmdbEpisodeDetail(Episode episode, int episodeNumber) {
+        // 对话框关闭后完整重渲染剧集列表，防止焦点状态紊乱导致按钮失效
+        android.content.DialogInterface.OnDismissListener dismissListener = d -> {
+            if (binding == null || binding.episodeContainer == null) return;
+            // RecyclerView 可能仍在恢复布局，下一帧再完整重渲染（参考原生增强的 render 机制）
+            binding.episodeContainer.post(() -> {
+                // 完整重建列表 + 分组按钮（类似原生增强 render[0].run()）
+                rerenderEpisodeViewportOnly(false, true, true);
+            });
+        };
+
         // 电影场景：直接展示影片详情
         if (matchedTmdbItem != null && matchedTmdbItem.isMovie()) {
-            showMovieDialog(episode);
+            // 电影场景复用 EpisodeDetailDialog（leanback/mobile 都有实现）
+            com.fongmi.android.tv.ui.dialog.EpisodeDetailDialog.show(this, episode, null, null, null, dismissListener);
             return;
         }
         // 剧集场景：原有逻辑
@@ -4622,14 +4670,23 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
                 List<String> photos = tmdbService.episodePhotos(detail, config);
                 List<TmdbPerson> guests = tmdbService.episodeGuests(detail, config);
                 runOnAliveUi(() -> {
-                    if (!isTmdbRequestCurrent(generation, item) || detailGeneration != tmdbEpisodeDetailGeneration) return;
+                    if (!isTmdbRequestCurrent(generation, item) || detailGeneration != tmdbEpisodeDetailGeneration) {
+                        // guard 失败时也要隐藏 loading，否则覆盖层会阻挡所有界面交互
+                        binding.loading.setVisibility(View.GONE);
+                        return;
+                    }
                     binding.loading.setVisibility(View.GONE);
                     if (displaySeasonNumber != selectedSeasonNumber) return;
-                    showTmdbEpisodeDialog(episode, episodeNumber, detail, photos, guests);
+                    // 复用 EpisodeDetailDialog，传入已拉取的 photos/guests 避免重复 API 请求
+                    com.fongmi.android.tv.ui.dialog.EpisodeDetailDialog.show(this, episode, getSite(), photos, guests, dismissListener);
                 });
             } catch (Throwable e) {
                 runOnAliveUi(() -> {
-                    if (!isTmdbRequestCurrent(generation, item) || detailGeneration != tmdbEpisodeDetailGeneration) return;
+                    if (!isTmdbRequestCurrent(generation, item) || detailGeneration != tmdbEpisodeDetailGeneration) {
+                        // guard 失败时也要隐藏 loading
+                        binding.loading.setVisibility(View.GONE);
+                        return;
+                    }
                     binding.loading.setVisibility(View.GONE);
                     if (displaySeasonNumber != selectedSeasonNumber) return;
                     Notify.show(TextUtils.isEmpty(e.getMessage()) ? getString(R.string.detail_tmdb_empty) : e.getMessage());
@@ -4804,6 +4861,22 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         dialogBinding.guestList.setVisibility(guests.isEmpty() ? View.GONE : View.VISIBLE);
         dialogBinding.close.setOnClickListener(view -> dialog.dismiss());
         setButton(dialogBinding.close, colors.control, colors.line, colors.primary);
+
+        // 对话框关闭后刷新界面，防止按钮失效
+        dialog.setOnDismissListener(d -> {
+            if (binding == null || binding.episodeContainer == null) return;
+            // DEBUG: 添加 Toast 确认修复代码已执行
+            Notify.show("详情对话框已关闭，正在刷新界面");
+            // RecyclerView 可能仍在恢复布局，下一帧再刷新
+            binding.episodeContainer.post(() -> {
+                if (episodeAdapter != null) {
+                    episodeAdapter.refreshDisplaySettings(binding.episodeContainer);
+                }
+                // 刷新分组按钮和其他控件状态
+                updateEpisodeViewModeButton();
+                updateEpisodeFileNameButton();
+            });
+        });
 
         dialog.show();
         dialogBinding.close.post(dialogBinding.close::requestFocus);
@@ -7066,6 +7139,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
 
             @Override
             public void onItemLongClick(View anchor, Episode episode, int episodeNumber) {
+                anchor.setPressed(false);
                 showTmdbEpisodeDetail(episode, episodeNumber);
             }
         });
@@ -7372,12 +7446,14 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         }
         int titleSeason = sourceTitleSeasonNumber();
         if (!hasExplicitSeasonNumbers(episodes) && seasonNumbers.contains(titleSeason)) {
-            android.util.Log.d("EPPOS", "[" + epName + "] idx=" + index + " src=" + sourceNumber + " branch=titleSeasonIndexPlus1 -> s" + titleSeason + "e" + (index + 1));
-            return new EpisodePosition(titleSeason, index + 1);
+            int number = linearEpisodeNumber(sourceNumber, index);
+            android.util.Log.d("EPPOS", "[" + epName + "] idx=" + index + " src=" + sourceNumber + " branch=titleSeasonLinear -> s" + titleSeason + "e" + number);
+            return new EpisodePosition(titleSeason, number);
         }
         if (!EpisodeSeasonPolicy.canSliceBySeasonCounts(episodes.size(), seasonNumbers, seasonEpisodeCounts)) {
-            android.util.Log.d("EPPOS", "[" + epName + "] idx=" + index + " src=" + sourceNumber + " branch=noSliceIndexPlus1 -> s" + selectedSeasonNumber + "e" + (index + 1));
-            return new EpisodePosition(selectedSeasonNumber, index + 1);
+            int number = linearEpisodeNumber(sourceNumber, index);
+            android.util.Log.d("EPPOS", "[" + epName + "] idx=" + index + " src=" + sourceNumber + " branch=noSliceLinear -> s" + selectedSeasonNumber + "e" + number);
+            return new EpisodePosition(selectedSeasonNumber, number);
         }
         int start = 0;
         for (int i = 0; i < seasonNumbers.size(); i++) {
@@ -7391,8 +7467,9 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             }
             start += count;
         }
-        android.util.Log.d("EPPOS", "[" + epName + "] idx=" + index + " src=" + sourceNumber + " branch=fallbackIndexPlus1 -> s" + selectedSeasonNumber + "e" + (index + 1));
-        return new EpisodePosition(selectedSeasonNumber, index + 1);
+        int number = linearEpisodeNumber(sourceNumber, index);
+        android.util.Log.d("EPPOS", "[" + epName + "] idx=" + index + " src=" + sourceNumber + " branch=fallbackLinear -> s" + selectedSeasonNumber + "e" + number);
+        return new EpisodePosition(selectedSeasonNumber, number);
     }
 
     private boolean useSourceEpisodeNumber(int sourceNumber, int sourceSeason) {
@@ -10038,7 +10115,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
 
     private String getSiteName() {
         Site site = getCurrentSite();
-        return site == null ? getKeyText() : site.getName();
+        return site == null ? getKeyText() : site.getDisplayName();
     }
 
     private String getHistoryKey() {

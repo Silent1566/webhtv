@@ -441,7 +441,7 @@ public class History implements Diffable<History> {
     }
 
     public String getSiteName() {
-        return VodConfig.get().getSite(getSiteKey()).getName();
+        return VodConfig.get().getSite(getSiteKey()).getDisplayName();
     }
 
     public String getSiteKey() {

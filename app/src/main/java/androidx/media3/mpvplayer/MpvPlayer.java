@@ -138,6 +138,7 @@ public final class MpvPlayer extends SimpleBasePlayer implements MPVLib.EventObs
     private MpvLutShader lutShader;
     private String currentPlayableUri;
     private String currentIsoUri;
+    private boolean isoTrackListDumped;
     private String appliedLutShaderPath;
     private PlaybackParameters playbackParameters;
     private PlaybackException playerError;
@@ -2050,6 +2051,7 @@ public final class MpvPlayer extends SimpleBasePlayer implements MPVLib.EventObs
     private long bufferedPositionMs(long position, long duration) {
         if (duration == C.TIME_UNSET || duration <= 0) return position;
         if (cachedCacheDurationMs > 0) return Math.min(duration, position + cachedCacheDurationMs);
+        if (!TextUtils.isEmpty(currentIsoUri)) return position;
         return playbackState == Player.STATE_READY || playbackState == Player.STATE_ENDED ? duration : position;
     }
 
@@ -2067,9 +2069,17 @@ public final class MpvPlayer extends SimpleBasePlayer implements MPVLib.EventObs
             currentTracks = Tracks.EMPTY;
             return;
         }
+        if (!isoTrackListDumped && !TextUtils.isEmpty(currentIsoUri)) {
+            isoTrackListDumped = true;
+            MPVLib.dumpTrackList();
+        }
         List<TrackInfo> infos = new ArrayList<>();
+        int audioIndex = 0;
+        int subtitleIndex = 0;
         for (int i = 0; i < count; i++) {
-            TrackInfo info = readTrackInfo(i);
+            String mpvType = stringProperty("track-list/" + i + "/type", "");
+            int typeIndex = "audio".equals(mpvType) ? audioIndex++ : "sub".equals(mpvType) ? subtitleIndex++ : C.INDEX_UNSET;
+            TrackInfo info = readTrackInfo(i, typeIndex);
             if (info == null) continue;
             infos.add(info);
         }
@@ -2239,7 +2249,12 @@ public final class MpvPlayer extends SimpleBasePlayer implements MPVLib.EventObs
             builder.append(" id=").append(info.id);
             builder.append(" rawSelected=").append(info.selected);
             builder.append(" finalSelected=").append(isTrackSelectedInSnapshot(tracks, info));
+            builder.append(" title=").append(info.title);
+            builder.append(" lang=").append(info.lang);
             builder.append(" codec=").append(info.codec);
+            Format format = info.toFormat();
+            builder.append(" label=").append(format.label);
+            builder.append(" formatLang=").append(format.language);
             builder.append(" size=").append(info.width).append("x").append(info.height);
             builder.append(" fps=").append(info.frameRate);
             builder.append(" sr=").append(info.sampleRate);
@@ -2343,7 +2358,7 @@ public final class MpvPlayer extends SimpleBasePlayer implements MPVLib.EventObs
     }
 
     @Nullable
-    private TrackInfo readTrackInfo(int index) {
+    private TrackInfo readTrackInfo(int index, int typeIndex) {
         String prefix = "track-list/" + index + "/";
         String mpvType = stringProperty(prefix + "type", "");
         int type = mediaTrackType(mpvType);
@@ -2353,6 +2368,12 @@ public final class MpvPlayer extends SimpleBasePlayer implements MPVLib.EventObs
         if (TextUtils.isEmpty(id)) id = String.valueOf(intProperty(prefix + "id", index + 1));
         String title = stringProperty(prefix + "title", "");
         String lang = stringProperty(prefix + "lang", "");
+        if (TextUtils.isEmpty(lang) && typeIndex >= 0 && !TextUtils.isEmpty(currentIsoUri)) {
+            int isoTrackType = type == C.TRACK_TYPE_AUDIO ? 1 : type == C.TRACK_TYPE_TEXT ? 2 : 0;
+            if (isoTrackType != 0) {
+                lang = MPVLib.getIsoTrackLanguage(IsoSessionManager.parseId(currentIsoUri), isoTrackType, typeIndex);
+            }
+        }
         String codec = stringProperty(prefix + "codec", "");
         boolean selected = booleanProperty(prefix + "selected", false);
         int width = intProperty(prefix + "demux-w", C.LENGTH_UNSET);
@@ -2898,6 +2919,7 @@ public final class MpvPlayer extends SimpleBasePlayer implements MPVLib.EventObs
         if (TextUtils.isEmpty(currentIsoUri)) return;
         IsoSessionManager.closeUri(currentIsoUri);
         currentIsoUri = null;
+        isoTrackListDumped = false;
     }
 
     private boolean isLikelyIso(MediaItem item, String uri) {
@@ -3060,7 +3082,7 @@ public final class MpvPlayer extends SimpleBasePlayer implements MPVLib.EventObs
         }
 
         Format toFormat() {
-            String label = TextUtils.isEmpty(title) ? trackLabel() : title;
+            String label = TextUtils.isEmpty(title) ? (TextUtils.isEmpty(lang) ? trackLabel() : null) : title;
             Format.Builder builder = new Format.Builder()
                     .setId(type + ":" + id)
                     .setLabel(label)

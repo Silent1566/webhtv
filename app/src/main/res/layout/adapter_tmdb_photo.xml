@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- TMDB 剧照卡片：横版大图 -->
-<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="220dp"
@@ -10,20 +10,16 @@
     android:defaultFocusHighlightEnabled="false"
     android:focusable="true"
     android:focusableInTouchMode="true"
-    android:stateListAnimator="@null"
-    app:cardBackgroundColor="#CC16202A"
-    app:cardCornerRadius="8dp"
-    app:cardElevation="0dp"
-    app:strokeColor="#33FFFFFF"
-    app:strokeWidth="1dp">
+    android:foreground="@drawable/selector_episode_photo">
 
-    <androidx.appcompat.widget.AppCompatImageView
+    <com.google.android.material.imageview.ShapeableImageView
         android:id="@+id/photo"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:background="#1C2530"
         android:contentDescription="@null"
         android:scaleType="centerCrop"
+        app:shapeAppearanceOverlay="@style/Vod.Grid.Large"
         tools:src="@color/black" />
 
-</com.google.android.material.card.MaterialCardView>
+</FrameLayout>

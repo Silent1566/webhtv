@@ -1284,7 +1284,7 @@ public class AudioActivity extends PlaybackActivity {
 
     private String getSiteNameText() {
         Site site = VodConfig.get().getSite(getSiteKey());
-        String name = site == null ? "" : site.getName();
+        String name = site == null ? "" : site.getDisplayName();
         return TextUtils.isEmpty(name) ? getSiteKey() : name;
     }
 

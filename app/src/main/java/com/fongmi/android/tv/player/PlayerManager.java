@@ -19,6 +19,7 @@ import androidx.media3.common.MediaItem;
 import androidx.media3.common.MediaMetadata;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
+import androidx.media3.common.TrackSelectionParameters;
 import androidx.media3.common.Tracks;
 import androidx.media3.common.VideoSize;
 import androidx.media3.datasource.HttpDataSource;
@@ -54,6 +55,7 @@ import com.fongmi.android.tv.player.lut.MpvLutShaderFactory;
 import com.fongmi.android.tv.setting.DanmakuSetting;
 import com.fongmi.android.tv.setting.SiteHealthStore;
 import com.fongmi.android.tv.setting.PlayerSetting;
+import com.fongmi.android.tv.subtitle.RealtimeSubtitleController;
 import com.fongmi.android.tv.utils.LocalProxyDebug;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
@@ -102,6 +104,7 @@ public class PlayerManager implements ParseCallback {
     private ParseJob parseJob;
     private PlaySpec spec;
     private Player player;
+    private TrackSelectionParameters realtimeSubtitleTrackSelection;
     private String currentDanmakuUrl;
     private String currentDanmakuKey;
     private String loadingDanmakuKey;
@@ -169,6 +172,7 @@ public class PlayerManager implements ParseCallback {
         engine.release();
         engine = null;
         player = null;
+        realtimeSubtitleTrackSelection = null;
         videoEffectsActive = false;
         videoEffectsDirty = false;
         lutAppliedForItem = false;
@@ -616,6 +620,11 @@ public class PlayerManager implements ParseCallback {
 
     public String setSpeed(float speed) {
         if (!player.isCommandAvailable(Player.COMMAND_SET_SPEED_AND_PITCH)) return getSpeedText();
+        RealtimeSubtitleController realtime = RealtimeSubtitleController.get();
+        if (Math.abs(speed - 1f) > 0.001f && (realtime.isEnabled() || realtime.isPreparing())) {
+            realtime.disable();
+            Notify.show(R.string.subtitle_realtime_speed_disabled);
+        }
         player.setPlaybackParameters(player.getPlaybackParameters().withSpeed(speed));
         return getSpeedText();
     }
@@ -728,6 +737,48 @@ public class PlayerManager implements ParseCallback {
 
     public void resetTrack() {
         engine.resetTrack();
+    }
+
+    public void resetTrack(int type) {
+        engine.resetTrack(type);
+    }
+
+    public void disableSubtitleTrackForRealtime() {
+        if (player == null || engine == null) return;
+        if (isExo() && realtimeSubtitleTrackSelection == null) realtimeSubtitleTrackSelection = player.getTrackSelectionParameters();
+        setTrack(Collections.singletonList(Track.disabled(C.TRACK_TYPE_TEXT, "")));
+    }
+
+    public void restoreSubtitleTrackAfterRealtime() {
+        if (player == null || engine == null) {
+            realtimeSubtitleTrackSelection = null;
+            return;
+        }
+        if (isExo() && realtimeSubtitleTrackSelection != null) player.setTrackSelectionParameters(realtimeSubtitleTrackSelection);
+        realtimeSubtitleTrackSelection = null;
+    }
+
+    public void rebuildAudioPipeline() {
+        if (!isExo() || spec == null || spec.getUrl() == null || engine == null || player == null) return;
+        PlaySpec target = spec;
+        long position = isLive() ? C.TIME_UNSET : Math.max(0, getPosition());
+        float speed = getSpeed();
+        boolean repeat = isRepeatOne();
+        boolean wasPlayWhenReady = player.getPlayWhenReady();
+        ++prepareSeq;
+        App.removeCallbacks(runnable);
+        rebuildPlayer();
+        playWhenReady = wasPlayWhenReady;
+        setDanmakus(target.getDanmakus());
+        prepareLutPipeline();
+        initTrack = false;
+        waitingLutBeforePlay = false;
+        applySubtitleStyle();
+        engine.start(target.checkUa(), position, wasPlayWhenReady);
+        if (speed != 1f) setSpeed(speed);
+        setRepeatOne(repeat);
+        App.post(runnable, Constant.TIMEOUT_PLAY);
+        callback.onPrepare();
     }
 
     public void toggleDecode() {
@@ -1895,6 +1946,7 @@ public class PlayerManager implements ParseCallback {
             if (!tracks.isEmpty() && !initTrack) {
                 List<Track> savedTracks = Track.find(getKey());
                 setTrack(savedTracks);
+                if (RealtimeSubtitleController.get().isEnabled()) disableSubtitleTrackForRealtime();
                 if (PlayerSetting.isPreferAAC() && !TrackUtil.hasTrack(player, savedTracks, C.TRACK_TYPE_AUDIO)) TrackUtil.preferAAC(player);
                 callback.onTracksChanged();
                 initTrack = true;

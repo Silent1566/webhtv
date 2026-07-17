@@ -48,14 +48,15 @@ public class EpisodeSeasonPolicyGapTest {
     }
 
     @Test
-    public void fallsBackToPositionWhenSourceNumberIsSmall() {
-        // 源编号 < index+1 时，使用位置编号
+    public void trustsSourceNumberEvenWhenSmall() {
+        // 新逻辑：只要 sourceNumber > 0，就信任它（不管它和 index 的关系）
+        // 场景：多线路合并后，文件在列表中的位置可能与文件名集号不一致
         int sourceNumber = 1;
         int index = 5;
 
         int result = EpisodeSeasonPolicy.linearEpisodeNumber(sourceNumber, index);
 
-        // 1 >= 5+1? → false → 使用位置编号 6
-        assertEquals(6, result);
+        // sourceNumber > 0 → 直接返回 1（文件名的集号比列表位置更可靠）
+        assertEquals(1, result);
     }
 }
