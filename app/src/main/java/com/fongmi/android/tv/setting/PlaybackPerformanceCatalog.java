@@ -41,6 +41,8 @@ public final class PlaybackPerformanceCatalog {
     public static final String MPV_VERBOSE_LOG = "mpv_verbose_log";
     public static final String MPV_FRAME_RATE = "mpv_frame_rate";
     public static final String MPV_HLS_BITRATE = "mpv_hls_bitrate";
+    public static final String MPV_REBUFFER = "mpv_rebuffer";
+    public static final String MPV_OPTION_PRIORITY = "mpv_option_priority";
     public static final String IJK_SCENE = "ijk_scene";
     public static final String IJK_BUFFER = "ijk_buffer";
     public static final String IJK_PACKET_BUFFERING = "ijk_packet_buffering";
@@ -106,7 +108,9 @@ public final class PlaybackPerformanceCatalog {
         options.add(option(MPV_RENDER, BASIC, "渲染后端", "OpenGL 兼容性最好；Vulkan 使用 gpu-next/libplacebo，部分设备性能更好，也更依赖驱动。只有 native 和设备能力都满足时才会实际使用 Vulkan，否则自动回退 OpenGL。"));
         options.add(option(MPV_HWDEC, BASIC, "硬解路径", "自动回退依次尝试 MediaCodec 零拷贝和兼容复制；零拷贝开销最低但设备兼容差异更大；兼容复制增加内存带宽，部分 Amlogic/Mali 设备仍可能绿屏。"));
         options.add(option(MPV_FRAME_RATE, BASIC, "帧率匹配", "Android 11及以上根据 MPV 识别到的内容帧率调用 Surface.setFrameRate。仅无缝模式不会主动触发可能黑屏的显示模式切换；旧系统自动忽略。"));
+        options.add(option(MPV_OPTION_PRIORITY, BASIC, "参数优先级", "播放性能优先时，缓存、硬解、同步、丢帧和HLS码率等受性能档管理，同名mpv.conf参数会被覆盖，其他自定义仍生效；mpv.conf优先时由配置文件接管同名参数。"));
         addSharedBuffer(options, false, true);
+        options.add(option(MPV_REBUFFER, BUFFER, "重缓冲恢复", "缓存耗尽后重新积累到指定时长再恢复播放，避免只下载一小段就反复播放、反复转圈。"));
         options.add(option(MPV_HLS_BITRATE, BUFFER, "HLS码率首选", "按HLS清单声明的码率选择默认轨道。限制码率可降低网络、解码和内存压力，但可能降低画质；它不是动态ABR，服务端码率标记不准确时效果也会偏差。"));
         addPreload(options);
         options.add(option(MPV_SYNC, DECODE, "同步模式", "音频同步是兼容默认；显示重采样会轻微调整音频速度以匹配屏幕刷新率，运动更平滑，但不适合音频直通。"));
@@ -150,7 +154,7 @@ public final class PlaybackPerformanceCatalog {
 
     private static String profileDescription(int kernel) {
         return switch (kernel) {
-            case PlayerSetting.MPV -> "MPV 独立预设。后续只组合 MPV 的输出、硬解、同步、缓存和诊断参数，不修改 EXO/IJK 专用值。";
+            case PlayerSetting.MPV -> "MPV 独立预设，组合输出、硬解、同步、缓存和诊断参数。参数优先级决定它与用户mpv.conf同名设置的覆盖关系。";
             case PlayerSetting.IJK -> "IJK 独立预设。后续只组合 IJK 的读包、缓冲、水位、丢帧、探测和直播策略，不修改 EXO/MPV 专用值。";
             default -> "EXO 独立预设，组合 Media3 选轨、LoadControl、MediaCodec、Surface、预载和音频参数，不修改 MPV/IJK 专用值。";
         };

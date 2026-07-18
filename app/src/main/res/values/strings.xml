@@ -923,6 +923,7 @@
     <string name="player_button_down">Down</string>
     <string name="play_episodes">Episodes</string>
     <string name="player_exo_4k_compat">Playback performance</string>
+    <string name="player_immersive_audio_mode">Immersive audio mode</string>
     <string name="player_performance">Playback performance</string>
     <string name="player_performance_recommended">Recommended</string>
     <string name="player_performance_compatible">Compatible</string>
@@ -1789,5 +1790,344 @@
     <string name="ad_rule_ai_disable_confirm">临时停用此 AI 识别规则？\n可随时重新启用。</string>
     <string name="ad_rule_manual_disable_confirm">临时停用此手动规则？\n可随时重新启用。</string>
     <string name="ad_rule_default_enable_confirm">重新启用此默认规则？</string>
+
+<string name="player_karaoke_status_free">Karaoke · Free sing</string>
+
+<string name="player_karaoke_status_free_score_grade">Karaoke · Fun %1$d · %2$s</string>
+
+<string name="player_karaoke_status_score">Karaoke · %1$d</string>
+
+<string name="player_karaoke_status_score_grade">Karaoke · %1$d · %2$s</string>
+
+<string name="player_karaoke_status_rhythm_score">Karaoke · Rhythm %1$d</string>
+
+<string name="player_karaoke_status_rhythm_score_grade">Karaoke · Rhythm %1$d · %2$s</string>
+
+<string name="player_karaoke_need_permission">Microphone permission required</string>
+
+<string name="player_karaoke_mic_unavailable">Microphone unavailable</string>
+
+<string name="player_karaoke_no_voice">Sing closer to the microphone</string>
+
+<string name="player_karaoke_pitch">Pitch %1$s</string>
+
+<string name="player_karaoke_pitch_score">Pitch %1$s · %2$s</string>
+
+<string name="player_karaoke_pitch_hit">Hit</string>
+
+<string name="player_karaoke_pitch_perfect">Perfect</string>
+
+<string name="player_karaoke_pitch_vibrato">Vibrato</string>
+
+<string name="player_karaoke_pitch_miss">Off %1$.1f st</string>
+
+<string name="player_karaoke_free_detail">Pitch %1$s · Participation %2$d%%</string>
+
+<string name="player_karaoke_rhythm_detail">Rhythm hit %1$d%%</string>
+
+<string name="player_karaoke_combo">Combo %1$d sec</string>
+
+<string name="player_karaoke_line_score">Line %1$d%%</string>
+
+<string name="player_karaoke_result_title">Karaoke result</string>
+
+<string name="player_karaoke_result_scoring">Pitch scoring</string>
+
+<string name="player_karaoke_result_rhythm">Rhythm scoring</string>
+
+<string name="player_karaoke_result_free">Free sing</string>
+
+<string name="player_karaoke_result_track">Track: %1$s</string>
+
+<string name="player_karaoke_result_no_track">No scoring track bound. This is a free-sing estimate.</string>
+
+<string name="player_karaoke_result_rhythm_note">Generated from lyric timing. Pitch is not judged.</string>
+
+<string name="player_karaoke_result_metric_hit">Hit rate</string>
+
+<string name="player_karaoke_result_metric_rhythm">Rhythm hit</string>
+
+<string name="player_karaoke_result_metric_participation">Participation</string>
+
+<string name="player_karaoke_result_score_value">%1$d · %2$s</string>
+
+<string name="player_karaoke_result_voice_coverage">Voice coverage</string>
+
+<string name="player_karaoke_result_bonus">Performance bonus</string>
+
+<string name="player_karaoke_result_perfect">Perfect hits</string>
+
+<string name="player_karaoke_result_vibrato">Vibrato bonus</string>
+
+<string name="player_karaoke_result_active_time">Active %1$d sec</string>
+
+<string name="player_karaoke_result_best_combo">Combo %1$d sec</string>
+
+<string name="player_karaoke_result_line_average">Line average</string>
+
+<string name="player_karaoke_result_line_summary">Lines %1$d · Best %2$d%%</string>
+
+<string name="player_karaoke_result_pitch_headline_high">Strong pitch control and steady delivery.</string>
+
+<string name="player_karaoke_result_pitch_headline_mid">Good take. Keep the pitch centered for a higher score.</string>
+
+<string name="player_karaoke_result_pitch_headline_low">Warm up the first notes and keep singing through each line.</string>
+
+<string name="player_karaoke_result_no_track_short">Free-sing estimate</string>
+
+<string name="player_karaoke_result_rhythm_note_short">Lyric rhythm scoring</string>
+
+<string name="player_karaoke_result_pitch_headline_high_short">Strong take</string>
+
+<string name="player_karaoke_result_pitch_headline_mid_short">Center the pitch</string>
+
+<string name="player_karaoke_result_pitch_headline_low_short">Start steady, sing through</string>
+
+<string name="player_karaoke_result_fun_note">Entertainment scoring includes pitch hits, perfect holds, combo, and vibrato bonuses.</string>
+
+<string name="player_lyrics_offset">Lyric offset</string>
+
+<string name="player_lyrics_rows">Lyric rows</string>
+
+<string name="player_lyrics_size">Lyric size</string>
+
+<string name="player_lyrics_source">Lyric source</string>
+
+<string name="player_karaoke_mode">Karaoke mode</string>
+
+<string name="player_audio_options">Playback options</string>
+
+<string name="player_karaoke_mode_enabled">Currently enabled</string>
+
+<string name="player_karaoke_mode_disabled">Currently disabled</string>
+
+<string name="player_karaoke_difficulty">Karaoke difficulty</string>
+
+<string name="player_karaoke_mic_delay">Mic delay</string>
+
+<string name="player_karaoke_track">Scoring track</string>
+
+<string name="player_karaoke_track_generate_pitch">Generate track</string>
+
+<string name="player_karaoke_track_search">Search online</string>
+
+<string name="player_karaoke_track_keyword">Scoring track keyword</string>
+
+<string name="player_karaoke_track_import_file">Import file</string>
+
+<string name="player_karaoke_track_import_url">Import URL</string>
+
+<string name="player_karaoke_track_sources">Track sources</string>
+
+<string name="player_karaoke_track_advanced">Advanced options</string>
+
+<string name="player_karaoke_track_back">Back</string>
+
+<string name="player_karaoke_track_basic_pitch_tflite">Basic Pitch: %1$s</string>
+
+<string name="player_karaoke_track_option_enabled">Enabled</string>
+
+<string name="player_karaoke_track_option_disabled">Disabled</string>
+
+<string name="player_karaoke_track_sources_hint">One repo per line: owner/repo@branch or https://github.com/owner/repo/tree/branch</string>
+
+<string name="player_karaoke_track_sources_saved">Scoring track sources saved</string>
+
+<string name="player_karaoke_track_url_hint">UltraStar .txt URL, USDB ID, USDB detail URL, or append @Cookie=...</string>
+
+<string name="player_karaoke_track_clear">Clear binding</string>
+
+<string name="player_karaoke_track_searching">Searching scoring tracks...</string>
+
+<string name="player_karaoke_track_not_found">No scoring track found</string>
+
+<string name="player_karaoke_track_select">Select scoring track</string>
+
+<string name="player_karaoke_track_source_login"> · login</string>
+
+<string name="player_karaoke_track_result_item">%1$s\n%2$s - %3$s\n%4$s</string>
+
+<string name="player_karaoke_track_imported">Scoring track imported</string>
+
+<string name="player_karaoke_track_import_failed">Scoring track import failed</string>
+
+<string name="player_karaoke_track_generated">Lightweight rhythm track generated</string>
+
+<string name="player_karaoke_track_generating_pitch">Generating pitch scoring track...</string>
+
+<string name="player_karaoke_track_generating_pitch_message">Analyzing the current audio locally and generating a pitch scoring track. Keep the player open until it finishes.</string>
+
+<string name="player_karaoke_track_generating_pitch_progress">%1$d%% · %2$s · %3$s</string>
+
+<string name="player_karaoke_track_generation_stop">Stop</string>
+
+<string name="player_karaoke_track_generation_stopped">Scoring track generation stopped</string>
+
+<string name="player_karaoke_track_pitch_stage_prepare">Preparing</string>
+
+<string name="player_karaoke_track_pitch_stage_decode">Decoding audio</string>
+
+<string name="player_karaoke_track_pitch_stage_analyze">Analyzing pitch</string>
+
+<string name="player_karaoke_track_pitch_stage_write">Writing scoring track</string>
+
+<string name="player_karaoke_track_pitch_stage_finish">Finishing</string>
+
+<string name="player_karaoke_track_pitch_remaining_unknown">Remaining time estimating</string>
+
+<string name="player_karaoke_track_pitch_remaining_seconds">About %1$d s left</string>
+
+<string name="player_karaoke_track_pitch_remaining_minutes">About %1$d min %2$d s left</string>
+
+<string name="player_karaoke_track_generated_pitch">Pitch scoring track generated</string>
+
+<string name="player_karaoke_track_generated_pitch_message">Applied to the current song and karaoke mode is enabled.</string>
+
+<string name="player_karaoke_track_generate_pitch_failed">Failed to generate pitch scoring track</string>
+
+<string name="player_karaoke_track_generate_pitch_failed_message">No scoring track was generated: %1$s</string>
+
+<string name="player_karaoke_track_generate_pitch_unsupported_source">The current media source cannot be analyzed directly. Try another line or quality, or use online search/import.</string>
+
+<string name="player_karaoke_track_generate_failed">Failed to generate rhythm track</string>
+
+<string name="player_karaoke_track_generate_no_lyrics">No timed lyrics available</string>
+
+<string name="player_karaoke_track_cleared">Scoring track binding cleared</string>
+
+<string name="player_karaoke_track_none">No scoring track binding</string>
+
+<string name="player_desktop_lyrics">Desktop lyrics</string>
+
+<string name="player_desktop_lyrics_permission">Allow display over other apps to show desktop lyrics</string>
+
+<string name="player_lyrics_cache">Lyric cache</string>
+
+<string name="player_lyrics_cache_value">%1$d items</string>
+
+<string name="player_lyrics_cache_cleared">Lyric cache cleared</string>
+
+<string name="player_lyrics_search">Search lyrics</string>
+
+<string name="player_lyrics_reload">Search lyrics again</string>
+
+<string name="player_lyrics_keyword">Lyric keyword</string>
+
+<string name="player_lyrics_keyword_required">Enter a lyric keyword</string>
+
+<string name="player_lyrics_searching">Searching lyrics...</string>
+
+<string name="player_lyrics_not_found">No lyrics found</string>
+
+<string name="player_lyrics_loaded">Lyrics loaded: %1$s</string>
+
+<string name="player_lyrics_select">Select lyrics</string>
+
+<string name="player_lyrics_word">Word</string>
+
+<string name="player_lyrics_synced">Synced</string>
+
+<string name="player_lyrics_plain">Plain</string>
+
+<string name="player_audio_badge_audio">Audio</string>
+
+<string name="player_audio_badge_lyrics">Lyrics</string>
+
+<string name="player_audio_playlist">Playlist</string>
+
+<string name="player_audio_playlist_results">Search results</string>
+
+<string name="player_audio_playlist_search_hint">Search current source</string>
+
+<string name="player_audio_playlist_search_required">Enter a search keyword</string>
+
+<string name="player_audio_playlist_search_failed">Search failed</string>
+
+<string name="player_audio_playlist_no_results">No results found</string>
+
+<string name="player_audio_playlist_result_count">%1$d results found</string>
+
+<string name="player_audio_playlist_adding">Adding %1$s...</string>
+
+<string name="player_audio_playlist_add_failed">Add failed</string>
+
+<string name="player_audio_playlist_add_empty">No playable item found</string>
+
+<string name="player_audio_playlist_added">Added %1$d item(s)</string>
+
+<string name="player_audio_playlist_exists">Already in playlist</string>
+
+<string name="player_audio_playlist_empty">No songs in playlist</string>
+
+<string name="player_audio_playlist_removed">Removed %1$s</string>
+
+<string name="player_audio_playlist_keep_one">Keep at least one song in playlist</string>
+
+<string name="player_audio_playlist_switch">Switch</string>
+
+<string name="player_audio_playlist_create">New</string>
+
+<string name="player_audio_playlist_name_hint">Playlist name</string>
+
+<string name="player_audio_more">More</string>
+
+<string name="player_audio_background">Background</string>
+
+<string name="player_audio_background_decorated_on">Details on</string>
+
+<string name="player_audio_background_decorated_off">Details off</string>
+
+<string name="player_audio_background_light_effect_on">Light effect on</string>
+
+<string name="player_audio_background_light_effect_off">Light effect off</string>
+
+<string name="player_audio_background_decorated_turn_on">Show details</string>
+
+<string name="player_audio_background_decorated_turn_off">Hide details</string>
+
+<string name="player_audio_background_random_plain">New background</string>
+
+<string name="player_audio_background_random_decoration">New details</string>
+
+<string name="player_audio_background_random_plain_done">Plain background generated</string>
+
+<string name="player_audio_background_random_decoration_done">Background details generated</string>
+
+<string name="player_audio_background_random_mix_done">Background mix generated</string>
+
+<string name="player_lyrics_unknown">Unknown</string>
+
+<string name="player_lyrics_result_item">%1$s · %2$s · %3$d\n%4$s - %5$s</string>
+
+<string name="player_lyrics_rows_value">%1$d rows</string>
+
+<string-array name="select_lyrics_size">
+        <item>Small</item>
+        <item>Default</item>
+        <item>Large</item>
+        <item>Extra large</item>
+    </string-array>
+
+<string-array name="select_lyrics_source">
+        <item>Auto</item>
+        <item>Local</item>
+        <item>AMLL TTML</item>
+        <item>QQMusic QRC</item>
+        <item>Netease YRC</item>
+        <item>Kuwo</item>
+        <item>LRCLIB</item>
+        <item>Kugou</item>
+        <item>Migu</item>
+    </string-array>
+
+<string-array name="select_karaoke_difficulty">
+        <item>Easy</item>
+        <item>Standard</item>
+        <item>Strict</item>
+    </string-array>
+
+<string name="player_audio_badge_queue">Queue</string>
+
+<string name="player_audio_repeat">Repeat</string>
 
 </resources>

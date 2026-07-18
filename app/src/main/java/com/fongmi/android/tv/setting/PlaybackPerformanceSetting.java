@@ -16,6 +16,7 @@ public class PlaybackPerformanceSetting {
     private static final String KEY_PROFILE_MPV = "perf_mpv_profile";
     private static final String KEY_PROFILE_IJK = "perf_ijk_profile";
     private static final String KEY_INITIALIZED = "playback_performance_initialized";
+    private static final String KEY_BUFFER_WATERMARKS_MIGRATED = "playback_performance_buffer_watermarks_v2";
     private static final String KEY_CODEC_ASYNC_QUEUEING = "perf_codec_async_queueing";
     private static final String KEY_DYNAMIC_SCHEDULING = "perf_dynamic_scheduling";
     private static final String KEY_VIDEO_DURATION_PROGRESS = "perf_video_duration_progress";
@@ -35,6 +36,7 @@ public class PlaybackPerformanceSetting {
             Prefers.put(KEY_INITIALIZED, true);
         }
         migrateProfiles();
+        migrateBufferWatermarks();
     }
 
     public static int getProfile() {
@@ -286,7 +288,7 @@ public class PlaybackPerformanceSetting {
         String preload = PreloadSetting.isPreload() ? "预载开" : "预载关";
         return switch (PlayerSetting.getPlayer()) {
             case PlayerSetting.IJK -> getProfileName() + " · IJK · " + preload;
-            case PlayerSetting.MPV -> getProfileName() + " · MPV · " + preload;
+            case PlayerSetting.MPV -> getProfileName() + " · MPV · " + MpvPerformanceSetting.getOptionPriorityText() + " · " + preload;
             default -> getProfileName() + " · " + (isTrackLimitEnabled() ? "轨道限制" : "不限轨道") + " · " + preload;
         };
     }
@@ -297,6 +299,7 @@ public class PlaybackPerformanceSetting {
                 + "\n渲染：" + (PlayerSetting.getRender() == PlayerSetting.RENDER_SURFACE ? "SurfaceView" : "TextureView")
                 + "\n轨道限制：" + onOff(isTrackLimitEnabled()) + "，自适应降级：" + onOff(isAdaptiveDowngradeEnabled())
                 + "\n缓冲：" + PlayerSetting.getBuffer() + "/10，容量：" + bufferBytesText() + "，回退：" + backBufferText()
+                + bufferWatermarksText()
                 + "\n播放缓存：" + playCacheText()
                 + "\n预载：" + onOff(PreloadSetting.isPreload()) + "，线程：" + PreloadSetting.getPreloadThreads() + "，容量：" + PreloadSetting.getPreloadSizeMb() + "MB，时间：" + PreloadSetting.getPreloadTimeSeconds() + "秒"
                 + "\nMediaCodec异步：" + onOff(isCodecAsyncQueueingEnabled()) + "，动态调度：" + onOff(isDynamicSchedulingEnabled())
@@ -346,6 +349,15 @@ public class PlaybackPerformanceSetting {
         applyKernelSpecificPreset(PlayerSetting.MPV, oldProfile);
         applyKernelSpecificPreset(PlayerSetting.IJK, oldProfile);
         Prefers.put(KEY_PROFILE_MIGRATED, true);
+    }
+
+    private static void migrateBufferWatermarks() {
+        if (Prefers.getBoolean(KEY_BUFFER_WATERMARKS_MIGRATED)) return;
+        int exoProfile = clampProfile(Prefers.getInt(profileKey(PlayerSetting.EXO), PROFILE_RECOMMENDED));
+        int mpvProfile = clampProfile(Prefers.getInt(profileKey(PlayerSetting.MPV), PROFILE_RECOMMENDED));
+        if (exoProfile != PROFILE_CUSTOM) ExoPerformanceSetting.applyRebufferPreset(exoProfile);
+        if (mpvProfile != PROFILE_CUSTOM) MpvPerformanceSetting.applyRebufferPreset(mpvProfile);
+        Prefers.put(KEY_BUFFER_WATERMARKS_MIGRATED, true);
     }
 
     private static void applyKernelSpecificPreset(int kernel, int profile) {
@@ -408,5 +420,17 @@ public class PlaybackPerformanceSetting {
             case 4 -> "2GB";
             default -> "128MB";
         };
+    }
+
+    private static String bufferWatermarksText() {
+        return switch (PlayerSetting.getPlayer()) {
+            case PlayerSetting.EXO -> "\n起播阈值：" + secondsText(ExoPerformanceSetting.getStartBufferMs()) + "，重缓冲恢复：" + secondsText(ExoPerformanceSetting.getRebufferMs());
+            case PlayerSetting.MPV -> "\n参数优先级：" + MpvPerformanceSetting.getOptionPriorityText() + "，重缓冲恢复：" + secondsText(MpvPerformanceSetting.getRebufferMs());
+            default -> "";
+        };
+    }
+
+    private static String secondsText(int milliseconds) {
+        return milliseconds % 1000 == 0 ? milliseconds / 1000 + "秒" : String.format(java.util.Locale.US, "%.1f秒", milliseconds / 1000f);
     }
 }

@@ -43,7 +43,7 @@ public class TrackUtil {
         player.setTrackSelectionParameters(player.getTrackSelectionParameters().buildUpon().clearOverrides().setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false).setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, false).setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false).build());
     }
 
-    public static void reset(Player player, int type) {
+public static void reset(Player player, int type) {
         player.setTrackSelectionParameters(player.getTrackSelectionParameters().buildUpon().clearOverridesOfType(type).setTrackTypeDisabled(type, false).build());
     }
 
@@ -60,6 +60,10 @@ public class TrackUtil {
             if (track.getType() == type && find(player, track) != null) return true;
         }
         return false;
+    }
+
+    public static void enable(Player player, int type) {
+        player.setTrackSelectionParameters(player.getTrackSelectionParameters().buildUpon().setTrackTypeDisabled(type, false).build());
     }
 
     private static TrackInfo find(Player player, Track track) {

@@ -15,11 +15,10 @@ import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.dialog.HomeButtonDialog;
 import com.fongmi.android.tv.ui.dialog.HomeMenuKeyDialog;
+import com.fongmi.android.tv.ui.dialog.SliderNumberDialog;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 public class SettingPersonalActivity extends BaseActivity {
-
-    private static final int[] SEARCH_THREADS = {1, 2, 4, 6, 8, 10, 12, 16, 20, 32};
 
     private ActivitySettingPersonalBinding mBinding;
     private String[] fullscreenMenuKey;
@@ -147,10 +146,10 @@ public class SettingPersonalActivity extends BaseActivity {
     }
 
     private void setSearchThread(View view) {
-        int index = 0;
-        for (int i = 0; i < SEARCH_THREADS.length; i++) if (SEARCH_THREADS[i] == Setting.getSearchThread()) index = i;
-        Setting.putSearchThread(SEARCH_THREADS[(index + 1) % SEARCH_THREADS.length]);
-        setText();
+        SliderNumberDialog.show(this, R.string.setting_search_thread, Setting.getSearchThread(), 1, 100, value -> {
+            Setting.putSearchThread(value);
+            setText();
+        });
     }
 
     private void setSearchUi(View view) {

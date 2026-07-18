@@ -44,6 +44,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import tv.danmaku.ijk.media.player.IMediaPlayer;
 import tv.danmaku.ijk.media.player.IjkMediaPlayer;
@@ -100,6 +101,7 @@ class IjkSimplePlayer extends SimpleBasePlayer implements IMediaPlayer.Listener 
     private boolean loading;
     private boolean repeatOne;
     private boolean ownsSurface;
+    private boolean currentDash;
     private float volume;
 
     IjkSimplePlayer(int decode) {
@@ -227,10 +229,40 @@ class IjkSimplePlayer extends SimpleBasePlayer implements IMediaPlayer.Listener 
 
     @Override
     protected ListenableFuture<?> handleRelease() {
+        if (currentDash) {
+            releaseDashSafely();
+            return Futures.immediateVoidFuture();
+        }
         stopInternal(false);
         hlsProxy.release();
         ijk.release();
         return Futures.immediateVoidFuture();
+    }
+
+    private void releaseDashSafely() {
+        stopStateRefresh();
+        loading = false;
+        playWhenReady = false;
+        currentTracks = Tracks.EMPTY;
+        videoSize = VideoSize.UNKNOWN;
+        try {
+            ijk.resetListeners();
+            clearVideoOutput();
+            ijk.stop();
+        } catch (Throwable e) {
+            SpiderDebug.log("ijk", "dash switch stop failed error=%s", e.getMessage());
+        }
+        SpiderDebug.log("ijk", "dash switch deferred release scheduled");
+        Task.schedule(() -> {
+            try {
+                ijk.release();
+                SpiderDebug.log("ijk", "dash switch deferred release complete");
+            } catch (Throwable e) {
+                SpiderDebug.log("ijk", "dash switch deferred release failed error=%s", e.getMessage());
+            } finally {
+                hlsProxy.release();
+            }
+        }, 800, TimeUnit.MILLISECONDS);
     }
 
     @Override
@@ -374,6 +406,7 @@ class IjkSimplePlayer extends SimpleBasePlayer implements IMediaPlayer.Listener 
             Map<String, String> headers = ExoUtil.extractHeaders(mediaItem);
             String playableUrl = sourceUri.toString();
             boolean dash = isLikelyDash(mediaItem, playableUrl);
+            currentDash = dash;
             if (BuildConfig.DEBUG) Log.e("WebHTV-IJK", "open dash=" + dash + " uri=" + playableUrl + " headers=" + headers.keySet());
             if (dash) {
                 String originalUrl = playableUrl;
@@ -412,6 +445,7 @@ class IjkSimplePlayer extends SimpleBasePlayer implements IMediaPlayer.Listener 
         }
         ijk.reset();
         hlsProxy.clear();
+        currentDash = false;
         loading = false;
         bufferingPercent = 0;
         currentTracks = Tracks.EMPTY;
@@ -514,7 +548,14 @@ class IjkSimplePlayer extends SimpleBasePlayer implements IMediaPlayer.Listener 
         detachSurfaceHolder();
         releaseOwnedSurface();
         surface = null;
-        ijk.setSurface(null);
+        try {
+            ijk.setDisplay(null);
+        } catch (Throwable ignored) {
+        }
+        try {
+            ijk.setSurface(null);
+        } catch (Throwable ignored) {
+        }
     }
 
     private void detachSurfaceHolder() {

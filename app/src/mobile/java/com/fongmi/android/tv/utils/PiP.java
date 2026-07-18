@@ -84,6 +84,16 @@ public class PiP {
         }
     }
 
+    public void disableAutoEnter(Activity activity) {
+        try {
+            if (noPiP() || Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return;
+            builder.setAutoEnterEnabled(false);
+            activity.setPictureInPictureParams(builder.build());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
     public boolean enter(Activity activity, int width, int height, int scale) {
         return enter(activity, width, height, scale, false);
     }

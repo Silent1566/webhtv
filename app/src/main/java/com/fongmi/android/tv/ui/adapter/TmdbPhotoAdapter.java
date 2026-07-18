@@ -11,6 +11,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.utils.ImgUtil;
 import com.fongmi.android.tv.utils.Util;
+import com.google.android.material.card.MaterialCardView;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -84,6 +85,7 @@ public class TmdbPhotoAdapter extends RecyclerView.Adapter<TmdbPhotoAdapter.View
     static class ViewHolder extends RecyclerView.ViewHolder {
 
         private final ImageView photo;
+        private final MaterialCardView card;
 
         public ViewHolder(@NonNull android.view.View itemView) {
             super(itemView);
@@ -91,6 +93,7 @@ public class TmdbPhotoAdapter extends RecyclerView.Adapter<TmdbPhotoAdapter.View
                 itemView.setFocusable(false);
                 itemView.setFocusableInTouchMode(false);
             }
+            card = (MaterialCardView) itemView;
             photo = itemView.findViewById(R.id.photo);
         }
 
@@ -100,11 +103,12 @@ public class TmdbPhotoAdapter extends RecyclerView.Adapter<TmdbPhotoAdapter.View
                 itemView.setFocusable(false);
                 itemView.setFocusableInTouchMode(false);
             }
+            card = (MaterialCardView) itemView;
             photo = itemView.findViewById(R.id.photo);
         }
 
         void bind(String url, int position, OnItemClickListener listener, boolean light) {
-            // 焦点样式已通过布局的 android:foreground="@drawable/selector_vod" 实现，无需动态设置
+            TmdbCardFocusHelper.bind(card, light ? 0xEEFFFFFF : 0xCC16202A, light ? 0x33647480 : 0x33FFFFFF);
             ImgUtil.load(photo.getContext().getString(R.string.tmdb_photos_label), url, photo);
 
             if (listener != null) {

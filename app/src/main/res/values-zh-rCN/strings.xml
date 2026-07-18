@@ -920,6 +920,7 @@
     <string name="player_button_down">下移</string>
     <string name="play_episodes">选集</string>
     <string name="player_exo_4k_compat">播放性能</string>
+    <string name="player_immersive_audio_mode">沉浸音频模式</string>
     <string name="player_performance">播放性能</string>
     <string name="player_performance_recommended">推荐</string>
     <string name="player_performance_compatible">兼容</string>
@@ -1683,4 +1684,344 @@
 
     <string name="ad_rule_delete_confirm">删除规则</string>
     <string name="ad_rule_delete_message">确定删除“%1$s”吗？接口导入规则删除后可在待审核规则中重新导入。</string>
+
+<string name="player_karaoke_status_free">K歌 · 自由唱</string>
+
+<string name="player_karaoke_status_free_score_grade">K歌 · 娱乐 %1$d 分 · %2$s</string>
+
+<string name="player_karaoke_status_score">K歌 · %1$d 分</string>
+
+<string name="player_karaoke_status_score_grade">K歌 · %1$d 分 · %2$s</string>
+
+<string name="player_karaoke_status_rhythm_score">K歌 · 节奏 %1$d 分</string>
+
+<string name="player_karaoke_status_rhythm_score_grade">K歌 · 节奏 %1$d 分 · %2$s</string>
+
+<string name="player_karaoke_need_permission">需要麦克风权限</string>
+
+<string name="player_karaoke_mic_unavailable">麦克风不可用</string>
+
+<string name="player_karaoke_no_voice">请靠近麦克风演唱</string>
+
+<string name="player_karaoke_pitch">音高 %1$s</string>
+
+<string name="player_karaoke_pitch_score">音高 %1$s · %2$s</string>
+
+<string name="player_karaoke_pitch_hit">命中</string>
+
+<string name="player_karaoke_pitch_perfect">完美</string>
+
+<string name="player_karaoke_pitch_vibrato">颤音</string>
+
+<string name="player_karaoke_pitch_miss">偏差 %1$.1f 半音</string>
+
+<string name="player_karaoke_free_detail">音高 %1$s · 参与 %2$d%%</string>
+
+<string name="player_karaoke_rhythm_detail">节奏命中 %1$d%%</string>
+
+<string name="player_karaoke_combo">连击 %1$d 秒</string>
+
+<string name="player_karaoke_line_score">本句 %1$d 分</string>
+
+<string name="player_karaoke_result_title">K歌结果</string>
+
+<string name="player_karaoke_result_scoring">音准评分</string>
+
+<string name="player_karaoke_result_rhythm">节奏评分</string>
+
+<string name="player_karaoke_result_free">自由唱</string>
+
+<string name="player_karaoke_result_track">评分谱：%1$s</string>
+
+<string name="player_karaoke_result_no_track">未绑定评分谱，当前是自由唱娱乐估算。</string>
+
+<string name="player_karaoke_result_rhythm_note">根据歌词时间轴自动生成，不判断真实音高。</string>
+
+<string name="player_karaoke_result_metric_hit">命中率</string>
+
+<string name="player_karaoke_result_metric_rhythm">节奏命中</string>
+
+<string name="player_karaoke_result_metric_participation">参与度</string>
+
+<string name="player_karaoke_result_score_value">%1$d 分 · %2$s</string>
+
+<string name="player_karaoke_result_voice_coverage">演唱覆盖</string>
+
+<string name="player_karaoke_result_bonus">表现加成</string>
+
+<string name="player_karaoke_result_perfect">完美命中</string>
+
+<string name="player_karaoke_result_vibrato">颤音奖励</string>
+
+<string name="player_karaoke_result_active_time">有效 %1$d 秒</string>
+
+<string name="player_karaoke_result_best_combo">连击 %1$d 秒</string>
+
+<string name="player_karaoke_result_line_average">逐句平均</string>
+
+<string name="player_karaoke_result_line_summary">逐句 %1$d 句 · 最佳 %2$d%%</string>
+
+<string name="player_karaoke_result_pitch_headline_high">音准和稳定度都不错，表现很完整。</string>
+
+<string name="player_karaoke_result_pitch_headline_mid">这次表现可以，音高再稳一点分数会更好。</string>
+
+<string name="player_karaoke_result_pitch_headline_low">先把每句开头唱稳，并尽量完整唱完。</string>
+
+<string name="player_karaoke_result_no_track_short">自由唱估算</string>
+
+<string name="player_karaoke_result_rhythm_note_short">歌词节奏评分</string>
+
+<string name="player_karaoke_result_pitch_headline_high_short">表现完整</string>
+
+<string name="player_karaoke_result_pitch_headline_mid_short">音高再稳一点</string>
+
+<string name="player_karaoke_result_pitch_headline_low_short">唱稳开头，完整唱完</string>
+
+<string name="player_karaoke_result_fun_note">娱乐评分包含音准命中、完美保持、连击和颤音奖励。</string>
+
+<string name="player_lyrics_offset">歌词偏移</string>
+
+<string name="player_lyrics_rows">歌词行数</string>
+
+<string name="player_lyrics_size">歌词字号</string>
+
+<string name="player_lyrics_source">歌词来源</string>
+
+<string name="player_karaoke_mode">K歌模式</string>
+
+<string name="player_audio_options">播放选项</string>
+
+<string name="player_karaoke_mode_enabled">当前已开启</string>
+
+<string name="player_karaoke_mode_disabled">当前已关闭</string>
+
+<string name="player_karaoke_difficulty">K歌难度</string>
+
+<string name="player_karaoke_mic_delay">麦克风延迟</string>
+
+<string name="player_karaoke_track">评分谱</string>
+
+<string name="player_karaoke_track_generate_pitch">生成评分谱</string>
+
+<string name="player_karaoke_track_search">在线搜索</string>
+
+<string name="player_karaoke_track_keyword">评分谱关键词</string>
+
+<string name="player_karaoke_track_import_file">本地导入</string>
+
+<string name="player_karaoke_track_import_url">链接导入</string>
+
+<string name="player_karaoke_track_sources">谱源管理</string>
+
+<string name="player_karaoke_track_advanced">高级选项</string>
+
+<string name="player_karaoke_track_back">返回</string>
+
+<string name="player_karaoke_track_basic_pitch_tflite">Basic Pitch：%1$s</string>
+
+<string name="player_karaoke_track_option_enabled">已开启</string>
+
+<string name="player_karaoke_track_option_disabled">已关闭</string>
+
+<string name="player_karaoke_track_sources_hint">每行一个仓库：owner/repo@branch 或 https://github.com/owner/repo/tree/branch</string>
+
+<string name="player_karaoke_track_sources_saved">评分谱源已保存</string>
+
+<string name="player_karaoke_track_url_hint">UltraStar .txt 链接、USDB ID、USDB 详情页，或追加 @Cookie=...</string>
+
+<string name="player_karaoke_track_clear">清除绑定</string>
+
+<string name="player_karaoke_track_searching">正在搜索评分谱...</string>
+
+<string name="player_karaoke_track_not_found">未找到评分谱</string>
+
+<string name="player_karaoke_track_select">选择评分谱</string>
+
+<string name="player_karaoke_track_source_login"> · 需登录</string>
+
+<string name="player_karaoke_track_result_item">%1$s\n%2$s - %3$s\n%4$s</string>
+
+<string name="player_karaoke_track_imported">评分谱已导入</string>
+
+<string name="player_karaoke_track_import_failed">评分谱导入失败</string>
+
+<string name="player_karaoke_track_generated">轻量节奏评分谱已生成</string>
+
+<string name="player_karaoke_track_generating_pitch">正在生成音高评分谱...</string>
+
+<string name="player_karaoke_track_generating_pitch_message">正在本地分析当前音频并生成带音高的评分谱，完成前请勿关闭播放器。</string>
+
+<string name="player_karaoke_track_generating_pitch_progress">%1$d%% · %2$s · %3$s</string>
+
+<string name="player_karaoke_track_generation_stop">停止</string>
+
+<string name="player_karaoke_track_generation_stopped">已停止生成评分谱</string>
+
+<string name="player_karaoke_track_pitch_stage_prepare">准备中</string>
+
+<string name="player_karaoke_track_pitch_stage_decode">解码音频</string>
+
+<string name="player_karaoke_track_pitch_stage_analyze">分析音高</string>
+
+<string name="player_karaoke_track_pitch_stage_write">写入评分谱</string>
+
+<string name="player_karaoke_track_pitch_stage_finish">收尾中</string>
+
+<string name="player_karaoke_track_pitch_remaining_unknown">正在估算剩余时间</string>
+
+<string name="player_karaoke_track_pitch_remaining_seconds">剩余约 %1$d 秒</string>
+
+<string name="player_karaoke_track_pitch_remaining_minutes">剩余约 %1$d 分 %2$d 秒</string>
+
+<string name="player_karaoke_track_generated_pitch">音高评分谱已生成</string>
+
+<string name="player_karaoke_track_generated_pitch_message">已应用到当前歌曲，K歌模式已开启。</string>
+
+<string name="player_karaoke_track_generate_pitch_failed">音高评分谱生成失败</string>
+
+<string name="player_karaoke_track_generate_pitch_failed_message">未生成评分谱：%1$s</string>
+
+<string name="player_karaoke_track_generate_pitch_unsupported_source">当前媒体源无法直接分析音频，可尝试切换线路/清晰度，或使用在线搜索、本地导入评分谱。</string>
+
+<string name="player_karaoke_track_generate_failed">轻量节奏评分谱生成失败</string>
+
+<string name="player_karaoke_track_generate_no_lyrics">当前没有可用的歌词时间轴</string>
+
+<string name="player_karaoke_track_cleared">评分谱绑定已清除</string>
+
+<string name="player_karaoke_track_none">当前没有评分谱绑定</string>
+
+<string name="player_desktop_lyrics">桌面歌词</string>
+
+<string name="player_desktop_lyrics_permission">请允许显示在其他应用上层，用于显示桌面歌词</string>
+
+<string name="player_lyrics_cache">歌词缓存</string>
+
+<string name="player_lyrics_cache_value">%1$d 项</string>
+
+<string name="player_lyrics_cache_cleared">歌词缓存已清理</string>
+
+<string name="player_lyrics_search">搜索歌词</string>
+
+<string name="player_lyrics_reload">重搜歌词</string>
+
+<string name="player_lyrics_keyword">歌词关键词</string>
+
+<string name="player_lyrics_keyword_required">请输入歌词关键词</string>
+
+<string name="player_lyrics_searching">正在搜索歌词...</string>
+
+<string name="player_lyrics_not_found">未找到歌词</string>
+
+<string name="player_lyrics_loaded">已加载歌词：%1$s</string>
+
+<string name="player_lyrics_select">选择歌词</string>
+
+<string name="player_lyrics_word">逐字</string>
+
+<string name="player_lyrics_synced">逐句</string>
+
+<string name="player_lyrics_plain">文本</string>
+
+<string name="player_audio_badge_audio">音频</string>
+
+<string name="player_audio_badge_lyrics">歌词</string>
+
+<string name="player_audio_playlist">歌单</string>
+
+<string name="player_audio_playlist_results">搜索结果</string>
+
+<string name="player_audio_playlist_search_hint">搜索当前站源</string>
+
+<string name="player_audio_playlist_search_required">请输入搜索关键词</string>
+
+<string name="player_audio_playlist_search_failed">搜索失败</string>
+
+<string name="player_audio_playlist_no_results">未找到结果</string>
+
+<string name="player_audio_playlist_result_count">找到 %1$d 个结果</string>
+
+<string name="player_audio_playlist_adding">正在加入 %1$s...</string>
+
+<string name="player_audio_playlist_add_failed">加入失败</string>
+
+<string name="player_audio_playlist_add_empty">未找到可播放条目</string>
+
+<string name="player_audio_playlist_added">已加入 %1$d 项</string>
+
+<string name="player_audio_playlist_exists">已在歌单中</string>
+
+<string name="player_audio_playlist_empty">歌单暂无歌曲</string>
+
+<string name="player_audio_playlist_removed">已移除 %1$s</string>
+
+<string name="player_audio_playlist_keep_one">歌单至少保留一首歌曲</string>
+
+<string name="player_audio_playlist_switch">切换</string>
+
+<string name="player_audio_playlist_create">新建</string>
+
+<string name="player_audio_playlist_name_hint">歌单名称</string>
+
+<string name="player_audio_more">更多</string>
+
+<string name="player_audio_background">背景</string>
+
+<string name="player_audio_background_decorated_on">装饰已开</string>
+
+<string name="player_audio_background_decorated_off">装饰已关</string>
+
+<string name="player_audio_background_light_effect_on">光效已开</string>
+
+<string name="player_audio_background_light_effect_off">光效已关</string>
+
+<string name="player_audio_background_decorated_turn_on">打开装饰</string>
+
+<string name="player_audio_background_decorated_turn_off">关闭装饰</string>
+
+<string name="player_audio_background_random_plain">换背景</string>
+
+<string name="player_audio_background_random_decoration">换装饰</string>
+
+<string name="player_audio_background_random_plain_done">已随机生成纯背景</string>
+
+<string name="player_audio_background_random_decoration_done">已随机生成背景装饰</string>
+
+<string name="player_audio_background_random_mix_done">已随机生成背景搭配</string>
+
+<string name="player_lyrics_unknown">未知</string>
+
+<string name="player_lyrics_result_item">%1$s · %2$s · %3$d\n%4$s - %5$s</string>
+
+<string name="player_lyrics_rows_value">%1$d 行</string>
+
+<string-array name="select_lyrics_size">
+        <item>小</item>
+        <item>默认</item>
+        <item>大</item>
+        <item>特大</item>
+    </string-array>
+
+<string-array name="select_lyrics_source">
+        <item>自动</item>
+        <item>本地</item>
+        <item>AMLL TTML</item>
+        <item>QQMusic QRC</item>
+        <item>网易 YRC</item>
+        <item>酷我</item>
+        <item>LRCLIB</item>
+        <item>酷狗</item>
+        <item>咪咕</item>
+    </string-array>
+
+<string-array name="select_karaoke_difficulty">
+        <item>轻松</item>
+        <item>标准</item>
+        <item>严格</item>
+    </string-array>
+
+<string name="player_audio_badge_queue">队列</string>
+
+<string name="player_audio_repeat">循环</string>
+
 </resources>

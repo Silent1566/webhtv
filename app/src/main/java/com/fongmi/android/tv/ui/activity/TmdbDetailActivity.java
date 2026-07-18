@@ -7,6 +7,7 @@ import android.content.pm.ActivityInfo;
 import android.content.res.ColorStateList;
 import android.content.res.Configuration;
 import android.content.Intent;
+import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
@@ -22,6 +23,9 @@ import android.view.GestureDetector;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
+import android.view.PixelCopy;
+import android.view.SurfaceView;
+import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
@@ -294,6 +298,9 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private boolean savingTmdbPhoto;
     private boolean pendingInlineLutImport;
     private PlayerGesture inlineGestureDetector;
+    private Bitmap inlineTransitionBitmap;
+    private ImageView inlineTransitionFrame;
+    private int inlineTransitionCaptureSeq;
     private VodPlayerUiController inlinePlayerUi;
     private Clock inlineClock;
     private VodPlayerControlController inlineControlController;
@@ -302,6 +309,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private PiP inlinePiP;
     private final Runnable inlineHideControls = this::hideInlineControlsIfIdle;
     private final Runnable inlineKeySeekEnd = this::onInlineKeySeekEnd;
+    private final Runnable inlineTransitionFrameTimeout = this::hideInlineTransitionFrame;
     private Result pendingInlineResult;
     private Result currentInlineResult;
     private ViewGroup playerParent;
@@ -803,7 +811,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
 
             @Override
             public boolean suppressPersistentOsd() {
-                return Util.isMobile();
+                // 统一使用 OSD 系统，不再使用独立的 playerDisplay* 面板
+                return false;
             }
 
             @Override
@@ -1513,7 +1522,6 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         tintInlineGestureOverlay();
         if (isInlinePlayerMode()) {
             binding.playerError.setTextColor(0xFFFFFFFF);
-            binding.playerTitle.setTextColor(0xFFFFFFFF);
             tintInlineControl(inlineControlsView());
             tintInlineDisplay();
             tintInlineLoading();
@@ -5456,7 +5464,6 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         boolean current = isCurrentInlinePlayback(selectedEpisode);
         detailPlayerActive = true;
         binding.playerError.setTextColor(0xFFFFFFFF);
-        binding.playerTitle.setTextColor(0xFFFFFFFF);
         tintInlineControl(inlineControlsView());
         setPlayerCard(lightTheme ? ThemeColors.light() : ThemeColors.dark());
         ensureInlineDanmakuController();
@@ -5480,7 +5487,6 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         stopInlinePlayerForReload();
         showInlineLoading();
         updateInlineDisplayPanel();
-        updateInlineTitle();
         Task.execute(() -> {
             try {
                 Result result = SiteApi.playerContent(key, flag, episodeUrl);
@@ -5551,7 +5557,6 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         pendingInlineResult = null;
         hideInlineControls();
         resetInlineShortDramaMode();
-        updateInlineTitle();
         updateInlineButtons(false);
         player().stop();
         player().clear();
@@ -5653,10 +5658,13 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             hideInlineControls();
             return;
         }
-        updateInlineTitle();
         updateInlineButtons(service() != null && player() != null && !player().isEmpty() && player().isPlaying());
         inlineControlsView().setVisibility(View.VISIBLE);
-        if (inlineOsd != null) inlineOsd.setControlsVisible(true);
+        if (inlineOsd != null) {
+            inlineOsd.setSuppressed(true);
+            inlineOsd.setControlsVisible(true);
+        }
+        captureInlineTransitionFrame();
         focusInlineDefaultControl();
         touchInlineControls();
         updateInlineDisplayPanel();
@@ -5666,7 +5674,10 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         if (binding == null) return;
         boolean hadControlFocus = hasFocusedChild(inlineControlsView());
         inlineControlsView().setVisibility(View.GONE);
-        if (inlineOsd != null) inlineOsd.setControlsVisible(false);
+        if (inlineOsd != null) {
+            inlineOsd.setControlsVisible(false);
+            inlineOsd.setSuppressed(false);
+        }
         hideMobileFusionPlayerActionDock();
         App.removeCallbacks(inlineHideControls);
         if (hadControlFocus) binding.playerPanel.requestFocus();
@@ -5686,14 +5697,67 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         binding.playerPanel.requestFocus();
     }
 
+    private void captureInlineTransitionFrame() {
+        if (!Util.isMobile() || binding == null || inlineTransitionFrame != null) return;
+        View output = binding.exo.getVideoSurfaceView();
+        if (output == null || output.getWidth() <= 0 || output.getHeight() <= 0) return;
+        Bitmap frame;
+        try {
+            frame = Bitmap.createBitmap(output.getWidth(), output.getHeight(), Bitmap.Config.ARGB_8888);
+        } catch (Throwable ignored) {
+            return;
+        }
+        int sequence = ++inlineTransitionCaptureSeq;
+        if (output instanceof TextureView textureView) {
+            Bitmap captured = textureView.getBitmap(frame);
+            if (captured != null) setInlineTransitionBitmap(sequence, captured);
+            else frame.recycle();
+        } else if (output instanceof SurfaceView surfaceView && output.getHandler() != null) {
+            PixelCopy.request(surfaceView, frame, result -> {
+                if (result == PixelCopy.SUCCESS) setInlineTransitionBitmap(sequence, frame);
+                else frame.recycle();
+            }, output.getHandler());
+        } else {
+            frame.recycle();
+        }
+    }
+
+    private void setInlineTransitionBitmap(int sequence, Bitmap frame) {
+        if (binding == null || sequence != inlineTransitionCaptureSeq || inlineTransitionFrame != null) {
+            frame.recycle();
+            return;
+        }
+        if (inlineTransitionBitmap != null && !inlineTransitionBitmap.isRecycled()) inlineTransitionBitmap.recycle();
+        inlineTransitionBitmap = frame;
+    }
+
+    private void showInlineTransitionFrame() {
+        if (!Util.isMobile() || binding == null || inlineTransitionBitmap == null || inlineTransitionBitmap.isRecycled()) return;
+        hideInlineTransitionFrame();
+        ImageView frame = new ImageView(this);
+        frame.setImageBitmap(inlineTransitionBitmap);
+        frame.setScaleType(ImageView.ScaleType.FIT_XY);
+        frame.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+        int index = Math.min(binding.playerPanel.indexOfChild(binding.exo) + 1, binding.playerPanel.getChildCount());
+        binding.playerPanel.addView(frame, index, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        inlineTransitionFrame = frame;
+    }
+
+    private void hideInlineTransitionFrame() {
+        if (binding == null) return;
+        binding.playerPanel.removeCallbacks(inlineTransitionFrameTimeout);
+        if (inlineTransitionFrame != null && inlineTransitionFrame.getParent() == binding.playerPanel) binding.playerPanel.removeView(inlineTransitionFrame);
+        inlineTransitionFrame = null;
+    }
+
+    private void scheduleInlineTransitionFrameTimeout() {
+        if (binding == null || inlineTransitionFrame == null) return;
+        binding.playerPanel.removeCallbacks(inlineTransitionFrameTimeout);
+        binding.playerPanel.postDelayed(inlineTransitionFrameTimeout, 1200);
+    }
+
     private void hideInlineDisplayPanel() {
-        binding.playerDisplayTitle.setVisibility(View.GONE);
-        binding.playerDisplaySize.setVisibility(View.GONE);
-        binding.playerDisplayTopLeft.setVisibility(View.GONE);
-        binding.playerDisplayClock.setVisibility(View.GONE);
-        binding.playerDisplayTraffic.setVisibility(View.GONE);
-        binding.playerDisplayBottomProgress.setVisibility(View.GONE);
-        binding.playerDisplayMini.setVisibility(View.GONE);
+        // 已废弃：统一使用 PlayerOsdController（OSD）系统
     }
 
     private boolean suppressInlineDisplayForLeanbackFusionExit() {
@@ -5804,7 +5868,6 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         binding.playerParse.setText(parseLabel());
         binding.playerOpening.setText(inlineOpeningLabel());
         binding.playerEnding.setText(inlineEndingLabel());
-        inlineControlController.updateSize(binding.playerSize, inlineFullscreen);
         int episodeCount = selectedFlag == null || selectedFlag.getEpisodes() == null ? 0 : selectedFlag.getEpisodes().size();
         boolean hasTitle = hasPlayer && player().haveTitle();
         // 上集/下集按钮始终可用，点击时如果没有相邻集数会显示提示（与影视原生模式保持一致）
@@ -5969,7 +6032,10 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         CharSequence titleText = inlineTitleText();
         title.setText(titleText);
         title.setVisibility(!locked && hasPlayer && !TextUtils.isEmpty(titleText) ? View.VISIBLE : View.INVISIBLE);
-        inlineControlController.updateSize(size, inlineFullscreen);
+        // 控制栏显示时显示分辨率
+        String sizeText = hasPlayer && player() != null ? player().getSizeText() : "";
+        size.setText(sizeText);
+        size.setVisibility(!locked && hasPlayer && !TextUtils.isEmpty(sizeText) ? View.VISIBLE : View.GONE);
         updateMobileInlineControlStatus(hasPlayer);
         detailControlView(R.id.play, ImageView.class).setImageResource(playing ? androidx.media3.ui.R.drawable.exo_icon_pause : androidx.media3.ui.R.drawable.exo_icon_play);
         detailControlView(R.id.lock, ImageView.class).setImageResource(locked ? R.drawable.ic_control_lock_on : R.drawable.ic_control_lock_off);
@@ -6158,41 +6224,9 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private void updateInlineDisplayPanel() {
-        if (binding == null) return;
-        if (!Util.isMobile()) {
-            hideInlineDisplayPanel();
-            return;
-        }
-        if (isInPictureInPictureMode() || isInlineDisplaySuppressed()) {
-            hideInlineDisplayPanel();
-            return;
-        }
-        boolean hasPlayer = isInlinePlayerMode() && service() != null && player() != null && !player().isEmpty();
-        boolean centerVisible = binding.gestureSeek.getVisibility() == View.VISIBLE;
-        boolean canShow = hasPlayer && inlineControlsView().getVisibility() != View.VISIBLE && binding.playerProgress.getVisibility() != View.VISIBLE && binding.playerError.getVisibility() != View.VISIBLE;
-        boolean showTitle = canShow && (inlinePauseInfo || PlayerSetting.isDisplayTitle()) && !TextUtils.isEmpty(inlineTitleText());
-        boolean showSize = canShow && (inlinePauseInfo || PlayerSetting.isDisplaySize()) && !TextUtils.isEmpty(player().getSizeText());
-        boolean showProgress = !centerVisible && canShow && PlayerSetting.isDisplayProgress() && player().getDuration() > 0;
-        boolean showMini = !centerVisible && canShow && PlayerSetting.isDisplayMini() && player().getDuration() > 0;
-        binding.playerDisplayTitle.setText(inlineTitleText());
-        binding.playerDisplaySize.setText(showSize ? player().getSizeText() : "");
-        tintInlineDisplay();
-        binding.playerDisplayTitle.setVisibility(showTitle ? View.VISIBLE : View.GONE);
-        binding.playerDisplaySize.setVisibility(showSize ? View.VISIBLE : View.GONE);
-        binding.playerDisplayTopLeft.setVisibility(showTitle || showSize ? View.VISIBLE : View.GONE);
-        binding.playerDisplayClock.setText(TIME_FORMAT.format(LocalDateTime.now()));
-        binding.playerDisplayClock.setVisibility(canShow && (inlinePauseInfo || PlayerSetting.isDisplayTime()) ? View.VISIBLE : View.GONE);
-        if (!centerVisible && canShow && PlayerSetting.isDisplayTraffic()) Traffic.setSpeed(binding.playerDisplayTraffic);
-        else binding.playerDisplayTraffic.setVisibility(View.GONE);
-        binding.playerDisplayBottomProgress.setVisibility(showProgress ? View.VISIBLE : View.GONE);
-        binding.playerDisplayMini.setVisibility(showMini ? View.VISIBLE : View.GONE);
-        if (!showProgress && !showMini) return;
-        long duration = Math.max(0, player().getDuration());
-        long position = Math.max(0, Math.min(player().getPosition(), duration));
-        int progress = duration > 0 ? (int) (position * binding.playerDisplayBar.getMax() / duration) : 0;
-        binding.playerDisplayPosition.setText(player().getPositionTime(0) + "/" + player().getDurationTime());
-        binding.playerDisplayBar.setProgress(progress);
-        binding.playerDisplayMini.setProgress(position, duration);
+        // 已废弃：统一使用 PlayerOsdController（OSD）系统
+        // 原逻辑已迁移到 PlayerOsdController.render()
+        // 保留此方法避免删除所有调用点时遗漏
     }
 
     private void setButtonEnabled(View button, boolean enabled) {
@@ -6216,7 +6250,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private CharSequence inlineTitleText() {
-        return binding.playerTitle.getText();
+        return getInlineOsdTitle();
     }
 
     protected boolean hasInlineCast() {
@@ -6296,7 +6330,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     protected CharSequence getInlinePlayerTitle() {
-        return binding.playerTitle.getText();
+        return getInlineOsdTitle();
     }
 
     protected History getInlineHistory() {
@@ -6308,13 +6342,6 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         int index = selectedFlag.getEpisodes().indexOf(selectedEpisode);
         int next = index + direction;
         return index >= 0 && next >= 0 && next < selectedFlag.getEpisodes().size();
-    }
-
-    private void updateInlineTitle() {
-        if (!isInlinePlayerMode()) return;
-        String title = playbackHistoryName();
-        String episode = selectedEpisode != null ? inlineEpisodeTitle(selectedEpisode) : "";
-        binding.playerTitle.setText(TextUtils.isEmpty(episode) || TextUtils.equals(episode, title) ? title : title + "  " + episode);
     }
 
     private String qualityLabel() {
@@ -6935,7 +6962,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
 
     private void openInlineExternal() {
         if (service() == null || player().isEmpty()) return;
-        PlayerHelper.choose(this, player().getUrl(), player().getHeaders(), player().isVod(), player().getPosition(), binding.playerTitle.getText());
+        PlayerHelper.choose(this, player().getUrl(), player().getHeaders(), player().isVod(), player().getPosition(), inlineTitleText());
         setRedirect(true);
     }
 
@@ -7735,6 +7762,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
 
     private void enterInlineFullscreen() {
         if (inlineFullscreen || inlinePiPLayout || isInPictureInPictureMode()) return;
+        showInlineTransitionFrame();
         inlineFullscreen = true;
         updateDetailThemeButtonVisibility();
         requestedOrientation = getRequestedOrientation();
@@ -7757,6 +7785,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         Util.toggleFullscreen(this, true);
         setInlineFullscreenOrientation();
         scheduleMobileInlineSideControlMarginUpdate();
+        reattachVideoSurfaceAfterReparent();
+        scheduleInlineTransitionFrameTimeout();
     }
 
     private boolean shouldShowDetailFullscreenControlsOnReady() {
@@ -7940,6 +7970,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
 
     private void exitInlineFullscreen() {
         if (!inlineFullscreen) return;
+        showInlineTransitionFrame();
         boolean suppressDisplay = suppressInlineDisplayForLeanbackFusionExit();
         prepareInlinePlayerTransition();
         inlineFullscreen = false;
@@ -7968,6 +7999,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         restoreEmbeddedInlinePlayerLayout();
         restoreInlineDetailScrollAfterOverlay();
         scheduleInlinePlayerPanelRestoreAfterOverlay();
+        reattachVideoSurfaceAfterReparent();
+        scheduleInlineTransitionFrameTimeout();
     }
 
     private void enterInlinePiPLayout() {
@@ -8540,6 +8573,12 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     @Override
+    protected void onFirstFrameRendered() {
+        hideInlineTransitionFrame();
+        if (binding != null) binding.playerPanel.post(this::captureInlineTransitionFrame);
+    }
+
+    @Override
     protected void onStateChanged(int state) {
         if (!isInlinePlayerMode()) return;
         if (state == Player.STATE_BUFFERING) showInlineLoading();
@@ -8679,6 +8718,10 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         cancelBackdropSlideRequest();
         App.removeCallbacks(inlineHideControls);
         App.removeCallbacks(inlineKeySeekEnd);
+        hideInlineTransitionFrame();
+        inlineTransitionCaptureSeq++;
+        if (inlineTransitionBitmap != null && !inlineTransitionBitmap.isRecycled()) inlineTransitionBitmap.recycle();
+        inlineTransitionBitmap = null;
         EpisodeTitlePopup.dismiss();
         saveInlineHistory();
         // 确保内嵌播放退出时停止播放，避免声音继续（与 VideoActivity 保持一致）

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_pressed="true" android:drawable="@drawable/shape_audio_action_icon_focused" />
+    <item android:state_activated="true" android:drawable="@drawable/shape_audio_action_icon_focused" />
+    <item android:state_selected="true">
+        <inset android:inset="3dp"><shape android:shape="rectangle"><corners android:radius="17dp" /><solid android:color="#2AFFFFFF" /><stroke android:width="1dp" android:color="#66FFFFFF" /></shape></inset>
+    </item>
+    <item android:drawable="@android:color/transparent" />
+</selector>

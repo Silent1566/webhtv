@@ -11,6 +11,8 @@ import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Result;
 import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.exception.ExtractException;
+import com.fongmi.android.tv.player.karaoke.KaraokeResult;
+import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.setting.SiteBlockSetting;
 import com.fongmi.android.tv.setting.SiteHealthStore;
 import com.fongmi.android.tv.utils.Task;
@@ -44,6 +46,8 @@ public class SiteViewModel extends ViewModel {
     private final Map<TaskType, AtomicInteger> taskIds;
     private final List<Future<?>> searchFuture;
     private final AtomicInteger searchEpoch;
+    private KaraokeResult karaokeResult;
+    private int karaokeResultAction;
 
     public SiteViewModel() {
         result = new MutableLiveData<>();
@@ -78,6 +82,24 @@ public class SiteViewModel extends ViewModel {
         return action;
     }
 
+    public KaraokeResult getKaraokeResult() {
+        return karaokeResult;
+    }
+
+    public int getKaraokeResultAction() {
+        return karaokeResultAction;
+    }
+
+    public void setKaraokeResult(KaraokeResult result, int action) {
+        karaokeResult = result;
+        karaokeResultAction = action;
+    }
+
+    public void clearKaraokeResult() {
+        karaokeResult = null;
+        karaokeResultAction = 0;
+    }
+
     public SiteViewModel init() {
         search.setValue(null);
         searchProgress.setValue(null);
@@ -108,7 +130,6 @@ public class SiteViewModel extends ViewModel {
     }
 
     public void searchContent(Site site, String keyword, boolean quick, String page) {
-        if (SiteBlockSetting.isBlocked(site)) return;
         long start = System.currentTimeMillis();
         execute(TaskType.RESULT, result, SearchTask.create(site, keyword, quick, page),
                 result -> SiteHealthStore.recordSearch(site, true, result.getList().size(), System.currentTimeMillis() - start, ""),
@@ -117,9 +138,9 @@ public class SiteViewModel extends ViewModel {
 
     public void searchContent(List<Site> sites, String keyword, boolean quick) {
         int epoch = stopSearch();
+        Task.applySearchThread(Setting.getSearchThread());
         List<Site> tasks = new ArrayList<>();
         for (Site site : sites) {
-            if (SiteBlockSetting.isBlocked(site)) continue;
             if (quick && !site.isQuickSearch()) continue;
             tasks.add(site);
         }
@@ -128,7 +149,7 @@ public class SiteViewModel extends ViewModel {
         searchProgress.postValue(SearchProgress.start(total));
         for (Site site : tasks) {
             long start = System.currentTimeMillis();
-            FluentFuture<Result> future = FluentFuture.from(Task.largeExecutor().submit(SearchTask.create(site, keyword, quick))).withTimeout(Constant.TIMEOUT_SEARCH, TimeUnit.MILLISECONDS, Task.scheduler());
+            FluentFuture<Result> future = FluentFuture.from(Task.searchPoolExecutor().submit(SearchTask.create(site, keyword, quick))).withTimeout(Constant.TIMEOUT_SEARCH, TimeUnit.MILLISECONDS, Task.scheduler());
             searchFuture.add(future);
             future.addCallback(Task.callback(
                     result -> {

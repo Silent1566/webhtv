@@ -82,7 +82,32 @@ public abstract class BaseActivity extends AppCompatActivity {
     }
 
     protected void notifyItemChanged(RecyclerView view, RecyclerView.Adapter<?> adapter) {
-        view.post(() -> adapter.notifyDataSetChanged());
+        postRecyclerUpdate(view, adapter::notifyDataSetChanged);
+    }
+
+    protected void notifyItemsChanged(RecyclerView view, RecyclerView.Adapter<?> adapter, int... positions) {
+        postRecyclerUpdate(view, () -> {
+            for (int i = 0; i < positions.length; i++) {
+                int position = positions[i];
+                if (position < 0 || position >= adapter.getItemCount()) continue;
+                boolean duplicate = false;
+                for (int j = 0; j < i; j++) if (positions[j] == position) duplicate = true;
+                if (!duplicate) adapter.notifyItemChanged(position);
+            }
+        });
+    }
+
+    private void postRecyclerUpdate(RecyclerView view, Runnable update) {
+        view.post(new Runnable() {
+            @Override
+            public void run() {
+                if (view.isComputingLayout()) {
+                    view.postOnAnimation(this);
+                    return;
+                }
+                update.run();
+            }
+        });
     }
 
     private void setBackCallback() {

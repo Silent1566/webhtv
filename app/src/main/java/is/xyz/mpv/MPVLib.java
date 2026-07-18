@@ -43,6 +43,8 @@ public final class MPVLib {
     private static String loadedAbi;
     private static Boolean bundledVulkanEnabled;
     private static Boolean deviceVulkan13Capable;
+    private static boolean contextCreationAttempted;
+    private static boolean contextCreated;
 
     private MPVLib() {
     }
@@ -176,6 +178,27 @@ public final class MPVLib {
     public static native void init();
 
     public static native void destroy();
+
+    public static synchronized boolean tryCreate(Context appctx) {
+        if (contextCreationAttempted) {
+            Log.w(TAG, "Ignore duplicate MPV context creation");
+            return false;
+        }
+        contextCreationAttempted = true;
+        create(appctx);
+        contextCreated = true;
+        return true;
+    }
+
+    public static synchronized void destroyCreatedContext() {
+        if (!contextCreated) return;
+        try {
+            destroy();
+        } finally {
+            contextCreated = false;
+            contextCreationAttempted = false;
+        }
+    }
 
     public static native void attachSurface(Surface surface);
 

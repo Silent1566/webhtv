@@ -57,20 +57,6 @@ public class VodPlayerControlController {
         return true;
     }
 
-    public void updateSize(TextView view, boolean visibleArea) {
-        String size = hasPlayer() ? player().getSizeText() : "";
-        if (view.getId() == R.id.size || view.getId() == R.id.playerSize) {
-            view.setBackground(null);
-            view.setSingleLine(true);
-            view.setEllipsize(TextUtils.TruncateAt.END);
-        }
-        if (view.getId() == R.id.size) {
-            view.setPadding(0, 0, 0, 0);
-        }
-        view.setText(size);
-        view.setVisibility(visibleArea && !TextUtils.isEmpty(size) ? View.VISIBLE : View.GONE);
-    }
-
     public interface Host {
 
         PlayerManager player();

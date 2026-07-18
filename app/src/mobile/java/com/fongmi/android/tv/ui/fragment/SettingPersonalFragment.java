@@ -12,11 +12,10 @@ import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.databinding.FragmentSettingPersonalBinding;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.base.BaseFragment;
+import com.fongmi.android.tv.ui.dialog.SliderNumberDialog;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 public class SettingPersonalFragment extends BaseFragment {
-
-    private static final int[] SEARCH_THREADS = {1, 2, 4, 6, 8, 10, 12, 16, 20, 32};
 
     private FragmentSettingPersonalBinding mBinding;
     private String[] searchUi;
@@ -78,11 +77,10 @@ public class SettingPersonalFragment extends BaseFragment {
     }
 
     private void setSearchThread(View view) {
-        int index = 0;
-        for (int i = 0; i < SEARCH_THREADS.length; i++)
-            if (SEARCH_THREADS[i] == Setting.getSearchThread()) index = i;
-        Setting.putSearchThread(SEARCH_THREADS[(index + 1) % SEARCH_THREADS.length]);
-        setText();
+        SliderNumberDialog.show(requireActivity(), R.string.setting_search_thread, Setting.getSearchThread(), 1, 100, value -> {
+            Setting.putSearchThread(value);
+            setText();
+        });
     }
 
     private void setPlayBackToDetail(View view) {

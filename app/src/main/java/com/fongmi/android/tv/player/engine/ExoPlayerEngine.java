@@ -165,8 +165,13 @@ public class ExoPlayerEngine implements PlayerEngine {
     }
 
     @Override
-    public void resetTrack(int type) {
+public void resetTrack(int type) {
         TrackUtil.reset(player, type);
+    }
+
+    @Override
+    public void restoreVideoTrack() {
+        TrackUtil.enable(player, C.TRACK_TYPE_VIDEO);
     }
 
     @Override

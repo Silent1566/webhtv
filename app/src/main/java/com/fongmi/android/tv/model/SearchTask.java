@@ -10,7 +10,7 @@ import java.util.concurrent.Callable;
 public record SearchTask(Site site, String keyword, boolean quick, String page) implements Callable<Result> {
 
     public SearchTask(Site site, String keyword, boolean quick, String page) {
-        this.keyword = Trans.t2s(false, keyword);
+        this.keyword = Trans.t2s(keyword);
         this.quick = quick;
         this.page = page;
         this.site = site;

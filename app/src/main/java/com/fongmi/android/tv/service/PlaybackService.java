@@ -33,6 +33,9 @@ import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.playback.PlaybackEventCollector;
 import com.fongmi.android.tv.player.PlayerManager;
 import com.fongmi.android.tv.player.engine.PlaySpec;
+import com.fongmi.android.tv.player.lyrics.DesktopLyricsWindow;
+import com.fongmi.android.tv.player.lyrics.LyricsLine;
+import com.fongmi.android.tv.player.lyrics.LyricsResult;
 import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.ui.audio.AudioHistory;
 import com.fongmi.android.tv.utils.Task;
@@ -70,7 +73,8 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
 
     private NavigationCallback navigationCallback;
     private MediaLibrarySession session;
-    private AudioHistory.Record audioHistoryRecord;
+private AudioHistory.Record audioHistoryRecord;
+    private DesktopLyricsWindow desktopLyrics;
     private Runnable onNewBinding;
     private String savedAudioHistoryTrack;
     private long lastAudioHistorySync;
@@ -119,6 +123,7 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
         if (SpiderDebug.isEnabled()) SpiderDebug.log("playback-flow", "service onCreate start");
         running = true;
         player = new PlayerManager(this);
+        desktopLyrics = new DesktopLyricsWindow(this);
         PlaybackEventCollector.get().setPlayer(player);
         if (SpiderDebug.isEnabled()) SpiderDebug.log("playback-flow", "service player ready cost=%dms", System.currentTimeMillis() - start);
         exoPlayer = player.getPlayer();
@@ -217,6 +222,7 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
         syncAudioHistoryProgress(true);
         clearAudioHistoryRecord();
         PlaybackEventCollector.get().onStop(player);
+        if (desktopLyrics != null) desktopLyrics.release();
         releaseSession();
         player.stop();
         player.release();
@@ -385,6 +391,18 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
 
     public void setSessionActivity(PendingIntent pendingIntent) {
         if (session != null) session.setSessionActivity(pendingIntent);
+    }
+
+    public void setPlaybackForeground(boolean foreground) {
+        if (desktopLyrics != null) desktopLyrics.setForeground(foreground);
+    }
+
+    public void setDesktopLyricsAudioContent(boolean audioContent) {
+        if (desktopLyrics != null) desktopLyrics.setAudioContent(audioContent);
+    }
+
+    public void setDesktopLyricsSnapshot(LyricsResult result, List<LyricsLine> lines) {
+        if (desktopLyrics != null) desktopLyrics.setLyricsSnapshot(result, lines);
     }
 
     public void resetSessionActivity() {
@@ -566,16 +584,19 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
 
     @Override
     public void onPrepare() {
+        if (desktopLyrics != null) desktopLyrics.refresh(player);
         playerCallbacks.forEach(PlayerCallback::onPrepare);
     }
 
     @Override
     public void onTracksChanged() {
+        if (desktopLyrics != null) desktopLyrics.refresh(player);
         playerCallbacks.forEach(PlayerCallback::onTracksChanged);
     }
 
     @Override
     public void onTitlesChanged() {
+        if (desktopLyrics != null) desktopLyrics.refresh(player);
         playerCallbacks.forEach(PlayerCallback::onTitlesChanged);
     }
 
@@ -609,8 +630,9 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
 
     private final Player.Listener listener = new Player.Listener() {
         @Override
-        public void onIsPlayingChanged(boolean isPlaying) {
+public void onIsPlayingChanged(boolean isPlaying) {
             PlaybackEventCollector.get().onIsPlayingChanged(player, isPlaying);
+            if (desktopLyrics != null) desktopLyrics.update(player);
             if (isPlaying) scheduleAudioHistorySync();
             else syncAudioHistoryProgress(true);
         }
@@ -618,13 +640,16 @@ public class PlaybackService extends MediaLibraryService implements MediaLibrary
         @Override
         public void onPlaybackStateChanged(int state) {
             PlaybackEventCollector.get().onPlaybackStateChanged(player, state);
+            if (desktopLyrics != null) desktopLyrics.update(player);
             if (state == Player.STATE_READY) {
                 updateAudioHistoryForReady();
                 scheduleAudioHistorySync();
             }
             if (state == Player.STATE_ENDED) {
                 syncAudioHistoryProgress(true);
-                if (!(hasNavigationCallback() && isNavigationOwner())) navigateItem(1);
+                if (SpiderDebug.isEnabled()) SpiderDebug.log("audio-auto-next", "service ended owner=%s navigation=%s key=%s navigationKey=%s", isNavigationOwner(), hasNavigationCallback(), player.getKey(), navigationKey);
+                if (hasNavigationCallback() && isNavigationOwner()) dispatchNext();
+                else navigateItem(1);
             }
         }
 

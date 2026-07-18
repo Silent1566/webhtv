@@ -172,6 +172,239 @@ public class VideoActivityLayoutTest {
     }
 
     @Test
+    public void leanbackAudioModeReconcilesAfterTracksAndPlayerBecomeReady() throws Exception {
+        Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        String tracksBody = methodBody(source, "protected void onTracksChanged()", "protected void onTitlesChanged()");
+        String stateBody = methodBody(source, "protected void onStateChanged(int state)", "protected void onPlayingChanged(boolean isPlaying)");
+
+        assertTrue("TV track changes must re-evaluate immersive audio after native players publish their video track",
+                tracksBody.indexOf("refreshLyrics();") >= 0
+                        && tracksBody.indexOf("refreshLyrics();") < tracksBody.indexOf("setTrackVisible();"));
+        assertTrue("TV READY state must correct any early audio-only classification made during prepare",
+                stateBody.contains("case Player.STATE_READY:")
+                        && stateBody.indexOf("refreshLyrics();") > stateBody.indexOf("case Player.STATE_READY:"));
+    }
+
+    @Test
+    public void videoPlaybackStartKeepsMergedAudioPreparation() throws Exception {
+        assertVideoPlaybackStartKeepsMergedAudioPreparation("TV",
+                findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java")));
+        assertVideoPlaybackStartKeepsMergedAudioPreparation("mobile",
+                findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java")));
+    }
+
+    private static void assertVideoPlaybackStartKeepsMergedAudioPreparation(String label, Path sourcePath) throws Exception {
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        String body = methodBody(source, "private void getPlayer(Flag flag, Episode episode)", "private void setPlayer(Result result)");
+
+        assertTrue(label + " playback must preserve per-episode play flags", body.contains("String playFlag = getEpisodePlayFlag(flag, episode);"));
+        assertTrue(label + " playback must update the audio episode identity before loading", body.contains("mPlaybackEpisodeKey = audioQueueEpisodeKey(episode);"));
+        assertTrue(label + " playback must load inline lyrics for the selected episode", body.contains("mInlineLyrics = getEpisodeInlineLyrics(episode);"));
+        assertTrue(label + " playback must update artwork before the new item starts", body.contains("applyPlaybackArtwork(episode);"));
+        assertTrue(label + " playback must clear lyrics and karaoke state between episodes",
+                body.contains("clearLyrics();") && body.contains("clearKaraokeState();"));
+        assertTrue(label + " playback must request content with the resolved per-episode flag",
+                body.contains("mViewModel.playerContent(getKey(), playFlag, episode.getUrl());"));
+    }
+
+    @Test
+    public void mobileAudioLifecycleKeepsStageStateInSync() throws Exception {
+        Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        String tracksBody = methodBody(source, "protected void onTracksChanged()", "protected void onTitlesChanged()");
+        String audioStateBody = methodBody(source, "private void updateAudioOnlyState()", "protected void onTitlesChanged()");
+        String startBody = methodBody(source, "protected void onStart()", "protected void onStop()");
+        String resumeBody = methodBody(source, "protected void onResume()", "private void finishIfPipClosed()");
+        String configBody = methodBody(source, "public void onConfigurationChanged(@NonNull Configuration newConfig)", "public void onWindowFocusChanged(boolean hasFocus)");
+
+        assertTrue("mobile track changes must refresh lyrics after reconciling the final track set",
+                tracksBody.contains("updateAudioOnlyState();")
+                        && tracksBody.contains("suppressPiPForAudio();")
+                        && tracksBody.contains("refreshLyrics();"));
+        assertTrue("mobile audio state must update desktop lyrics, stage visibility, and karaoke actions",
+                audioStateBody.contains("LyricsController.isAudioOnly(player())")
+                        && audioStateBody.contains("syncDesktopLyricsAudioContent();")
+                        && audioStateBody.contains("setAudioStageVisible(shouldUseImmersiveAudio());")
+                        && audioStateBody.contains("setKaraokeActionState();"));
+        assertTrue("mobile start must reset stale audio state before refreshing the current player",
+                startBody.indexOf("setAudioOnly(false);") >= 0
+                        && startBody.indexOf("setAudioOnly(false);") < startBody.indexOf("refreshLyrics();")
+                        && startBody.contains("syncLyricsPlaybackState();")
+                        && startBody.contains("syncKaraokePosition();"));
+        assertTrue("mobile resume must restore the audio stage and synchronize lyrics playback",
+                resumeBody.contains("if (mAudioStageVisible) restorePlaybackArtwork();")
+                        && resumeBody.contains("if (mAudioStageVisible) applyAudioBackground();")
+                        && resumeBody.contains("syncLyricsPlaybackState();")
+                        && resumeBody.contains("syncKaraokePosition();"));
+        assertTrue("mobile rotation must recreate a visible audio stage before applying video fullscreen rules",
+                configBody.contains("if (shouldRecreateAudioStageForOrientation(newConfig))")
+                        && configBody.contains("setAudioOnly(true);")
+                        && configBody.contains("recreate();"));
+    }
+
+    @Test
+    public void videoAudioControllersAreReleasedWithTheirActivity() throws Exception {
+        Path leanbackPath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String leanback = new String(Files.readAllBytes(leanbackPath), StandardCharsets.UTF_8);
+        String leanbackDestroy = methodBody(leanback, "protected void onDestroy()", "public String getSubtitlePlaybackKey()");
+        assertTrue("TV destroy must invalidate lyric work and close lyric sheets",
+                leanbackDestroy.contains("mLyricsSearchSeq++;")
+                        && leanbackDestroy.contains("mLyricsRefreshSeq++;")
+                        && leanbackDestroy.contains("dismissLyricsResultDialog();"));
+        assertTrue("TV destroy must release lyric and karaoke controllers",
+                leanbackDestroy.contains("mLyrics.release();") && leanbackDestroy.contains("mKaraoke.release();"));
+
+        Path mobilePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String mobile = new String(Files.readAllBytes(mobilePath), StandardCharsets.UTF_8);
+        String mobileDestroy = methodBody(mobile, "protected void onDestroy()", "public String getSubtitlePlaybackKey()");
+        assertTrue("mobile destroy must dismiss configuration-owned karaoke UI and cancel pitch generation",
+                mobileDestroy.contains("dismissKaraokeResultDialogForRecreation();")
+                        && mobileDestroy.contains("cancelKaraokePitchGeneration(false);")
+                        && mobileDestroy.contains("dismissLyricsResultDialog();"));
+        assertTrue("mobile destroy must release lyric and karaoke controllers",
+                mobileDestroy.contains("mLyrics.release();") && mobileDestroy.contains("mKaraoke.release();"));
+    }
+
+    @Test
+    public void videoAudioCallbacksKeepPlaybackStateSynchronized() throws Exception {
+        Path leanbackPath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String leanback = new String(Files.readAllBytes(leanbackPath), StandardCharsets.UTF_8);
+        String leanbackError = methodBody(leanback, "protected void onError(String msg)", "protected void onReclaim()");
+        String leanbackPlaying = methodBody(leanback, "protected void onPlayingChanged(boolean isPlaying)", "protected void onSizeChanged(VideoSize size)");
+        assertTrue("TV playback errors must clear stale lyrics and karaoke state",
+                leanbackError.contains("clearLyrics();") && leanbackError.contains("clearKaraokeState();"));
+        assertTrue("TV play/pause changes must update karaoke position and the immersive audio transport",
+                leanbackPlaying.contains("syncKaraokePosition();") && leanbackPlaying.contains("checkAudioPlayImg(isPlaying);"));
+
+        Path mobilePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String mobile = new String(Files.readAllBytes(mobilePath), StandardCharsets.UTF_8);
+        String mobileError = methodBody(mobile, "protected void onError(String msg)", "protected void onReload(String msg)");
+        String mobileState = methodBody(mobile, "protected void onStateChanged(int state)", "protected void onPlayingChanged(boolean isPlaying)");
+        String mobilePlaying = methodBody(mobile, "protected void onPlayingChanged(boolean isPlaying)", "protected void onSizeChanged(VideoSize size)");
+        assertTrue("mobile playback errors must clear stale lyrics and karaoke state",
+                mobileError.contains("clearLyrics();") && mobileError.contains("clearKaraokeState();"));
+        assertTrue("mobile READY state must refresh lyrics and reset the karaoke result for a new playback",
+                mobileState.contains("mPendingKaraokeResult == null")
+                        && mobileState.contains("mKaraokeResultShown = false;")
+                        && mobileState.contains("refreshLyrics();"));
+        assertTrue("mobile play/pause changes must synchronize lyrics, karaoke, PiP, and the audio transport",
+                mobilePlaying.contains("syncLyricsPlaybackState(isPlaying);")
+                        && mobilePlaying.contains("syncKaraokePosition();")
+                        && mobilePlaying.contains("suppressPiPForAudio()")
+                        && mobilePlaying.contains("checkAudioPlayImg("));
+    }
+
+    @Test
+    public void videoPlayerResultsKeepMergedAudioMetadata() throws Exception {
+        Path leanbackPath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String leanback = new String(Files.readAllBytes(leanbackPath), StandardCharsets.UTF_8);
+        String leanbackPlayer = methodBody(leanback, "private void setPlayer(Result result)", "private boolean redirectToContentHandler(Result result)");
+        assertTrue("TV results without artwork must restore the selected episode artwork", leanbackPlayer.contains("else applyPlaybackArtwork(getPlaybackEpisode());"));
+        assertTrue("TV result descriptions must remain available as inline lyrics", leanbackPlayer.contains("setPlaybackLyrics(result.getDesc());"));
+        assertTrue("TV audio queue metadata must be applied before playback starts", leanbackPlayer.contains("applyAudioQueueMetadata(getPlaybackEpisode());"));
+
+        Path mobilePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String mobile = new String(Files.readAllBytes(mobilePath), StandardCharsets.UTF_8);
+        String mobilePlayer = methodBody(mobile, "private void setPlayer(Result result)", "private boolean redirectToAudioIfNeeded(Result result)");
+        assertTrue("mobile player results must wait until the playback service is connected",
+                mobilePlayer.contains("if (service() == null)") && mobilePlayer.contains("mPendingPlayerResult = result;"));
+        assertTrue("mobile results without artwork must restore the selected episode artwork", mobilePlayer.contains("else applyPlaybackArtwork(getPlaybackEpisode());"));
+        assertTrue("mobile result descriptions must remain available as inline lyrics", mobilePlayer.contains("setPlaybackLyrics(result.getDesc());"));
+        assertTrue("mobile audio queue metadata must be applied before playback starts", mobilePlayer.contains("applyAudioQueueMetadata(getPlaybackEpisode());"));
+    }
+
+    @Test
+    public void mobilePlaybackServiceConsumesPendingMergedState() throws Exception {
+        Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        String connected = methodBody(source, "protected void onServiceConnected()", "protected void onPlayerRebuilt()");
+        String detail = methodBody(source, "private void setDetail(Vod item)", "private void setText(Vod item)");
+
+        assertTrue("mobile service connection must restore desktop lyrics state before consuming queued playback",
+                connected.contains("syncDesktopLyricsAudioContent();")
+                        && connected.contains("if (consumePendingPlaybackResult()) return;")
+                        && connected.indexOf("consumePendingPlaybackResult()") < connected.indexOf("checkId();"));
+        assertTrue("mobile detail results must wait for the playback service just like player results",
+                detail.contains("if (service() == null)") && detail.contains("mPendingDetailVod = item;"));
+    }
+
+    @Test
+    public void detailSwitchClearsReusableAudioControllersInsteadOfReleasingThem() throws Exception {
+        assertDetailSwitchKeepsReusableAudioControllers("TV",
+                findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java")));
+        assertDetailSwitchKeepsReusableAudioControllers("mobile",
+                findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java")));
+    }
+
+    private static void assertDetailSwitchKeepsReusableAudioControllers(String label, Path sourcePath) throws Exception {
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        String body = methodBody(source, "private void getDetail(Vod item)", "private void setDetail(Result result)");
+
+        assertTrue(label + " detail switching must clear reusable lyrics and karaoke state",
+                body.contains("clearLyrics();") && body.contains("clearKaraokeState();"));
+        assertFalse(label + " detail switching must not release activity-owned audio controllers", body.contains(".release();"));
+        assertTrue(label + " detail switching must invalidate lyrics searches exactly once", occurrences(body, "mLyricsSearchSeq++;") == 1);
+    }
+
+    @Test
+    public void videoClockKeepsLyricsAndKaraokeAdvancing() throws Exception {
+        Path leanbackPath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String leanback = new String(Files.readAllBytes(leanbackPath), StandardCharsets.UTF_8);
+        String leanbackClock = methodBody(leanback, "public void onTimeChanged(long time)", "private void updatePlaybackHistoryPosition()");
+        assertTrue("TV clock ticks must advance lyrics and karaoke state",
+                leanbackClock.contains("syncKaraokePosition();")
+                        && leanbackClock.contains("mLyrics.update(player());")
+                        && leanbackClock.contains("mKaraoke.update(player(), mLyrics == null ? null : mLyrics.getLines());"));
+
+        Path mobilePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String mobile = new String(Files.readAllBytes(mobilePath), StandardCharsets.UTF_8);
+        String mobileClock = methodBody(mobile, "public void onTimeChanged(long time)", "private void updatePlaybackHistoryPosition()");
+        assertTrue("mobile clock ticks must learn playlist metadata and advance lyrics and karaoke state",
+                mobileClock.contains("syncCurrentAudioPlaylistMetadata();")
+                        && mobileClock.contains("syncKaraokePosition();")
+                        && mobileClock.contains("mLyrics.update(player());")
+                        && mobileClock.contains("mKaraoke.update(player(), mLyrics == null ? null : mLyrics.getLines());"));
+    }
+
+    @Test
+    public void videoDetailTextKeepsInlineLyricsMetadata() throws Exception {
+        Path leanbackPath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String leanback = new String(Files.readAllBytes(leanbackPath), StandardCharsets.UTF_8);
+        String leanbackText = methodBody(leanback, "private void setText(Vod item)", "private void setText(TextView view");
+        assertTrue("TV detail content must remain available as inline lyrics", leanbackText.contains("setDetailLyrics(item.getContent());"));
+        assertTrue("TV detail binding must refresh immersive audio labels", leanbackText.contains("updateAudioStageText();"));
+
+        Path mobilePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String mobile = new String(Files.readAllBytes(mobilePath), StandardCharsets.UTF_8);
+        String mobileText = methodBody(mobile, "private void setText(Vod item)", "private boolean shouldUseTmdbTabletWideLayout()");
+        assertTrue("mobile detail content must be captured before TMDB reveal can return early",
+                mobileText.indexOf("setDetailLyrics(item.getContent());") >= 0
+                        && mobileText.indexOf("setDetailLyrics(item.getContent());") < mobileText.indexOf("if (shouldWaitForTmdbDetailReveal())"));
+        assertTrue("mobile detail binding must refresh immersive audio labels", mobileText.contains("updateAudioStageText();"));
+    }
+
+    @Test
+    public void mobileConfigurationRestorePreservesPlaybackAndAudioMetadata() throws Exception {
+        Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        String init = methodBody(source, "protected void initView(Bundle savedInstanceState)", "private void setupIntroSkipConfirmListener()");
+        String checkFlag = methodBody(source, "private void checkFlag(Vod item)", "private void checkHistory(Vod item)");
+        String episodeClick = methodBody(source, "public void onItemClick(Episode item)", "public void onItemClick(EpisodeGroupAdapter.Group item)");
+
+        assertTrue("mobile recreation must remember that an existing service playback should be preserved",
+                init.contains("mRestoringConfigurationPlayback = savedInstanceState != null;"));
+        assertTrue("mobile detail restore must bind flags without starting the same episode again",
+                checkFlag.contains("boolean preservePlayback = mRestoringConfigurationPlayback")
+                        && checkFlag.contains("restoreFlagSelectionWithoutPlayback();")
+                        && checkFlag.contains("mRestoringConfigurationPlayback = false;"));
+        assertTrue("mobile episode switches must persist current playlist metadata before selecting the next item",
+                episodeClick.contains("syncCurrentAudioPlaylistMetadata();")
+                        && episodeClick.contains("applyAudioQueueMetadata(item);")
+                        && episodeClick.indexOf("syncCurrentAudioPlaylistMetadata();") < episodeClick.indexOf("mFlagAdapter.toggle(item);"));
+    }
+
+    @Test
     public void refreshedPlayerKernelSwitchKeepsManualFailureSemantics() throws Exception {
         Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "player", "PlayerManager.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
@@ -1233,6 +1466,26 @@ public class VideoActivityLayoutTest {
     }
 
     @Test
+    public void updateVodOnlyReplacesHistoryWhenKeyChangesAndAlwaysSyncsAfterReplace() throws Exception {
+        for (Path root : List.of(findMobileJavaPath(), findLeanbackJavaPath())) {
+            Path sourcePath = root.resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+            String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+            int method = source.indexOf("private void updateVod(Vod item)");
+            int end = source.indexOf("\n    private ", method + 1);
+            String body = method >= 0 && end > method ? source.substring(method, end) : "";
+
+            assertTrue(sourcePath + " is missing updateVod", method >= 0);
+            assertTrue(sourcePath + " must only replace history when key actually changes",
+                    body.contains("keyChanged = !TextUtils.equals(mHistory.getKey(), nextKey)")
+                            && body.contains("if (keyChanged) mHistory.replace(nextKey)"));
+            assertFalse(sourcePath + " must not unconditionally replace history on every id update",
+                    body.contains("if (id) mHistory.replace(getHistoryKey())"));
+            assertTrue(sourcePath + " must sync history after key migration even without pic/name",
+                    body.contains("if (keyChanged || pic || name) syncHistory()"));
+        }
+    }
+
+    @Test
     public void mobileVideoDirectTmdbCarriesDetailThemeIntoPlayback() throws Exception {
         Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
@@ -1656,6 +1909,24 @@ public class VideoActivityLayoutTest {
         Path moduleRelative = Path.of("src", "leanback", "java");
         if (Files.exists(moduleRelative)) return moduleRelative;
         return Path.of("app", "src", "leanback", "java");
+    }
+
+    private static String methodBody(String source, String startToken, String endToken) {
+        int start = source.indexOf(startToken);
+        int end = source.indexOf(endToken, start + startToken.length());
+        assertTrue("Missing source token: " + startToken, start >= 0);
+        assertTrue("Missing source token after " + startToken + ": " + endToken, end > start);
+        return source.substring(start, end);
+    }
+
+    private static int occurrences(String source, String token) {
+        int count = 0;
+        int index = 0;
+        while ((index = source.indexOf(token, index)) >= 0) {
+            count++;
+            index += token.length();
+        }
+        return count;
     }
 
     private static Set<String> collectAndroidIds(File file) throws Exception {

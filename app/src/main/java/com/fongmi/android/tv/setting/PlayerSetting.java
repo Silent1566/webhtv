@@ -21,6 +21,19 @@ public class PlayerSetting {
     public static final int FFMPEG_MODE_SIMPLE = 2;
     public static final int MPV_RENDER_OPENGL = 0;
     public static final int MPV_RENDER_VULKAN = 1;
+    public static final int AUDIO_BACKGROUND_ARTWORK = 0;
+    public static final int AUDIO_BACKGROUND_DARK_NEON = 1;
+    public static final int AUDIO_BACKGROUND_BLACK_GOLD = 2;
+    public static final int AUDIO_BACKGROUND_SUNSET = 3;
+    public static final int AUDIO_BACKGROUND_MINT = 4;
+    public static final int AUDIO_BACKGROUND_CANDY = 5;
+    public static final int AUDIO_BACKGROUND_SKY = 6;
+    public static final int AUDIO_BACKGROUND_ROSE = 7;
+    public static final int AUDIO_BACKGROUND_CYBER = 8;
+    public static final int AUDIO_BACKGROUND_FOREST = 9;
+    public static final int AUDIO_BACKGROUND_LEMON = 10;
+    public static final int AUDIO_BACKGROUND_DUSK = 11;
+    public static final int AUDIO_BACKGROUND_RANDOM = 12;
     public static final int PAD_LIVE_FULLSCREEN = 0;
     public static final int PAD_LIVE_STANDARD = 1;
     public static final int FALLBACK_FULL = 0;
@@ -60,6 +73,54 @@ public class PlayerSetting {
 
     public static void putPlayer(int player) {
         Prefers.put("player", sanitizePlayer(player));
+    }
+
+    public static boolean isImmersiveAudioMode() {
+        return Prefers.getBoolean("immersive_audio_mode", false);
+    }
+
+    public static void putImmersiveAudioMode(boolean enabled) {
+        Prefers.put("immersive_audio_mode", enabled);
+    }
+
+    public static int getAudioBackground() {
+        return Math.min(Math.max(Prefers.getInt("audio_background", AUDIO_BACKGROUND_ARTWORK), AUDIO_BACKGROUND_ARTWORK), AUDIO_BACKGROUND_RANDOM);
+    }
+
+    public static void putAudioBackground(int background) {
+        Prefers.put("audio_background", Math.min(Math.max(background, AUDIO_BACKGROUND_ARTWORK), AUDIO_BACKGROUND_RANDOM));
+    }
+
+    public static int getAudioBackgroundSeed() {
+        return Prefers.getInt("audio_background_seed", 0x5A17B3);
+    }
+
+    public static void putAudioBackgroundSeed(int seed) {
+        Prefers.put("audio_background_seed", seed);
+    }
+
+    public static int getAudioBackgroundDecorationSeed() {
+        return Prefers.getInt("audio_background_decoration_seed", getAudioBackgroundSeed());
+    }
+
+    public static void putAudioBackgroundDecorationSeed(int seed) {
+        Prefers.put("audio_background_decoration_seed", seed);
+    }
+
+    public static boolean isAudioBackgroundDecorated() {
+        return Prefers.getBoolean("audio_background_decorated", true);
+    }
+
+    public static void putAudioBackgroundDecorated(boolean decorated) {
+        Prefers.put("audio_background_decorated", decorated);
+    }
+
+    public static boolean isAudioBackgroundLightEffect() {
+        return Prefers.getBoolean("audio_background_light_effect", false);
+    }
+
+    public static void putAudioBackgroundLightEffect(boolean enabled) {
+        Prefers.put("audio_background_light_effect", enabled);
     }
 
     public static boolean isPlayer(int player) {
@@ -526,6 +587,113 @@ public class PlayerSetting {
 
     public static void putSubtitlePosition(float value) {
         Prefers.put("subtitle_position", value);
+    }
+
+    public static boolean isDesktopLyrics() {
+        return isImmersiveAudioMode() && Prefers.getBoolean("desktop_lyrics");
+    }
+
+    public static void putDesktopLyrics(boolean value) {
+        Prefers.put("desktop_lyrics", value);
+    }
+
+    public static int getDesktopLyricsX(int defaultValue) {
+        return Prefers.getInt("desktop_lyrics_x", defaultValue);
+    }
+
+    public static int getDesktopLyricsY(int defaultValue) {
+        return Prefers.getInt("desktop_lyrics_y", defaultValue);
+    }
+
+    public static void putDesktopLyricsPosition(int x, int y) {
+        Prefers.put("desktop_lyrics_x", x);
+        Prefers.put("desktop_lyrics_y", y);
+    }
+
+    public static void resetDesktopLyricsPosition() {
+        Prefers.remove("desktop_lyrics_x");
+        Prefers.remove("desktop_lyrics_y");
+    }
+
+    public static long getLyricsTimeOffsetMs() {
+        return Math.min(Math.max(Prefers.getLong("lyrics_time_offset", 0L), -5000L), 5000L);
+    }
+
+    public static void putLyricsTimeOffsetMs(long value) {
+        Prefers.put("lyrics_time_offset", Math.min(Math.max(value, -5000L), 5000L));
+    }
+
+    public static int getLyricsRows() {
+        return Math.min(Math.max(Prefers.getInt("lyrics_rows", 5), 1), 5);
+    }
+
+    public static void putLyricsRows(int value) {
+        Prefers.put("lyrics_rows", Math.min(Math.max(value, 1), 5));
+    }
+
+    public static int getLyricsTextSizeOption() {
+        return Math.min(Math.max(Prefers.getInt("lyrics_text_size", 1), 0), 3);
+    }
+
+    public static void putLyricsTextSizeOption(int value) {
+        Prefers.put("lyrics_text_size", Math.min(Math.max(value, 0), 3));
+    }
+
+    public static float getLyricsTextSizeScale() {
+        return switch (getLyricsTextSizeOption()) {
+            case 0 -> 0.85f;
+            case 2 -> 1.15f;
+            case 3 -> 1.3f;
+            default -> 1f;
+        };
+    }
+
+    public static boolean isKaraokeMode() {
+        return isImmersiveAudioMode() && Prefers.getBoolean("karaoke_mode");
+    }
+
+    public static void putKaraokeMode(boolean value) {
+        Prefers.put("karaoke_mode", value);
+    }
+
+    public static int getKaraokeDifficulty() {
+        return Math.min(Math.max(Prefers.getInt("karaoke_difficulty", 0), 0), 2);
+    }
+
+    public static void putKaraokeDifficulty(int value) {
+        Prefers.put("karaoke_difficulty", Math.min(Math.max(value, 0), 2));
+    }
+
+    public static double getKaraokeToleranceSemitones() {
+        return switch (getKaraokeDifficulty()) {
+            case 1 -> 1.5;
+            case 2 -> 1.0;
+            default -> 2.0;
+        };
+    }
+
+    public static long getKaraokeMicDelayMs() {
+        return Math.min(Math.max(Prefers.getLong("karaoke_mic_delay", 0L), -1000L), 1000L);
+    }
+
+    public static void putKaraokeMicDelayMs(long value) {
+        Prefers.put("karaoke_mic_delay", Math.min(Math.max(value, -1000L), 1000L));
+    }
+
+    public static boolean isKaraokeBasicPitchTflite() {
+        return Prefers.getBoolean("karaoke_basic_pitch_tflite");
+    }
+
+    public static void putKaraokeBasicPitchTflite(boolean value) {
+        Prefers.put("karaoke_basic_pitch_tflite", value);
+    }
+
+    public static String getKaraokeGithubSources() {
+        return Prefers.getString("karaoke_github_sources");
+    }
+
+    public static void putKaraokeGithubSources(String value) {
+        Prefers.put("karaoke_github_sources", value == null ? "" : value.trim());
     }
 
     public static boolean isOsdTitle() {

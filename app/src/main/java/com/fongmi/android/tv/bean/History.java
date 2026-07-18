@@ -480,10 +480,11 @@ public class History implements Diffable<History> {
         return !isPushHistory();
     }
 
-    private boolean shouldMerge(History item, boolean force) {
+    boolean shouldMerge(History item, boolean force) {
         if (!canMergeByName() || !item.canMergeByName()) return false;
-        if (!force && getKey().equals(item.getKey())) return false;
-        if (getDuration() <= 0 || item.getDuration() <= 0) return true;
+        if (!force && TextUtils.equals(getKey(), item.getKey())) return false;
+        if (force) return true;
+        if (getDuration() <= 0 || item.getDuration() <= 0) return false;
         return Math.abs(getDuration() - item.getDuration()) <= TimeUnit.MINUTES.toMillis(10);
     }
 
@@ -529,9 +530,20 @@ public class History implements Diffable<History> {
         return this;
     }
 
+    /**
+     * 将历史记录的 key 迁移到新值。
+     * 仅在 key 实际变化时删除旧 key，避免同 key 先删后写失败导致历史消失。
+     * 迁移后立即 save 新 key，缩短「旧已删、新未写」窗口。
+     */
     public void replace(String key) {
-        delete();
+        if (TextUtils.isEmpty(key) || TextUtils.equals(getKey(), key)) return;
+        String previous = getKey();
         setKey(key);
+        if (!TextUtils.isEmpty(previous)) {
+            AppDatabase.get().getHistoryDao().delete(VodConfig.getCid(), previous);
+            AppDatabase.get().getTrackDao().delete(previous);
+        }
+        save();
     }
 
     public History save(int cid) {

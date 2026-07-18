@@ -739,7 +739,7 @@ public class PlayerManager implements ParseCallback {
         engine.resetTrack();
     }
 
-    public void resetTrack(int type) {
+public void resetTrack(int type) {
         engine.resetTrack(type);
     }
 
@@ -779,6 +779,10 @@ public class PlayerManager implements ParseCallback {
         setRepeatOne(repeat);
         App.post(runnable, Constant.TIMEOUT_PLAY);
         callback.onPrepare();
+    }
+
+    public void restoreVideoTrack() {
+        if (engine != null) engine.restoreVideoTrack();
     }
 
     public void toggleDecode() {

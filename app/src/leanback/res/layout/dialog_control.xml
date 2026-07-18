@@ -1,0 +1,357 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/shape_dialog_control_glass_panel"
+    tools:background="#1F1F1F">
+
+    <com.fongmi.android.tv.ui.custom.ContextWallImageView
+        android:id="@+id/sheetWall"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no"
+        android:visibility="gone" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@drawable/shape_dialog_control_glass_scrim" />
+
+    <androidx.core.widget.NestedScrollView
+        android:id="@+id/controlScroll"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipToPadding="false"
+        android:fillViewport="false"
+        android:overScrollMode="never"
+        android:paddingStart="16dp"
+        android:paddingEnd="9dp"
+        android:paddingBottom="20dp">
+
+        <androidx.appcompat.widget.LinearLayoutCompat
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <com.google.android.material.slider.Slider
+                android:id="@+id/speed"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:visibility="gone"
+                android:valueFrom="0.5"
+                android:valueTo="5" />
+
+            <com.google.android.material.textview.MaterialTextView
+                style="@style/ControlSheetTitle"
+                android:text="@string/play" />
+
+            <androidx.appcompat.widget.LinearLayoutCompat
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/fullscreen"
+                    style="@style/ControlSheetButton"
+                    android:text="@string/play_fullscreen" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/lut"
+                    style="@style/ControlSheetButton"
+                    android:text="@string/play_lut" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/reset"
+                    style="@style/ControlSheetButton"
+                    android:text="@string/play_reset" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/repeat"
+                    style="@style/ControlSheetButton"
+                    android:text="@string/play_repeat" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/timer"
+                    style="@style/ControlSheetButton"
+                    android:text="@string/play_timer" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/karaoke"
+                    style="@style/ControlSheetButton"
+                    android:text="@string/player_karaoke_mode" />
+            </androidx.appcompat.widget.LinearLayoutCompat>
+
+            <androidx.appcompat.widget.LinearLayoutCompat
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:orientation="horizontal">
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/player"
+                    style="@style/ControlSheetButton"
+                    tools:text="EXO" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/decode"
+                    style="@style/ControlSheetButton"
+                    tools:text="硬解" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/opening"
+                    style="@style/ControlSheetButton"
+                    tools:text="片头" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/ending"
+                    style="@style/ControlSheetButton"
+                    tools:text="片尾" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/immersiveAudio"
+                    style="@style/ControlSheetButton"
+                    android:text="@string/player_immersive_audio_mode" />
+
+            </androidx.appcompat.widget.LinearLayoutCompat>
+
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/parseText"
+                style="@style/ControlSheetTitle"
+                android:text="@string/parse"
+                android:visibility="gone"
+                tools:visibility="visible" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/parse"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:clipChildren="false"
+                android:clipToPadding="false"
+                android:orientation="horizontal"
+                android:overScrollMode="never"
+                android:paddingEnd="7dp"
+                android:visibility="gone"
+                app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
+                tools:itemCount="5"
+                tools:listitem="@layout/adapter_parse_light"
+                tools:visibility="visible" />
+
+            <com.google.android.material.textview.MaterialTextView
+                style="@style/ControlSheetTitle"
+                android:text="@string/control_speed" />
+
+            <androidx.appcompat.widget.LinearLayoutCompat
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/speed_05"
+                    style="@style/ControlSheetButton"
+                    android:tag="0.5"
+                    android:text="0.5" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/speed_075"
+                    style="@style/ControlSheetButton"
+                    android:tag="0.75"
+                    android:text="0.75" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/speed_10"
+                    style="@style/ControlSheetButton"
+                    android:tag="1"
+                    android:text="1.0" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/speed_125"
+                    style="@style/ControlSheetButton"
+                    android:tag="1.25"
+                    android:text="1.25" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/speed_15"
+                    style="@style/ControlSheetButton"
+                    android:tag="1.5"
+                    android:text="1.5" />
+
+            </androidx.appcompat.widget.LinearLayoutCompat>
+
+            <androidx.appcompat.widget.LinearLayoutCompat
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:orientation="horizontal">
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/speed_175"
+                    style="@style/ControlSheetButton"
+                    android:tag="1.75"
+                    android:text="1.75" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/speed_20"
+                    style="@style/ControlSheetButton"
+                    android:tag="2"
+                    android:text="2.0" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/speed_25"
+                    style="@style/ControlSheetButton"
+                    android:tag="2.5"
+                    android:text="2.5" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/speed_30"
+                    style="@style/ControlSheetButton"
+                    android:tag="3"
+                    android:text="3.0" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/speed_50"
+                    style="@style/ControlSheetButton"
+                    android:tag="5"
+                    android:text="5.0" />
+
+            </androidx.appcompat.widget.LinearLayoutCompat>
+
+            <com.google.android.material.textview.MaterialTextView
+                style="@style/ControlSheetTitle"
+                android:text="@string/control_scale" />
+
+            <androidx.appcompat.widget.LinearLayoutCompat
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/scale_0"
+                    style="@style/ControlSheetButton"
+                    android:tag="0"
+                    tools:text="默认" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/scale_1"
+                    style="@style/ControlSheetButton"
+                    android:tag="1"
+                    tools:text="16:9" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/scale_2"
+                    style="@style/ControlSheetButton"
+                    android:tag="2"
+                    tools:text="4:3" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/scale_3"
+                    style="@style/ControlSheetButton"
+                    android:tag="3"
+                    tools:text="填充" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/scale_4"
+                    style="@style/ControlSheetButton"
+                    android:tag="4"
+                    tools:text="裁剪" />
+
+            </androidx.appcompat.widget.LinearLayoutCompat>
+
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/episodeColumnText"
+                style="@style/ControlSheetTitle"
+                android:text="@string/control_episode_column" />
+
+            <androidx.appcompat.widget.LinearLayoutCompat
+                android:id="@+id/episodeColumnRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/episodeColumn1"
+                    style="@style/ControlSheetButton"
+                    android:text="@string/control_episode_column_single" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/episodeColumn2"
+                    style="@style/ControlSheetButton"
+                    android:text="@string/control_episode_column_double" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/compactEpisodeTitle"
+                    style="@style/ControlSheetButton"
+                    android:text="@string/control_compact_episode_title" />
+
+                <Space
+                    android:layout_width="0dp"
+                    android:layout_height="34dp"
+                    android:layout_marginEnd="7dp"
+                    android:layout_weight="1" />
+
+                <Space
+                    android:layout_width="0dp"
+                    android:layout_height="34dp"
+                    android:layout_marginEnd="7dp"
+                    android:layout_weight="1" />
+
+            </androidx.appcompat.widget.LinearLayoutCompat>
+
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/trackText"
+                style="@style/ControlSheetTitle"
+                android:text="@string/control_track"
+                android:visibility="gone"
+                tools:visibility="visible" />
+
+            <androidx.appcompat.widget.LinearLayoutCompat
+                android:id="@+id/trackRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:orientation="horizontal">
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/text"
+                    style="@style/ControlSheetButton"
+                    android:tag="3"
+                    android:text="@string/play_track_text"
+                    android:visibility="gone"
+                    tools:visibility="visible" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/audio"
+                    style="@style/ControlSheetButton"
+                    android:tag="1"
+                    android:text="@string/play_track_audio"
+                    android:visibility="gone"
+                    tools:visibility="visible" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/video"
+                    style="@style/ControlSheetButton"
+                    android:tag="2"
+                    android:text="@string/play_track_video"
+                    android:visibility="gone"
+                    tools:visibility="visible" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/danmaku"
+                    style="@style/ControlSheetButton"
+                    android:text="@string/danmaku"
+                    android:visibility="gone"
+                    tools:visibility="visible" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/title"
+                    style="@style/ControlSheetButton"
+                    android:text="@string/play_title"
+                    android:visibility="gone"
+                    tools:visibility="visible" />
+
+            </androidx.appcompat.widget.LinearLayoutCompat>
+
+        </androidx.appcompat.widget.LinearLayoutCompat>
+    </androidx.core.widget.NestedScrollView>
+</FrameLayout>

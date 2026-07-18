@@ -66,6 +66,24 @@
         <item name="android:textSize">12sp</item>
     </style>
 
+    <style name="AudioActionButton" parent="Video.ContextText">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">46dp</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:background">?attr/selectableItemBackgroundBorderless</item>
+        <item name="android:drawablePadding">3dp</item>
+        <item name="android:gravity">center</item>
+        <item name="android:paddingTop">3dp</item>
+        <item name="android:paddingBottom">3dp</item>
+        <item name="android:textColor">@color/white_80</item>
+        <item name="android:textSize">11sp</item>
+    </style>
+
+    <style name="ShapeAppearance.WebHTV.AudioCover" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">50%</item>
+    </style>
+
     <style name="ToolbarTextAppearance" parent="TextAppearance.Material3.TitleLarge">
         <item name="android:textSize">20sp</item>
         <item name="android:textColor">@color/white</item>

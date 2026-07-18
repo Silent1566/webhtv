@@ -21,6 +21,8 @@ public final class MpvPerformanceSetting {
     public static final int HLS_15_MBPS = 1;
     public static final int HLS_8_MBPS = 2;
     public static final int HLS_LOWEST = 3;
+    public static final int PRIORITY_PERFORMANCE = 0;
+    public static final int PRIORITY_CONFIG = 1;
 
     private static final String KEY_HWDEC = "perf_mpv_hwdec";
     private static final String KEY_SYNC = "perf_mpv_sync";
@@ -30,6 +32,8 @@ public final class MpvPerformanceSetting {
     private static final String KEY_VERBOSE_LOG = "perf_mpv_verbose_log";
     private static final String KEY_FRAME_RATE = "perf_mpv_frame_rate";
     private static final String KEY_HLS_BITRATE = "perf_mpv_hls_bitrate";
+    private static final String KEY_REBUFFER_MS = "perf_mpv_rebuffer_ms";
+    private static final String KEY_OPTION_PRIORITY = "perf_mpv_option_priority";
 
     private MpvPerformanceSetting() {
     }
@@ -171,6 +175,41 @@ public final class MpvPerformanceSetting {
         };
     }
 
+    public static int getRebufferMs() {
+        return normalizeRebuffer(Prefers.getInt(KEY_REBUFFER_MS, 10_000));
+    }
+
+    public static void putRebufferMs(int value) {
+        Prefers.put(KEY_REBUFFER_MS, normalizeRebuffer(value));
+        PlaybackPerformanceSetting.markCustom();
+    }
+
+    public static int nextRebufferMs() {
+        return switch (getRebufferMs()) {
+            case 3_000 -> 5_000;
+            case 5_000 -> 8_000;
+            case 8_000 -> 10_000;
+            case 10_000 -> 15_000;
+            default -> 3_000;
+        };
+    }
+
+    public static int getOptionPriority() {
+        return clamp(Prefers.getInt(KEY_OPTION_PRIORITY, PRIORITY_PERFORMANCE), PRIORITY_PERFORMANCE, PRIORITY_CONFIG);
+    }
+
+    public static void putOptionPriority(int value) {
+        Prefers.put(KEY_OPTION_PRIORITY, clamp(value, PRIORITY_PERFORMANCE, PRIORITY_CONFIG));
+    }
+
+    public static boolean isPerformancePriority() {
+        return getOptionPriority() == PRIORITY_PERFORMANCE;
+    }
+
+    public static String getOptionPriorityText() {
+        return isPerformancePriority() ? "播放性能优先" : "mpv.conf优先";
+    }
+
     public static void putVerboseLog(boolean value) {
         Prefers.put(KEY_VERBOSE_LOG, value);
         PlaybackPerformanceSetting.markCustom();
@@ -185,6 +224,7 @@ public final class MpvPerformanceSetting {
         Prefers.put(KEY_VERBOSE_LOG, false);
         Prefers.put(KEY_FRAME_RATE, FRAME_RATE_SEAMLESS);
         Prefers.put(KEY_HLS_BITRATE, HLS_HIGHEST);
+        applyRebufferPreset(PlaybackPerformanceSetting.PROFILE_RECOMMENDED);
     }
 
     public static void applyCompatible() {
@@ -196,6 +236,7 @@ public final class MpvPerformanceSetting {
         Prefers.put(KEY_VERBOSE_LOG, false);
         Prefers.put(KEY_FRAME_RATE, FRAME_RATE_OFF);
         Prefers.put(KEY_HLS_BITRATE, HLS_HIGHEST);
+        applyRebufferPreset(PlaybackPerformanceSetting.PROFILE_COMPATIBLE);
     }
 
     public static void applyLightweight() {
@@ -207,6 +248,25 @@ public final class MpvPerformanceSetting {
         Prefers.put(KEY_VERBOSE_LOG, false);
         Prefers.put(KEY_FRAME_RATE, FRAME_RATE_SEAMLESS);
         Prefers.put(KEY_HLS_BITRATE, HLS_8_MBPS);
+        applyRebufferPreset(PlaybackPerformanceSetting.PROFILE_LIGHTWEIGHT);
+    }
+
+    static void applyRebufferPreset(int profile) {
+        if (profile == PlaybackPerformanceSetting.PROFILE_LIGHTWEIGHT) {
+            Prefers.put(KEY_REBUFFER_MS, 3_000);
+        } else if (profile == PlaybackPerformanceSetting.PROFILE_COMPATIBLE) {
+            Prefers.put(KEY_REBUFFER_MS, 5_000);
+        } else {
+            Prefers.put(KEY_REBUFFER_MS, 10_000);
+        }
+    }
+
+    private static int normalizeRebuffer(int value) {
+        if (value <= 3_000) return 3_000;
+        if (value <= 5_000) return 5_000;
+        if (value <= 8_000) return 8_000;
+        if (value <= 10_000) return 10_000;
+        return 15_000;
     }
 
     private static int clamp(int value, int min, int max) {

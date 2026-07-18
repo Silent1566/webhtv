@@ -8,6 +8,13 @@
     <string name="home_push">推送</string>
     <string name="home_cast">投屏</string>
     <string name="home_setting">设置</string>
+    <string name="control_speed">倍速</string>
+    <string name="control_scale">缩放</string>
+    <string name="control_episode_column">长标题列数</string>
+    <string name="control_episode_column_single">单列</string>
+    <string name="control_episode_column_double">双列</string>
+    <string name="control_compact_episode_title">精简标题</string>
+    <string name="control_track">轨道</string>
     <string name="home_history">最近观看</string>
     <string name="home_history_button">历史</string>
     <string name="home_recommend">更新推荐</string>
@@ -23,4 +30,13 @@
     <string name="push_clip">推送剪贴板内容</string>
     <string name="push_info">使用手机扫描二维码，或于浏览器访问地址\n<xliff:g name="name">%s</xliff:g></string>
 
+    <string name="device_select">选择设备</string>
+    <string name="device_offline">设备已离线</string>
+    <string name="device_scan">请扫描 WebHTV 二维码进行绑定</string>
+    <string name="timer_5">5 分钟</string>
+    <string name="timer_15">15 分钟</string>
+    <string name="timer_30">30 分钟</string>
+    <string name="timer_60">1 小时</string>
+    <string name="timer_delay">延长 5 分钟</string>
+    <string name="timer_cancel">取消定时器</string>
 </resources>

@@ -49,6 +49,18 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent" />
 
+        <com.fongmi.android.tv.ui.custom.LyricsOverlayView
+            android:id="@+id/lyrics"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <com.fongmi.android.tv.ui.custom.KaraokeStatusView
+            android:id="@+id/karaoke"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|end"
+            android:layout_margin="12dp" />
+
         <include
             android:id="@+id/control"
             layout="@layout/view_control_vod"
@@ -108,6 +120,317 @@
                     android:orientation="vertical"
                     android:paddingTop="14dp"
                     android:paddingBottom="8dp">
+
+                    <FrameLayout
+                        android:id="@+id/audioStage"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:background="@drawable/shape_audio_player_background"
+                        android:clickable="true"
+                        android:clipChildren="false"
+                        android:clipToPadding="false"
+                        android:focusable="true"
+                        android:paddingStart="24dp"
+                        android:paddingTop="18dp"
+                        android:paddingEnd="24dp"
+                        android:paddingBottom="14dp"
+                        android:visibility="gone"
+                        tools:visibility="visible">
+
+                        <androidx.appcompat.widget.LinearLayoutCompat
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:clipChildren="false"
+                            android:clipToPadding="false"
+                            android:gravity="center_horizontal"
+                            android:orientation="vertical">
+
+                        <FrameLayout
+                            android:id="@+id/audioDisc"
+                            android:layout_width="184dp"
+                            android:layout_height="184dp"
+                            android:background="@drawable/shape_audio_disc_back"
+                            android:padding="12dp">
+
+                            <com.google.android.material.imageview.ShapeableImageView
+                                android:id="@+id/audioCover"
+                                android:layout_width="match_parent"
+                                android:layout_height="match_parent"
+                                android:scaleType="centerCrop"
+                                android:src="@drawable/artwork"
+                                app:shapeAppearanceOverlay="@style/ShapeAppearance.WebHTV.AudioCover"
+                                app:strokeColor="@color/white_20"
+                                app:strokeWidth="1dp" />
+
+                        </FrameLayout>
+
+                        <com.google.android.material.textview.MaterialTextView
+                            android:id="@+id/audioTitle"
+                            style="@style/Video.ContextText"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="12dp"
+                            android:ellipsize="end"
+                            android:gravity="center"
+                            android:maxLines="2"
+                            android:textColor="@color/white"
+                            android:textSize="22sp"
+                            android:textStyle="bold"
+                            tools:text="八段锦口令音乐" />
+
+                        <com.google.android.material.textview.MaterialTextView
+                            android:id="@+id/audioSubtitle"
+                            style="@style/Video.ContextText"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:ellipsize="end"
+                            android:gravity="center"
+                            android:maxLines="1"
+                            android:textColor="@color/white_70"
+                            android:textSize="13sp"
+                            tools:text="站源 · 当前播放列表" />
+
+                        <androidx.appcompat.widget.LinearLayoutCompat
+                            android:id="@+id/audioBadges"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="14dp"
+                            android:gravity="center"
+                            android:orientation="horizontal"
+                            android:visibility="gone">
+
+                            <com.google.android.material.textview.MaterialTextView
+                                android:id="@+id/audioBadgeFormat"
+                                style="@style/Video.ContextText"
+                                android:layout_width="wrap_content"
+                                android:layout_height="28dp"
+                                android:background="@drawable/shape_audio_badge"
+                                android:gravity="center"
+                                android:minWidth="58dp"
+                                android:paddingStart="10dp"
+                                android:paddingEnd="10dp"
+                                android:text="@string/player_audio_badge_audio"
+                                android:textColor="@color/white_90"
+                                android:textSize="12sp" />
+
+                            <com.google.android.material.textview.MaterialTextView
+                                android:id="@+id/audioBadgeLyrics"
+                                style="@style/Video.ContextText"
+                                android:layout_width="wrap_content"
+                                android:layout_height="28dp"
+                                android:layout_marginStart="8dp"
+                                android:background="@drawable/shape_audio_badge"
+                                android:gravity="center"
+                                android:minWidth="58dp"
+                                android:paddingStart="10dp"
+                                android:paddingEnd="10dp"
+                                android:text="@string/player_audio_badge_lyrics"
+                                android:textColor="@color/white_90"
+                                android:textSize="12sp" />
+
+                            <com.google.android.material.textview.MaterialTextView
+                                android:id="@+id/audioBadgeQueue"
+                                style="@style/Video.ContextText"
+                                android:layout_width="wrap_content"
+                                android:layout_height="28dp"
+                                android:layout_marginStart="8dp"
+                                android:background="@drawable/shape_audio_badge"
+                                android:gravity="center"
+                                android:minWidth="58dp"
+                                android:paddingStart="10dp"
+                                android:paddingEnd="10dp"
+                                android:text="@string/player_audio_badge_queue"
+                                android:textColor="@color/white_90"
+                                android:textSize="12sp" />
+
+                        </androidx.appcompat.widget.LinearLayoutCompat>
+
+                        <com.fongmi.android.tv.ui.custom.LyricsOverlayView
+                            android:id="@+id/audioLyrics"
+                            android:layout_width="match_parent"
+                            android:layout_height="164dp"
+                            android:layout_marginTop="14dp" />
+
+                        <com.fongmi.android.tv.ui.custom.KaraokeStatusView
+                            android:id="@+id/audioKaraoke"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp" />
+
+                        <androidx.appcompat.widget.LinearLayoutCompat
+                            android:id="@+id/audioPlaybackPanel"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:orientation="vertical"
+                            android:paddingStart="14dp"
+                            android:paddingEnd="14dp"
+                            android:paddingBottom="2dp">
+
+                            <com.fongmi.android.tv.ui.custom.CustomSeekView
+                                android:id="@+id/audioSeek"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content" />
+
+                            <androidx.appcompat.widget.LinearLayoutCompat
+                                android:id="@+id/audioTransport"
+                                android:layout_width="match_parent"
+                                android:layout_height="58dp"
+                                android:gravity="center"
+                                android:orientation="horizontal">
+
+                                <androidx.appcompat.widget.AppCompatImageView
+                                    android:id="@+id/audioRepeatAction"
+                                    android:layout_width="42dp"
+                                    android:layout_height="42dp"
+                                    android:background="?attr/selectableItemBackgroundBorderless"
+                                    android:padding="9dp"
+                                    android:scaleType="center"
+                                    android:src="@drawable/ic_audio_repeat" />
+
+                                <androidx.appcompat.widget.AppCompatImageView
+                                    android:id="@+id/audioPrev"
+                                    android:layout_width="42dp"
+                                    android:layout_height="42dp"
+                                    android:layout_marginStart="8dp"
+                                    android:background="?attr/selectableItemBackgroundBorderless"
+                                    android:padding="9dp"
+                                    android:scaleType="center"
+                                    android:src="@drawable/exo_icon_previous" />
+
+                                <androidx.appcompat.widget.AppCompatImageView
+                                    android:id="@+id/audioPlay"
+                                    android:layout_width="42dp"
+                                    android:layout_height="42dp"
+                                    android:layout_marginStart="20dp"
+                                    android:layout_marginEnd="20dp"
+                                    android:background="?attr/selectableItemBackgroundBorderless"
+                                    android:padding="9dp"
+                                    android:scaleType="center"
+                                    android:src="@drawable/exo_icon_play" />
+
+                                <androidx.appcompat.widget.AppCompatImageView
+                                    android:id="@+id/audioNext"
+                                    android:layout_width="42dp"
+                                    android:layout_height="42dp"
+                                    android:layout_marginEnd="8dp"
+                                    android:background="?attr/selectableItemBackgroundBorderless"
+                                    android:padding="9dp"
+                                    android:scaleType="center"
+                                    android:src="@drawable/exo_icon_next" />
+
+                                <androidx.appcompat.widget.AppCompatImageView
+                                    android:id="@+id/audioQueueAction"
+                                    android:layout_width="42dp"
+                                    android:layout_height="42dp"
+                                    android:background="?attr/selectableItemBackgroundBorderless"
+                                    android:padding="9dp"
+                                    android:scaleType="center"
+                                    android:src="@drawable/ic_audio_queue" />
+
+                            </androidx.appcompat.widget.LinearLayoutCompat>
+
+                        </androidx.appcompat.widget.LinearLayoutCompat>
+
+                        <androidx.appcompat.widget.LinearLayoutCompat
+                            android:id="@+id/audioActionRow"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:gravity="center"
+                            android:orientation="horizontal">
+
+                            <com.google.android.material.textview.MaterialTextView
+                                android:id="@+id/audioLyricsAction"
+                                style="@style/AudioActionButton"
+                                android:layout_marginEnd="4dp"
+                                android:text="@string/player_lyrics_search"
+                                app:drawableTopCompat="@drawable/ic_audio_lyrics" />
+
+                            <com.google.android.material.textview.MaterialTextView
+                                android:id="@+id/audioKaraokeAction"
+                                style="@style/AudioActionButton"
+                                android:layout_marginEnd="4dp"
+                                android:text="@string/player_audio_options"
+                                app:drawableTopCompat="@drawable/ic_action_ktv" />
+
+                            <com.google.android.material.textview.MaterialTextView
+                                android:id="@+id/audioMoreAction"
+                                style="@style/AudioActionButton"
+                                android:text="@string/player_audio_more"
+                                app:drawableTopCompat="@drawable/ic_audio_more" />
+
+                        </androidx.appcompat.widget.LinearLayoutCompat>
+
+                        <androidx.appcompat.widget.LinearLayoutCompat
+                            android:id="@+id/audioToolRow"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:gravity="center"
+                            android:orientation="horizontal"
+                            android:visibility="gone">
+
+                            <com.google.android.material.textview.MaterialTextView
+                                android:id="@+id/audioCastAction"
+                                style="@style/VideoActionButton"
+                                android:layout_marginEnd="4dp"
+                                android:text="@string/play_cast"
+                                app:drawableTopCompat="@drawable/ic_control_cast_shadow" />
+
+                            <com.google.android.material.textview.MaterialTextView
+                                android:id="@+id/audioKeepAction"
+                                style="@style/VideoActionButton"
+                                android:layout_marginEnd="4dp"
+                                android:text="@string/keep"
+                                app:drawableTopCompat="@drawable/ic_action_keep" />
+
+                            <com.google.android.material.textview.MaterialTextView
+                                android:id="@+id/audioSettingAction"
+                                style="@style/VideoActionButton"
+                                android:layout_marginEnd="4dp"
+                                android:text="@string/nav_setting"
+                                app:drawableTopCompat="@drawable/ic_control_setting_shadow" />
+
+                            <com.google.android.material.textview.MaterialTextView
+                                android:id="@+id/audioTrackAction"
+                                style="@style/VideoActionButton"
+                                android:layout_marginEnd="4dp"
+                                android:text="@string/play_track_audio"
+                                app:drawableTopCompat="@drawable/ic_action_audio" />
+
+                            <com.google.android.material.textview.MaterialTextView
+                                android:id="@+id/audioSubtitleAction"
+                                style="@style/VideoActionButton"
+                                android:layout_marginEnd="4dp"
+                                android:text="@string/play_track_text"
+                                app:drawableTopCompat="@drawable/ic_action_subtitle" />
+
+                            <com.google.android.material.textview.MaterialTextView
+                                android:id="@+id/audioInfoAction"
+                                style="@style/VideoActionButton"
+                                android:text="@string/player_osd"
+                                app:drawableTopCompat="@drawable/ic_control_info" />
+
+                        </androidx.appcompat.widget.LinearLayoutCompat>
+
+                        </androidx.appcompat.widget.LinearLayoutCompat>
+
+                        <androidx.appcompat.widget.AppCompatImageView
+                            android:id="@+id/audioBackgroundAction"
+                            android:layout_width="92dp"
+                            android:layout_height="142dp"
+                            android:layout_gravity="top|end"
+                            android:layout_marginTop="-18dp"
+                            android:layout_marginEnd="-24dp"
+                            android:background="@null"
+                            android:contentDescription="@string/player_audio_background"
+                            android:padding="0dp"
+                            android:scaleType="fitXY"
+                            android:src="@drawable/audio_background_drip" />
+
+                    </FrameLayout>
 
                     <androidx.appcompat.widget.LinearLayoutCompat
                         android:layout_width="match_parent"

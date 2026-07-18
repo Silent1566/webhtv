@@ -18,9 +18,8 @@ public final class PlaybackOrientation {
         return ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
     }
 
-    public static int getRotateOrientation(Context context) {
-        if (ResUtil.isLand(context)) return ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT;
-        return ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE;
+    public static int getRotateOrientation(boolean portrait) {
+        return portrait ? ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT : ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE;
     }
 
     public static int getEnterFullscreenOrientation(boolean portraitVideo) {

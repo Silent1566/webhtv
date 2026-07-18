@@ -1256,7 +1256,7 @@ public class Setting {
     }
 
     public static int getSearchThread() {
-        return clampSearchThread(Prefers.getInt("search_thread", 10));
+        return clampSearchThread(Prefers.getInt("search_thread", 20));
     }
 
     public static void putSearchThread(int thread) {
@@ -1264,7 +1264,7 @@ public class Setting {
     }
 
     private static int clampSearchThread(int thread) {
-        return Math.max(1, Math.min(thread, 32));
+        return Math.max(1, Math.min(thread, 100));
     }
 
     public static int getSearchColumn() {

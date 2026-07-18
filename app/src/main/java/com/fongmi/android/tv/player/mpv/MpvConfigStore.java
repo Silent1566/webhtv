@@ -79,6 +79,14 @@ public final class MpvConfigStore {
         if (!file.isFile() || file.length() == 0) {
             writeText(defaultConfig());
             putDefault(TARGET_MPV_CONF);
+            return;
+        }
+        if (TYPE_DEFAULT.equals(Prefers.getString(key(KEY_TYPE, TARGET_MPV_CONF), TYPE_DEFAULT))) {
+            try {
+                String expected = defaultConfig();
+                if (!TextUtils.equals(readText(file), expected)) writeText(expected);
+            } catch (IOException ignored) {
+            }
         }
     }
 
@@ -760,16 +768,6 @@ public final class MpvConfigStore {
                 + "# Loaded by libmpv from files/mpv/mpv.conf. Keep Android-only output options in app code.\n"
                 + "\n"
                 + "profile=fast\n"
-                + "hls-bitrate=max\n"
-                + "cache=yes\n"
-                + "cache-secs=20\n"
-                + "cache-pause=yes\n"
-                + "cache-pause-initial=no\n"
-                + "demuxer-thread=yes\n"
-                + "demuxer-seekable-cache=auto\n"
-                + "demuxer-max-bytes=64MiB\n"
-                + "demuxer-max-back-bytes=64MiB\n"
-                + "demuxer-readahead-secs=20\n"
                 + "http-allow-redirect=yes\n"
                 + "sub-ass=yes\n"
                 + "sub-ass-override=yes\n"

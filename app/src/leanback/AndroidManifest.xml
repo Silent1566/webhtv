@@ -13,6 +13,12 @@
         android:name="android.hardware.microphone"
         android:required="false" />
 
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
+
+    <uses-permission android:name="android.permission.CAMERA" />
+
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
@@ -25,6 +31,11 @@
         <meta-data
             android:name="design_height_in_dp"
             android:value="540" />
+
+        <activity
+            android:name=".ui.activity.ScanActivity"
+            android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation"
+            android:screenOrientation="sensorLandscape" />
 
         <activity
             android:name=".ui.activity.HomeActivity"
@@ -210,6 +221,10 @@
             android:name=".service.DLNARendererService"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
+
+        <service
+            android:name=".service.DLNACastService"
+            android:exported="false" />
 
         <receiver
             android:name=".receiver.BootReceiver"
