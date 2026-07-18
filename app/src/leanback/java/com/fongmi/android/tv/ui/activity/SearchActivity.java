@@ -314,7 +314,7 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
                 Notify.show(R.string.detail_site_not_searchable);
                 return;
             }
-            Notify.show(getString(R.string.search_scope_current_hint, site.getName()));
+            Notify.show(getString(R.string.search_scope_current_hint, site.getDisplayName()));
         }
         mCurrentSite = !mCurrentSite;
         setSearchScope();
@@ -352,7 +352,7 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
             Notify.show(R.string.detail_site_not_searchable);
             return;
         }
-        Notify.show(getString(R.string.search_scope_current_hint, site.getName()));
+        Notify.show(getString(R.string.search_scope_current_hint, site.getDisplayName()));
         selectScope(true, "", popup);
     }
 

@@ -264,7 +264,7 @@ public class Vod implements Parcelable, Diffable<Vod> {
     }
 
     public String getSiteName() {
-        return getSite() == null ? "" : getSite().getName();
+        return getSite() == null ? "" : getSite().getDisplayName();
     }
 
     public String getSiteKey() {

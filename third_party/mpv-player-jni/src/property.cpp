@@ -1,4 +1,5 @@
 #include <jni.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 #include <mpv/client.h>
@@ -18,8 +19,44 @@ extern "C" {
     jni_func(void, setPropertyBoolean, jstring property, jboolean value);
     jni_func(jstring, getPropertyString, jstring jproperty);
     jni_func(void, setPropertyString, jstring jproperty, jstring jvalue);
+    jni_func(void, dumpTrackList);
 
     jni_func(void, observeProperty, jstring property, jint format);
+}
+
+static void log_node(const char *path, const mpv_node &node) {
+    if (node.format == MPV_FORMAT_NODE_ARRAY || node.format == MPV_FORMAT_NODE_MAP) {
+        mpv_node_list *list = node.u.list;
+        if (!list) return;
+        for (int i = 0; i < list->num; ++i) {
+            char child[256];
+            const char *key = node.format == MPV_FORMAT_NODE_MAP && list->keys ? list->keys[i] : nullptr;
+            if (key) snprintf(child, sizeof(child), "%s/%s", path, key);
+            else snprintf(child, sizeof(child), "%s/%d", path, i);
+            log_node(child, list->values[i]);
+        }
+        return;
+    }
+    switch (node.format) {
+        case MPV_FORMAT_STRING: ALOGV("mpv-node %s string=%s", path, node.u.string ? node.u.string : ""); break;
+        case MPV_FORMAT_FLAG: ALOGV("mpv-node %s flag=%d", path, node.u.flag); break;
+        case MPV_FORMAT_INT64: ALOGV("mpv-node %s int=%lld", path, static_cast<long long>(node.u.int64)); break;
+        case MPV_FORMAT_DOUBLE: ALOGV("mpv-node %s double=%f", path, node.u.double_); break;
+        case MPV_FORMAT_NONE: ALOGV("mpv-node %s none", path); break;
+        default: ALOGV("mpv-node %s format=%d", path, node.format); break;
+    }
+}
+
+jni_func(void, dumpTrackList) {
+    CHECK_MPV_INIT();
+    mpv_node node{};
+    int result = mpv_get_property(g_mpv, "track-list", MPV_FORMAT_NODE, &node);
+    if (result < 0) {
+        ALOGE("mpv track-list node failed: %s", mpv_error_string(result));
+        return;
+    }
+    log_node("track-list", node);
+    mpv_free_node_contents(&node);
 }
 
 jni_func(jint, setOptionString, jstring joption, jstring jvalue) {

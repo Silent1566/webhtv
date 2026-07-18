@@ -24,6 +24,7 @@ import com.fongmi.android.tv.databinding.ActivitySettingEnhanceBinding;
 import com.fongmi.android.tv.setting.CustomCspSetting;
 import com.fongmi.android.tv.setting.ProxySetting;
 import com.fongmi.android.tv.setting.SiteHealthStore;
+import com.fongmi.android.tv.setting.SiteNameStore;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.dialog.AdRuleManageDialog;
 import com.fongmi.android.tv.ui.dialog.AiConfigDialog;
@@ -41,6 +42,7 @@ import com.fongmi.android.tv.ui.dialog.OneKeySyncDialog;
 import com.fongmi.android.tv.ui.dialog.RemoteTrustDialog;
 import com.fongmi.android.tv.ui.dialog.ShellProxyDialog;
 import com.fongmi.android.tv.ui.dialog.SiteHealthDialog;
+import com.fongmi.android.tv.ui.dialog.SiteNameDialog;
 import com.fongmi.android.tv.ui.dialog.ViewingRecordSyncDialog;
 import com.fongmi.android.tv.ui.dialog.WebHomeExtensionDialog;
 import com.fongmi.android.tv.utils.LoginStateSync;
@@ -85,6 +87,7 @@ public class SettingEnhanceActivity extends BaseActivity {
         mBinding.githubRepo.setOnClickListener(view -> openRepo(URL_GITHUB));
         mBinding.cnbRepo.setOnClickListener(view -> openRepo(URL_CNB));
         mBinding.driveCheck.setOnClickListener(this::setDriveCheck);
+        mBinding.siteName.setOnClickListener(this::setSiteName);
         mBinding.audioSource.setOnClickListener(this::setAudioSource);
         mBinding.shortDramaSource.setOnClickListener(this::setShortDramaSource);
         mBinding.tmdbSource.setOnClickListener(this::setTmdbSource);
@@ -133,6 +136,7 @@ public class SettingEnhanceActivity extends BaseActivity {
                 mBinding.cspWarmup,
                 mBinding.playbackArtworkWall,
                 mBinding.driveCheck,
+                mBinding.siteName,
                 mBinding.audioSource,
                 mBinding.shortDramaSource,
                 mBinding.tmdbSource,
@@ -151,6 +155,7 @@ public class SettingEnhanceActivity extends BaseActivity {
     private void setText() {
         if (!canSetText()) return;
         safeSet("driveCheck", mBinding.driveCheckText, () -> getSwitch(Setting.isDriveCheck()));
+        safeSet("siteName", mBinding.siteNameText, () -> getString(R.string.setting_site_name_summary, SiteNameStore.count()));
         safeSet("audioSource", mBinding.audioSourceText, () -> getSwitch(!AudioConfig.objectFrom(Setting.getAudioConfig()).getDisplayRules().isEmpty()));
         safeSet("shortDramaSource", mBinding.shortDramaSourceText, () -> getSwitch(!ShortDramaConfig.objectFrom(Setting.getShortDramaConfig()).getDisplayRules().isEmpty()));
         safeSet("tmdbSource", mBinding.tmdbSourceText, () -> getString(Setting.isTmdbReady() ? R.string.setting_configured : R.string.setting_unconfigured));
@@ -250,6 +255,10 @@ public class SettingEnhanceActivity extends BaseActivity {
         mBinding.debugLogText.setText(getSwitch(Setting.isDebugLog()));
         if (!Setting.isDebugLog()) return;
         DebugLogDialog.show(this);
+    }
+
+    private void setSiteName(View view) {
+        SiteNameDialog.create(this).onChanged(this::setText).show();
     }
 
     private void setAudioSource(View view) {

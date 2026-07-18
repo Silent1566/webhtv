@@ -59,16 +59,16 @@ public class EpisodeGapScenarioTest {
     }
 
     @Test
-    public void linearEpisodeNumber_fallsBackToPositionWhenSourceIsWrong() {
-        // 源编号异常小（< index+1）时，使用位置编号
-        // 例如：文件名错误，多个文件都叫 "1.mp4"
+    public void linearEpisodeNumber_trustsSourceNumberEvenWhenSmall() {
+        // 新逻辑：文件名有集号时，无条件信任它
+        // 真实场景：S01E19 在 index=20 时，应该返回19而非21
         int sourceNumber = 1;
         int index = 5;
 
         int result = EpisodeSeasonPolicy.linearEpisodeNumber(sourceNumber, index);
 
-        // 1 >= 5+1? → false → 使用位置编号 6
-        assertEquals(6, result);
+        // sourceNumber > 0 → 直接返回 1
+        assertEquals(1, result);
     }
 
     @Test
@@ -85,14 +85,14 @@ public class EpisodeGapScenarioTest {
 
     @Test
     public void linearEpisodeNumber_zeroSourceWithNegativeIndex() {
-        // sourceNumber <= 0 且 index < 0 时，返回 sourceNumber（即 0 或负数）
+        // sourceNumber <= 0 且 index < 0 时，返回 -1（无法推断）
         int sourceNumber = 0;
         int index = -1;
 
         int result = EpisodeSeasonPolicy.linearEpisodeNumber(sourceNumber, index);
 
-        // 0 > 0? → false → 返回 0
-        assertEquals(0, result);
+        // sourceNumber <= 0, index < 0 → 返回 -1
+        assertEquals(-1, result);
     }
 
     @Test

@@ -401,7 +401,7 @@ public class SearchFragment extends BaseFragment implements MenuProvider, WordAd
             }
             mCurrentSite = true;
             mGroup = "";
-            Notify.show(getString(R.string.search_scope_current_hint, site.getName()));
+            Notify.show(getString(R.string.search_scope_current_hint, site.getDisplayName()));
         } else if (itemId >= MENU_SCOPE_GROUP_OFFSET) {
             int index = itemId - MENU_SCOPE_GROUP_OFFSET;
             if (index < 0 || index >= groups.size()) return true;

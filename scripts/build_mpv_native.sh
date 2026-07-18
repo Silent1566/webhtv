@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 LOCK_FILE="$ROOT/third_party/mpv-native-lock.json"
 OVERRIDE_DIR="$ROOT/third_party/mpv-native-overrides"
+MPV_DISC_PATCH="$ROOT/third_party/patches/mpv-stream-cb-disc-controls.patch"
 WORK_DIR="${MPV_NATIVE_WORK_DIR:-$ROOT/build/mpv-native}"
 ABI="arm64-v8a"
 JOBS="${MPV_NATIVE_JOBS:-}"
@@ -313,6 +314,9 @@ prepare_sources() {
       "refs/tags/$MPV_DESCRIBE_TAG:refs/tags/$MPV_DESCRIBE_TAG"
   fi
   [ "$(git -C "$deps/mpv" describe --abbrev=9 --tags HEAD)" = "v$MPV_VERSION" ] || die "MPV describe version mismatch"
+  [ -f "$MPV_DISC_PATCH" ] || die "missing MPV disc controls patch: $MPV_DISC_PATCH"
+  git -C "$deps/mpv" apply --check "$MPV_DISC_PATCH"
+  git -C "$deps/mpv" apply "$MPV_DISC_PATCH"
   mkdir -p "$deps/shaderc"
   printf '%s\n' "shaderc is supplied by Android NDK $NDK_VERSION" >"$deps/shaderc/README.webhtv"
 }
@@ -380,6 +384,7 @@ verify_directory() {
   version_strings="$(strings "$directory/libmpv.so")"
   grep -Fq "mpv v$MPV_VERSION" <<<"$version_strings" || die "unexpected MPV version in $directory/libmpv.so"
   grep -Fq "v$LIBPLACEBO_VERSION" <<<"$version_strings" || die "unexpected libplacebo version in $directory/libmpv.so"
+  grep -Fq "WebHTV stream_cb controls enabled" <<<"$version_strings" || die "MPV stream_cb disc controls patch missing from $directory/libmpv.so"
 }
 
 stage_abi() {

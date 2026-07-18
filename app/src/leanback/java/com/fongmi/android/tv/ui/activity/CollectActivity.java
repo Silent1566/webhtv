@@ -25,7 +25,6 @@ import com.fongmi.android.tv.databinding.ActivityCollectBinding;
 import com.fongmi.android.tv.model.SiteViewModel;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.setting.SiteHealthStore;
-import com.fongmi.android.tv.setting.SiteBlockSetting;
 import com.fongmi.android.tv.ui.adapter.CollectAdapter;
 import com.fongmi.android.tv.ui.adapter.SearchAdapter;
 import com.fongmi.android.tv.ui.base.BaseActivity;
@@ -241,7 +240,6 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
         mSites = new ArrayList<>();
         for (Site site : VodConfig.get().getSites()) {
             if (!site.isSearchable()) continue;
-            if (SiteBlockSetting.isBlocked(site)) continue;
             if (!siteKey.isEmpty() && !site.getKey().equals(siteKey)) continue;
             if (!group.isEmpty() && !site.inGroup(group)) continue;
             mSites.add(site);

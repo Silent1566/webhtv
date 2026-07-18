@@ -245,7 +245,7 @@ public class SiteHealthStore {
         Map<String, String> names = new LinkedHashMap<>();
         for (Site site : VodConfig.get().getSites()) {
             if (site == null || TextUtils.isEmpty(site.getKey())) continue;
-            names.put(site.getKey(), site.getName());
+            names.put(site.getKey(), site.getDisplayName());
         }
         return names;
     }

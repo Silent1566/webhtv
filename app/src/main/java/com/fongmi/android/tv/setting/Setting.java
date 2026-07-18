@@ -41,6 +41,15 @@ import java.util.Locale;
 
 public class Setting {
 
+    public static final String REALTIME_SUBTITLE_MODEL_ZH = "zh";
+    public static final String REALTIME_SUBTITLE_MODEL_YUE = "yue";
+    public static final String REALTIME_SUBTITLE_MODEL_EN = "en";
+    public static final String REALTIME_SUBTITLE_MODEL_DE = "de";
+    public static final String REALTIME_SUBTITLE_MODEL_FR = "fr";
+    public static final String REALTIME_SUBTITLE_MODEL_ES = "es";
+    public static final String REALTIME_SUBTITLE_MODEL_JA = "ja";
+    public static final String REALTIME_SUBTITLE_MODEL_ZH_EN = "zh-en";
+
     public static final int TMDB_MODEL_NATIVE = 0;
     public static final int DETAIL_OPEN_FUSION = 0;
     public static final int DETAIL_OPEN_ENHANCED = 1;
@@ -462,11 +471,11 @@ public class Setting {
 
     private static float getUiScaleFactor(int scale) {
         return switch (scale) {
-            case UI_SCALE_STANDARD -> 0.9f;
-            case UI_SCALE_MILD_COMPACT -> 0.85f;
-            case UI_SCALE_COMPACT -> 0.8f;
-            case UI_SCALE_MORE_COMPACT -> 0.75f;
-            case UI_SCALE_SMALLER -> 0.7f;
+            case UI_SCALE_STANDARD -> 0.8f;
+            case UI_SCALE_MILD_COMPACT -> 0.75f;
+            case UI_SCALE_COMPACT -> 0.7f;
+            case UI_SCALE_MORE_COMPACT -> 0.65f;
+            case UI_SCALE_SMALLER -> 0.6f;
             default -> 1.0f;
         };
     }
@@ -1164,6 +1173,28 @@ public class Setting {
         Prefers.put("subtitle_preferred_language", language == null || language.isEmpty() ? "zh" : language);
     }
 
+    public static String getRealtimeSubtitleModel() {
+        String model = Prefers.getString("subtitle_realtime_model", REALTIME_SUBTITLE_MODEL_ZH);
+        return isRealtimeSubtitleModel(model) ? model : REALTIME_SUBTITLE_MODEL_ZH;
+    }
+
+    public static void putRealtimeSubtitleModel(String model) {
+        Prefers.put("subtitle_realtime_model", isRealtimeSubtitleModel(model) ? model : REALTIME_SUBTITLE_MODEL_ZH);
+    }
+
+    private static boolean isRealtimeSubtitleModel(String model) {
+        return switch (model) {
+            case REALTIME_SUBTITLE_MODEL_ZH,
+                 REALTIME_SUBTITLE_MODEL_YUE,
+                 REALTIME_SUBTITLE_MODEL_EN,
+                 REALTIME_SUBTITLE_MODEL_DE,
+                 REALTIME_SUBTITLE_MODEL_FR,
+                 REALTIME_SUBTITLE_MODEL_ES,
+                 REALTIME_SUBTITLE_MODEL_JA,
+                 REALTIME_SUBTITLE_MODEL_ZH_EN -> true;
+            case null, default -> false;
+        };
+    }
     public static String getSubtitleAssrtToken() {
         return Prefers.getString("subtitle_assrt_token");
     }
@@ -1225,7 +1256,7 @@ public class Setting {
     }
 
     public static int getSearchThread() {
-        return clampSearchThread(Prefers.getInt("search_thread", 10));
+        return clampSearchThread(Prefers.getInt("search_thread", 20));
     }
 
     public static void putSearchThread(int thread) {
@@ -1233,7 +1264,7 @@ public class Setting {
     }
 
     private static int clampSearchThread(int thread) {
-        return Math.max(1, Math.min(thread, 32));
+        return Math.max(1, Math.min(thread, 100));
     }
 
     public static int getSearchColumn() {

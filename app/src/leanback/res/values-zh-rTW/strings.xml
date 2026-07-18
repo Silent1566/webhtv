@@ -7,6 +7,13 @@
     <string name="home_keep">收藏</string>
     <string name="home_push">推送</string>
     <string name="home_setting">設定</string>
+    <string name="control_speed">倍速</string>
+    <string name="control_scale">縮放</string>
+    <string name="control_episode_column">長標題列數</string>
+    <string name="control_episode_column_single">單列</string>
+    <string name="control_episode_column_double">雙列</string>
+    <string name="control_compact_episode_title">精簡標題</string>
+    <string name="control_track">軌道</string>
     <string name="home_history">最近觀看</string>
     <string name="home_recommend">更新推薦</string>
     <string name="detail_tmdb_rematch">TMDB</string>
@@ -18,4 +25,13 @@
     <string name="push_clip">推送剪貼簿內容</string>
     <string name="push_info">使用手機掃描 QR Code，或於瀏覽器輸入網址\n<xliff:g name="name">%s</xliff:g></string>
 
+    <string name="device_select">選擇裝置</string>
+    <string name="device_offline">裝置已離線</string>
+    <string name="device_scan">請掃描 WebHTV QRCode 進行綁定</string>
+    <string name="timer_5">5 分鐘</string>
+    <string name="timer_15">15 分鐘</string>
+    <string name="timer_30">30 分鐘</string>
+    <string name="timer_60">1 小時</string>
+    <string name="timer_delay">延長 5 分鐘</string>
+    <string name="timer_cancel">取消定時器</string>
 </resources>

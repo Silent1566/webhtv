@@ -1,0 +1,912 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:tag="land">
+
+    <com.fongmi.android.tv.ui.custom.ProgressLayout
+        android:id="@+id/progressLayout"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <com.fongmi.android.tv.ui.custom.ContextWallImageView
+            android:id="@+id/contextWall"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:importantForAccessibility="no"
+            android:visibility="gone" />
+
+        <View
+            android:id="@+id/videoContextScrim"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/shape_video_context_scrim" />
+
+        <View
+            android:id="@+id/statusBar"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:background="@color/black" />
+
+        <FrameLayout
+            android:id="@+id/video"
+            android:layout_width="400dp"
+            android:layout_height="225dp"
+            android:layout_below="@+id/statusBar"
+            android:layout_margin="16dp"
+            android:background="@color/black"
+            android:clickable="true"
+            android:elevation="4dp"
+            android:focusable="true">
+
+            <androidx.media3.ui.PlayerView
+                android:id="@+id/exo"
+                style="@style/Player.Vod"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                app:surface_type="none" />
+
+            <FrameLayout
+                android:id="@+id/audioStage"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@drawable/shape_audio_player_background"
+                android:clipChildren="false"
+                android:clipToPadding="false"
+                android:paddingStart="44dp"
+                android:paddingTop="20dp"
+                android:paddingEnd="44dp"
+                android:paddingBottom="14dp"
+                android:visibility="gone"
+                tools:visibility="visible">
+
+                <androidx.appcompat.widget.LinearLayoutCompat
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:clipChildren="false"
+                    android:clipToPadding="false"
+                    android:orientation="vertical">
+
+                    <androidx.appcompat.widget.LinearLayoutCompat
+                        android:id="@+id/flagTitleBar"
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_weight="1"
+                        android:clipChildren="false"
+                        android:clipToPadding="false"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <androidx.appcompat.widget.LinearLayoutCompat
+                            android:layout_width="252dp"
+                            android:layout_height="match_parent"
+                            android:gravity="center"
+                            android:orientation="vertical">
+
+                            <FrameLayout
+                                android:id="@+id/audioDisc"
+                                android:layout_width="174dp"
+                                android:layout_height="174dp"
+                                android:background="@drawable/shape_audio_disc_back"
+                                android:padding="11dp">
+
+                                <com.google.android.material.imageview.ShapeableImageView
+                                    android:id="@+id/audioCover"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="match_parent"
+                                    android:scaleType="centerCrop"
+                                    android:src="@drawable/artwork"
+                                    app:shapeAppearanceOverlay="@style/ShapeAppearance.WebHTV.AudioCover"
+                                    app:strokeColor="@color/white_20"
+                                    app:strokeWidth="1dp" />
+
+                            </FrameLayout>
+
+                            <com.google.android.material.textview.MaterialTextView
+                                android:id="@+id/audioTitle"
+                                style="@style/Video.ContextText"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="10dp"
+                                android:ellipsize="end"
+                                android:gravity="center"
+                                android:maxLines="2"
+                                android:textColor="@color/white"
+                                android:textSize="22sp"
+                                android:textStyle="bold"
+                                tools:text="八段锦口令音乐" />
+
+                            <com.google.android.material.textview.MaterialTextView
+                                android:id="@+id/audioSubtitle"
+                                style="@style/Video.ContextText"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="4dp"
+                                android:ellipsize="end"
+                                android:gravity="center"
+                                android:maxLines="1"
+                                android:textColor="@color/white_70"
+                                android:textSize="14sp"
+                                tools:text="站源 · 当前播放列表" />
+
+                            <androidx.appcompat.widget.LinearLayoutCompat
+                                android:id="@+id/audioBadges"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="8dp"
+                                android:gravity="center"
+                                android:orientation="horizontal"
+                                android:visibility="gone">
+
+                                <com.google.android.material.textview.MaterialTextView
+                                    android:id="@+id/audioBadgeFormat"
+                                    style="@style/Video.ContextText"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="28dp"
+                                    android:background="@drawable/shape_audio_badge"
+                                    android:gravity="center"
+                                    android:minWidth="58dp"
+                                    android:paddingStart="10dp"
+                                    android:paddingEnd="10dp"
+                                    android:text="@string/player_audio_badge_audio"
+                                    android:textColor="@color/white_90"
+                                    android:textSize="13sp" />
+
+                                <com.google.android.material.textview.MaterialTextView
+                                    android:id="@+id/audioBadgeLyrics"
+                                    style="@style/Video.ContextText"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="28dp"
+                                    android:layout_marginStart="8dp"
+                                    android:background="@drawable/shape_audio_badge"
+                                    android:gravity="center"
+                                    android:minWidth="58dp"
+                                    android:paddingStart="10dp"
+                                    android:paddingEnd="10dp"
+                                    android:text="@string/player_audio_badge_lyrics"
+                                    android:textColor="@color/white_90"
+                                    android:textSize="13sp" />
+
+                                <com.google.android.material.textview.MaterialTextView
+                                    android:id="@+id/audioBadgeQueue"
+                                    style="@style/Video.ContextText"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="28dp"
+                                    android:layout_marginStart="8dp"
+                                    android:background="@drawable/shape_audio_badge"
+                                    android:gravity="center"
+                                    android:minWidth="58dp"
+                                    android:paddingStart="10dp"
+                                    android:paddingEnd="10dp"
+                                    android:text="@string/player_audio_badge_queue"
+                                    android:textColor="@color/white_90"
+                                    android:textSize="13sp" />
+
+                            </androidx.appcompat.widget.LinearLayoutCompat>
+
+                        </androidx.appcompat.widget.LinearLayoutCompat>
+
+                        <androidx.appcompat.widget.LinearLayoutCompat
+                            android:layout_width="0dp"
+                            android:layout_height="match_parent"
+                            android:layout_marginStart="34dp"
+                            android:layout_weight="1"
+                            android:gravity="center"
+                            android:orientation="vertical">
+
+                            <com.fongmi.android.tv.ui.custom.LyricsOverlayView
+                                android:id="@+id/audioLyrics"
+                                android:layout_width="match_parent"
+                                android:layout_height="0dp"
+                                android:layout_weight="1" />
+
+                            <com.fongmi.android.tv.ui.custom.KaraokeStatusView
+                                android:id="@+id/audioKaraoke"
+                                android:layout_width="match_parent"
+                                android:layout_height="96dp"
+                                android:layout_marginTop="8dp" />
+
+                        </androidx.appcompat.widget.LinearLayoutCompat>
+
+                    </androidx.appcompat.widget.LinearLayoutCompat>
+
+                    <androidx.appcompat.widget.LinearLayoutCompat
+                        android:id="@+id/audioPlaybackPanel"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:orientation="vertical">
+
+                        <com.fongmi.android.tv.ui.custom.CustomSeekView
+                            android:id="@+id/audioSeek"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content" />
+
+                        <androidx.appcompat.widget.LinearLayoutCompat
+                            android:layout_width="match_parent"
+                            android:layout_height="72dp"
+                            android:layout_marginTop="4dp"
+                            android:gravity="center"
+                            android:orientation="horizontal">
+
+                            <androidx.appcompat.widget.LinearLayoutCompat
+                                android:id="@+id/audioTransport"
+                                android:layout_width="0dp"
+                                android:layout_height="match_parent"
+                                android:layout_weight="5"
+                                android:gravity="center"
+                                android:orientation="horizontal">
+
+                                <androidx.appcompat.widget.LinearLayoutCompat
+                                    android:layout_width="0dp"
+                                    android:layout_height="match_parent"
+                                    android:layout_weight="1"
+                                    android:gravity="center"
+                                    android:orientation="vertical">
+
+                                    <androidx.appcompat.widget.AppCompatImageView
+                                        android:id="@+id/audioRepeatAction"
+                                        android:layout_width="40dp"
+                                        android:layout_height="40dp"
+                                        android:background="?attr/selectableItemBackgroundBorderless"
+                                        android:padding="8dp"
+                                        android:scaleType="center"
+                                        android:src="@drawable/ic_audio_repeat" />
+
+                                    <com.google.android.material.textview.MaterialTextView
+                                        style="@style/Video.ContextText"
+                                        android:layout_width="match_parent"
+                                        android:layout_height="18dp"
+                                        android:gravity="center"
+                                        android:singleLine="true"
+                                        android:text="@string/player_audio_repeat"
+                                        android:textColor="@color/white_80"
+                                        android:textSize="12sp" />
+
+                                </androidx.appcompat.widget.LinearLayoutCompat>
+
+                                <androidx.appcompat.widget.LinearLayoutCompat
+                                    android:layout_width="0dp"
+                                    android:layout_height="match_parent"
+                                    android:layout_weight="1"
+                                    android:gravity="center"
+                                    android:orientation="vertical">
+
+                                    <androidx.appcompat.widget.AppCompatImageView
+                                        android:id="@+id/audioPrev"
+                                        android:layout_width="40dp"
+                                        android:layout_height="40dp"
+                                        android:background="?attr/selectableItemBackgroundBorderless"
+                                        android:padding="8dp"
+                                        android:scaleType="center"
+                                        android:src="@drawable/exo_icon_previous" />
+
+                                    <com.google.android.material.textview.MaterialTextView
+                                        style="@style/Video.ContextText"
+                                        android:layout_width="match_parent"
+                                        android:layout_height="18dp"
+                                        android:gravity="center"
+                                        android:singleLine="true"
+                                        android:text="@string/play_prev"
+                                        android:textColor="@color/white_80"
+                                        android:textSize="12sp" />
+
+                                </androidx.appcompat.widget.LinearLayoutCompat>
+
+                                <androidx.appcompat.widget.LinearLayoutCompat
+                                    android:layout_width="0dp"
+                                    android:layout_height="match_parent"
+                                    android:layout_weight="1"
+                                    android:gravity="center"
+                                    android:orientation="vertical">
+
+                                    <androidx.appcompat.widget.AppCompatImageView
+                                        android:id="@+id/audioPlay"
+                                        android:layout_width="44dp"
+                                        android:layout_height="44dp"
+                                        android:background="?attr/selectableItemBackgroundBorderless"
+                                        android:padding="8dp"
+                                        android:scaleType="center"
+                                        android:src="@drawable/exo_icon_play" />
+
+                                    <com.google.android.material.textview.MaterialTextView
+                                        style="@style/Video.ContextText"
+                                        android:layout_width="match_parent"
+                                        android:layout_height="18dp"
+                                        android:gravity="center"
+                                        android:singleLine="true"
+                                        android:text="@string/play"
+                                        android:textColor="@color/white_80"
+                                        android:textSize="12sp" />
+
+                                </androidx.appcompat.widget.LinearLayoutCompat>
+
+                                <androidx.appcompat.widget.LinearLayoutCompat
+                                    android:layout_width="0dp"
+                                    android:layout_height="match_parent"
+                                    android:layout_weight="1"
+                                    android:gravity="center"
+                                    android:orientation="vertical">
+
+                                    <androidx.appcompat.widget.AppCompatImageView
+                                        android:id="@+id/audioNext"
+                                        android:layout_width="40dp"
+                                        android:layout_height="40dp"
+                                        android:background="?attr/selectableItemBackgroundBorderless"
+                                        android:padding="8dp"
+                                        android:scaleType="center"
+                                        android:src="@drawable/exo_icon_next" />
+
+                                    <com.google.android.material.textview.MaterialTextView
+                                        style="@style/Video.ContextText"
+                                        android:layout_width="match_parent"
+                                        android:layout_height="18dp"
+                                        android:gravity="center"
+                                        android:singleLine="true"
+                                        android:text="@string/play_next"
+                                        android:textColor="@color/white_80"
+                                        android:textSize="12sp" />
+
+                                </androidx.appcompat.widget.LinearLayoutCompat>
+
+                                <androidx.appcompat.widget.LinearLayoutCompat
+                                    android:layout_width="0dp"
+                                    android:layout_height="match_parent"
+                                    android:layout_weight="1"
+                                    android:gravity="center"
+                                    android:orientation="vertical">
+
+                                    <androidx.appcompat.widget.AppCompatImageView
+                                        android:id="@+id/audioQueueAction"
+                                        android:layout_width="40dp"
+                                        android:layout_height="40dp"
+                                        android:background="?attr/selectableItemBackgroundBorderless"
+                                        android:padding="8dp"
+                                        android:scaleType="center"
+                                        android:src="@drawable/ic_audio_queue" />
+
+                                    <com.google.android.material.textview.MaterialTextView
+                                        style="@style/Video.ContextText"
+                                        android:layout_width="match_parent"
+                                        android:layout_height="18dp"
+                                        android:gravity="center"
+                                        android:singleLine="true"
+                                        android:text="@string/player_audio_playlist"
+                                        android:textColor="@color/white_80"
+                                        android:textSize="12sp" />
+
+                                </androidx.appcompat.widget.LinearLayoutCompat>
+
+                            </androidx.appcompat.widget.LinearLayoutCompat>
+
+                            <androidx.appcompat.widget.LinearLayoutCompat
+                                android:id="@+id/audioActionRow"
+                                android:layout_width="0dp"
+                                android:layout_height="match_parent"
+                                android:layout_weight="3"
+                                android:gravity="center"
+                                android:orientation="horizontal">
+
+                                <com.google.android.material.textview.MaterialTextView
+                                    android:id="@+id/audioLyricsAction"
+                                    style="@style/AudioActionButton"
+                                    android:layout_marginEnd="4dp"
+                                    android:text="@string/player_lyrics_search"
+                                    android:textSize="12sp"
+                                    app:drawableTopCompat="@drawable/ic_audio_lyrics" />
+
+                                <com.google.android.material.textview.MaterialTextView
+                                    android:id="@+id/audioKaraokeAction"
+                                    style="@style/AudioActionButton"
+                                    android:layout_marginEnd="4dp"
+                                    android:text="@string/player_audio_options"
+                                    android:textSize="12sp"
+                                    app:drawableTopCompat="@drawable/ic_action_ktv" />
+
+                                <com.google.android.material.textview.MaterialTextView
+                                    android:id="@+id/audioMoreAction"
+                                    style="@style/AudioActionButton"
+                                    android:text="@string/player_audio_more"
+                                    android:textSize="12sp"
+                                    app:drawableTopCompat="@drawable/ic_audio_more" />
+
+                            </androidx.appcompat.widget.LinearLayoutCompat>
+
+                        </androidx.appcompat.widget.LinearLayoutCompat>
+
+                    </androidx.appcompat.widget.LinearLayoutCompat>
+
+                    <androidx.appcompat.widget.LinearLayoutCompat
+                        android:id="@+id/audioToolRow"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center"
+                        android:orientation="horizontal"
+                        android:visibility="gone">
+
+                        <com.google.android.material.textview.MaterialTextView
+                            android:id="@+id/audioCastAction"
+                            style="@style/VideoActionButton"
+                            android:layout_marginEnd="4dp"
+                            android:text="@string/play_cast"
+                            app:drawableTopCompat="@drawable/ic_control_cast_shadow" />
+
+                        <com.google.android.material.textview.MaterialTextView
+                            android:id="@+id/audioKeepAction"
+                            style="@style/VideoActionButton"
+                            android:layout_marginEnd="4dp"
+                            android:text="@string/keep"
+                            app:drawableTopCompat="@drawable/ic_action_keep" />
+
+                        <com.google.android.material.textview.MaterialTextView
+                            android:id="@+id/audioSettingAction"
+                            style="@style/VideoActionButton"
+                            android:layout_marginEnd="4dp"
+                            android:text="@string/nav_setting"
+                            app:drawableTopCompat="@drawable/ic_control_setting_shadow" />
+
+                        <com.google.android.material.textview.MaterialTextView
+                            android:id="@+id/audioTrackAction"
+                            style="@style/VideoActionButton"
+                            android:layout_marginEnd="4dp"
+                            android:text="@string/play_track_audio"
+                            app:drawableTopCompat="@drawable/ic_action_audio" />
+
+                        <com.google.android.material.textview.MaterialTextView
+                            android:id="@+id/audioSubtitleAction"
+                            style="@style/VideoActionButton"
+                            android:layout_marginEnd="4dp"
+                            android:text="@string/play_track_text"
+                            app:drawableTopCompat="@drawable/ic_action_subtitle" />
+
+                        <com.google.android.material.textview.MaterialTextView
+                            android:id="@+id/audioInfoAction"
+                            style="@style/VideoActionButton"
+                            android:text="@string/player_osd"
+                            app:drawableTopCompat="@drawable/ic_control_info" />
+
+                    </androidx.appcompat.widget.LinearLayoutCompat>
+
+                </androidx.appcompat.widget.LinearLayoutCompat>
+
+                <androidx.appcompat.widget.AppCompatImageView
+                    android:id="@+id/audioBackgroundAction"
+                    android:layout_width="98dp"
+                    android:layout_height="150dp"
+                    android:layout_gravity="top|end"
+                    android:layout_marginEnd="-28dp"
+                    android:background="@null"
+                    android:contentDescription="@string/player_audio_background"
+                    android:padding="0dp"
+                    android:scaleType="fitXY"
+                    android:src="@drawable/audio_background_drip" />
+
+            </FrameLayout>
+
+            <include
+                android:id="@+id/widget"
+                layout="@layout/view_widget_vod"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
+            <com.fongmi.android.tv.ui.custom.LyricsOverlayView
+                android:id="@+id/lyrics"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
+            <com.fongmi.android.tv.ui.custom.KaraokeStatusView
+                android:id="@+id/karaoke"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="top|end"
+                android:layout_margin="12dp" />
+
+            <include
+                android:id="@+id/control"
+                layout="@layout/view_control_vod"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:visibility="gone" />
+
+            <include
+                android:id="@+id/progress"
+                layout="@layout/view_progress"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
+            <include
+                android:id="@+id/osd"
+                layout="@layout/view_player_osd"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
+        </FrameLayout>
+
+        <View
+            android:id="@+id/videoShadow"
+            android:layout_width="400dp"
+            android:layout_height="4dp"
+            android:layout_below="@+id/video"
+            android:layout_marginStart="16dp"
+            android:background="@drawable/shadow" />
+
+        <androidx.appcompat.widget.LinearLayoutCompat
+            android:id="@+id/titleRow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_alignTop="@+id/video"
+            android:layout_marginEnd="16dp"
+            android:layout_toEndOf="@+id/video"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/name"
+                style="@style/Video.ContextText"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="@color/white"
+                android:textSize="19sp"
+                tools:text="慶餘年第二季" />
+
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/remark"
+                style="@style/Video.ContextText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="10dp"
+                android:ellipsize="end"
+                android:maxWidth="112dp"
+                android:singleLine="true"
+                android:textColor="@color/white_80"
+                android:textSize="13sp"
+                tools:text="更新至第30集" />
+
+        </androidx.appcompat.widget.LinearLayoutCompat>
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/site"
+            style="@style/Video.ContextText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_below="@+id/titleRow"
+            android:layout_alignStart="@+id/titleRow"
+            android:layout_marginTop="6dp"
+            android:layout_marginEnd="16dp"
+            android:singleLine="true"
+            android:textColor="@color/white_80"
+            android:textSize="13sp"
+            tools:text="站源：泥巴" />
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/other"
+            style="@style/Video.ContextText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_below="@+id/site"
+            android:layout_alignStart="@+id/titleRow"
+            android:layout_marginTop="6dp"
+            android:layout_marginEnd="16dp"
+            android:singleLine="true"
+            android:textColor="@color/white_90"
+            android:textSize="13sp"
+            tools:text="年份：2022 地區：台灣 類型：科幻" />
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/director"
+            style="@style/Video.ContextText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_below="@+id/other"
+            android:layout_alignStart="@+id/titleRow"
+            android:layout_marginTop="6dp"
+            android:layout_marginEnd="16dp"
+            android:singleLine="true"
+            android:textColor="@color/white_80"
+            android:textSize="13sp"
+            tools:text="導演：FongMi" />
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/actor"
+            style="@style/Video.ContextText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_below="@+id/director"
+            android:layout_alignStart="@+id/titleRow"
+            android:layout_alignBottom="@+id/video"
+            android:layout_marginTop="6dp"
+            android:layout_marginEnd="16dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="@color/white_80"
+            android:textSize="13sp"
+            tools:text="演員：FongMi" />
+
+        <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+            android:id="@+id/swipeLayout"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_below="@+id/video">
+
+            <com.fongmi.android.tv.ui.custom.FixedNestedScrollView
+                android:id="@+id/scroll"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:fillViewport="true">
+
+                <androidx.appcompat.widget.LinearLayoutCompat
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:clipChildren="false"
+                    android:clipToPadding="false"
+                    android:orientation="vertical"
+                    android:paddingBottom="8dp">
+
+                    <androidx.appcompat.widget.LinearLayoutCompat
+                        android:id="@+id/content_layout"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="16dp"
+                        android:layout_marginTop="10dp"
+                        android:layout_marginEnd="16dp"
+                        android:gravity="top"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.textview.MaterialTextView
+                            android:id="@+id/flagText"
+                            style="@style/Video.ContextText"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/detail_content"
+                            android:textColor="@color/white_70"
+                            android:textSize="13sp" />
+
+                        <com.google.android.material.textview.MaterialTextView
+                            android:id="@+id/content"
+                            style="@style/Video.ContextText"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="4dp"
+                            android:layout_weight="1"
+                            android:ellipsize="end"
+                            android:lineSpacingExtra="3dp"
+                            android:maxLines="2"
+                            android:textColor="@color/white_90"
+                            android:textSize="13sp"
+                            tools:text="一個身世神秘的少年范閒，因對自身身世的好奇而離開故鄉澹州，前赴南慶京都。" />
+
+                    </androidx.appcompat.widget.LinearLayoutCompat>
+
+                    <androidx.appcompat.widget.LinearLayoutCompat
+                        android:id="@+id/actionRow"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="16dp"
+                        android:layout_marginTop="10dp"
+                        android:layout_marginEnd="16dp"
+                        android:gravity="center"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.textview.MaterialTextView
+                            android:id="@+id/shortDisplay"
+                            style="@style/VideoActionButton"
+                            android:layout_marginEnd="8dp"
+                            android:text="@string/play_short_display"
+                            app:drawableTopCompat="@drawable/ic_action_short_display_shadow" />
+
+                        <com.google.android.material.textview.MaterialTextView
+                            android:id="@+id/search"
+                            style="@style/VideoActionButton"
+                            android:layout_marginEnd="8dp"
+                            android:text="@string/play_search"
+                            app:drawableTopCompat="@drawable/ic_action_search_shadow" />
+
+                        <com.google.android.material.textview.MaterialTextView
+                            android:id="@+id/castAction"
+                            style="@style/VideoActionButton"
+                            android:layout_marginEnd="8dp"
+                            android:text="@string/play_cast"
+                            app:drawableTopCompat="@drawable/ic_control_cast_shadow" />
+
+                        <com.google.android.material.textview.MaterialTextView
+                            android:id="@+id/settingAction"
+                            style="@style/VideoActionButton"
+                            android:text="@string/nav_setting"
+                            app:drawableTopCompat="@drawable/ic_control_setting_shadow" />
+
+                    </androidx.appcompat.widget.LinearLayoutCompat>
+
+                    <androidx.appcompat.widget.LinearLayoutCompat
+                        android:id="@+id/episodeTitleBar"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="16dp"
+                        android:layout_marginEnd="12dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.textview.MaterialTextView
+                            style="@style/Video.ContextText"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/detail_flag"
+                            android:textColor="@color/white"
+                            android:textSize="16sp" />
+
+                        <View
+                            android:layout_width="0dp"
+                            android:layout_height="0dp"
+                            android:layout_weight="1" />
+
+                    </androidx.appcompat.widget.LinearLayoutCompat>
+
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/flag"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:clipChildren="false"
+                        android:clipToPadding="false"
+                        android:orientation="horizontal"
+                        android:paddingStart="16dp"
+                        android:paddingEnd="16dp"
+                        app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager" />
+
+                    <com.google.android.material.textview.MaterialTextView
+                        android:id="@+id/quality_text"
+                        style="@style/Video.ContextText"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="16dp"
+                        android:layout_marginTop="14dp"
+                        android:layout_marginEnd="16dp"
+                        android:text="@string/detail_quality"
+                        android:textColor="@color/white"
+                        android:textSize="16sp"
+                        android:visibility="gone"
+                        tools:visibility="visible" />
+
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/quality"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:clipChildren="false"
+                        android:clipToPadding="false"
+                        android:orientation="horizontal"
+                        android:paddingStart="16dp"
+                        android:paddingEnd="16dp"
+                        android:visibility="gone"
+                        app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
+                        tools:visibility="visible" />
+
+                    <androidx.appcompat.widget.LinearLayoutCompat
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="16dp"
+                        android:layout_marginTop="16dp"
+                        android:layout_marginEnd="12dp"
+                        android:gravity="center_vertical">
+
+                        <com.google.android.material.textview.MaterialTextView
+                            style="@style/Video.ContextText"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/detail_episode"
+                            android:textColor="@color/white"
+                            android:textSize="16sp" />
+
+                        <androidx.appcompat.widget.AppCompatImageView
+                            android:id="@+id/reverse"
+                            android:layout_width="20dp"
+                            android:layout_height="20dp"
+                            android:layout_marginStart="8dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:src="@drawable/ic_action_reverse"
+                            android:visibility="gone"
+                            tools:visibility="visible" />
+
+                        <View
+                            android:layout_width="0dp"
+                            android:layout_height="0dp"
+                            android:layout_weight="1" />
+
+                        <androidx.appcompat.widget.AppCompatImageView
+                            android:id="@+id/episodeFileName"
+                            android:layout_width="40dp"
+                            android:layout_height="40dp"
+                            android:layout_marginEnd="12dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:clickable="true"
+                            android:contentDescription="@string/detail_episode_file_name_scraped_action"
+                            android:focusable="true"
+                            android:padding="8dp"
+                            android:scaleType="center"
+                            android:src="@drawable/ic_action_rename"
+                            android:visibility="gone"
+                            tools:visibility="visible" />
+
+                        <androidx.appcompat.widget.AppCompatImageView
+                            android:id="@+id/episodeViewMode"
+                            android:layout_width="40dp"
+                            android:layout_height="40dp"
+                            android:layout_marginEnd="12dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:clickable="true"
+                            android:focusable="true"
+                            android:padding="8dp"
+                            android:scaleType="center"
+                            android:src="@drawable/ic_site_grid"
+                            android:visibility="gone"
+                            tools:visibility="visible" />
+
+                        <androidx.appcompat.widget.AppCompatImageView
+                            android:id="@+id/more"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:src="@drawable/ic_action_more"
+                            android:visibility="gone"
+                            tools:visibility="visible" />
+
+                    </androidx.appcompat.widget.LinearLayoutCompat>
+
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/episodeGroup"
+                        android:layout_width="match_parent"
+                        android:layout_height="40dp"
+                        android:layout_marginTop="8dp"
+                        android:clipChildren="false"
+                        android:clipToPadding="false"
+                        android:orientation="horizontal"
+                        android:paddingStart="16dp"
+                        android:paddingEnd="16dp"
+                        android:visibility="gone"
+                        app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
+                        tools:itemCount="4"
+                        tools:listitem="@layout/adapter_episode_group"
+                        tools:visibility="visible" />
+
+                    <com.fongmi.android.tv.ui.custom.CustomRecyclerView
+                        android:id="@+id/episode"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:layout_marginBottom="8dp"
+                        android:clipChildren="true"
+                        android:clipToPadding="true"
+                        android:nestedScrollingEnabled="false"
+                        android:overScrollMode="never"
+                        android:paddingStart="16dp"
+                        android:paddingEnd="16dp"
+                        app:layoutManager="androidx.recyclerview.widget.GridLayoutManager"
+                        app:maxHeight="328dp"
+                        app:spanCount="6"
+                        tools:itemCount="36"
+                        tools:listitem="@layout/adapter_episode_grid" />
+
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/quick"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:clipChildren="false"
+                        android:clipToPadding="false"
+                        android:nestedScrollingEnabled="false"
+                        android:paddingStart="8dp"
+                        android:paddingEnd="8dp"
+                        android:visibility="gone"
+                        app:layoutManager="androidx.recyclerview.widget.GridLayoutManager"
+                        app:spanCount="4"
+                        tools:listitem="@layout/adapter_quick"
+                        tools:visibility="visible" />
+
+                </androidx.appcompat.widget.LinearLayoutCompat>
+            </com.fongmi.android.tv.ui.custom.FixedNestedScrollView>
+        </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+    </com.fongmi.android.tv.ui.custom.ProgressLayout>
+</FrameLayout>

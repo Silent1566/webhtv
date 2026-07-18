@@ -97,7 +97,7 @@ public class AudioSourceDialog {
 
         for (int i = 0; i < sites.size(); i++) {
             Site site = sites.get(i);
-            labels[i] = TextUtils.isEmpty(site.getName()) ? site.getKey() : site.getName() + "  " + site.getKey();
+            labels[i] = site.getDisplayName() + "  " + site.getKey();
             checked[i] = matchesRule(enabledRules, site);
         }
 
@@ -166,7 +166,7 @@ public class AudioSourceDialog {
     }
 
     private String displayName(Site site) {
-        return TextUtils.isEmpty(site.getName()) ? site.getKey() : site.getName();
+        return site.getDisplayName();
     }
 
     private String toJsonArray(List<String> values) {

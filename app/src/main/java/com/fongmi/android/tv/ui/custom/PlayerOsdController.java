@@ -105,7 +105,13 @@ public class PlayerOsdController {
 
     public void start() {
         started = true;
-        if (suppressed || !PlayerSetting.isOsdEnabled()) {
+        if (suppressed) {
+            root.setVisibility(View.GONE);
+            return;
+        }
+        // 即使用户关闭所有 OSD，控制栏显示时也需要强制显示标题/分辨率/时间
+        // 所以不能在 !isOsdEnabled() 时直接 return
+        if (!PlayerSetting.isOsdEnabled() && !controlsVisible) {
             root.setVisibility(View.GONE);
             return;
         }
@@ -135,7 +141,15 @@ public class PlayerOsdController {
     public void setControlsVisible(boolean controlsVisible) {
         if (this.controlsVisible == controlsVisible) return;
         this.controlsVisible = controlsVisible;
-        if (started) render();
+        if (started) {
+            // 控制栏显示时，即使 OSD 全关也要启动更新循环（为了强制显示时间）
+            if (controlsVisible && !PlayerSetting.isOsdEnabled()) {
+                resetSpeed();
+                App.removeCallbacks(update);
+                App.post(update, 0);
+            }
+            render();
+        }
     }
 
     public void setPersistentSuppressed(boolean persistentSuppressed) {
@@ -170,16 +184,35 @@ public class PlayerOsdController {
             root.setVisibility(View.GONE);
             return false;
         }
+        setTextSize(miniSp);
+        PlayerManager player = source.getPlayer();
+        updateSpeed();
+
+        // 控制栏显示时的处理：
+        // - leanback: suppressed=false，强制显示 OSD 的标题/分辨率/时间（因为控制栏没有自己的 title/size）
+        // - mobile: suppressed=true，已在上面 return，不会执行此分支（mobile 控制栏有自己的 title/size）
+        if (controlsVisible) {
+            setTopLeftForControls(player);
+            setTopRightForControls();
+            bottomLeft.setVisibility(View.GONE);
+            bottomRight.setVisibility(View.GONE);
+            diagnosticsPanel.setVisibility(View.GONE);
+            if (miniProgress != null) miniProgress.setVisibility(View.GONE);
+            // 如果标题或时间至少有一个显示，则显示 root
+            boolean hasVisible = topLeft.getVisibility() == View.VISIBLE || topRight.getVisibility() == View.VISIBLE;
+            root.setVisibility(hasVisible ? View.VISIBLE : View.GONE);
+            return true;
+        }
+
+        // 控制栏隐藏时，若用户关闭所有 OSD 屏显，停止刷新并隐藏
         boolean enabled = PlayerSetting.isOsdEnabled();
         if (!enabled) {
             root.setVisibility(View.GONE);
             return false;
         }
-        root.setVisibility(controlsVisible ? View.GONE : View.VISIBLE);
-        if (controlsVisible) return true;
-        setTextSize(miniSp);
-        PlayerManager player = source.getPlayer();
-        updateSpeed();
+
+        // 控制栏隐藏时，按用户设置显示
+        root.setVisibility(View.VISIBLE);
         if (persistentSuppressed) {
             hidePersistent();
             setDiagnosticsPanel(player);
@@ -208,9 +241,23 @@ public class PlayerOsdController {
         topLeft.setVisibility(TextUtils.isEmpty(topLeft.getText()) ? View.GONE : View.VISIBLE);
     }
 
+    private void setTopLeftForControls(PlayerManager player) {
+        // 控制栏显示时，强制显示标题和分辨率
+        String title = source.getTitle();
+        String size = player != null ? player.getSizeText() : "";
+        topLeft.setText(join("\n", title, size));
+        topLeft.setVisibility(TextUtils.isEmpty(topLeft.getText()) ? View.GONE : View.VISIBLE);
+    }
+
     private void setTopRight() {
         topRight.setVisibility(PlayerSetting.isOsdTime() ? View.VISIBLE : View.GONE);
         if (PlayerSetting.isOsdTime()) topRight.setText(timeFormat.format(new Date()));
+    }
+
+    private void setTopRightForControls() {
+        // 控制栏显示时，强制显示时间，无论用户设置
+        topRight.setText(timeFormat.format(new Date()));
+        topRight.setVisibility(View.VISIBLE);
     }
 
     private void setBottomLeft(PlayerManager player) {

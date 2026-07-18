@@ -40,7 +40,9 @@ public final class EpisodeSeasonPolicy {
     }
 
     public static int linearEpisodeNumber(int sourceEpisodeNumber, int zeroBasedIndex) {
-        if (sourceEpisodeNumber > 0 && (zeroBasedIndex < 0 || sourceEpisodeNumber >= zeroBasedIndex + 1)) return sourceEpisodeNumber;
-        return zeroBasedIndex >= 0 ? zeroBasedIndex + 1 : sourceEpisodeNumber;
+        // 文件名有明确集号时，直接使用它，不要被列表位置覆盖
+        if (sourceEpisodeNumber > 0) return sourceEpisodeNumber;
+        // 文件名无集号时，用列表位置推断（index + 1）
+        return zeroBasedIndex >= 0 ? zeroBasedIndex + 1 : -1;
     }
 }

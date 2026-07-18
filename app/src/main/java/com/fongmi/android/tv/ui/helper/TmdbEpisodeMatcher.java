@@ -14,9 +14,15 @@ public final class TmdbEpisodeMatcher {
 
     public static boolean shouldApply(Episode episode, TmdbEpisode tmdbEpisode, int mappedNumber) {
         if (tmdbEpisode == null) return false;
-        int compareNumber = mappedNumber > 0 ? mappedNumber : (episode == null ? -1 : episode.getNumber());
-        if (compareNumber <= 0) return true;
-        return compareNumber == tmdbEpisode.getNumber();
+        // 如果没有有效的映射编号，放行（原有逻辑已经决定了这个 tmdbEpisode）
+        if (mappedNumber <= 0) return true;
+        // 如果源文件有编号，检查它是否与 TMDB 编号一致（这是真正的匹配检查）
+        // 忽略 mappedNumber，因为它可能是错误的中间计算结果
+        if (episode != null && episode.getNumber() > 0) {
+            return episode.getNumber() == tmdbEpisode.getNumber();
+        }
+        // 源文件没编号，依赖映射编号
+        return mappedNumber == tmdbEpisode.getNumber();
     }
 
     public static boolean shouldApply(Episode episode, int number, String tmdbTitle) {

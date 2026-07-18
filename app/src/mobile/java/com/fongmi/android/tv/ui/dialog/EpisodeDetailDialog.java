@@ -42,6 +42,21 @@ import java.util.List;
 public class EpisodeDetailDialog {
 
     public static void show(FragmentActivity activity, Episode episode) {
+        show(activity, episode, null, null, null, null);
+    }
+
+    public static void show(FragmentActivity activity, Episode episode,
+                           com.fongmi.android.tv.bean.Site site,
+                           java.util.List<String> preloadedPhotos,
+                           java.util.List<TmdbPerson> preloadedGuests) {
+        show(activity, episode, site, preloadedPhotos, preloadedGuests, null);
+    }
+
+    public static void show(FragmentActivity activity, Episode episode,
+                           com.fongmi.android.tv.bean.Site site,
+                           java.util.List<String> preloadedPhotos,
+                           java.util.List<TmdbPerson> preloadedGuests,
+                           android.content.DialogInterface.OnDismissListener dismissListener) {
         if (activity == null || episode == null) return;
         TmdbEpisode tmdbEpisode = episode.getTmdbEpisode();
         if (tmdbEpisode == null) {
@@ -51,11 +66,11 @@ public class EpisodeDetailDialog {
                 TmdbItem movieItem = host.getMatchedTmdbItem();
                 JsonObject movieDetail = host.getMatchedTmdbDetail();
                 if (movieItem != null && movieItem.isMovie()) {
-                    showMovieDetail(activity, episode, movieItem, movieDetail);
+                    showMovieDetail(activity, episode, movieItem, movieDetail, dismissListener);
                     return;
                 }
             }
-            showSimpleDialog(activity, episode);
+            showSimpleDialog(activity, episode, dismissListener);
             return;
         }
 
@@ -79,10 +94,16 @@ public class EpisodeDetailDialog {
         Dialog dialog = new Dialog(activity, android.R.style.Theme_Black_NoTitleBar_Fullscreen);
         dialog.setContentView(view);
         view.findViewById(R.id.close).setOnClickListener(v -> dialog.dismiss());
+        if (dismissListener != null) dialog.setOnDismissListener(dismissListener);
         dialog.show();
         applyWindowSize(dialog);
 
-        loadEpisodeMedia(activity, tmdbEpisode, light, photoTitle, photoList, guestsTitle, guestsList);
+        // 若已预加载数据，直接绑定，避免重复 API 请求；否则异步加载
+        if (preloadedPhotos != null || preloadedGuests != null) {
+            bindMedia(activity, preloadedPhotos, preloadedGuests, light, photoTitle, photoList, guestsTitle, guestsList);
+        } else {
+            loadEpisodeMedia(activity, tmdbEpisode, light, photoTitle, photoList, guestsTitle, guestsList);
+        }
     }
 
     /**
@@ -90,7 +111,8 @@ public class EpisodeDetailDialog {
      * 复用剧集详情布局，标题=影片名，原始名称=源站文件名（完整多行展示），
      * meta=评分/上映日期/时长，简介=影片简介，剧照/演员异步加载。
      */
-    private static void showMovieDetail(FragmentActivity activity, Episode episode, TmdbItem movieItem, JsonObject movieDetail) {
+    private static void showMovieDetail(FragmentActivity activity, Episode episode, TmdbItem movieItem, JsonObject movieDetail,
+                                        android.content.DialogInterface.OnDismissListener dismissListener) {
         View view = LayoutInflater.from(activity).inflate(R.layout.dialog_episode_detail, null);
         ImageView still = view.findViewById(R.id.still);
         TextView title = view.findViewById(R.id.title);
@@ -150,6 +172,7 @@ public class EpisodeDetailDialog {
         Dialog dialog = new Dialog(activity, android.R.style.Theme_Black_NoTitleBar_Fullscreen);
         dialog.setContentView(view);
         view.findViewById(R.id.close).setOnClickListener(v -> dialog.dismiss());
+        if (dismissListener != null) dialog.setOnDismissListener(dismissListener);
         dialog.show();
         applyWindowSize(dialog);
 
@@ -339,13 +362,16 @@ public class EpisodeDetailDialog {
         return Setting.resolveTmdbDetailLightTheme(Setting.getTmdbDetailTheme(), night == Configuration.UI_MODE_NIGHT_YES);
     }
 
-    private static void showSimpleDialog(FragmentActivity activity, Episode episode) {
+    private static void showSimpleDialog(FragmentActivity activity, Episode episode,
+                                         android.content.DialogInterface.OnDismissListener dismissListener) {
         // 标题放固定文案，源站文件名放可换行的正文，避免长名被单行标题截断
-        new MaterialAlertDialogBuilder(activity)
+        androidx.appcompat.app.AlertDialog dialog = new MaterialAlertDialogBuilder(activity)
                 .setTitle(R.string.detail_tmdb_empty)
                 .setMessage(episode.getName())
                 .setPositiveButton(R.string.dialog_negative, null)
-                .show();
+                .create();
+        if (dismissListener != null) dialog.setOnDismissListener(dismissListener);
+        dialog.show();
     }
 
     private static String tmdbImageUrl(String url, String size) {

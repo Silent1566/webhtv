@@ -131,6 +131,6 @@ public class ShortDramaConfig {
     }
 
     private static String getSiteName(Site site) {
-        return TextUtils.isEmpty(site.getName()) ? site.getKey() : site.getName();
+        return site.getDisplayName();
     }
 }

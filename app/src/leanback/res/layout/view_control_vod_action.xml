@@ -110,6 +110,20 @@
             android:layout_marginEnd="8dp"
             android:text="@string/play_lut" />
 
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/karaoke"
+            style="@style/Control"
+            android:layout_marginEnd="12dp"
+            android:text="@string/player_karaoke_mode"
+            android:visibility="gone" />
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/immersiveAudio"
+            style="@style/Control"
+            android:layout_marginEnd="12dp"
+            android:text="@string/player_immersive_audio_mode"
+            android:visibility="gone" />
+
         <com.fongmi.android.tv.ui.custom.CustomUpDownView
             android:id="@+id/text"
             style="@style/Control"
@@ -166,6 +180,18 @@
             android:text="@string/play_title"
             android:visibility="gone"
             tools:visibility="visible" />
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/cast"
+            style="@style/Control"
+            android:layout_marginEnd="8dp"
+            android:text="@string/play_cast" />
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/timer"
+            style="@style/Control"
+            android:layout_marginEnd="8dp"
+            android:text="@string/play_timer" />
 
         <com.google.android.material.textview.MaterialTextView
             android:id="@+id/repeat"

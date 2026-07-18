@@ -33,6 +33,8 @@ public final class MpvPlayerConfig {
     private final long demuxerMaxBackBytes;
     private final int cacheSeconds;
     private final int demuxerReadaheadSeconds;
+    private final int rebufferMs;
+    private final boolean performanceOptionsPriority;
     private final Map<String, String> extraOptions;
 
     private MpvPlayerConfig(Builder builder) {
@@ -55,6 +57,8 @@ public final class MpvPlayerConfig {
         demuxerMaxBackBytes = builder.demuxerMaxBackBytes;
         cacheSeconds = builder.cacheSeconds;
         demuxerReadaheadSeconds = builder.demuxerReadaheadSeconds;
+        rebufferMs = builder.rebufferMs;
+        performanceOptionsPriority = builder.performanceOptionsPriority;
         extraOptions = Collections.unmodifiableMap(new LinkedHashMap<>(builder.extraOptions));
     }
 
@@ -140,6 +144,14 @@ public final class MpvPlayerConfig {
         return demuxerReadaheadSeconds;
     }
 
+    public int rebufferMs() {
+        return rebufferMs;
+    }
+
+    public boolean performanceOptionsPriority() {
+        return performanceOptionsPriority;
+    }
+
     public Map<String, String> extraOptions() {
         return extraOptions;
     }
@@ -166,6 +178,8 @@ public final class MpvPlayerConfig {
         private long demuxerMaxBackBytes = DEFAULT_DEMUXER_BYTES;
         private int cacheSeconds = DEFAULT_CACHE_SECONDS;
         private int demuxerReadaheadSeconds = DEFAULT_CACHE_SECONDS;
+        private int rebufferMs = 5_000;
+        private boolean performanceOptionsPriority = true;
 
         private Builder(Context context) {
             Context app = context.getApplicationContext();
@@ -266,6 +280,16 @@ public final class MpvPlayerConfig {
 
         public Builder demuxerReadaheadSeconds(int demuxerReadaheadSeconds) {
             this.demuxerReadaheadSeconds = demuxerReadaheadSeconds;
+            return this;
+        }
+
+        public Builder rebufferMs(int rebufferMs) {
+            this.rebufferMs = Math.max(0, rebufferMs);
+            return this;
+        }
+
+        public Builder performanceOptionsPriority(boolean performanceOptionsPriority) {
+            this.performanceOptionsPriority = performanceOptionsPriority;
             return this;
         }
 

@@ -63,7 +63,7 @@ public final class ExoPerformanceSetting {
     }
 
     public static int getStartBufferMs() {
-        return normalizeStart(Prefers.getInt(KEY_START_BUFFER_MS, 1500));
+        return normalizeStart(Prefers.getInt(KEY_START_BUFFER_MS, 1_500));
     }
 
     public static void putStartBufferMs(int value) {
@@ -73,16 +73,16 @@ public final class ExoPerformanceSetting {
 
     public static int nextStartBufferMs() {
         return switch (getStartBufferMs()) {
-            case 500 -> 1000;
-            case 1000 -> 1500;
-            case 1500 -> 2000;
-            case 2000 -> 3000;
+            case 500 -> 1_000;
+            case 1_000 -> 1_500;
+            case 1_500 -> 2_000;
+            case 2_000 -> 3_000;
             default -> 500;
         };
     }
 
     public static int getRebufferMs() {
-        return normalizeRebuffer(Prefers.getInt(KEY_REBUFFER_MS, 5000));
+        return normalizeRebuffer(Prefers.getInt(KEY_REBUFFER_MS, 10_000));
     }
 
     public static void putRebufferMs(int value) {
@@ -92,10 +92,13 @@ public final class ExoPerformanceSetting {
 
     public static int nextRebufferMs() {
         return switch (getRebufferMs()) {
-            case 1000 -> 2000;
-            case 2000 -> 3000;
-            case 3000 -> 5000;
-            default -> 1000;
+            case 1_000 -> 2_000;
+            case 2_000 -> 3_000;
+            case 3_000 -> 5_000;
+            case 5_000 -> 8_000;
+            case 8_000 -> 10_000;
+            case 10_000 -> 15_000;
+            default -> 1_000;
         };
     }
 
@@ -111,40 +114,53 @@ public final class ExoPerformanceSetting {
     public static void applyRecommended() {
         Prefers.put(KEY_CODEC_QUEUE_MODE, CODEC_QUEUE_AUTO);
         Prefers.put(KEY_FRAME_RATE_MODE, FRAME_RATE_SEAMLESS);
-        Prefers.put(KEY_START_BUFFER_MS, 1500);
-        Prefers.put(KEY_REBUFFER_MS, 3000);
+        Prefers.put(KEY_START_BUFFER_MS, 1_500);
+        applyRebufferPreset(PlaybackPerformanceSetting.PROFILE_RECOMMENDED);
         Prefers.put(KEY_PRIORITIZE_TIME, true);
     }
 
     public static void applyCompatible() {
         Prefers.put(KEY_CODEC_QUEUE_MODE, CODEC_QUEUE_SYNC);
         Prefers.put(KEY_FRAME_RATE_MODE, FRAME_RATE_OFF);
-        Prefers.put(KEY_START_BUFFER_MS, 2000);
-        Prefers.put(KEY_REBUFFER_MS, 5000);
+        Prefers.put(KEY_START_BUFFER_MS, 2_000);
+        applyRebufferPreset(PlaybackPerformanceSetting.PROFILE_COMPATIBLE);
         Prefers.put(KEY_PRIORITIZE_TIME, true);
     }
 
     public static void applyLightweight() {
         Prefers.put(KEY_CODEC_QUEUE_MODE, CODEC_QUEUE_AUTO);
         Prefers.put(KEY_FRAME_RATE_MODE, FRAME_RATE_SEAMLESS);
-        Prefers.put(KEY_START_BUFFER_MS, 1000);
-        Prefers.put(KEY_REBUFFER_MS, 2000);
+        Prefers.put(KEY_START_BUFFER_MS, 1_000);
+        applyRebufferPreset(PlaybackPerformanceSetting.PROFILE_LIGHTWEIGHT);
         Prefers.put(KEY_PRIORITIZE_TIME, false);
+    }
+
+    static void applyRebufferPreset(int profile) {
+        if (profile == PlaybackPerformanceSetting.PROFILE_LIGHTWEIGHT) {
+            Prefers.put(KEY_REBUFFER_MS, 2_000);
+        } else if (profile == PlaybackPerformanceSetting.PROFILE_COMPATIBLE) {
+            Prefers.put(KEY_REBUFFER_MS, 5_000);
+        } else {
+            Prefers.put(KEY_REBUFFER_MS, 10_000);
+        }
     }
 
     private static int normalizeStart(int value) {
         if (value <= 500) return 500;
-        if (value <= 1000) return 1000;
-        if (value <= 1500) return 1500;
-        if (value <= 2000) return 2000;
-        return 3000;
+        if (value <= 1_000) return 1_000;
+        if (value <= 1_500) return 1_500;
+        if (value <= 2_000) return 2_000;
+        return 3_000;
     }
 
     private static int normalizeRebuffer(int value) {
-        if (value <= 1000) return 1000;
-        if (value <= 2000) return 2000;
-        if (value <= 3000) return 3000;
-        return 5000;
+        if (value <= 1_000) return 1_000;
+        if (value <= 2_000) return 2_000;
+        if (value <= 3_000) return 3_000;
+        if (value <= 5_000) return 5_000;
+        if (value <= 8_000) return 8_000;
+        if (value <= 10_000) return 10_000;
+        return 15_000;
     }
 
     private static int clamp(int value, int min, int max) {

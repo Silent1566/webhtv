@@ -8,6 +8,13 @@
     <string name="home_push">Push</string>
     <string name="home_cast">Cast</string>
     <string name="home_setting">Setting</string>
+    <string name="control_speed">Speed</string>
+    <string name="control_scale">Scale</string>
+    <string name="control_episode_column">Long title columns</string>
+    <string name="control_episode_column_single">Single</string>
+    <string name="control_episode_column_double">Double</string>
+    <string name="control_compact_episode_title">Compact title</string>
+    <string name="control_track">Track</string>
     <string name="home_history">History</string>
     <string name="home_history_button">History</string>
     <string name="home_recommend">Recommend</string>
@@ -23,4 +30,13 @@
     <string name="push_clip">Push clipboard content</string>
     <string name="push_info">Scan QR Code or enter the URL in browser\n<xliff:g name="name">%s</xliff:g></string>
 
+    <string name="device_select">Select devices</string>
+    <string name="device_offline">Device is offline</string>
+    <string name="device_scan">Please scan WebHTV QRCode to bind</string>
+    <string name="timer_5">5 minutes</string>
+    <string name="timer_15">15 minutes</string>
+    <string name="timer_30">30 minutes</string>
+    <string name="timer_60">1 hour</string>
+    <string name="timer_delay">Delay 5 minutes</string>
+    <string name="timer_cancel">Cancel timer</string>
 </resources>

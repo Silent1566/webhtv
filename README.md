@@ -184,30 +184,39 @@ bash gradlew :app:assembleMobileArm64_v8aDebug :app:assembleLeanbackArmeabi_v7aD
 
 - `third_party/mpv-player-jni/src/**`
 - `third_party/mpv-player-jni/include/mpv/client.h`
+- `third_party/mpv-player-jni/include/mpv/stream_cb.h`
 - 升级 MPV client API，或新的 `libmpv.so` 与现有 JNI 头文件/API 不兼容
 
 当前 `libmpv.so` 同时启用 OpenGL 和 Vulkan；`libplayer.so` 由本仓库 `third_party/mpv-player-jni` 构建，用于保留 END_FILE reason/error 等本地桥接能力。当前 native 基线：
 
 | ABI | MPV | FFmpeg | libplacebo | 说明 |
 | --- | --- | --- | --- | --- |
-| `arm64-v8a` | `0.41.0-556-g9ce79bcaa` | `5ba2525c7aff`（8.0.git） | `7.362.0` / `82224764a981` | 已验证 OpenGL LUT 效果、预览分割线/滑动和 Vulkan |
-| `armeabi-v7a` | `0.41.0-224-gd54bad563` | `N-122998-g5ba2525c7a` | `7.360.0-3-gc93aa134` | 仍为原 32 位 Vulkan 基线，不能与 arm64 二进制混用 |
+| `arm64-v8a` | `0.41.0-556-g9ce79bcaa` | `5ba2525c7aff`（8.0.git） | `7.362.0` / `82224764a981` | OpenGL、Vulkan、LUT 和 Blu-ray ISO 时间轴/seek 已验证 |
+| `armeabi-v7a` | `0.41.0-556-g9ce79bcaa` | `5ba2525c7aff`（8.0.git） | `7.362.0` / `82224764a981` | 与 arm64 使用相同锁定源码和光盘时间轴补丁，独立生成 32 位产物 |
 
 替换或升级 MPV native 时必须遵守：
 
 - `libmpv.so`、FFmpeg（codec/device/filter/format/util/swresample/swscale）、libplacebo 和 `libc++_shared.so` 必须按同一 ABI、同一兼容构建成套更新。禁止只替换 `libmpv.so`；否则常见结果是 `cannot locate symbol` 或进入播放即失败。
-- arm64 本次验证组合固定为 MPV `9ce79bcaa0132660a2e45b6bfc1fb0c199665277`、FFmpeg `5ba2525c7affc29cbd99e6266946b382d3fffe8b`、libplacebo `82224764a98164ce9d2d9a10e4fefca934e475fb`、NDK `28.2.13676358`。该 MPV 要求 libplacebo `>= 7.360.1`，旧 `7.360.0` 不能直接链接。
+- 两个 ABI 的验证组合均固定为 MPV `9ce79bcaa0132660a2e45b6bfc1fb0c199665277`、FFmpeg `5ba2525c7affc29cbd99e6266946b382d3fffe8b`、libplacebo `82224764a98164ce9d2d9a10e4fefca934e475fb`、NDK `28.2.13676358`。该 MPV 要求 libplacebo `>= 7.360.1`，旧 `7.360.0` 不能直接链接。
 - FFmpeg 文件名、ELF `SONAME` 和所有 `DT_NEEDED` 都要从 `libav*`/`libsw*` 等长改为 `libmv*`/`libmw*`，不能只重命名文件，否则会和 `nextlib-media3ext` 内置 FFmpeg 发生 Android linker 复用冲突。
-- 更新后用 NDK `llvm-readelf -d` 确认没有残留 `libav*.so`/`libsw*.so` 依赖，再分别回归 OpenGL 普通播放、LUT 效果、预览分割线连续滑动、Vulkan、字幕切换和硬解。
+- 固定 MPV 源码会应用 `third_party/patches/mpv-stream-cb-disc-controls.patch`。该补丁扩展 `stream_cb` 光盘控制并接入 `demux_disc`；修改补丁或 `stream_cb.h` 后必须同时重建 `libmpv.so` 和 `libplayer.so`。
+- 更新后用 NDK `llvm-readelf -d` 确认没有残留 `libav*.so`/`libsw*.so` 依赖，再分别回归 OpenGL 普通播放、LUT 效果、预览分割线连续滑动、Vulkan、字幕切换、硬解，以及 Blu-ray ISO 初始完整时长和跨 M2TS seek。
 
-从固定源码重新生成 arm64 MPV/FFmpeg `.so`：
+从固定源码重新生成单个 ABI 的 MPV/FFmpeg `.so`：
 
 ```bash
 scripts/build_mpv_native.sh --abi arm64-v8a --install
 bash gradlew :app:assembleMobileArm64_v8aRelease -PfastRelease=true
 ```
 
-脚本读取 `third_party/mpv-native-lock.json`，自动下载固定 commit、构建依赖、修改 ELF 依赖名、strip并校验。普通 Gradle 和 GitHub Actions 不会调用该脚本，仍直接复用仓库已提交的 `.so`。完整环境准备、两 ABI 构建、输出目录和故障处理见 [MPV Native 可复现构建](third_party/mpv-native-build.md)。
+同时重新生成两套 ARM ABI 和匹配的 JNI 桥：
+
+```bash
+scripts/build_mpv_native.sh --abi all --install
+scripts/build_mpv_player_jni.sh
+```
+
+脚本读取 `third_party/mpv-native-lock.json`，自动下载固定 commit、应用 MPV 光盘控制补丁、构建依赖、修改 ELF 依赖名、strip 并校验。普通 Gradle 和 GitHub Actions 不会调用该脚本，仍直接复用仓库已提交的 `.so`。完整环境准备、两 ABI 构建、输出目录和故障处理见 [MPV Native 可复现构建](third_party/mpv-native-build.md)。
 
 只重建 App JNI 桥接库 `libplayer.so`：
 

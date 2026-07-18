@@ -162,6 +162,25 @@ public class CustomSeekView extends FrameLayout implements Player.Listener, Time
         player.play();
     }
 
+    public void previewSeekPosition(long positionMs) {
+        long duration = currentDuration > 0 ? currentDuration : player == null ? 0 : Math.max(0, player.getDuration());
+        long position = duration > 0 ? Util.constrainValue(positionMs, 0, duration) : Math.max(0, positionMs);
+        removeCallbacks(runnable);
+        scrubbing = true;
+        timeBar.setPosition(position);
+        positionView.setText(stringToTime(position));
+    }
+
+    public void commitSeekPreview(long positionMs) {
+        long duration = currentDuration > 0 ? currentDuration : player == null ? 0 : Math.max(0, player.getDuration());
+        long position = duration > 0 ? Util.constrainValue(positionMs, 0, duration) : Math.max(0, positionMs);
+        scrubbing = false;
+        timeBar.setPosition(position);
+        positionView.setText(stringToTime(position));
+        removeCallbacks(runnable);
+        postDelayed(runnable, 350);
+    }
+
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();

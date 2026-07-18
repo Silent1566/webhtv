@@ -1,7 +1,6 @@
 package com.fongmi.android.tv.ui.adapter;
 
 import android.content.res.ColorStateList;
-import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -16,6 +15,7 @@ import com.fongmi.android.tv.databinding.AdapterSiteBinding;
 import com.fongmi.android.tv.databinding.AdapterSiteSwitchBinding;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.setting.SiteHealthStore;
+import com.fongmi.android.tv.setting.SiteNameStore;
 import com.github.catvod.crawler.SpiderDebug;
 
 import java.util.ArrayList;
@@ -62,9 +62,8 @@ public class SiteAdapter extends RecyclerView.Adapter<SiteAdapter.ViewHolder> {
         String text = keyword == null ? "" : keyword.trim().toLowerCase(Locale.getDefault());
         mItems.clear();
         for (Site site : allItems) {
-            String name = site.getName();
-            boolean matchGroup = TextUtils.isEmpty(tag) || name.contains(tag);
-            boolean matchKeyword = TextUtils.isEmpty(text) || name.toLowerCase(Locale.getDefault()).contains(text) || site.getKey().toLowerCase(Locale.getDefault()).contains(text);
+            boolean matchGroup = site.inGroup(tag);
+            boolean matchKeyword = SiteNameStore.matchesSearch(site, text);
             if (matchGroup && matchKeyword) mItems.add(site);
         }
         displayLimit = Integer.MAX_VALUE;
@@ -215,13 +214,13 @@ public class SiteAdapter extends RecyclerView.Adapter<SiteAdapter.ViewHolder> {
         void bind(Site item) {
             this.item = item;
             if (actionBinding != null) {
-                actionBinding.text.setText(item.getName());
+                actionBinding.text.setText(item.getDisplayName());
                 actionBinding.health.setBackgroundTintList(ColorStateList.valueOf(SiteHealthStore.getColor(item)));
                 actionBinding.check.setChecked(getChecked(item));
                 actionBinding.text.setSelected(item.isSelected());
                 actionBinding.getRoot().setSelected(item.isSelected());
             } else {
-                switchBinding.text.setText(item.getName());
+                switchBinding.text.setText(item.getDisplayName());
                 switchBinding.health.setBackgroundTintList(ColorStateList.valueOf(SiteHealthStore.getColor(item)));
                 switchBinding.text.setSelected(item.isSelected());
                 switchBinding.getRoot().setSelected(item.isSelected());

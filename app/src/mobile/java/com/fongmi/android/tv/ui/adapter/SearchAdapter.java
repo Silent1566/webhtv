@@ -71,6 +71,7 @@ public class SearchAdapter extends BaseDiffAdapter<Vod, RecyclerView.ViewHolder>
         ListHolder(@NonNull AdapterSearchBinding binding) {
             super(binding.getRoot());
             this.binding = binding;
+            binding.remark.setSelected(true);
         }
 
         private void initView(Vod item) {
@@ -91,6 +92,7 @@ public class SearchAdapter extends BaseDiffAdapter<Vod, RecyclerView.ViewHolder>
         GridHolder(@NonNull AdapterVodRectBinding binding) {
             super(binding.getRoot());
             this.binding = binding;
+            binding.remark.setSelected(true);
             applySize();
         }
 

@@ -5,7 +5,9 @@ import org.junit.Test;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotSame;
+import static org.junit.Assert.assertTrue;
 
 public class HistoryPlaybackTest {
 
@@ -35,6 +37,41 @@ public class HistoryPlaybackTest {
         assertEquals("site@@vod@@2", result.getKey());
         assertEquals("第2集", result.getVodRemarks());
         assertEquals(90_000, result.getPosition());
+    }
+
+    @Test
+    public void replaceSameKeyDoesNotChangeKey() {
+        History history = history("site@@vod@@1", "片名", "第1集", "url-1", 10_000, 300_000);
+
+        history.replace("site@@vod@@1");
+
+        assertEquals("site@@vod@@1", history.getKey());
+    }
+
+    @Test
+    public void shouldMergeDoesNotMatchWhenDurationMissing() {
+        History current = history("site@@a@@1", "同名剧", "第1集", "url-1", 10_000, 0);
+        History other = history("site@@b@@1", "同名剧", "第1集", "url-2", 20_000, 300_000);
+
+        assertFalse(other.shouldMerge(current, false));
+        assertTrue(other.shouldMerge(current, true));
+    }
+
+    @Test
+    public void shouldMergeMatchesSimilarDurationAcrossSources() {
+        History current = history("site@@a@@1", "同名剧", "第1集", "url-1", 10_000, 300_000);
+        History other = history("site@@b@@1", "同名剧", "第1集", "url-2", 20_000, 305_000);
+
+        assertTrue(other.shouldMerge(current, false));
+    }
+
+    @Test
+    public void shouldMergeSkipsSameKeyUnlessForced() {
+        History current = history("site@@a@@1", "同名剧", "第1集", "url-1", 10_000, 300_000);
+        History other = history("site@@a@@1", "同名剧", "第1集", "url-1", 20_000, 300_000);
+
+        assertFalse(other.shouldMerge(current, false));
+        assertTrue(other.shouldMerge(current, true));
     }
 
     private static History history(String key, String name, String remarks, String episodeUrl, long position, long duration) {

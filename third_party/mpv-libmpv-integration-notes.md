@@ -114,3 +114,29 @@ no audio or video data played
 
 Passing these URLs directly to libmpv is not enough. MPV support for those sources
 requires an equivalent local HLS decrypt/remux proxy or native demuxer support.
+
+## Remote Blu-ray ISO timeline
+
+The `webhtv-dvdiso://` stream is byte-backed by the App's HTTP Range reader, but
+Blu-ray playback must not be treated as a plain MPEG-TS file. Multi-clip playlists
+can reset PTS/DTS between M2TS files, so FFmpeg duration probing can report only
+the currently parsed/readahead boundary and ordinary byte seeks can land on the
+wrong playback time.
+
+The pinned MPV source therefore applies
+`third_party/patches/mpv-stream-cb-disc-controls.patch`. For Blu-ray ISO sessions,
+the JNI stream callback exposes the same controls used by MPV's built-in
+`stream_bluray.c` and forces the `+disc` wrapper:
+
+- playlist duration from `BLURAY_TITLE_INFO.duration`;
+- current playlist time from `bd_tell_time()`;
+- time seeks through `bd_seek_time()`;
+- chapter start times and MPEG-TS PID language lookup.
+
+`demux_disc` remains responsible for dropping the nested lavf buffers after a
+seek, reinitializing the base time, and remapping timestamp discontinuities.
+The patch also makes nested lavf recognize a custom `+disc` stream as optical
+media, preventing its flush path from issuing a byte seek that would overwrite
+the preceding `bd_seek_time()` result.
+Do not replace the standard `seek absolute+exact` command with a private direct
+stream seek command, because that bypasses `demux_disc`'s reinitialization state.

@@ -15,6 +15,8 @@ import java.util.List;
 public class CollectAdapter extends BaseDiffAdapter<Collect, CollectAdapter.ViewHolder> {
 
     private final OnClickListener listener;
+    private int progressCurrent;
+    private int progressTotal;
 
     public CollectAdapter(OnClickListener listener) {
         this.listener = listener;
@@ -28,6 +30,12 @@ public class CollectAdapter extends BaseDiffAdapter<Collect, CollectAdapter.View
     public void add(List<Vod> items) {
         if (getItemCount() == 0) return;
         getItem(0).getList().addAll(items);
+    }
+
+    public void setProgress(int current, int total) {
+        progressTotal = Math.max(0, total);
+        progressCurrent = Math.max(0, Math.min(current, progressTotal));
+        if (getItemCount() > 0) notifyItemChanged(0);
     }
 
     public int getPosition() {
@@ -53,8 +61,10 @@ public class CollectAdapter extends BaseDiffAdapter<Collect, CollectAdapter.View
     @Override
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         Collect item = getItem(position);
+        boolean all = "all".equals(item.getSite().getKey());
         holder.binding.text.setSelected(item.isSelected());
-        holder.binding.text.setText(item.getSite().getName());
+        String name = item.getSite().getDisplayName();
+        holder.binding.text.setText(all && progressTotal > 0 ? name + " " + progressCurrent + "/" + progressTotal : name);
         holder.binding.text.setOnClickListener(v -> {
             int pos = holder.getBindingAdapterPosition();
             if (pos != RecyclerView.NO_POSITION) listener.onItemClick(pos, getItem(pos));

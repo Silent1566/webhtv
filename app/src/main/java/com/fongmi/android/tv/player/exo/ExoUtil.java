@@ -15,7 +15,9 @@ import android.view.accessibility.CaptioningManager;
 
 import androidx.annotation.NonNull;
 import androidx.media3.common.AudioAttributes;
+import androidx.media3.common.audio.AudioProcessor;
 import androidx.media3.common.C;
+import androidx.media3.common.ColorInfo;
 import androidx.media3.common.Format;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.MimeTypes;
@@ -28,6 +30,7 @@ import androidx.media3.exoplayer.LoadControl;
 import androidx.media3.exoplayer.Renderer;
 import androidx.media3.exoplayer.RenderersFactory;
 import androidx.media3.exoplayer.audio.AudioSink;
+import androidx.media3.exoplayer.audio.AudioOutputProvider;
 import androidx.media3.exoplayer.audio.AudioRendererEventListener;
 import androidx.media3.exoplayer.audio.AudioTrackAudioOutputProvider;
 import androidx.media3.exoplayer.audio.DefaultAudioSink;
@@ -56,6 +59,9 @@ import com.fongmi.android.tv.player.track.LangUtil;
 import com.fongmi.android.tv.setting.PlaybackPerformanceSetting;
 import com.fongmi.android.tv.setting.ExoPerformanceSetting;
 import com.fongmi.android.tv.setting.PlayerSetting;
+import com.fongmi.android.tv.subtitle.RealtimeSubtitleAudioOutputProvider;
+import com.fongmi.android.tv.subtitle.RealtimeSubtitleBufferSizeProvider;
+import com.fongmi.android.tv.subtitle.RealtimeSubtitleController;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.UrlUtil;
@@ -391,20 +397,20 @@ public class ExoUtil {
     }
 
     private static RenderersFactory buildPlaybackRenderersFactory(int decode) {
-        return buildRenderersFactory(getAudioRenderMode(), getVideoRenderMode(decode), isAudioPrefer(decode), PlayerSetting.isVideoPrefer(PlayerSetting.EXO), decode == PlayerEngine.SOFT && PlaybackPerformanceSetting.isSoftVideoTuneEnabled());
+        return buildRenderersFactory(getAudioRenderMode(), getVideoRenderMode(decode), isAudioPrefer(decode), PlayerSetting.isVideoPrefer(PlayerSetting.EXO), decode == PlayerEngine.SOFT && PlaybackPerformanceSetting.isSoftVideoTuneEnabled(), true);
     }
 
     static RenderersFactory buildRenderersFactory() {
-        return buildRenderersFactory(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER, DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER, PlayerSetting.isAudioPrefer(PlayerSetting.EXO), PlayerSetting.isVideoPrefer(PlayerSetting.EXO), false);
+        return buildRenderersFactory(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER, DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER, PlayerSetting.isAudioPrefer(PlayerSetting.EXO), PlayerSetting.isVideoPrefer(PlayerSetting.EXO), false, false);
     }
 
-    private static RenderersFactory buildRenderersFactory(int audioRenderMode, int videoRenderMode, boolean audioPrefer, boolean videoPrefer, boolean softVideoTune) {
+    private static RenderersFactory buildRenderersFactory(int audioRenderMode, int videoRenderMode, boolean audioPrefer, boolean videoPrefer, boolean softVideoTune, boolean realtimePipeline) {
         int mode = PlayerSetting.getFFmpegMode();
         if (useFfmpegVideoRenderer(mode)) {
-            return buildNextLibRenderersFactory(audioRenderMode, videoRenderMode, audioPrefer, videoPrefer, softVideoTune);
+            return buildNextLibRenderersFactory(audioRenderMode, videoRenderMode, audioPrefer, videoPrefer, softVideoTune, realtimePipeline);
         }
-        if (useFfmpegAudioFallback(mode)) return buildSimpleRenderersFactory(audioRenderMode, videoRenderMode, audioPrefer, videoPrefer);
-        return buildOfficialRenderersFactory(audioRenderMode, videoRenderMode, audioPrefer, videoPrefer);
+        if (useFfmpegAudioFallback(mode)) return buildSimpleRenderersFactory(audioRenderMode, videoRenderMode, audioPrefer, videoPrefer, realtimePipeline);
+        return buildOfficialRenderersFactory(audioRenderMode, videoRenderMode, audioPrefer, videoPrefer, realtimePipeline);
     }
 
     static boolean useFfmpegAudioFallback(int mode) {
@@ -415,11 +421,11 @@ public class ExoUtil {
         return mode == PlayerSetting.FFMPEG_MODE_NEXTLIB;
     }
 
-    private static RenderersFactory buildNextLibRenderersFactory(int audioRenderMode, int videoRenderMode, boolean audioPrefer, boolean videoPrefer, boolean softVideoTune) {
+    private static RenderersFactory buildNextLibRenderersFactory(int audioRenderMode, int videoRenderMode, boolean audioPrefer, boolean videoPrefer, boolean softVideoTune, boolean realtimePipeline) {
         DefaultRenderersFactory factory = new FfmpegRenderersFactory(App.get(), audioRenderMode, videoRenderMode, audioPrefer, videoPrefer, softVideoTune) {
             @Override
             protected AudioSink buildAudioSink(@NonNull Context context, boolean enableFloatOutput, boolean enableAudioOutputPlaybackParams) {
-                return ExoUtil.buildAudioSink(context, enableFloatOutput, enableAudioOutputPlaybackParams);
+                return ExoUtil.buildAudioSink(context, enableFloatOutput, enableAudioOutputPlaybackParams, realtimePipeline);
             }
         };
         if (ExoPerformanceSetting.getCodecQueueMode() == ExoPerformanceSetting.CODEC_QUEUE_ASYNC) factory.forceEnableMediaCodecAsynchronousQueueing();
@@ -429,11 +435,11 @@ public class ExoUtil {
         return factory.setEnableDecoderFallback(PlaybackPerformanceSetting.isDecoderFallbackEnabled()).setExtensionRendererMode(Math.max(audioRenderMode, videoRenderMode));
     }
 
-    private static RenderersFactory buildAudioFallbackRenderersFactory(int audioRenderMode, int videoRenderMode, boolean audioPrefer) {
+    private static RenderersFactory buildAudioFallbackRenderersFactory(int audioRenderMode, int videoRenderMode, boolean audioPrefer, boolean realtimePipeline) {
         DefaultRenderersFactory factory = new FfmpegAudioFallbackRenderersFactory(App.get(), audioRenderMode, audioPrefer) {
             @Override
             protected AudioSink buildAudioSink(@NonNull Context context, boolean enableFloatOutput, boolean enableAudioOutputPlaybackParams) {
-                return ExoUtil.buildAudioSink(context, enableFloatOutput, enableAudioOutputPlaybackParams);
+                return ExoUtil.buildAudioSink(context, enableFloatOutput, enableAudioOutputPlaybackParams, realtimePipeline);
             }
         };
         return factory
@@ -441,11 +447,11 @@ public class ExoUtil {
             .setExtensionRendererMode(Math.max(audioRenderMode, videoRenderMode));
     }
 
-    private static RenderersFactory buildOfficialRenderersFactory(int audioRenderMode, int videoRenderMode, boolean audioPrefer, boolean videoPrefer) {
+    private static RenderersFactory buildOfficialRenderersFactory(int audioRenderMode, int videoRenderMode, boolean audioPrefer, boolean videoPrefer, boolean realtimePipeline) {
         DefaultRenderersFactory factory = new DefaultRenderersFactory(App.get()) {
             @Override
             protected AudioSink buildAudioSink(@NonNull Context context, boolean enableFloatOutput, boolean enableAudioOutputPlaybackParams) {
-                return ExoUtil.buildAudioSink(context, enableFloatOutput, enableAudioOutputPlaybackParams);
+                return ExoUtil.buildAudioSink(context, enableFloatOutput, enableAudioOutputPlaybackParams, realtimePipeline);
             }
         };
         if (PlayerSetting.isExoEnhanced()) {
@@ -459,13 +465,32 @@ public class ExoUtil {
             .setExtensionRendererMode(Math.max(audioRenderMode, videoRenderMode));
     }
 
-    private static RenderersFactory buildSimpleRenderersFactory(int audioRenderMode, int videoRenderMode, boolean audioPrefer, boolean videoPrefer) {
-        return buildAudioFallbackRenderersFactory(audioRenderMode, videoRenderMode, audioPrefer);
+    private static RenderersFactory buildSimpleRenderersFactory(int audioRenderMode, int videoRenderMode, boolean audioPrefer, boolean videoPrefer, boolean realtimePipeline) {
+        return buildAudioFallbackRenderersFactory(audioRenderMode, videoRenderMode, audioPrefer, realtimePipeline);
     }
 
-    private static AudioSink buildAudioSink(Context context, boolean enableFloatOutput, boolean enableAudioOutputPlaybackParams) {
-        DefaultAudioSink.Builder builder = new DefaultAudioSink.Builder(context).setEnableFloatOutput(enableFloatOutput).setEnableAudioOutputPlaybackParameters(enableAudioOutputPlaybackParams);
-        if (!PlayerSetting.isAudioPassThrough(PlayerSetting.EXO)) builder.setAudioOutputProvider(new AudioTrackAudioOutputProvider.Builder(null).build());
+    private static AudioSink buildAudioSink(Context context, boolean enableFloatOutput, boolean enableAudioOutputPlaybackParams, boolean realtimePipeline) {
+        RealtimeSubtitleController controller = realtimePipeline ? RealtimeSubtitleController.get() : null;
+        boolean lookahead = controller != null && controller.isAudioPipelineRequested();
+        if (!lookahead) {
+            if (controller != null) controller.createAudioPipeline(false);
+            DefaultAudioSink.Builder builder = new DefaultAudioSink.Builder(context)
+                    .setEnableFloatOutput(enableFloatOutput)
+                    .setEnableAudioOutputPlaybackParameters(enableAudioOutputPlaybackParams);
+            if (!PlayerSetting.isAudioPassThrough(PlayerSetting.EXO)) builder.setAudioOutputProvider(new AudioTrackAudioOutputProvider.Builder(null).build());
+            return builder.build();
+        }
+        RealtimeSubtitleController.AudioPipeline realtime = controller.createAudioPipeline(true);
+        DefaultAudioSink.Builder builder = new DefaultAudioSink.Builder(context)
+                .setEnableFloatOutput(enableFloatOutput)
+                .setEnableAudioOutputPlaybackParameters(enableAudioOutputPlaybackParams)
+                .setAudioProcessors(new AudioProcessor[]{realtime.audioProcessor()});
+        if (!PlayerSetting.isAudioPassThrough(PlayerSetting.EXO)) {
+            AudioTrackAudioOutputProvider.Builder outputBuilder = new AudioTrackAudioOutputProvider.Builder(null);
+            if (lookahead) outputBuilder.setAudioTrackBufferSizeProvider(new RealtimeSubtitleBufferSizeProvider());
+            AudioOutputProvider output = outputBuilder.build();
+            builder.setAudioOutputProvider(new RealtimeSubtitleAudioOutputProvider(output, realtime.clockSink()));
+        }
         return builder.build();
     }
 
@@ -522,7 +547,7 @@ public class ExoUtil {
         protected void buildVideoRenderers(Context context, int extensionRendererMode, MediaCodecSelector mediaCodecSelector, boolean enableDecoderFallback, Handler eventHandler, VideoRendererEventListener eventListener, long allowedVideoJoiningTimeMs, ArrayList<Renderer> out) {
             super.buildVideoRenderers(context, videoRenderMode, getVideoCodecSelector(mediaCodecSelector), enableDecoderFallback, eventHandler, eventListener, allowedVideoJoiningTimeMs, out);
             if (videoRenderMode == EXTENSION_RENDERER_MODE_OFF) {
-                out.add(new DolbyVisionHevcFallbackRenderer(context, getCodecAdapterFactory(), getVideoCodecSelector(mediaCodecSelector), allowedVideoJoiningTimeMs, enableDecoderFallback, eventHandler, eventListener));
+                out.add(new DolbyVisionHdr10FallbackRenderer(context, getCodecAdapterFactory(), getVideoCodecSelector(mediaCodecSelector), allowedVideoJoiningTimeMs, enableDecoderFallback, eventHandler, eventListener));
                 return;
             }
             try {
@@ -554,7 +579,7 @@ public class ExoUtil {
         }
     }
 
-    private static class FfmpegAudioFallbackRenderersFactory extends DefaultRenderersFactory {
+private static class FfmpegAudioFallbackRenderersFactory extends DefaultRenderersFactory {
 
         private final int audioRenderMode;
         private final boolean audioPrefer;
@@ -582,48 +607,63 @@ public class ExoUtil {
         }
     }
 
-    private static final class DolbyVisionHevcFallbackRenderer extends MediaCodecVideoRenderer {
+    private static final class DolbyVisionHdr10FallbackRenderer extends MediaCodecVideoRenderer {
 
-        DolbyVisionHevcFallbackRenderer(Context context, MediaCodecAdapter.Factory codecAdapterFactory, MediaCodecSelector mediaCodecSelector, long allowedJoiningTimeMs, boolean enableDecoderFallback, Handler eventHandler, VideoRendererEventListener eventListener) {
+        DolbyVisionHdr10FallbackRenderer(Context context, MediaCodecAdapter.Factory codecAdapterFactory, MediaCodecSelector mediaCodecSelector, long allowedJoiningTimeMs, boolean enableDecoderFallback, Handler eventHandler, VideoRendererEventListener eventListener) {
             super(context, codecAdapterFactory, mediaCodecSelector, allowedJoiningTimeMs, enableDecoderFallback, eventHandler, eventListener, DefaultRenderersFactory.MAX_DROPPED_VIDEO_FRAME_COUNT_TO_NOTIFY);
         }
 
         @Override
         public String getName() {
-            return "MediaCodecVideoRenderer-DV5-HEVC";
+            return "MediaCodecVideoRenderer-DV-HDR10";
         }
 
         @Override
         protected int supportsFormat(MediaCodecSelector mediaCodecSelector, Format format) throws androidx.media3.exoplayer.mediacodec.MediaCodecUtil.DecoderQueryException {
-            if (!isDolbyVisionProfile5(format)) return C.FORMAT_UNSUPPORTED_TYPE;
-            Format hevc = asHevc(format);
-            int support = super.supportsFormat(mediaCodecSelector, hevc);
-            if (SpiderDebug.isEnabled()) SpiderDebug.log("exo-dv", "DV5 HEVC fallback support=%d codecs=%s size=%dx%d", support, format.codecs, format.width, format.height);
+            if (!isDolbyVisionHdr10Fallback(format)) return C.FORMAT_UNSUPPORTED_TYPE;
+            Format hdr10 = asHdr10Hevc(format);
+            int support = super.supportsFormat(mediaCodecSelector, hdr10);
+            if (SpiderDebug.isEnabled()) SpiderDebug.log("exo-dv", "DV HDR10 forced fallback support=%d codecs=%s size=%dx%d color=%s", support, format.codecs, format.width, format.height, hdr10.colorInfo);
             return support;
         }
 
         @Override
         protected List<MediaCodecInfo> getDecoderInfos(MediaCodecSelector mediaCodecSelector, Format format, boolean requiresSecureDecoder) throws androidx.media3.exoplayer.mediacodec.MediaCodecUtil.DecoderQueryException {
-            if (!isDolbyVisionProfile5(format)) return List.of();
-            List<MediaCodecInfo> infos = super.getDecoderInfos(mediaCodecSelector, asHevc(format), requiresSecureDecoder);
-            if (SpiderDebug.isEnabled()) SpiderDebug.log("exo-dv", "DV5 HEVC fallback decoders=%s", decoderNames(infos));
+            if (!isDolbyVisionHdr10Fallback(format)) return List.of();
+            List<MediaCodecInfo> infos = super.getDecoderInfos(mediaCodecSelector, asHdr10Hevc(format), requiresSecureDecoder);
+            if (SpiderDebug.isEnabled()) SpiderDebug.log("exo-dv", "DV HDR10 forced fallback codecs=%s decoders=%s", format.codecs, decoderNames(infos));
             return infos;
         }
 
         @Override
         protected MediaCodecAdapter.Configuration getMediaCodecConfiguration(MediaCodecInfo codecInfo, Format format, MediaCrypto crypto, float codecOperatingRate) {
-            if (isDolbyVisionProfile5(format) && SpiderDebug.isEnabled()) SpiderDebug.log("exo-dv", "DV5 configure as HEVC decoder=%s codecMime=%s", codecInfo.name, codecInfo.codecMimeType);
-            return super.getMediaCodecConfiguration(codecInfo, isDolbyVisionProfile5(format) ? asHevc(format) : format, crypto, codecOperatingRate);
+            if (isDolbyVisionHdr10Fallback(format) && SpiderDebug.isEnabled()) SpiderDebug.log("exo-dv", "DV configure as HDR10 HEVC codecs=%s decoder=%s codecMime=%s", format.codecs, codecInfo.name, codecInfo.codecMimeType);
+            return super.getMediaCodecConfiguration(codecInfo, isDolbyVisionHdr10Fallback(format) ? asHdr10Hevc(format) : format, crypto, codecOperatingRate);
+        }
+
+        private static boolean isDolbyVisionHdr10Fallback(Format format) {
+            return isDolbyVisionProfile5(format) || isDolbyVisionProfile7(format);
         }
 
         private static boolean isDolbyVisionProfile5(Format format) {
-            if (format == null || !MimeTypes.VIDEO_DOLBY_VISION.equals(format.sampleMimeType) || format.codecs == null) return false;
-            String codecs = format.codecs.toLowerCase(java.util.Locale.US);
-            return codecs.startsWith("dvhe.05.") || codecs.startsWith("dvh1.05.");
+            return hasDolbyVisionProfile(format, "05");
         }
 
-        private static Format asHevc(Format format) {
-            return format.buildUpon().setSampleMimeType(MimeTypes.VIDEO_H265).setCodecs(null).build();
+        private static boolean isDolbyVisionProfile7(Format format) {
+            return hasDolbyVisionProfile(format, "07");
+        }
+
+        private static boolean hasDolbyVisionProfile(Format format, String profile) {
+            if (format == null || !MimeTypes.VIDEO_DOLBY_VISION.equals(format.sampleMimeType) || format.codecs == null) return false;
+            String codecs = format.codecs.toLowerCase(java.util.Locale.US);
+            return codecs.startsWith("dvhe." + profile + ".") || codecs.startsWith("dvh1." + profile + ".");
+        }
+
+        private static Format asHdr10Hevc(Format format) {
+            ColorInfo colorInfo = format.colorInfo == null
+                    ? new ColorInfo.Builder().setColorSpace(C.COLOR_SPACE_BT2020).setColorRange(C.COLOR_RANGE_LIMITED).setColorTransfer(C.COLOR_TRANSFER_ST2084).build()
+                    : format.colorInfo.buildUpon().setColorSpace(C.COLOR_SPACE_BT2020).setColorRange(C.COLOR_RANGE_LIMITED).setColorTransfer(C.COLOR_TRANSFER_ST2084).build();
+            return format.buildUpon().setSampleMimeType(MimeTypes.VIDEO_H265).setCodecs(null).setColorInfo(colorInfo).build();
         }
 
         private static String decoderNames(List<MediaCodecInfo> infos) {

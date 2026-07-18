@@ -124,7 +124,7 @@ public class CollectAdapter extends RecyclerView.Adapter<CollectAdapter.ViewHold
             int adapterPosition = holder.getBindingAdapterPosition();
             return listener != null && adapterPosition >= 0 && listener.onCollectKey(adapterPosition, keyCode, event);
         });
-        holder.binding.text.setText(item.getSite().getName());
+        holder.binding.text.setText(item.getSite().getDisplayName());
         holder.binding.text.setSelected(holder.binding.text.hasFocus() || item.isSelected());
         holder.binding.text.setOnFocusChangeListener((v, hasFocus) -> holder.binding.text.setSelected(hasFocus || item.isSelected()));
     }

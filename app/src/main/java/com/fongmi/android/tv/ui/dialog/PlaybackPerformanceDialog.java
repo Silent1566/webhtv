@@ -434,6 +434,8 @@ public final class PlaybackPerformanceDialog extends DialogFragment {
             case PlaybackPerformanceCatalog.MPV_HWDEC -> MpvPerformanceSetting.getHwdecText();
             case PlaybackPerformanceCatalog.MPV_FRAME_RATE -> MpvPerformanceSetting.getFrameRateText();
             case PlaybackPerformanceCatalog.MPV_HLS_BITRATE -> MpvPerformanceSetting.getHlsBitrateText();
+            case PlaybackPerformanceCatalog.MPV_REBUFFER -> formatSeconds(MpvPerformanceSetting.getRebufferMs());
+            case PlaybackPerformanceCatalog.MPV_OPTION_PRIORITY -> MpvPerformanceSetting.getOptionPriorityText();
             case PlaybackPerformanceCatalog.MPV_SYNC -> MpvPerformanceSetting.getSyncText();
             case PlaybackPerformanceCatalog.MPV_FRAME_DROP -> MpvPerformanceSetting.getFrameDropText();
             case PlaybackPerformanceCatalog.MPV_INTERPOLATION -> onOff(MpvPerformanceSetting.isInterpolation());
@@ -512,6 +514,14 @@ public final class PlaybackPerformanceDialog extends DialogFragment {
             };
             case PlaybackPerformanceCatalog.MPV_HLS_BITRATE -> () -> {
                 MpvPerformanceSetting.putHlsBitrateMode((MpvPerformanceSetting.getHlsBitrateMode() + 1) % 4);
+                refresh();
+            };
+            case PlaybackPerformanceCatalog.MPV_REBUFFER -> () -> {
+                MpvPerformanceSetting.putRebufferMs(MpvPerformanceSetting.nextRebufferMs());
+                refresh();
+            };
+            case PlaybackPerformanceCatalog.MPV_OPTION_PRIORITY -> () -> {
+                MpvPerformanceSetting.putOptionPriority(MpvPerformanceSetting.isPerformancePriority() ? MpvPerformanceSetting.PRIORITY_CONFIG : MpvPerformanceSetting.PRIORITY_PERFORMANCE);
                 refresh();
             };
             case PlaybackPerformanceCatalog.MPV_SYNC -> () -> {

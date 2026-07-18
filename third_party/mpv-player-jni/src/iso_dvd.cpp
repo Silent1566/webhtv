@@ -1,10 +1,14 @@
 #include <jni.h>
+#include <limits.h>
+#include <math.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <atomic>
 #include <mutex>
 #include <string>
+#include <unordered_map>
+#include <vector>
 
 #include <mpv/client.h>
 #include <mpv/stream_cb.h>
@@ -19,6 +23,7 @@
 namespace {
 
 constexpr int DVD_BLOCK = 2048;
+constexpr double BLURAY_TIMEBASE = 90000.0;
 constexpr const char *PROTOCOL = "webhtv-dvdiso";
 
 jclass manager_class;
@@ -36,12 +41,22 @@ struct DvdStream {
     dvdnav_t *nav = nullptr;
     BLURAY *bluray = nullptr;
     IsoKind kind = IsoKind::NONE;
+    uint64_t bluray_duration_ticks = 0;
+    uint32_t bluray_playlist = 0;
+    uint32_t bluray_title_count = 0;
     std::atomic<bool> cancelled{false};
     std::mutex lock;
+    std::unordered_map<int, std::string> track_languages;
+    std::vector<std::string> audio_languages;
+    std::vector<std::string> subtitle_languages;
+    std::vector<uint64_t> chapter_times;
     uint8_t block[DVD_BLOCK];
     int block_offset = DVD_BLOCK;
     int block_size = 0;
 };
+
+std::mutex streams_lock;
+std::unordered_map<int64_t, DvdStream *> active_streams;
 
 JNIEnv *env_for_thread() {
     JNIEnv *env = nullptr;
@@ -201,6 +216,71 @@ int64_t stream_size(void *opaque) {
     return stream ? stream->output_size : MPV_ERROR_UNSUPPORTED;
 }
 
+int stream_control_cb(void *opaque, int command, void *arg) {
+    auto *stream = static_cast<DvdStream *>(opaque);
+    if (!stream || !arg || stream->cancelled || stream->kind != IsoKind::BLURAY || !stream->bluray) {
+        return MPV_STREAM_CB_CONTROL_UNSUPPORTED;
+    }
+    std::lock_guard<std::mutex> guard(stream->lock);
+    switch (command) {
+        case MPV_STREAM_CB_CTRL_GET_TIME_LENGTH:
+            if (!stream->bluray_duration_ticks) return MPV_STREAM_CB_CONTROL_ERROR;
+            *static_cast<double *>(arg) = stream->bluray_duration_ticks / BLURAY_TIMEBASE;
+            return MPV_STREAM_CB_CONTROL_OK;
+        case MPV_STREAM_CB_CTRL_GET_CURRENT_TIME:
+            *static_cast<double *>(arg) = bd_tell_time(stream->bluray) / BLURAY_TIMEBASE;
+            return MPV_STREAM_CB_CONTROL_OK;
+        case MPV_STREAM_CB_CTRL_SEEK_TO_TIME: {
+            double seconds = *static_cast<double *>(arg);
+            if (!isfinite(seconds) || seconds < 0 || !stream->bluray_duration_ticks) {
+                return MPV_STREAM_CB_CONTROL_ERROR;
+            }
+            uint64_t target_ticks;
+            double duration_seconds = stream->bluray_duration_ticks / BLURAY_TIMEBASE;
+            if (seconds >= duration_seconds) {
+                target_ticks = stream->bluray_duration_ticks - 1;
+            } else {
+                target_ticks = static_cast<uint64_t>(seconds * BLURAY_TIMEBASE);
+            }
+            int64_t position = bd_seek_time(stream->bluray, target_ticks);
+            if (position < 0) return MPV_STREAM_CB_CONTROL_ERROR;
+            stream->output_offset = position;
+            uint64_t actual_ticks = bd_tell_time(stream->bluray);
+            ALOGV("iso-bluray timeline seek session=%lld requestedMs=%lld actualMs=%lld byte=%lld",
+                  static_cast<long long>(stream->session_id),
+                  static_cast<long long>(target_ticks / 90),
+                  static_cast<long long>(actual_ticks / 90),
+                  static_cast<long long>(position));
+            return MPV_STREAM_CB_CONTROL_OK;
+        }
+        case MPV_STREAM_CB_CTRL_GET_NUM_CHAPTERS:
+            *static_cast<int *>(arg) = stream->chapter_times.size() > static_cast<size_t>(INT_MAX)
+                    ? INT_MAX : static_cast<int>(stream->chapter_times.size());
+            return MPV_STREAM_CB_CONTROL_OK;
+        case MPV_STREAM_CB_CTRL_GET_CHAPTER_TIME: {
+            double index_value = *static_cast<double *>(arg);
+            if (!isfinite(index_value) || index_value < 0) return MPV_STREAM_CB_CONTROL_ERROR;
+            size_t index = static_cast<size_t>(index_value);
+            if (index >= stream->chapter_times.size()) return MPV_STREAM_CB_CONTROL_ERROR;
+            *static_cast<double *>(arg) = stream->chapter_times[index] / BLURAY_TIMEBASE;
+            return MPV_STREAM_CB_CONTROL_OK;
+        }
+        case MPV_STREAM_CB_CTRL_GET_LANG: {
+            auto *request = static_cast<mpv_stream_cb_lang_req *>(arg);
+            if (request->type != MPV_STREAM_CB_TRACK_AUDIO &&
+                request->type != MPV_STREAM_CB_TRACK_SUBTITLE) {
+                return MPV_STREAM_CB_CONTROL_UNSUPPORTED;
+            }
+            auto language = stream->track_languages.find(request->id);
+            if (language == stream->track_languages.end()) return MPV_STREAM_CB_CONTROL_ERROR;
+            snprintf(request->name, sizeof(request->name), "%s", language->second.c_str());
+            return MPV_STREAM_CB_CONTROL_OK;
+        }
+        default:
+            return MPV_STREAM_CB_CONTROL_UNSUPPORTED;
+    }
+}
+
 void close_java_session(int64_t id) {
     JNIEnv *env = env_for_thread();
     if (!env) return;
@@ -217,6 +297,10 @@ void stream_close(void *opaque) {
     auto *stream = static_cast<DvdStream *>(opaque);
     if (!stream) return;
     stream->cancelled = true;
+    {
+        std::lock_guard<std::mutex> guard(streams_lock);
+        active_streams.erase(stream->session_id);
+    }
     if (stream->nav) dvdnav_close(stream->nav);
     if (stream->bluray) bd_close(stream->bluray);
     close_java_session(stream->session_id);
@@ -260,6 +344,38 @@ bool open_bluray(DvdStream *stream) {
         stream->bluray = nullptr;
         return false;
     }
+    BLURAY_TITLE_INFO *info = bd_get_playlist_info(stream->bluray, playlist, 0);
+    if (info) {
+        stream->bluray_duration_ticks = info->duration ? info->duration : longest;
+        stream->chapter_times.reserve(info->chapter_count);
+        for (uint32_t chapter = 0; chapter < info->chapter_count; ++chapter) {
+            stream->chapter_times.push_back(info->chapters[chapter].start);
+        }
+        for (uint32_t clip_index = 0; clip_index < info->clip_count; ++clip_index) {
+            BLURAY_CLIP_INFO &clip = info->clips[clip_index];
+            auto collect = [&](BLURAY_STREAM_INFO *streams, uint8_t stream_count,
+                               std::vector<std::string> &languages) {
+                if (!streams) return;
+                for (uint8_t i = 0; i < stream_count; ++i) {
+                    BLURAY_STREAM_INFO &item = streams[i];
+                    ALOGV("iso-bluray clip=%u kind=%s index=%u pid=%u coding=%u format=%u rate=%u char=%u lang=%.3s",
+                          clip_index, &languages == &stream->audio_languages ? "audio" : "subtitle", i,
+                          item.pid, item.coding_type, item.format, item.rate, item.char_code, item.lang);
+                    if (!item.pid || !item.lang[0]) continue;
+                    std::string language(reinterpret_cast<const char *>(item.lang), 3);
+                    if (language.empty()) continue;
+                    auto inserted = stream->track_languages.emplace(item.pid, language);
+                    if (inserted.second) languages.push_back(language);
+                }
+            };
+            collect(clip.audio_streams, clip.audio_stream_count, stream->audio_languages);
+            collect(clip.pg_streams, clip.pg_stream_count, stream->subtitle_languages);
+        }
+        bd_free_title_info(info);
+    }
+    if (!stream->bluray_duration_ticks) stream->bluray_duration_ticks = longest;
+    stream->bluray_playlist = playlist;
+    stream->bluray_title_count = count;
     stream->output_size = static_cast<int64_t>(bd_get_title_size(stream->bluray));
     if (stream->output_size <= 0) {
         bd_close(stream->bluray);
@@ -267,8 +383,11 @@ bool open_bluray(DvdStream *stream) {
         return false;
     }
     stream->kind = IsoKind::BLURAY;
-    ALOGV("iso-native opened Blu-ray image playlist=%u titles=%u duration=%llu size=%lld",
-          playlist, count, static_cast<unsigned long long>(longest), static_cast<long long>(stream->output_size));
+    ALOGV("iso-native opened Blu-ray image session=%lld playlist=%u titles=%u durationMs=%llu chapters=%zu size=%lld",
+          static_cast<long long>(stream->session_id), stream->bluray_playlist,
+          stream->bluray_title_count,
+          static_cast<unsigned long long>(stream->bluray_duration_ticks / 90),
+          stream->chapter_times.size(), static_cast<long long>(stream->output_size));
     return true;
 }
 
@@ -290,16 +409,37 @@ int stream_open(void *, char *uri, mpv_stream_cb_info *info) {
         delete stream;
         return MPV_ERROR_LOADING_FAILED;
     }
+    {
+        std::lock_guard<std::mutex> guard(streams_lock);
+        active_streams[stream->session_id] = stream;
+    }
     info->cookie = stream;
     info->read_fn = stream_read;
     info->seek_fn = stream_seek;
     info->size_fn = stream_size;
     info->close_fn = stream_close;
     info->cancel_fn = stream_cancel;
+    if (stream->kind == IsoKind::BLURAY) {
+        info->control_fn = stream_control_cb;
+        info->demuxer = "+disc";
+    }
     return 0;
 }
 
 } // namespace
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_is_xyz_mpv_MPVLib_getIsoTrackLanguage(JNIEnv *env, jclass, jlong session_id,
+                                           jint track_type, jint track_index) {
+    std::lock_guard<std::mutex> guard(streams_lock);
+    auto stream = active_streams.find(session_id);
+    if (stream == active_streams.end() || !stream->second) return nullptr;
+    const std::vector<std::string> *languages = nullptr;
+    if (track_type == 1) languages = &stream->second->audio_languages;
+    if (track_type == 2) languages = &stream->second->subtitle_languages;
+    if (!languages || track_index < 0 || static_cast<size_t>(track_index) >= languages->size()) return nullptr;
+    return env->NewStringUTF((*languages)[track_index].c_str());
+}
 
 bool register_iso_protocol(JNIEnv *env) {
     jclass local = env->FindClass("com/fongmi/android/tv/player/iso/IsoSessionManager");

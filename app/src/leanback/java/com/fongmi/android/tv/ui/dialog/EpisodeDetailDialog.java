@@ -3,6 +3,7 @@ package com.fongmi.android.tv.ui.dialog;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.widget.ImageView;
 import android.widget.TextView;
 
@@ -32,10 +33,29 @@ import java.util.List;
 public class EpisodeDetailDialog {
 
     public static void show(FragmentActivity activity, Episode episode) {
-        show(activity, episode, null);
+        show(activity, episode, null, null, null, null);
     }
 
     public static void show(FragmentActivity activity, Episode episode, Site site) {
+        show(activity, episode, site, null, null, null);
+    }
+
+    public static void show(FragmentActivity activity, Episode episode, Site site,
+                           java.util.List<String> preloadedPhotos,
+                           java.util.List<TmdbPerson> preloadedGuests) {
+        show(activity, episode, site, preloadedPhotos, preloadedGuests, null);
+    }
+
+    /**
+     * 显示剧集详情对话框（可选预加载数据，避免重复请求 API）
+     * @param preloadedPhotos 预加载的剧照列表，null 时异步请求
+     * @param preloadedGuests 预加载的客串演员列表，null 时异步请求
+     * @param dismissListener 对话框关闭回调，null 时不设置
+     */
+    public static void show(FragmentActivity activity, Episode episode, Site site,
+                           java.util.List<String> preloadedPhotos,
+                           java.util.List<TmdbPerson> preloadedGuests,
+                           android.content.DialogInterface.OnDismissListener dismissListener) {
         TmdbEpisode tmdbEpisode = episode.getTmdbEpisode();
         if (tmdbEpisode == null) {
             // 电影没有分集对象，尝试从宿主获取影片级数据
@@ -43,17 +63,19 @@ public class EpisodeDetailDialog {
                 com.fongmi.android.tv.ui.host.TmdbDetailHost host = (com.fongmi.android.tv.ui.host.TmdbDetailHost) activity;
                 com.fongmi.android.tv.bean.TmdbItem movieItem = host.getMatchedTmdbItem();
                 if (movieItem != null && movieItem.isMovie()) {
-                    showMovieDetail(activity, episode, movieItem);
+                    showMovieDetail(activity, episode, movieItem, dismissListener);
                     return;
                 }
             }
             // 没有TMDB数据，显示简单信息
-            showSimpleDialog(activity, episode);
+            showSimpleDialog(activity, episode, dismissListener);
             return;
         }
 
         View view = LayoutInflater.from(activity).inflate(R.layout.dialog_episode_detail, null);
 
+        android.widget.ScrollView scrollView = view.findViewById(R.id.scrollView);
+        androidx.cardview.widget.CardView stillCard = view.findViewById(R.id.stillCard);
         ImageView still = view.findViewById(R.id.still);
         TextView title = view.findViewById(R.id.title);
         TextView originalName = view.findViewById(R.id.originalName);
@@ -125,20 +147,28 @@ public class EpisodeDetailDialog {
             overview.setText("暂无简介");
         }
 
-        // 初始隐藏本集图片，异步加载
-        photosLabel.setVisibility(View.GONE);
-        photosGrid.setVisibility(View.GONE);
-        guestsLabel.setVisibility(View.GONE);
-        guestsGrid.setVisibility(View.GONE);
-
-        // 异步加载本集图片与客串演员
-        loadEpisodeMedia(activity, tmdbEpisode, site, photosLabel, photosGrid, guestsLabel, guestsGrid);
+        // 如果已预加载数据，直接显示；否则异步加载
+        if (preloadedPhotos != null || preloadedGuests != null) {
+            bindPreloadedMedia(activity, preloadedPhotos, preloadedGuests, photosLabel, photosGrid, guestsLabel, guestsGrid);
+        } else {
+            // 初始隐藏本集图片，异步加载
+            photosLabel.setVisibility(View.GONE);
+            photosGrid.setVisibility(View.GONE);
+            guestsLabel.setVisibility(View.GONE);
+            guestsGrid.setVisibility(View.GONE);
+            // 异步加载本集图片与客串演员
+            loadEpisodeMedia(activity, tmdbEpisode, site, photosLabel, photosGrid, guestsLabel, guestsGrid);
+        }
 
         MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(activity)
                 .setView(view);
 
         AlertDialog alertDialog = builder.create();
+        if (dismissListener != null) alertDialog.setOnDismissListener(dismissListener);
         alertDialog.show();
+
+        // 对话框级别的按键导航：无论焦点在哪都能捕获遥控器方向键
+        setupDialogKeyNavigation(alertDialog, scrollView, stillCard, photosGrid, guestsGrid);
 
         // 设置全屏显示，不透明背景
         if (alertDialog.getWindow() != null) {
@@ -149,6 +179,9 @@ public class EpisodeDetailDialog {
             // 使用纯色背景（布局中已有半透明黑色背景）
             alertDialog.getWindow().setBackgroundDrawableResource(android.R.color.black);
         }
+
+        // 延迟一帧确保布局完成后滚动到顶部
+        scrollView.post(() -> scrollView.scrollTo(0, 0));
     }
 
     /**
@@ -156,9 +189,12 @@ public class EpisodeDetailDialog {
      * TV端 VideoActivity 只持有 TmdbItem，没有 detail JSON，
      * 所以不加载演员与剧照，只显示标题/评分/简介。
      */
-    private static void showMovieDetail(FragmentActivity activity, Episode episode, com.fongmi.android.tv.bean.TmdbItem movieItem) {
+    private static void showMovieDetail(FragmentActivity activity, Episode episode, com.fongmi.android.tv.bean.TmdbItem movieItem,
+                                        android.content.DialogInterface.OnDismissListener dismissListener) {
         View view = LayoutInflater.from(activity).inflate(R.layout.dialog_episode_detail, null);
 
+        android.widget.ScrollView scrollView = view.findViewById(R.id.scrollView);
+        androidx.cardview.widget.CardView stillCard = view.findViewById(R.id.stillCard);
         ImageView still = view.findViewById(R.id.still);
         TextView title = view.findViewById(R.id.title);
         TextView originalName = view.findViewById(R.id.originalName);
@@ -228,6 +264,7 @@ public class EpisodeDetailDialog {
                 .setView(view);
 
         AlertDialog alertDialog = builder.create();
+        if (dismissListener != null) alertDialog.setOnDismissListener(dismissListener);
         alertDialog.show();
 
         // 设置全屏显示
@@ -238,15 +275,21 @@ public class EpisodeDetailDialog {
             );
             alertDialog.getWindow().setBackgroundDrawableResource(android.R.color.black);
         }
+
+        // 延迟一帧确保布局完成后滚动到顶部
+        scrollView.post(() -> scrollView.scrollTo(0, 0));
     }
 
-    private static void showSimpleDialog(FragmentActivity activity, Episode episode) {
+    private static void showSimpleDialog(FragmentActivity activity, Episode episode,
+                                         android.content.DialogInterface.OnDismissListener dismissListener) {
         // 标题放固定文案，源站文件名放可换行的正文，避免长名被单行标题截断
-        new MaterialAlertDialogBuilder(activity)
+        AlertDialog dialog = new MaterialAlertDialogBuilder(activity)
                 .setTitle(R.string.detail_tmdb_empty)
                 .setMessage(episode.getName())
                 .setPositiveButton("关闭", null)
-                .show();
+                .create();
+        if (dismissListener != null) dialog.setOnDismissListener(dismissListener);
+        dialog.show();
     }
 
     private static void loadEpisodeMedia(FragmentActivity activity, TmdbEpisode tmdbEpisode, Site site,
@@ -324,5 +367,104 @@ public class EpisodeDetailDialog {
         if (url == null || url.isEmpty()) return "";
         String result = url.replaceFirst("(/t/p/)([^/]+)(/)", "$1" + size + "$3");
         return result.equals(url) ? url.replaceFirst("/(w\\d+|h\\d+|original)/", "/" + size + "/") : result;
+    }
+
+    /**
+     * 绑定预加载的图片和客串数据（避免重复 API 请求）
+     */
+    private static void bindPreloadedMedia(FragmentActivity activity,
+                                          java.util.List<String> photos,
+                                          java.util.List<TmdbPerson> guests,
+                                          TextView photosLabel,
+                                          androidx.leanback.widget.HorizontalGridView photosGrid,
+                                          TextView guestsLabel,
+                                          androidx.leanback.widget.HorizontalGridView guestsGrid) {
+        if (photos != null && !photos.isEmpty()) {
+            photosLabel.setVisibility(View.VISIBLE);
+            photosGrid.setVisibility(View.VISIBLE);
+            photosGrid.setHorizontalSpacing(ResUtil.dp2px(12));
+            photosGrid.setRowHeight(ResUtil.dp2px(124));
+
+            EpisodePhotoAdapter photoAdapter = new EpisodePhotoAdapter(photos,
+                    (url, position) -> PhotoViewerDialog.show(activity, photos, position, null));
+            photosGrid.setAdapter(photoAdapter);
+        } else {
+            photosLabel.setVisibility(View.GONE);
+            photosGrid.setVisibility(View.GONE);
+        }
+
+        if (guests != null && !guests.isEmpty()) {
+            guestsLabel.setVisibility(View.VISIBLE);
+            guestsGrid.setVisibility(View.VISIBLE);
+            guestsGrid.setHorizontalSpacing(ResUtil.dp2px(12));
+            guestsGrid.setRowHeight(ResUtil.dp2px(154));
+
+            TmdbPersonAdapter guestAdapter = new TmdbPersonAdapter(person -> TmdbPersonDialog.show(activity, person, null));
+            guestAdapter.setItems(guests);
+            guestsGrid.setAdapter(guestAdapter);
+        } else {
+            guestsLabel.setVisibility(View.GONE);
+            guestsGrid.setVisibility(View.GONE);
+        }
+    }
+
+    /**
+     * 设置 ScrollView 按键监听，处理遥控器上下键滚动
+     * 策略：ScrollView 持有焦点时，按下滚动；网格可见且有数据时，转移焦点到网格
+     */
+    /**
+     * 对话框级别的按键导航：拦截方向键实现焦点在大海报与网格间跳转
+     * 优势：无论当前焦点在哪都能捕获按键，比视图级监听器更可靠
+     */
+    private static void setupDialogKeyNavigation(AlertDialog dialog,
+                                                 android.widget.ScrollView scrollView,
+                                                 View stillCard,
+                                                 androidx.leanback.widget.HorizontalGridView photosGrid,
+                                                 androidx.leanback.widget.HorizontalGridView guestsGrid) {
+        dialog.setOnKeyListener((d, keyCode, event) -> {
+            if (event.getAction() != android.view.KeyEvent.ACTION_DOWN) return false;
+
+            View focus = dialog.getCurrentFocus();
+
+            if (keyCode == android.view.KeyEvent.KEYCODE_DPAD_DOWN) {
+                // 从大海报往下：跳到第一个有数据的网格
+                if (focus == stillCard || (focus != null && focus.getParent() == stillCard)) {
+                    if (photosGrid != null && photosGrid.getVisibility() == View.VISIBLE
+                        && photosGrid.getAdapter() != null && photosGrid.getAdapter().getItemCount() > 0) {
+                        photosGrid.requestFocus();
+                        return true;
+                    }
+                    if (guestsGrid != null && guestsGrid.getVisibility() == View.VISIBLE
+                        && guestsGrid.getAdapter() != null && guestsGrid.getAdapter().getItemCount() > 0) {
+                        guestsGrid.requestFocus();
+                        return true;
+                    }
+                }
+            }
+
+            if (keyCode == android.view.KeyEvent.KEYCODE_DPAD_UP) {
+                // 从网格往上：跳回大海报
+                // 焦点实际在网格的 item 上，需要检查父级关系
+                if (focus != null && (isDescendantOf(focus, photosGrid) || isDescendantOf(focus, guestsGrid))) {
+                    stillCard.requestFocus();
+                    return true;
+                }
+            }
+
+            return false;
+        });
+    }
+
+    /**
+     * 检查 view 是否是 ancestor 的子孙视图
+     */
+    private static boolean isDescendantOf(View view, View ancestor) {
+        if (ancestor == null) return false;
+        ViewParent parent = view.getParent();
+        while (parent != null) {
+            if (parent == ancestor) return true;
+            parent = parent.getParent();
+        }
+        return false;
     }
 }

@@ -165,6 +165,11 @@ public class MpvPlayerEngine implements PlayerEngine {
     }
 
     @Override
+    public void restoreVideoTrack() {
+        player.restoreVideoTrackSelection();
+    }
+
+    @Override
     public boolean haveTrack(int type) {
         return TrackUtil.count(getCurrentTracks(), type) > 0;
     }
@@ -379,6 +384,8 @@ public class MpvPlayerEngine implements PlayerEngine {
                 .demuxerMaxBackBytes(getDemuxerMaxBackBytes())
                 .cacheSeconds(getDemuxerReadAheadSeconds())
                 .demuxerReadaheadSeconds(getDemuxerReadAheadSeconds())
+                .rebufferMs(MpvPerformanceSetting.getRebufferMs())
+                .performanceOptionsPriority(MpvPerformanceSetting.isPerformancePriority())
                 .option("framedrop", MpvPerformanceSetting.getFrameDropOption())
                 .option("video-sync", MpvPerformanceSetting.getSyncOption())
                 .option("interpolation", MpvPerformanceSetting.isInterpolation() ? "yes" : "no")

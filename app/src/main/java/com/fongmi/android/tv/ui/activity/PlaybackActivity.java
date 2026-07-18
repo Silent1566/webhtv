@@ -33,6 +33,7 @@ import com.fongmi.android.tv.player.exo.ExoUtil;
 import com.fongmi.android.tv.service.PlaybackService;
 import com.fongmi.android.tv.setting.PlaybackPerformanceSetting;
 import com.fongmi.android.tv.setting.PlayerSetting;
+import com.fongmi.android.tv.subtitle.RealtimeSubtitleController;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.custom.CustomSeekView;
 import com.fongmi.android.tv.utils.ResUtil;
@@ -199,6 +200,12 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
         return false;
     }
 
+    protected void onControllerReady(Player controller) {
+    }
+
+    protected void onPlayerPositionDiscontinuity(Player.PositionInfo oldPosition, Player.PositionInfo newPosition, int reason) {
+    }
+
     protected void onError(String msg) {
     }
 
@@ -216,6 +223,9 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
     }
 
     protected void onSurfaceAttached() {
+    }
+
+    protected void onFirstFrameRendered() {
     }
 
     protected void onSeekStarted() {
@@ -343,7 +353,8 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
         try {
             mController = mControllerFuture.get();
             getSeekView().setPlayer(mController);
-            getSeekView().setSeekListener(this::onSeekStarted);
+getSeekView().setSeekListener(this::onSeekStarted);
+            onControllerReady(mController);
             mController.addListener(this);
             reconcileControllerReadyState();
         } catch (Exception ignored) {
@@ -371,23 +382,30 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
     }
 
     private void attachSurface() {
+        attachSurface(true);
+    }
+
+    private void attachSurface(boolean restoreExoShutter) {
         if (mService == null) return;
         int targetRender = getRender();
         logSurfaceState("attach start target=" + targetRender);
-        syncShutter(true);
+        if (restoreExoShutter) syncShutter(true);
+        else hideVideoShutter();
         if (render != targetRender) {
             if (SpiderDebug.isEnabled()) SpiderDebug.log("playback-flow", "switch render from=%d to=%d", render, targetRender);
             if (getExoView().getPlayer() != null) getExoView().setPlayer(null);
             getExoView().setRender(targetRender);
             render = targetRender;
-            syncShutter(true);
+            if (restoreExoShutter) syncShutter(true);
+            else hideVideoShutter();
             logSurfaceState("attach after setRender target=" + targetRender);
         }
         if (getExoView().getPlayer() == null) {
             getExoView().setPlayer(player().getPlayer());
             logSurfaceState("attach after setPlayer");
             syncVideoSurfaceSize(null);
-            syncShutter();
+            if (restoreExoShutter) syncShutter();
+            else hideVideoShutter();
             if (player().isNativePlayer()) getExoView().post(this::syncShutter);
         }
         onSurfaceAttached();
@@ -462,6 +480,12 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
         }
     }
 
+    private void hideVideoShutter() {
+        View shutter = getExoView().findViewById(androidx.media3.ui.R.id.exo_shutter);
+        getExoView().setShutterBackgroundColor(Color.TRANSPARENT);
+        if (shutter != null) shutter.setVisibility(View.GONE);
+    }
+
     private void detachSurface() {
         getExoView().setPlayer(null);
     }
@@ -474,6 +498,19 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
         getExoView().setRender(temporaryRender);
         getExoView().setRender(targetRender);
         render = -1;
+    }
+
+    protected void reattachVideoSurfaceAfterReparent() {
+        if (mService == null) return;
+        PlayerView view = getExoView();
+        view.setKeepContentOnPlayerReset(true);
+        hideVideoShutter();
+        detachSurface();
+        boolean posted = view.post(() -> {
+            if (mService != null && !isFinishing() && !isDestroyed()) attachSurface(false);
+            view.setKeepContentOnPlayerReset(false);
+        });
+        if (!posted) view.setKeepContentOnPlayerReset(false);
     }
 
     protected void setRender() {
@@ -616,6 +653,7 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
         super.initView(savedInstanceState);
         if (!shouldBindPlaybackService()) return;
         ExoUtil.setPlayerView(getExoView());
+        RealtimeSubtitleController.get().bind(getExoView());
         if (deferPlaybackServiceBinding()) bindPlaybackServiceAfterFirstFrame();
         else bindPlaybackService();
         if (SpiderDebug.isEnabled()) SpiderDebug.log("playback-flow", "initView cost=%dms key=%s deferred=%s", System.currentTimeMillis() - start, getPlaybackKey(), deferPlaybackServiceBinding());
@@ -631,8 +669,13 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
     }
 
     @Override
-    public void onPlayWhenReadyChanged(boolean playWhenReady, int reason) {
+public void onPlayWhenReadyChanged(boolean playWhenReady, int reason) {
         syncKeepScreenOn();
+    }
+
+    @Override
+    public void onPositionDiscontinuity(Player.PositionInfo oldPosition, Player.PositionInfo newPosition, int reason) {
+        if (isOwner()) onPlayerPositionDiscontinuity(oldPosition, newPosition, reason);
     }
 
     @Override
@@ -654,11 +697,17 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
     }
 
     @Override
+    public void onRenderedFirstFrame() {
+        if (isOwner()) onFirstFrameRendered();
+    }
+
+    @Override
     public void onServiceConnected(ComponentName name, IBinder binder) {
         long start = System.currentTimeMillis();
         mService = ((PlaybackService.LocalBinder) binder).getService();
         mService.replaceBinding(this::closePiP);
         mService.setSessionActivity(buildSessionIntent());
+        mService.setPlaybackForeground(true);
         mService.setNavigationCallback(getNavigationCallback(), getPlaybackKey());
         mService.addPlayerCallback(mPlayerCallback);
         player().setLutAllowed(isLutAllowed());
@@ -678,6 +727,7 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
     @Override
     protected void onResume() {
         super.onResume();
+        if (mService != null) mService.setPlaybackForeground(true);
         if (SpiderDebug.isEnabled()) SpiderDebug.log("playback-lifecycle", "activity resume %s", lifecycleState());
         playbackExiting = false;
         setRedirect(false);
@@ -697,6 +747,7 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
 
     @Override
     protected void onStop() {
+        if (mService != null) mService.setPlaybackForeground(false);
         if (SpiderDebug.isEnabled()) SpiderDebug.log("playback-lifecycle", "activity stop backgroundOff=%s %s", PlayerSetting.isBackgroundOff(), lifecycleState());
         super.onStop();
         if (isOwner() && shouldPauseOnBackground() && mController != null) mController.pause();
@@ -711,7 +762,14 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
     @Override
     protected void onDestroy() {
         if (SpiderDebug.isEnabled()) SpiderDebug.log("playback-lifecycle", "activity destroy beforeRelease %s", lifecycleState());
+        RealtimeSubtitleController.get().unbind(getExoView());
         super.onDestroy();
+        if (isChangingConfigurations()) {
+            if (mService != null) mService.removePlayerCallback(mPlayerCallback);
+            detach();
+            if (SpiderDebug.isEnabled()) SpiderDebug.log("playback-lifecycle", "activity destroy configuration change preserved service key=%s", getPlaybackKey());
+            return;
+        }
         releasePlaybackService();
         if (SpiderDebug.isEnabled()) SpiderDebug.log("playback-lifecycle", "activity destroy afterRelease activity=%s key=%s", getClass().getSimpleName(), getPlaybackKey());
     }

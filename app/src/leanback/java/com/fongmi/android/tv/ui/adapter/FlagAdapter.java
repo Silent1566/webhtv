@@ -58,8 +58,13 @@ public class FlagAdapter extends RecyclerView.Adapter<FlagAdapter.ViewHolder> {
     }
 
     public int getPosition() {
+        int position = getSelectedPosition();
+        return position == RecyclerView.NO_POSITION ? 0 : position;
+    }
+
+    public int getSelectedPosition() {
         for (int i = 0; i < mItems.size(); i++) if (mItems.get(i).isSelected()) return i;
-        return 0;
+        return RecyclerView.NO_POSITION;
     }
 
     public Flag getActivated() {
@@ -70,7 +75,6 @@ public class FlagAdapter extends RecyclerView.Adapter<FlagAdapter.ViewHolder> {
         if (mItems.isEmpty() || item == null) return;
         if (indexOf(item) == -1) item.setFlag(mItems.get(0).getFlag());
         for (Flag flag : mItems) flag.setSelected(item);
-        notifyItemRangeChanged(0, getItemCount());
     }
 
     public void toggle(Episode item) {
