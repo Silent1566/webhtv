@@ -271,10 +271,21 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     }
 
     private void setWebView() {
-        SpiderDebug.log("startup", "webview create start cost=%sms", System.currentTimeMillis() - App.time());
-        mWeb = new HomeWebController(this, getHomeWeb(), this);
-        mWeb.setViewport(tvViewport(webChromeMode));
-        SpiderDebug.log("startup", "webview create end cost=%sms", System.currentTimeMillis() - App.time());
+        try {
+            SpiderDebug.log("startup", "webview create start cost=%sms", System.currentTimeMillis() - App.time());
+            WebView webView = getHomeWeb();
+            if (webView == null) {
+                SpiderDebug.log("startup", "webview unavailable, web home disabled");
+                return;
+            }
+            mWeb = new HomeWebController(this, webView, this);
+            mWeb.setViewport(tvViewport(webChromeMode));
+            SpiderDebug.log("startup", "webview create end cost=%sms", System.currentTimeMillis() - App.time());
+        } catch (Throwable e) {
+            SpiderDebug.log("startup", "webview init failed: %s", e.toString());
+            mHomeWeb = null;
+            mWeb = null;
+        }
     }
 
     private void ensureWebView() {
@@ -283,12 +294,18 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
 
     private WebView getHomeWeb() {
         if (mHomeWeb != null) return mHomeWeb;
-        mHomeWeb = new WebView(this);
-        mHomeWeb.setFocusable(true);
-        mHomeWeb.setFocusableInTouchMode(true);
-        mHomeWeb.setVisibility(View.GONE);
-        mBinding.webOverlay.addView(mHomeWeb, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
-        return mHomeWeb;
+        try {
+            mHomeWeb = new WebView(this);
+            mHomeWeb.setFocusable(true);
+            mHomeWeb.setFocusableInTouchMode(true);
+            mHomeWeb.setVisibility(View.GONE);
+            mBinding.webOverlay.addView(mHomeWeb, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+            return mHomeWeb;
+        } catch (Throwable e) {
+            SpiderDebug.log("startup", "webview construction failed: %s", e.toString());
+            mHomeWeb = null;
+            return null;
+        }
     }
 
     private void setViewModel() {

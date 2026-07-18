@@ -387,6 +387,7 @@ public class Setting {
         int value = isLanguage(language) ? language : LANGUAGE_FOLLOW_SYSTEM;
         Prefers.put("language", value);
         applyLanguage(value);
+        App.get().invalidateResources();
     }
 
     public static void applyLanguage() {
