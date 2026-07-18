@@ -1975,4 +1975,152 @@
 
 <string name="player_audio_repeat">循環</string>
 
+
+    <!-- Auto-generated missing translations -->
+    <string name="live_no_epg">00:00 - 23:59 暫無節目信息</string>
+    <string name="setting_home_vod_auto_load">默認加載點播</string>
+    <string name="setting_fullscreen_menu_key">全屏菜單鍵</string>
+    <string name="setting_home_menu_key">首頁菜單鍵</string>
+    <string name="setting_play_back_to_detail">播放返回詳情</string>
+    <string name="setting_home_history">首頁最近觀看</string>
+    <string name="site_health_report_ad_blocked">廣告攔截 · %1$d 次</string>
+    <string name="setting_custom_csp_sort">排序</string>
+    <string name="setting_custom_csp_sort_done">完成</string>
+    <string name="setting_custom_csp_sort_drag">拖拽排序</string>
+    <string name="setting_custom_csp_sort_more">排序操作</string>
+    <string name="setting_custom_csp_sort_top">置頂</string>
+    <string name="setting_custom_csp_sort_bottom">置底</string>
+    <string name="setting_custom_csp_sort_forward_five">上移 5 位</string>
+    <string name="setting_custom_csp_sort_backward_five">下移 5 位</string>
+    <string name="setting_custom_csp_sort_move_to">移動到指定位置</string>
+    <string name="setting_custom_csp_sort_move_to_title">移動到指定位置</string>
+    <string name="setting_custom_csp_sort_move_to_hint">位置 1-%1$d</string>
+    <string name="setting_proxy_recognize">自動識別</string>
+    <string name="setting_proxy_recognize_hint">粘貼完整配置、proxy 片段、規則數組或單個規則對象</string>
+    <string name="setting_proxy_recognize_empty">請先粘貼 Proxy 規則</string>
+    <string name="setting_proxy_recognize_failed">未識別到 Proxy 規則</string>
+    <string name="setting_proxy_recognize_done">已識別 %1$d 條 Proxy 規則</string>
+    <string name="search_column">搜索佈局</string>
+    <string name="dialog_audio_enabled_label">啓用規則</string>
+    <string name="dialog_audio_add_hint">添加關鍵詞或站點…</string>
+    <string name="dialog_audio_add">添加</string>
+    <string name="dialog_short_drama_site_disabled">已排除：%1$s</string>
+    <string name="dialog_short_drama_enabled_label">啓用規則</string>
+    <string name="dialog_short_drama_disabled_label">已排除</string>
+    <string name="dialog_short_drama_add_hint">添加關鍵詞或站點…</string>
+    <string name="dialog_short_drama_add">添加</string>
+    <string name="search_scope_all">全部</string>
+    <string name="search_scope_current">當前站</string>
+    <string name="search_scope_current_hint">當前站：%1$s</string>
+    <string name="search_scope_group_hint">分組：%1$s</string>
+    <string name="search_result_all">%1$s 的搜索結果</string>
+    <string name="search_result_current">當前站搜索：%1$s</string>
+    <string name="search_result_group">%1$s 搜索：%2$s</string>
+    <string name="detail_site_not_searchable">當前站源不支持搜索</string>
+    <string name="viewing_report_refreshing">刷新報告中...</string>
+    <string name="setting_ai_ad_detection">AI 智能去廣</string>
+    <string name="setting_ad_rule_manage">規則管理</string>
+    <string name="ad_rule_add_manual">手動添加規則</string>
+    <string name="ad_rule_import_candidates">待審覈接口規則（%d）</string>
+    <string name="ad_rule_import_title">導入接口去廣規則</string>
+    <string name="ad_rule_import_action">導入（默認停用）</string>
+    <string name="ad_rule_ignore_all">忽略全部</string>
+    <string name="ad_rule_import_empty">暫無待審覈接口規則</string>
+    <string name="ad_rule_section_custom">自定義規則</string>
+    <string name="ad_rule_section_server">接口配置規則</string>
+    <string name="ad_rule_empty">暫無規則</string>
+    <string name="ad_rule_server_empty">來自配置 · 暫無</string>
+    <string name="ad_rule_server_summary">來自配置 · 共 %d 條（只讀）</string>
+    <string name="ad_rule_edit_title">編輯規則</string>
+    <string name="ad_rule_field_name">規則名稱（可選）</string>
+    <string name="ad_rule_field_hosts">域名列表（每行一個）</string>
+    <string name="ad_rule_field_hosts_hint">僅對這些域名生效，留空表示全局</string>
+    <string name="ad_rule_field_regex">廣告規則（每行一個正則）</string>
+    <string name="ad_rule_field_regex_hint">匹配的 URL 會被屏蔽</string>
+    <string name="ad_rule_field_exclude">白名單（每行一個正則）</string>
+    <string name="ad_rule_field_exclude_hint">匹配的 URL 不會被屏蔽</string>
+    <string name="ad_rule_empty_input">至少填寫一項</string>
+    <string name="ad_rule_invalid_regex">正則表達式無效：%s</string>
+    <string name="ad_rule_count">%d 條規則</string>
+    <string name="ad_rule_count_with_pending">%1$d 條規則 · %2$d 條待審覈</string>
+    <string name="play_ad_feedback">有廣告</string>
+    <string name="ad_feedback_analyzing">AI 正在分析廣告特徵…</string>
+    <string name="ad_feedback_no_url">當前沒有可分析的播放地址</string>
+    <string name="ad_feedback_ai_disabled">請先在增強設置中開啓 AI 與智能去廣</string>
+    <string name="ad_feedback_failed">分析失敗：%s</string>
+    <string name="ad_feedback_empty_result">AI 未識別到明顯的廣告特徵</string>
+    <string name="ad_feedback_preview_title">AI 廣告分析結果</string>
+    <string name="ad_feedback_confidence">置信度 %d%%</string>
+    <string name="ad_feedback_reasoning">分析說明</string>
+    <string name="ad_feedback_apply">應用並屏蔽</string>
+    <string name="ad_feedback_applied">已添加去廣規則</string>
+    <string name="ad_feedback_low_confidence">置信度較低，建議人工覈對後再應用</string>
+    <string name="ad_feedback_no_ad">AI 未識別到明顯的廣告特徵</string>
+    <string name="ad_feedback_saved">已添加去廣規則</string>
+    <string name="ad_rule_preview_title">AI 廣告分析結果</string>
+    <string name="ad_rule_confidence_value">置信度：%d%%</string>
+    <string name="ad_rule_low_confidence_warning">置信度較低，證據不足，建議人工覈對後再應用</string>
+    <string name="ad_rule_preview_hosts">屏蔽域名</string>
+    <string name="ad_rule_preview_regex">廣告規則（正則）</string>
+    <string name="ad_block_stats">廣告攔截統計</string>
+    <string name="ad_block_total">總攔截次數</string>
+    <string name="ad_feedback_count">AI 反饋次數</string>
+    <string name="ad_ai_success_rate">AI 分析成功率</string>
+    <string name="ad_site_rank">站點攔截排行</string>
+    <string name="ad_rule_rank">規則命中排行</string>
+    <string name="ad_stats_reset">重置統計</string>
+    <string name="ad_stats_reset_confirm">確定重置所有統計數據嗎？</string>
+    <string name="ad_stats_empty">暫無統計數據</string>
+    <string name="ad_stats_overview">統計概覽</string>
+    <string name="ad_stats_times">次</string>
+    <string name="ad_stats_percent">%.1f%%</string>
+    <string name="ad_stats_site_name">站點</string>
+    <string name="ad_stats_rule_name">規則</string>
+    <string name="ad_stats_count">次數</string>
+    <string name="ad_stats_source">來源</string>
+    <string name="ad_stats_source_default">默認</string>
+    <string name="ad_stats_source_ai">AI</string>
+    <string name="ad_stats_source_manual">手動</string>
+    <string name="ad_stats_source_unknown">未知</string>
+    <string name="ad_rule_preview_exclude">白名單（正則）</string>
+    <string name="ad_rule_preview_none">（無）</string>
+    <string name="ad_rule_preview_confirm">應用並屏蔽</string>
+    <string name="ad_rule_section_summary">AI/自定義 %1$d 條 · 接口配置 %2$d 條 · 內置 HLS %3$d 條</string>
+    <string name="ad_rule_hls_builtin_summary">內置 HLS · v%1$d · %2$s</string>
+    <string name="ad_rule_hls_enabled">已啓用</string>
+    <string name="ad_rule_hls_disabled">默認關閉</string>
+    <string name="ad_rule_hls_invalid">規則異常：%1$s</string>
+    <string name="ad_rule_detail_hint">查看完整規則</string>
+    <string name="ad_rule_detail_hosts">適用域名</string>
+    <string name="ad_rule_detail_regex">匹配規則</string>
+    <string name="ad_rule_detail_script">自動化腳本</string>
+    <string name="ad_rule_detail_exclude">白名單 / 正片保護</string>
+    <string name="ad_rule_detail_json">完整規則（JSON）</string>
+    <string name="ad_rule_detail_id">規則 ID：%1$s</string>
+    <string name="ad_rule_detail_source">來源：%1$s</string>
+    <string name="ad_rule_default_disable_confirm">臨時停用此接口配置規則？\n可能導致部分廣告無法過濾，可隨時重新啓用。</string>
+    <string name="ad_rule_imported_disable_confirm">臨時停用此接口導入規則？\n可隨時重新啓用，刪除後也可從待審覈規則重新導入。</string>
+    <string name="ad_rule_ai_disable_confirm">臨時停用此 AI 識別規則？\n可隨時重新啓用。</string>
+    <string name="ad_rule_manual_disable_confirm">臨時停用此手動規則？\n可隨時重新啓用。</string>
+    <string name="ad_rule_default_enable_confirm">重新啓用此默認規則？</string>
+    <string-array name="select_render">
+        <item>Surface</item>
+        <item>Texture</item>
+    </string-array>
+    <string-array name="select_fullscreen_menu_key">
+        <item>控制欄</item>
+        <item>選集</item>
+    </string-array>
+    <string-array name="select_home_menu_key">
+        <item>選項彈窗</item>
+        <item>切換站源</item>
+        <item>切換線路</item>
+        <item>直播頁面</item>
+        <item>歷史頁面</item>
+        <item>搜索頁面</item>
+        <item>推送頁面</item>
+        <item>投屏頁面</item>
+        <item>收藏頁面</item>
+        <item>設置頁面</item>
+    </string-array>
 </resources>

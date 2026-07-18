@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.app.Application;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.content.res.Resources;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -36,6 +37,9 @@ public class App extends Application implements Application.ActivityLifecycleCal
 
     private Activity activity;
     private Hook hook;
+
+    private Resources resources;
+    private int resourcesLanguage = Integer.MIN_VALUE;
 
     public App() {
         instance = this;
@@ -122,6 +126,21 @@ public class App extends Application implements Application.ActivityLifecycleCal
     @Override
     public String getPackageName() {
         return hook != null ? hook.getPackageName() : getBaseContext().getPackageName();
+    }
+
+    @Override
+    public Resources getResources() {
+        int language = Setting.getLanguage();
+        if (resources == null || resourcesLanguage != language) {
+            resources = Setting.wrapLanguage(getBaseContext()).getResources();
+            resourcesLanguage = language;
+        }
+        return resources;
+    }
+
+    public void invalidateResources() {
+        resources = null;
+        resourcesLanguage = Integer.MIN_VALUE;
     }
 
     @Override
