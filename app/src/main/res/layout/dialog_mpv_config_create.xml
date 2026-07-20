@@ -27,8 +27,9 @@
             android:id="@+id/close"
             android:layout_width="44dp"
             android:layout_height="40dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
+            android:background="@drawable/selector_mpv_icon_button"
             android:contentDescription="@string/mpv_config_close"
+            android:focusable="true"
             android:padding="10dp"
             android:src="@drawable/ic_dialog_close"
             android:tint="#5F6368" />
@@ -36,6 +37,7 @@
     </androidx.appcompat.widget.LinearLayoutCompat>
 
     <com.google.android.material.textview.MaterialTextView
+        android:id="@+id/chooseAction"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
@@ -83,7 +85,7 @@
     <androidx.appcompat.widget.LinearLayoutCompat
         android:id="@+id/textOption"
         android:layout_width="match_parent"
-        android:layout_height="76dp"
+        android:layout_height="68dp"
         android:layout_marginTop="10dp"
         android:background="@drawable/selector_mpv_create_action"
         android:clickable="true"
@@ -132,10 +134,61 @@
     </androidx.appcompat.widget.LinearLayoutCompat>
 
     <androidx.appcompat.widget.LinearLayoutCompat
+        android:id="@+id/urlOption"
+        android:layout_width="match_parent"
+        android:layout_height="68dp"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/selector_mpv_create_action"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="14dp"
+        android:paddingEnd="12dp">
+
+        <androidx.appcompat.widget.AppCompatImageView
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:padding="6dp"
+            android:src="@drawable/ic_git_cloud_download" />
+
+        <androidx.appcompat.widget.LinearLayoutCompat
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <com.google.android.material.textview.MaterialTextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/mpv_config_import_url"
+                android:textColor="#202124"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <com.google.android.material.textview.MaterialTextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/mpv_config_import_url_desc"
+                android:textColor="#80868B"
+                android:textSize="12sp" />
+
+        </androidx.appcompat.widget.LinearLayoutCompat>
+
+        <androidx.appcompat.widget.AppCompatImageView
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:src="@drawable/ic_sync_arrow_right"
+            android:tint="#80868B" />
+
+    </androidx.appcompat.widget.LinearLayoutCompat>
+
+    <androidx.appcompat.widget.LinearLayoutCompat
         android:id="@+id/importOption"
         android:layout_width="match_parent"
-        android:layout_height="76dp"
-        android:layout_marginTop="10dp"
+        android:layout_height="68dp"
+        android:layout_marginTop="8dp"
         android:layout_marginBottom="2dp"
         android:background="@drawable/selector_mpv_create_action"
         android:clickable="true"
@@ -180,6 +233,74 @@
             android:layout_height="24dp"
             android:src="@drawable/ic_sync_arrow_right"
             android:tint="#80868B" />
+
+    </androidx.appcompat.widget.LinearLayoutCompat>
+
+    <androidx.appcompat.widget.LinearLayoutCompat
+        android:id="@+id/urlPanel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <com.google.android.material.textview.MaterialTextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/mpv_config_import_url"
+            android:textColor="#3C4043"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/urlLayout"
+            style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            app:hintEnabled="false">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/url"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/mpv_config_url_hint"
+                android:imeOptions="actionDone"
+                android:inputType="textUri"
+                android:maxLines="1" />
+
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <androidx.appcompat.widget.LinearLayoutCompat
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:gravity="end|center_vertical"
+            android:orientation="horizontal">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/urlBack"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:minWidth="64dp"
+                android:text="@string/mpv_config_method"
+                android:textColor="@color/dialog_outlined_button_text"
+                app:backgroundTint="@color/dialog_outlined_button_bg"
+                app:strokeColor="@color/dialog_outlined_button_stroke" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/urlImport"
+                style="@style/Widget.Material3.Button"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:layout_marginStart="8dp"
+                android:minHeight="40dp"
+                android:text="@string/mpv_config_import"
+                android:textColor="@color/dialog_primary_button_text"
+                app:backgroundTint="@color/dialog_primary_button_bg" />
+
+        </androidx.appcompat.widget.LinearLayoutCompat>
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 

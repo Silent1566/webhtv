@@ -176,7 +176,8 @@ public final class MpvPerformanceSetting {
     }
 
     public static int getRebufferMs() {
-        return normalizeRebuffer(Prefers.getInt(KEY_REBUFFER_MS, 10_000));
+        PlaybackPerformanceSetting.ensureInitialized();
+        return normalizeRebuffer(Prefers.getInt(KEY_REBUFFER_MS, rebufferForPreset(PlaybackPerformanceSetting.PROFILE_RECOMMENDED)));
     }
 
     public static void putRebufferMs(int value) {
@@ -186,11 +187,14 @@ public final class MpvPerformanceSetting {
 
     public static int nextRebufferMs() {
         return switch (getRebufferMs()) {
+            case 1_000 -> 2_000;
+            case 2_000 -> 3_000;
             case 3_000 -> 5_000;
             case 5_000 -> 8_000;
             case 8_000 -> 10_000;
             case 10_000 -> 15_000;
-            default -> 3_000;
+            case 15_000 -> 1_000;
+            default -> 1_000;
         };
     }
 
@@ -252,16 +256,20 @@ public final class MpvPerformanceSetting {
     }
 
     static void applyRebufferPreset(int profile) {
-        if (profile == PlaybackPerformanceSetting.PROFILE_LIGHTWEIGHT) {
-            Prefers.put(KEY_REBUFFER_MS, 3_000);
-        } else if (profile == PlaybackPerformanceSetting.PROFILE_COMPATIBLE) {
-            Prefers.put(KEY_REBUFFER_MS, 5_000);
-        } else {
-            Prefers.put(KEY_REBUFFER_MS, 10_000);
-        }
+        Prefers.put(KEY_REBUFFER_MS, rebufferForPreset(profile));
     }
 
-    private static int normalizeRebuffer(int value) {
+    static int rebufferForPreset(int profile) {
+        return switch (profile) {
+            case PlaybackPerformanceSetting.PROFILE_COMPATIBLE -> 3_000;
+            case PlaybackPerformanceSetting.PROFILE_LIGHTWEIGHT -> 1_000;
+            default -> 2_000;
+        };
+    }
+
+    static int normalizeRebuffer(int value) {
+        if (value <= 1_000) return 1_000;
+        if (value <= 2_000) return 2_000;
         if (value <= 3_000) return 3_000;
         if (value <= 5_000) return 5_000;
         if (value <= 8_000) return 8_000;

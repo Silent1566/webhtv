@@ -17,6 +17,7 @@ public class PlaybackPerformanceSettingSourceTest {
 
         assertTrue(source.contains("PROFILE_CUSTOM = 2"));
         assertTrue(source.contains("PROFILE_ORIGINAL = 4"));
+        assertTrue(source.contains("PROFILE_AUTO = 5"));
         assertTrue(source.contains("profile == PROFILE_ORIGINAL"));
         assertTrue(method.contains("putCurrentProfile(PROFILE_ORIGINAL)"));
     }
@@ -63,10 +64,11 @@ public class PlaybackPerformanceSettingSourceTest {
 
         assertTrue(source.contains("R.string.player_performance_original"));
         assertTrue(source.contains("PlaybackPerformanceSetting.applyOriginal()"));
+        assertTrue(source.contains("case PlaybackPerformanceSetting.PROFILE_ORIGINAL -> 4"));
 
         String catalog = read(sourcePath("main", "java", "com", "fongmi", "android", "tv", "setting", "PlaybackPerformanceCatalog.java"));
         assertTrue(catalog.contains("option(PROFILE, BASIC, \"性能配置\", profileDescription(kernel))"));
-        assertTrue(catalog.contains("独立预设"));
+        assertTrue(catalog.contains("自动档"));
     }
 
     @Test
@@ -82,22 +84,22 @@ public class PlaybackPerformanceSettingSourceTest {
     public void performanceDialogHighlightsSelectedProfile() throws Exception {
         String source = read(sourcePath("main", "java", "com", "fongmi", "android", "tv", "ui", "dialog", "PlaybackPerformanceDialog.java"));
         String createView = methodBody(source, "private View createView", "private void showHelpDialog");
-        String refresh = methodBody(source, "private void refresh()", "private void refreshRows()");
-        String style = methodBody(source, "private void styleAction", "private LinearLayout.LayoutParams actionParams");
+        String refresh = methodBody(source, "private void refresh()", "private TabLayout createProfileTabs()");
+        String sync = methodBody(source, "private void syncProfileTabs(TabLayout tabs)", "private int profileAt");
 
         assertContainsAll(source,
-                "private MaterialButton profileButton(int text, int profile)",
-                "button.setSelected((int) button.getTag() == profile)",
-                "styleAction(button, button.hasFocus(), button.isSelected())");
-        assertTrue(createView.contains("refreshProfileButtons();"));
-        assertTrue(refresh.contains("refreshProfileButtons();"));
-        assertTrue(style.contains("selected ? \"#D2E3FC\" : \"#FFFFFF\""));
+                "private TabLayout createProfileTabs()",
+                "tabs.selectTab(position < 0 ? null : tabs.getTabAt(position))",
+                "case PlaybackPerformanceSetting.PROFILE_ORIGINAL -> 4");
+        assertTrue(createView.contains("syncProfileTabs();"));
+        assertTrue(refresh.contains("syncProfileTabs();"));
+        assertTrue(sync.contains("profilePosition(PlaybackPerformanceSetting.getProfile())"));
     }
 
     @Test
     public void performanceDialogButtonsKeepLabelsVisible() throws Exception {
         String source = read(sourcePath("main", "java", "com", "fongmi", "android", "tv", "ui", "dialog", "PlaybackPerformanceDialog.java"));
-        String actionButton = methodBody(source, "private MaterialButton actionButton", "private MaterialButton profileButton");
+        String actionButton = methodBody(source, "private MaterialButton actionButton", "private MaterialButton closeButton");
 
         assertContainsAll(actionButton,
                 "button.setMaxLines(1)",

@@ -26,8 +26,9 @@
             android:id="@+id/close"
             android:layout_width="44dp"
             android:layout_height="40dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
+            android:background="@drawable/selector_mpv_icon_button"
             android:contentDescription="@string/mpv_config_close"
+            android:focusable="true"
             android:padding="10dp"
             android:src="@drawable/ic_dialog_close"
             android:tint="#5F6368" />
@@ -61,12 +62,14 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/cancel"
-            style="@style/Widget.Material3.Button.TextButton"
+            style="@style/Widget.Material3.Button.OutlinedButton"
             android:layout_width="wrap_content"
             android:layout_height="40dp"
             android:minWidth="64dp"
             android:text="@string/dialog_negative"
-            android:textColor="@color/dialog_text_button" />
+            android:textColor="@color/dialog_outlined_button_text"
+            app:backgroundTint="@color/dialog_outlined_button_bg"
+            app:strokeColor="@color/dialog_outlined_button_stroke" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/rename"

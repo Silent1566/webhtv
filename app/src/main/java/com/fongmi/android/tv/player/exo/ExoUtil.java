@@ -78,11 +78,7 @@ import io.github.anilbeesetti.nextlib.media3ext.ffdecoder.FfmpegVideoRenderer;
 
 public class ExoUtil {
 
-    private static final int ENHANCED_MIN_BUFFER_MS = 30_000;
-    private static final int ENHANCED_MAX_BUFFER_MS = 120_000;
-    private static final int ENHANCED_BUFFER_FOR_PLAYBACK_MS = 1_500;
-    private static final int ENHANCED_BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS = 5_000;
-    private static final int ENHANCED_TARGET_BUFFER_BYTES = 256 * 1024 * 1024;
+    private static final int ENHANCED_TARGET_BUFFER_BYTES = 128 * 1024 * 1024;
     private static final long ENHANCED_LATE_THRESHOLD_TO_DROP_INPUT_US = 5_000L;
     private static final long ENHANCED_ADAPT_COOLDOWN_MS = 15_000L;
     private static final int ENHANCED_DROPPED_FRAMES_THRESHOLD = 24;
@@ -104,6 +100,7 @@ public class ExoUtil {
     }
 
     public static ExoPlayer buildPlayer(int decode, Player.Listener listener) {
+        if (PlaybackPerformanceSetting.isAuto(PlayerSetting.EXO)) ExoPerformanceSetting.beginAutoSession();
         EnhancedVideoProfile profile = getEnhancedVideoProfile(decode);
         List<EnhancedVideoProfile> profiles = getEnhancedVideoProfiles(decode);
         DefaultTrackSelector trackSelector = buildTrackSelector(decode);
@@ -112,7 +109,11 @@ public class ExoUtil {
                 .setRenderersFactory(buildPlaybackRenderersFactory(decode))
                 .setMediaSourceFactory(buildMediaSourceFactory())
                 .setVideoChangeFrameRateStrategy(ExoPerformanceSetting.getFrameRateStrategy());
-        if (PlayerSetting.getFFmpegMode() != 2) builder.setLoadControl(PlaybackPerformanceSetting.isHighBufferEnabled() ? buildEnhancedLoadControl() : buildLoadControl());
+        if (PlayerSetting.getFFmpegMode() == PlayerSetting.FFMPEG_MODE_SIMPLE) {
+            ExoPlaybackDiagnostics.logDefaultLoadControl(PlaybackPerformanceSetting.getProfile(PlayerSetting.EXO));
+        } else {
+            builder.setLoadControl(PlaybackPerformanceSetting.isHighBufferEnabled() ? buildEnhancedLoadControl() : buildLoadControl());
+        }
         if (PlaybackPerformanceSetting.isBandwidthMeterEnabled()) builder.setBandwidthMeter(buildEnhancedBandwidthMeter(profile));
         if (PlaybackPerformanceSetting.isDynamicSchedulingEnabled()) {
             builder.experimentalSetDynamicSchedulingEnabled(true);
@@ -360,26 +361,33 @@ public class ExoUtil {
         return profile;
     }
 
-    private static DefaultLoadControl buildEnhancedLoadControl() {
-        return new DefaultLoadControl.Builder()
-                .setBufferDurationsMs(getMinBufferMs(), getMaxBufferMs(), ExoPerformanceSetting.getStartBufferMs(), ExoPerformanceSetting.getRebufferMs())
-                .setTargetBufferBytes(getTargetBufferBytes())
-                .setBackBuffer(PlayerSetting.getBackBufferMs(PlayerSetting.EXO), true)
-                .setPrioritizeTimeOverSizeThresholds(ExoPerformanceSetting.isPrioritizeTime())
+    private static LoadControl buildEnhancedLoadControl() {
+        int profile = PlaybackPerformanceSetting.getProfile(PlayerSetting.EXO);
+        boolean auto = profile == PlaybackPerformanceSetting.PROFILE_AUTO;
+        ExoLoadControlPolicy.BufferDurations durations = getBufferDurations();
+        ExoBufferBudget.Budget budget = getBufferBudget();
+        int startBufferMs = auto ? ExoPerformanceSetting.getAutoSessionStartBufferMs() : ExoPerformanceSetting.getStartBufferMs();
+        int rebufferMs = ExoPerformanceSetting.getRebufferMs();
+        int backBufferMs = PlayerSetting.getBackBufferMs(PlayerSetting.EXO);
+        boolean prioritizeTime = ExoPerformanceSetting.isPrioritizeTime();
+        ExoPlaybackDiagnostics.logLoadControl(profile, durations, budget, startBufferMs, rebufferMs, backBufferMs, prioritizeTime);
+        DefaultLoadControl loadControl = new DefaultLoadControl.Builder()
+                .setBufferDurationsMs(durations.minBufferMs(), durations.maxBufferMs(), startBufferMs, auto ? AutoLoadControl.MAX_REBUFFER_MS : rebufferMs)
+                .setTargetBufferBytes(budget.effectiveTargetBytes())
+                .setBackBuffer(backBufferMs, true)
+                .setPrioritizeTimeOverSizeThresholds(prioritizeTime)
                 .build();
+        return auto ? new AutoLoadControl(loadControl) : loadControl;
     }
 
-    private static int getMinBufferMs() {
-        return Math.min(ENHANCED_MIN_BUFFER_MS, Math.max(15_000, PlayerSetting.getBuffer(PlayerSetting.EXO) * 3_000));
+    private static ExoLoadControlPolicy.BufferDurations getBufferDurations() {
+        return ExoLoadControlPolicy.resolve(PlaybackPerformanceSetting.getProfile(PlayerSetting.EXO), PlayerSetting.getBuffer(PlayerSetting.EXO));
     }
 
-    private static int getMaxBufferMs() {
-        return Math.max(ENHANCED_MAX_BUFFER_MS / 2, Math.min(ENHANCED_MAX_BUFFER_MS, getMinBufferMs() * 4));
-    }
-
-    private static int getTargetBufferBytes() {
-        int bytes = PlayerSetting.getBufferBytes(PlayerSetting.EXO);
-        return bytes > 0 ? bytes : ENHANCED_TARGET_BUFFER_BYTES;
+    static ExoBufferBudget.Budget getBufferBudget() {
+        int configured = PlayerSetting.getBufferBytes(PlayerSetting.EXO);
+        int requested = configured > 0 ? configured : ENHANCED_TARGET_BUFFER_BYTES;
+        return ExoBufferBudget.resolve(App.get(), requested);
     }
 
     private static DefaultBandwidthMeter buildEnhancedBandwidthMeter(EnhancedVideoProfile profile) {

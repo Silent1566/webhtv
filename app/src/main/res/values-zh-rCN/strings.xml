@@ -828,6 +828,7 @@
     <!-- Device Sync -->
     <string name="device_select">选择设备</string>
     <string name="device_offline">设备已离线</string>
+    <string name="cast_not_ready">播放信息尚未就绪，请稍后重试</string>
     <string name="sync_success">同步完成</string>
     <string name="sync_progress">正在同步...</string>
     <string name="sync_failed">同步失败</string>
@@ -936,13 +937,17 @@
     <string name="player_exo_4k_compat">播放性能</string>
     <string name="player_immersive_audio_mode">沉浸音频模式</string>
     <string name="player_performance">播放性能</string>
-    <string name="player_performance_recommended">推荐</string>
+    <string name="player_performance_recommended">均衡</string>
+    <string name="player_performance_auto">自动</string>
     <string name="player_performance_compatible">兼容</string>
     <string name="player_performance_lightweight">轻量</string>
     <string name="player_performance_original">原版</string>
     <string name="player_performance_help">说明</string>
     <string name="player_performance_help_title">播放性能参数说明</string>
     <string name="player_performance_help_close">关闭</string>
+    <string name="pan_diagnostic_section">诊断工具</string>
+    <string name="pan_diagnostic_entry">链路诊断</string>
+    <string name="pan_diagnostic_title">播放链路诊断</string>
     <string name="player_kernel">播放器内核</string>
     <string name="player_scale">缩放比例</string>
     <string name="player_lut">LUT 调色</string>
@@ -987,6 +992,10 @@
     <string name="mpv_config_text_edit_desc">打开编辑器，输入并保存配置内容</string>
     <string name="mpv_config_import_file">导入配置文件</string>
     <string name="mpv_config_import_file_desc">从本地选择已有配置文件</string>
+    <string name="mpv_config_import_url">通过 URL 导入</string>
+    <string name="mpv_config_import_url_desc">下载远程配置并保存为新配置</string>
+    <string name="mpv_config_url_hint">https://example.com/mpv.conf</string>
+    <string name="mpv_config_import">导入</string>
     <string name="mpv_config_editor_new">新建配置</string>
     <string name="mpv_config_editor_edit">编辑配置</string>
     <string name="mpv_config_save">保存</string>
@@ -1199,6 +1208,15 @@
     <string name="error_play_mpv_invalid_data">MPV 识别到异常媒体数据，请更换线路或手动切换播放器</string>
     <string name="error_play_mpv_decode_failed">MPV 解码失败，请尝试切换软硬解或更换线路</string>
     <string name="error_play_mpv_video_output">MPV 视频输出初始化失败，请尝试切换解码或重新进入播放</string>
+    <string name="error_play_stage_app_local">App 本地播放服务连接失败，请重新进入播放或重启应用</string>
+    <string name="error_play_stage_external_local">本地代理端口连接失败，请重启代理或更换线路</string>
+    <string name="error_play_stage_external_supply">外部或未知本地代理未能持续提供数据，App 无法判断其内部 CDN、鉴权或缓存状态，请检查代理或更换线路</string>
+    <string name="error_play_stage_network">网络读取失败，请检查网络、请求头或更换线路</string>
+    <string name="error_play_stage_media">媒体解析失败或没有有效音视频轨道，请更换线路或播放器</string>
+    <string name="error_play_stage_decoder">音视频解码失败，请尝试切换软硬解或播放器</string>
+    <string name="error_play_stage_output">音视频输出失败，请重新进入播放或切换解码方式</string>
+    <string name="error_play_stage_drm">DRM 鉴权或受保护媒体处理失败，请更换线路或播放器</string>
+    <string name="error_play_stage_unknown">播放失败，当前证据不足，暂时无法确定具体阶段</string>
     <string name="error_play_flag">暂无线路数据</string>
     <string name="error_play_timeout">连接超时</string>
     <string name="error_play_fallback">%1$s 播放失败，已切换到 %2$s</string>

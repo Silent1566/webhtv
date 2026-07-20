@@ -1,5 +1,6 @@
 package com.fongmi.android.tv.ui.adapter;
 
+import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.ViewGroup;
 
@@ -60,8 +61,14 @@ public class SearchAdapter extends BaseDiffAdapter<Vod, RecyclerView.ViewHolder>
 
     @Override
     public void onViewRecycled(@NonNull RecyclerView.ViewHolder holder) {
-        if (holder instanceof GridHolder gridHolder) Glide.with(gridHolder.binding.image).clear(gridHolder.binding.image);
-        if (holder instanceof ListHolder listHolder) Glide.with(listHolder.binding.image).clear(listHolder.binding.image);
+        if (holder instanceof GridHolder gridHolder) {
+            Glide.with(gridHolder.binding.image).clear(gridHolder.binding.image);
+            gridHolder.setMarquee(false);
+        }
+        if (holder instanceof ListHolder listHolder) {
+            Glide.with(listHolder.binding.image).clear(listHolder.binding.image);
+            listHolder.setMarquee(false);
+        }
     }
 
     public class ListHolder extends RecyclerView.ViewHolder {
@@ -72,16 +79,28 @@ public class SearchAdapter extends BaseDiffAdapter<Vod, RecyclerView.ViewHolder>
             super(binding.getRoot());
             this.binding = binding;
             binding.remark.setSelected(true);
+            binding.getRoot().setFocusable(true);
+            binding.name.setMarqueeRepeatLimit(-1);
+            binding.getRoot().setOnFocusChangeListener((view, hasFocus) -> setMarquee(hasFocus));
         }
 
         private void initView(Vod item) {
             binding.name.setText(item.getName());
+            setMarquee(binding.getRoot().hasFocus());
             binding.site.setText(item.getSiteName());
             binding.remark.setText(item.getRemarks());
             binding.site.setVisibility(item.getSiteVisible());
             binding.remark.setVisibility(item.getRemarkVisible());
             binding.getRoot().setOnClickListener(v -> listener.onItemClick(item));
             ImgUtil.load(item.getName(), item.getPic(), binding.image);
+        }
+
+        private void setMarquee(boolean focused) {
+            binding.name.setSingleLine(focused);
+            if (!focused) binding.name.setMaxLines(3);
+            binding.name.setHorizontallyScrolling(focused);
+            binding.name.setEllipsize(focused ? TextUtils.TruncateAt.MARQUEE : TextUtils.TruncateAt.END);
+            binding.name.setSelected(focused);
         }
     }
 
@@ -93,12 +112,18 @@ public class SearchAdapter extends BaseDiffAdapter<Vod, RecyclerView.ViewHolder>
             super(binding.getRoot());
             this.binding = binding;
             binding.remark.setSelected(true);
+            binding.getRoot().setFocusable(true);
+            binding.name.setSingleLine(true);
+            binding.name.setHorizontallyScrolling(true);
+            binding.name.setMarqueeRepeatLimit(-1);
+            binding.getRoot().setOnFocusChangeListener((view, hasFocus) -> setMarquee(hasFocus));
             applySize();
         }
 
         private void initView(Vod item) {
             applySize();
             binding.name.setText(item.getName());
+            setMarquee(binding.getRoot().hasFocus());
             binding.site.setText(item.getSiteName());
             binding.remark.setText(item.getRemarks());
             binding.year.setVisibility(android.view.View.GONE);
@@ -120,6 +145,11 @@ public class SearchAdapter extends BaseDiffAdapter<Vod, RecyclerView.ViewHolder>
                 params.setMargins(margin, margin, margin, margin);
             }
             binding.getRoot().setLayoutParams(rootParams);
+        }
+
+        private void setMarquee(boolean focused) {
+            binding.name.setEllipsize(focused ? TextUtils.TruncateAt.MARQUEE : TextUtils.TruncateAt.END);
+            binding.name.setSelected(focused);
         }
     }
 }

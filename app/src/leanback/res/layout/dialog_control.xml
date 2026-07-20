@@ -114,6 +114,12 @@
                     style="@style/ControlSheetButton"
                     android:text="@string/player_immersive_audio_mode" />
 
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/panDiagnostic"
+                    style="@style/ControlSheetButton"
+                    android:contentDescription="@string/pan_diagnostic_title"
+                    android:text="@string/pan_diagnostic_entry" />
+
             </androidx.appcompat.widget.LinearLayoutCompat>
 
             <com.google.android.material.textview.MaterialTextView

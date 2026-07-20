@@ -30,8 +30,10 @@ import java.util.zip.ZipOutputStream;
 
 public final class AppBackup {
 
-    public static final String PREFIX = "webhtv-backup-";
+    public static final String PREFIX = "bak-";
     public static final String SUFFIX = ".zip";
+
+    private static final String LEGACY_PREFIX = "webhtv-backup-";
 
     private static final DateTimeFormatter STAMP = DateTimeFormatter.ofPattern("yyyyMMdd-HHmm", Locale.ROOT);
     private static final String DATA = "backup.json";
@@ -51,7 +53,25 @@ public final class AppBackup {
     public static boolean isBackup(File file) {
         if (file == null || !file.isFile()) return false;
         String name = file.getName();
-        return (name.startsWith(PREFIX) && name.endsWith(SUFFIX)) || (name.endsWith(".bk.gz") && (name.startsWith("tv-") || name.startsWith("WebHomeTV-")));
+        return isBackupZipName(name) || (name.endsWith(".bk.gz") && (name.startsWith("tv-") || name.startsWith("WebHomeTV-")));
+    }
+
+    public static boolean isBackupZipName(String name) {
+        return hasBackupPrefix(name) && name.endsWith(SUFFIX);
+    }
+
+    public static boolean isBackupManifestName(String name) {
+        return hasBackupPrefix(name) && name.endsWith(".json");
+    }
+
+    public static String backupSortKey(String name) {
+        if (!isBackupZipName(name)) return "";
+        int prefixLength = name.startsWith(PREFIX) ? PREFIX.length() : LEGACY_PREFIX.length();
+        return name.substring(prefixLength, name.length() - SUFFIX.length());
+    }
+
+    private static boolean hasBackupPrefix(String name) {
+        return name != null && (name.startsWith(PREFIX) || name.startsWith(LEGACY_PREFIX));
     }
 
     public static File createTemp() throws IOException {

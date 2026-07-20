@@ -16,9 +16,11 @@ import androidx.media3.mpvplayer.MpvPlayerConfig;
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.bean.Track;
+import com.fongmi.android.tv.player.PlayerHelper;
+import com.fongmi.android.tv.player.PlaybackRoute;
+import com.fongmi.android.tv.player.PlaybackTrace;
 import com.fongmi.android.tv.player.exo.ExoUtil;
 import com.fongmi.android.tv.player.exo.TrackUtil;
-import com.fongmi.android.tv.player.PlayerHelper;
 import com.fongmi.android.tv.player.lut.MpvLutShader;
 import com.fongmi.android.tv.player.mpv.MpvConfigStore;
 import com.fongmi.android.tv.setting.PlayerSetting;
@@ -58,7 +60,7 @@ public class MpvPlayerEngine implements PlayerEngine {
     @Override
     public Player rebuild(Player.Listener listener) {
         player.release();
-        SpiderDebug.log("player-engine", "rebuild mpv decode=%d", decode);
+        PlaybackTrace.log("player-engine", getPlaybackTraceId(), "rebuild mpv decode=%d", decode);
         return player = buildPlayer(listener);
     }
 
@@ -107,7 +109,8 @@ public class MpvPlayerEngine implements PlayerEngine {
         this.spec = spec;
         this.playWhenReady = playWhenReady;
         this.retriedFormat = false;
-        SpiderDebug.log("player-engine", "start mpv decode=%d position=%d play=%s urlLen=%d headers=%d", decode, position, playWhenReady, spec.getUrl() == null ? 0 : spec.getUrl().length(), spec.getHeaders() == null ? 0 : spec.getHeaders().size());
+        player.setPlaybackTraceId(spec.getPlaybackTraceId());
+        PlaybackTrace.log("player-engine", getPlaybackTraceId(), "start mpv decode=%d position=%d play=%s urlLen=%d headers=%d", decode, position, playWhenReady, spec.getUrl() == null ? 0 : spec.getUrl().length(), spec.getHeaders() == null ? 0 : spec.getHeaders().size());
         MediaItem item = ExoUtil.getMediaItem(spec, decode);
         if (position > 0) player.setMediaItem(item, position);
         else player.setMediaItem(item);
@@ -215,6 +218,18 @@ public class MpvPlayerEngine implements PlayerEngine {
     }
 
     @Override
+    public String getPlaybackTraceId() {
+        return spec == null ? PlaybackTrace.NONE : spec.getPlaybackTraceId();
+    }
+
+    @Override
+    public PlaybackRoute.Resolution getEffectivePlaybackRoute() {
+        PlaybackRoute.Resolution current = player.getPlaybackRouteResolution();
+        if (current.route() != PlaybackRoute.OTHER) return current;
+        return spec == null ? current : spec.getPlaybackRoute();
+    }
+
+    @Override
     public boolean supportsSubtitleStyle() {
         return true;
     }
@@ -314,7 +329,7 @@ public class MpvPlayerEngine implements PlayerEngine {
 
     @Override
     public ErrorAction handleError(PlaybackException e) {
-        SpiderDebug.log("player-engine", "handleError mpv code=%d message=%s format=%s retried=%s urlLen=%d", e.errorCode, e.getMessage(), spec == null ? null : spec.getFormat(), retriedFormat, spec == null || spec.getUrl() == null ? 0 : spec.getUrl().length());
+        PlaybackTrace.log("player-engine", getPlaybackTraceId(), "handleError mpv code=%d message=%s format=%s retried=%s urlLen=%d", e.errorCode, e.getMessage(), spec == null ? null : spec.getFormat(), retriedFormat, spec == null || spec.getUrl() == null ? 0 : spec.getUrl().length());
         if (shouldRetryFormat(e)) return retryFormat();
         return ErrorAction.FATAL;
     }
@@ -334,7 +349,7 @@ public class MpvPlayerEngine implements PlayerEngine {
         retriedFormat = true;
         spec.setFormat(MimeTypes.APPLICATION_M3U8);
         long position = Math.max(0, player.getCurrentPosition());
-        SpiderDebug.log("player-engine", "retryFormat mpv newFormat=%s position=%d", spec.getFormat(), position);
+        PlaybackTrace.log("player-engine", getPlaybackTraceId(), "retryFormat mpv newFormat=%s position=%d", spec.getFormat(), position);
         player.stop();
         MediaItem item = ExoUtil.getMediaItem(spec, decode);
         if (position > 0) player.setMediaItem(item, position);

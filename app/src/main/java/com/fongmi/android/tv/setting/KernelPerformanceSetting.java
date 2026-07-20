@@ -61,7 +61,7 @@ public final class KernelPerformanceSetting {
 
     public static int getPreloadThreads(int kernel) {
         ensureMigrated();
-        return clamp(Prefers.getInt(key(kernel, "preload_threads"), PreloadSetting.MIN_THREADS), PreloadSetting.MIN_THREADS, PreloadSetting.MAX_THREADS);
+        return clamp(Prefers.getInt(key(kernel, "preload_threads"), PreloadSetting.DEFAULT_THREADS), PreloadSetting.MIN_THREADS, PreloadSetting.MAX_THREADS);
     }
 
     public static void putPreloadThreads(int kernel, int value) {
@@ -81,7 +81,7 @@ public final class KernelPerformanceSetting {
 
     public static int getPreloadTimeSeconds(int kernel) {
         ensureMigrated();
-        int seconds = clamp(Prefers.getInt(key(kernel, "preload_time"), PreloadSetting.MAX_TIME_SECONDS), PreloadSetting.MIN_TIME_SECONDS, PreloadSetting.MAX_TIME_SECONDS);
+        int seconds = clamp(Prefers.getInt(key(kernel, "preload_time"), PreloadSetting.DEFAULT_TIME_SECONDS), PreloadSetting.MIN_TIME_SECONDS, PreloadSetting.MAX_TIME_SECONDS);
         int steps = Math.round((float) (seconds - PreloadSetting.MIN_TIME_SECONDS) / PreloadSetting.STEP_TIME_SECONDS);
         return clamp(PreloadSetting.MIN_TIME_SECONDS + steps * PreloadSetting.STEP_TIME_SECONDS, PreloadSetting.MIN_TIME_SECONDS, PreloadSetting.MAX_TIME_SECONDS);
     }
@@ -133,45 +133,82 @@ public final class KernelPerformanceSetting {
 
     public static void applyPreset(int kernel, int profile) {
         if (profile == PlaybackPerformanceSetting.PROFILE_LIGHTWEIGHT) {
-            putBuffer(kernel, 5);
-            putBufferBytesOption(kernel, 1);
+            putBuffer(kernel, kernel == PlayerSetting.EXO ? exoBufferForPreset(profile) : 5);
+            putBufferBytesOption(kernel, kernel == PlayerSetting.EXO ? exoBufferBytesOptionForPreset(profile) : 1);
             putBackBufferOption(kernel, 0);
             putPlayCacheOption(kernel, 0);
             putPreload(kernel, false);
-            putPreloadThreads(kernel, PreloadSetting.MIN_THREADS);
+            putPreloadThreads(kernel, preloadThreadsForPreset(profile));
             putPreloadSizeMb(kernel, PreloadSetting.MIN_SIZE_MB);
-            putPreloadTimeSeconds(kernel, PreloadSetting.MIN_TIME_SECONDS);
+            putPreloadTimeSeconds(kernel, preloadTimeForPreset(profile));
             putAudioPassThrough(kernel, false);
             putPreferAac(kernel, true);
             putAudioPrefer(kernel, false);
             putVideoPrefer(kernel, false);
         } else if (profile == PlaybackPerformanceSetting.PROFILE_COMPATIBLE) {
-            putBuffer(kernel, 5);
-            putBufferBytesOption(kernel, 1);
+            putBuffer(kernel, kernel == PlayerSetting.EXO ? exoBufferForPreset(profile) : 5);
+            putBufferBytesOption(kernel, kernel == PlayerSetting.EXO ? exoBufferBytesOptionForPreset(profile) : 1);
             putBackBufferOption(kernel, 1);
             putPlayCacheOption(kernel, 1);
             putPreload(kernel, false);
-            putPreloadThreads(kernel, 1);
+            putPreloadThreads(kernel, preloadThreadsForPreset(profile));
             putPreloadSizeMb(kernel, 128);
-            putPreloadTimeSeconds(kernel, 60);
+            putPreloadTimeSeconds(kernel, preloadTimeForPreset(profile));
             putAudioPassThrough(kernel, false);
             putPreferAac(kernel, true);
             putAudioPrefer(kernel, false);
             putVideoPrefer(kernel, false);
         } else {
-            putBuffer(kernel, 10);
-            putBufferBytesOption(kernel, 3);
+            putBuffer(kernel, kernel == PlayerSetting.EXO ? exoBufferForPreset(profile) : 10);
+            putBufferBytesOption(kernel, kernel == PlayerSetting.EXO ? exoBufferBytesOptionForPreset(profile) : 3);
             putBackBufferOption(kernel, 2);
             putPlayCacheOption(kernel, 2);
             putPreload(kernel, true);
-            putPreloadThreads(kernel, Math.max(2, Math.min(3, Runtime.getRuntime().availableProcessors() / 2)));
+            putPreloadThreads(kernel, preloadThreadsForPreset(profile));
             putPreloadSizeMb(kernel, 512);
-            putPreloadTimeSeconds(kernel, 120);
+            putPreloadTimeSeconds(kernel, preloadTimeForPreset(profile));
             putAudioPassThrough(kernel, false);
             putPreferAac(kernel, false);
             putAudioPrefer(kernel, false);
             putVideoPrefer(kernel, false);
         }
+    }
+
+    static void applyPreloadPreset(int kernel, int profile) {
+        if (profile == PlaybackPerformanceSetting.PROFILE_RECOMMENDED || profile == PlaybackPerformanceSetting.PROFILE_AUTO) {
+            putPreload(kernel, true);
+            putPreloadSizeMb(kernel, 512);
+        } else {
+            putPreload(kernel, false);
+            putPreloadSizeMb(kernel, PreloadSetting.MIN_SIZE_MB);
+        }
+        putPreloadThreads(kernel, preloadThreadsForPreset(profile));
+        putPreloadTimeSeconds(kernel, preloadTimeForPreset(profile));
+    }
+
+    static int preloadThreadsForPreset(int profile) {
+        return PreloadSetting.DEFAULT_THREADS;
+    }
+
+    static int preloadTimeForPreset(int profile) {
+        return PreloadSetting.DEFAULT_TIME_SECONDS;
+    }
+
+    static void applyExoLoadControlPreset(int profile) {
+        putBuffer(PlayerSetting.EXO, exoBufferForPreset(profile));
+        putBufferBytesOption(PlayerSetting.EXO, exoBufferBytesOptionForPreset(profile));
+    }
+
+    static int exoBufferForPreset(int profile) {
+        return switch (profile) {
+            case PlaybackPerformanceSetting.PROFILE_COMPATIBLE -> 4;
+            case PlaybackPerformanceSetting.PROFILE_LIGHTWEIGHT -> 1;
+            default -> 10;
+        };
+    }
+
+    static int exoBufferBytesOptionForPreset(int profile) {
+        return profile == PlaybackPerformanceSetting.PROFILE_RECOMMENDED || profile == PlaybackPerformanceSetting.PROFILE_AUTO ? 2 : 1;
     }
 
     private static synchronized void ensureMigrated() {
@@ -181,9 +218,9 @@ public final class KernelPerformanceSetting {
         int backBuffer = clamp(Prefers.getInt("back_buffer"), 0, 3);
         int playCache = clamp(Prefers.getInt("play_cache"), 0, 4);
         boolean preload = Prefers.getBoolean("preload");
-        int preloadThreads = clamp(Prefers.getInt("preload_threads", PreloadSetting.MIN_THREADS), PreloadSetting.MIN_THREADS, PreloadSetting.MAX_THREADS);
+        int preloadThreads = clamp(Prefers.getInt("preload_threads", PreloadSetting.DEFAULT_THREADS), PreloadSetting.MIN_THREADS, PreloadSetting.MAX_THREADS);
         int preloadSize = closestPreloadSize(Prefers.getInt("preload_size", PreloadSetting.MIN_SIZE_MB));
-        int preloadTime = clamp(Prefers.getInt("preload_time", PreloadSetting.MAX_TIME_SECONDS), PreloadSetting.MIN_TIME_SECONDS, PreloadSetting.MAX_TIME_SECONDS);
+        int preloadTime = clamp(Prefers.getInt("preload_time", PreloadSetting.DEFAULT_TIME_SECONDS), PreloadSetting.MIN_TIME_SECONDS, PreloadSetting.MAX_TIME_SECONDS);
         boolean audioPass = Prefers.getBoolean("audio_pass_through", true);
         boolean preferAac = Prefers.getBoolean("prefer_aac");
         boolean audioPrefer = Prefers.getBoolean("audio_prefer");

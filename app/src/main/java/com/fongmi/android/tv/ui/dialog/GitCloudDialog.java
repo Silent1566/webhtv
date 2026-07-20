@@ -1856,17 +1856,17 @@ public class GitCloudDialog extends BaseAlertDialog {
         GitFile latest = null;
         for (GitFile file : files) {
             if (!isBackupZip(file)) continue;
-            if (latest == null || file.name.compareToIgnoreCase(latest.name) > 0) latest = file;
+            if (latest == null || AppBackup.backupSortKey(file.name).compareToIgnoreCase(AppBackup.backupSortKey(latest.name)) > 0) latest = file;
         }
         return latest;
     }
 
     private boolean isBackupZip(GitFile file) {
-        return file != null && !file.directory && !TextUtils.isEmpty(file.name) && file.name.startsWith(AppBackup.PREFIX) && file.name.endsWith(AppBackup.SUFFIX);
+        return file != null && !file.directory && AppBackup.isBackupZipName(file.name);
     }
 
     private boolean isBackupManifest(GitFile file) {
-        return file != null && !file.directory && !TextUtils.isEmpty(file.name) && file.name.startsWith(AppBackup.PREFIX) && file.name.endsWith(".json");
+        return file != null && !file.directory && AppBackup.isBackupManifestName(file.name);
     }
 
     private void downloadRemoteFile(GitFile file, File target) throws Exception {

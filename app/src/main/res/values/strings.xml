@@ -831,6 +831,7 @@
     <!-- Device Sync -->
     <string name="device_select">Select devices</string>
     <string name="device_offline">Device is offline</string>
+    <string name="cast_not_ready">Playback information is not ready. Try again shortly.</string>
     <string name="sync_success">Sync completed</string>
     <string name="sync_progress">Syncing...</string>
     <string name="sync_failed">Sync failed</string>
@@ -939,13 +940,17 @@
     <string name="player_exo_4k_compat">Playback performance</string>
     <string name="player_immersive_audio_mode">Immersive audio mode</string>
     <string name="player_performance">Playback performance</string>
-    <string name="player_performance_recommended">Recommended</string>
+    <string name="player_performance_recommended">Balanced</string>
+    <string name="player_performance_auto">Auto</string>
     <string name="player_performance_compatible">Compatible</string>
     <string name="player_performance_lightweight">Light</string>
     <string name="player_performance_original">Original</string>
     <string name="player_performance_help">Guide</string>
     <string name="player_performance_help_title">Playback performance guide</string>
     <string name="player_performance_help_close">Close</string>
+    <string name="pan_diagnostic_section">Diagnostics</string>
+    <string name="pan_diagnostic_entry">Link test</string>
+    <string name="pan_diagnostic_title">Playback link diagnostics</string>
     <string name="player_kernel">Player engine</string>
     <string name="player_scale">Scale</string>
     <string name="player_lut">LUT color</string>
@@ -990,6 +995,10 @@
     <string name="mpv_config_text_edit_desc">Open the editor to enter and save config content</string>
     <string name="mpv_config_import_file">Import config file</string>
     <string name="mpv_config_import_file_desc">Choose an existing config file from this device</string>
+    <string name="mpv_config_import_url">Import from URL</string>
+    <string name="mpv_config_import_url_desc">Download a remote config and save it as a new profile</string>
+    <string name="mpv_config_url_hint">https://example.com/mpv.conf</string>
+    <string name="mpv_config_import">Import</string>
     <string name="mpv_config_editor_new">New config</string>
     <string name="mpv_config_editor_edit">Edit config</string>
     <string name="mpv_config_save">Save</string>
@@ -1212,6 +1221,15 @@
     <string name="error_play_mpv_invalid_data">MPV found invalid media data. Choose another line or switch player manually.</string>
     <string name="error_play_mpv_decode_failed">MPV failed to decode this media. Try switching soft/hard decode or choose another line.</string>
     <string name="error_play_mpv_video_output">MPV failed to initialize video output. Try switching decode mode or reopen playback.</string>
+    <string name="error_play_stage_app_local">The app playback service could not be reached. Reopen playback or restart the app.</string>
+    <string name="error_play_stage_external_local">The local proxy port could not be reached. Restart the proxy or choose another line.</string>
+    <string name="error_play_stage_external_supply">An external or unknown local proxy could not provide a continuous data stream. The app cannot inspect its CDN, authorization, or cache state. Check the proxy or choose another line.</string>
+    <string name="error_play_stage_network">Network reading failed. Check the network and request headers, or choose another line.</string>
+    <string name="error_play_stage_media">Media parsing failed or no playable audio/video track was found. Choose another line or player.</string>
+    <string name="error_play_stage_decoder">Audio/video decoding failed. Try another decode mode or player.</string>
+    <string name="error_play_stage_output">Audio/video output failed. Reopen playback or try another decode mode.</string>
+    <string name="error_play_stage_drm">DRM authorization or protected-media handling failed. Choose another line or player.</string>
+    <string name="error_play_stage_unknown">Playback failed, but there is not enough evidence to identify the failing stage.</string>
     <string name="error_play_flag">No flag data</string>
     <string name="error_play_timeout">Timed out</string>
     <string name="error_play_fallback">%1$s playback failed, switched to %2$s</string>

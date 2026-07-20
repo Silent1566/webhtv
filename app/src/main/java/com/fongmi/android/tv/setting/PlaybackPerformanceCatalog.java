@@ -154,9 +154,9 @@ public final class PlaybackPerformanceCatalog {
 
     private static String profileDescription(int kernel) {
         return switch (kernel) {
-            case PlayerSetting.MPV -> "MPV 独立预设，组合输出、硬解、同步、缓存和诊断参数。参数优先级决定它与用户mpv.conf同名设置的覆盖关系。";
-            case PlayerSetting.IJK -> "IJK 独立预设。后续只组合 IJK 的读包、缓冲、水位、丢帧、探测和直播策略，不修改 EXO/MPV 专用值。";
-            default -> "EXO 独立预设，组合 Media3 选轨、LoadControl、MediaCodec、Surface、预载和音频参数，不修改 MPV/IJK 专用值。";
+            case PlayerSetting.MPV -> "自动档当前使用MPV均衡基线；第三批完成指标闭环后再增加动态能力。MPV独立组合输出、硬解、同步、缓存和诊断参数，参数优先级决定它与用户mpv.conf同名设置的覆盖关系。";
+            case PlayerSetting.IJK -> "自动档当前使用IJK均衡基线。IJK独立组合读包、缓冲、水位、丢帧、探测和直播策略，不修改EXO/MPV专用值。";
+            default -> "自动档以均衡参数起步，根据真实缓冲、码率和带宽把预载调整为0～2线程，并为下一播放会话选择2～8秒重缓冲恢复值；LoadControl容量、解码器和渲染器在单次会话内保持稳定。";
         };
     }
 

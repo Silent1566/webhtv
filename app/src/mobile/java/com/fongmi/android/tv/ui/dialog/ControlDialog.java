@@ -316,6 +316,7 @@ binding.ending.setText(controls.ending.getText());
         binding.repeat.setOnClickListener(v -> active(binding.repeat, controls.repeat));
         binding.decode.setOnClickListener(v -> click(binding.decode, controls.decode));
         binding.codecCapability.setOnClickListener(v -> listener().onCodecCapabilityPanel());
+        binding.panDiagnostic.setOnClickListener(v -> onPanDiagnostic());
         binding.lut.setOnClickListener(v -> onLut());
         binding.ending.setOnClickListener(v -> click(binding.ending, controls.ending));
         binding.opening.setOnClickListener(v -> click(binding.opening, controls.opening));
@@ -326,6 +327,14 @@ binding.ending.setText(controls.ending.getText());
 
     private void onTimer(View view) {
         TimerDialog.create().show(getActivity());
+    }
+
+    private void onPanDiagnostic() {
+        FragmentActivity activity = getActivity();
+        PlayerManager current = player;
+        if (activity == null || current == null) return;
+        dismissAllowingStateLoss();
+        App.post(() -> PanNetworkDiagnosticDialog.show(activity, current), 140);
     }
 
     private void setImmersiveAudio() {

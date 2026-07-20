@@ -170,7 +170,7 @@ public class SyncFiles {
         if (path.startsWith("TV/lib/") || path.startsWith("TV/log/") || path.startsWith("TV/LogVar/")) return true;
         if (path.startsWith("TV/cache_") || path.startsWith("TV/.subtitle_proxy_cache/") || path.startsWith("TV/.ai_subtitle_cache/") || path.startsWith("TV/.online_subtitle_cache/")) return true;
         String name = path.substring(path.lastIndexOf('/') + 1);
-        if (name.matches("(?i)(tv-|webhometv-).*\\.bk\\.gz") || name.matches("webhtv-backup-.*\\.zip")) return true;
+        if (name.matches("(?i)(tv-|webhometv-).*\\.bk\\.gz") || AppBackup.isBackupZipName(name)) return true;
         return ".DS_Store".equals(name) || name.startsWith("._");
     }
 

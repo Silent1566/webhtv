@@ -9,6 +9,8 @@ import androidx.media3.common.Player;
 import androidx.media3.common.Tracks;
 
 import com.fongmi.android.tv.bean.Track;
+import com.fongmi.android.tv.player.PlaybackRoute;
+import com.fongmi.android.tv.player.PlaybackTrace;
 import com.fongmi.android.tv.player.lut.MpvLutShader;
 
 import java.util.Collections;
@@ -110,6 +112,10 @@ default void resetTrack(int type) {
         return 0;
     }
 
+    default String getPlaybackTraceId() {
+        return PlaybackTrace.NONE;
+    }
+
     default boolean supportsSubtitleStyle() {
         return false;
     }
@@ -145,6 +151,10 @@ default void resetTrack(int type) {
 
     default List<MediaEdition> getCurrentMediaEditions() {
         return Collections.emptyList();
+    }
+
+    default PlaybackRoute.Resolution getEffectivePlaybackRoute() {
+        return null;
     }
 
     default boolean selectEdition(MediaEdition edition) {

@@ -27,6 +27,7 @@ import androidx.media3.common.Tracks;
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.player.PlayerManager;
+import com.fongmi.android.tv.player.PlaybackRoute;
 import com.fongmi.android.tv.player.engine.PlayerCacheState;
 import com.fongmi.android.tv.player.exo.PlaybackAnalyticsListener;
 import com.fongmi.android.tv.setting.PlaybackPerformanceSetting;
@@ -924,7 +925,7 @@ public class PlayerOsdController {
             String scheme = uri.getScheme();
             String host = uri.getHost();
             String path = uri.getPath();
-            String type = sourceType(scheme, host, path, url);
+            String type = sourceType(scheme, path, url);
             String ext = extension(path);
             return join(" ", type, TextUtils.isEmpty(host) ? emptyDash(scheme) : scheme + "://" + host, ext);
         } catch (Throwable ignored) {
@@ -932,10 +933,12 @@ public class PlayerOsdController {
         }
     }
 
-    private String sourceType(String scheme, String host, String path, String url) {
+    private String sourceType(String scheme, String path, String url) {
         String lower = url.toLowerCase(Locale.US);
         if ("file".equals(scheme) || "content".equals(scheme)) return "local";
-        if ("127.0.0.1".equals(host) || "localhost".equals(host)) return "local-proxy";
+        PlaybackRoute route = PlaybackRoute.classify(url);
+        if (route == PlaybackRoute.APP_LOCAL_SERVICE) return "app-local-service";
+        if (route == PlaybackRoute.EXTERNAL_LOOPBACK_PROXY) return "external-local-endpoint";
         if (lower.contains(".m3u8")) return "hls";
         if (lower.contains(".mpd")) return "dash";
         if (lower.startsWith("rtsp")) return "rtsp";

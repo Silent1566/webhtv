@@ -6,6 +6,7 @@ import androidx.annotation.Nullable;
 import com.fongmi.android.tv.api.config.HlsRuleConfig;
 import com.fongmi.android.tv.utils.HlsAdblockPipeline;
 
+import com.fongmi.android.tv.player.PlaybackRouteRegistry;
 import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.PreloadSetting;
 import com.fongmi.android.tv.setting.Setting;
@@ -89,6 +90,7 @@ public final class MpvHlsProxy extends NanoHTTPD {
     private final AtomicLong nextId;
     private final java.util.Set<String> preloading;
     private ExecutorService preloadExecutor;
+    private PlaybackRouteRegistry.Registration routeRegistration;
     private int preloadThreads;
     private volatile int sessionId;
     private volatile boolean started;
@@ -147,6 +149,8 @@ public final class MpvHlsProxy extends NanoHTTPD {
     public synchronized void release() {
         clear();
         if (started) stop();
+        if (routeRegistration != null) routeRegistration.close();
+        routeRegistration = null;
         started = false;
     }
 
@@ -185,6 +189,7 @@ public final class MpvHlsProxy extends NanoHTTPD {
     private void ensureStarted() throws IOException {
         if (started) return;
         start(NanoHTTPD.SOCKET_READ_TIMEOUT, true);
+        routeRegistration = PlaybackRouteRegistry.registerAppService(getListeningPort(), PlaybackRouteRegistry.AppOwner.HLS_PROXY);
         started = true;
     }
 

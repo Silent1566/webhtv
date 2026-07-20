@@ -98,6 +98,8 @@ public class PlayerManager implements ParseCallback {
     private final DynamicLutEffect dynamicLutEffect;
     private final AudioManager.OnAudioFocusChangeListener audioFocusChangeListener;
     private final BroadcastReceiver noisyReceiver;
+    private final PlaybackBufferingTracker playbackBufferingTracker;
+    private final PlaybackTrace playbackTrace;
     private DanmakuController danmakuController;
     private PlayerEngine engine;
     private VideoSize videoSize;
@@ -108,6 +110,7 @@ public class PlayerManager implements ParseCallback {
     private String currentDanmakuUrl;
     private String currentDanmakuKey;
     private String loadingDanmakuKey;
+    private String lastLoggedRouteTraceId = PlaybackTrace.NONE;
     private long danmakuLoadStartedAtMs;
     private long pendingSwitchPositionMs = C.TIME_UNSET;
     private float pendingSwitchSpeed = 1f;
@@ -146,6 +149,8 @@ public class PlayerManager implements ParseCallback {
 
     public PlayerManager(Callback callback) {
         this.runnable = this::onPlaybackTimeout;
+        this.playbackBufferingTracker = new PlaybackBufferingTracker();
+        this.playbackTrace = new PlaybackTrace();
         this.dynamicLutEffect = new DynamicLutEffect();
         this.audioFocusChangeListener = this::onNativeAudioFocusChanged;
         this.noisyReceiver = new BroadcastReceiver() {
@@ -184,6 +189,9 @@ public class PlayerManager implements ParseCallback {
         lutWarmupReloadPreviewPending = false;
         clearLutWarmupRecovery();
         clearDanmakuState();
+        playbackBufferingTracker.reset();
+        playbackTrace.clear();
+        lastLoggedRouteTraceId = PlaybackTrace.NONE;
     }
 
     private void resetLutRuntimeState(String reason, boolean clearEngineEffects) {
@@ -225,6 +233,10 @@ public class PlayerManager implements ParseCallback {
 
     public MediaItem getCurrentMediaItem() {
         return player.getCurrentMediaItem();
+    }
+
+    public String getPlaybackTraceId() {
+        return playbackTrace.current();
     }
 
     public int getPlaybackState() {
@@ -388,6 +400,14 @@ public class PlayerManager implements ParseCallback {
 
     public long getDroppedFrames() {
         return engine == null ? 0 : engine.getDroppedFrames();
+    }
+
+    public int getRebufferCount() {
+        return playbackBufferingTracker.getRebufferCount();
+    }
+
+    public long getRebufferTotalMs() {
+        return playbackBufferingTracker.getRebufferTotalMs();
     }
 
     public boolean supportsSubtitleStyle() {
@@ -733,6 +753,9 @@ public class PlayerManager implements ParseCallback {
         pendingLutPreview = false;
         waitingLutBeforePlay = false;
         clearLutWarmupRecovery();
+        playbackBufferingTracker.reset();
+        playbackTrace.clear();
+        lastLoggedRouteTraceId = PlaybackTrace.NONE;
     }
 
     public void resetTrack() {
@@ -789,6 +812,7 @@ public void resetTrack(int type) {
         int next = engine.isHard() ? PlayerEngine.SOFT : PlayerEngine.HARD;
         boolean resetVideoSurface = playerType == PlayerSetting.EXO && next == PlayerEngine.HARD;
         hardDecodeSwitchRetryArmed = next == PlayerEngine.HARD;
+        beginPlaybackTrace("switch-decode");
         engine.setDecode(next);
         rebuildPlayer(resetVideoSurface);
         setMediaItem();
@@ -796,6 +820,7 @@ public void resetTrack(int type) {
 
     public void switchDecode(PlaySpec freshSpec, long position, float speed, boolean repeat) {
         if (engine == null || player == null || freshSpec == null) return;
+        beginPlaybackTrace("switch-decode-fresh");
         int next = engine.isHard() ? PlayerEngine.SOFT : PlayerEngine.HARD;
         boolean resetVideoSurface = playerType == PlayerSetting.EXO && next == PlayerEngine.HARD;
         boolean wasPlayWhenReady = player.getPlayWhenReady();
@@ -804,6 +829,7 @@ public void resetTrack(int type) {
         stopNativeAudioSession();
         engine.release();
         spec = freshSpec;
+        bindPlaybackTrace();
         hardDecodeSwitchRetryArmed = next == PlayerEngine.HARD;
         engine = buildEngine(playerType, next);
         player = engine.getPlayer();
@@ -818,6 +844,7 @@ public void resetTrack(int type) {
 
     public void switchDecode(Result result, String key, MediaMetadata metadata, boolean useParse, long position, float speed, boolean repeat) {
         if (engine == null || player == null || result == null || result.hasMsg() || result.getRealUrl().isEmpty()) return;
+        beginPlaybackTrace("switch-decode-result");
         int next = engine.isHard() ? PlayerEngine.SOFT : PlayerEngine.HARD;
         boolean resetVideoSurface = playerType == PlayerSetting.EXO && next == PlayerEngine.HARD;
         boolean wasPlayWhenReady = player.getPlayWhenReady();
@@ -837,10 +864,12 @@ public void resetTrack(int type) {
             pendingSwitchSpeed = speed;
             pendingSwitchRepeat = repeat;
             spec = PlaySpec.fromParse(result, key, metadata, useParse);
+            bindPlaybackTrace();
             if (SpiderDebug.isEnabled()) SpiderDebug.log("player", "switch decode fresh parse decode=%d position=%d useParse=%s spec=%s", next, position, useParse, debugSpec());
             parseJob = ParseJob.create(this).start(result, useParse);
         } else {
             spec = PlaySpec.from(result, key, metadata);
+            bindPlaybackTrace();
             if (SpiderDebug.isEnabled()) SpiderDebug.log("player", "switch decode fresh result decode=%d position=%d spec=%s", next, position, debugSpec());
             setMediaItem(Constant.TIMEOUT_PLAY);
             if (position > 0) seekTo(position);
@@ -863,6 +892,7 @@ public void resetTrack(int type) {
 
     public void switchPlayer(int type, PlaySpec freshSpec, long position, float speed, boolean repeat) {
         if (engine == null || player == null || freshSpec == null) return;
+        beginPlaybackTrace("switch-player-fresh");
         type = PlayerSetting.sanitizePlayer(type);
         boolean wasPlayWhenReady = player.getPlayWhenReady();
         int decode = engine.getDecode();
@@ -873,6 +903,7 @@ public void resetTrack(int type) {
         playerType = type;
         PlayerSetting.putPlayer(type);
         spec = freshSpec;
+        bindPlaybackTrace();
         playWhenReady = wasPlayWhenReady;
         if (SpiderDebug.isEnabled()) SpiderDebug.log("player", "switch player fresh type=%d position=%d spec=%s", type, position, debugSpec());
         engine = buildEngine(playerType, decode);
@@ -886,6 +917,7 @@ public void resetTrack(int type) {
 
     public void switchPlayer(int type, Result result, String key, MediaMetadata metadata, boolean useParse, long position, float speed, boolean repeat) {
         if (engine == null || player == null || result == null || result.hasMsg() || result.getRealUrl().isEmpty()) return;
+        beginPlaybackTrace("switch-player-result");
         type = PlayerSetting.sanitizePlayer(type);
         manualPlayerSwitchPending = true;
         boolean wasPlayWhenReady = player.getPlayWhenReady();
@@ -907,10 +939,12 @@ public void resetTrack(int type) {
             pendingSwitchSpeed = speed;
             pendingSwitchRepeat = repeat;
             spec = PlaySpec.fromParse(result, key, metadata, useParse);
+            bindPlaybackTrace();
             if (SpiderDebug.isEnabled()) SpiderDebug.log("player", "switch player fresh parse type=%d position=%d useParse=%s spec=%s", type, position, useParse, debugSpec());
             parseJob = ParseJob.create(this).start(result, useParse);
         } else {
             spec = PlaySpec.from(result, key, metadata);
+            bindPlaybackTrace();
             if (SpiderDebug.isEnabled()) SpiderDebug.log("player", "switch player fresh result type=%d position=%d spec=%s", type, position, debugSpec());
             setMediaItem(Constant.TIMEOUT_PLAY);
             if (position > 0) seekTo(position);
@@ -930,6 +964,7 @@ public void resetTrack(int type) {
         if (type == playerType) return;
         resetPlayerFallback();
         manualPlayerSwitchPending = manual;
+        beginPlaybackTrace("switch-player");
         switchEngine(type, persist, true, true);
     }
 
@@ -1010,6 +1045,7 @@ public void resetTrack(int type) {
     public void start(PlaySpec spec, long timeout, boolean playWhenReady) {
         clearPendingSwitchRestore();
         this.spec = spec;
+        beginPlaybackTrace("start");
         this.playWhenReady = playWhenReady;
         manualPlayerSwitchPending = false;
         localProxyRetry = 0;
@@ -1027,6 +1063,7 @@ public void resetTrack(int type) {
         stopParse();
         clearPendingSwitchRestore();
         spec = PlaySpec.fromParse(result, key, metadata, useParse);
+        beginPlaybackTrace("parse");
         this.playWhenReady = playWhenReady;
         manualPlayerSwitchPending = false;
         localProxyRetry = 0;
@@ -1056,6 +1093,7 @@ public void resetTrack(int type) {
         stopParse();
         if (spec.isParseSource()) {
             spec = PlaySpec.fromParse(result, key, metadata, useParse);
+            bindPlaybackTrace();
             if (SpiderDebug.isEnabled()) SpiderDebug.log("player", "switch player reparse type=%d position=%d useParse=%s spec=%s", playerType, position, useParse, debugSpec());
             parseJob = ParseJob.create(this).start(result, useParse);
         } else {
@@ -1094,10 +1132,12 @@ public void resetTrack(int type) {
         }
         if (result.needParse()) {
             spec = PlaySpec.fromParse(result, key, metadata, false);
+            bindPlaybackTrace();
             parseJob = ParseJob.create(this).start(result, false);
             return;
         }
         spec = PlaySpec.from(result, key, metadata);
+        bindPlaybackTrace();
         if (SpiderDebug.isEnabled()) SpiderDebug.log("player", "switch player refreshed direct spec=%s", debugSpec());
         setMediaItem(Constant.TIMEOUT_PLAY);
         restoreAfterSwitchReparse();
@@ -1176,6 +1216,9 @@ public void resetTrack(int type) {
 
     private void setMediaItemNow(long timeout, boolean notifyPrepare) {
         if (spec == null || spec.getUrl() == null || engine == null) return;
+        spec.setPlaybackTraceId(playbackTrace.ensure());
+        spec.refreshPlaybackRoute();
+        logPlaybackRoute();
         if (SpiderDebug.isEnabled()) SpiderDebug.log("player", "setMediaItem timeout=%d notify=%s spec=%s", timeout, notifyPrepare, debugSpec());
         App.removeCallbacks(runnable);
         setDanmakus(spec.getDanmakus());
@@ -1183,6 +1226,7 @@ public void resetTrack(int type) {
         initTrack = false;
         waitingLutBeforePlay = false;
         applySubtitleStyle();
+        playbackTrace.mark(PlaybackTrace.Stage.PREPARE, "player=" + playerType + " decode=" + engine.getDecode());
         engine.start(spec.checkUa(), playWhenReady);
         startNativeAudioSession(playWhenReady);
         App.post(runnable, timeout);
@@ -1841,7 +1885,8 @@ public void resetTrack(int type) {
     @Override
     public void onParseSuccess(Map<String, String> headers, String url, String from) {
         if (!TextUtils.isEmpty(from)) Notify.show(ResUtil.getString(R.string.parse_from, from));
-        if (SpiderDebug.isEnabled()) SpiderDebug.log("player", "parseSuccess from=%s url=%s headers=%s", from, summarizeUrl(url), headers == null ? 0 : headers.size());
+        playbackTrace.mark(PlaybackTrace.Stage.PARSE_COMPLETE, "headers=" + (headers == null ? 0 : headers.size()));
+        PlaybackTrace.log("player", playbackTrace.current(), "parseSuccess from=%s url=%s headers=%s", from, summarizeUrl(url), headers == null ? 0 : headers.size());
         recordParseHealth(true, "");
         if (headers != null) headers.remove(HttpHeaders.RANGE);
         if (spec != null) spec.setHeaders(headers);
@@ -1866,12 +1911,34 @@ public void resetTrack(int type) {
 
     private String debugSpec() {
         if (spec == null) return "null";
-        return "key=" + spec.getKey() +
+        return "trace=" + playbackTrace.current() +
+                ", key=" + spec.getKey() +
                 ", url=" + summarizeUrl(spec.getUrl()) +
                 ", format=" + spec.getFormat() +
                 ", headers=" + (spec.getHeaders() == null ? 0 : spec.getHeaders().size()) +
                 ", subs=" + (spec.getSubs() == null ? 0 : spec.getSubs().size()) +
                 ", danmakus=" + (spec.getDanmakus() == null ? 0 : spec.getDanmakus().size());
+    }
+
+    private void beginPlaybackTrace(String reason) {
+        playbackBufferingTracker.reset();
+        playbackTrace.begin();
+        lastLoggedRouteTraceId = PlaybackTrace.NONE;
+        bindPlaybackTrace();
+        playbackTrace.mark(PlaybackTrace.Stage.REQUEST, "reason=" + reason + " player=" + playerType + " decode=" + (engine == null ? -1 : engine.getDecode()));
+    }
+
+    private void bindPlaybackTrace() {
+        if (spec != null) spec.setPlaybackTraceId(playbackTrace.current());
+    }
+
+    private void logPlaybackRoute() {
+        if (spec == null) return;
+        String traceId = playbackTrace.current();
+        if (traceId.equals(lastLoggedRouteTraceId)) return;
+        PlaybackRoute.Resolution resolution = spec.getPlaybackRoute();
+        PlaybackTrace.log("playback-route", traceId, "%s", resolution.logSummary());
+        lastLoggedRouteTraceId = traceId;
     }
 
     private static String summarizeUrl(String url) {
@@ -1897,6 +1964,77 @@ public void resetTrack(int type) {
             case Player.STATE_ENDED -> "ENDED";
             default -> String.valueOf(state);
         };
+    }
+
+    private void markStartupCompletion(boolean ready, Tracks tracks) {
+        if (tracks == null) return;
+        boolean hasVideo = tracks.containsType(C.TRACK_TYPE_VIDEO);
+        boolean hasAudio = tracks.containsType(C.TRACK_TYPE_AUDIO);
+        PlaybackStartupPolicy.Completion completion = PlaybackStartupPolicy.resolve(ready, playerType == PlayerSetting.MPV, hasVideo, hasAudio);
+        if (completion == PlaybackStartupPolicy.Completion.FIRST_FRAME) {
+            playbackTrace.mark(PlaybackTrace.Stage.FIRST_FRAME, "source=mpv-playback-restart player=" + playerType);
+        } else if (completion == PlaybackStartupPolicy.Completion.AUDIO_PLAYABLE) {
+            playbackTrace.mark(PlaybackTrace.Stage.AUDIO_PLAYABLE, "source=ready player=" + playerType);
+        }
+    }
+
+    private void recordBufferingState(int state) {
+        if (player == null || (playerType != PlayerSetting.EXO && playerType != PlayerSetting.MPV)) return;
+        boolean startupComplete = playbackTrace.hasStage(PlaybackTrace.Stage.FIRST_FRAME) || playbackTrace.hasStage(PlaybackTrace.Stage.AUDIO_PLAYABLE);
+        PlaybackBufferingTracker.Event event = playbackBufferingTracker.update(
+                state == Player.STATE_BUFFERING,
+                startupComplete,
+                SystemClock.elapsedRealtime(),
+                state,
+                currentPositionSnapshot(),
+                forwardBufferedSnapshot(),
+                loadingSnapshot());
+        if (event == null) return;
+        PlaybackTrace.log("playback-buffer", playbackTrace.current(),
+                "event=%s phase=%s outcome=%s duration=%dms count=%d total=%dms position=%d forward=%d state=%s loading=%s",
+                event.type().label(), event.phase().label(), bufferingOutcome(event), event.durationMs(), event.rebufferCount(), event.rebufferTotalMs(),
+                event.positionMs(), event.forwardBufferedMs(), stateName(event.playbackState()), event.loading());
+    }
+
+    private long currentPositionSnapshot() {
+        try {
+            return Math.max(0, player.getCurrentPosition());
+        } catch (Throwable ignored) {
+            return 0;
+        }
+    }
+
+    private long forwardBufferedSnapshot() {
+        try {
+            return Math.max(0, player.getTotalBufferedDuration());
+        } catch (Throwable ignored) {
+            return 0;
+        }
+    }
+
+    private boolean loadingSnapshot() {
+        try {
+            return player.isLoading();
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private static String bufferingOutcome(PlaybackBufferingTracker.Event event) {
+        if (event.type() == PlaybackBufferingTracker.Type.START) return "-";
+        return switch (event.playbackState()) {
+            case Player.STATE_READY -> "ready";
+            case Player.STATE_ENDED -> "ended";
+            case Player.STATE_IDLE -> "idle";
+            default -> "left-buffering";
+        };
+    }
+
+    private static String trackSummary(Tracks tracks) {
+        return "video=" + tracks.containsType(C.TRACK_TYPE_VIDEO) +
+                " audio=" + tracks.containsType(C.TRACK_TYPE_AUDIO) +
+                " text=" + tracks.containsType(C.TRACK_TYPE_TEXT) +
+                " groups=" + tracks.getGroups().size();
     }
 
     private static String causeChain(Throwable error) {
@@ -1940,10 +2078,13 @@ public void resetTrack(int type) {
             if (SpiderDebug.isEnabled()) SpiderDebug.log("player", "state=%s spec=%s", stateName(state), debugSpec());
             if (state == Player.STATE_READY) {
                 manualPlayerSwitchPending = false;
+                playbackTrace.mark(PlaybackTrace.Stage.READY, "player=" + playerType);
+                markStartupCompletion(true, getCurrentTracks());
                 hardDecodeSwitchRetryArmed = false;
                 clearLutWarmupRecovery();
                 applyLutForCurrentItem();
             }
+            recordBufferingState(state);
         }
 
         @Override
@@ -1955,6 +2096,7 @@ public void resetTrack(int type) {
         @Override
         public void onTracksChanged(@NonNull Tracks tracks) {
             if (!tracks.isEmpty() && !initTrack) {
+                playbackTrace.mark(PlaybackTrace.Stage.TRACKS, trackSummary(tracks));
                 List<Track> savedTracks = Track.find(getKey());
                 setTrack(savedTracks);
                 if (RealtimeSubtitleController.get().isEnabled()) disableSubtitleTrackForRealtime();
@@ -1962,7 +2104,13 @@ public void resetTrack(int type) {
                 callback.onTracksChanged();
                 initTrack = true;
             }
+            markStartupCompletion(player != null && player.getPlaybackState() == Player.STATE_READY, tracks);
             applyLutForCurrentItem();
+        }
+
+        @Override
+        public void onRenderedFirstFrame() {
+            playbackTrace.mark(PlaybackTrace.Stage.FIRST_FRAME, "source=media3 player=" + playerType);
         }
 
         @Override
@@ -1973,9 +2121,11 @@ public void resetTrack(int type) {
         @Override
         public void onPlayerError(@NonNull PlaybackException e) {
             App.removeCallbacks(runnable);
+            PlaybackErrorClassifier.Failure failure = PlaybackErrorClassifier.classify(e, getEffectivePlaybackRoute());
             PlayerEngine.ErrorAction action = engine.handleError(e);
             int statusCode = httpStatus(e);
             String errorMessage = engine.getErrorMessage(e);
+            PlaybackTrace.log("playback-error", playbackTrace.current(), "%s action=%s player=%d decode=%d", failure.logSummary(), action, playerType, engine.getDecode());
             if (SpiderDebug.isEnabled()) SpiderDebug.log("player", "error code=%d http=%d message=%s action=%s spec=%s cause=%s", e.errorCode, statusCode, e.getMessage(), action, debugSpec(), causeChain(e));
             LocalProxyDebug.dumpIfLocalFailure(spec == null ? null : spec.getUrl(), e);
             if (statusCode > 0 && callback.onSourceHttpError(statusCode, errorMessage)) return;
@@ -1988,7 +2138,7 @@ public void resetTrack(int type) {
                 return;
             }
             if (action == PlayerEngine.ErrorAction.RELOAD) {
-                callback.onReload(errorMessage);
+                callback.onReload(getPlaybackErrorMessage(failure));
                 return;
             }
             if (action == PlayerEngine.ErrorAction.RECOVERED) {
@@ -1996,7 +2146,7 @@ public void resetTrack(int type) {
                 return;
             }
             if (fallbackPlayback(e)) return;
-            callback.onError(errorMessage);
+            callback.onError(getPlaybackErrorMessage(failure));
         }
     };
 
@@ -2009,6 +2159,29 @@ public void resetTrack(int type) {
         }
         if (fallbackPlayback(e)) return;
         callback.onError(ResUtil.getString(R.string.error_play_timeout));
+    }
+
+    private PlaybackRoute.Resolution getEffectivePlaybackRoute() {
+        PlaybackRoute.Resolution route = engine == null ? null : engine.getEffectivePlaybackRoute();
+        if (route != null && route.route() != PlaybackRoute.OTHER) return route;
+        return spec == null ? PlaybackRoute.resolve(null) : spec.getPlaybackRoute();
+    }
+
+    private String getPlaybackErrorMessage(PlaybackErrorClassifier.Failure failure) {
+        return switch (failure.stage()) {
+            case LOCAL_ENDPOINT -> switch (failure.route().owner()) {
+                case APP_MAIN_SERVER, APP_HLS_PROXY -> ResUtil.getString(R.string.error_play_stage_app_local);
+                default -> ResUtil.getString(R.string.error_play_stage_external_local);
+            };
+            case NETWORK_IO -> PlaybackRouteCapabilities.resolve(failure.route()).externalUpstreamOpaque()
+                    ? ResUtil.getString(R.string.error_play_stage_external_supply)
+                    : ResUtil.getString(R.string.error_play_stage_network);
+            case MEDIA_PARSING -> ResUtil.getString(R.string.error_play_stage_media);
+            case DECODER -> ResUtil.getString(R.string.error_play_stage_decoder);
+            case OUTPUT -> ResUtil.getString(R.string.error_play_stage_output);
+            case DRM -> ResUtil.getString(R.string.error_play_stage_drm);
+            case UNKNOWN -> ResUtil.getString(R.string.error_play_stage_unknown);
+        };
     }
 
     private boolean retryHardDecodeSwitch(PlaybackException e) {

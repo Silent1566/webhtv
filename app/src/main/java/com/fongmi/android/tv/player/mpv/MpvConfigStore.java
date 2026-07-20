@@ -8,12 +8,14 @@ import com.fongmi.android.tv.utils.ResUtil;
 import com.github.catvod.net.OkHttp;
 import com.github.catvod.utils.Path;
 import com.github.catvod.utils.Prefers;
-import com.google.gson.reflect.TypeToken;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -44,9 +46,6 @@ public final class MpvConfigStore {
     private static final String CONFIG_FILE = "mpv.conf";
     private static final String PROFILE_DIR = "profiles";
     private static final int MAX_PROFILE_BYTES = 1024 * 1024;
-    private static final Type HISTORY_LIST = new TypeToken<List<History>>() {}.getType();
-    private static final Type PROFILE_LIST = new TypeToken<List<ConfigProfile>>() {}.getType();
-
     private MpvConfigStore() {
     }
 
@@ -386,7 +385,7 @@ public final class MpvConfigStore {
         List<History> available = getAvailableHistory(target, items);
         if (index < 0 || index >= available.size()) return false;
         items.remove(available.get(index));
-        Prefers.put(key(KEY_HISTORY, target), App.gson().toJson(items));
+        Prefers.put(key(KEY_HISTORY, target), serializeHistory(items));
         return true;
     }
 
@@ -648,15 +647,56 @@ public final class MpvConfigStore {
 
     private static List<ConfigProfile> readProfiles(String target) {
         try {
-            List<ConfigProfile> profiles = App.gson().fromJson(Prefers.getString(profilesKey(target), "[]"), PROFILE_LIST);
-            return profiles == null ? new ArrayList<>() : profiles;
-        } catch (Exception e) {
+            return parseProfilesJson(Prefers.getString(profilesKey(target), "[]"));
+        } catch (Throwable e) {
             return new ArrayList<>();
         }
     }
 
     private static void saveProfiles(String target, List<ConfigProfile> profiles) {
-        Prefers.put(profilesKey(target), App.gson().toJson(profiles));
+        Prefers.put(profilesKey(target), serializeProfiles(profiles));
+    }
+
+    static List<ConfigProfile> parseProfilesJson(String json) {
+        List<ConfigProfile> profiles = new ArrayList<>();
+        JsonArray array = parseArray(json);
+        for (JsonElement element : array) {
+            if (element == null || !element.isJsonObject()) continue;
+            try {
+                JsonObject object = element.getAsJsonObject();
+                if (!validStringField(object, "id") || !validStringField(object, "name")
+                        || !validStringField(object, "type") || !validStringField(object, "source")
+                        || !validNullableStringField(object, "content") || !validLongField(object, "time")) continue;
+                ConfigProfile profile = new ConfigProfile();
+                profile.id = stringValue(object, "id");
+                profile.name = stringValue(object, "name");
+                profile.type = stringValue(object, "type");
+                profile.source = stringValue(object, "source");
+                profile.content = nullableStringValue(object, "content");
+                profile.time = longValue(object, "time");
+                profiles.add(profile);
+            } catch (Throwable ignored) {
+            }
+        }
+        return profiles;
+    }
+
+    static String serializeProfiles(List<ConfigProfile> profiles) {
+        JsonArray array = new JsonArray();
+        if (profiles == null) return array.toString();
+        for (ConfigProfile profile : profiles) {
+            if (profile == null) continue;
+            JsonObject object = new JsonObject();
+            object.addProperty("id", value(profile.id));
+            object.addProperty("name", value(profile.name));
+            object.addProperty("type", value(profile.type));
+            object.addProperty("source", value(profile.source));
+            if (profile.content == null) object.add("content", null);
+            else object.addProperty("content", profile.content);
+            object.addProperty("time", profile.time);
+            array.add(object);
+        }
+        return array.toString();
     }
 
     private static ConfigProfile findProfile(List<ConfigProfile> profiles, String id) {
@@ -695,11 +735,86 @@ public final class MpvConfigStore {
 
     private static List<History> getHistory(String target) {
         try {
-            List<History> items = App.gson().fromJson(Prefers.getString(key(KEY_HISTORY, target), "[]"), HISTORY_LIST);
-            return items == null ? new ArrayList<>() : items;
-        } catch (Exception e) {
+            return parseHistoryJson(Prefers.getString(key(KEY_HISTORY, target), "[]"));
+        } catch (Throwable e) {
             return new ArrayList<>();
         }
+    }
+
+    private static List<History> parseHistoryJson(String json) {
+        List<History> items = new ArrayList<>();
+        JsonArray array = parseArray(json);
+        for (JsonElement element : array) {
+            if (element == null || !element.isJsonObject()) continue;
+            try {
+                JsonObject object = element.getAsJsonObject();
+                if (!validStringField(object, "type") || !validStringField(object, "name")
+                        || !validStringField(object, "source") || !validLongField(object, "time")) continue;
+                History item = new History();
+                item.type = stringValue(object, "type");
+                item.name = stringValue(object, "name");
+                item.source = stringValue(object, "source");
+                item.time = longValue(object, "time");
+                items.add(item);
+            } catch (Throwable ignored) {
+            }
+        }
+        return items;
+    }
+
+    private static String serializeHistory(List<History> items) {
+        JsonArray array = new JsonArray();
+        if (items == null) return array.toString();
+        for (History item : items) {
+            if (item == null) continue;
+            JsonObject object = new JsonObject();
+            object.addProperty("type", value(item.type));
+            object.addProperty("name", value(item.name));
+            object.addProperty("source", value(item.source));
+            object.addProperty("time", item.time);
+            array.add(object);
+        }
+        return array.toString();
+    }
+
+    private static JsonArray parseArray(String json) {
+        if (json == null || json.trim().isEmpty()) return new JsonArray();
+        try {
+            JsonElement root = JsonParser.parseString(json);
+            return root != null && root.isJsonArray() ? root.getAsJsonArray() : new JsonArray();
+        } catch (Throwable e) {
+            return new JsonArray();
+        }
+    }
+
+    private static boolean validStringField(JsonObject object, String key) {
+        return !object.has(key) || object.get(key).isJsonNull()
+                || object.get(key).isJsonPrimitive() && object.getAsJsonPrimitive(key).isString();
+    }
+
+    private static boolean validNullableStringField(JsonObject object, String key) {
+        return validStringField(object, key);
+    }
+
+    private static boolean validLongField(JsonObject object, String key) {
+        return !object.has(key) || object.get(key).isJsonNull()
+                || object.get(key).isJsonPrimitive() && object.getAsJsonPrimitive(key).isNumber();
+    }
+
+    private static String stringValue(JsonObject object, String key) {
+        return !object.has(key) || object.get(key).isJsonNull() ? "" : object.get(key).getAsString();
+    }
+
+    private static String nullableStringValue(JsonObject object, String key) {
+        return !object.has(key) || object.get(key).isJsonNull() ? null : object.get(key).getAsString();
+    }
+
+    private static long longValue(JsonObject object, String key) {
+        return !object.has(key) || object.get(key).isJsonNull() ? 0L : object.get(key).getAsLong();
+    }
+
+    private static String value(String value) {
+        return value == null ? "" : value;
     }
 
     private static List<History> getAvailableHistory(String target) {
@@ -731,7 +846,7 @@ public final class MpvConfigStore {
         item.time = System.currentTimeMillis();
         items.add(0, item);
         while (items.size() > 20) items.remove(items.size() - 1);
-        Prefers.put(key(KEY_HISTORY, target), App.gson().toJson(items));
+        Prefers.put(key(KEY_HISTORY, target), serializeHistory(items));
     }
 
     private static String label(History item) {

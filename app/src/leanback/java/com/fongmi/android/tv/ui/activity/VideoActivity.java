@@ -181,6 +181,7 @@ import androidx.coordinatorlayout.widget.CoordinatorLayout;
 import androidx.palette.graphics.Palette;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import com.fongmi.android.tv.bean.CastVideo;
+import com.fongmi.android.tv.player.diagnostic.PanEndpointParser;
 import com.fongmi.android.tv.player.karaoke.KaraokeController;
 import com.fongmi.android.tv.player.karaoke.KaraokePitchTrackGenerator;
 import com.fongmi.android.tv.player.karaoke.KaraokeResult;
@@ -197,6 +198,7 @@ import com.fongmi.android.tv.ui.custom.AudioPlayerBackgroundDrawable;
 import com.fongmi.android.tv.ui.custom.KaraokeResultView;
 import com.fongmi.android.tv.ui.dialog.CastDialog;
 import com.fongmi.android.tv.ui.dialog.ControlDialog;
+import com.fongmi.android.tv.ui.dialog.PanNetworkDiagnosticDialog;
 import com.fongmi.android.tv.ui.dialog.TimerDialog;
 import com.fongmi.android.tv.utils.Traffic;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
@@ -390,6 +392,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     private final Map<String, PersonalRecommendationService.DoubanRating> mTmdbDoubanRatingCache = Collections.synchronizedMap(new HashMap<>());
     private final Set<String> mTmdbDoubanRatingLoading = Collections.synchronizedSet(new HashSet<>());
     private View mFocus2;
+    private View mDialogReturnFocus;
     private Result mPendingDetail;
     private Result mPendingPlayer;
     private AudioPlaybackResolver.Resolved mImmersiveAudioResolved;
@@ -1050,9 +1053,10 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         mBinding.control.action.reset.setOnClickListener(guarded(this::onReset));
         mBinding.control.action.title.setOnClickListener(guarded(this::onTitle));
         mBinding.control.action.player.setOnClickListener(guarded(this::onPlayerKernel));
-        mBinding.control.action.player.setOnLongClickListener(view -> onPlayerKernelLong());
+        mBinding.control.action.player.setOnLongClickListener(view -> onChooseLong());
         mBinding.control.action.decode.setOnClickListener(guarded(this::onDecode));
         mBinding.control.action.playParams.setOnClickListener(guarded(this::onPlayParams));
+        mBinding.control.action.panDiagnostic.setOnClickListener(guarded(this::onPanDiagnostic));
         mBinding.control.action.codecCapability.setOnClickListener(guarded(this::onCodecCapability));
         mBinding.control.action.ending.setOnClickListener(guarded(this::onEnding));
         mBinding.control.action.repeat.setOnClickListener(guarded(this::onRepeat));
@@ -1236,6 +1240,8 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         addActionButton(PlayerButtonSetting.TITLE, mBinding.control.action.title);
         addActionButton(PlayerButtonSetting.REPEAT, mBinding.control.action.repeat);
         PlayerButtonSetting.applyOrder(mBinding.control.action.container, mActionButtons);
+        placePanDiagnosticAction();
+        updatePanDiagnosticAction();
     }
 
     private void addActionButton(String id, View view) {
@@ -1244,6 +1250,44 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
 
     private void applyActionButtonVisibility() {
         if (mActionButtons != null) PlayerButtonSetting.applyVisibility(mActionButtons);
+        updateImmersiveAudioAction();
+        updatePanDiagnosticAction();
+    }
+
+    private void placePanDiagnosticAction() {
+        ViewGroup container = mBinding.control.action.container;
+        View diagnostic = mBinding.control.action.panDiagnostic;
+        View anchor = mBinding.control.action.playParams;
+        if (diagnostic.getParent() != container || anchor.getParent() != container) return;
+        container.removeView(diagnostic);
+        container.addView(diagnostic, Math.min(container.getChildCount(), container.indexOfChild(anchor) + 1));
+    }
+
+    private void updatePanDiagnosticAction() {
+        if (mBinding == null) return;
+        mBinding.control.action.panDiagnostic.setVisibility(isFullscreen() && canRunPanDiagnostic() ? View.VISIBLE : View.GONE);
+    }
+
+    private boolean canRunPanDiagnostic() {
+        if (service() == null || player().isEmpty()) return false;
+        try {
+            PanEndpointParser.parse(player().getUrl(), player().getHeaders());
+            return true;
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
+    private void updateImmersiveAudioAction() {
+        if (mBinding == null) return;
+        boolean audioContent = isAudioOnly() || isMusicLike();
+        mBinding.control.action.immersiveAudio.setVisibility(isFullscreen() && audioContent ? View.VISIBLE : View.GONE);
+        mBinding.control.action.immersiveAudio.setSelected(PlayerSetting.isImmersiveAudioMode());
+    }
+
+    private void toggleImmersiveAudioMode() {
+        PlayerSetting.putImmersiveAudioMode(!PlayerSetting.isImmersiveAudioMode());
+        onImmersiveAudioModeChanged();
     }
 
     private int getEpisodeColumn() {
@@ -2936,6 +2980,28 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         mBinding.shortDisplay.setSelected(Setting.isCompactEpisodeTitle());
     }
 
+    private void onCodecCapability() {
+        CodecCapabilityDialog.show(this, player());
+        hideControl();
+    }
+
+    private void onSetting() {
+        ControlDialog.create().parent(mBinding).history(mHistory).parse(isUseParse()).player(player()).show(this);
+    }
+
+    private void onCast() {
+        if (mHistory == null || TextUtils.isEmpty(mHistory.getVodId()) || service() == null || player().isEmpty() || TextUtils.isEmpty(player().getUrl())) {
+            Notify.show(R.string.cast_not_ready);
+            return;
+        }
+        CastVideo video = new CastVideo(Objects.toString(mBinding.widget.title.getText(), ""), player().getUrl(), player().getPosition(), player().getHeaders());
+        CastDialog.create().history(mHistory).video(video).fm(true).show(this);
+    }
+
+    private void onTimer() {
+        TimerDialog.create().show(this);
+    }
+
     private void onKeep() {
         Keep keep = Keep.find(getHistoryKey());
         Notify.show(keep != null ? R.string.keep_del : R.string.keep_add);
@@ -2981,9 +3047,11 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         hideControl();
     }
 
-    private void onCodecCapability() {
-        CodecCapabilityDialog.show(this, player());
-        hideControl();
+    private void onPanDiagnostic() {
+        if (!canRunPanDiagnostic()) return;
+        mDialogReturnFocus = mBinding.control.action.panDiagnostic;
+        App.removeCallbacks(mR1);
+        PanNetworkDiagnosticDialog.show(this, player());
     }
 
     private void setPlayParamsState() {
@@ -5483,6 +5551,18 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         mBinding.control.action.scale.setText(array[scale]);
     }
 
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (!hasFocus || mDialogReturnFocus == null) return;
+        View target = mDialogReturnFocus;
+        mDialogReturnFocus = null;
+        App.post(() -> {
+            if (isFinishing() || isDestroyed() || !isFullscreen() || target.getVisibility() != View.VISIBLE) return;
+            showControl(target);
+        }, 120);
+    }
+
     private boolean isInitAuto() {
         return initAuto;
     }
@@ -6136,18 +6216,6 @@ private View[] audioStageIconButtons() {
         };
     }
 
-private void updateImmersiveAudioAction() {
-        if (mBinding == null) return;
-        boolean audioContent = isAudioOnly() || isMusicLike();
-        mBinding.control.action.immersiveAudio.setVisibility(isFullscreen() && audioContent ? View.VISIBLE : View.GONE);
-        mBinding.control.action.immersiveAudio.setSelected(PlayerSetting.isImmersiveAudioMode());
-    }
-
-private void toggleImmersiveAudioMode() {
-        PlayerSetting.putImmersiveAudioMode(!PlayerSetting.isImmersiveAudioMode());
-        onImmersiveAudioModeChanged();
-    }
-
 private void restoreAudioEpisodeDisplayNames(List<Episode> items) {
         if (items == null) return;
         for (Episode item : items) {
@@ -6346,20 +6414,6 @@ private void submitLyricsSearchSheet(EditText input, @Nullable LyricsRequest req
         }
         Util.hideKeyboard(input);
         searchLyrics(keyword, request, false);
-    }
-
-private void onSetting() {
-        ControlDialog.create().parent(mBinding).history(mHistory).parse(isUseParse()).player(player()).show(this);
-    }
-
-private void onCast() {
-        if (service() == null || player().isEmpty()) return;
-        CastVideo video = new CastVideo(Objects.toString(mBinding.widget.title.getText(), ""), player().getUrl(), player().getPosition(), player().getHeaders());
-        CastDialog.create().history(mHistory).video(video).fm(true).show(this);
-    }
-
-private void onTimer() {
-        TimerDialog.create().show(this);
     }
 
 private void checkPlay() {

@@ -7,6 +7,7 @@ import android.graphics.drawable.ColorDrawable;
 import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.Gravity;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
@@ -17,6 +18,7 @@ import android.widget.PopupWindow;
 import androidx.core.widget.TextViewCompat;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
+import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.App;
@@ -70,6 +72,7 @@ public class MpvConfigDialog extends BaseAlertDialog implements MpvConfigProfile
         binding.recycler.setAdapter(adapter);
         setupTabs();
         reload();
+        setupTvFocus();
     }
 
     @Override
@@ -98,6 +101,63 @@ public class MpvConfigDialog extends BaseAlertDialog implements MpvConfigProfile
             @Override public void onTabUnselected(TabLayout.Tab tab) { }
             @Override public void onTabReselected(TabLayout.Tab tab) { }
         });
+    }
+
+    private void setupTvFocus() {
+        if (!Util.isLeanback()) return;
+        tvFocusable(binding.create);
+        tvFocusable(binding.close);
+        binding.recycler.setFocusable(false);
+        binding.create.setNextFocusRightId(R.id.close);
+        binding.close.setNextFocusLeftId(R.id.create);
+        View.OnKeyListener headerKey = (view, keyCode, event) -> {
+            if (event.getAction() != KeyEvent.ACTION_DOWN || keyCode != KeyEvent.KEYCODE_DPAD_DOWN) return false;
+            return focusSelectedTab();
+        };
+        binding.create.setOnKeyListener(headerKey);
+        binding.close.setOnKeyListener(headerKey);
+        binding.tabs.post(this::configureTabFocus);
+    }
+
+    private void configureTabFocus() {
+        if (!Util.isLeanback() || binding == null || binding.tabs.getChildCount() == 0) return;
+        View strip = binding.tabs.getChildAt(0);
+        if (!(strip instanceof ViewGroup)) return;
+        ViewGroup tabs = (ViewGroup) strip;
+        for (int i = 0; i < tabs.getChildCount(); i++) {
+            View tab = tabs.getChildAt(i);
+            tvFocusable(tab);
+            tab.setOnKeyListener((view, keyCode, event) -> {
+                if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+                if (keyCode == KeyEvent.KEYCODE_DPAD_UP) return binding.create.requestFocus();
+                if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) return focusFirstProfile();
+                return false;
+            });
+        }
+    }
+
+    private boolean focusSelectedTab() {
+        if (binding == null || binding.tabs.getChildCount() == 0) return false;
+        View strip = binding.tabs.getChildAt(0);
+        if (!(strip instanceof ViewGroup)) return false;
+        ViewGroup tabs = (ViewGroup) strip;
+        int position = Math.max(0, binding.tabs.getSelectedTabPosition());
+        if (position >= tabs.getChildCount()) position = 0;
+        View tab = tabs.getChildAt(position);
+        return tab != null && tab.requestFocus();
+    }
+
+    private boolean focusFirstProfile() {
+        if (adapter.getItemCount() == 0) return binding.create.requestFocus();
+        RecyclerView.ViewHolder holder = binding.recycler.findViewHolderForAdapterPosition(0);
+        if (holder != null) return holder.itemView.requestFocus();
+        binding.recycler.scrollToPosition(0);
+        return true;
+    }
+
+    private static void tvFocusable(View view) {
+        view.setFocusable(true);
+        view.setFocusableInTouchMode(true);
     }
 
     private String[] targets() {
@@ -152,6 +212,9 @@ public class MpvConfigDialog extends BaseAlertDialog implements MpvConfigProfile
         popup.setOutsideTouchable(true);
         popup.setElevation(ResUtil.dp2px(10));
         showActionMenu(popup, content, anchor);
+        content.post(() -> {
+            if (content.getChildCount() > 0) content.getChildAt(0).requestFocus();
+        });
     }
 
     private void showActionMenu(PopupWindow popup, LinearLayout content, View anchor) {
@@ -184,6 +247,7 @@ public class MpvConfigDialog extends BaseAlertDialog implements MpvConfigProfile
         item.setBackgroundResource(value.resourceId);
         item.setClickable(true);
         item.setFocusable(true);
+        item.setFocusableInTouchMode(Util.isLeanback());
         item.setOnClickListener(view -> action.run());
         item.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ResUtil.dp2px(48)));
         return item;
@@ -320,7 +384,7 @@ public class MpvConfigDialog extends BaseAlertDialog implements MpvConfigProfile
             binding.getRoot().setLayoutParams(rootParams);
         }
         binding.getRoot().post(() -> window.setLayout(params.width, params.height));
-        if (Util.isLeanback()) binding.recycler.post(() -> binding.recycler.requestFocus());
+        if (Util.isLeanback()) binding.create.post(() -> binding.create.requestFocus());
     }
 
     private interface ThrowingSupplier<T> {

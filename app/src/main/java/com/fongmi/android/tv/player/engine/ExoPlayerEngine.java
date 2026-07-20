@@ -13,13 +13,14 @@ import androidx.media3.exoplayer.ExoPlayer;
 
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.bean.Track;
+import com.fongmi.android.tv.player.PlaybackTrace;
 import com.fongmi.android.tv.player.exo.ErrorMsgProvider;
 import com.fongmi.android.tv.player.exo.ExoUtil;
 import com.fongmi.android.tv.player.exo.PlaybackAnalyticsListener;
 import com.fongmi.android.tv.player.exo.PreCache;
 import com.fongmi.android.tv.player.exo.TrackUtil;
+import com.fongmi.android.tv.setting.ExoPerformanceSetting;
 import com.fongmi.android.tv.utils.ResUtil;
-import com.github.catvod.crawler.SpiderDebug;
 
 import java.util.HashSet;
 import java.util.List;
@@ -54,14 +55,16 @@ public class ExoPlayerEngine implements PlayerEngine {
     @Override
     public void release() {
         preCache.release();
+        PlaybackAnalyticsListener.finishSession(player.getCurrentPosition());
         player.release();
     }
 
     @Override
     public Player rebuild(Player.Listener listener) {
-        preCache.stop();
+        preCache.stop("engine-rebuild");
+        PlaybackAnalyticsListener.finishSession(player.getCurrentPosition());
         player.release();
-        SpiderDebug.log("player-engine", "rebuild decode=%d", decode);
+        PlaybackTrace.log("player-engine", getPlaybackTraceId(), "rebuild decode=%d", decode);
         return player = ExoUtil.buildPlayer(decode, listener);
     }
 
@@ -106,7 +109,7 @@ public class ExoPlayerEngine implements PlayerEngine {
         this.activeFormat = spec.getFormat();
         this.playWhenReady = playWhenReady;
         resetAttemptedFormats();
-        SpiderDebug.log("player-engine", "start decode=%d format=%s play=%s headers=%s urlLen=%d", decode, spec.getFormat(), playWhenReady, spec.getHeaders() == null ? 0 : spec.getHeaders().size(), spec.getUrl() == null ? 0 : spec.getUrl().length());
+        PlaybackTrace.log("player-engine", getPlaybackTraceId(), "start decode=%d format=%s play=%s headers=%s urlLen=%d", decode, spec.getFormat(), playWhenReady, spec.getHeaders() == null ? 0 : spec.getHeaders().size(), spec.getUrl() == null ? 0 : spec.getUrl().length());
         startInternal(C.TIME_UNSET, playWhenReady);
     }
 
@@ -116,7 +119,7 @@ public class ExoPlayerEngine implements PlayerEngine {
         this.activeFormat = spec.getFormat();
         this.playWhenReady = playWhenReady;
         resetAttemptedFormats();
-        SpiderDebug.log("player-engine", "start decode=%d format=%s position=%d play=%s headers=%s urlLen=%d", decode, spec.getFormat(), position, playWhenReady, spec.getHeaders() == null ? 0 : spec.getHeaders().size(), spec.getUrl() == null ? 0 : spec.getUrl().length());
+        PlaybackTrace.log("player-engine", getPlaybackTraceId(), "start decode=%d format=%s position=%d play=%s headers=%s urlLen=%d", decode, spec.getFormat(), position, playWhenReady, spec.getHeaders() == null ? 0 : spec.getHeaders().size(), spec.getUrl() == null ? 0 : spec.getUrl().length());
         startInternal(position, playWhenReady);
     }
 
@@ -126,15 +129,16 @@ public class ExoPlayerEngine implements PlayerEngine {
         this.activeFormat = spec.getFormat();
         this.playWhenReady = playWhenReady;
         resetAttemptedFormats();
-        SpiderDebug.log("player-engine", "restart decode=%d format=%s position=%d play=%s headers=%s urlLen=%d", decode, spec.getFormat(), position, playWhenReady, spec.getHeaders() == null ? 0 : spec.getHeaders().size(), spec.getUrl() == null ? 0 : spec.getUrl().length());
-        preCache.stop();
+        PlaybackTrace.log("player-engine", getPlaybackTraceId(), "restart decode=%d format=%s position=%d play=%s headers=%s urlLen=%d", decode, spec.getFormat(), position, playWhenReady, spec.getHeaders() == null ? 0 : spec.getHeaders().size(), spec.getUrl() == null ? 0 : spec.getUrl().length());
+        preCache.stop("engine-restart");
         player.stop();
         startInternal(position, playWhenReady);
     }
 
     @Override
     public void stop() {
-        preCache.stop();
+        preCache.stop("player-stop");
+        PlaybackAnalyticsListener.finishSession(player.getCurrentPosition());
         player.stop();
     }
 
@@ -205,6 +209,11 @@ public void resetTrack(int type) {
     }
 
     @Override
+    public String getPlaybackTraceId() {
+        return spec == null ? PlaybackTrace.NONE : spec.getPlaybackTraceId();
+    }
+
+    @Override
     public boolean haveTitle() {
         return !player.getCurrentMediaEditions().isEmpty();
     }
@@ -232,7 +241,7 @@ public void resetTrack(int type) {
             case PlaybackException.ERROR_CODE_IO_UNSPECIFIED, PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED, PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED, PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED, PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED -> retryFormat(e.errorCode);
             default -> ErrorAction.FATAL;
         };
-        SpiderDebug.log("player-engine", "handleError code=%d action=%s decode=%d format=%s originalFormat=%s", e.errorCode, action, decode, activeFormat, spec == null ? null : spec.getFormat());
+        PlaybackTrace.log("player-engine", getPlaybackTraceId(), "handleError code=%d action=%s decode=%d format=%s originalFormat=%s", e.errorCode, action, decode, activeFormat, spec == null ? null : spec.getFormat());
         return action;
     }
 
@@ -246,12 +255,14 @@ public void resetTrack(int type) {
 
     private void startInternal(long position, boolean playWhenReady) {
         this.playWhenReady = playWhenReady;
-        SpiderDebug.log("player-engine", "prepare position=%d decode=%d format=%s originalFormat=%s play=%s", position, decode, activeFormat, spec.getFormat(), playWhenReady);
-        PlaybackAnalyticsListener.reset();
+        PlaybackAnalyticsListener.finishSession(player.getCurrentPosition());
+        PlaybackAnalyticsListener.beginSession(spec.getPlaybackTraceId());
+        PlaybackTrace.log("player-engine", getPlaybackTraceId(), "prepare position=%d decode=%d format=%s originalFormat=%s play=%s", position, decode, activeFormat, spec.getFormat(), playWhenReady);
+        ExoPerformanceSetting.beginAutoSession();
         if (!playWhenReady) player.pause();
         MediaItem item = ExoUtil.getMediaItem(spec.copyWithFormat(activeFormat), decode);
         player.setMediaItem(item, position);
-        preCache.start(player, item);
+        preCache.start(player, item, spec.getPlaybackTraceId(), spec.getPlaybackRoute());
         player.prepare();
         if (playWhenReady) player.play();
     }
@@ -266,12 +277,12 @@ public void resetTrack(int type) {
         String format = ExoUtil.getMimeType(errorCode);
         String key = formatKey(format);
         if (format == null || attemptedFormats.contains(key)) {
-            SpiderDebug.log("player-engine", "retryFormat stopped errorCode=%d attempted=%s", errorCode, attemptedFormats);
+            PlaybackTrace.log("player-engine", getPlaybackTraceId(), "retryFormat stopped errorCode=%d attempted=%s", errorCode, attemptedFormats);
             return ErrorAction.FATAL;
         }
         attemptedFormats.add(key);
         activeFormat = format;
-        SpiderDebug.log("player-engine", "retryFormat errorCode=%d newFormat=%s position=%d", errorCode, format, player.getCurrentPosition());
+        PlaybackTrace.log("player-engine", getPlaybackTraceId(), "retryFormat errorCode=%d newFormat=%s position=%d", errorCode, format, player.getCurrentPosition());
         startInternal(player.getCurrentPosition());
         return ErrorAction.RECOVERED;
     }

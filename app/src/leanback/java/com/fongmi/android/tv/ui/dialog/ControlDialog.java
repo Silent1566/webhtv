@@ -178,6 +178,7 @@ public class ControlDialog extends BaseBottomSheetDialog implements ParseAdapter
         binding.lut.setOnClickListener(v -> onLut());
         binding.ending.setOnClickListener(v -> click(binding.ending, parent.control.action.ending));
         binding.opening.setOnClickListener(v -> click(binding.opening, parent.control.action.opening));
+        binding.panDiagnostic.setOnClickListener(v -> onPanDiagnostic());
         binding.player.setOnLongClickListener(v -> longClick(binding.player, parent.control.action.player));
         binding.ending.setOnLongClickListener(v -> longClick(binding.ending, parent.control.action.ending));
         binding.opening.setOnLongClickListener(v -> longClick(binding.opening, parent.control.action.opening));
@@ -192,6 +193,7 @@ public class ControlDialog extends BaseBottomSheetDialog implements ParseAdapter
         List<View> views = Arrays.asList(
                 binding.fullscreen, binding.lut, binding.reset, binding.repeat, binding.timer, binding.karaoke,
                 binding.player, binding.decode, binding.opening, binding.ending, binding.immersiveAudio,
+                binding.panDiagnostic,
                 binding.text, binding.audio, binding.video, binding.danmaku, binding.title,
                 binding.episodeColumn1, binding.episodeColumn2, binding.compactEpisodeTitle
         );
@@ -229,6 +231,14 @@ public class ControlDialog extends BaseBottomSheetDialog implements ParseAdapter
 
     private void onTimer(View view) {
         TimerDialog.create().show(getActivity());
+    }
+
+    private void onPanDiagnostic() {
+        FragmentActivity activity = getActivity();
+        PlayerManager current = player;
+        if (activity == null || current == null) return;
+        dismissAllowingStateLoss();
+        App.post(() -> PanNetworkDiagnosticDialog.show(activity, current), 140);
     }
 
     private void setKaraoke() {
