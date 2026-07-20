@@ -26,6 +26,7 @@ Options:
   --install              Replace the matching app/src/*/assets/mpv-libs files
   --prepare-only         Download and pin all sources without compiling
   --incremental          Keep build prefixes instead of doing a clean rebuild
+  --lock-file PATH       Use an alternate dependency lock for compatibility tests
   --work-dir PATH        Build/cache directory (default: build/mpv-native)
   --jobs N               Parallel compiler jobs
   -h, --help             Show this help
@@ -67,6 +68,11 @@ while [ "$#" -gt 0 ]; do
     --incremental)
       INCREMENTAL=1
       shift
+      ;;
+    --lock-file)
+      [ "$#" -ge 2 ] || die "--lock-file requires a value"
+      LOCK_FILE="$2"
+      shift 2
       ;;
     --work-dir)
       [ "$#" -ge 2 ] || die "--work-dir requires a value"
@@ -125,6 +131,13 @@ for key, value in values.items():
     print(f"{key}={shlex.quote(value)}")
 PY
 )"
+
+ENABLE_LIBCURL=0
+if [ -n "${CURL_URL:-}${CURL_COMMIT:-}" ] || [ -n "${NGHTTP2_URL:-}${NGHTTP2_COMMIT:-}" ]; then
+  [ -n "${CURL_URL:-}${CURL_COMMIT:-}" ] || die "curl source is required when nghttp2 is enabled"
+  [ -n "${NGHTTP2_URL:-}${NGHTTP2_COMMIT:-}" ] || die "nghttp2 source is required when curl is enabled"
+  ENABLE_LIBCURL=1
+fi
 
 detect_sdk_root() {
   if [ -n "${ANDROID_HOME:-}" ]; then
@@ -275,7 +288,16 @@ prepare_framework() {
   cp "$OVERRIDE_DIR/libass.sh" "$BUILDSCRIPTS/scripts/libass.sh"
   cp "$OVERRIDE_DIR/lua.sh" "$BUILDSCRIPTS/scripts/lua.sh"
   cp "$OVERRIDE_DIR/libplacebo.sh" "$BUILDSCRIPTS/scripts/libplacebo.sh"
-  chmod +x "$BUILDSCRIPTS/scripts/libass.sh" "$BUILDSCRIPTS/scripts/lua.sh" "$BUILDSCRIPTS/scripts/libplacebo.sh"
+  cp "$OVERRIDE_DIR/nghttp2.sh" "$BUILDSCRIPTS/scripts/nghttp2.sh"
+  cp "$OVERRIDE_DIR/curl.sh" "$BUILDSCRIPTS/scripts/curl.sh"
+  cp "$OVERRIDE_DIR/mpv.sh" "$BUILDSCRIPTS/scripts/mpv.sh"
+  local lock_hash
+  lock_hash="$(sha256_file "$LOCK_FILE")"
+  printf '\n# WebHTV wrapper cache identity: exact selected lock file.\nci_tarball="prefix-webhtv-%s.tgz"\n' \
+    "$lock_hash" >> "$BUILDSCRIPTS/include/depinfo.sh"
+  chmod +x "$BUILDSCRIPTS/scripts/libass.sh" "$BUILDSCRIPTS/scripts/lua.sh" \
+    "$BUILDSCRIPTS/scripts/libplacebo.sh" "$BUILDSCRIPTS/scripts/nghttp2.sh" \
+    "$BUILDSCRIPTS/scripts/curl.sh" "$BUILDSCRIPTS/scripts/mpv.sh"
   python3 - "$BUILDSCRIPTS/buildall.sh" <<'PY'
 from pathlib import Path
 import sys
@@ -305,15 +327,19 @@ prepare_sources() {
   checkout_repo libass "$LIBASS_REPO" "$LIBASS_COMMIT" "$deps/libass"
   extract_archive Lua "$LUA_URL" "$LUA_SHA256" "$deps/lua"
   checkout_repo libplacebo "$LIBPLACEBO_REPO" "$LIBPLACEBO_COMMIT" "$deps/libplacebo" "$LIBPLACEBO_SUBMODULES"
+  if [ "$ENABLE_LIBCURL" -eq 1 ]; then
+    extract_archive nghttp2 "$NGHTTP2_URL" "$NGHTTP2_SHA256" "$deps/nghttp2"
+    extract_archive curl "$CURL_URL" "$CURL_SHA256" "$deps/curl"
+  fi
   checkout_repo mpv "$MPV_REPO" "$MPV_COMMIT" "$deps/mpv"
   # The initial exact-commit fetch is shallow. Fetch enough ancestry and the
-  # release tag so MPV embeds the stable v0.41.0-556-g... version string.
-  if [ "$(git -C "$deps/mpv" describe --abbrev=9 --tags HEAD 2>/dev/null || true)" != "v$MPV_VERSION" ]; then
+  # release tag so MPV embeds the version string recorded by the selected lock.
+  if [ "$(git -C "$deps/mpv" describe --abbrev=9 --tags --match "$MPV_DESCRIBE_TAG" HEAD 2>/dev/null || true)" != "v$MPV_VERSION" ]; then
     git -C "$deps/mpv" fetch --deepen="$MPV_HISTORY_DEPTH" origin "$MPV_COMMIT"
     git -C "$deps/mpv" fetch --depth=1 origin \
       "refs/tags/$MPV_DESCRIBE_TAG:refs/tags/$MPV_DESCRIBE_TAG"
   fi
-  [ "$(git -C "$deps/mpv" describe --abbrev=9 --tags HEAD)" = "v$MPV_VERSION" ] || die "MPV describe version mismatch"
+  [ "$(git -C "$deps/mpv" describe --abbrev=9 --tags --match "$MPV_DESCRIBE_TAG" HEAD)" = "v$MPV_VERSION" ] || die "MPV describe version mismatch"
   [ -f "$MPV_DISC_PATCH" ] || die "missing MPV disc controls patch: $MPV_DISC_PATCH"
   git -C "$deps/mpv" apply --check "$MPV_DISC_PATCH"
   git -C "$deps/mpv" apply "$MPV_DISC_PATCH"
@@ -385,6 +411,42 @@ verify_directory() {
   grep -Fq "mpv v$MPV_VERSION" <<<"$version_strings" || die "unexpected MPV version in $directory/libmpv.so"
   grep -Fq "v$LIBPLACEBO_VERSION" <<<"$version_strings" || die "unexpected libplacebo version in $directory/libmpv.so"
   grep -Fq "WebHTV stream_cb controls enabled" <<<"$version_strings" || die "MPV stream_cb disc controls patch missing from $directory/libmpv.so"
+  if [ "$ENABLE_LIBCURL" -eq 1 ]; then
+    grep -Fq "libcurl/$CURL_VERSION" <<<"$version_strings" || die "libcurl $CURL_VERSION missing from $directory/libmpv.so"
+    grep -Fq "HTTP2" <<<"$version_strings" || die "HTTP/2 support missing from $directory/libmpv.so"
+  fi
+}
+
+verify_curl_ffmpeg_compat() {
+  [ "$ENABLE_LIBCURL" -eq 1 ] || return
+  python3 - "$BUILDSCRIPTS/deps/ffmpeg/libavformat/version_major.h" \
+    "$BUILDSCRIPTS/deps/ffmpeg/libavformat/version.h" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+text = "\n".join(Path(path).read_text(encoding="utf-8") for path in sys.argv[1:])
+values = {}
+for key in ("MAJOR", "MINOR", "MICRO"):
+    match = re.search(rf"LIBAVFORMAT_VERSION_{key}\s+(\d+)", text)
+    if not match:
+        raise SystemExit(f"missing libavformat {key.lower()} version")
+    values[key] = int(match.group(1))
+
+version = (values["MAJOR"], values["MINOR"], values["MICRO"])
+safe = version[0] > 62 or (
+    version[0] == 62 and (
+        version[1] >= 15 or
+        (version[1] == 12 and version[2] >= 102) or
+        (version[1] == 3 and version[2] >= 103)
+    )
+)
+if not safe:
+    raise SystemExit(
+        "libcurl requires the nested AVIO cleanup fix; "
+        f"libavformat {version[0]}.{version[1]}.{version[2]} is too old"
+    )
+PY
 }
 
 stage_abi() {
@@ -450,7 +512,14 @@ build_abi() {
     rm -rf "$BUILDSCRIPTS/prefix/$prefix_name"
   fi
   export cores="$JOBS"
-  local targets=(mbedtls unibreak dav1d ffmpeg freetype2 fribidi harfbuzz libass lua shaderc libplacebo mpv)
+  local targets=(mbedtls unibreak dav1d ffmpeg freetype2 fribidi harfbuzz libass lua shaderc libplacebo)
+  if [ "$ENABLE_LIBCURL" -eq 1 ]; then
+    targets+=(nghttp2 curl)
+    export WEBHTV_MPV_LIBCURL=enabled
+  else
+    export WEBHTV_MPV_LIBCURL=auto
+  fi
+  targets+=(mpv)
   local target
   for target in "${targets[@]}"; do
     if [ "$INCREMENTAL" -eq 1 ]; then
@@ -470,8 +539,11 @@ build_abi() {
       lua) [ -f "$BUILDSCRIPTS/prefix/$prefix_name/lib/liblua.a" ] ;;
       shaderc) [ -f "$BUILDSCRIPTS/prefix/$prefix_name/lib/libshaderc_combined.a" ] ;;
       libplacebo) [ -f "$BUILDSCRIPTS/prefix/$prefix_name/lib/libplacebo.a" ] ;;
+      nghttp2) [ -f "$BUILDSCRIPTS/prefix/$prefix_name/lib/libnghttp2.a" ] ;;
+      curl) [ -f "$BUILDSCRIPTS/prefix/$prefix_name/lib/libcurl.a" ] ;;
       mpv) [ -f "$BUILDSCRIPTS/prefix/$prefix_name/lib/libmpv.so" ] ;;
     esac || die "$target did not produce its expected $abi output"
+    [ "$target" != "ffmpeg" ] || verify_curl_ffmpeg_compat
   done
   stage_abi "$arch" "$abi" "$prefix_name" "$cxx_abi"
 }

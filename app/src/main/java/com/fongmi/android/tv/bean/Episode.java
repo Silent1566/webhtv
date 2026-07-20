@@ -28,7 +28,7 @@ public class Episode implements Parcelable, Diffable<Episode> {
     private TmdbEpisode tmdbEpisode;
 
     private Episode(String name, String desc, String url) {
-        this.number = Util.getNumber(name);
+        this.number = Util.getEpisodeNumber(name);
         this.name = name;
         this.desc = desc;
         this.url = url;

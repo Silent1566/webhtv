@@ -8,6 +8,7 @@ import com.fongmi.android.tv.api.Decoder;
 import com.fongmi.android.tv.api.loader.BaseLoader;
 import com.fongmi.android.tv.bean.Config;
 import com.fongmi.android.tv.bean.Depot;
+import com.fongmi.android.tv.bean.GroupRule;
 import com.fongmi.android.tv.bean.HlsAdRule;
 import com.fongmi.android.tv.bean.Parse;
 import com.fongmi.android.tv.bean.Rule;
@@ -16,6 +17,7 @@ import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.setting.CustomCspSetting;
+import com.fongmi.android.tv.setting.GroupRuleConfig;
 import com.fongmi.android.tv.utils.UrlUtil;
 import com.fongmi.android.tv.web.ext.WebHomeExtensionRegistry;
 import com.github.catvod.bean.Doh;
@@ -98,6 +100,7 @@ public class VodConfig extends BaseConfig {
         BaseLoader.get().clear();
         RuleConfig.get().invalidate();
         HlsRuleConfig.invalidate();
+        GroupRuleConfig.setInterfaceRules(List.of());
         return this;
     }
 
@@ -176,6 +179,7 @@ public class VodConfig extends BaseConfig {
         setProxy(Proxy.arrayFrom(fetchArray(object, "proxy")));
         setRules(Rule.arrayFrom(fetchArray(object, "rules")));
         setHlsRules(HlsAdRule.arrayFrom(fetchArray(object, "hlsRules")));
+        setGroupRules(GroupRule.arrayFrom(fetchArray(object, "groupRules")));
         setDoh(Doh.arrayFrom(fetchArray(object, "doh")));
         setFlags(Json.safeListString(object, "flags"));
         setHosts(Json.safeListString(object, "hosts"));
@@ -253,6 +257,10 @@ public class VodConfig extends BaseConfig {
     private void setHlsRules(List<HlsAdRule> rules) {
         this.hlsRules = rules;
         HlsRuleConfig.invalidate();
+    }
+
+    private void setGroupRules(List<GroupRule> rules) {
+        GroupRuleConfig.setInterfaceRules(rules);
     }
 
     private void setRules(List<Rule> rules) {

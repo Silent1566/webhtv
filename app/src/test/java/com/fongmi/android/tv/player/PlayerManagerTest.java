@@ -1,8 +1,10 @@
 package com.fongmi.android.tv.player;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
 
 import androidx.media3.common.Format;
 import androidx.media3.common.MimeTypes;
@@ -10,6 +12,7 @@ import androidx.media3.common.Tracks;
 
 import com.fongmi.android.tv.bean.Sub;
 import com.fongmi.android.tv.player.engine.PlayerEngine;
+import com.fongmi.android.tv.player.engine.PlaySpec;
 import com.fongmi.android.tv.setting.PlayerSetting;
 
 import org.junit.Test;
@@ -52,6 +55,18 @@ public class PlayerManagerTest {
     @Test
     public void shouldStopOnManualSwitchFailure_allowsAutomaticFallbacks() {
         assertEquals(false, PlayerManager.shouldStopOnManualSwitchFailure(false, PlayerEngine.ErrorAction.FATAL));
+    }
+
+    @Test
+    public void isCurrentDirectSwitchRefresh_acceptsOnlyMatchingPendingRequest() {
+        PlaySpec requested = PlaySpec.from("key", "https://example.com/video.m3u8", null, null);
+        PlaySpec replacement = PlaySpec.from("other", "https://example.com/other.m3u8", null, null);
+
+        assertTrue(PlayerManager.isCurrentDirectSwitchRefresh(true, 7, 7, PlayerSetting.EXO, PlayerSetting.EXO, requested, requested));
+        assertFalse(PlayerManager.isCurrentDirectSwitchRefresh(false, 7, 7, PlayerSetting.EXO, PlayerSetting.EXO, requested, requested));
+        assertFalse(PlayerManager.isCurrentDirectSwitchRefresh(true, 7, 8, PlayerSetting.EXO, PlayerSetting.EXO, requested, requested));
+        assertFalse(PlayerManager.isCurrentDirectSwitchRefresh(true, 7, 7, PlayerSetting.EXO, PlayerSetting.IJK, requested, requested));
+        assertFalse(PlayerManager.isCurrentDirectSwitchRefresh(true, 7, 7, PlayerSetting.EXO, PlayerSetting.EXO, requested, replacement));
     }
 
     @Test

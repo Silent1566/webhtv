@@ -101,6 +101,46 @@ public class VideoActivityLayoutTest {
     }
 
     @Test
+    public void mobileVodControlOverlayRoutesBlankTouchesToGestureDetector() throws Exception {
+        Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int initEvent = source.indexOf("protected void initEvent()");
+        int rootTouch = source.indexOf("mBinding.control.getRoot().setOnTouchListener(this::onPlayerControlTouch);", initEvent);
+        int touchHandler = source.indexOf("private boolean onPlayerControlTouch(View view, MotionEvent event)");
+        int gestureDispatch = source.indexOf("return mKeyDown.onTouchEvent(event);", touchHandler);
+
+        assertTrue(sourcePath + " is missing initEvent", initEvent >= 0);
+        assertTrue("the fullscreen control overlay must route blank touches directly to the gesture detector", rootTouch > initEvent);
+        assertTrue("the control-overlay touch handler must dispatch the full gesture sequence", touchHandler >= 0 && gestureDispatch > touchHandler);
+    }
+
+    @Test
+    public void mobilePlayerGesturesUseVideoViewBoundsAfterFullscreen() throws Exception {
+        List<Path> gestureFiles = Arrays.asList(
+                findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "custom", "CustomKeyDown.java")),
+                findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "custom", "PlayerGesture.java"))
+        );
+
+        for (Path gestureFile : gestureFiles) {
+            String source = new String(Files.readAllBytes(gestureFile), StandardCharsets.UTF_8);
+            assertTrue(gestureFile + " must map raw touch coordinates into the actual player view",
+                    source.contains("videoView.getLocationOnScreen(videoLocation);")
+                            && source.contains("return e.getRawX() - videoLocation[0];")
+                            && source.contains("return e.getRawY() - videoLocation[1];"));
+            assertTrue(gestureFile + " must use the current player view dimensions for gesture regions",
+                    source.contains("private int getVideoWidth()")
+                            && source.contains("videoView.getWidth()")
+                            && source.contains("videoView.getMeasuredWidth()")
+                            && source.contains("private int getVideoHeight()")
+                            && source.contains("videoView.getHeight()")
+                            && source.contains("videoView.getMeasuredHeight()"));
+            assertFalse(gestureFile + " must not use app screen metrics for fullscreen gesture regions",
+                    source.contains("ResUtil.isEdge(App.get()")
+                            || source.contains("ResUtil.getScreenWidth(App.get())"));
+        }
+    }
+
+    @Test
     public void mobileVideoRefreshesDanmakuControlsAfterLateDanmakuLoad() throws Exception {
         Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
@@ -184,6 +224,71 @@ public class VideoActivityLayoutTest {
         assertTrue("TV READY state must correct any early audio-only classification made during prepare",
                 stateBody.contains("case Player.STATE_READY:")
                         && stateBody.indexOf("refreshLyrics();") > stateBody.indexOf("case Player.STATE_READY:"));
+    }
+
+    @Test
+    public void leanbackImmersiveAudioModeUsesAudioContentGuard() throws Exception {
+        Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        String policyBody = methodBody(source, "private boolean shouldUseImmersiveAudio()", "private void syncAudioStageSurface(boolean visible)");
+
+        assertTrue("TV immersive audio must honor the selected mode for audio-only or music-like content",
+                policyBody.contains("return PlayerSetting.isImmersiveAudioMode() && (isAudioOnly() || isMusicLike());"));
+    }
+
+    @Test
+    public void leanbackAudioStageReconcilesRestoredViewVisibility() throws Exception {
+        Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        String visibilityBody = methodBody(source, "private void setAudioStageVisible(boolean visible)", "private boolean shouldUseImmersiveAudio()");
+
+        int reconcileView = visibilityBody.indexOf("mBinding.audioStage.setVisibility(visible ? View.VISIBLE : View.GONE);");
+        int stateFastPath = visibilityBody.indexOf("if (mAudioStageVisible == visible)");
+        assertTrue("TV audio stage must reconcile the real View before trusting its cached visibility flag",
+                reconcileView >= 0 && stateFastPath > reconcileView);
+    }
+
+    @Test
+    public void leanbackDisabledAudioStageHidesBeforeLyricsControllerEarlyReturn() throws Exception {
+        Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        String refreshBody = methodBody(source, "private void refreshLyricsNow()", "private void scheduleRefreshKaraoke");
+
+        int audioContent = refreshBody.indexOf("boolean audioContent = shouldUseImmersiveAudio();");
+        int hideStage = refreshBody.indexOf("setAudioStageVisible(audioContent);");
+        int earlyReturn = refreshBody.indexOf("if (mLyrics == null || service() == null) return;");
+        assertTrue("TV disabled audio stage must be hidden even when lyrics controllers were never initialized",
+                audioContent >= 0 && hideStage > audioContent && earlyReturn > hideStage);
+    }
+
+    @Test
+    public void leanbackAudioStageOverlayStartsHiddenWhileAutoDetectionIsDisabled() throws Exception {
+        Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        String setupBody = methodBody(source, "private void setupAudioStageOverlay()", "private void setupAudioStageFocusFeedback()");
+
+        int reattach = setupBody.indexOf("addView(mBinding.audioStage, params);");
+        int resetState = setupBody.indexOf("mAudioStageVisible = false;");
+        int hideView = setupBody.indexOf("mBinding.audioStage.setVisibility(View.GONE);");
+        assertTrue("TV audio stage overlay must not become visible merely because it was reattached to the root",
+                reattach >= 0 && resetState > reattach && hideView > resetState);
+    }
+
+    @Test
+    public void leanbackDisabledAudioStageStaysHiddenBeforeFirstFrame() throws Exception {
+        Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        Element audioStage = findAndroidId(findLeanbackResPath().resolve(Path.of("layout", "activity_video.xml")).toFile(), "audioStage");
+
+        assertTrue("TV audio stage must opt out of restoring a previously visible overlay",
+                audioStage != null
+                        && "false".equals(audioStage.getAttribute("android:saveEnabled"))
+                        && source.contains("mBinding.audioStage.setSaveFromParentEnabled(false);"));
+        int onResume = source.indexOf("protected void onResume()");
+        int hideStage = source.indexOf("setAudioStageVisible(false);", onResume);
+        int superResume = source.indexOf("super.onResume();", onResume);
+        assertTrue("TV audio stage must be hidden in onResume before Android draws the first frame",
+                onResume >= 0 && hideStage > onResume && superResume > hideStage);
     }
 
     @Test
@@ -1839,6 +1944,37 @@ public class VideoActivityLayoutTest {
                 source.indexOf("mBinding.videoContextScrim.setLayoutParams(", method) > method);
         assertTrue("Fusion context wall scrim must remain visible over the full-screen artwork",
                 source.indexOf("mBinding.videoContextScrim.setVisibility(View.VISIBLE)", method) > method);
+    }
+
+    @Test
+    public void mobileHistoryEntryPassesExactPlaybackSelection() throws Exception {
+        Path historyPath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "HistoryActivity.java"));
+        Path videoPath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String history = new String(Files.readAllBytes(historyPath), StandardCharsets.UTF_8);
+        String video = new String(Files.readAllBytes(videoPath), StandardCharsets.UTF_8);
+        String compactHistory = history.replaceAll("\\s+", " ");
+
+        assertTrue("history clicks must pass flag, episode title, and episode url to direct playback",
+                compactHistory.contains("VideoActivity.startDirect(this, item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic(), item.getVodRemarks(), item.getVodFlag(), item.getVodRemarks(), item.getEpisodeUrl())"));
+        assertTrue("direct playback must preserve the requested episode selection in the intent",
+                video.contains("putIntentPlaybackSelection(intent, playFlag, playEpisodeName, playEpisodeUrl);"));
+    }
+
+    @Test
+    public void mobileSaveHistoryKeepsRecordWithoutMergeDeletingSource() throws Exception {
+        Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int method = source.indexOf("private void saveHistory(boolean exit)");
+        int end = source.indexOf("private void syncHistory()", method);
+        String body = method >= 0 && end > method ? source.substring(method, end) : "";
+
+        assertTrue(sourcePath + " is missing saveHistory(boolean)", method >= 0);
+        assertTrue("saveHistory must treat an attached non-empty owner player as played content",
+                body.contains("boolean hasPlayback = service() != null && isOwner() && !player().isEmpty();"));
+        assertTrue("saveHistory must persist played content even before progress advances past zero",
+                body.contains("if (!mHistory.canSave() && !hasPlayback) return;"));
+        assertFalse("mobile playback save must not merge-delete existing history entries",
+                body.contains("history.merge().save()"));
     }
 
     private static void assertNoPrematurePlaybackReveal(Path sourcePath, String source) {

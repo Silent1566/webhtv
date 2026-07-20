@@ -83,6 +83,7 @@ public class History implements Diffable<History> {
 
     private transient int player = PlayerSetting.NONE;
     private transient long updateTime;
+    private transient String playbackSourceKey;
 
     public History() {
         this.speed = 1;
@@ -119,6 +120,7 @@ public class History implements Diffable<History> {
         item.year = year;
         item.player = player;
         item.updateTime = updateTime;
+        item.playbackSourceKey = playbackSourceKey;
         return item;
     }
 
@@ -201,7 +203,10 @@ public class History implements Diffable<History> {
 
     private static History copyForPlaybackKey(History item, String key) {
         History copy = item.copy();
-        if (key != null && !key.isEmpty()) copy.setKey(key);
+        if (key != null && !key.isEmpty() && !TextUtils.equals(key, item.getKey())) {
+            copy.playbackSourceKey = item.getKey();
+            copy.setKey(key);
+        }
         return copy;
     }
 
@@ -483,6 +488,7 @@ public class History implements Diffable<History> {
     boolean shouldMerge(History item, boolean force) {
         if (!canMergeByName() || !item.canMergeByName()) return false;
         if (!force && TextUtils.equals(getKey(), item.getKey())) return false;
+        if (!force && TextUtils.equals(getKey(), item.playbackSourceKey)) return false;
         if (force) return true;
         if (getDuration() <= 0 || item.getDuration() <= 0) return false;
         return Math.abs(getDuration() - item.getDuration()) <= TimeUnit.MINUTES.toMillis(10);

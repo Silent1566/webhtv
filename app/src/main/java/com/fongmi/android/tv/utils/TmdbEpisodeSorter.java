@@ -5,8 +5,10 @@ import android.text.TextUtils;
 import com.fongmi.android.tv.bean.Episode;
 import com.fongmi.android.tv.bean.Flag;
 import com.fongmi.android.tv.bean.Vod;
+import com.github.catvod.crawler.SpiderDebug;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -27,27 +29,42 @@ public final class TmdbEpisodeSorter {
         if (flag == null || flag.getEpisodes() == null || flag.getEpisodes().size() < 2) return;
         List<IndexedEpisode> indexed = new ArrayList<>();
         int recognized = 0;
+        int recognizedWithSeason = 0;
         for (int i = 0; i < flag.getEpisodes().size(); i++) {
             Episode episode = flag.getEpisodes().get(i);
-            if (episode != null && episode.getNumber() > 0) recognized++;
-            indexed.add(new IndexedEpisode(episode, sourceSeasonNumber(episode), number(episode), i));
+            int season = sourceSeasonNumber(episode);
+            int number = number(episode);
+            if (number > 0) {
+                recognized++;
+                if (season > 0) recognizedWithSeason++;
+            }
+            indexed.add(new IndexedEpisode(episode, season, number, i));
         }
-        if (recognized < 2 || isSorted(indexed)) return;
-        indexed.sort(TmdbEpisodeSorter::compare);
+        if (recognized < 2) return;
+        // Use one strategy for the whole flag so the comparator remains transitive.
+        boolean useSeason = recognized == recognizedWithSeason;
+        Comparator<IndexedEpisode> comparator = (left, right) -> compare(left, right, useSeason);
+        if (isSorted(indexed, comparator)) return;
+        try {
+            indexed.sort(comparator);
+        } catch (IllegalArgumentException e) {
+            SpiderDebug.log("tmdb-episode-sort", "keep source order after sort failure: %s", e.getMessage());
+            return;
+        }
         flag.getEpisodes().clear();
         for (IndexedEpisode item : indexed) flag.getEpisodes().add(item.episode());
     }
 
-    private static boolean isSorted(List<IndexedEpisode> episodes) {
+    private static boolean isSorted(List<IndexedEpisode> episodes, Comparator<IndexedEpisode> comparator) {
         for (int i = 1; i < episodes.size(); i++) {
-            if (compare(episodes.get(i - 1), episodes.get(i)) > 0) return false;
+            if (comparator.compare(episodes.get(i - 1), episodes.get(i)) > 0) return false;
         }
         return true;
     }
 
-    private static int compare(IndexedEpisode left, IndexedEpisode right) {
+    private static int compare(IndexedEpisode left, IndexedEpisode right, boolean useSeason) {
         if (left.number() > 0 && right.number() > 0) {
-            if (left.season() > 0 && right.season() > 0 && left.season() != right.season()) return Integer.compare(left.season(), right.season());
+            if (useSeason && left.season() != right.season()) return Integer.compare(left.season(), right.season());
             int result = Integer.compare(left.number(), right.number());
             return result != 0 ? result : Integer.compare(left.index(), right.index());
         }

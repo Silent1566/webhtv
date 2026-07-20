@@ -24,15 +24,25 @@ public class ExoUtilTest {
     }
 
     @Test
+    public void getFfmpegVideoRenderMode_keepsFfmpegAsFallbackForHardDecode() {
+        assertEquals(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON, ExoUtil.getFfmpegVideoRenderMode(ExoUtil.getRenderMode(PlayerEngine.HARD)));
+    }
+
+    @Test
+    public void getFfmpegVideoRenderMode_prefersFfmpegForSoftDecode() {
+        assertEquals(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER, ExoUtil.getFfmpegVideoRenderMode(ExoUtil.getRenderMode(PlayerEngine.SOFT)));
+    }
+
+    @Test
     public void ffmpegRendererPolicy_usesFullNextLibRenderersInNextLibMode() {
         assertTrue(ExoUtil.useFfmpegAudioFallback(PlayerSetting.FFMPEG_MODE_NEXTLIB));
         assertTrue(ExoUtil.useFfmpegVideoRenderer(PlayerSetting.FFMPEG_MODE_NEXTLIB));
     }
 
     @Test
-    public void ffmpegRendererPolicy_keepsAudioFallbackInSimpleMode() {
+    public void ffmpegRendererPolicy_usesAudioAndVideoFallbackInSimpleMode() {
         assertTrue(ExoUtil.useFfmpegAudioFallback(PlayerSetting.FFMPEG_MODE_SIMPLE));
-        assertFalse(ExoUtil.useFfmpegVideoRenderer(PlayerSetting.FFMPEG_MODE_SIMPLE));
+        assertTrue(ExoUtil.useFfmpegVideoRenderer(PlayerSetting.FFMPEG_MODE_SIMPLE));
     }
 
     @Test

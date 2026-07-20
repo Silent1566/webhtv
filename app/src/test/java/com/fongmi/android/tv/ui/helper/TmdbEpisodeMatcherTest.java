@@ -64,6 +64,15 @@ public class TmdbEpisodeMatcherTest {
     }
 
     @Test
+    public void allowsUnderscoreSeparatedQualitySuffix() {
+        Episode episode = Episode.create("85_4K.mp4", "http://example.test/85");
+        TmdbEpisode tmdbEpisode = new TmdbEpisode(85, "Episode 85", "", "", "", 0, 0);
+
+        assertEquals(85, episode.getNumber());
+        assertTrue(TmdbEpisodeMatcher.shouldApply(episode, tmdbEpisode, 85));
+    }
+
+    @Test
     public void rejectsWhenSourceEpisodeNumberDoesNotMatchTmdbEpisodeNumber() {
         Episode episode = Episode.create("11. 啪啪鹿鸣上分！太子认出她", "http://example.test/11");
         TmdbEpisode tmdbEpisode = new TmdbEpisode(12, "诀爱！郦主烧信烧", "", "", "", 0, 0);
@@ -81,12 +90,14 @@ public class TmdbEpisodeMatcherTest {
     }
 
     @Test
-    public void allowsWhenSourceEpisodeHasNoNumberAndTmdbEpisodeExists() {
+    public void rejectsWhenSourceEpisodeHasNoNumber() {
+        // 无法提取集号的文件名（如 "正片"、"00.mp4"、"trailer"）不应该匹配 TMDB 数据
+        // 避免按位置错配（如 00.mp4 被匹配到 E18）
         Episode episode = Episode.create("正片", "http://example.test/1");
         TmdbEpisode tmdbEpisode = new TmdbEpisode(1, "青丘脚下", "", "", "", 0, 0);
 
         assertEquals(-1, episode.getNumber());
-        assertTrue(TmdbEpisodeMatcher.shouldApply(episode, tmdbEpisode, 1));
+        assertFalse(TmdbEpisodeMatcher.shouldApply(episode, tmdbEpisode, 1));
     }
 
     @Test

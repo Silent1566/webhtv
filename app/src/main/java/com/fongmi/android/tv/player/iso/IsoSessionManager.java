@@ -23,6 +23,11 @@ public final class IsoSessionManager {
         thread.setDaemon(true);
         return thread;
     });
+    private static final ExecutorService METADATA_EXECUTOR = Executors.newSingleThreadExecutor(r -> {
+        Thread thread = new Thread(r, "iso-track-metadata");
+        thread.setDaemon(true);
+        return thread;
+    });
 
     private IsoSessionManager() {
     }
@@ -91,6 +96,27 @@ public final class IsoSessionManager {
             SpiderDebug.log("iso-source", "read failed id=%d offset=%d length=%d error=%s", id, offset, length, e.getMessage());
             return -1;
         }
+    }
+
+    /** Called by the native Blu-ray stream after libbluray selects the exact playlist. */
+    public static void prepareTrackMetadata(long id, int playlist) {
+        IsoPlaybackSession session = SESSIONS.get(id);
+        if (session != null) session.prepareTrackMetadata(playlist, METADATA_EXECUTOR);
+    }
+
+    public static String getTrackLanguage(long id, int trackType, int demuxId, int ordinal) {
+        IsoPlaybackSession session = SESSIONS.get(id);
+        return session == null ? null : session.trackLanguage(trackType, demuxId, ordinal);
+    }
+
+    public static void addTrackMetadataListener(long id, Runnable listener) {
+        IsoPlaybackSession session = SESSIONS.get(id);
+        if (session != null) session.addTrackMetadataListener(listener);
+    }
+
+    public static void removeTrackMetadataListener(long id, Runnable listener) {
+        IsoPlaybackSession session = SESSIONS.get(id);
+        if (session != null) session.removeTrackMetadataListener(listener);
     }
 
     public static long parseId(String uri) {

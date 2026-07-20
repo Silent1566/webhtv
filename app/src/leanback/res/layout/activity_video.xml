@@ -67,6 +67,7 @@
             android:paddingTop="20dp"
             android:paddingEnd="44dp"
             android:paddingBottom="14dp"
+            android:saveEnabled="false"
             android:visibility="gone"
             tools:visibility="visible">
 

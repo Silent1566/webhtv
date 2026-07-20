@@ -196,13 +196,13 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
         Episode episode = items.get(position);
         int episodeNumber = episodeNumber(episode, position);
         TmdbEpisode tmdbEpisode = tmdbItems.get(episodeNumber);
-        android.util.Log.d("TMDB_BIND", "[" + episode.getName() + "] pos=" + position + " episodeNumber=" + episodeNumber + " tmdbEpisode=" + (tmdbEpisode == null ? "null" : "S" + tmdbEpisode.getSeasonNumber() + "E" + tmdbEpisode.getNumber()) + " mapSize=" + tmdbItems.size());
         if (!TmdbEpisodeMatcher.shouldApply(episode, tmdbEpisode, episodeNumber)) {
-            android.util.Log.d("TMDB_BIND", "  shouldApply=false, setting tmdbEpisode to null");
             tmdbEpisode = null;
         }
+        // 匹配被拒时用文件自身集号（无有效集号则回退文件名），避免 position 回退值泄漏到标题
+        int titleNumber = tmdbEpisode != null ? episodeNumber : episode.getNumber();
         String tmdbTitle = tmdbEpisode != null ? tmdbEpisode.getTitle() : "";
-        String cleanTitle = getCleanTitle(episode, episodeNumber, tmdbTitle);
+        String cleanTitle = getCleanTitle(episode, titleNumber, tmdbTitle);
         String title = titleWithFileSize(episode, cleanTitle);
         String fileSize = episodeFileSize(episode);
         String date = tmdbEpisode != null ? tmdbEpisode.getDate() : "";

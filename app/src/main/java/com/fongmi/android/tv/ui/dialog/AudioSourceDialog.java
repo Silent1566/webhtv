@@ -5,6 +5,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.inputmethod.EditorInfo;
 import android.widget.EditText;
+import android.widget.RadioGroup;
 
 import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.FragmentActivity;
@@ -13,6 +14,7 @@ import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.AudioConfig;
 import com.fongmi.android.tv.bean.Site;
+import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.Setting;
 import com.google.android.material.chip.Chip;
 import com.google.android.material.chip.ChipGroup;
@@ -31,6 +33,7 @@ public class AudioSourceDialog {
 
     // 暂存数据，点"确定"才保存
     private List<String> tempEnabledRules;
+    private int tempPlaybackStyle;
 
     public static AudioSourceDialog create(FragmentActivity activity) {
         return new AudioSourceDialog(activity);
@@ -48,6 +51,7 @@ public class AudioSourceDialog {
     public void show() {
         View view = LayoutInflater.from(activity).inflate(R.layout.dialog_audio_source, null);
         enabledChips = view.findViewById(R.id.enabledChips);
+        RadioGroup playbackStyleGroup = view.findViewById(R.id.audioPlaybackStyle);
         EditText ruleInput = view.findViewById(R.id.ruleInput);
         View addBtn = view.findViewById(R.id.add);
         View manageBtn = view.findViewById(R.id.manage);
@@ -55,9 +59,12 @@ public class AudioSourceDialog {
 
         // 初始化暂存数据
         AudioConfig config = AudioConfig.objectFrom(Setting.getAudioConfig());
-        tempEnabledRules = new ArrayList<>(config.getEnabledSites());
+        tempEnabledRules = new ArrayList<>(config.isConfigured() ? config.getEnabledSites() : defaultRules());
+        playbackStyleGroup.check(PlayerSetting.getAudioPlaybackStyle() == PlayerSetting.AUDIO_PLAYBACK_STYLE_BUILT_IN ? R.id.audioPlaybackStyleBuiltIn : R.id.audioPlaybackStyleImmersive);
+        tempPlaybackStyle = playbackStyleGroup.getCheckedRadioButtonId() == R.id.audioPlaybackStyleBuiltIn ? PlayerSetting.AUDIO_PLAYBACK_STYLE_BUILT_IN : PlayerSetting.AUDIO_PLAYBACK_STYLE_IMMERSIVE;
         updateChipsDisplay();
 
+        playbackStyleGroup.setOnCheckedChangeListener((group, checkedId) -> tempPlaybackStyle = checkedId == R.id.audioPlaybackStyleBuiltIn ? PlayerSetting.AUDIO_PLAYBACK_STYLE_BUILT_IN : PlayerSetting.AUDIO_PLAYBACK_STYLE_IMMERSIVE);
         addBtn.setOnClickListener(v -> addRule(ruleInput));
         ruleInput.setOnEditorActionListener((v, actionId, event) -> {
             if (actionId == EditorInfo.IME_ACTION_DONE) {
@@ -80,17 +87,20 @@ public class AudioSourceDialog {
     }
 
     private void onSave() {
+        PlayerSetting.putAudioPlaybackStyle(tempPlaybackStyle);
         String json = "{\"configured\":true,\"enabledSites\":" + toJsonArray(tempEnabledRules) + "}";
         Setting.putAudioConfig(AudioConfig.objectFrom(json).toJson());
+    }
+
+    private static List<String> defaultRules() {
+        return List.of(AudioConfig.defaultRulesText().split(";"));
     }
 
     private void showSiteManage() {
         List<Site> sites = VodConfig.get().getSites().stream().filter(s -> s != null && !s.isEmpty()).toList();
         if (sites.isEmpty()) return;
 
-        List<String> enabledRules = tempEnabledRules.isEmpty()
-            ? List.of(AudioConfig.defaultRulesText().split(";"))
-            : new ArrayList<>(tempEnabledRules);
+        List<String> enabledRules = new ArrayList<>(tempEnabledRules);
 
         String[] labels = new String[sites.size()];
         boolean[] checked = new boolean[sites.size()];
@@ -182,11 +192,7 @@ public class AudioSourceDialog {
     private void updateChipsDisplay() {
         enabledChips.removeAllViews();
 
-        List<String> enabledRules = tempEnabledRules.isEmpty()
-            ? List.of(AudioConfig.defaultRulesText().split(";"))
-            : tempEnabledRules;
-
-        for (String rule : enabledRules) {
+        for (String rule : tempEnabledRules) {
             if (TextUtils.isEmpty(rule)) continue;
             Chip chip = createChip(rule.trim());
             enabledChips.addView(chip);
@@ -222,6 +228,7 @@ public class AudioSourceDialog {
 
     private void resetToDefault() {
         tempEnabledRules.clear();
+        tempEnabledRules.addAll(defaultRules());
         updateChipsDisplay();
     }
 

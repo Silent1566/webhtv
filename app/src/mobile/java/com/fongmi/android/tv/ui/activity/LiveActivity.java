@@ -1817,6 +1817,7 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
     @Override
     public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode, @NonNull Configuration newConfig) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
+        setVideoView(isInPictureInPictureMode);
         if (isInPictureInPictureMode) {
             dismissLiveControlDialog();
             hideControl();
@@ -1827,6 +1828,27 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
             // PiP 窗口点 × 关闭时，主动停止播放，避免声音继续。
             // 不能依赖 isStop() 时序，改为等生命周期 settle 后按最终状态判定。
             App.post(this::finishIfPipClosed, 0);
+        }
+    }
+
+    private void setVideoView(boolean isInPictureInPictureMode) {
+        if (isInPictureInPictureMode) {
+            // PiP 模式：显式让 video 填满整个 PiP 窗口，避免残留 embedded 布局参数
+            // （原布局 height=0dp+weight=9）导致 SurfaceView 渲染区域与 PiP 窗口尺寸不匹配，
+            // 表现为画面显示异常，退出后系统合成层残留最后一帧（水印残留）。
+            ViewGroup.LayoutParams params = mBinding.video.getLayoutParams();
+            if (params instanceof LinearLayoutCompat.LayoutParams layout) {
+                if (params.height == ViewGroup.LayoutParams.MATCH_PARENT
+                        && params.width == ViewGroup.LayoutParams.MATCH_PARENT
+                        && layout.weight == 0) return;
+                params.width = ViewGroup.LayoutParams.MATCH_PARENT;
+                params.height = ViewGroup.LayoutParams.MATCH_PARENT;
+                layout.weight = 0;
+                mBinding.video.setLayoutParams(params);
+            }
+        } else {
+            // 退出 PiP：按当前 UI 模式恢复合适的布局（嵌入式小窗 vs 全屏）
+            updateVideoHeight(videoSize);
         }
     }
 

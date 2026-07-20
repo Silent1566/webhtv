@@ -159,6 +159,10 @@ public class ExoUtil {
         return decode == PlayerEngine.HARD ? DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF : DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER;
     }
 
+    static int getFfmpegVideoRenderMode(int videoRenderMode) {
+        return videoRenderMode == DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF ? DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON : videoRenderMode;
+    }
+
     private static int getVideoRenderMode(int decode) {
         return getRenderMode(decode);
     }
@@ -406,10 +410,10 @@ public class ExoUtil {
 
     private static RenderersFactory buildRenderersFactory(int audioRenderMode, int videoRenderMode, boolean audioPrefer, boolean videoPrefer, boolean softVideoTune, boolean realtimePipeline) {
         int mode = PlayerSetting.getFFmpegMode();
-        if (useFfmpegVideoRenderer(mode)) {
+        if (mode == PlayerSetting.FFMPEG_MODE_NEXTLIB) {
             return buildNextLibRenderersFactory(audioRenderMode, videoRenderMode, audioPrefer, videoPrefer, softVideoTune, realtimePipeline);
         }
-        if (useFfmpegAudioFallback(mode)) return buildSimpleRenderersFactory(audioRenderMode, videoRenderMode, audioPrefer, videoPrefer, realtimePipeline);
+        if (useFfmpegAudioFallback(mode) || useFfmpegVideoRenderer(mode)) return buildSimpleRenderersFactory(audioRenderMode, videoRenderMode, audioPrefer, videoPrefer, realtimePipeline);
         return buildOfficialRenderersFactory(audioRenderMode, videoRenderMode, audioPrefer, videoPrefer, realtimePipeline);
     }
 
@@ -418,7 +422,7 @@ public class ExoUtil {
     }
 
     static boolean useFfmpegVideoRenderer(int mode) {
-        return mode == PlayerSetting.FFMPEG_MODE_NEXTLIB;
+        return mode == PlayerSetting.FFMPEG_MODE_NEXTLIB || mode == PlayerSetting.FFMPEG_MODE_SIMPLE;
     }
 
     private static RenderersFactory buildNextLibRenderersFactory(int audioRenderMode, int videoRenderMode, boolean audioPrefer, boolean videoPrefer, boolean softVideoTune, boolean realtimePipeline) {
@@ -435,8 +439,8 @@ public class ExoUtil {
         return factory.setEnableDecoderFallback(PlaybackPerformanceSetting.isDecoderFallbackEnabled()).setExtensionRendererMode(Math.max(audioRenderMode, videoRenderMode));
     }
 
-    private static RenderersFactory buildAudioFallbackRenderersFactory(int audioRenderMode, int videoRenderMode, boolean audioPrefer, boolean realtimePipeline) {
-        DefaultRenderersFactory factory = new FfmpegAudioFallbackRenderersFactory(App.get(), audioRenderMode, audioPrefer) {
+    private static RenderersFactory buildFallbackRenderersFactory(int audioRenderMode, int videoRenderMode, boolean audioPrefer, boolean videoPrefer, boolean realtimePipeline) {
+        DefaultRenderersFactory factory = new FfmpegFallbackRenderersFactory(App.get(), audioRenderMode, videoRenderMode, audioPrefer, videoPrefer) {
             @Override
             protected AudioSink buildAudioSink(@NonNull Context context, boolean enableFloatOutput, boolean enableAudioOutputPlaybackParams) {
                 return ExoUtil.buildAudioSink(context, enableFloatOutput, enableAudioOutputPlaybackParams, realtimePipeline);
@@ -466,7 +470,7 @@ public class ExoUtil {
     }
 
     private static RenderersFactory buildSimpleRenderersFactory(int audioRenderMode, int videoRenderMode, boolean audioPrefer, boolean videoPrefer, boolean realtimePipeline) {
-        return buildAudioFallbackRenderersFactory(audioRenderMode, videoRenderMode, audioPrefer, realtimePipeline);
+        return buildFallbackRenderersFactory(audioRenderMode, videoRenderMode, audioPrefer, videoPrefer, realtimePipeline);
     }
 
     private static AudioSink buildAudioSink(Context context, boolean enableFloatOutput, boolean enableAudioOutputPlaybackParams, boolean realtimePipeline) {
@@ -546,13 +550,16 @@ public class ExoUtil {
         @Override
         protected void buildVideoRenderers(Context context, int extensionRendererMode, MediaCodecSelector mediaCodecSelector, boolean enableDecoderFallback, Handler eventHandler, VideoRendererEventListener eventListener, long allowedVideoJoiningTimeMs, ArrayList<Renderer> out) {
             super.buildVideoRenderers(context, videoRenderMode, getVideoCodecSelector(mediaCodecSelector), enableDecoderFallback, eventHandler, eventListener, allowedVideoJoiningTimeMs, out);
+            int ffmpegVideoRenderMode = getFfmpegVideoRenderMode(videoRenderMode);
             if (videoRenderMode == EXTENSION_RENDERER_MODE_OFF) {
                 out.add(new DolbyVisionHdr10FallbackRenderer(context, getCodecAdapterFactory(), getVideoCodecSelector(mediaCodecSelector), allowedVideoJoiningTimeMs, enableDecoderFallback, eventHandler, eventListener));
-                return;
             }
             try {
-                out.add(getExtensionRendererIndex(videoRenderMode, videoPrefer, out), buildFfmpegVideoRenderer(allowedVideoJoiningTimeMs, eventHandler, eventListener));
-            } catch (Throwable ignored) {
+                int index = getExtensionRendererIndex(ffmpegVideoRenderMode, videoPrefer, out);
+                out.add(index, buildFfmpegVideoRenderer(allowedVideoJoiningTimeMs, eventHandler, eventListener));
+                if (SpiderDebug.isEnabled()) SpiderDebug.log("exo-ffmpeg", "loaded ffmpeg video renderer mode=%d index=%d", ffmpegVideoRenderMode, index);
+            } catch (Throwable e) {
+                if (SpiderDebug.isEnabled()) SpiderDebug.log("exo-ffmpeg", "ffmpeg video renderer unavailable mode=%d error=%s", ffmpegVideoRenderMode, e.toString());
             }
         }
 
@@ -579,15 +586,19 @@ public class ExoUtil {
         }
     }
 
-private static class FfmpegAudioFallbackRenderersFactory extends DefaultRenderersFactory {
+    private static class FfmpegFallbackRenderersFactory extends DefaultRenderersFactory {
 
         private final int audioRenderMode;
+        private final int videoRenderMode;
         private final boolean audioPrefer;
+        private final boolean videoPrefer;
 
-        FfmpegAudioFallbackRenderersFactory(Context context, int audioRenderMode, boolean audioPrefer) {
+        FfmpegFallbackRenderersFactory(Context context, int audioRenderMode, int videoRenderMode, boolean audioPrefer, boolean videoPrefer) {
             super(context);
             this.audioRenderMode = audioRenderMode;
+            this.videoRenderMode = videoRenderMode;
             this.audioPrefer = audioPrefer;
+            this.videoPrefer = videoPrefer;
         }
 
         @Override
@@ -597,6 +608,19 @@ private static class FfmpegAudioFallbackRenderersFactory extends DefaultRenderer
             try {
                 out.add(getExtensionRendererIndex(audioRenderMode, audioPrefer, out), new CompatFfmpegAudioRenderer(context, eventHandler, eventListener, audioSink, true));
             } catch (Throwable ignored) {
+            }
+        }
+
+        @Override
+        protected void buildVideoRenderers(Context context, int extensionRendererMode, MediaCodecSelector mediaCodecSelector, boolean enableDecoderFallback, Handler eventHandler, VideoRendererEventListener eventListener, long allowedVideoJoiningTimeMs, ArrayList<Renderer> out) {
+            super.buildVideoRenderers(context, videoRenderMode, mediaCodecSelector, enableDecoderFallback, eventHandler, eventListener, allowedVideoJoiningTimeMs, out);
+            int ffmpegVideoRenderMode = getFfmpegVideoRenderMode(videoRenderMode);
+            try {
+                int index = getExtensionRendererIndex(ffmpegVideoRenderMode, videoPrefer, out);
+                out.add(index, new FfmpegVideoRenderer(allowedVideoJoiningTimeMs, eventHandler, eventListener, MAX_DROPPED_VIDEO_FRAME_COUNT_TO_NOTIFY));
+                if (SpiderDebug.isEnabled()) SpiderDebug.log("exo-ffmpeg", "loaded ffmpeg video renderer mode=%d index=%d", ffmpegVideoRenderMode, index);
+            } catch (Throwable e) {
+                if (SpiderDebug.isEnabled()) SpiderDebug.log("exo-ffmpeg", "ffmpeg video renderer unavailable mode=%d error=%s", ffmpegVideoRenderMode, e.toString());
             }
         }
 

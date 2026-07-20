@@ -2,21 +2,24 @@ package com.fongmi.android.tv.bean;
 
 import android.text.TextUtils;
 
-import com.fongmi.android.tv.App;
+import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Pattern;
 
 public class TmdbConfig {
 
+    private static final Gson GSON = new Gson();
     private static final String DEFAULT_API_BASE = "https://api.tmdb.org/3";
-    private static final String DEFAULT_IMAGE_HOST = "https://image.tmdb.org";
-    private static final String DEFAULT_IMAGE_BASE = "https://image.tmdb.org/t/p/w342";
-    private static final String DEFAULT_BACKDROP_BASE = "https://image.tmdb.org/t/p/w780";
+    private static final String DEFAULT_IMAGE_HOST = "https://images.tmdb.org";
+    private static final String DEFAULT_IMAGE_BASE = "https://images.tmdb.org/t/p/w342";
+    private static final String DEFAULT_BACKDROP_BASE = "https://images.tmdb.org/t/p/w780";
     private static final String DEFAULT_LANGUAGE = "zh-CN";
     private static final List<String> DEFAULT_DISABLED_RULES = List.of("[音]", "[听]", "[书]", "[漫]", "[短]");
+    private static final Pattern TMDB_SIZE = Pattern.compile("/(?:w\\d+|h\\d+|original)$");
 
     @SerializedName("apiBase")
     private String apiBase;
@@ -47,7 +50,7 @@ public class TmdbConfig {
 
     public static TmdbConfig objectFrom(String json) {
         try {
-            TmdbConfig config = App.gson().fromJson(json, TmdbConfig.class);
+            TmdbConfig config = GSON.fromJson(json, TmdbConfig.class);
             return config == null ? new TmdbConfig().sanitize() : config.sanitize();
         } catch (Throwable e) {
             return new TmdbConfig().sanitize();
@@ -62,11 +65,12 @@ public class TmdbConfig {
         if (!TextUtils.isEmpty(accessToken) && accessToken.equals(apiKey) && !isAccessToken(accessToken)) accessToken = "";
         omdbApiKey = trimOr(omdbApiKey, "");
         language = trimOr(language, DEFAULT_LANGUAGE);
-        imageBase = trimOr(imageBase, DEFAULT_IMAGE_BASE);
-        backdropBase = trimOr(backdropBase, "");
+        imageBase = normalizeImageInput(trimOr(imageBase, DEFAULT_IMAGE_BASE));
+        backdropBase = normalizeImageInput(trimOr(backdropBase, ""));
         if (TextUtils.isEmpty(backdropBase) && isImageHost(imageBase)) backdropBase = imageBase(imageBase, "w780");
         if (isImageHost(imageBase)) imageBase = imageBase(imageBase, "w342");
         backdropBase = trimOr(backdropBase, DEFAULT_BACKDROP_BASE);
+        if (isImageHost(backdropBase) && !backdropBase.contains("/t/p/")) backdropBase = imageBase(backdropBase, "w780");
         enabledSites = cleanList(enabledSites);
         disabledSites = mergeList(cleanList(excludeKeywords), cleanList(disabledSites));
         excludeKeywords = null;
@@ -87,7 +91,8 @@ public class TmdbConfig {
     public String getApiHost() {
         String api = TextUtils.isEmpty(apiBase) ? DEFAULT_API_BASE : apiBase;
         api = trimTrailingSlash(api);
-        return api.endsWith("/3") ? api.substring(0, api.length() - 2) : api;
+        if (api.endsWith("/3")) api = api.substring(0, api.length() - 2);
+        return trimTrailingSlash(api);
     }
 
     public String getApiKey() {
@@ -117,8 +122,11 @@ public class TmdbConfig {
     public String getImageHost() {
         String base = TextUtils.isEmpty(imageBase) ? DEFAULT_IMAGE_BASE : imageBase;
         base = stripImageSize(base);
-        if (base.endsWith("/t/p")) return base.substring(0, base.length() - 4);
-        return isHttpUrl(base) ? base : DEFAULT_IMAGE_HOST;
+        if (base.endsWith("/t/p")) base = base.substring(0, base.length() - 4);
+        base = trimTrailingSlash(base);
+        if (isHttpUrl(base)) return base;
+        String withScheme = ensureHttpScheme(base);
+        return isHttpUrl(withScheme) ? withScheme : DEFAULT_IMAGE_HOST;
     }
 
     public List<String> getEnabledSites() {
@@ -160,7 +168,7 @@ public class TmdbConfig {
     }
 
     public String toJson() {
-        return App.gson().toJson(sanitize());
+        return GSON.toJson(sanitize());
     }
 
     private static String trimOr(String value, String fallback) {
@@ -168,14 +176,33 @@ public class TmdbConfig {
     }
 
     private static String normalizeApiBase(String value) {
-        String api = trimTrailingSlash(value);
+        String api = ensureHttpScheme(trimTrailingSlash(value));
         if (api.endsWith("/3")) return api;
         return joinUrl(api, "3");
     }
 
+    private static String normalizeImageInput(String value) {
+        if (TextUtils.isEmpty(value)) return value;
+        return ensureHttpScheme(value.trim());
+    }
+
+    private static String ensureHttpScheme(String value) {
+        if (TextUtils.isEmpty(value) || isHttpUrl(value)) return value;
+        if (looksLikeHost(value)) return "https://" + value.trim();
+        return value;
+    }
+
+    private static boolean looksLikeHost(String value) {
+        String text = trimTrailingSlash(value);
+        if (TextUtils.isEmpty(text) || text.contains("://") || text.contains(" ") || text.startsWith("/")) return false;
+        int slash = text.indexOf('/');
+        String host = slash < 0 ? text : text.substring(0, slash);
+        return host.contains(".") || host.equalsIgnoreCase("localhost") || host.matches("\\d+\\.\\d+\\.\\d+\\.\\d+(:\\d+)?");
+    }
+
     private static boolean isImageHost(String value) {
         String image = trimTrailingSlash(value);
-        return image.endsWith("/t/p") || image.equals(DEFAULT_IMAGE_HOST) || image.endsWith(".tmdb.org") || isHttpUrl(image);
+        return image.endsWith("/t/p") || image.equals(DEFAULT_IMAGE_HOST) || image.endsWith(".tmdb.org") || isHttpUrl(image) || looksLikeHost(image);
     }
 
     private static String imageBase(String value, String size) {
@@ -190,8 +217,10 @@ public class TmdbConfig {
 
     private static String stripImageSize(String value) {
         String image = trimTrailingSlash(value);
-        if (image.endsWith("/w342") || image.endsWith("/w500") || image.endsWith("/w780")) return image.substring(0, image.lastIndexOf('/'));
-        if (image.endsWith("/original")) return image.substring(0, image.length() - 9);
+        while (TMDB_SIZE.matcher(image).find()) {
+            image = image.substring(0, image.lastIndexOf('/'));
+            image = trimTrailingSlash(image);
+        }
         return image;
     }
 

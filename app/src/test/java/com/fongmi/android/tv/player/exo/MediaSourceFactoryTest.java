@@ -53,9 +53,11 @@ public class MediaSourceFactoryTest {
         assertTrue(MediaSourceFactory.isLocalProxyUrl("http://localhost:9978/proxy?siteKey=drive"));
         assertTrue(MediaSourceFactory.isLocalProxyUrl("http://[::1]:9978/proxy?do=py"));
         assertTrue(MediaSourceFactory.isLocalProxyUrl("http://0.0.0.0:9978/proxy?do=jar"));
+        assertTrue(MediaSourceFactory.isLocalProxyUrl("http://127.0.0.1:5000/proxy/1_4213_0_0"));
 
         assertFalse(MediaSourceFactory.isLocalProxyUrl("https://cdn.example.test/movie.mkv"));
         assertFalse(MediaSourceFactory.isLocalProxyUrl("http://127.0.0.1.evil.test:9978/proxy?do=js"));
+        assertFalse(MediaSourceFactory.isLocalProxyUrl("http://127.0.0.1:9978/proxy-evil/movie.mkv"));
         assertFalse(MediaSourceFactory.isLocalProxyUrl("http://127.0.0.1:9978/file/movie.mkv"));
         assertFalse(MediaSourceFactory.isLocalProxyUrl(null));
     }

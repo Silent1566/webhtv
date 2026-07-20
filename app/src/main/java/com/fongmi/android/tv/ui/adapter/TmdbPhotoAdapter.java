@@ -51,7 +51,8 @@ public class TmdbPhotoAdapter extends RecyclerView.Adapter<TmdbPhotoAdapter.View
         legacyMode = true;
         if (this.light == light) return;
         this.light = light;
-        notifyItemRangeChanged(0, items.size());
+        // 避免大数据集触发 RecyclerView 复用崩溃，改用 notifyDataSetChanged 全量刷新
+        if (items.size() > 0) notifyDataSetChanged();
     }
 
     public void setItems(List<String> photos) {

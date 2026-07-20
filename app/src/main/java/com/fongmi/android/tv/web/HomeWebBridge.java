@@ -161,7 +161,7 @@ public class HomeWebBridge {
         final String playWall = wall;
         final String playContent = content;
         SpiderDebug.log("webhome", "player.playUrl title=%s url=%s", playTitle, playUrl);
-        App.post(() -> VideoActivity.start(activity, SiteApi.PUSH, playUrl, playTitle, playPic, null, playWall, playContent));
+        App.post(() -> controller.prepareNativePlayback(() -> VideoActivity.start(activity, SiteApi.PUSH, playUrl, playTitle, playPic, null, playWall, playContent)));
         return "{}";
     }
 
@@ -172,7 +172,7 @@ public class HomeWebBridge {
         String pic = Json.safeString(payload, "pic");
         String wall = wallPic(payload);
         String content = content(payload);
-        App.post(() -> VideoActivity.start(activity, siteKey, vodId, title, pic, null, wall, content));
+        App.post(() -> controller.prepareNativePlayback(() -> VideoActivity.start(activity, siteKey, vodId, title, pic, null, wall, content)));
         return "{}";
     }
 
@@ -191,7 +191,7 @@ public class HomeWebBridge {
         final String playWall = wall;
         final String playContent = content;
         SpiderDebug.log("webhome", "player.playVodInline title=%s id=%s mark=%s", playTitle, vodId, playMark);
-        App.post(() -> VideoActivity.start(activity, WebHomeInlineVodStore.KEY, vodId, playTitle, playPic, playMark, playWall, playContent));
+        App.post(() -> controller.prepareNativePlayback(() -> VideoActivity.start(activity, WebHomeInlineVodStore.KEY, vodId, playTitle, playPic, playMark, playWall, playContent)));
         JsonObject result = new JsonObject();
         result.addProperty("siteKey", WebHomeInlineVodStore.KEY);
         result.addProperty("vodId", vodId);
@@ -348,7 +348,7 @@ public class HomeWebBridge {
         final String playWall = wall;
         final String playContent = content;
         SpiderDebug.log("webhome", "pan.play route=%s type=%s title=%s url=%s", SiteApi.PUSH, type, playTitle, playUrl);
-        App.post(() -> VideoActivity.start(activity, SiteApi.PUSH, playUrl, playTitle, playPic, null, playWall, playContent));
+        App.post(() -> controller.prepareNativePlayback(() -> VideoActivity.start(activity, SiteApi.PUSH, playUrl, playTitle, playPic, null, playWall, playContent)));
         return "{}";
     }
 

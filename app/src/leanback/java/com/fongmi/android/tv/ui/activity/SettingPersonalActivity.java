@@ -11,8 +11,10 @@ import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.bean.HomeButton;
 import com.fongmi.android.tv.databinding.ActivitySettingPersonalBinding;
 import com.fongmi.android.tv.event.RefreshEvent;
+import com.fongmi.android.tv.setting.GroupRuleConfig;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.base.BaseActivity;
+import com.fongmi.android.tv.ui.dialog.GroupRuleDialog;
 import com.fongmi.android.tv.ui.dialog.HomeButtonDialog;
 import com.fongmi.android.tv.ui.dialog.HomeMenuKeyDialog;
 import com.fongmi.android.tv.ui.dialog.SliderNumberDialog;
@@ -56,6 +58,7 @@ public class SettingPersonalActivity extends BaseActivity {
         mBinding.playBackToDetail.setOnClickListener(this::setPlayBackToDetail);
         mBinding.tmdbMatchMode.setOnClickListener(this::setTmdbMatchMode);
         mBinding.personalRecommendation.setOnClickListener(this::setPersonalRecommendation);
+        mBinding.groupRule.setOnClickListener(this::setGroupRule);
         mBinding.homeHistory.setOnClickListener(this::setHomeHistory);
         mBinding.tmdbEpisodeFileSize.setOnClickListener(this::setTmdbEpisodeFileSize);
         mBinding.searchThread.setOnClickListener(this::setSearchThread);
@@ -72,6 +75,7 @@ public class SettingPersonalActivity extends BaseActivity {
         mBinding.playBackToDetailText.setText(getSwitch(Setting.isPlayBackToDetail()));
         mBinding.tmdbMatchModeText.setText((tmdbMatchMode = getResources().getStringArray(R.array.select_tmdb_match_mode))[Setting.getTmdbMatchMode()]);
         mBinding.personalRecommendationText.setText(getSwitch(Setting.isPersonalRecommendation()));
+        mBinding.groupRuleText.setText(getString(R.string.setting_group_rule_summary, GroupRuleConfig.enabledCount(), GroupRuleConfig.totalCount()));
         mBinding.homeHistoryText.setText(getSwitch(Setting.isHomeHistory()));
         mBinding.tmdbEpisodeFileSizeText.setText(getSwitch(Setting.isTmdbEpisodeFileSize()));
         mBinding.searchThreadText.setText(String.valueOf(Setting.getSearchThread()));
@@ -132,6 +136,10 @@ public class SettingPersonalActivity extends BaseActivity {
                     setText();
                 })
                 .show();
+    }
+
+    private void setGroupRule(View view) {
+        GroupRuleDialog.create(this).onChanged(this::setText).show();
     }
 
     private void setHomeHistory(View view) {

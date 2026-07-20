@@ -44,9 +44,11 @@ import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.audio.AudioHistory;
 import com.fongmi.android.tv.ui.audio.AudioMiniPlayer;
+import com.fongmi.android.tv.ui.audio.AudioPlaybackResolver;
 import com.fongmi.android.tv.ui.custom.CustomSeekView;
 import com.fongmi.android.tv.ui.custom.CustomWallView;
 import com.fongmi.android.tv.ui.dialog.AudioCommentDialog;
+import com.fongmi.android.tv.utils.ActivityLaunch;
 import com.fongmi.android.tv.utils.AudioUtil;
 import com.fongmi.android.tv.utils.FileUtil;
 import com.fongmi.android.tv.utils.ImgUtil;
@@ -151,22 +153,18 @@ public class AudioActivity extends PlaybackActivity {
     }
 
     public static boolean startSite(Activity activity, String key, String id, String name, String pic, String mark) {
+        if (PlayerSetting.isImmersiveAudioMode()) return VideoActivity.startImmersiveAudioSite(activity, key, id, name, pic, mark);
         if (SiteApi.PUSH.equals(key)) return false;
         if (!AudioUtil.isAudioSiteEnabled(key)) return false;
         Notify.show("正在加载音频");
         Task.execute(() -> {
             try {
-                Result detail = SiteApi.detailContent(key, id);
-                Vod vod = detail.getVod();
-                vod.checkName(name);
-                vod.checkPic(pic);
-                Flag flag = selectFlag(key, id, vod, mark);
-                if (flag == null || flag.getEpisodes().isEmpty()) throw new IllegalStateException("没有可播放的音频");
-                Episode episode = selectEpisode(key, id, flag, mark);
-                int index = Math.max(0, flag.getEpisodes().indexOf(episode));
-                Result result = SiteApi.playerContent(key, flag.getFlag(), episode.getUrl());
-                String playbackKey = AudioHistory.buildPlaybackKey(key, id);
-                App.post(() -> start(activity, playbackKey, key, flag.getFlag(), vod.getName(), episode.getDisplayName(), result.hasArtwork() ? result.getArtwork() : vod.getPic(), flag.getEpisodes(), index, result, VodConfig.get().getSite(key).getTimeout(), result.getHeader()));
+                AudioPlaybackResolver.Resolved resolved = AudioPlaybackResolver.resolveSite(key, id, name, pic, mark);
+                Result result = resolved.getResult();
+                Vod vod = resolved.getVod();
+                Flag flag = resolved.getFlag();
+                Episode episode = resolved.getEpisode();
+                App.post(() -> ActivityLaunch.postOnAnimation(activity, () -> start(activity, AudioHistory.buildPlaybackKey(key, id), key, flag.getFlag(), vod.getName(), episode.getDisplayName(), result.hasArtwork() ? result.getArtwork() : vod.getPic(), flag.getEpisodes(), resolved.getIndex(), result, resolved.getTimeout(), result.getHeader())));
             } catch (Throwable e) {
                 App.post(() -> Notify.show(TextUtils.isEmpty(e.getMessage()) ? "音频加载失败" : e.getMessage()));
             }
@@ -184,12 +182,14 @@ public class AudioActivity extends PlaybackActivity {
     }
 
     public static boolean startIfAudio(Activity activity, String key, Result result, String title, String subtitle, String pic) {
+        if (PlayerSetting.isImmersiveAudioMode()) return false;
         if (!AudioUtil.isAudio(result)) return false;
         start(activity, key, "", "", title, subtitle, result.hasArtwork() ? result.getArtwork() : pic, null, 0, result, Constant.TIMEOUT_PLAY, result.getHeader());
         return true;
     }
 
     public static boolean startIfAudio(Activity activity, String playbackKey, String siteKey, String flag, String vodName, String vodPic, List<Episode> episodes, int index, Result result, long timeout) {
+        if (PlayerSetting.isImmersiveAudioMode()) return false;
         if (!AudioUtil.isAudioSiteEnabled(siteKey)) return false;
         boolean audio = AudioUtil.isAudio(result);
         if (SiteApi.PUSH.equals(siteKey) && !audio) return false;
@@ -228,27 +228,6 @@ public class AudioActivity extends PlaybackActivity {
         intent.putExtra(EXTRA_EPISODES_KEY, objectKey);
         if (headers != null && !headers.isEmpty()) intent.putExtra(EXTRA_HEADERS, new java.util.HashMap<>(headers));
         activity.startActivity(intent);
-    }
-
-    private static Flag selectFlag(String key, String id, Vod vod, String mark) {
-        History history = AudioHistory.find(key, id);
-        String targetFlag = history == null ? "" : history.getVodFlag();
-        if (!TextUtils.isEmpty(targetFlag)) {
-            for (Flag flag : vod.getFlags()) if (targetFlag.equals(flag.getFlag())) return flag;
-        }
-        if (!TextUtils.isEmpty(mark)) {
-            for (Flag flag : vod.getFlags()) if (mark.equals(flag.getFlag())) return flag;
-        }
-        return vod.getFlags().isEmpty() ? null : vod.getFlags().get(0);
-    }
-
-    private static Episode selectEpisode(String key, String id, Flag flag, String mark) {
-        History history = AudioHistory.find(key, id);
-        Episode episode = history == null ? null : flag.find(history.getVodRemarks(), false);
-        if (episode != null) return episode;
-        if (!TextUtils.isEmpty(mark)) episode = flag.find(mark, false);
-        if (episode != null) return episode;
-        return flag.getEpisodes().get(0);
     }
 
     @Override

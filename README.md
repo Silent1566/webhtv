@@ -187,36 +187,49 @@ bash gradlew :app:assembleMobileArm64_v8aDebug :app:assembleLeanbackArmeabi_v7aD
 - `third_party/mpv-player-jni/include/mpv/stream_cb.h`
 - 升级 MPV client API，或新的 `libmpv.so` 与现有 JNI 头文件/API 不兼容
 
-当前 `libmpv.so` 同时启用 OpenGL 和 Vulkan；`libplayer.so` 由本仓库 `third_party/mpv-player-jni` 构建，用于保留 END_FILE reason/error 等本地桥接能力。当前 native 基线：
+当前 `libmpv.so` 同时启用 OpenGL、Vulkan、libcurl 和 HTTP/2；`libplayer.so` 由本仓库 `third_party/mpv-player-jni` 构建，用于保留 END_FILE reason/error 等本地桥接能力。当前 native 基线：
 
-| ABI | MPV | FFmpeg | libplacebo | 说明 |
-| --- | --- | --- | --- | --- |
-| `arm64-v8a` | `0.41.0-556-g9ce79bcaa` | `5ba2525c7aff`（8.0.git） | `7.362.0` / `82224764a981` | OpenGL、Vulkan、LUT 和 Blu-ray ISO 时间轴/seek 已验证 |
-| `armeabi-v7a` | `0.41.0-556-g9ce79bcaa` | `5ba2525c7aff`（8.0.git） | `7.362.0` / `82224764a981` | 与 arm64 使用相同锁定源码和光盘时间轴补丁，独立生成 32 位产物 |
+| ABI | MPV | FFmpeg | libplacebo | 网络后端 | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `arm64-v8a` | `0.41.0-878-g94335ab87` | `8ae0b34901ba`（n8.0.3） | `7.371.0` / `a7a18af88ff0` | curl 8.21.0 + nghttp2 1.69.0 | vivo Android 15 MPV 网络播放已验证，未出现 destroyed-mutex、SIGABRT 或 SIGSEGV |
+| `armeabi-v7a` | `0.41.0-878-g94335ab87` | `8ae0b34901ba`（n8.0.3） | `7.371.0` / `a7a18af88ff0` | curl 8.21.0 + nghttp2 1.69.0 | 同一 lock 独立构建并通过版本、补丁、HTTP/2 和 ELF 依赖校验；待 32 位真机播放回归 |
 
 替换或升级 MPV native 时必须遵守：
 
-- `libmpv.so`、FFmpeg（codec/device/filter/format/util/swresample/swscale）、libplacebo 和 `libc++_shared.so` 必须按同一 ABI、同一兼容构建成套更新。禁止只替换 `libmpv.so`；否则常见结果是 `cannot locate symbol` 或进入播放即失败。
-- 两个 ABI 的验证组合均固定为 MPV `9ce79bcaa0132660a2e45b6bfc1fb0c199665277`、FFmpeg `5ba2525c7affc29cbd99e6266946b382d3fffe8b`、libplacebo `82224764a98164ce9d2d9a10e4fefca934e475fb`、NDK `28.2.13676358`。该 MPV 要求 libplacebo `>= 7.360.1`，旧 `7.360.0` 不能直接链接。
+- `libmpv.so`、FFmpeg（codec/device/filter/format/util/swresample/swscale）、静态链接进 MPV 的 libplacebo、curl、nghttp2、MbedTLS 和 `libc++_shared.so` 必须按同一 ABI、同一 lock 成套构建，不能再混用旧 `libmpv.so` 与新依赖作为正式方案。
+- 当前已提交 assets 使用 MPV `94335ab87ab225ca3e36e0faeac831639d3e1d4e`、FFmpeg n8.0.3 `8ae0b34901ba60a802f183ee75a250a9fc3e09a5`、libplacebo `a7a18af88ff0a17c04840dcb3246047bb6b46df3`（7.371.0）、curl 8.21.0、nghttp2 1.69.0 和 NDK r28c。curl 使用 MbedTLS，只启用 HTTP/HTTPS 与 HTTP/2，不包含 HTTP/3、ngtcp2、nghttp3 或 quiche。FFmpeg 8.1.2 组合在 vivo Android 15 播放初始化时可触发 `pthread_mutex_lock called on a destroyed mutex`，因此没有进入正式 lock。
+- curl 与 nghttp2 静态链接进 `libmpv.so`，APK 不新增独立网络 `.so`。它增强 MPV 直接远程 HTTP/HTTPS 输入；App 自己处理的本地 HLS 代理、`stream_cb` 和 FFmpeg/lavf 路径仍按各自实现工作，不能把启用 curl 理解为所有播放请求都强制走同一后端。
 - FFmpeg 文件名、ELF `SONAME` 和所有 `DT_NEEDED` 都要从 `libav*`/`libsw*` 等长改为 `libmv*`/`libmw*`，不能只重命名文件，否则会和 `nextlib-media3ext` 内置 FFmpeg 发生 Android linker 复用冲突。
 - 固定 MPV 源码会应用 `third_party/patches/mpv-stream-cb-disc-controls.patch`。该补丁扩展 `stream_cb` 光盘控制并接入 `demux_disc`；修改补丁或 `stream_cb.h` 后必须同时重建 `libmpv.so` 和 `libplayer.so`。
-- 更新后用 NDK `llvm-readelf -d` 确认没有残留 `libav*.so`/`libsw*.so` 依赖，再分别回归 OpenGL 普通播放、LUT 效果、预览分割线连续滑动、Vulkan、字幕切换、硬解，以及 Blu-ray ISO 初始完整时长和跨 M2TS seek。
+- 更新后用 NDK `llvm-readelf -d` 确认没有残留 `libav*.so`/`libsw*.so` 依赖，再分别回归 OpenGL、Vulkan、硬解/软解、LUT、字幕、线路切换、连续起播/退出和 Blu-ray ISO。Android 15 必须同时检查 crash buffer 中是否出现 destroyed mutex。
 
-从固定源码重新生成单个 ABI 的 MPV/FFmpeg `.so`：
+从固定源码重新生成 MPV/FFmpeg `.so`：
 
 ```bash
-scripts/build_mpv_native.sh --abi arm64-v8a --install
+scripts/build_mpv_native.sh --abi arm64-v8a
 bash gradlew :app:assembleMobileArm64_v8aRelease -PfastRelease=true
 ```
 
-同时重新生成两套 ARM ABI 和匹配的 JNI 桥：
+需要更新仓库 assets 时，同步安装两套 ARM ABI；只有 JNI 源码、MPV client API 或 `stream_cb.h` 变化时才重建 JNI 桥：
 
 ```bash
 scripts/build_mpv_native.sh --abi all --install
-scripts/build_mpv_player_jni.sh
+# 按需执行：scripts/build_mpv_player_jni.sh
 ```
 
-脚本读取 `third_party/mpv-native-lock.json`，自动下载固定 commit、应用 MPV 光盘控制补丁、构建依赖、修改 ELF 依赖名、strip 并校验。普通 Gradle 和 GitHub Actions 不会调用该脚本，仍直接复用仓库已提交的 `.so`。完整环境准备、两 ABI 构建、输出目录和故障处理见 [MPV Native 可复现构建](third_party/mpv-native-build.md)。
+脚本读取 `third_party/mpv-native-lock.json`，自动下载固定 commit、应用 MPV 光盘控制补丁、构建依赖、修改 ELF 依赖名、strip 并校验。当前 lock 与两套已提交 assets 一致，可复现正式 native 组合；普通 Gradle 和 GitHub Actions 不会调用该脚本，直接复用仓库已提交的 `.so`。Android Release Action 会在 Gradle 打包前运行 `scripts/verify_mpv_native_assets.sh --require-elf`，检查两套 assets 的文件集合、ABI、版本字符串、HTTP/2/光盘补丁标记、`SONAME` 和 `DT_NEEDED`，但不会现场重编 MPV。完整排查记录见本地 `plans/MPV原生依赖升级与Android崩溃排查记录.md`。
+
+只校验当前仓库已经提交的 MPV native assets：
+
+```bash
+bash scripts/verify_mpv_native_assets.sh
+```
+
+发布或 native 提交前应要求完整 ELF 校验；Linux 可使用系统 `readelf`，macOS 可使用 NDK 中的 `llvm-readelf`：
+
+```bash
+bash scripts/verify_mpv_native_assets.sh --require-elf
+```
 
 只重建 App JNI 桥接库 `libplayer.so`：
 
@@ -360,6 +373,7 @@ keyPassword=your_key_password
 - `failed to find target with hash string 'android-37'`：未安装 Android SDK Platform 37。
 - `NDK clang++ not found under .../ndk/28.2.13676358`：未安装 NDK 28.2.13676358，或 `ANDROID_NDK_HOME` 指向错误。
 - `Missing MPV asset directory`：MPV assets 缺失或 ABI 目录名不匹配，确认 `app/src/arm64_v8a/assets/mpv-libs/arm64-v8a` 和 `app/src/armeabi_v7a/assets/mpv-libs/armeabi-v7a` 存在。
+- `missing llvm-readelf/readelf`：运行完整 native assets 校验时缺少 ELF 工具；Linux 安装 `binutils`，macOS 安装 NDK 28.2.13676358 或设置 `ANDROID_NDK_HOME`。
 - 运行后提示 `dlopen failed`、`libplayer.so` 或 `libmpv.so` 相关错误：先确认对应 ABI 的整套 MPV/FFmpeg `.so` 已打包，并用 NDK `llvm-readelf -d` 检查 `SONAME`/`DT_NEEDED`。只有 JNI 或 client API 变化才运行 `scripts/build_mpv_player_jni.sh`；该脚本不能修复不配套的 `libmpv.so`、FFmpeg 或 libplacebo。
 - `Could not resolve ...`：依赖下载失败，检查网络或设置代理后重新执行 Gradle。
 - `Permission denied: ./gradlew`：本仓库文档统一使用 `bash gradlew`，不依赖可执行位。

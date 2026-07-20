@@ -136,6 +136,7 @@ public class ControlDialog extends BaseBottomSheetDialog implements ParseAdapter
         binding.karaoke.setSelected(PlayerSetting.isKaraokeMode());
         binding.immersiveAudio.setSelected(PlayerSetting.isImmersiveAudioMode());
         setKaraokeVisible();
+        setImmersiveAudioVisible();
         binding.timer.setSelected(Timer.get().isRunning());
         setTrackVisible();
         setTitleVisible();
@@ -352,6 +353,7 @@ public class ControlDialog extends BaseBottomSheetDialog implements ParseAdapter
         binding.decode.setVisibility(parent.control.action.decode.getVisibility());
         binding.danmaku.setVisibility(parent.control.action.danmaku.getVisibility());
         setKaraokeVisible();
+        setImmersiveAudioVisible();
         setTrackVisible();
     }
 
@@ -376,6 +378,12 @@ public class ControlDialog extends BaseBottomSheetDialog implements ParseAdapter
 
     private void setKaraokeVisible() {
         binding.karaoke.setVisibility(parent.control.action.karaoke.getVisibility());
+    }
+
+    private void setImmersiveAudioVisible() {
+        FragmentActivity activity = getActivity();
+        boolean visible = activity instanceof Listener listener && listener.isControlAudioContent();
+        binding.immersiveAudio.setVisibility(visible ? View.VISIBLE : View.GONE);
     }
 
     @Override
@@ -456,6 +464,8 @@ public class ControlDialog extends BaseBottomSheetDialog implements ParseAdapter
     }
 
     public interface Listener {
+
+        boolean isControlAudioContent();
 
         void onScale(int tag);
 
