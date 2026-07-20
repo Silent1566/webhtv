@@ -106,7 +106,8 @@ public final class TrackDialog extends BaseBottomSheetDialog implements TrackAda
     }
 
     private boolean hasText() {
-        return !secondarySubtitle && type == C.TRACK_TYPE_TEXT && player.haveTrack(type);
+        return !secondarySubtitle && type == C.TRACK_TYPE_TEXT &&
+               (player.haveTrack(type) || player.getSelectedSubtitleSub() != null);
     }
 
     private boolean hasAudio() {

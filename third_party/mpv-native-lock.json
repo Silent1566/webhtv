@@ -1,7 +1,7 @@
 {
   "builder": {
     "repo": "https://github.com/marlboro-advance/mpv-android.git",
-    "commit": "eb6d70c8c291bea72b7cab0df8bfc09de0cad23c"
+    "commit": "f712d4dcf56c00d04e7dd05e157d953d665a6890"
   },
   "android": {
     "ndk_version": "28.2.13676358",
@@ -21,17 +21,18 @@
     },
     "dav1d": {
       "repo": "https://github.com/videolan/dav1d.git",
-      "commit": "daef39627713a3e09873e78df65b268386cb4c20"
+      "commit": "54706fc6bc0cdecab7e9593974a4039cc038fca7",
+      "version": "1.5.4"
     },
     "ffmpeg": {
       "repo": "https://github.com/FFmpeg/FFmpeg.git",
-      "commit": "5ba2525c7affc29cbd99e6266946b382d3fffe8b",
-      "version": "8.0.git"
+      "commit": "8ae0b34901ba60a802f183ee75a250a9fc3e09a5",
+      "version": "8.0.3"
     },
     "freetype2": {
       "repo": "https://github.com/freetype/freetype.git",
-      "commit": "526ec5c47b9ebccc4754c85ac0c0cdf7c85a5e9b",
-      "version": "2.14.1"
+      "commit": "f4205da14867c5387cd6a329b90ee10a6df6eeff",
+      "version": "2.14.2"
     },
     "fribidi": {
       "repo": "https://github.com/fribidi/fribidi.git",
@@ -40,8 +41,8 @@
     },
     "harfbuzz": {
       "repo": "https://github.com/harfbuzz/harfbuzz.git",
-      "commit": "b42511e071162fe76102f613a6ccc009726c99af",
-      "version": "12.3.2"
+      "commit": "c298b921d63bd0fa5336dca1d57e2dbd3c25de21",
+      "version": "13.0.1"
     },
     "unibreak": {
       "url": "https://github.com/adah1972/libunibreak/releases/download/libunibreak_6_1/libunibreak-6.1.tar.gz",
@@ -50,7 +51,8 @@
     },
     "libass": {
       "repo": "https://github.com/libass/libass.git",
-      "commit": "fadc390583f24eb5cf98f16925fd3adee50bca88"
+      "commit": "4a05d8127f525943ebf45fdc6497c9e665947f0d",
+      "version": "0.17.5"
     },
     "lua": {
       "url": "https://www.lua.org/ftp/lua-5.2.4.tar.gz",
@@ -59,16 +61,26 @@
     },
     "libplacebo": {
       "repo": "https://github.com/haasn/libplacebo.git",
-      "commit": "82224764a98164ce9d2d9a10e4fefca934e475fb",
-      "version": "7.362.0",
+      "commit": "a7a18af88ff0a17c04840dcb3246047bb6b46df3",
+      "version": "7.371.0",
       "submodules": true
+    },
+    "nghttp2": {
+      "url": "https://github.com/nghttp2/nghttp2/releases/download/v1.69.0/nghttp2-1.69.0.tar.gz",
+      "sha256": "c866b7477cbb7512ab6863a685027adbb1bb8da8fc3bab7429ed43d3281d5aa9",
+      "version": "1.69.0"
+    },
+    "curl": {
+      "url": "https://github.com/curl/curl/releases/download/curl-8_21_0/curl-8.21.0.tar.gz",
+      "sha256": "d9b327997999045a24cda50f3983e69e51c516bd8be6ef9842fc7f99135e33bb",
+      "version": "8.21.0"
     },
     "mpv": {
       "repo": "https://github.com/mpv-player/mpv.git",
-      "commit": "9ce79bcaa0132660a2e45b6bfc1fb0c199665277",
-      "version": "0.41.0-556-g9ce79bcaa",
+      "commit": "94335ab87ab225ca3e36e0faeac831639d3e1d4e",
+      "version": "0.41.0-878-g94335ab87",
       "describe_tag": "v0.41.0",
-      "history_depth": 600
+      "history_depth": 1200
     }
   }
 }

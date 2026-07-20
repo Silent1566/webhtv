@@ -25,6 +25,7 @@ public final class SubtitleDialog extends BaseBottomSheetDialog {
     private static final float DEFAULT_TEXT_SIZE = 0.0533f;
     private static final float TEXT_STEP = 0.002f;
     private static final float POSITION_STEP = 0.005f;
+    private static final float NATIVE_POSITION_STEP = 0.05f;
 
     private DialogSubtitleBinding binding;
     private SubtitleView subtitleView;
@@ -88,7 +89,7 @@ public final class SubtitleDialog extends BaseBottomSheetDialog {
 
     private void onUp(View view) {
         if (isNativeSubtitleStyle()) {
-            setNativePosition(PlayerSetting.getSubtitlePosition() + POSITION_STEP);
+            setNativePosition(PlayerSetting.getSubtitlePosition() + NATIVE_POSITION_STEP);
             return;
         }
         if (subtitleView == null) return;
@@ -98,7 +99,7 @@ public final class SubtitleDialog extends BaseBottomSheetDialog {
 
     private void onDown(View view) {
         if (isNativeSubtitleStyle()) {
-            setNativePosition(PlayerSetting.getSubtitlePosition() - POSITION_STEP);
+            setNativePosition(PlayerSetting.getSubtitlePosition() - NATIVE_POSITION_STEP);
             return;
         }
         if (subtitleView == null) return;

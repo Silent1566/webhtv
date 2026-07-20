@@ -30,6 +30,7 @@ jclass manager_class;
 jmethodID manager_length;
 jmethodID manager_read;
 jmethodID manager_close;
+jmethodID manager_prepare_track_metadata;
 
 enum class IsoKind { NONE, DVD, BLURAY };
 
@@ -47,8 +48,6 @@ struct DvdStream {
     std::atomic<bool> cancelled{false};
     std::mutex lock;
     std::unordered_map<int, std::string> track_languages;
-    std::vector<std::string> audio_languages;
-    std::vector<std::string> subtitle_languages;
     std::vector<uint64_t> chapter_times;
     uint8_t block[DVD_BLOCK];
     int block_offset = DVD_BLOCK;
@@ -353,23 +352,21 @@ bool open_bluray(DvdStream *stream) {
         }
         for (uint32_t clip_index = 0; clip_index < info->clip_count; ++clip_index) {
             BLURAY_CLIP_INFO &clip = info->clips[clip_index];
-            auto collect = [&](BLURAY_STREAM_INFO *streams, uint8_t stream_count,
-                               std::vector<std::string> &languages) {
+            auto collect = [&](BLURAY_STREAM_INFO *streams, uint8_t stream_count, const char *kind) {
                 if (!streams) return;
                 for (uint8_t i = 0; i < stream_count; ++i) {
                     BLURAY_STREAM_INFO &item = streams[i];
                     ALOGV("iso-bluray clip=%u kind=%s index=%u pid=%u coding=%u format=%u rate=%u char=%u lang=%.3s",
-                          clip_index, &languages == &stream->audio_languages ? "audio" : "subtitle", i,
+                          clip_index, kind, i,
                           item.pid, item.coding_type, item.format, item.rate, item.char_code, item.lang);
                     if (!item.pid || !item.lang[0]) continue;
                     std::string language(reinterpret_cast<const char *>(item.lang), 3);
                     if (language.empty()) continue;
-                    auto inserted = stream->track_languages.emplace(item.pid, language);
-                    if (inserted.second) languages.push_back(language);
+                    stream->track_languages.emplace(item.pid, language);
                 }
             };
-            collect(clip.audio_streams, clip.audio_stream_count, stream->audio_languages);
-            collect(clip.pg_streams, clip.pg_stream_count, stream->subtitle_languages);
+            collect(clip.audio_streams, clip.audio_stream_count, "audio");
+            collect(clip.pg_streams, clip.pg_stream_count, "subtitle");
         }
         bd_free_title_info(info);
     }
@@ -381,6 +378,12 @@ bool open_bluray(DvdStream *stream) {
         bd_close(stream->bluray);
         stream->bluray = nullptr;
         return false;
+    }
+    JNIEnv *env = env_for_thread();
+    if (env && manager_prepare_track_metadata) {
+        env->CallStaticVoidMethod(manager_class, manager_prepare_track_metadata, stream->session_id,
+                                  static_cast<jint>(playlist));
+        if (env->ExceptionCheck()) env->ExceptionClear();
     }
     stream->kind = IsoKind::BLURAY;
     ALOGV("iso-native opened Blu-ray image session=%lld playlist=%u titles=%u durationMs=%llu chapters=%zu size=%lld",
@@ -428,19 +431,6 @@ int stream_open(void *, char *uri, mpv_stream_cb_info *info) {
 
 } // namespace
 
-extern "C" JNIEXPORT jstring JNICALL
-Java_is_xyz_mpv_MPVLib_getIsoTrackLanguage(JNIEnv *env, jclass, jlong session_id,
-                                           jint track_type, jint track_index) {
-    std::lock_guard<std::mutex> guard(streams_lock);
-    auto stream = active_streams.find(session_id);
-    if (stream == active_streams.end() || !stream->second) return nullptr;
-    const std::vector<std::string> *languages = nullptr;
-    if (track_type == 1) languages = &stream->second->audio_languages;
-    if (track_type == 2) languages = &stream->second->subtitle_languages;
-    if (!languages || track_index < 0 || static_cast<size_t>(track_index) >= languages->size()) return nullptr;
-    return env->NewStringUTF((*languages)[track_index].c_str());
-}
-
 bool register_iso_protocol(JNIEnv *env) {
     jclass local = env->FindClass("com/fongmi/android/tv/player/iso/IsoSessionManager");
     if (!local) return false;
@@ -449,7 +439,8 @@ bool register_iso_protocol(JNIEnv *env) {
     manager_length = env->GetStaticMethodID(manager_class, "length", "(J)J");
     manager_read = env->GetStaticMethodID(manager_class, "readAt", "(JJLjava/nio/ByteBuffer;I)I");
     manager_close = env->GetStaticMethodID(manager_class, "close", "(J)V");
-    if (!manager_length || !manager_read || !manager_close) return false;
+    manager_prepare_track_metadata = env->GetStaticMethodID(manager_class, "prepareTrackMetadata", "(JI)V");
+    if (!manager_length || !manager_read || !manager_close || !manager_prepare_track_metadata) return false;
     int result = mpv_stream_cb_add_ro(g_mpv, PROTOCOL, nullptr, stream_open);
     if (result < 0) {
         ALOGE("iso protocol registration failed: %s", mpv_error_string(result));

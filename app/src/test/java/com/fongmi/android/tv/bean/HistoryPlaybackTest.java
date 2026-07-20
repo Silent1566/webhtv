@@ -74,6 +74,22 @@ public class HistoryPlaybackTest {
         assertTrue(other.shouldMerge(current, true));
     }
 
+    @Test
+    public void copiedPlaybackCandidateDoesNotMergeBackIntoSourceHistory() {
+        History source = history("site@@vod@@1", "武神主宰", "第2集", "url-2", 120_000, 300_000);
+        History copied = History.findPlaybackCandidate("site@@vod@@2", List.of(source), List.of(flag(Episode.create("第2集", "url-2"))));
+
+        assertFalse(source.shouldMerge(copied.copy(), false));
+    }
+
+    @Test
+    public void shouldMergeStillDeduplicatesIndependentMatchingHistories() {
+        History source = history("site@@vod@@1", "武神主宰", "第2集", "url-2", 120_000, 300_000);
+        History independent = history("site@@vod@@2", "武神主宰", "第2集", "url-2", 180_000, 300_000);
+
+        assertTrue(source.shouldMerge(independent, false));
+    }
+
     private static History history(String key, String name, String remarks, String episodeUrl, long position, long duration) {
         History history = new History();
         history.setKey(key);

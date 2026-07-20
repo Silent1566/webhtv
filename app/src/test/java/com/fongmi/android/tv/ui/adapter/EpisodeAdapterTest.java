@@ -51,7 +51,7 @@ public class EpisodeAdapterTest {
 
         assertTrue("TV TMDB episode cards must expose a fileSize badge",
                 layout.contains("android:id=\"@+id/fileSize\"")
-                        && adapter.contains("String cardTitle = getCardTitle(item);")
+                        && adapter.contains("String cardTitle = getCardTitle(item, tmdbEpisode);")
                         && adapter.contains("binding.cardTitle.setText(cardTitle);")
                         && adapter.contains("bindFileSize(binding, getCardFileSize(item, cardTitle), showMeta);"));
     }

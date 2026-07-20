@@ -192,11 +192,11 @@ public class TmdbSourceDialog {
     }
 
     private void onSave() {
-        String apiKey = apiKeyInput.getText().toString().trim();
-        String language = languageInput.getText().toString().trim();
-        String apiHost = apiHostInput.getText().toString().trim();
-        String imageHost = imageHostInput.getText().toString().trim();
-        String omdbApiKey = omdbApiKeyInput.getText().toString().trim();
+        String apiKey = text(apiKeyInput);
+        String language = text(languageInput);
+        String apiHost = text(apiHostInput);
+        String imageHost = text(imageHostInput);
+        String omdbApiKey = text(omdbApiKeyInput);
         boolean isToken = apiKey.split("\\.").length >= 3;
         StringBuilder sb = new StringBuilder("{");
         if (isToken) sb.append("\"accessToken\":\"").append(escape(apiKey)).append("\",");
@@ -207,6 +207,7 @@ public class TmdbSourceDialog {
         if (!TextUtils.isEmpty(apiHost)) {
             sb.append("\"apiBase\":\"").append(escape(apiHost)).append("\",");
         }
+        // Always persist image host when provided so sanitize can normalize scheme/size.
         if (!TextUtils.isEmpty(imageHost)) {
             sb.append("\"imageBase\":\"").append(escape(imageHost)).append("\",");
         }
@@ -219,6 +220,10 @@ public class TmdbSourceDialog {
         sb.append("\"disabledSites\":").append(toJsonArray(tempDisabledSites));
         sb.append('}');
         Setting.putTmdbConfig(TmdbConfig.objectFrom(sb.toString()).toJson());
+    }
+
+    private static String text(EditText input) {
+        return input == null || input.getText() == null ? "" : input.getText().toString().trim();
     }
 
     private void showSiteManage() {

@@ -17,24 +17,105 @@ index 1413f8d..18acf58 100644
  
              pom {
 diff --git a/ffmpeg/setup.sh b/ffmpeg/setup.sh
-index 7389538..09f6fcd 100755
+index 7389538..e68e4d0 100755
 --- a/ffmpeg/setup.sh
 +++ b/ffmpeg/setup.sh
-@@ -120,9 +120,10 @@ function buildLibVpx() {
+@@ -1,5 +1,7 @@
+ #!/bin/bash
+ 
++set -euo pipefail
++
+ # Versions
+ VPX_VERSION=1.13.0
+ MBEDTLS_VERSION=3.4.1
+@@ -15,10 +17,10 @@ VPX_DIR=$SOURCES_DIR/libvpx-$VPX_VERSION
+ MBEDTLS_DIR=$SOURCES_DIR/mbedtls-$MBEDTLS_VERSION
+ 
+ # Configuration
+-ANDROID_ABIS="x86 x86_64 armeabi-v7a arm64-v8a"
++ANDROID_ABIS="${ANDROID_ABIS:-x86 x86_64 armeabi-v7a arm64-v8a}"
+ ANDROID_PLATFORM=21
+-ENABLED_DECODERS="vorbis opus flac alac pcm_mulaw pcm_alaw mp3 amrnb amrwb aac ac3 eac3 dca mlp truehd h264 hevc mpeg2video mpegvideo libvpx_vp8 libvpx_vp9"
+-JOBS=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || sysctl -n hw.pysicalcpu || echo 4)
++ENABLED_DECODERS="vorbis opus flac alac pcm_mulaw pcm_alaw mp3 amrnb amrwb aac ac3 eac3 dca mlp truehd h264 hevc mpeg2video mpegvideo vc1 libvpx_vp8 libvpx_vp9"
++JOBS="${JOBS:-$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || sysctl -n hw.pysicalcpu || echo 4)}"
+ 
+ # Set up host platform variables
+ HOST_PLATFORM="linux-x86_64"
+@@ -37,20 +39,33 @@ esac
+ TOOLCHAIN_PREFIX="${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/${HOST_PLATFORM}"
+ CMAKE_EXECUTABLE="${ANDROID_SDK_HOME}/cmake/${ANDROID_CMAKE_VERSION}/bin/cmake"
+ 
+-# Check if sdkmanager is in PATH
+-if command -v sdkmanager &> /dev/null; then
+-  # Use sdkmanager from PATH
+-  echo "Using sdkmanager from PATH"
+-  echo y | sdkmanager --sdk_root="${ANDROID_SDK_HOME}" "cmake;${ANDROID_CMAKE_VERSION}"
+-else
+-  # Use sdkmanager from Android SDK
+-  SDKMANAGER_EXECUTABLE="${ANDROID_SDK_HOME}/cmdline-tools/latest/bin/sdkmanager"
+-  if [[ -x "$SDKMANAGER_EXECUTABLE" ]]; then
+-    echo "Using sdkmanager from Android SDK"
+-    echo y | "$SDKMANAGER_EXECUTABLE" --sdk_root="${ANDROID_SDK_HOME}" "cmake;${ANDROID_CMAKE_VERSION}"
++function setCompilerCommands() {
++  TARGET=${TOOLCHAIN%-}
++  if [[ "$HOST_PLATFORM" == windows* ]]; then
++    CC_BIN="${TOOLCHAIN_PREFIX}/bin/clang.exe --target=${TARGET}"
++    CXX_BIN="${TOOLCHAIN_PREFIX}/bin/clang++.exe --target=${TARGET}"
++  else
++    CC_BIN="${TOOLCHAIN_PREFIX}/bin/${TOOLCHAIN}clang"
++    CXX_BIN="${CC_BIN}++"
++  fi
++}
++
++if [[ ! -x "$CMAKE_EXECUTABLE" && ! -x "${CMAKE_EXECUTABLE}.exe" ]]; then
++  # Check if sdkmanager is in PATH
++  if command -v sdkmanager &> /dev/null; then
++    # Use sdkmanager from PATH
++    echo "Using sdkmanager from PATH"
++    echo y | sdkmanager --sdk_root="${ANDROID_SDK_HOME}" "cmake;${ANDROID_CMAKE_VERSION}"
+   else
+-    echo "Error: sdkmanager not found in PATH or Android SDK"
+-    exit 1
++    # Use sdkmanager from Android SDK
++    SDKMANAGER_EXECUTABLE="${ANDROID_SDK_HOME}/cmdline-tools/latest/bin/sdkmanager"
++    if [[ -x "$SDKMANAGER_EXECUTABLE" ]]; then
++      echo "Using sdkmanager from Android SDK"
++      echo y | "$SDKMANAGER_EXECUTABLE" --sdk_root="${ANDROID_SDK_HOME}" "cmake;${ANDROID_CMAKE_VERSION}"
++    else
++      echo "Error: sdkmanager not found in PATH or Android SDK"
++      exit 1
++    fi
+   fi
+ fi
+ 
+@@ -92,8 +107,8 @@ function downloadFfmpeg() {
+ function buildLibVpx() {
+   pushd $VPX_DIR
+ 
+-  VPX_AS=${TOOLCHAIN_PREFIX}/bin/llvm-as
+   for ABI in $ANDROID_ABIS; do
++    VPX_AS=${TOOLCHAIN_PREFIX}/bin/llvm-as
+     # Set up environment variables
+     case $ABI in
+     armeabi-v7a)
+@@ -120,9 +135,12 @@ function buildLibVpx() {
        ;;
      esac
  
 -    CC=${TOOLCHAIN_PREFIX}/bin/${TOOLCHAIN}clang \
 -      CXX=${CC}++ \
 -      LD=${CC} \
-+    CC_BIN=${TOOLCHAIN_PREFIX}/bin/${TOOLCHAIN}clang
++    make clean >/dev/null 2>&1 || true
++
++    setCompilerCommands
 +    CC=${CC_BIN} \
-+      CXX=${CC_BIN}++ \
++      CXX=${CXX_BIN} \
 +      LD=${CC_BIN} \
        AR=${TOOLCHAIN_PREFIX}/bin/llvm-ar \
        AS=${VPX_AS} \
        STRIP=${TOOLCHAIN_PREFIX}/bin/llvm-strip \
-@@ -137,6 +138,7 @@ function buildLibVpx() {
+@@ -137,6 +155,7 @@ function buildLibVpx() {
        --disable-shared \
        --disable-examples \
        --disable-docs \
@@ -42,7 +123,15 @@ index 7389538..09f6fcd 100755
        --enable-realtime-only \
        --enable-install-libs \
        --enable-multithread \
-@@ -156,6 +158,8 @@ function buildLibVpx() {
+@@ -146,7 +165,6 @@ function buildLibVpx() {
+       --disable-runtime-cpu-detect \
+       ${EXTRA_BUILD_FLAGS}
+ 
+-    make clean
+     make -j$JOBS
+     make install
+   done
+@@ -156,6 +174,8 @@ function buildLibVpx() {
  function buildMbedTLS() {
      pushd $MBEDTLS_DIR
  
@@ -51,7 +140,12 @@ index 7389538..09f6fcd 100755
      for ABI in $ANDROID_ABIS; do
  
        CMAKE_BUILD_DIR=$MBEDTLS_DIR/mbedtls_build_${ABI}
-@@ -168,7 +172,10 @@ function buildMbedTLS() {
+@@ -164,11 +184,15 @@ function buildMbedTLS() {
+       cd ${CMAKE_BUILD_DIR}
+ 
+       ${CMAKE_EXECUTABLE} .. \
++       -G "Unix Makefiles" \
+        -DANDROID_PLATFORM=${ANDROID_PLATFORM} \
         -DANDROID_ABI=$ABI \
         -DCMAKE_TOOLCHAIN_FILE=${ANDROID_NDK_HOME}/build/cmake/android.toolchain.cmake \
         -DCMAKE_INSTALL_PREFIX=$BUILD_DIR/external/$ABI \
@@ -62,6 +156,71 @@ index 7389538..09f6fcd 100755
         -DENABLE_TESTING=0
  
        make -j$JOBS
+@@ -190,6 +214,7 @@ function buildFfmpeg() {
+ 
+   # Build FFmpeg for each architecture and platform
+   for ABI in $ANDROID_ABIS; do
++    EXTRA_BUILD_CONFIGURATION_FLAGS=""
+ 
+     # Set up environment variables
+     case $ABI in
+@@ -220,6 +245,8 @@ function buildFfmpeg() {
+       ;;
+     esac
+ 
++    setCompilerCommands
++
+     # Referencing dependencies without pkgconfig
+     DEP_CFLAGS="-I$BUILD_DIR/external/$ABI/include"
+     DEP_LD_FLAGS="-L$BUILD_DIR/external/$ABI/lib"
+@@ -231,6 +258,9 @@ function buildFfmpeg() {
+       --arch=$ARCH \
+       --cpu=$CPU \
+       --cross-prefix="${TOOLCHAIN_PREFIX}/bin/$TOOLCHAIN" \
++      --cc="${CC_BIN}" \
++      --cxx="${CXX_BIN}" \
++      --ld="${CC_BIN}" \
+       --nm="${TOOLCHAIN_PREFIX}/bin/llvm-nm" \
+       --ar="${TOOLCHAIN_PREFIX}/bin/llvm-ar" \
+       --ranlib="${TOOLCHAIN_PREFIX}/bin/llvm-ranlib" \
+@@ -250,14 +280,11 @@ function buildFfmpeg() {
+       --disable-postproc \
+       --disable-avfilter \
+       --disable-symver \
++      --disable-network \
+       --enable-parsers \
+-      --enable-demuxers \
+       --enable-swresample \
+-      --enable-avformat \
+       --enable-libvpx \
+-      --enable-protocol=file,http,https,mmsh,mmst,pipe,rtmp,rtmps,rtmpt,rtmpts,rtp,tls \
+       --enable-version3 \
+-      --enable-mbedtls \
+       --extra-ldexeflags=-pie \
+       --disable-debug \
+       ${EXTRA_BUILD_CONFIGURATION_FLAGS} \
+@@ -281,12 +308,7 @@ function buildFfmpeg() {
+   popd
+ }
+ 
+-if [[ ! -d "$OUTPUT_DIR" && ! -d "$BUILD_DIR" ]]; then
+-  # Download MbedTLS source code if it doesn't exist
+-  if [[ ! -d "$MBEDTLS_DIR" ]]; then
+-    downloadMbedTLS
+-  fi
+-
++if [[ "${FORCE_BUILD:-0}" == "1" || ( ! -d "$OUTPUT_DIR" && ! -d "$BUILD_DIR" ) ]]; then
+   # Download Vpx source code if it doesn't exist
+   if [[ ! -d "$VPX_DIR" ]]; then
+     downloadLibVpx
+@@ -298,7 +320,6 @@ if [[ ! -d "$OUTPUT_DIR" && ! -d "$BUILD_DIR" ]]; then
+   fi
+ 
+   # Building library
+-  buildMbedTLS
+   buildLibVpx
+   buildFfmpeg
+ fi
 diff --git a/gradle/libs.versions.toml b/gradle/libs.versions.toml
 index 3a3cf0d..4892413 100644
 --- a/gradle/libs.versions.toml
@@ -83,7 +242,7 @@ index 3a3cf0d..4892413 100644
  
  [libraries]
 diff --git a/media3ext/src/main/cpp/ffvideo.cpp b/media3ext/src/main/cpp/ffvideo.cpp
-index 4c37d03..33a7727 100644
+index 4c37d03..3ed7f07 100644
 --- a/media3ext/src/main/cpp/ffvideo.cpp
 +++ b/media3ext/src/main/cpp/ffvideo.cpp
 @@ -84,7 +84,10 @@ struct JniContext {
@@ -133,15 +292,20 @@ index 4c37d03..33a7727 100644
  }
  
  extern "C"
-@@ -390,4 +404,4 @@ Java_io_github_anilbeesetti_nextlib_media3ext_ffdecoder_FfmpegVideoDecoder_ffmpe
-     av_frame_free(&frame);
- 
-     return result;
--}
-\ No newline at end of file
-+}
+diff --git a/media3ext/src/main/java/io/github/anilbeesetti/nextlib/media3ext/ffdecoder/FfmpegLibrary.java b/media3ext/src/main/java/io/github/anilbeesetti/nextlib/media3ext/ffdecoder/FfmpegLibrary.java
+index ccaf284..c0c67fb 100644
+--- a/media3ext/src/main/java/io/github/anilbeesetti/nextlib/media3ext/ffdecoder/FfmpegLibrary.java
++++ b/media3ext/src/main/java/io/github/anilbeesetti/nextlib/media3ext/ffdecoder/FfmpegLibrary.java
+@@ -124,6 +124,7 @@ public final class FfmpegLibrary {
+       case MimeTypes.VIDEO_MPEG2 -> "mpeg2video";
+       case MimeTypes.VIDEO_VP8 -> "libvpx";
+       case MimeTypes.VIDEO_VP9 -> "libvpx-vp9";
++      case "video/wvc1" -> "vc1";
+       default -> null;
+     };
+   }
 diff --git a/media3ext/src/main/java/io/github/anilbeesetti/nextlib/media3ext/ffdecoder/FfmpegVideoDecoder.java b/media3ext/src/main/java/io/github/anilbeesetti/nextlib/media3ext/ffdecoder/FfmpegVideoDecoder.java
-index b4e2f3f..d430b34 100644
+index b4e2f3f..284d9d3 100644
 --- a/media3ext/src/main/java/io/github/anilbeesetti/nextlib/media3ext/ffdecoder/FfmpegVideoDecoder.java
 +++ b/media3ext/src/main/java/io/github/anilbeesetti/nextlib/media3ext/ffdecoder/FfmpegVideoDecoder.java
 @@ -48,11 +48,28 @@ final class FfmpegVideoDecoder extends
@@ -183,7 +347,17 @@ index b4e2f3f..d430b34 100644
          if (nativeContext == 0) {
              throw new FfmpegDecoderException("Failed to initialize decoder.");
          }
-@@ -197,7 +214,7 @@ final class FfmpegVideoDecoder extends
+@@ -88,6 +105,9 @@ final class FfmpegVideoDecoder extends
+             case MimeTypes.VIDEO_H265 -> {
+                 return initializationData.get(0);
+             }
++            case "video/wvc1" -> {
++                return initializationData.get(0);
++            }
+             default -> {
+                 // Other codecs do not require extra data.
+                 return null;
+@@ -197,7 +217,7 @@ final class FfmpegVideoDecoder extends
          }
      }
  
@@ -192,7 +366,7 @@ index b4e2f3f..d430b34 100644
  
      private native long ffmpegReset(long context);
  
-@@ -232,4 +249,4 @@ final class FfmpegVideoDecoder extends
+@@ -232,4 +252,4 @@ final class FfmpegVideoDecoder extends
      private native int ffmpegReceiveFrame(
              long context, int outputMode, VideoDecoderOutputBuffer outputBuffer, boolean decodeOnly);
  

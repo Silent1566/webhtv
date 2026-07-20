@@ -16,6 +16,7 @@ import com.fongmi.android.tv.ui.adapter.EpisodeAdapter;
 import com.fongmi.android.tv.ui.base.BaseEpisodeHolder;
 import com.fongmi.android.tv.ui.dialog.EpisodeDetailDialog;
 import com.fongmi.android.tv.ui.helper.EpisodeCardPolicy;
+import com.fongmi.android.tv.ui.helper.TmdbEpisodeMatcher;
 import com.fongmi.android.tv.utils.ImgUtil;
 import com.fongmi.android.tv.utils.ResUtil;
 
@@ -46,7 +47,13 @@ public class EpisodeHoriHolder extends BaseEpisodeHolder {
 
     @Override
     public void initView(Episode item) {
+        // 使用集号匹配 TMDB 数据，而不是直接使用 item.getTmdbEpisode()
+        int position = getBindingAdapterPosition();
+        int episodeNumber = item.getNumber() > 0 ? item.getNumber() : position + 1;
         TmdbEpisode tmdbEpisode = item.getTmdbEpisode();
+        if (!TmdbEpisodeMatcher.shouldApply(item, tmdbEpisode, episodeNumber)) {
+            tmdbEpisode = null;
+        }
         if (EpisodeCardPolicy.shouldShowCard(useTmdbCard, tmdbEpisode != null, !TextUtils.isEmpty(fallbackStillUrl))) bindCard(item, tmdbEpisode);
         else bindText(item);
     }
@@ -58,7 +65,7 @@ public class EpisodeHoriHolder extends BaseEpisodeHolder {
         binding.card.setSelected(item.isSelected());
         bindCardActions(item, binding.getRoot(), binding.card, binding.still, binding.cardTitle, binding.overview);
 
-        String cardTitle = EpisodeAdapter.getCardTitle(item);
+        String cardTitle = EpisodeAdapter.getCardTitle(item, tmdbEpisode);
         binding.cardTitle.setText(cardTitle);
         binding.cardTitle.setSelected(item.isSelected());
 

@@ -134,6 +134,11 @@ public class ControlDialog extends BaseBottomSheetDialog implements ParseAdapter
             }
 
             @Override
+            public boolean isControlAudioContent() {
+                return false;
+            }
+
+            @Override
             public void onScale(int tag) {
                 activity.inlineControlDialogScale(tag);
             }
@@ -273,6 +278,7 @@ binding.ending.setText(controls.ending.getText());
         binding.opening.setText(controls.opening.getText());
         binding.repeat.setSelected(controls.repeat.isSelected());
         binding.immersiveAudio.setSelected(PlayerSetting.isImmersiveAudioMode());
+        setImmersiveAudioVisible();
         binding.timer.setSelected(Timer.get().isRunning());
         setTrackVisible();
         setTitleVisible();
@@ -435,6 +441,7 @@ if (binding == null || controls == null || player == null) return;
         setEpisodeColumn();
         binding.decode.setVisibility(controls.decode.getVisibility());
         binding.danmaku.setVisibility(controls.danmaku.getVisibility());
+        setImmersiveAudioVisible();
         setTrackVisible();
     }
 
@@ -469,6 +476,12 @@ if (binding == null || controls == null || player == null) return;
         boolean visible = binding.text.getVisibility() != View.GONE || binding.audio.getVisibility() != View.GONE || binding.video.getVisibility() != View.GONE || binding.title.getVisibility() != View.GONE || binding.danmaku.getVisibility() != View.GONE;
         binding.trackText.setVisibility(visible ? View.VISIBLE : View.GONE);
         binding.trackRow.setVisibility(visible ? View.VISIBLE : View.GONE);
+    }
+
+    private void setImmersiveAudioVisible() {
+        FragmentActivity activity = getActivity();
+        boolean visible = activity instanceof Listener listener && listener.isControlAudioContent();
+        binding.immersiveAudio.setVisibility(visible ? View.VISIBLE : View.GONE);
     }
 
     @Override
@@ -607,6 +620,8 @@ if (binding == null || controls == null || player == null) return;
         History getControlHistory();
 
         boolean isControlParseEnabled();
+
+        boolean isControlAudioContent();
 
         void onScale(int tag);
 

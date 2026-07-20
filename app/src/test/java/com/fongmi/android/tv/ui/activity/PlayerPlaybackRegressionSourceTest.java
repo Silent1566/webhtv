@@ -6,6 +6,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class PlayerPlaybackRegressionSourceTest {
@@ -31,6 +32,22 @@ public class PlayerPlaybackRegressionSourceTest {
                         && source.indexOf("view.getVisibility() == View.VISIBLE && view.isFocusable()", focus) > focus
                         && source.indexOf("current.setNextFocusLeftId(prev == null ? View.NO_ID : prev.getId());", focus) > focus
                         && source.indexOf("current.setNextFocusRightId(next == null ? View.NO_ID : next.getId());", focus) > focus);
+    }
+
+    @Test
+    public void mediaSessionStopStopsPlaybackWithoutExitingThePlaybackScreen() throws Exception {
+        String source = readMainJava("com", "fongmi", "android", "tv", "service", "PlaybackService.java");
+        int wrap = source.indexOf("private ForwardingPlayer wrap(Player base)");
+        int stop = source.indexOf("public void stop()", wrap);
+        int nextOverride = source.indexOf("@NonNull", stop);
+
+        assertTrue("PlaybackService must keep the MediaSession stop override available for regression checking",
+                wrap >= 0 && stop > wrap && nextOverride > stop);
+        String stopOverride = source.substring(stop, nextOverride);
+        assertTrue("MediaSession STOP must stop and clear playback without invoking the navigation callback",
+                stopOverride.contains("stopAndClear();"));
+        assertFalse("MediaSession STOP must not be treated as an explicit request to exit the playback Activity",
+                stopOverride.contains("dispatchStop();"));
     }
 
     @Test

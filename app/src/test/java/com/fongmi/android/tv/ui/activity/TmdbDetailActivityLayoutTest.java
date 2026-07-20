@@ -202,6 +202,19 @@ public class TmdbDetailActivityLayoutTest {
     }
 
     @Test
+    public void defaultDetailPlaybackDefersLaunchUntilAfterCurrentInputDispatch() throws Exception {
+        String source = readJava("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java");
+        int method = source.indexOf("private void playDefaultPlayback()");
+        int methodEnd = source.indexOf("private ", method + 1);
+        String body = source.substring(method, methodEnd);
+
+        assertTrue("detail playback must reject repeated taps while a launch is pending",
+                body.contains("if (defaultPlaybackLaunchPending) return;"));
+        assertTrue("detail playback must leave the current click/input dispatch before launching VideoActivity",
+                body.contains("ActivityLaunch.postOnAnimation(this, () ->"));
+    }
+
+    @Test
     public void playbackPageHidesThemeActionsWhileEnhancedDetailKeepsThem() throws Exception {
         String source = readJava("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java");
         int method = source.indexOf("private void updateDetailThemeButtonVisibility()");
@@ -410,6 +423,19 @@ public class TmdbDetailActivityLayoutTest {
     }
 
     @Test
+    public void mobileFusionControlOverlayRoutesBlankTouchesToGestureDetector() throws Exception {
+        Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int touchHandler = source.indexOf("private boolean onInlineControlTouch(View view, MotionEvent event)");
+        int nextMethod = source.indexOf("private boolean onInlinePanelKey", touchHandler);
+        String handlerBody = touchHandler >= 0 && nextMethod > touchHandler ? source.substring(touchHandler, nextMethod) : "";
+
+        assertTrue(sourcePath + " is missing onInlineControlTouch", touchHandler >= 0);
+        assertTrue("the fusion control overlay must forward blank touches to the player gesture detector",
+                handlerBody.contains("return onInlineTouch(view, event);"));
+    }
+
+    @Test
     public void fusionDetailBackdropCropsToFillScreen() throws Exception {
         Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
@@ -504,6 +530,30 @@ public class TmdbDetailActivityLayoutTest {
                 source.indexOf("seasonCounts.put(seasonNumber, episodes.size());", preload) > preload
                         && source.indexOf("seasonCast.put(seasonNumber, tmdbService.seasonCast(season, tmdbConfig));", preload) > preload
                         && source.indexOf("seasonPhotos.put(seasonNumber, tmdbService.seasonPhotos(season, tmdbConfig));", preload) > preload);
+    }
+
+    @Test
+    public void episodeDetailDismissRestoresLongPressedCardFocus() throws Exception {
+        String source = readJava("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java");
+        int show = source.indexOf("private void showTmdbEpisodeDetail(Episode episode, int episodeNumber, RecyclerView returnRecycler)");
+        int restore = source.indexOf("private void restoreEpisodeDetailFocus(RecyclerView recycler, Episode episode)", show);
+
+        assertTrue("TMDB episode detail must define an exact-card focus restore helper", show >= 0 && restore > show);
+        assertTrue("each episode list must provide its own recycler as the focus return target",
+                source.contains("showTmdbEpisodeDetail(episode, episodeNumber, binding.episodeContainer);")
+                        && source.contains("showTmdbEpisodeDetail(episode, episodeNumber, recycler);"));
+        int dismiss = source.indexOf("OnDismissListener dismissListener", show);
+        int movie = source.indexOf("// 电影场景", dismiss);
+        String dismissBody = source.substring(dismiss, movie);
+        assertTrue("closing episode detail must rerender and then restore the long-pressed episode card",
+                dismissBody.contains("rerenderEpisodeViewportOnly(false, true, true);")
+                        && dismissBody.contains("returnRecycler.post(() -> restoreEpisodeDetailFocus(returnRecycler, episode));"));
+        int restoreEnd = source.indexOf("\n    private ", restore + 1);
+        String restoreBody = source.substring(restore, restoreEnd);
+        assertTrue("focus restoration must resolve the episode's exact adapter position instead of defaulting to the first column",
+                restoreBody.contains("if (!(adapter instanceof TmdbEpisodeAdapter episodeAdapter)) return;")
+                        && restoreBody.contains("int position = episodeAdapter.getPosition(episode);")
+                        && restoreBody.contains("focusTmdbRecyclerItem(recycler, position);"));
     }
 
     @Test

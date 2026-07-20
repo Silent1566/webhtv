@@ -48,6 +48,7 @@ import java.util.HashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class HomeWebController {
 
@@ -55,12 +56,31 @@ public class HomeWebController {
     private static final int SLOW_KEY_MS = 24;
     private static final long LOAD_TIMEOUT_MS = 15000;
     private static final long EXTENSION_RELOAD_MIN_INTERVAL_MS = 5000;
+    private static final long MEDIA_PAUSE_LAUNCH_TIMEOUT_MS = 250;
+    private static final String PAUSE_PAGE_MEDIA_SCRIPT = """
+            (function() {
+              const pause = function(root) {
+                try {
+                  root.querySelectorAll('video,audio').forEach(function(media) {
+                    try { media.pause(); } catch (ignored) {}
+                  });
+                  root.querySelectorAll('iframe').forEach(function(frame) {
+                    try {
+                      if (frame.contentDocument) pause(frame.contentDocument);
+                    } catch (ignored) {}
+                  });
+                } catch (ignored) {}
+              };
+              pause(document);
+            })();
+            """;
     private static HomeWebController active;
     private static boolean extensionReloadRequested;
 
     private final Listener listener;
     private final Activity activity;
     private final Set<String> injectedExtensions;
+    private final Set<PendingNativePlayback> pendingNativePlaybacks;
     private final Runnable extensionReloadRunnable;
     private final boolean debugTools;
     private WebView webView;
@@ -82,6 +102,7 @@ public class HomeWebController {
     private int loadTimeoutRecoveries;
     private boolean sdkReady;
     private boolean paused;
+    private boolean destroyed;
 
     public HomeWebController(Activity activity, WebView webView, Listener listener) {
         this(activity, webView, listener, false);
@@ -94,6 +115,7 @@ public class HomeWebController {
         this.debugTools = debugTools;
         this.density = activity.getResources().getDisplayMetrics().density;
         this.injectedExtensions = new HashSet<>();
+        this.pendingNativePlaybacks = new HashSet<>();
         this.extensionReloadRunnable = this::consumeExtensionReload;
         active = this;
         init();
@@ -389,6 +411,7 @@ public class HomeWebController {
         paused = true;
         pauseAt = System.currentTimeMillis();
         dispatchLifecycle("fmpause", "{time:" + pauseAt + "}");
+        pausePageMedia();
         webView.onPause();
     }
 
@@ -418,17 +441,94 @@ public class HomeWebController {
         App.post(() -> {
             if (!paused) return;
             SpiderDebug.log("webhome-inline", "pause WebView after inline evaluation url=%s", webView.getUrl());
+            pausePageMedia();
             webView.onPause();
         });
     }
 
+    private void pausePageMedia() {
+        try {
+            webView.evaluateJavascript(PAUSE_PAGE_MEDIA_SCRIPT, null);
+        } catch (Throwable e) {
+            SpiderDebug.log("webhome-inline", "pause page media failed: %s", e.getMessage());
+        }
+    }
+
+    public void prepareNativePlayback(Runnable launch) {
+        if (launch == null || destroyed) return;
+        if (webView == null) {
+            if (!activity.isFinishing() && !activity.isDestroyed()) launch.run();
+            return;
+        }
+        WebView target = webView;
+        PendingNativePlayback pending = new PendingNativePlayback(launch);
+        pendingNativePlaybacks.add(pending);
+        target.postDelayed(pending, MEDIA_PAUSE_LAUNCH_TIMEOUT_MS);
+        try {
+            target.evaluateJavascript(PAUSE_PAGE_MEDIA_SCRIPT, ignored -> {
+                target.removeCallbacks(pending);
+                pending.run();
+            });
+        } catch (Throwable e) {
+            SpiderDebug.log("webhome-inline", "prepare native playback media pause failed: %s", e.getMessage());
+            target.removeCallbacks(pending);
+            pending.run();
+        }
+    }
+
     public void destroy() {
+        if (destroyed) return;
+        destroyed = true;
+        cancelPendingNativePlaybacks();
         removeDocumentStartScripts();
         rawAdapter = null;
         webView.stopLoading();
         webView.destroy();
         if (debugTools) WebView.setWebContentsDebuggingEnabled(false);
         if (active == this) active = null;
+    }
+
+    private void cancelPendingNativePlaybacks() {
+        for (PendingNativePlayback pending : new HashSet<>(pendingNativePlaybacks)) {
+            pending.cancel();
+            webView.removeCallbacks(pending);
+        }
+        pendingNativePlaybacks.clear();
+    }
+
+    private final class PendingNativePlayback implements Runnable {
+
+        private final NativePlaybackLaunchState state;
+        private final Runnable launch;
+
+        private PendingNativePlayback(Runnable launch) {
+            this.state = new NativePlaybackLaunchState();
+            this.launch = launch;
+        }
+
+        @Override
+        public void run() {
+            pendingNativePlaybacks.remove(this);
+            if (!state.tryLaunch(destroyed, activity.isFinishing(), activity.isDestroyed())) return;
+            launch.run();
+        }
+
+        private void cancel() {
+            state.cancel();
+        }
+    }
+
+    static final class NativePlaybackLaunchState {
+
+        private final AtomicBoolean completed = new AtomicBoolean();
+
+        boolean tryLaunch(boolean controllerDestroyed, boolean activityFinishing, boolean activityDestroyed) {
+            return !controllerDestroyed && !activityFinishing && !activityDestroyed && completed.compareAndSet(false, true);
+        }
+
+        void cancel() {
+            completed.set(true);
+        }
     }
 
     private void consumeExtensionReload() {

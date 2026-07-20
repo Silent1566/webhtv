@@ -33,8 +33,8 @@ import com.fongmi.android.tv.utils.UrlUtil;
 import com.github.catvod.net.OkHttp;
 import com.github.catvod.utils.Path;
 
-import java.net.URI;
 import java.io.File;
+import java.net.URI;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Locale;
@@ -63,7 +63,7 @@ public class MediaSourceFactory implements MediaSource.Factory {
     static DataSource.Factory createUpstreamDataSourceFactory(Map<String, String> headers) {
         OkHttpDataSource.Factory factory = new OkHttpDataSource.Factory(OkHttp.player());
         applyHeaders(factory, headers);
-        return new DefaultDataSource.Factory(App.get(), factory);
+        return new DefaultDataSource.Factory(App.get(), LocalProxyRangeDataSource.wrap(factory));
     }
 
     static synchronized Cache getCache() {
@@ -130,7 +130,7 @@ public class MediaSourceFactory implements MediaSource.Factory {
     }
 
     private DataSource.Factory getDataSourceFactory() {
-        if (dataSourceFactory == null) dataSourceFactory = getCacheDataSource(new DefaultDataSource.Factory(App.get(), getHttpDataSourceFactory()));
+        if (dataSourceFactory == null) dataSourceFactory = getCacheDataSource(new DefaultDataSource.Factory(App.get(), LocalProxyRangeDataSource.wrap(getHttpDataSourceFactory())));
         return dataSourceFactory;
     }
 
@@ -175,23 +175,7 @@ public class MediaSourceFactory implements MediaSource.Factory {
     }
 
     static boolean isLocalProxyUrl(String url) {
-        if (url == null || url.isEmpty()) return false;
-        try {
-            URI uri = URI.create(url);
-            if (!"http".equalsIgnoreCase(uri.getScheme())) return false;
-            if (!"/proxy".equals(uri.getPath())) return false;
-            return isLoopbackHost(uri.getHost());
-        } catch (IllegalArgumentException ignored) {
-            return false;
-        }
-    }
-
-    private static boolean isLoopbackHost(String host) {
-        if (host == null || host.isEmpty()) return false;
-        String value = host;
-        if (value.startsWith("[") && value.endsWith("]")) value = value.substring(1, value.length() - 1);
-        value = value.toLowerCase(Locale.ROOT);
-        return "localhost".equals(value) || "127.0.0.1".equals(value) || "0.0.0.0".equals(value) || "::1".equals(value);
+        return LocalProxyRangeDataSource.isLocalProxyUrl(url);
     }
 
     private static boolean isHls(MediaItem mediaItem, String url) {

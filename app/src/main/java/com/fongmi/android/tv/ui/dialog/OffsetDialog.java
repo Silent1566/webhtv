@@ -37,7 +37,7 @@ public final class OffsetDialog {
     public void show(FragmentActivity activity) {
         FragmentManager manager = activity.getSupportFragmentManager();
         for (Fragment f : manager.getFragments()) if (f instanceof BottomSheet || f instanceof SideSheet) return;
-        if (Util.isFullscreenLand(activity) || Util.isLeanback()) new SideSheet(player, type).show(manager, null);
+        if (Util.isLeanback()) new SideSheet(player, type).show(manager, null);
         else new BottomSheet(player, type).show(manager, null);
     }
 

@@ -35,11 +35,11 @@
         {
           "name": "nextlib-media3ext-1.10.0-0.12.1-fongmi-softload.aar",
           "url": "nextlib-media3ext-1.10.0-0.12.1-fongmi-softload.aar",
-          "size": 10635077,
-          "sha512": "aba78b9f295ae0ac116b200c52a2601216e0a86b4de5c1233387ced003f032996b8fa0ee111d82dedd3f69fb54199ba5229fc40c15c73179813c4ce6a9b56bc8",
-          "sha256": "d28e5af085e431d6b7bf29f36a008dae28f4ee11ffdb49a373f1a9108d365f7c",
-          "sha1": "a301fd62543567eaead3fa63e361a0118453822e",
-          "md5": "c44bac6f779b45534ea80b945bf99c06"
+          "size": 11252003,
+          "sha512": "bca52755cb4a7d13175652b109b5285b4d03f23b9c949872364d76048f666a958d53e413dbe3f4c22a3f3ee57e58274cbede283fc7f01bb72ddb388064c153c3",
+          "sha256": "b87547d701acea9d74e31e54cdf962da588ac3b0dea3b8c76f3974d7065ceea2",
+          "sha1": "460250791bb479db5166eee2b9ed8fbbb7641452",
+          "md5": "9e18a25ee223fbb40d69660b29a850b7"
         }
       ]
     },
@@ -85,11 +85,11 @@
         {
           "name": "nextlib-media3ext-1.10.0-0.12.1-fongmi-softload.aar",
           "url": "nextlib-media3ext-1.10.0-0.12.1-fongmi-softload.aar",
-          "size": 10635077,
-          "sha512": "aba78b9f295ae0ac116b200c52a2601216e0a86b4de5c1233387ced003f032996b8fa0ee111d82dedd3f69fb54199ba5229fc40c15c73179813c4ce6a9b56bc8",
-          "sha256": "d28e5af085e431d6b7bf29f36a008dae28f4ee11ffdb49a373f1a9108d365f7c",
-          "sha1": "a301fd62543567eaead3fa63e361a0118453822e",
-          "md5": "c44bac6f779b45534ea80b945bf99c06"
+          "size": 11252003,
+          "sha512": "bca52755cb4a7d13175652b109b5285b4d03f23b9c949872364d76048f666a958d53e413dbe3f4c22a3f3ee57e58274cbede283fc7f01bb72ddb388064c153c3",
+          "sha256": "b87547d701acea9d74e31e54cdf962da588ac3b0dea3b8c76f3974d7065ceea2",
+          "sha1": "460250791bb479db5166eee2b9ed8fbbb7641452",
+          "md5": "9e18a25ee223fbb40d69660b29a850b7"
         }
       ]
     },
@@ -105,11 +105,11 @@
         {
           "name": "nextlib-media3ext-1.10.0-0.12.1-fongmi-softload-sources.jar",
           "url": "nextlib-media3ext-1.10.0-0.12.1-fongmi-softload-sources.jar",
-          "size": 20170,
-          "sha512": "953db2db9176993c61500a0b3fb11eefbb4053085e5b15b88d6a40396f17bf8869a6b0f4e380a5511fb6583bd416049f02a5265f1f2d6c816ad43728deeed45a",
-          "sha256": "94c0f5f39d6527ec9afdd87de016725b12a313bc074e3df77a8f20a7e470dfe5",
-          "sha1": "a964e475f29dfe1919b9adeb0ccf232eb686c411",
-          "md5": "82efa743d3ddbaf4a700f55218e227f5"
+          "size": 20568,
+          "sha512": "6f26c2ea868c4a65184d252583ffde5fa07fbdebc510fcdf25db4fb23737e527369846dda9f41f69745b78eef192913ad146de2f6a6d98f49a36b67a013de569",
+          "sha256": "ad029c9d76e81c4d66c2a22e09f89c224ef93a62d975fce464373185652510c2",
+          "sha1": "97e057fbe5fb2b4a92df12e4e87314f504b520e1",
+          "md5": "985dbb95395756e0fe0371bbfb28d01c"
         }
       ]
     },

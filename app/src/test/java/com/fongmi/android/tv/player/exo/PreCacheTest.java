@@ -18,6 +18,7 @@ public class PreCacheTest {
         assertFalse(PreCache.canPreCache("http", "http://127.0.0.1:9978/proxy?do=js"));
         assertFalse(PreCache.canPreCache("http", "http://localhost:9978/proxy?siteKey=drive"));
         assertFalse(PreCache.canPreCache("http", "http://[::1]:9978/proxy?do=py"));
+        assertFalse(PreCache.canPreCache("http", "http://127.0.0.1:5000/proxy/1_4213_0_0"));
     }
 
     @Test

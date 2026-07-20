@@ -97,6 +97,7 @@ import com.fongmi.android.tv.ui.adapter.ParseAdapter;
 import com.fongmi.android.tv.ui.adapter.PartAdapter;
 import com.fongmi.android.tv.ui.adapter.QualityAdapter;
 import com.fongmi.android.tv.ui.adapter.QuickAdapter;
+import com.fongmi.android.tv.ui.audio.AudioPlaybackResolver;
 import com.fongmi.android.tv.ui.custom.CustomKeyDownVod;
 import com.fongmi.android.tv.ui.custom.CustomMovement;
 import com.fongmi.android.tv.ui.custom.CustomSeekView;
@@ -120,6 +121,7 @@ import com.fongmi.android.tv.ui.helper.TmdbNavigation;
 import com.fongmi.android.tv.ui.player.VodPlayerChrome;
 import com.fongmi.android.tv.ui.player.VodPlayerUiController;
 import com.fongmi.android.tv.ui.player.VodPlayerUiHost;
+import com.fongmi.android.tv.utils.ActivityLaunch;
 import com.fongmi.android.tv.utils.AudioUtil;
 import com.fongmi.android.tv.utils.Clock;
 import com.fongmi.android.tv.utils.EpisodeTitleFormatter;
@@ -294,6 +296,8 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     private static final String EXTRA_TMDB_PLAY_EPISODE_NAME = "tmdb_play_episode_name";
     private static final String EXTRA_TMDB_PLAY_EPISODE_URL = "tmdb_play_episode_url";
     private static final String EXTRA_TMDB_VOD_CACHE_KEY = "tmdb_vod_cache_key";
+    private static final String EXTRA_IMMERSIVE_AUDIO_CACHE_KEY = "immersive_audio_cache_key";
+    private static final java.util.concurrent.ConcurrentHashMap<String, AudioPlaybackResolver.Resolved> IMMERSIVE_AUDIO_LAUNCHES = new java.util.concurrent.ConcurrentHashMap<>();
 
     private ActivityVideoBinding mBinding;
     private ViewGroup.LayoutParams mFrameParams;
@@ -388,6 +392,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     private View mFocus2;
     private Result mPendingDetail;
     private Result mPendingPlayer;
+    private AudioPlaybackResolver.Resolved mImmersiveAudioResolved;
     private String mContextWallUrl;
     private String mContextWallLockedUrl;
     private String playHealthKey;
@@ -617,6 +622,43 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         intent.putExtra("pic", pic);
         intent.putExtra("key", key);
         intent.putExtra("id", id);
+        activity.startActivity(intent);
+    }
+
+    public static boolean startImmersiveAudioSite(Activity activity, String key, String id, String name, String pic, String mark) {
+        if (SiteApi.PUSH.equals(key)) return false;
+        if (!PlayerSetting.isImmersiveAudioMode()) return false;
+        if (!AudioUtil.isAudioSiteEnabled(key)) return false;
+        Notify.show("正在加载音频");
+        Task.execute(() -> {
+            try {
+                AudioPlaybackResolver.Resolved resolved = AudioPlaybackResolver.resolveSite(key, id, name, pic, mark);
+                App.post(() -> ActivityLaunch.postOnAnimation(activity, () -> startResolvedImmersiveAudio(activity, resolved, mark)));
+            } catch (Throwable e) {
+                App.post(() -> Notify.show(TextUtils.isEmpty(e.getMessage()) ? "音频加载失败" : e.getMessage()));
+            }
+        });
+        return true;
+    }
+
+    private static void startResolvedImmersiveAudio(Activity activity, AudioPlaybackResolver.Resolved resolved, String mark) {
+        Result result = resolved.getResult();
+        Vod vod = resolved.getVod();
+        Episode episode = resolved.getEpisode();
+        String pic = result.hasArtwork() ? result.getArtwork() : vod.getPic();
+        if (!TextUtils.isEmpty(pic)) ImgUtil.preload(activity, pic);
+        String cacheKey = resolved.getSiteKey() + AppDatabase.SYMBOL + resolved.getVodId() + AppDatabase.SYMBOL + System.nanoTime();
+        IMMERSIVE_AUDIO_LAUNCHES.put(cacheKey, resolved);
+        Intent intent = new Intent(activity, VideoActivity.class);
+        intent.putExtra("collect", false);
+        intent.putExtra("cast", false);
+        intent.putExtra("mark", mark);
+        intent.putExtra("name", vod.getName());
+        intent.putExtra("pic", pic);
+        intent.putExtra("key", resolved.getSiteKey());
+        intent.putExtra("id", resolved.getVodId());
+        intent.putExtra(EXTRA_IMMERSIVE_AUDIO_CACHE_KEY, cacheKey);
+        putIntentPlaybackSelection(intent, resolved.getFlag().getFlag(), episode.getName(), episode.getUrl());
         activity.startActivity(intent);
     }
 
@@ -883,6 +925,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         setPlayerKernel();
         setDecode();
         setLut();
+        if (consumeImmersiveAudioLaunch()) return;
         if (!detailRequested) checkId();
         flushPendingFastTmdbPlayback();
         if (mPendingDetail != null) {
@@ -1313,15 +1356,17 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         mVod = item;
         mFastTmdbPlaybackStarted = true;
         mFastTmdbFullDetailBound = false;
+        takeFastTmdbDetailCache();
         prepareFastTmdbPlaybackItem(item);
         mBinding.name.setText(getFastTmdbPlaybackInitialName(item));
         mBinding.widget.title.setText(getFastTmdbPlaybackInitialTitle(item));
         mBinding.widget.title.setSelected(true);
+        setText(item);
+        hydrateFastTmdbPlaybackDetail(item);
         mBinding.video.requestFocus();
         showProgress();
         showFastTmdbPlaybackContent();
         SpiderDebug.log("video-flow", "fast tmdb playback reveal cost=%dms key=%s episode=%s", System.currentTimeMillis() - start, getKey(), getIntentPlaybackEpisodeName());
-        mBinding.getRoot().post(() -> hydrateFastTmdbPlaybackDetail(item));
         if (shouldWaitForPlaybackService()) {
             queueFastTmdbPlaybackUntilServiceReady(item);
             return true;
@@ -1364,8 +1409,13 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         }
         mFastPlaybackFlag = flag;
         mFastPlaybackEpisode = episode;
-        mBinding.name.setText(item.getName());
-        mBinding.widget.title.setText(getPlaybackControlTitle(episode));
+        if (!TextUtils.equals(mBinding.name.getText(), item.getName())) {
+            mBinding.name.setText(item.getName());
+        }
+        CharSequence playbackTitle = getPlaybackControlTitle(episode);
+        if (!TextUtils.equals(mBinding.widget.title.getText(), playbackTitle)) {
+            mBinding.widget.title.setText(playbackTitle);
+        }
         playerStartTime = System.currentTimeMillis();
         beginPlayHealth();
         prepareFastTmdbPlaybackHistory(item, flag, episode);
@@ -1381,6 +1431,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         mBinding.getRoot().postDelayed(() -> {
             if (isFinishing() || isDestroyed()) return;
             long start = System.currentTimeMillis();
+            prepareFastTmdbPlaybackItem(item);
             setDetail(Result.vod(item));
             SpiderDebug.log("video-flow", "fast tmdb full detail bind cost=%dms key=%s id=%s name=%s", System.currentTimeMillis() - start, getKey(), getId(), item.getName());
         }, TMDB_CACHED_DETAIL_APPLY_DELAY_MS);
@@ -1390,6 +1441,11 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         item.checkPic(firstNonEmpty(getPic(), getTmdbVodPic()));
         item.checkName(getName());
         item.checkContent(firstNonEmpty(item.getContent(), getTmdbVodContent(), getContent()));
+        setIfEmpty(item.getYear(), getTmdbVodYear(), item::setYear);
+        setIfEmpty(item.getArea(), getTmdbVodArea(), item::setArea);
+        setIfEmpty(item.getTypeName(), getTmdbVodType(), item::setTypeName);
+        setIfEmpty(item.getDirector(), getTmdbVodDirector(), item::setDirector);
+        setIfEmpty(item.getActor(), getTmdbVodActor(), item::setActor);
     }
 
     private void hydrateFastTmdbPlaybackDetail(Vod item) {
@@ -1402,17 +1458,22 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         if (!TextUtils.isEmpty(content)) {
             item.setContent(content);
             mBinding.content.setTag(content);
-            if (isTmdbMode()) {
+            if (isTmdbMode() && !isIntentTmdbPlayback()) {
                 suppressTmdbNativeTextFields();
                 mBinding.tmdbOverview.setSingleLine(false);
                 mBinding.tmdbOverview.setHorizontallyScrolling(false);
                 mBinding.tmdbOverview.setMaxLines(Integer.MAX_VALUE);
-                mBinding.tmdbOverview.setText(getString(R.string.detail_content, content));
+                CharSequence overview = getString(R.string.detail_content, content);
+                if (!TextUtils.equals(mBinding.tmdbOverview.getText(), overview)) {
+                    mBinding.tmdbOverview.setText(overview);
+                }
                 mBinding.tmdbOverview.setVisibility(View.VISIBLE);
                 mBinding.tmdbOverview.post(this::updateTmdbOverviewButton);
             }
         }
-        if (!TextUtils.isEmpty(item.getName())) mBinding.name.setText(item.getName());
+        if (!TextUtils.isEmpty(item.getName()) && !TextUtils.equals(mBinding.name.getText(), item.getName())) {
+            mBinding.name.setText(item.getName());
+        }
         if (!TextUtils.isEmpty(wall)) setContextWall(wall);
         if (mHistory != null) {
             if (!TextUtils.isEmpty(item.getName())) mHistory.setVodName(item.getName());
@@ -1432,6 +1493,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     private boolean applyFastTmdbDetailCache(Vod item) {
         TmdbDetailCache.Entry cached = takeFastTmdbDetailCache();
         if (cached == null || item == null) return false;
+        mFastTmdbDetailCache = cached;
         JsonObject detail = cached.getDetail();
         String overview = cachedTmdbOverview(detail);
         if (!TextUtils.isEmpty(overview) && (TextUtils.isEmpty(item.getContent()) || overview.length() > item.getContent().length())) {
@@ -1445,12 +1507,16 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     private String cachedFastTmdbBackdrop() {
-        return cachedFastTmdbBackdrop(takeFastTmdbDetailCache());
+        return cachedFastTmdbBackdrop(mFastTmdbDetailCache);
     }
 
     private String cachedFastTmdbBackdrop(TmdbDetailCache.Entry cached) {
         if (cached == null) return "";
         return firstNonEmpty(cachedTmdbImage(cached.getDetail(), "backdrop_path", true), cached.getItem() == null ? "" : cached.getItem().getBackdropUrl());
+    }
+
+    private void setIfEmpty(String current, String value, java.util.function.Consumer<String> setter) {
+        if (TextUtils.isEmpty(current) && !TextUtils.isEmpty(value)) setter.accept(value);
     }
 
     private String cachedFastTmdbPoster(TmdbDetailCache.Entry cached) {
@@ -1799,8 +1865,8 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         if (mTmdbUIAdapter != null && mTmdbUIAdapter.isReady()) {
             com.fongmi.android.tv.bean.TmdbItem tmdbItem = getTmdbItem();
             if (tmdbItem != null) {
-                SpiderDebug.log("tmdb-tv", "direct load vodTitle=%s tmdbTitle=%s tmdbId=%d media=%s", item.getName(), tmdbItem.getTitle(), tmdbItem.getTmdbId(), tmdbItem.getMediaType());
-                mTmdbUIAdapter.load(tmdbItem, item);
+                SpiderDebug.log("tmdb-tv", "direct load vodTitle=%s tmdbTitle=%s tmdbId=%d media=%s cache=%s", item.getName(), tmdbItem.getTitle(), tmdbItem.getTmdbId(), tmdbItem.getMediaType(), mFastTmdbDetailCache != null);
+                mTmdbUIAdapter.load(tmdbItem, item, mFastTmdbDetailCache);
             } else {
                 mTmdbUIAdapter.autoMatch(item.getName(), item);
             }
@@ -1864,10 +1930,16 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     private void applyTmdbDetailFields() {
+        setTmdbRematchVisible(true);
+        // 炫彩详情已经在播放页显示前带入完整文本，异步 TMDB 完成时不要再切换右侧布局。
+        if (isIntentTmdbPlayback()) {
+            mBinding.video.setNextFocusRightId(R.id.content);
+            return;
+        }
+
         // 去掉集数、演员、导演；简介按钮默认隐藏（仅简介显示不全时再显示）
         suppressTmdbNativeTextFields();
         mBinding.content.setVisibility(View.GONE);
-        setTmdbRematchVisible(true);
 
         // 年份、地区、类型取 TMDB
         if (mTmdbUIAdapter != null) {
@@ -1879,17 +1951,19 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
             if (!TextUtils.isEmpty(genres)) setText(mBinding.type, R.string.detail_type, genres);
         }
 
-        // 简介移到站源行下方显示（内容来自已 enrich 的 content tag）
+        // 简介移到站源行下方显示；内容相同时不重置 maxLines，避免播放页再次布局闪动。
         Object desc = mBinding.content.getTag();
         String overview = desc == null ? "" : desc.toString();
         if (!TextUtils.isEmpty(overview)) {
-            mBinding.tmdbOverview.setSingleLine(false);
-            mBinding.tmdbOverview.setHorizontallyScrolling(false);
-            mBinding.tmdbOverview.setMaxLines(Integer.MAX_VALUE);
-            mBinding.tmdbOverview.setText(getString(R.string.detail_content, overview));
+            CharSequence overviewText = getString(R.string.detail_content, overview);
+            if (!TextUtils.equals(mBinding.tmdbOverview.getText(), overviewText)) {
+                mBinding.tmdbOverview.setSingleLine(false);
+                mBinding.tmdbOverview.setHorizontallyScrolling(false);
+                mBinding.tmdbOverview.setMaxLines(Integer.MAX_VALUE);
+                mBinding.tmdbOverview.setText(overviewText);
+                mBinding.tmdbOverview.post(this::updateTmdbOverviewButton);
+            }
             mBinding.tmdbOverview.setVisibility(View.VISIBLE);
-            // 布局完成后检测是否截断，截断则显示简介按钮
-            mBinding.tmdbOverview.post(this::updateTmdbOverviewButton);
         } else {
             mBinding.tmdbOverview.setVisibility(View.GONE);
         }
@@ -1959,8 +2033,10 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
 
     private void setText(TextView view, int resId, String text) {
         if (TextUtils.isEmpty(text) && !TextUtils.isEmpty(view.getText())) return;
-        view.setText(Sniffer.buildClickable(resId > 0 ? getString(resId, text) : text, this::clickableSpan), TextView.BufferType.SPANNABLE);
+        String value = resId > 0 ? getString(resId, text) : text;
         view.setVisibility(text.isEmpty() ? View.GONE : View.VISIBLE);
+        if (TextUtils.equals(view.getText(), value)) return;
+        view.setText(Sniffer.buildClickable(value, this::clickableSpan), TextView.BufferType.SPANNABLE);
         view.setLinkTextColor(MDColor.YELLOW_500);
         CustomMovement.bind(view);
     }
@@ -3561,6 +3637,9 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         mBinding.flag.setVisibility(empty ? View.GONE : View.VISIBLE);
         if (empty) {
             startFlow();
+        } else if (mImmersiveAudioResolved != null) {
+            applyImmersiveAudioSelection(mImmersiveAudioResolved);
+            if (mHistory.isRevSort()) reverseEpisode(true);
         } else if (mFastTmdbPlaybackStarted && mFastPlaybackFlag != null && mFastPlaybackEpisode != null) {
             mFlagAdapter.setSelected(mFastPlaybackFlag);
             mBinding.flag.setSelectedPosition(mFlagAdapter.indexOf(mFastPlaybackFlag));
@@ -3828,11 +3907,14 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
             }
         }
         if (name) mHistory.setVodName(item.getName());
-        if (name) mBinding.name.setText(item.getName());
+        if (name && !TextUtils.equals(mBinding.name.getText(), item.getName())) {
+            mBinding.name.setText(item.getName());
+        }
         // 原生增强：TMDB 富集完成后回写题材/地区/演员/主创到 History（enrichVod 已填充 item），仅补空字段
         if (mHistory != null) mHistory.enrichMeta(item.getTypeName(), item.getArea(), item.getActor(), item.getDirector(), item.getYear());
         updateFlag(getFlag(), item.getFlags());
-        mBinding.widget.title.setText(getPlaybackControlTitle());
+        CharSequence playbackTitle = getPlaybackControlTitle();
+        if (!TextUtils.equals(mBinding.widget.title.getText(), playbackTitle)) mBinding.widget.title.setText(playbackTitle);
         if (pic) setArtwork(item.getPic());
         if (pic || name) setMetadata();
         // key 迁移后必须写回，避免 replace 删旧 key 后未 save 导致历史消失
@@ -3850,6 +3932,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     private void suppressTmdbNativeTextFields() {
+        if (isIntentTmdbPlayback()) return;
         mBinding.remark.setVisibility(View.GONE);
         mBinding.actor.setVisibility(View.GONE);
         mBinding.director.setVisibility(View.GONE);
@@ -5424,6 +5507,11 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         this.useParse = useParse;
     }
 
+    @Override
+    public boolean isControlAudioContent() {
+        return isAudioOnly() || isMusicLike();
+    }
+
     private View getFocus1() {
         return mFocus1 == null || mFocus1.getVisibility() != View.VISIBLE ? mBinding.video : mFocus1;
     }
@@ -5711,6 +5799,13 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     @Override
+    protected void onResume() {
+        // TV 歌曲舞台自动判断已暂时关闭，首帧绘制前清除任何恢复出来的可见状态。
+        setAudioStageVisible(false);
+        super.onResume();
+    }
+
+    @Override
     protected void onStart() {
         super.onStart();
         mClock.stop().start();
@@ -5983,6 +6078,7 @@ private void disableLeanbackDesktopLyrics() {
     }
 
 private void setupAudioStageOverlay() {
+        mBinding.audioStage.setSaveFromParentEnabled(false);
         ViewGroup parent = (ViewGroup) mBinding.audioStage.getParent();
         if (parent != null) parent.removeView(mBinding.audioStage);
         RelativeLayout.LayoutParams params = new RelativeLayout.LayoutParams(RelativeLayout.LayoutParams.MATCH_PARENT, RelativeLayout.LayoutParams.MATCH_PARENT);
@@ -5990,6 +6086,9 @@ private void setupAudioStageOverlay() {
         params.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM);
         ((ViewGroup) mBinding.getRoot()).addView(mBinding.audioStage, params);
         mBinding.audioStage.bringToFront();
+        // TV 歌曲舞台自动判断已暂时关闭，重挂 overlay 时也必须保持隐藏。
+        mAudioStageVisible = false;
+        mBinding.audioStage.setVisibility(View.GONE);
     }
 
 private void setupAudioStageFocusFeedback() {
@@ -7413,11 +7512,11 @@ private void refreshLyrics() {
     }
 
 private void refreshLyricsNow() {
+        boolean audioContent = shouldUseImmersiveAudio();
+        setAudioStageVisible(audioContent);
         if (mLyrics == null || service() == null) return;
         int seq = ++mLyricsRefreshSeq;
         setAudioOnly(LyricsController.isAudioOnly(player()));
-        boolean audioContent = shouldUseImmersiveAudio();
-        setAudioStageVisible(audioContent);
         if (!audioContent) {
             mLyrics.refresh(player(), false);
             scheduleRefreshKaraoke(seq, false, 0);
@@ -7449,6 +7548,8 @@ private void scheduleRefreshKaraoke(int seq, boolean audioContent, long delayMs)
 private void setAudioStageVisible(boolean visible) {
         visible = visible && PlayerSetting.isImmersiveAudioMode();
         if (visible) ensureImmersiveAudioControllers();
+        // Android may restore the View visibility independently of this cached flag.
+        mBinding.audioStage.setVisibility(visible ? View.VISIBLE : View.GONE);
         if (mAudioStageVisible == visible) {
             syncAudioStageSurface(visible);
             updateAudioStageText();
@@ -7457,7 +7558,6 @@ private void setAudioStageVisible(boolean visible) {
         }
         mAudioStageVisible = visible;
         if (!visible) mAudioLightEffectAnimated = false;
-        mBinding.audioStage.setVisibility(visible ? View.VISIBLE : View.GONE);
         if (visible) {
             mBinding.audioStage.bringToFront();
             hideProgress();
@@ -7476,8 +7576,62 @@ private void setAudioStageVisible(boolean visible) {
         if (visible) mBinding.audioStage.post(this::focusAudioStageDefault);
     }
 
-private boolean shouldUseImmersiveAudio() {
+    private boolean shouldUseImmersiveAudio() {
         return PlayerSetting.isImmersiveAudioMode() && (isAudioOnly() || isMusicLike());
+    }
+
+private AudioPlaybackResolver.Resolved takeImmersiveAudioLaunch() {
+        String cacheKey = Objects.toString(getIntent().getStringExtra(EXTRA_IMMERSIVE_AUDIO_CACHE_KEY), "");
+        return TextUtils.isEmpty(cacheKey) ? null : IMMERSIVE_AUDIO_LAUNCHES.remove(cacheKey);
+    }
+
+private boolean consumeImmersiveAudioLaunch() {
+        AudioPlaybackResolver.Resolved resolved = takeImmersiveAudioLaunch();
+        if (resolved == null) return false;
+        try {
+            prepareImmersiveAudioPlayback(resolved);
+            setDetail(resolved.getVod());
+            mInlineLyrics = getEpisodeInlineLyrics(resolved.getEpisode());
+            setAudioStageVisible(true);
+            setPlayer(resolved.getResult());
+            return true;
+        } finally {
+            mImmersiveAudioResolved = null;
+        }
+    }
+
+private void prepareImmersiveAudioPlayback(AudioPlaybackResolver.Resolved resolved) {
+        mImmersiveAudioResolved = resolved;
+        Vod vod = resolved.getVod();
+        Result result = resolved.getResult();
+        Episode episode = resolved.getEpisode();
+        String pic = result.hasArtwork() ? result.getArtwork() : vod.getPic();
+        getIntent().putExtra("key", resolved.getSiteKey());
+        getIntent().putExtra("id", resolved.getVodId());
+        getIntent().putExtra("name", vod.getName());
+        getIntent().putExtra("pic", pic);
+        putIntentPlaybackSelection(getIntent(), resolved.getFlag().getFlag(), episode.getName(), episode.getUrl());
+        detailStartTime = System.currentTimeMillis();
+        playerStartTime = detailStartTime;
+        beginPlayHealth();
+        mPlaybackEpisodeKey = audioQueueEpisodeKey(episode);
+        clearLyrics();
+        clearKaraokeState();
+        setAudioOnly(true);
+    }
+
+private void applyImmersiveAudioSelection(AudioPlaybackResolver.Resolved resolved) {
+        Flag flag = resolved.getFlag();
+        Episode episode = resolved.getEpisode();
+        mFlagAdapter.setSelected(flag);
+        mFlagAdapter.toggle(episode);
+        int position = mFlagAdapter.indexOf(flag);
+        if (position != RecyclerView.NO_POSITION) mBinding.flag.setSelectedPosition(position);
+        notifyItemChanged(mBinding.flag, mFlagAdapter);
+        setEpisodeAdapter(flag.getEpisodes(), false);
+        setQualityVisible(false);
+        mBinding.widget.title.setText(getPlaybackControlTitle(episode));
+        mBinding.widget.title.setSelected(true);
     }
 
 private void syncAudioStageSurface(boolean visible) {

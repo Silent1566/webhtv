@@ -1044,7 +1044,7 @@ public void resetTrack(int type) {
     }
 
     private boolean reparseForPlayerSwitch(long position, float speed, boolean repeat) {
-        if (spec == null || !spec.canReparse() || !spec.isParseSource()) return false;
+        if (spec == null || !spec.canReparse()) return false;
         Result result = spec.getParseResult();
         boolean useParse = spec.isParseUseParse();
         MediaMetadata metadata = spec.getMetadata();
@@ -1065,13 +1065,20 @@ public void resetTrack(int type) {
     }
 
     private void refreshDirectForPlayerSwitch(Result result, String key, MediaMetadata metadata) {
-        if (SpiderDebug.isEnabled()) SpiderDebug.log("player", "switch player refresh direct type=%d key=%s flag=%s url=%s", playerType, key, result.getFlag(), summarizeUrl(result.getUrl().v()));
+        int requestSeq = prepareSeq;
+        int requestPlayerType = playerType;
+        PlaySpec requestSpec = spec;
+        if (SpiderDebug.isEnabled()) SpiderDebug.log("player", "switch player refresh direct type=%d key=%s flag=%s url=%s", requestPlayerType, key, result.getFlag(), summarizeUrl(result.getUrl().v()));
         Task.execute(() -> {
             try {
-                Result refreshed = SiteApi.playerContent(key, result.getFlag(), result.getUrl().v(), playerType);
-                App.post(() -> startRefreshedSwitchResult(refreshed, key, metadata));
+                Result refreshed = SiteApi.playerContent(key, result.getFlag(), result.getUrl().v(), requestPlayerType);
+                App.post(() -> {
+                    if (!isCurrentDirectSwitchRefresh(pendingSwitchRestore, requestSeq, prepareSeq, requestPlayerType, playerType, requestSpec, spec)) return;
+                    startRefreshedSwitchResult(refreshed, key, metadata);
+                });
             } catch (Throwable e) {
                 App.post(() -> {
+                    if (!isCurrentDirectSwitchRefresh(pendingSwitchRestore, requestSeq, prepareSeq, requestPlayerType, playerType, requestSpec, spec)) return;
                     clearPendingSwitchRestore();
                     callback.onError(e.getMessage());
                 });
@@ -2186,6 +2193,10 @@ public void resetTrack(int type) {
 
     static boolean shouldStopOnManualSwitchFailure(boolean manualSwitchPending, PlayerEngine.ErrorAction action) {
         return manualSwitchPending && action != PlayerEngine.ErrorAction.RECOVERED;
+    }
+
+    static boolean isCurrentDirectSwitchRefresh(boolean pending, int requestSeq, int currentSeq, int requestPlayerType, int currentPlayerType, PlaySpec requestSpec, PlaySpec currentSpec) {
+        return pending && requestSeq == currentSeq && requestPlayerType == currentPlayerType && requestSpec == currentSpec;
     }
 
     static int httpStatus(Throwable error) {

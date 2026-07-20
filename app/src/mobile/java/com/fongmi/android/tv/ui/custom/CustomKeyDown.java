@@ -27,6 +27,7 @@ public class CustomKeyDown extends GestureDetector.SimpleOnGestureListener imple
     private final Listener listener;
     private final Activity activity;
     private final View videoView;
+    private final int[] videoLocation;
     private boolean changeBright;
     private boolean changeVolume;
     private boolean changeSpeed;
@@ -53,6 +54,7 @@ public class CustomKeyDown extends GestureDetector.SimpleOnGestureListener imple
         this.listener = (Listener) activity;
         this.videoView = videoView;
         this.activity = activity;
+        this.videoLocation = new int[2];
         this.scale = 1.0f;
         applyBrightness();
     }
@@ -98,17 +100,41 @@ public class CustomKeyDown extends GestureDetector.SimpleOnGestureListener imple
     }
 
     private boolean isEdge(MotionEvent e) {
-        // 使用 App.get() 而非 activity，避免被 wrapLanguage 冻结的 context 导致横屏时宽高错误
-        return ResUtil.isEdge(App.get(), e, ResUtil.dp2px(24));
+        int width = getVideoWidth();
+        int height = getVideoHeight();
+        if (width <= 0 || height <= 0) return false;
+        int edge = ResUtil.dp2px(24);
+        float x = getVideoX(e);
+        float y = getVideoY(e);
+        return x < edge || x > width - edge || y < edge || y > height - edge;
     }
 
     private boolean isSide(MotionEvent e) {
-        // 使用 getRawX 获取屏幕绝对坐标，避免横屏时 View 坐标系统问题
-        // 使用 App.get() 而非 activity，避免被 wrapLanguage 冻结的 context 导致横屏时宽度错误
-        int width = ResUtil.getScreenWidth(App.get());
+        int width = getVideoWidth();
+        if (width <= 0) return false;
         int four = width / 4;
-        float x = e.getRawX();
+        float x = getVideoX(e);
         return !(x > four) || !(x < four * 3);
+    }
+
+    private int getVideoWidth() {
+        int width = videoView.getWidth();
+        return width > 0 ? width : videoView.getMeasuredWidth();
+    }
+
+    private int getVideoHeight() {
+        int height = videoView.getHeight();
+        return height > 0 ? height : videoView.getMeasuredHeight();
+    }
+
+    private float getVideoX(MotionEvent e) {
+        videoView.getLocationOnScreen(videoLocation);
+        return e.getRawX() - videoLocation[0];
+    }
+
+    private float getVideoY(MotionEvent e) {
+        videoView.getLocationOnScreen(videoLocation);
+        return e.getRawY() - videoLocation[1];
     }
 
     private void reset() {
@@ -159,7 +185,7 @@ public class CustomKeyDown extends GestureDetector.SimpleOnGestureListener imple
     @Override
     public boolean onSingleTapConfirmed(@NonNull MotionEvent e) {
         if (isMultiple(e) || changeScale) return true;
-        listener.onSingleTap(e.getRawX(), ResUtil.getScreenWidth(App.get()));
+        listener.onSingleTap(getVideoX(e), getVideoWidth());
         return true;
     }
 
@@ -189,10 +215,8 @@ public class CustomKeyDown extends GestureDetector.SimpleOnGestureListener imple
     }
 
     private void checkSide(MotionEvent e2) {
-        // 使用 getRawX 获取屏幕绝对坐标，确保横屏时正确判断左右区域
-        // 使用 App.get() 而非 activity，避免被 wrapLanguage 冻结的 context 导致横屏时宽度错误
-        int width = ResUtil.getScreenWidth(App.get());
-        float x = e2.getRawX();
+        int width = getVideoWidth();
+        float x = getVideoX(e2);
         if (x > width / 2f) changeVolume = true;
         else changeBright = true;
     }

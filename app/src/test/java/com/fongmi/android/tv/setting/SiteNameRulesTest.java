@@ -13,13 +13,13 @@ public class SiteNameRulesTest {
     @Test
     public void customNameOverridesRawNameAndGroups() {
         assertEquals("[主力][短剧]我的一号站", SiteNameRules.effectiveName("[荐][采集]影视天堂", "[主力][短剧]我的一号站"));
-        assertEquals(List.of("[主力]", "[短剧]"), SiteNameRules.groups("[荐][采集]影视天堂", "[主力][短剧]我的一号站"));
+        assertEquals(List.of("主力", "短剧"), SiteNameRules.groups("[荐][采集]影视天堂", "[主力][短剧]我的一号站"));
     }
 
     @Test
     public void blankCustomNameFallsBackToRawNameAndGroups() {
         assertEquals("[原始]站源A", SiteNameRules.effectiveName("[原始]站源A", "  "));
-        assertEquals(List.of("[原始]"), SiteNameRules.groups("[原始]站源A", ""));
+        assertEquals(List.of("原始"), SiteNameRules.groups("[原始]站源A", ""));
     }
 
     @Test
@@ -29,7 +29,7 @@ public class SiteNameRulesTest {
 
     @Test
     public void groupsAreOrderedAndDeduplicated() {
-        assertEquals(List.of("[主力]", "[备用]"), SiteNameRules.groups("", "[主力][备用][主力]我的站"));
+        assertEquals(List.of("主力", "备用"), SiteNameRules.groups("", "[主力][备用][主力]我的站"));
     }
 
     @Test

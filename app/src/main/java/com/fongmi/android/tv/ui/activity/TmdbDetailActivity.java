@@ -141,6 +141,7 @@ import com.fongmi.android.tv.ui.helper.TmdbRecommendationRows;
 import com.fongmi.android.tv.ui.player.VodPlayerChrome;
 import com.fongmi.android.tv.ui.player.VodPlayerUiController;
 import com.fongmi.android.tv.ui.player.VodPlayerUiHost;
+import com.fongmi.android.tv.utils.ActivityLaunch;
 import com.fongmi.android.tv.utils.BatteryUtil;
 import com.fongmi.android.tv.utils.Formatters;
 import com.fongmi.android.tv.utils.ImgUtil;
@@ -291,6 +292,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private boolean inlineHttpRefreshAttempted;
     private boolean detailPlayerActive;
     private boolean autoPlayed;
+    private boolean defaultPlaybackLaunchPending;
     private boolean inlineFullscreen;
     private boolean inlineShortDramaMode;
     private boolean inlinePauseInfo;
@@ -633,7 +635,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             @Override
             public void onItemLongClick(View anchor, Episode episode, int episodeNumber) {
                 anchor.setPressed(false);
-                showTmdbEpisodeDetail(episode, episodeNumber);
+                showTmdbEpisodeDetail(episode, episodeNumber, binding.episodeContainer);
             }
         });
         episodeAdapter.setNativeEnhanced(true);
@@ -1433,7 +1435,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
 
     private boolean onInlineControlTouch(View view, MotionEvent event) {
         if (isInlineControlsVisible()) touchInlineControls();
-        return false;
+        // 控制层显示时空白区域不会稳定冒泡到 playerPanel，直接继续播放器手势序列。
+        return onInlineTouch(view, event);
     }
 
     private boolean onInlinePanelKey(View view, int keyCode, KeyEvent event) {
@@ -4603,12 +4606,18 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private void playDefaultPlayback() {
-        long start = System.currentTimeMillis();
-        logTmdbMatch("原生增强播放标题：raw=%s，缓存标题=%s，详情标题=%s，播放标题=%s", getTmdbRawTitle(), matchedTmdbItem == null ? "" : matchedTmdbItem.getTitle(), tmdbDetailTitle(matchedTmdbItem, matchedTmdbDetail), playbackHistoryName());
-        TmdbItem item = playbackTmdbItem();
-        String tmdbDetailCacheKey = TmdbDetailCache.put(item, matchedTmdbDetail, detailCastItems);
-        SpiderDebug.log("tmdb-tv", "play launch prep cost=%dms title=%s", System.currentTimeMillis() - start, playbackHistoryName());
-        VideoActivity.startDirectTmdb(this, getKeyText(), getIdText(), playbackHistoryName(), playbackHistoryPic(), playbackMark(), fastPlaybackEpisodeTitles(), item, playbackTmdbVod(), vod, tmdbDetailCacheKey, playbackFlag(), playbackEpisodeName(), playbackEpisodeUrl());
+        if (defaultPlaybackLaunchPending) return;
+        defaultPlaybackLaunchPending = true;
+        ActivityLaunch.postOnAnimation(this, () -> {
+            defaultPlaybackLaunchPending = false;
+            if (isFinishing() || isDestroyed()) return;
+            long start = System.currentTimeMillis();
+            logTmdbMatch("原生增强播放标题：raw=%s，缓存标题=%s，详情标题=%s，播放标题=%s", getTmdbRawTitle(), matchedTmdbItem == null ? "" : matchedTmdbItem.getTitle(), tmdbDetailTitle(matchedTmdbItem, matchedTmdbDetail), playbackHistoryName());
+            TmdbItem item = playbackTmdbItem();
+            String tmdbDetailCacheKey = TmdbDetailCache.put(item, matchedTmdbDetail, detailCastItems);
+            SpiderDebug.log("tmdb-tv", "play launch prep cost=%dms title=%s", System.currentTimeMillis() - start, playbackHistoryName());
+            VideoActivity.startDirectTmdb(this, getKeyText(), getIdText(), playbackHistoryName(), playbackHistoryPic(), playbackMark(), fastPlaybackEpisodeTitles(), item, playbackTmdbVod(), vod, tmdbDetailCacheKey, playbackFlag(), playbackEpisodeName(), playbackEpisodeUrl());
+        });
     }
 
     private String playbackMark() {
@@ -4642,14 +4651,15 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         view.setLayoutParams(marginParams);
     }
 
-    private void showTmdbEpisodeDetail(Episode episode, int episodeNumber) {
+    private void showTmdbEpisodeDetail(Episode episode, int episodeNumber, RecyclerView returnRecycler) {
         // 对话框关闭后完整重渲染剧集列表，防止焦点状态紊乱导致按钮失效
         android.content.DialogInterface.OnDismissListener dismissListener = d -> {
-            if (binding == null || binding.episodeContainer == null) return;
+            if (binding == null || binding.episodeContainer == null || returnRecycler == null) return;
             // RecyclerView 可能仍在恢复布局，下一帧再完整重渲染（参考原生增强的 render 机制）
             binding.episodeContainer.post(() -> {
                 // 完整重建列表 + 分组按钮（类似原生增强 render[0].run()）
                 rerenderEpisodeViewportOnly(false, true, true);
+                returnRecycler.post(() -> restoreEpisodeDetailFocus(returnRecycler, episode));
             });
         };
 
@@ -4701,6 +4711,15 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
                 });
             }
         });
+    }
+
+    private void restoreEpisodeDetailFocus(RecyclerView recycler, Episode episode) {
+        if (recycler == null || episode == null) return;
+        RecyclerView.Adapter<?> adapter = recycler.getAdapter();
+        if (!(adapter instanceof TmdbEpisodeAdapter episodeAdapter)) return;
+        int position = episodeAdapter.getPosition(episode);
+        if (position < 0) return;
+        focusTmdbRecyclerItem(recycler, position);
     }
 
     /**
@@ -7167,7 +7186,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             @Override
             public void onItemLongClick(View anchor, Episode episode, int episodeNumber) {
                 anchor.setPressed(false);
-                showTmdbEpisodeDetail(episode, episodeNumber);
+                showTmdbEpisodeDetail(episode, episodeNumber, recycler);
             }
         });
         adapter.setLight(lightTheme);

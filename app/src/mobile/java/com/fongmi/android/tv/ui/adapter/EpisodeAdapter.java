@@ -139,8 +139,11 @@ public class EpisodeAdapter extends RecyclerView.Adapter<BaseEpisodeHolder> {
     }
 
     public static String getCardTitle(Episode item) {
+        return getCardTitle(item, item == null ? null : item.getTmdbEpisode());
+    }
+
+    public static String getCardTitle(Episode item, TmdbEpisode tmdbEpisode) {
         if (item == null) return "";
-        TmdbEpisode tmdbEpisode = item.getTmdbEpisode();
         if (tmdbEpisode == null) return getNativeTitle(item);
         int number = tmdbEpisode.getNumber();
         String label = number > 0 ? String.valueOf(number) : item.getName();

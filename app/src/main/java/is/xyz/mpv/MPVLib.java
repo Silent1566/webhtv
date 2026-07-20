@@ -6,6 +6,7 @@ import android.content.pm.PackageManager;
 import android.content.res.AssetManager;
 import android.graphics.Bitmap;
 import android.os.Build;
+import android.os.SystemClock;
 import android.util.Log;
 import android.view.Surface;
 
@@ -43,6 +44,8 @@ public final class MPVLib {
     private static String loadedAbi;
     private static Boolean bundledVulkanEnabled;
     private static Boolean deviceVulkan13Capable;
+    private static final long CONTEXT_RECREATE_COOLDOWN_MS = 350;
+    private static long lastContextDestroyedAtMs;
     private static boolean contextCreationAttempted;
     private static boolean contextCreated;
 
@@ -184,6 +187,12 @@ public final class MPVLib {
             Log.w(TAG, "Ignore duplicate MPV context creation");
             return false;
         }
+        long elapsed = SystemClock.elapsedRealtime() - lastContextDestroyedAtMs;
+        if (lastContextDestroyedAtMs > 0 && elapsed < CONTEXT_RECREATE_COOLDOWN_MS) {
+            long waitMs = CONTEXT_RECREATE_COOLDOWN_MS - elapsed;
+            Log.i(TAG, "Waiting " + waitMs + "ms for previous MPV/HWUI teardown");
+            SystemClock.sleep(waitMs);
+        }
         contextCreationAttempted = true;
         create(appctx);
         contextCreated = true;
@@ -197,6 +206,7 @@ public final class MPVLib {
         } finally {
             contextCreated = false;
             contextCreationAttempted = false;
+            lastContextDestroyedAtMs = SystemClock.elapsedRealtime();
         }
     }
 
@@ -227,8 +237,6 @@ public final class MPVLib {
     public static native void setPropertyString(String property, String value);
 
     public static native void dumpTrackList();
-
-    public static native String getIsoTrackLanguage(long sessionId, int trackType, int trackIndex);
 
     public static native void observeProperty(String property, int format);
 

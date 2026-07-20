@@ -34,6 +34,8 @@ public class PlayerSetting {
     public static final int AUDIO_BACKGROUND_LEMON = 10;
     public static final int AUDIO_BACKGROUND_DUSK = 11;
     public static final int AUDIO_BACKGROUND_RANDOM = 12;
+    public static final int AUDIO_PLAYBACK_STYLE_BUILT_IN = 0;
+    public static final int AUDIO_PLAYBACK_STYLE_IMMERSIVE = 1;
     public static final int PAD_LIVE_FULLSCREEN = 0;
     public static final int PAD_LIVE_STANDARD = 1;
     public static final int FALLBACK_FULL = 0;
@@ -76,11 +78,19 @@ public class PlayerSetting {
     }
 
     public static boolean isImmersiveAudioMode() {
-        return Prefers.getBoolean("immersive_audio_mode", false);
+        return Prefers.getBoolean("immersive_audio_mode", true);
     }
 
     public static void putImmersiveAudioMode(boolean enabled) {
         Prefers.put("immersive_audio_mode", enabled);
+    }
+
+    public static int getAudioPlaybackStyle() {
+        return isImmersiveAudioMode() ? AUDIO_PLAYBACK_STYLE_IMMERSIVE : AUDIO_PLAYBACK_STYLE_BUILT_IN;
+    }
+
+    public static void putAudioPlaybackStyle(int style) {
+        putImmersiveAudioMode(style != AUDIO_PLAYBACK_STYLE_BUILT_IN);
     }
 
     public static int getAudioBackground() {

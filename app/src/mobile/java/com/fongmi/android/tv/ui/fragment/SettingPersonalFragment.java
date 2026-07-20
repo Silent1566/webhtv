@@ -10,8 +10,10 @@ import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.databinding.FragmentSettingPersonalBinding;
+import com.fongmi.android.tv.setting.GroupRuleConfig;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.base.BaseFragment;
+import com.fongmi.android.tv.ui.dialog.GroupRuleDialog;
 import com.fongmi.android.tv.ui.dialog.SliderNumberDialog;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
@@ -48,6 +50,7 @@ public class SettingPersonalFragment extends BaseFragment {
         mBinding.playBackToDetail.setOnClickListener(this::setPlayBackToDetail);
         mBinding.tmdbMatchMode.setOnClickListener(this::setTmdbMatchMode);
         mBinding.personalRecommendation.setOnClickListener(this::setPersonalRecommendation);
+        mBinding.groupRule.setOnClickListener(this::setGroupRule);
         mBinding.tmdbEpisodeFileSize.setOnClickListener(this::setTmdbEpisodeFileSize);
         mBinding.searchUi.setOnClickListener(this::setSearchUi);
         mBinding.searchColumn.setOnClickListener(this::setSearchColumn);
@@ -60,6 +63,7 @@ public class SettingPersonalFragment extends BaseFragment {
         mBinding.playBackToDetailText.setText(getSwitch(Setting.isPlayBackToDetail()));
         mBinding.tmdbMatchModeText.setText((tmdbMatchMode = getResources().getStringArray(R.array.select_tmdb_match_mode))[Setting.getTmdbMatchMode()]);
         mBinding.personalRecommendationText.setText(getSwitch(Setting.isPersonalRecommendation()));
+        mBinding.groupRuleText.setText(getString(R.string.setting_group_rule_summary, GroupRuleConfig.enabledCount(), GroupRuleConfig.totalCount()));
         mBinding.tmdbEpisodeFileSizeText.setText(getSwitch(Setting.isTmdbEpisodeFileSize()));
         mBinding.searchUiText.setText((searchUi = getResources().getStringArray(R.array.select_search_ui))[Setting.getSearchUi()]);
         mBinding.searchColumnText.setText(getSearchColumnText());
@@ -108,6 +112,10 @@ public class SettingPersonalFragment extends BaseFragment {
                     setText();
                 })
                 .show();
+    }
+
+    private void setGroupRule(View view) {
+        GroupRuleDialog.create(requireActivity()).onChanged(this::setText).show();
     }
 
     private void setTmdbEpisodeFileSize(View view) {

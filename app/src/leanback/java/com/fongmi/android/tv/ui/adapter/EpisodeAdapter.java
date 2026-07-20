@@ -19,6 +19,7 @@ import com.fongmi.android.tv.bean.TmdbEpisode;
 import com.fongmi.android.tv.databinding.AdapterEpisodeBinding;
 import com.fongmi.android.tv.databinding.AdapterEpisodeCardBinding;
 import com.fongmi.android.tv.setting.Setting;
+import com.fongmi.android.tv.ui.helper.TmdbEpisodeMatcher;
 import com.fongmi.android.tv.utils.EpisodeTitleCompact;
 import com.fongmi.android.tv.utils.EpisodeTitleFormatter;
 import com.fongmi.android.tv.utils.ImgUtil;
@@ -292,7 +293,12 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
         AdapterEpisodeCardBinding binding = holder.cardBinding;
         if (binding == null) return;
 
+        // 使用集号匹配 TMDB 数据，而不是直接使用 item.getTmdbEpisode()
+        int episodeNumber = item.getNumber() > 0 ? item.getNumber() : position + 1;
         TmdbEpisode tmdbEpisode = item.getTmdbEpisode();
+        if (!TmdbEpisodeMatcher.shouldApply(item, tmdbEpisode, episodeNumber)) {
+            tmdbEpisode = null;
+        }
         if (tmdbEpisode == null) return;
 
         applyCardSize(binding);
@@ -304,7 +310,7 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
         binding.cardContainer.setOnKeyListener(keyListener);
 
         // 加载剧照
-        String cardTitle = getCardTitle(item);
+        String cardTitle = getCardTitle(item, tmdbEpisode);
         String stillUrl = tmdbEpisode.getStillUrl();
         String imageUrl = TextUtils.isEmpty(stillUrl) ? fallbackStillUrl : stillUrl;
         String errorImageUrl = TextUtils.isEmpty(stillUrl) ? "" : fallbackStillUrl;
@@ -441,8 +447,11 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
     }
 
     public static String getCardTitle(Episode item) {
+        return getCardTitle(item, item == null ? null : item.getTmdbEpisode());
+    }
+
+    public static String getCardTitle(Episode item, TmdbEpisode tmdbEpisode) {
         if (item == null) return "";
-        TmdbEpisode tmdbEpisode = item.getTmdbEpisode();
         if (tmdbEpisode == null) return getTitle(item);
         if (!Setting.getTmdbEpisodeShowScrapedName()) return item.getDisplayName();
         String title = EpisodeTitleFormatter.formatTmdbTitle(tmdbEpisode.getNumber(), tmdbEpisode.getTitle());

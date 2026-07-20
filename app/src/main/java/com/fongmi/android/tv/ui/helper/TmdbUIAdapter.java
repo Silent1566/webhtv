@@ -168,6 +168,21 @@ public class TmdbUIAdapter {
         loadDetail(vod, item, generation);
     }
 
+    /**
+     * Load TMDB data from the detail payload already consumed by fast playback.
+     */
+    public void load(TmdbItem item, Vod vod, TmdbDetailCache.Entry cached) {
+        if (item == null) return;
+        if (cached == null) {
+            load(item, vod);
+            return;
+        }
+        int generation = resetLoadState();
+        this.tmdbItem = item;
+        saveMatch(vod, item);
+        Task.execute(() -> loadDetailSync(vod, cached.getItem(), cached.getDetail(), cached.getCast(), generation));
+    }
+
     public void rememberManualMatch(Vod vod, TmdbItem item) {
         saveTitleLearning(vod, item);
     }
@@ -743,6 +758,8 @@ public class TmdbUIAdapter {
                     int resolvedNumber = resolveEpisodeNumber(episode, index, usePosition);
                     TmdbEpisode tmdbEp = findEpisodeByNumber(episodes, resolvedNumber);
                     if (tmdbEp == null) continue;
+                    // 验证匹配是否正确，避免无效集号误匹配
+                    if (!TmdbEpisodeMatcher.shouldApply(episode, tmdbEp, resolvedNumber)) continue;
                     if (hasEpisodeMetadataChanged(episode.getTmdbEpisode(), tmdbEp)) changed = true;
                     episode.setTmdbEpisode(tmdbEp);
                     if (!tmdbEp.getTitle().isEmpty()) {

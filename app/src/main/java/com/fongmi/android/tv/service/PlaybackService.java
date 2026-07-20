@@ -560,7 +560,11 @@ private AudioHistory.Record audioHistoryRecord;
 
             @Override
             public void stop() {
-                dispatchStop();
+                // Standard MediaSession STOP controls playback only. Activity navigation is reserved for
+                // explicit in-app exit actions so stray system, remote, or Bluetooth STOP events cannot
+                // close the playback screen.
+                if (!isPlayerAvailable() || player.getPlaybackState() == Player.STATE_IDLE) return;
+                stopAndClear();
             }
 
             @NonNull

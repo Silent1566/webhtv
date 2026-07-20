@@ -51,7 +51,6 @@ public class PlayerButtonSetting {
             new Item(SPEED, R.string.play_speed),
             new Item(SCALE, R.string.play_scale),
             new Item(LUT, R.string.play_lut),
-            new Item(KARAOKE, R.string.player_karaoke_mode),
             new Item(RESET, R.string.play_reset),
             new Item(REPEAT, R.string.play_repeat),
             new Item(TEXT, R.string.play_track_text),
