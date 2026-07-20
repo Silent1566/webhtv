@@ -131,8 +131,25 @@ public final class KernelPerformanceSetting {
         Prefers.put(key(kernel, "video_prefer"), value);
     }
 
+    static void applyOriginal(int kernel) {
+        putBuffer(kernel, 1);
+        putBufferBytesOption(kernel, 0);
+        putBackBufferOption(kernel, 0);
+        putPlayCacheOption(kernel, 0);
+        putPreload(kernel, false);
+        putPreloadThreads(kernel, 1);
+        putPreloadSizeMb(kernel, PreloadSetting.MIN_SIZE_MB);
+        putPreloadTimeSeconds(kernel, PreloadSetting.MAX_TIME_SECONDS);
+        putAudioPassThrough(kernel, true);
+        putPreferAac(kernel, false);
+        putAudioPrefer(kernel, false);
+        putVideoPrefer(kernel, false);
+    }
+
     public static void applyPreset(int kernel, int profile) {
-        if (profile == PlaybackPerformanceSetting.PROFILE_LIGHTWEIGHT) {
+        if (profile == PlaybackPerformanceSetting.PROFILE_ORIGINAL) {
+            applyOriginal(kernel);
+        } else if (profile == PlaybackPerformanceSetting.PROFILE_LIGHTWEIGHT) {
             putBuffer(kernel, kernel == PlayerSetting.EXO ? exoBufferForPreset(profile) : 5);
             putBufferBytesOption(kernel, kernel == PlayerSetting.EXO ? exoBufferBytesOptionForPreset(profile) : 1);
             putBackBufferOption(kernel, 0);

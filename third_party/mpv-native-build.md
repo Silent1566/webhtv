@@ -42,6 +42,7 @@ third_party/mpv-native-lock.json
 | 构建框架 | `marlboro-advance/mpv-android@f712d4dcf56c00d04e7dd05e157d953d665a6890` |
 | NDK | `28.2.13676358`（r28c），API 24 |
 | MPV | `94335ab87ab225ca3e36e0faeac831639d3e1d4e`（`0.41.0-878-g94335ab87`） |
+| MediaCodec/Vulkan 互操作 | `FongMi/mpv@fd679c812149fe1f3e246897b1015ae109da7c74`，通过 AImageReader/AHardwareBuffer 保持 GPU 链路 |
 | FFmpeg | `8ae0b34901ba60a802f183ee75a250a9fc3e09a5`（n8.0.3） |
 | libplacebo | `a7a18af88ff0a17c04840dcb3246047bb6b46df3`（7.371.0） |
 | curl | 8.21.0，MbedTLS，HTTP/HTTPS、HTTP/2 |
@@ -147,7 +148,7 @@ scripts/build_mpv_native.sh --abi arm64-v8a --jobs 8 --work-dir /tmp/webhtv-mpv-
 2. 检查 NDK revision 和 LLVM 工具。
 3. 在独立 Python venv 中安装固定版本 Meson/Ninja及 MbedTLS 生成工具依赖。
 4. 下载构建框架和每个固定 commit，初始化 MbedTLS、libplacebo 子模块，并校验 Lua、libunibreak、curl、nghttp2 tar 包 SHA-256。
-5. 对固定 MPV commit 应用 `third_party/patches/mpv-stream-cb-disc-controls.patch`，为自定义 Blu-ray ISO stream 暴露光盘时间轴控制。
+5. 对固定 MPV commit 应用锁定的 FongMi Vulkan/MediaCodec 互操作提交，通过 AImageReader/AHardwareBuffer 将 MediaCodec 帧导入 Vulkan；随后应用 `third_party/patches/mpv-stream-cb-disc-controls.patch`，为自定义 Blu-ray ISO stream 暴露光盘时间轴控制。
 6. 按依赖顺序构建 MbedTLS、libunibreak、dav1d、FFmpeg、FreeType、FriBidi、HarfBuzz、libass、Lua、shaderc、libplacebo、nghttp2、curl 和 MPV。
 7. 把 FFmpeg 的文件名、ELF `SONAME` 和 `DT_NEEDED` 从 `libav*`/`libsw*` 等长修改为 `libmv*`/`libmw*`。
 8. 使用 NDK `llvm-strip --strip-unneeded` 处理最终库。
@@ -227,6 +228,7 @@ bash gradlew :app:assembleMobileArm64_v8aRelease -PfastRelease=true
 - OpenGL普通播放、硬解状态。
 - OpenGL LUT 生效，预览竖线可见，拖动连续且无闪烁。
 - Vulkan普通播放和 LUT。
+- Vulkan 硬解时确认 `hwdec-current=mediacodec`，并在日志中确认 `Using Vulkan AHardwareBuffer GPU conversion`；不应无条件回退到 `mediacodec-copy`。
 - 文本字幕、图形字幕以及播放中切换。
 - 播放成功前切换播放器内核。
 - 连续起播、退出、换线路，并检查 crash buffer 中没有 destroyed-mutex。

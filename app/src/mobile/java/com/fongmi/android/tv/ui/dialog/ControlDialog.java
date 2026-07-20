@@ -17,6 +17,7 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
+import androidx.fragment.app.FragmentManager;
 import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.App;
@@ -333,8 +334,13 @@ binding.ending.setText(controls.ending.getText());
         FragmentActivity activity = getActivity();
         PlayerManager current = player;
         if (activity == null || current == null) return;
+        FragmentManager fragmentManager = activity.getSupportFragmentManager();
+        if (activity.isFinishing() || activity.isDestroyed() || fragmentManager.isStateSaved() || current.isReleased()) return;
         dismissAllowingStateLoss();
-        App.post(() -> PanNetworkDiagnosticDialog.show(activity, current), 140);
+        App.post(() -> {
+            if (activity.isFinishing() || activity.isDestroyed() || fragmentManager.isStateSaved() || current.isReleased()) return;
+            PanNetworkDiagnosticDialog.show(activity, current);
+        }, 140);
     }
 
     private void setImmersiveAudio() {

@@ -556,7 +556,7 @@ public class Manage implements Process {
         SyncFiles.Archive archive = null;
         LoginStateSync.Archive loginArchive = null;
         try {
-            if (!pull && options.isSpider()) archive = SyncFiles.createArchive(SyncFiles.getPaths(options.getPaths()));
+            if (!pull && SyncFiles.hasPaths(options)) archive = SyncFiles.createArchive(SyncFiles.getPaths(options));
             if (!pull && options.isLoginState()) loginArchive = LoginStateSync.createArchive();
             RequestBody body = buildSyncBody(pull, options, archive, loginArchive);
             String remote = device.replaceAll("/+$", "") + "/action?do=sync&mode=" + (pull ? "2" : "1") + "&type=backup";

@@ -91,10 +91,22 @@ public class Source {
     public String fetch(Result result, int playerType) throws Exception {
         Uri uri = result.getUrl().uri();
         String url = result.getUrl().v();
+        int originalParse = result.getParse();
         Extractor extractor = getExtractor(uri);
         if (extractor != null) result.setParse(0);
         if (extractor instanceof Video) result.setParse(1);
-        String fetched = extractor == null ? url : extractor.fetch(result);
+        String fetched;
+        try {
+            fetched = extractor == null ? url : extractor.fetch(result);
+        } catch (Exception e) {
+            if (!(extractor instanceof Youtube) || originalParse != 1) throw e;
+            result.setParse(1);
+            return url;
+        }
+        if (extractor instanceof Youtube && fetched.isEmpty() && originalParse == 1) {
+            result.setParse(1);
+            return url;
+        }
         String sanitized = MpdSanitizer.sanitize(fetched);
         if (MpdSanitizer.hasLimitedYoutubeAudio(sanitized)) {
             String referer = getHeader(result.getHeader(), "Referer");

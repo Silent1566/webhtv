@@ -335,11 +335,24 @@ prepare_sources() {
   # The initial exact-commit fetch is shallow. Fetch enough ancestry and the
   # release tag so MPV embeds the version string recorded by the selected lock.
   if [ "$(git -C "$deps/mpv" describe --abbrev=9 --tags --match "$MPV_DESCRIBE_TAG" HEAD 2>/dev/null || true)" != "v$MPV_VERSION" ]; then
-    git -C "$deps/mpv" fetch --deepen="$MPV_HISTORY_DEPTH" origin "$MPV_COMMIT"
+    # Fetch an absolute depth from the selected commit. --deepen can leave a
+    # detached exact-commit checkout on a separate shallow boundary, so the
+    # release tag remains unreachable even when enough objects were fetched.
+    git -C "$deps/mpv" fetch --depth="$MPV_HISTORY_DEPTH" origin "$MPV_COMMIT"
     git -C "$deps/mpv" fetch --depth=1 origin \
       "refs/tags/$MPV_DESCRIBE_TAG:refs/tags/$MPV_DESCRIBE_TAG"
   fi
   [ "$(git -C "$deps/mpv" describe --abbrev=9 --tags --match "$MPV_DESCRIBE_TAG" HEAD)" = "v$MPV_VERSION" ] || die "MPV describe version mismatch"
+  # Stock MPV only maps MediaCodec AImageReader frames through EGL/OpenGL.
+  # Apply the pinned FongMi interop commit so Android AHardwareBuffer frames
+  # can stay on the GPU when gpu-next uses the Vulkan backend.
+  if ! git -C "$deps/mpv" cat-file -e "$MPV_VULKAN_MEDIACODEC_COMMIT^{commit}" 2>/dev/null; then
+    git -C "$deps/mpv" fetch --depth 2 "$MPV_VULKAN_MEDIACODEC_REPO" \
+      "$MPV_VULKAN_MEDIACODEC_COMMIT"
+  fi
+  git -C "$deps/mpv" cherry-pick --no-commit "$MPV_VULKAN_MEDIACODEC_COMMIT"
+  [ -f "$deps/mpv/video/out/hwdec/hwdec_aimagereader_vk.c" ] || \
+    die "MPV Vulkan MediaCodec interop patch did not add its Vulkan mapper"
   [ -f "$MPV_DISC_PATCH" ] || die "missing MPV disc controls patch: $MPV_DISC_PATCH"
   git -C "$deps/mpv" apply --check "$MPV_DISC_PATCH"
   git -C "$deps/mpv" apply "$MPV_DISC_PATCH"
@@ -411,6 +424,7 @@ verify_directory() {
   grep -Fq "mpv v$MPV_VERSION" <<<"$version_strings" || die "unexpected MPV version in $directory/libmpv.so"
   grep -Fq "v$LIBPLACEBO_VERSION" <<<"$version_strings" || die "unexpected libplacebo version in $directory/libmpv.so"
   grep -Fq "WebHTV stream_cb controls enabled" <<<"$version_strings" || die "MPV stream_cb disc controls patch missing from $directory/libmpv.so"
+  grep -Fq "Using Vulkan AHardwareBuffer GPU conversion" <<<"$version_strings" || die "MPV Vulkan MediaCodec interop missing from $directory/libmpv.so"
   if [ "$ENABLE_LIBCURL" -eq 1 ]; then
     grep -Fq "libcurl/$CURL_VERSION" <<<"$version_strings" || die "libcurl $CURL_VERSION missing from $directory/libmpv.so"
     grep -Fq "HTTP2" <<<"$version_strings" || die "HTTP/2 support missing from $directory/libmpv.so"

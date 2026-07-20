@@ -41,6 +41,9 @@ public class KaraokeStatusView extends LinearLayout {
     private KaraokeScoreSnapshot currentSnapshot;
     private boolean spectrumMode;
     private boolean playing;
+    private boolean positionSyncActive;
+    private boolean lastPositionPlaying;
+    private long lastPositionMs = Long.MIN_VALUE;
 
     public KaraokeStatusView(Context context) {
         this(context, null);
@@ -74,11 +77,24 @@ public class KaraokeStatusView extends LinearLayout {
     }
 
     public void syncPosition(long positionMs, boolean playing) {
+        if (getVisibility() != VISIBLE || !isShown()) {
+            positionSyncActive = false;
+            return;
+        }
+        long position = Math.max(0, positionMs);
+        if (!positionSyncActive) {
+            positionSyncActive = true;
+            lastPositionMs = Long.MIN_VALUE;
+        }
+        if (lastPositionMs == position && lastPositionPlaying == playing) return;
+        lastPositionMs = position;
+        lastPositionPlaying = playing;
         setPlaying(playing);
-        timeline.syncPosition(positionMs);
+        timeline.syncPosition(position);
     }
 
     public void setState(KaraokeStatus status, KaraokeTrack track, KaraokePitchSample sample, KaraokeScoreSnapshot snapshot) {
+        if (currentTrack != track) lastPositionMs = Long.MIN_VALUE;
         currentStatus = status == null ? KaraokeStatus.INACTIVE : status;
         currentTrack = track;
         currentSample = sample;

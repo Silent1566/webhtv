@@ -334,7 +334,7 @@ public class OneKeySyncDialog extends BaseBottomSheetDialog implements SyncDevic
         prepareUpdate = 0;
         Task.execute(() -> {
             try {
-                SyncFiles.Archive archive = toRemote && options.isSpider() ? SyncFiles.createArchive(SyncFiles.getPaths(Setting.getSyncPaths()), () -> syncing, this::onPrepareProgress) : null;
+                SyncFiles.Archive archive = toRemote && SyncFiles.hasPaths(options) ? SyncFiles.createArchive(SyncFiles.getPaths(options), () -> syncing, this::onPrepareProgress) : null;
                 LoginStateSync.Archive loginArchive = toRemote && options.isLoginState() ? LoginStateSync.createArchive() : null;
                 RequestBody body = buildBody(options, archive, loginArchive);
                 if (!syncing) {

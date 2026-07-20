@@ -242,7 +242,7 @@ public class Action implements Process {
     private boolean sendBackup(Device device, Map<String, String> params) {
         try {
             SyncOptions options = SyncOptions.objectFrom(params.get("options"));
-            SyncFiles.Archive archive = options.isSpider() ? SyncFiles.createArchive(SyncFiles.getPaths(options.getPaths())) : null;
+            SyncFiles.Archive archive = SyncFiles.hasPaths(options) ? SyncFiles.createArchive(SyncFiles.getPaths(options)) : null;
             LoginStateSync.Archive loginArchive = options.isLoginState() ? LoginStateSync.createArchive() : null;
             try {
                 return post(device, "backup", getBackupBody(options, archive, loginArchive));
@@ -276,7 +276,7 @@ public class Action implements Process {
     private void syncBackup(Map<String, String> params, Map<String, String> files, boolean force) {
         Backup backup = Backup.objectFrom(params.get("backup"));
         SyncOptions options = SyncOptions.objectFrom(params.get("options"));
-        if (options.isSpider() && files.containsKey(SyncFiles.PART_NAME)) {
+        if (SyncFiles.hasPaths(options) && files.containsKey(SyncFiles.PART_NAME)) {
             File archive = new File(files.get(SyncFiles.PART_NAME));
             try {
                 SyncFiles.restoreArchive(archive);

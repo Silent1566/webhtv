@@ -22,6 +22,7 @@ import com.fongmi.android.tv.db.dao.LiveDao;
 import com.fongmi.android.tv.db.dao.SiteDao;
 import com.fongmi.android.tv.db.dao.TrackDao;
 import com.fongmi.android.tv.utils.AppBackup;
+import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.Task;
 import com.github.catvod.crawler.SpiderDebug;
 import com.github.catvod.utils.Path;
@@ -57,8 +58,11 @@ public abstract class AppDatabase extends RoomDatabase {
         Task.execute(() -> {
             File file = new File(Path.tv(), AppBackup.fileName());
             try {
-                AppBackup.create(file, progress);
-                App.post(callback::success);
+                AppBackup.CreateResult result = AppBackup.create(file, progress);
+                App.post(() -> {
+                    callback.success();
+                    if (result.hasWarning()) Notify.show(result.warning);
+                });
                 cleanOld();
             } catch (Exception e) {
                 SpiderDebug.log("backup", "local create failed error=%s", e.getMessage());
@@ -74,8 +78,11 @@ public abstract class AppDatabase extends RoomDatabase {
     public static void restore(File file, com.fongmi.android.tv.impl.Callback callback, AppBackup.Progress progress) {
         Task.execute(() -> {
             try {
-                AppBackup.restore(file, progress);
-                App.post(callback::success);
+                AppBackup.RestoreResult result = AppBackup.restore(file, progress);
+                App.post(() -> {
+                    callback.success();
+                    if (result.hasWarning()) Notify.show(result.warning);
+                });
             } catch (Exception e) {
                 SpiderDebug.log("backup", "local restore failed file=%s error=%s", file == null ? "" : file.getAbsolutePath(), e.getMessage());
                 App.post(callback::error);

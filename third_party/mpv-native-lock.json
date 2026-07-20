@@ -81,6 +81,11 @@
       "version": "0.41.0-878-g94335ab87",
       "describe_tag": "v0.41.0",
       "history_depth": 1200
+    },
+    "mpv-vulkan-mediacodec": {
+      "repo": "https://github.com/FongMi/mpv.git",
+      "commit": "fd679c812149fe1f3e246897b1015ae109da7c74",
+      "version": "Vulkan AHardwareBuffer MediaCodec interop"
     }
   }
 }

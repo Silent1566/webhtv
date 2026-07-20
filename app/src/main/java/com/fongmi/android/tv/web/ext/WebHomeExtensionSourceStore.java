@@ -3,6 +3,7 @@ package com.fongmi.android.tv.web.ext;
 import android.text.TextUtils;
 
 import com.fongmi.android.tv.App;
+import com.fongmi.android.tv.bean.Backup;
 import com.github.catvod.utils.Json;
 import com.github.catvod.utils.Prefers;
 import com.github.catvod.utils.Util;
@@ -17,7 +18,7 @@ import java.util.List;
 
 public class WebHomeExtensionSourceStore {
 
-    private static final String KEY = "web_home_extension_user_sources";
+    private static final String KEY = Backup.PREF_WEB_HOME_EXTENSION_SOURCES;
     public static final String SOURCE_TYPE_FILE = "file";
     public static final String SOURCE_TYPE_LINK = "link";
     public static final String SOURCE_TYPE_CODE = "code";

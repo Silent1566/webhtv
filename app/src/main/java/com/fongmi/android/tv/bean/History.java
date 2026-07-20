@@ -454,7 +454,7 @@ public class History implements Diffable<History> {
     }
 
     public String getVodId() {
-        String[] parts = Objects.toString(getKey(), "").split(AppDatabase.SYMBOL, 2);
+        String[] parts = Objects.toString(getKey(), "").split(AppDatabase.SYMBOL);
         return parts.length > 1 ? parts[1] : "";
     }
 

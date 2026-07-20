@@ -165,6 +165,7 @@ public class PlaybackPerformanceSetting {
     }
 
     public static void applyOriginal() {
+        KernelPerformanceSetting.applyOriginal(PlayerSetting.getPlayer());
         put(KEY_CODEC_ASYNC_QUEUEING, false);
         put(KEY_DYNAMIC_SCHEDULING, false);
         put(KEY_VIDEO_DURATION_PROGRESS, false);
@@ -179,18 +180,6 @@ public class PlaybackPerformanceSetting {
         put(KEY_BANDWIDTH_METER, false);
         Prefers.put("render", PlayerSetting.RENDER_SURFACE);
         Prefers.put("tunnel", false);
-        Prefers.put("buffer", 1);
-        Prefers.put("buffer_bytes", 0);
-        Prefers.put("back_buffer", 0);
-        Prefers.put("play_cache", 0);
-        Prefers.put("preload", false);
-        Prefers.put("preload_threads", 1);
-        Prefers.put("preload_size", 128);
-        Prefers.put("preload_time", 120);
-        Prefers.put("audio_pass_through", true);
-        Prefers.put("prefer_aac", false);
-        Prefers.put("audio_prefer", false);
-        Prefers.put("video_prefer", false);
         Prefers.put("exo_4k_compat", false);
         putCurrentProfile(PROFILE_ORIGINAL);
     }

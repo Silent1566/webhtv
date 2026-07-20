@@ -2,6 +2,7 @@ package com.fongmi.android.tv.utils;
 
 import android.text.TextUtils;
 
+import com.fongmi.android.tv.bean.SyncOptions;
 import com.github.catvod.crawler.SpiderDebug;
 import com.github.catvod.utils.Path;
 
@@ -23,6 +24,7 @@ import java.util.zip.ZipOutputStream;
 public class SyncFiles {
 
     public static final String DEFAULT_PATHS = "TV\nTVBox\nTVData";
+    public static final String CUSTOM_CSP_PATH = "TV/CustomCsp";
     public static final String PART_NAME = "syncFiles";
 
     private static final int BUFFER_SIZE = 128 * 1024;
@@ -39,6 +41,32 @@ public class SyncFiles {
 
     public static String getPathsText(List<String> paths) {
         return TextUtils.join("\n", paths);
+    }
+
+    public static List<String> getPaths(SyncOptions options) {
+        List<String> result = new ArrayList<>();
+        if (options == null) return result;
+        if (options.isSpider()) for (String path : getPaths(options.getPaths())) addPath(result, path);
+        if (options.isConfig() || options.isWebHome()) addPath(result, CUSTOM_CSP_PATH);
+        return result;
+    }
+
+    public static boolean hasPaths(SyncOptions options) {
+        return !getPaths(options).isEmpty();
+    }
+
+    private static void addPath(List<String> paths, String path) {
+        String candidate = normalizeRelative(path);
+        if (candidate.isEmpty()) return;
+        for (String existing : paths) if (covers(existing, candidate)) return;
+        paths.removeIf(existing -> covers(candidate, existing));
+        paths.add(candidate);
+    }
+
+    private static boolean covers(String parent, String child) {
+        String p = normalizeRelative(parent);
+        String c = normalizeRelative(child);
+        return !p.isEmpty() && (p.equals(c) || c.startsWith(p + "/"));
     }
 
     public static Archive createArchive(List<String> paths) throws IOException {
@@ -110,6 +138,39 @@ public class SyncFiles {
         return count;
     }
 
+    public static int countArchiveFiles(File archive, String path) throws IOException {
+        if (archive == null || !archive.isFile() || archive.length() <= 0) return 0;
+        String target = normalize(path);
+        int count = 0;
+        try (ZipInputStream zis = new ZipInputStream(new BufferedInputStream(new FileInputStream(archive), BUFFER_SIZE))) {
+            ZipEntry entry;
+            while ((entry = zis.getNextEntry()) != null) {
+                String name = normalize(entry.getName());
+                if (!entry.isDirectory() && covers(target, name)) count++;
+                zis.closeEntry();
+            }
+        }
+        return count;
+    }
+
+    public static int countFiles(String path) throws IOException {
+        File root = Path.root().getCanonicalFile();
+        File target = new File(root, normalize(path)).getCanonicalFile();
+        if (!inside(root, target)) return 0;
+        return countFiles(root, target);
+    }
+
+    private static int countFiles(File root, File file) throws IOException {
+        File canonical = file.getCanonicalFile();
+        if (!inside(root, canonical) || !canonical.exists()) return 0;
+        String name = root.toPath().relativize(canonical.toPath()).toString().replace(File.separatorChar, '/');
+        if (canonical.isFile()) return skip(name) ? 0 : 1;
+        int count = 0;
+        File[] files = canonical.listFiles();
+        if (files != null) for (File child : files) count += countFiles(root, child);
+        return count;
+    }
+
     private static Stats add(File root, File file, ZipOutputStream zos, byte[] buffer, BooleanSupplier running, Progress progress, Stats total) throws IOException {
         checkRunning(running);
         File canonical = file.getCanonicalFile();
@@ -159,6 +220,12 @@ public class SyncFiles {
         value = value.replace("file://", "");
         if (value.startsWith(root)) value = value.substring(root.length());
         if (value.startsWith("/sdcard/")) value = value.substring("/sdcard/".length());
+        return normalizeRelative(value);
+    }
+
+    private static String normalizeRelative(String path) {
+        if (path == null) return "";
+        String value = path.trim().replace('\\', '/');
         while (value.startsWith("/")) value = value.substring(1);
         while (value.endsWith("/")) value = value.substring(0, value.length() - 1);
         if (value.isEmpty() || ".".equals(value) || value.contains("../") || value.contains("/..") || value.equals("..")) return "";

@@ -1838,7 +1838,7 @@ public class GitCloudDialog extends BaseAlertDialog {
                 downloadRemoteFile(backup, archive);
                 updateProgress("恢复 " + backup.name, 100, true);
                 AppBackup.RestoreResult result = AppBackup.restore(archive, (stage, percent, bytes, total) -> updateProgress(progressText(stage, bytes, total), percent, percent <= 0));
-                App.post(() -> Notify.show("恢复完成：" + result.fileCount() + " 个文件及完整应用数据"));
+                App.post(() -> Notify.show(result.hasWarning() ? "恢复完成，但存在缺失：" + result.warning : "恢复完成：" + result.fileCount() + " 个文件及完整应用数据"));
             } finally {
                 Path.clear(archive);
             }
