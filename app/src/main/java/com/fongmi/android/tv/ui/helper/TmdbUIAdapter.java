@@ -30,6 +30,10 @@ import com.fongmi.android.tv.utils.TmdbDetailCache;
 import com.fongmi.android.tv.utils.TmdbImageSelector;
 import com.fongmi.android.tv.utils.Util;
 import com.github.catvod.crawler.SpiderDebug;
+import com.google.common.util.concurrent.FutureCallback;
+import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.MoreExecutors;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -39,6 +43,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.concurrent.CancellationException;
 
 /**
  * TMDB 数据适配器
@@ -61,6 +66,8 @@ public class TmdbUIAdapter {
     private final TmdbMatcher tmdbMatcher;
     private final TmdbConfig tmdbConfig;
     private final Runnable pendingVodRefresh = this::dispatchPendingVodRefresh;
+    private final TmdbDetailPrefetch detailPrefetch;
+    private ListenableFuture<TmdbDetailPrefetch.Result> activePrefetch;
 
     private TmdbItem tmdbItem;
     private JsonObject tmdbDetail;
@@ -100,6 +107,7 @@ public class TmdbUIAdapter {
         this.tmdbService = new TmdbService();
         this.tmdbConfig = TmdbConfig.objectFrom(Setting.getTmdbConfig());
         this.tmdbMatcher = new TmdbMatcher(tmdbService, tmdbConfig);
+        this.detailPrefetch = new TmdbDetailPrefetch(Task.executor());
     }
 
     public boolean isReady() {
@@ -153,19 +161,117 @@ public class TmdbUIAdapter {
     }
 
     /**
+     * Invalidate callbacks from the previous detail page before starting a new crawler request.
+     */
+    public void beginDetailRequest() {
+        resetLoadState();
+        cancelActivePrefetch();
+        detailPrefetch.cancel();
+    }
+
+    public void release() {
+        beginDetailRequest();
+    }
+
+    /**
+     * Prefetch core TMDB detail for a known item without mutating or publishing a Vod.
+     */
+    public void prefetch(TmdbItem item) {
+        if (item == null || !isReady()) return;
+        long start = System.currentTimeMillis();
+        TmdbDetailPrefetch.StartResult started = detailPrefetch.start(item, () -> {
+            JsonObject detail = tmdbService.detail(item, tmdbConfig, false);
+            TmdbItem loadedItem = normalizeLoadedItem(item, detail);
+            List<TmdbPerson> cast = tmdbService.cast(detail, tmdbConfig);
+            SpiderDebug.log("tmdb-prefetch", "finish cost=%dms media=%s id=%d", System.currentTimeMillis() - start, loadedItem.getMediaType(), loadedItem.getTmdbId());
+            return new TmdbDetailPrefetch.Result(loadedItem, detail, cast);
+        });
+        if (started == null) {
+            SpiderDebug.log("tmdb-prefetch", "skip invalid media=%s id=%d", item.getMediaType(), item.getTmdbId());
+            return;
+        }
+        SpiderDebug.log("tmdb-prefetch", "%s media=%s id=%d", prefetchStateText(started.getState()), item.getMediaType(), item.getTmdbId());
+        if (started.getState() != TmdbDetailPrefetch.StartState.REUSED) logPrefetchFailure(started.getFuture(), item, start);
+    }
+
+    private String prefetchStateText(TmdbDetailPrefetch.StartState state) {
+        if (state == TmdbDetailPrefetch.StartState.REUSED) return "reuse";
+        if (state == TmdbDetailPrefetch.StartState.REPLACED) return "replace";
+        return "start";
+    }
+
+    private void logPrefetchFailure(ListenableFuture<TmdbDetailPrefetch.Result> future, TmdbItem item, long start) {
+        Futures.addCallback(future, new FutureCallback<>() {
+            @Override
+            public void onSuccess(TmdbDetailPrefetch.Result result) {
+            }
+
+            @Override
+            public void onFailure(Throwable error) {
+                String state = error instanceof CancellationException ? "cancelled" : "failed";
+                SpiderDebug.log("tmdb-prefetch", "%s cost=%dms media=%s id=%d error=%s", state, System.currentTimeMillis() - start, item.getMediaType(), item.getTmdbId(), error == null ? "unknown" : error.getMessage());
+            }
+        }, MoreExecutors.directExecutor());
+    }
+
+    /**
      * 直接指定 TMDB 条目并加载详情。
      */
     public void load(TmdbItem item, Vod vod) {
         if (item == null) return;
         int generation = resetLoadState();
+        cancelActivePrefetch();
         this.tmdbItem = item;
         saveMatch(vod, item);
         TmdbDetailCache.Entry cached = takeTmdbDetailCache(item);
         if (cached != null) {
+            detailPrefetch.cancel();
             Task.execute(() -> loadDetailSync(vod, cached.getItem(), cached.getDetail(), cached.getCast(), generation));
             return;
         }
+        ListenableFuture<TmdbDetailPrefetch.Result> prefetched = detailPrefetch.take(item);
+        if (prefetched != null) {
+            attachPrefetch(prefetched, vod, generation);
+            return;
+        }
         loadDetail(vod, item, generation);
+    }
+
+    private void attachPrefetch(ListenableFuture<TmdbDetailPrefetch.Result> prefetched, Vod vod, int generation) {
+        setActivePrefetch(prefetched);
+        SpiderDebug.log("tmdb-prefetch", "attach state=%s", prefetched.isDone() ? "done" : "running");
+        Futures.addCallback(prefetched, new FutureCallback<>() {
+            @Override
+            public void onSuccess(TmdbDetailPrefetch.Result result) {
+                clearActivePrefetch(prefetched);
+                if (result == null || !isCurrentGeneration(generation)) return;
+                Task.execute(() -> loadDetailSync(vod, result.getItem(), result.getDetail(), result.getCast(), generation));
+            }
+
+            @Override
+            public void onFailure(Throwable error) {
+                clearActivePrefetch(prefetched);
+                if (!isCurrentGeneration(generation)) return;
+                notifyLoadComplete(vod, generation);
+            }
+        }, MoreExecutors.directExecutor());
+    }
+
+    private synchronized void setActivePrefetch(ListenableFuture<TmdbDetailPrefetch.Result> future) {
+        activePrefetch = future;
+    }
+
+    private synchronized void clearActivePrefetch(ListenableFuture<TmdbDetailPrefetch.Result> expected) {
+        if (activePrefetch == expected) activePrefetch = null;
+    }
+
+    private void cancelActivePrefetch() {
+        ListenableFuture<TmdbDetailPrefetch.Result> future;
+        synchronized (this) {
+            future = activePrefetch;
+            activePrefetch = null;
+        }
+        if (future != null) future.cancel(true);
     }
 
     /**
@@ -178,6 +284,8 @@ public class TmdbUIAdapter {
             return;
         }
         int generation = resetLoadState();
+        cancelActivePrefetch();
+        detailPrefetch.cancel();
         this.tmdbItem = item;
         saveMatch(vod, item);
         Task.execute(() -> loadDetailSync(vod, cached.getItem(), cached.getDetail(), cached.getCast(), generation));
@@ -195,6 +303,8 @@ public class TmdbUIAdapter {
      */
     public void autoMatch(String videoName, Vod vod) {
         int generation = resetLoadState();
+        cancelActivePrefetch();
+        detailPrefetch.cancel();
         if (!isReady()) {
             SpiderDebug.log("tmdb", "skip auto match: config not ready");
             notifyLoadComplete(vod, generation);

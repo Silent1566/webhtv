@@ -7,6 +7,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class TmdbDetailActivityLayoutTest {
@@ -397,12 +398,14 @@ public class TmdbDetailActivityLayoutTest {
     public void mobileFusionDetailKeepsInlinePlayerActionsInsideOverlay() throws Exception {
         Path layoutPath = findMainResPath().resolve(Path.of("layout", "activity_tmdb_detail.xml"));
         String layout = new String(Files.readAllBytes(layoutPath), StandardCharsets.UTF_8);
-        int player = layout.indexOf("android:id=\"@+id/playerPanel\"");
+        int playerSpacer = layout.indexOf("android:id=\"@+id/playerPanelSpacer\"");
         int dock = layout.indexOf("android:id=\"@+id/mobileFusionPlayerActionDock\"");
         int fusionActions = layout.indexOf("android:id=\"@+id/fusionActions\"");
 
         assertTrue("mobile fusion detail may keep a hidden legacy action dock for binding compatibility", dock >= 0);
-        assertTrue("mobile fusion player action dock must remain hidden between player and detail actions", player < dock && dock < fusionActions);
+        assertTrue("playerPanelSpacer (reserves inline player space in pageContent) must appear before action dock",
+                playerSpacer >= 0 && playerSpacer < dock);
+        assertTrue("mobile fusion player action dock must remain hidden between player spacer and detail actions", playerSpacer < dock && dock < fusionActions);
 
         Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
@@ -1738,50 +1741,16 @@ public class TmdbDetailActivityLayoutTest {
                         && restoreBody.contains("if (surface != null) surface.requestLayout();")
                         && restoreBody.contains("binding.danmaku.requestLayout();")
                         && restoreBody.contains("binding.scroll.requestLayout();"));
-        assertTrue("embedded player restore must invalidate stale fullscreen measurements on the whole detail hierarchy",
-                activity.contains("private void requestEmbeddedInlinePlayerLayout(ViewGroup parent)")
-                        && activity.contains("binding.playerPanel.forceLayout();")
-                        && activity.contains("binding.exo.forceLayout();")
-                        && activity.contains("binding.danmaku.forceLayout();")
-                        && activity.contains("parent.forceLayout();")
-                        && activity.contains("parent.requestLayout();")
-                        && activity.contains("binding.pageContent.forceLayout();")
-                        && activity.contains("binding.pageContent.requestLayout();")
-                        && activity.contains("binding.scroll.forceLayout();")
-                        && activity.contains("binding.scroll.requestLayout();")
-                        && activity.contains("binding.root.requestLayout();"));
-        assertTrue("embedded player restore must synchronously remeasure the detail content when Android keeps the stale fullscreen layout",
-                activity.contains("private void layoutEmbeddedInlinePageContent(ViewGroup parent)")
-                        && activity.contains("if (parent != binding.pageContent || binding.scroll.getWidth() <= 0) return;")
-                        && activity.contains("View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY)")
-                        && activity.contains("View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)")
-                        && activity.contains("binding.pageContent.measure(widthSpec, heightSpec);")
-                        && activity.contains("int height = Math.max(binding.pageContent.getMeasuredHeight(), binding.scroll.getHeight());")
-                        && activity.contains("binding.pageContent.layout(0, 0, width, height);"));
-        assertTrue("fullscreen/PiP entry must keep a defensive copy of embedded layout params",
-                activity.contains("private ViewGroup.LayoutParams copyInlinePlayerLayoutParams(ViewGroup.LayoutParams params)")
-                        && activity.contains("private ViewGroup.LayoutParams embeddedInlinePlayerLayoutParams(ViewGroup parent, ViewGroup.LayoutParams fallback)")
-                        && activity.contains("private void restoreEmbeddedInlinePlayerLayout()")
-                        && activity.contains("private void restoreInlineDetailScrollAfterOverlay()")
-                        && activity.contains("if (binding == null || !isInlinePlayerMode()) return;")
-                        && activity.contains("new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ResUtil.dp2px(252))")
-                        && activity.contains("params.setMargins(ResUtil.dp2px(16), ResUtil.dp2px(isFusionMode() ? 22 : 14), ResUtil.dp2px(16), ResUtil.dp2px(isFusionMode() ? 20 : 16));")
-                        && activity.contains("params.height = ResUtil.dp2px(252);")
-                        && activity.contains("binding.playerPanel.setLayoutParams(params);")
-                        && activity.contains("binding.scroll.scrollTo(0, 0);")
-                        && enterFullscreenBody.contains("playerLayoutParams = copyInlinePlayerLayoutParams(binding.playerPanel.getLayoutParams());")
-                        && enterPiPBody.contains("inlinePiPLayoutParams = copyInlinePlayerLayoutParams(binding.playerPanel.getLayoutParams());"));
-        assertTrue("fullscreen exit should reuse the embedded player restore path after reattaching the shared player panel",
-                fullscreenBody.contains("playerParent.addView(binding.playerPanel, index, embeddedInlinePlayerLayoutParams(playerParent, playerLayoutParams));")
-                        && fullscreenBody.contains("binding.playerPanel.setLayoutParams(embeddedInlinePlayerLayoutParams(playerParent, playerLayoutParams));")
+        assertTrue("fullscreen exit calls restoreInlinePlayerPanelAfterOverlay to reset surface sizing and theme without reparent",
+                fullscreenBody.contains("applyInlinePlayerEmbeddedLayout();")
                         && fullscreenBody.contains("resetInlineShortDramaMode();")
                         && fullscreenBody.contains("restoreInlinePlayerPanelAfterOverlay();")
                         && !fullscreenBody.contains("closeDetailFullscreenPlayer();")
-                        && fullscreenBody.contains("scheduleInlinePlayerPanelRestoreAfterOverlay();")
-                        && activity.contains("private void scheduleInlinePlayerPanelRestoreAfterOverlay()")
-                        && activity.contains("binding.playerPanel.post(() -> {")
-                        && activity.contains("binding.root.postDelayed(() -> {")
-                        && activity.contains("}, 180);"));
+                        && !fullscreenBody.contains("playerParent.addView(binding.playerPanel")
+                        && !fullscreenBody.contains("binding.root.addView(binding.playerPanel"));
+        assertTrue("PiP exit calls restoreInlinePlayerPanelAfterOverlay without reparent",
+                pipBody.contains("restoreInlinePlayerPanelAfterOverlay();")
+                        && !pipBody.contains("inlinePiPParent.addView(binding.playerPanel"));
         assertTrue("detail-player fullscreen Back must close playback back to the detail page on TV and mobile, while fusion keeps embedded exit",
                 backFromFullscreenBody.contains("if (isPlayerMode())")
                         && backFromFullscreenBody.indexOf("exitInlineFullscreen();") < backFromFullscreenBody.indexOf("closeDetailFullscreenPlayer();")
@@ -1791,10 +1760,6 @@ public class TmdbDetailActivityLayoutTest {
                         && !backFromFullscreenBody.contains("Setting.isPlayBackToDetail()")
                         && focusBody.contains("if (!isInlinePlayerMode()) return;")
                         && !focusBody.contains("if (!isFusionMode()) return;"));
-        assertTrue("PiP layout exit should reuse the same embedded player restore path",
-                pipBody.contains("inlinePiPParent.addView(binding.playerPanel, index, embeddedInlinePlayerLayoutParams(inlinePiPParent, inlinePiPLayoutParams));")
-                        && pipBody.contains("binding.playerPanel.setLayoutParams(embeddedInlinePlayerLayoutParams(inlinePiPParent, inlinePiPLayoutParams));")
-                        && pipBody.contains("restoreInlinePlayerPanelAfterOverlay();"));
         assertTrue("leanback fullscreen Back should hide visible controls before exiting fullscreen",
                 keyBody.indexOf("KeyUtil.isBackKey(event) && Util.isLeanback() && inlineFullscreen") >= 0
                         && keyBody.indexOf("KeyUtil.isBackKey(event) && isInlineControlsVisible()") < keyBody.indexOf("KeyUtil.isBackKey(event) && Util.isLeanback() && inlineFullscreen")
@@ -1805,61 +1770,118 @@ public class TmdbDetailActivityLayoutTest {
     }
 
     @Test
-    public void inlineFullscreenRebindsVideoSurfaceAfterPlayerPanelReparent() throws Exception {
-        Path activityPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
-        Path playbackPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "PlaybackActivity.java"));
-        String activity = new String(Files.readAllBytes(activityPath), StandardCharsets.UTF_8).replace("\r\n", "\n");
-        String playback = new String(Files.readAllBytes(playbackPath), StandardCharsets.UTF_8).replace("\r\n", "\n");
+    public void inlinePlayerScaleSurvivesPlayerCoreRebuild() throws Exception {
+        String activity = readJava("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java");
+        int setScale = activity.indexOf("private void setInlineScale(int scale)");
+        int previewScale = activity.indexOf("private void setInlinePreviewScale(int scale)", setScale);
 
-        int helper = playback.indexOf("protected void reattachVideoSurfaceAfterReparent()");
+        assertTrue("TmdbDetailActivity is missing setInlineScale", setScale >= 0);
+        assertTrue("TmdbDetailActivity is missing setInlinePreviewScale", previewScale > setScale);
+
+        String setScaleBody = activity.substring(setScale, previewScale);
+        assertTrue("inline scale must update PlaybackActivity's requested resize mode so a player-core rebuild restores the same style",
+                setScaleBody.contains("applyResizeMode(scale);"));
+        assertFalse("inline scale must not bypass PlaybackActivity's resize-mode state",
+                setScaleBody.contains("binding.exo.setResizeMode(scale);"));
+    }
+
+    @Test
+    public void inlinePlayerPanelStaysInRootWithoutReparent() throws Exception {
+        Path activityPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
+        String activity = new String(Files.readAllBytes(activityPath), StandardCharsets.UTF_8).replace("\r\n", "\n");
+
         int enter = activity.indexOf("private void enterInlineFullscreen()");
         int exit = activity.indexOf("private void exitInlineFullscreen()");
-        int exitPiP = activity.indexOf("private void enterInlinePiPLayout()", exit);
+        int sync = activity.indexOf("private void syncInlinePlayerToSpacer()");
+        int applyEmbedded = activity.indexOf("private void applyInlinePlayerEmbeddedLayout()");
+        int applyFullscreen = activity.indexOf("private void applyInlinePlayerFullscreenLayout()");
 
-        assertTrue(playbackPath + " is missing the video surface reattach helper", helper >= 0);
-        String helperBody = playback.substring(helper, playback.indexOf("protected void setRender()", helper));
-        int showControls = activity.indexOf("private void showInlineControls(boolean show, boolean focus)");
-        String enterBody = activity.substring(enter, activity.indexOf("private boolean shouldShowDetailFullscreenControlsOnReady()", enter));
-        String exitBody = activity.substring(exit, exitPiP);
-        String showControlsBody = activity.substring(showControls, activity.indexOf("private void hideInlineControls()", showControls));
-        assertTrue("surface reattach must detach the stale output and bind again after the reparent layout pass",
-                helperBody.contains("detachSurface();")
-                        && helperBody.contains("view.post(() -> {")
-                        && helperBody.contains("attachSurface(false);"));
-        assertTrue("surface reattach must preserve the last frame and keep the Exo shutter transparent during the transition",
-                helperBody.contains("view.setKeepContentOnPlayerReset(true);")
-                        && helperBody.contains("hideVideoShutter();")
-                        && helperBody.contains("attachSurface(false);")
-                        && helperBody.contains("view.setKeepContentOnPlayerReset(false);"));
-        assertTrue("normal player attachment must retain the loading shutter while reparent attachment bypasses it",
-                playback.contains("private void attachSurface() {\n        attachSurface(true);\n    }")
-                        && playback.contains("private void attachSurface(boolean restoreExoShutter)")
-                        && playback.contains("if (restoreExoShutter) syncShutter(true);")
-                        && playback.contains("else hideVideoShutter();")
-                        && playback.contains("private void hideVideoShutter()")
-                        && playback.contains("getExoView().setShutterBackgroundColor(Color.TRANSPARENT);")
-                        && playback.contains("if (shutter != null) shutter.setVisibility(View.GONE);"));
-        assertTrue("mobile fullscreen transitions must cache and overlay the current video frame instead of exposing a rebuilding SurfaceView",
-                activity.contains("private void captureInlineTransitionFrame()")
-                        && activity.contains("PixelCopy.request(surfaceView, frame")
-                        && activity.contains("private void showInlineTransitionFrame()")
-                        && activity.contains("private void hideInlineTransitionFrame()")
-                        && showControlsBody.contains("captureInlineTransitionFrame();")
-                        && enterBody.contains("showInlineTransitionFrame();")
-                        && exitBody.contains("showInlineTransitionFrame();"));
-        assertTrue("the transition frame must clear on the first frame from the rebound surface with a timeout fallback",
-                playback.contains("public void onRenderedFirstFrame()")
-                        && playback.contains("onFirstFrameRendered();")
-                        && playback.contains("protected void onFirstFrameRendered()")
-                        && activity.contains("protected void onFirstFrameRendered()")
-                        && activity.contains("hideInlineTransitionFrame();")
-                        && activity.contains("postDelayed(inlineTransitionFrameTimeout, 1200);"));
-        assertTrue("fullscreen entry must rebind after adding the shared player panel to the root overlay",
-                enterBody.indexOf("binding.root.addView(binding.playerPanel, params);")
-                        < enterBody.indexOf("reattachVideoSurfaceAfterReparent();"));
-        assertTrue("fullscreen exit must rebind after restoring the shared player panel to its embedded parent",
-                exitBody.indexOf("playerParent.addView(binding.playerPanel, index, embeddedInlinePlayerLayoutParams(playerParent, playerLayoutParams));")
-                        < exitBody.indexOf("reattachVideoSurfaceAfterReparent();"));
+        assertTrue(activityPath + " is missing enterInlineFullscreen", enter >= 0);
+        assertTrue(activityPath + " is missing exitInlineFullscreen", exit >= 0);
+        assertTrue("playerPanel must stay in root — no reparent, no addView/removeView in fullscreen enter/exit",
+                !activity.contains("binding.root.addView(binding.playerPanel")
+                        && !activity.contains("binding.root.removeView(binding.playerPanel")
+                        && !activity.contains("playerParent.addView(binding.playerPanel"));
+        assertTrue("playerPanel must apply FrameLayout.LayoutParams (root-level) for both embedded and fullscreen modes",
+                applyEmbedded >= 0 && applyFullscreen >= 0
+                        && activity.contains("new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT"));
+        assertTrue("embedded mode must sync playerPanel.translationY to spacer position via scroll listener",
+                sync >= 0
+                        && activity.contains("binding.scroll.setOnScrollChangeListener")
+                        && activity.contains("syncInlinePlayerToSpacer()")
+                        && activity.contains("binding.playerPanelSpacer"));
+        String enterBody = activity.substring(enter, exit);
+        String exitBody = activity.substring(exit, activity.indexOf("private void enterInlinePiPLayout()", exit));
+        assertTrue("fullscreen enter must switch to fullscreen LayoutParams (铺满 root), not reparent",
+                enterBody.contains("applyInlinePlayerFullscreenLayout();")
+                        && !enterBody.contains("reattachVideoSurfaceAfterReparent"));
+        assertTrue("fullscreen exit must switch back to embedded LayoutParams (with translationY sync), not reparent",
+                exitBody.contains("applyInlinePlayerEmbeddedLayout();")
+                        && !exitBody.contains("reattachVideoSurfaceAfterReparent"));
+    }
+
+    @Test
+    public void mobileInlineFullscreenKeepsLiveVideoVisibleDuringLayoutChanges() throws Exception {
+        Path activityPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
+        String activity = new String(Files.readAllBytes(activityPath), StandardCharsets.UTF_8).replace("\r\n", "\n");
+
+        int enter = activity.indexOf("private void enterInlineFullscreen()");
+        int exit = activity.indexOf("private void exitInlineFullscreen()");
+        int exitEnd = activity.indexOf("private void enterInlinePiPLayout()", exit);
+
+        assertTrue(activityPath + " is missing enterInlineFullscreen", enter >= 0);
+        assertTrue(activityPath + " is missing exitInlineFullscreen", exit >= 0 && exitEnd > exit);
+        String enterBody = activity.substring(enter, exit);
+        String exitBody = activity.substring(exit, exitEnd);
+        assertTrue("layout-only fullscreen entry and exit must keep the live video visible instead of covering it with a cached frame",
+                !enterBody.contains("showInlineTransitionFrame();")
+                        && !exitBody.contains("showInlineTransitionFrame();")
+                        && !enterBody.contains("scheduleInlineTransitionFrameTimeout();")
+                        && !exitBody.contains("scheduleInlineTransitionFrameTimeout();"));
+        assertTrue("the root-resident player must not retain the obsolete PixelCopy transition-frame pipeline",
+                !activity.contains("captureInlineTransitionFrame()")
+                        && !activity.contains("PixelCopy.request(")
+                        && !activity.contains("inlineTransitionBitmap")
+                        && !activity.contains("inlineTransitionFrame"));
+    }
+
+    @Test
+    public void fusionPlayerSpacerOnlyAcceptsFocusOnLeanback() throws Exception {
+        String layout = readLayout("activity_tmdb_detail.xml");
+        String activity = readJava("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java");
+        String controller = readJava("com", "fongmi", "android", "tv", "ui", "detail", "FusionDetailController.java");
+
+        int spacerStart = layout.indexOf("android:id=\"@+id/playerPanelSpacer\"");
+        int spacerEnd = layout.indexOf("/>", spacerStart);
+        assertTrue("detail layout must contain playerPanelSpacer", spacerStart >= 0 && spacerEnd > spacerStart);
+        String spacerTag = layout.substring(spacerStart, spacerEnd);
+        assertTrue("transparent spacer must not be a mobile/touch focus target by default",
+                spacerTag.contains("android:focusable=\"false\"")
+                        && spacerTag.contains("android:focusableInTouchMode=\"false\""));
+        assertTrue("transparent spacer must be hidden from accessibility services",
+                spacerTag.contains("android:importantForAccessibility=\"no\""));
+
+        int setupStart = activity.indexOf("private void setupInlineFocusNavigation()");
+        int setupEnd = activity.indexOf("private void setupHorizontalFocusChain()", setupStart);
+        String setupBody = activity.substring(setupStart, setupEnd);
+        int mobileGuard = setupBody.indexOf("if (Util.isMobile()) return;");
+        int enableFocus = setupBody.indexOf("binding.playerPanelSpacer.setFocusable(true);");
+        int disableTouchFocus = setupBody.indexOf("binding.playerPanelSpacer.setFocusableInTouchMode(false);");
+        int focusBridge = setupBody.indexOf("binding.playerPanelSpacer.setOnFocusChangeListener");
+        assertTrue("spacer focus must be enabled only after the mobile guard",
+                mobileGuard >= 0 && enableFocus > mobileGuard);
+        assertTrue("TV spacer must remain outside touch-mode focus and then install the focus bridge",
+                disableTouchFocus > enableFocus && focusBridge > disableTouchFocus);
+        assertTrue("fusion mode must keep the spacer visible so it reserves player space",
+                controller.contains("binding.playerPanelSpacer.setVisibility(View.VISIBLE);"));
+    }
+
+    @Test
+    public void fusionFocusBridgeDoesNotShipTemporaryDebugLogs() throws Exception {
+        String activity = readJava("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java");
+
+        assertTrue("temporary TmdbDetailFocus logs must be removed before merge",
+                !activity.contains("TmdbDetailFocus"));
     }
 
     @Test
@@ -1921,6 +1943,60 @@ public class TmdbDetailActivityLayoutTest {
                 startBody.contains("inlinePlaybackEpisode = selectedEpisode;")
                         && startBody.contains("inlinePlaybackKey = getKeyText();")
                         && startBody.contains("inlinePlaybackFlag = selectedFlag == null ? \"\" : selectedFlag.getFlag();"));
+    }
+
+    @Test
+    public void inlinePlaybackSpeedUsesPersonalDefaultAndRestoresAfterHold() throws Exception {
+        String source = readJava("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java");
+        int speedEnd = source.indexOf("public void onSpeedEnd()");
+        int onBright = source.indexOf("public void onBright(int progress)", speedEnd);
+        int initHistory = source.indexOf("private void initHistory()");
+        int helper = source.indexOf("private float getInlinePlaybackSpeed()", initHistory);
+        int updatePlayLabel = source.indexOf("private void updatePlayLabel()", helper);
+        int start = source.indexOf("private void startInlinePlayer(Result result, long resumePosition)");
+        int searchDanmaku = source.indexOf("private void searchInlineDanmaku(Result result)", start);
+        int changeSpeed = source.indexOf("private void changeInlineSpeed()");
+        int setSpeed = source.indexOf("private void setInlineSpeed(float speed)", changeSpeed);
+        int resetSpeed = source.indexOf("private boolean resetInlineSpeed()", setSpeed);
+        int refreshPlayback = source.indexOf("private void refreshInlinePlayback()", resetSpeed);
+        int normalize = source.indexOf("private float normalizeInlineSpeed(float speed)");
+        int setText = source.indexOf("private void setInlineSpeedText(CharSequence text)", normalize);
+        int prepare = source.indexOf("protected void onPrepare()");
+        int resume = source.indexOf("private long getInlineResumePosition()", prepare);
+
+        assertTrue("native enhanced speed release handler must exist", speedEnd >= 0 && onBright > speedEnd);
+        assertTrue("native enhanced speed initialization helper must exist", initHistory >= 0 && helper > initHistory && updatePlayLabel > helper);
+        assertTrue("native enhanced startInlinePlayer must exist", start >= 0 && searchDanmaku > start);
+        assertTrue("native enhanced manual speed handlers must exist", changeSpeed >= 0 && setSpeed > changeSpeed && resetSpeed > setSpeed && refreshPlayback > resetSpeed);
+        assertTrue("native enhanced normalizeInlineSpeed must exist", normalize >= 0 && setText > normalize);
+        assertTrue("native enhanced onPrepare must exist", prepare >= 0 && resume > prepare);
+        String speedEndBody = source.substring(speedEnd, onBright);
+        String initBody = source.substring(initHistory, helper);
+        String helperBody = source.substring(helper, updatePlayLabel);
+        String startBody = source.substring(start, searchDanmaku);
+        String changeSpeedBody = source.substring(changeSpeed, setSpeed);
+        String resetSpeedBody = source.substring(resetSpeed, refreshPlayback);
+        String normalizeBody = source.substring(normalize, setText);
+        String prepareBody = source.substring(prepare, resume);
+
+        assertFalse("native enhanced startup must not create a per-show speed override",
+                initBody.contains("resetInitialPlaybackSpeed()"));
+        assertTrue("native enhanced helper must preserve explicit 1.0x and otherwise use the personal default",
+                helperBody.contains("history.getPlaybackSpeed(PlayerSetting.getDefaultSpeed())"));
+        assertTrue("native enhanced playback start must apply the resolved playback speed",
+                startBody.contains("setInlineSpeed(getInlinePlaybackSpeed());"));
+        assertTrue("native enhanced prepare must reapply the resolved playback speed",
+                prepareBody.contains("setInlineSpeed(getInlinePlaybackSpeed());"));
+        assertTrue("native enhanced long-press release must restore the resolved playback speed",
+                speedEndBody.contains("history == null ? inlineGestureSpeed : getInlinePlaybackSpeed()"));
+        assertTrue("native enhanced speed cycle must save a per-show override",
+                changeSpeedBody.contains("history.setUserSpeed(player().getSpeed())"));
+        assertTrue("native enhanced speed toggle must save a per-show override",
+                resetSpeedBody.contains("history.setUserSpeed(player().getSpeed())"));
+        assertTrue("native enhanced persistent speed toggle must use the current show's effective speed",
+                resetSpeedBody.contains("player().toggleSpeed(getInlinePlaybackSpeed())"));
+        assertTrue("native enhanced invalid speed fallback must use personal default speed",
+                normalizeBody.contains("PlayerSetting.getDefaultSpeed()"));
     }
 
     @Test

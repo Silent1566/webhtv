@@ -40,6 +40,8 @@ public class PlaybackProgressInput {
     public double progress;
     @SerializedName("speed")
     public float speed;
+    @SerializedName("speedOverride")
+    public Boolean speedOverride;
     @SerializedName("completed")
     public boolean completed;
     @SerializedName("updatedAt")

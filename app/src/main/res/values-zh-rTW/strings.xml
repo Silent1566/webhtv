@@ -566,6 +566,7 @@
         <item>總時長，單位毫秒。</item>
         <item>進度比例，範圍 0 到 1。</item>
         <item>播放倍速。</item>
+        <item>播放倍速是否明確覆蓋個人預設值。</item>
         <item>是否視為完播。</item>
         <item>目前集原始 URL，可能包含源站參數。</item>
         <item>目前集序號，可識別時返回。</item>
@@ -803,6 +804,7 @@
     <string name="restore_fail">還原失敗</string>
     <string name="backup_success">備份成功</string>
     <string name="backup_fail">備份失敗</string>
+    <string name="backup_permission_denied">需要儲存權限才能備份或恢復資料</string>
 
     <!-- Device Sync -->
     <string name="device_select">選擇設備</string>
@@ -881,6 +883,7 @@
     <string name="login_state_tree_title_count">%1$s · 已確認 %2$d · 待確認 %3$d</string>
     <string name="login_state_tree_expand">展開資料夾</string>
     <string name="login_state_tree_collapse">收起資料夾</string>
+    <string name="login_state_tree_truncated">目錄項目過多已限量，請直接選擇資料夾或縮小路徑</string>
     <string name="login_state_state_selected">已選</string>
     <string name="login_state_state_pending">待確認</string>
     <string name="login_state_state_has_pending">含待確認</string>
@@ -2014,9 +2017,11 @@
     <!-- Auto-generated missing translations -->
     <string name="live_no_epg">00:00 - 23:59 暫無節目信息</string>
     <string name="setting_home_vod_auto_load">默認加載點播</string>
+    <string name="setting_auto_backup">自動備份</string>
     <string name="setting_fullscreen_menu_key">全屏菜單鍵</string>
     <string name="setting_home_menu_key">首頁菜單鍵</string>
     <string name="setting_play_back_to_detail">播放返回詳情</string>
+    <string name="setting_play_speed">播放倍速</string>
     <string name="setting_home_history">首頁最近觀看</string>
     <string name="site_health_report_ad_blocked">廣告攔截 · %1$d 次</string>
     <string name="setting_custom_csp_sort">排序</string>

@@ -80,12 +80,44 @@ public class SearchResultLayoutTest {
     }
 
     @Test
+    public void personalSettingsExposePlaybackSpeedControlsOnTvAndMobile() throws Exception {
+        Path tvSourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "SettingPersonalActivity.java"));
+        String tvSource = read(tvSourcePath);
+        Path tvLayoutPath = findLeanbackResPath().resolve(Path.of("layout", "activity_setting_personal.xml"));
+        String tvLayout = read(tvLayoutPath);
+        Path mobileSourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "fragment", "SettingPersonalFragment.java"));
+        String mobileSource = read(mobileSourcePath);
+        Path mobileLayoutPath = findMobileResPath().resolve(Path.of("layout", "fragment_setting_personal.xml"));
+        String mobileLayout = read(mobileLayoutPath);
+
+        assertTrue("TV personal settings must include playback speed entry",
+                tvLayout.contains("android:id=\"@+id/playSpeed\""));
+        assertTrue("TV personal settings must open playback speed dialog",
+                tvSource.contains("mBinding.playSpeed.setOnClickListener(this::setPlaySpeed);"));
+        assertTrue("TV playback speed setting must persist the default speed",
+                tvSource.contains("PlayerSetting.putDefaultSpeed(value);"));
+        assertFalse("TV personal settings must not duplicate the existing long-press speed setting",
+                tvLayout.contains("@string/player_speed"));
+
+        assertTrue("Mobile personal settings must include playback speed entry",
+                mobileLayout.contains("android:id=\"@+id/playSpeed\""));
+        assertTrue("Mobile personal settings must open playback speed dialog",
+                mobileSource.contains("mBinding.playSpeed.setOnClickListener(this::setPlaySpeed);"));
+        assertTrue("Mobile playback speed setting must persist the default speed",
+                mobileSource.contains("PlayerSetting.putDefaultSpeed(value);"));
+        assertFalse("Mobile personal settings must not duplicate the existing long-press speed setting",
+                mobileLayout.contains("@string/player_speed"));
+    }
+
+    @Test
     public void traditionalChineseResourcesIncludeSearchLayoutOptions() throws Exception {
         Path stringsPath = findMainResPath().resolve(Path.of("values-zh-rTW", "strings.xml"));
         String strings = read(stringsPath);
 
         assertTrue("Traditional Chinese resources must include the search layout options",
                 strings.contains("<string-array name=\"select_search_ui\">"));
+        assertTrue("Traditional Chinese resources must include the playback speed label",
+                strings.contains("<string name=\"setting_play_speed\">"));
     }
 
     private static String read(Path path) throws Exception {
@@ -108,5 +140,17 @@ public class SearchResultLayoutTest {
         Path moduleRelative = Path.of("src", "main", "res");
         if (Files.exists(moduleRelative)) return moduleRelative;
         return Path.of("app", "src", "main", "res");
+    }
+
+    private static Path findMobileJavaPath() {
+        Path moduleRelative = Path.of("src", "mobile", "java");
+        if (Files.exists(moduleRelative)) return moduleRelative;
+        return Path.of("app", "src", "mobile", "java");
+    }
+
+    private static Path findMobileResPath() {
+        Path moduleRelative = Path.of("src", "mobile", "res");
+        if (Files.exists(moduleRelative)) return moduleRelative;
+        return Path.of("app", "src", "mobile", "res");
     }
 }

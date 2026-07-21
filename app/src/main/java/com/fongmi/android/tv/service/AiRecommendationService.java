@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
 
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -45,6 +46,7 @@ public class AiRecommendationService {
     private static final String RESOLVED_CACHE_SUFFIX = ".items.json";
     private static final String LATEST_CACHE_PREFIX = "latest_";
     private static final String DISPLAY_CACHE_PREFIX = "display_";
+    private static final Pattern HISTORY_EPISODE_LABEL = Pattern.compile("(?:第\\s*\\d+\\s*[集期话]|\\b(?:ep(?:isode)?|e)\\s*\\.?\\s*\\d+\\b|\\bs\\d+e\\d+\\b)", Pattern.CASE_INSENSITIVE);
 
     private final TmdbService tmdbService;
     private final TmdbConfig tmdbConfig;
@@ -124,7 +126,7 @@ public class AiRecommendationService {
 
     static String fingerprint(String currentTitle, String historyFingerprint, String searchRecords, AiConfig config) {
         AiConfig safe = config == null ? new AiConfig().sanitize() : config.sanitize();
-        String value = "v3|"
+        String value = "v4|"
                 + Objects.toString(safe.getProtocol(), "") + "|"
                 + Objects.toString(safe.getEndpoint(), "") + "|"
                 + Objects.toString(safe.getModel(), "") + "|"
@@ -364,6 +366,10 @@ public class AiRecommendationService {
         builder.append("- 不要推荐 currentItem 或 playHistory 中已经出现的作品、别名或明显同名混淆项。\n");
         builder.append("- searchHistory 只代表兴趣意向，不等同于已观看；重复或靠前搜索词权重更高。\n");
         builder.append("- 如果 playHistory 中包含异常标题、合集或非影视内容，请降低权重。\n");
+        builder.append("- currentItem 代表即时兴趣，playHistory 代表长期偏好；不要只围绕当前作品推荐。\n");
+        builder.append("- 同一题材、演员、导演、地区或年代重复出现在多条高完成率历史时，视为更强偏好。\n");
+        builder.append("- 高完成率、较长观看时长和较新记录权重更高，低完成率或短暂播放权重更低。\n");
+        builder.append("- 单条历史中的人员或导演只作为弱信号，空字段表示未知而不是负面偏好。\n");
         builder.append("- 推荐理由必须结合用户偏好，不能只复述剧情。\n\n");
         appendFieldGuide(builder);
         builder.append("请基于下面结构化 JSON 分析，字段为空表示本地暂无该信息:\n");
@@ -380,6 +386,7 @@ public class AiRecommendationService {
         builder.append("- searchHistory: 用户搜索词，代表潜在兴趣，不等同于已观看。\n");
         builder.append("- title/year/mediaType/country/language: 作品基础信息，用于判断题材、地区、语言和年代偏好。\n");
         builder.append("- genres/tags/statusOrRemarks/description: 类型、标签、更新状态或简介，用于判断内容气质。\n");
+        builder.append("- actors/director: 演员与导演/主创；在多条高兴趣历史中重复出现时代表稳定人员偏好。\n");
         builder.append("- episodeCount/episodeName/episodeNumber: 总集数、历史观看集名和集号，用于判断剧集观看偏好。\n");
         builder.append("- watchedMinutes/durationMinutes: 用户在单集或单条历史上的已看时长和总时长。\n");
         builder.append("- completionRate: 单集观看完成比例，接近 1 表示兴趣更强。\n");
@@ -415,7 +422,7 @@ public class AiRecommendationService {
         addStringArray(object, "tags", currentVod.getTag());
         addString(object, "statusOrRemarks", currentVod.getRemarks());
         addString(object, "director", currentVod.getDirector());
-        addStringArray(object, "actors", currentVod.getActor());
+        addPeopleArray(object, "actors", currentVod.getActor());
         addPositiveInt(object, "episodeCount", episodeCount);
         addString(object, "description", limit(currentVod.getContent(), 220));
         return object;
@@ -423,17 +430,9 @@ public class AiRecommendationService {
 
     private List<JsonObject> historyItems(Vod currentVod, String currentTitle) {
         List<JsonObject> items = new ArrayList<>();
-        List<String> titles = new ArrayList<>();
         String current = !isBlank(currentTitle) ? currentTitle : currentVod == null ? "" : currentVod.getName();
         try {
-            for (History history : History.get()) {
-                if (history == null || isBlank(history.getVodName())) continue;
-                if (PersonalRecommendationService.normalizeTitle(history.getVodName()).equals(PersonalRecommendationService.normalizeTitle(current))) continue;
-                if (containsNormalized(titles, history.getVodName())) continue;
-                titles.add(history.getVodName());
-                items.add(historyContextItem(history));
-                if (items.size() >= MAX_CONTEXT_ITEMS) break;
-            }
+            for (History history : selectHistoryContext(History.get(), current)) items.add(historyContextItem(history));
         } catch (Throwable e) {
             SpiderDebug.log("ai-rec", "history read failed: %s", e.getMessage());
         }
@@ -442,9 +441,17 @@ public class AiRecommendationService {
 
     static JsonObject historyContextItem(History history) {
         JsonObject object = new JsonObject();
+        int episodeNumber = extractNumber(history.getVodRemarks());
         addString(object, "title", history.getVodName());
+        addString(object, "year", history.getYear());
+        addString(object, "mediaType", inferHistoryMediaType(history.getTypeName(), history.getVodRemarks()));
+        addString(object, "country", history.getArea());
+        addString(object, "language", inferLanguage(history.getArea()));
+        addStringArray(object, "genres", history.getTypeName());
+        addString(object, "director", history.getDirector());
+        addPeopleArray(object, "actors", history.getActor());
         addString(object, "episodeName", history.getVodRemarks());
-        addPositiveInt(object, "episodeNumber", extractNumber(history.getVodRemarks()));
+        addPositiveInt(object, "episodeNumber", episodeNumber);
         long position = history.getPosition();
         long duration = history.getDuration();
         if (position > 0) object.addProperty("watchedMinutes", TimeUnit.MILLISECONDS.toMinutes(position));
@@ -452,6 +459,43 @@ public class AiRecommendationService {
         if (position > 0 && duration > 0) object.addProperty("completionRate", Math.min(1.0, Math.round((position * 100.0 / duration)) / 100.0));
         if (history.getCreateTime() > 0) addString(object, "lastWatchedAt", formatTime(history.getCreateTime()));
         return object;
+    }
+
+    static String historyMetadataFingerprint(List<History> histories) {
+        return historyMetadataFingerprint(histories, "");
+    }
+
+    static String historyMetadataFingerprint(List<History> histories, String currentTitle) {
+        JsonArray items = new JsonArray();
+        for (History history : selectHistoryContext(histories, currentTitle)) {
+            JsonObject item = new JsonObject();
+            addString(item, "title", history.getVodName());
+            addString(item, "typeName", history.getTypeName());
+            addString(item, "mediaType", inferHistoryMediaType(history.getTypeName(), history.getVodRemarks()));
+            addString(item, "area", history.getArea());
+            addString(item, "actor", history.getActor());
+            addString(item, "director", history.getDirector());
+            addString(item, "year", history.getYear());
+            items.add(item);
+        }
+        return md5("history-metadata-v1|" + items);
+    }
+
+    static List<History> selectHistoryContext(List<History> histories, String currentTitle) {
+        List<History> selected = new ArrayList<>();
+        List<String> titles = new ArrayList<>();
+        String normalizedCurrent = PersonalRecommendationService.normalizeTitle(currentTitle);
+        if (histories == null) return selected;
+        for (History history : histories) {
+            if (history == null || isBlank(history.getVodName())) continue;
+            String normalizedTitle = PersonalRecommendationService.normalizeTitle(history.getVodName());
+            if (normalizedTitle.equals(normalizedCurrent)) continue;
+            if (containsNormalized(titles, history.getVodName())) continue;
+            titles.add(history.getVodName());
+            selected.add(history);
+            if (selected.size() >= MAX_CONTEXT_ITEMS) break;
+        }
+        return selected;
     }
 
     private List<String> searchKeywords() {
@@ -505,12 +549,43 @@ public class AiRecommendationService {
         if (object == null || isBlank(key) || isBlank(value)) return;
         JsonArray array = new JsonArray();
         for (String part : value.split("[,，/、|｜;；\\s]+")) {
-            String item = part == null ? "" : part.trim();
-            if (isBlank(item) || contains(array, item)) continue;
-            array.add(item);
+            addArrayItem(array, part);
             if (array.size() >= 8) break;
         }
         if (array.size() > 0) object.add(key, array);
+    }
+
+    private static void addPeopleArray(JsonObject object, String key, String value) {
+        if (object == null || isBlank(key) || isBlank(value)) return;
+        JsonArray array = new JsonArray();
+        for (String group : value.split("[,，/、|｜;；]+")) {
+            String item = normalizeListItem(group);
+            if (hasLatinLetter(item)) {
+                addArrayItem(array, item);
+            } else {
+                for (String part : item.split("\\s+")) addArrayItem(array, part);
+            }
+            if (array.size() >= 8) break;
+        }
+        if (array.size() > 0) object.add(key, array);
+    }
+
+    private static void addArrayItem(JsonArray array, String value) {
+        String item = normalizeListItem(value);
+        if (isBlank(item) || contains(array, item) || array.size() >= 8) return;
+        array.add(item);
+    }
+
+    private static String normalizeListItem(String value) {
+        return Objects.toString(value, "").trim().replaceAll("\\s+", " ");
+    }
+
+    private static boolean hasLatinLetter(String value) {
+        for (int index = 0; index < value.length(); index++) {
+            char character = value.charAt(index);
+            if (character < 128 && Character.isLetter(character)) return true;
+        }
+        return false;
     }
 
     private static boolean contains(JsonArray array, String value) {
@@ -545,6 +620,12 @@ public class AiRecommendationService {
         if (value.contains("电影") || value.contains("movie")) return "movie";
         if (value.contains("电视剧") || value.contains("连续") || value.contains("剧集") || value.contains("短剧") || value.contains("动漫") || value.contains("动画") || value.contains("综艺") || value.contains("纪录")) return "tv";
         return episodeCount > 1 ? "tv" : "";
+    }
+
+    private static String inferHistoryMediaType(String typeName, String episodeName) {
+        String mediaType = inferMediaType(typeName, 0);
+        if (!isBlank(mediaType)) return mediaType;
+        return HISTORY_EPISODE_LABEL.matcher(Objects.toString(episodeName, "")).find() ? "tv" : "";
     }
 
     private static String inferLanguage(String area) {

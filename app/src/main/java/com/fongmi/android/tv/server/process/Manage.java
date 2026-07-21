@@ -58,6 +58,7 @@ import okhttp3.ResponseBody;
 public class Manage implements Process {
 
     private static final int TREE_LIMIT = 300;
+    private static final int LOGIN_STATE_FINDINGS_LIMIT = 300;
     private static final MediaType ZIP = MediaType.parse("application/zip");
 
     @Override
@@ -665,6 +666,8 @@ public class Manage implements Process {
         object.addProperty("parent", tree.getParent());
         object.addProperty("valid", tree.isValid());
         object.add("items", App.gson().toJsonTree(tree.getItems()));
+        object.addProperty("total", tree.getTotal());
+        object.addProperty("truncated", tree.isTruncated());
         return json(object);
     }
 
@@ -676,6 +679,9 @@ public class Manage implements Process {
     private JsonObject loginStateObject() {
         List<String> learned = LoginStateSync.learnedPaths();
         List<String> pending = LoginStateSync.pendingPaths();
+        List<LoginStateSync.Candidate> findings = LoginStateSync.findings();
+        int findingsTotal = findings.size();
+        if (findingsTotal > LOGIN_STATE_FINDINGS_LIMIT) findings = findings.subList(0, LOGIN_STATE_FINDINGS_LIMIT);
         JsonObject object = new JsonObject();
         object.addProperty("learning", LoginStateSync.hasLearningSnapshot());
         object.addProperty("learnedCount", learned.size());
@@ -683,7 +689,9 @@ public class Manage implements Process {
         object.add("learned", array(learned));
         object.add("pending", array(pending));
         object.add("states", App.gson().toJsonTree(LoginStateSync.pathStates(learned)));
-        object.add("findings", App.gson().toJsonTree(LoginStateSync.findings()));
+        object.add("findings", App.gson().toJsonTree(findings));
+        object.addProperty("findingsTotal", findingsTotal);
+        object.addProperty("findingsTruncated", findingsTotal > findings.size());
         object.addProperty("pathsText", LoginStateSync.pathsText(learned));
         return object;
     }

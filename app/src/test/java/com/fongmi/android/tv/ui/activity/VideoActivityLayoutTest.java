@@ -92,6 +92,18 @@ public class VideoActivityLayoutTest {
     }
 
     @Test
+    public void mobilePortraitPlayerTouchesStatusBarWithoutExtraGap() throws Exception {
+        Path layoutFile = findMobileResPath().resolve(Path.of("layout", "activity_video.xml"));
+        Element video = findAndroidId(layoutFile.toFile(), "video");
+
+        assertTrue(layoutFile + " is missing @+id/video", video != null);
+        assertTrue("the portrait player must stay directly below the status bar inset",
+                "@+id/statusBar".equals(video.getAttribute("android:layout_below")));
+        assertFalse("the portrait player must not add a second gap below the status bar",
+                video.hasAttribute("android:layout_marginTop"));
+    }
+
+    @Test
     public void mobileVodControlLayoutExposesFullscreenTopActions() throws Exception {
         Path controlLayout = findMobileResPath().resolve(Path.of("layout", "view_control_vod.xml"));
         Set<String> ids = collectAndroidIds(controlLayout.toFile());
@@ -510,6 +522,56 @@ public class VideoActivityLayoutTest {
     }
 
     @Test
+    public void playbackSpeedInitializationUsesPersonalDefaultSpeed() throws Exception {
+        String mobile = new String(Files.readAllBytes(findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"))), StandardCharsets.UTF_8);
+        String leanback = new String(Files.readAllBytes(findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"))), StandardCharsets.UTF_8);
+        String mobileControl = new String(Files.readAllBytes(findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "dialog", "ControlDialog.java"))), StandardCharsets.UTF_8);
+        String leanbackControl = new String(Files.readAllBytes(findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "dialog", "ControlDialog.java"))), StandardCharsets.UTF_8);
+        String playerManager = new String(Files.readAllBytes(findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "player", "PlayerManager.java"))), StandardCharsets.UTF_8);
+        String mobileCheckHistory = methodBody(mobile, "private void checkHistory(Vod item)", "private void enrichHistoryMeta(Vod item)");
+        String mobileSetSpeed = methodBody(mobile, "private void setSpeed()", "private void checkOrientation()");
+        String mobilePlaybackSpeed = methodBody(mobile, "private float getPlaybackSpeed()", "private void checkOrientation()");
+        String mobileSaveUserSpeed = methodBody(mobile, "private void saveUserSpeed()", "private void onReset()");
+        String mobileSpeedLong = methodBody(mobile, "private boolean onSpeedLong()", "private void saveUserSpeed()");
+        String mobileSpeedEnd = methodBody(mobile, "public void onSpeedEnd()", "public void onBright(int progress)");
+        String mobileApplySpeed = methodBody(mobileControl, "private void applySpeed(float speed)", "private void setSpeedPreset(View view)");
+        String leanbackFastHistory = methodBody(leanback, "private void prepareFastTmdbPlaybackHistory(Vod item, Flag flag, Episode episode)", "private void selectFastTmdbPlaybackEpisode(Vod item, Flag selectedFlag, Episode selectedEpisode)");
+        String leanbackCheckHistory = methodBody(leanback, "private void checkHistory(Vod item)", "private void enrichHistoryMeta(Vod item)");
+        String leanbackSetSpeed = methodBody(leanback, "private void setSpeed()", "private void checkEnded(boolean notify)");
+        String leanbackPlaybackSpeed = methodBody(leanback, "private float getPlaybackSpeed()", "private void checkEnded(boolean notify)");
+        String leanbackSaveUserSpeed = methodBody(leanback, "private void saveUserSpeed()", "private void onReset()");
+        String leanbackSpeedLong = methodBody(leanback, "private boolean onSpeedLong()", "private void saveUserSpeed()");
+        String leanbackSpeedEnd = methodBody(leanback, "public void onSpeedEnd()", "public void onKeyUp()");
+        String leanbackApplySpeed = methodBody(leanbackControl, "private void applySpeed(float speed)", "private void setSpeedPreset(View view)");
+        String defaultToggleSpeed = methodBody(playerManager, "public String toggleSpeed()", "public String toggleSpeed(float normalSpeed)");
+        String toggleSpeed = methodBody(playerManager, "public String toggleSpeed(float normalSpeed)", "private float nextPresetSpeed()");
+
+        assertTrue("mobile history speed fallback must use the default-aware helper", mobileCheckHistory.contains("float speed = getPlaybackSpeed();"));
+        assertTrue("mobile checkHistory must not fall back to hardcoded 1.0x", !mobileCheckHistory.contains(": 1f"));
+        assertFalse("mobile startup must not create a per-show speed override", mobileCheckHistory.contains("mHistory.setSpeed(player().getSpeed())"));
+        assertTrue("mobile onPrepare speed restore must apply the default-aware helper", mobileSetSpeed.contains("player().setSpeed(getPlaybackSpeed())"));
+        assertTrue("mobile speed helper must resolve explicit 1.0x separately from the personal default", mobilePlaybackSpeed.contains("mHistory.getPlaybackSpeed(PlayerSetting.getDefaultSpeed())"));
+        assertTrue("mobile in-player speed changes must be saved only for the current show", mobileSaveUserSpeed.contains("mHistory.setUserSpeed(player().getSpeed())") && !mobileSaveUserSpeed.contains("PlayerSetting.putDefaultSpeed"));
+        assertTrue("mobile persistent speed toggle must use the current show's effective speed", mobileSpeedLong.contains("player().toggleSpeed(getPlaybackSpeed())"));
+        assertTrue("mobile speed dialog must be a per-show override", mobileApplySpeed.contains("history.setUserSpeed(player.getSpeed())") && !mobileApplySpeed.contains("PlayerSetting.putDefaultSpeed"));
+        assertTrue("mobile hold release must restore the current show's effective speed", mobileSpeedEnd.contains("player().setSpeed(getPlaybackSpeed())"));
+        assertTrue("leanback fast TMDB playback must use the default-aware helper", leanbackFastHistory.contains("float speed = getPlaybackSpeed();"));
+        assertFalse("leanback fast startup must not create a per-show speed override", leanbackFastHistory.contains("mHistory.setSpeed(player().getSpeed())"));
+        assertTrue("leanback history speed fallback must use the default-aware helper", leanbackCheckHistory.contains("float speed = getPlaybackSpeed();"));
+        assertTrue("leanback checkHistory must not fall back to hardcoded 1.0x", !leanbackCheckHistory.contains(": 1f"));
+        assertFalse("leanback startup must not create a per-show speed override", leanbackCheckHistory.contains("mHistory.setSpeed(player().getSpeed())"));
+        assertTrue("leanback onPrepare speed restore must apply the default-aware helper", leanbackSetSpeed.contains("player().setSpeed(getPlaybackSpeed())"));
+        assertTrue("leanback speed helper must resolve explicit 1.0x separately from the personal default", leanbackPlaybackSpeed.contains("mHistory.getPlaybackSpeed(PlayerSetting.getDefaultSpeed())"));
+        assertTrue("leanback in-player speed changes must be saved only for the current show", leanbackSaveUserSpeed.contains("mHistory.setUserSpeed(player().getSpeed())") && !leanbackSaveUserSpeed.contains("PlayerSetting.putDefaultSpeed"));
+        assertTrue("leanback persistent speed toggle must use the current show's effective speed", leanbackSpeedLong.contains("player().toggleSpeed(getPlaybackSpeed())"));
+        assertTrue("leanback speed dialog must be a per-show override", leanbackApplySpeed.contains("history.setUserSpeed(player.getSpeed())") && !leanbackApplySpeed.contains("PlayerSetting.putDefaultSpeed"));
+        assertTrue("leanback hold release must restore the current show's effective speed", leanbackSpeedEnd.contains("player().setSpeed(getPlaybackSpeed())"));
+        assertTrue("shared speed toggle must preserve the normal 1.0x baseline for live and cast playback", defaultToggleSpeed.contains("return toggleSpeed(1.0f, 1.0f);"));
+        assertTrue("VOD speed toggle must use the personal default when a restored player has no session baseline", toggleSpeed.contains("toggleSpeed(normalSpeed, PlayerSetting.getDefaultSpeed())"));
+        assertTrue("speed toggle must resolve the target through the stable session state", toggleSpeed.contains("speedToggleState.next(getSpeed(), normalSpeed, PlayerSetting.getSpeed(), fallbackSpeed)"));
+    }
+
+    @Test
     public void refreshedPlayerKernelSwitchKeepsManualFailureSemantics() throws Exception {
         Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "player", "PlayerManager.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
@@ -855,15 +917,15 @@ public class VideoActivityLayoutTest {
     }
 
     @Test
-    public void leanbackVodEventPageSuffixStripPreservesLeadingSlashIds() throws Exception {
-        Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+    public void vodEventPageSuffixStripPreservesLeadingSlashIds() throws Exception {
+        Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "helper", "VodEventGuard.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
-        int method = source.indexOf("private static String stripPageSuffix(String id)");
-        int nextMethod = source.indexOf("private void loadNativePersonalRecommendations", method);
+        int method = source.indexOf("static String stripPageSuffix(String id)");
+        int nextMethod = source.indexOf("private VodEventGuard()", method);
         String body = method >= 0 && nextMethod > method ? source.substring(method, nextMethod) : "";
 
         assertTrue(sourcePath + " is missing stripPageSuffix", method >= 0);
-        assertTrue("leanback VOD event ids may start with /index.php and must not be stripped to empty",
+        assertTrue("VOD event ids may start with /index.php and must not be stripped to empty",
                 body.contains("slash > 0 ? id.substring(0, slash) : id"));
         assertFalse("only real page suffixes after the first character should be stripped",
                 body.contains("slash >= 0 ? id.substring(0, slash) : id"));
@@ -1947,15 +2009,24 @@ public class VideoActivityLayoutTest {
     }
 
     @Test
-    public void mobileHistoryEntryPassesExactPlaybackSelection() throws Exception {
+    public void mobileHistoryEntryRespectsDetailModeAndPreservesExactPlaybackSelection() throws Exception {
         Path historyPath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "HistoryActivity.java"));
         Path videoPath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
         String history = new String(Files.readAllBytes(historyPath), StandardCharsets.UTF_8);
         String video = new String(Files.readAllBytes(videoPath), StandardCharsets.UTF_8);
         String compactHistory = history.replaceAll("\\s+", " ");
+        int historyStart = video.indexOf("static void startFromHistory(Activity activity, History item)");
+        int historyStartEnd = video.indexOf("public static void startDirect(", historyStart);
+        String historyStartBody = historyStart >= 0 && historyStartEnd > historyStart ? video.substring(historyStart, historyStartEnd).replaceAll("\\s+", " ") : "";
 
-        assertTrue("history clicks must pass flag, episode title, and episode url to direct playback",
-                compactHistory.contains("VideoActivity.startDirect(this, item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic(), item.getVodRemarks(), item.getVodFlag(), item.getVodRemarks(), item.getEpisodeUrl())"));
+        assertTrue("history clicks must use the history-aware playback entry point",
+                compactHistory.contains("VideoActivity.startFromHistory(this, item)"));
+        assertTrue("history playback must respect the configured standalone detail mode",
+                historyStartBody.contains("if (shouldOpenLegacyTmdbDetail(item.getSiteKey()))"));
+        assertTrue("standalone detail mode must use the normal detail-aware start path",
+                historyStartBody.contains("start(activity, item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic(), item.getVodRemarks())"));
+        assertTrue("non-detail playback must preserve flag, episode title, and episode url",
+                historyStartBody.contains("startDirect(activity, item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic(), item.getVodRemarks(), item.getVodFlag(), item.getVodRemarks(), item.getEpisodeUrl())"));
         assertTrue("direct playback must preserve the requested episode selection in the intent",
                 video.contains("putIntentPlaybackSelection(intent, playFlag, playEpisodeName, playEpisodeUrl);"));
     }

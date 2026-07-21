@@ -5,7 +5,6 @@ import java.util.List;
 
 public final class PlaybackPerformanceCatalog {
 
-    public static final String KERNEL = "kernel";
     public static final String PROFILE = "profile";
     public static final String RENDER = "render";
     public static final String TRACK_LIMIT = "track_limit";
@@ -32,6 +31,7 @@ public final class PlaybackPerformanceCatalog {
     public static final String PREFER_AAC = "prefer_aac";
     public static final String AUDIO_SOFT_PREFER = "audio_soft_prefer";
     public static final String VIDEO_SOFT_PREFER = "video_soft_prefer";
+    public static final String MPV_OUTPUT = "mpv_output";
     public static final String MPV_RENDER = "mpv_render";
     public static final String MPV_HWDEC = "mpv_hwdec";
     public static final String MPV_SYNC = "mpv_sync";
@@ -70,7 +70,6 @@ public final class PlaybackPerformanceCatalog {
 
     public static List<PlaybackPerformanceOption> forKernel(int kernel) {
         List<PlaybackPerformanceOption> options = new ArrayList<>();
-        options.add(option(KERNEL, BASIC, "播放器内核", "显示当前正在配置的播放器内核。EXO、MPV 和 IJK 使用相互独立的性能参数与预设，切换内核不会把其他内核专用参数伪装成当前可用。"));
         options.add(option(PROFILE, BASIC, "性能配置", profileDescription(kernel)));
         if (kernel == PlayerSetting.EXO) addExo(options);
         else if (kernel == PlayerSetting.MPV) addMpv(options);
@@ -79,84 +78,91 @@ public final class PlaybackPerformanceCatalog {
     }
 
     private static void addExo(List<PlaybackPerformanceOption> options) {
-        options.add(option(RENDER, BASIC, "渲染方式", "SurfaceView 通常更省电并支持隧道模式；TextureView 更适合动画和自由变换，但会增加 GPU 合成开销。该选项只作用于 EXO，原生播放器使用自己的输出路径。"));
-        options.add(option(TRACK_LIMIT, BASIC, "视频轨道限制", "按屏幕和硬件解码能力限制分辨率、帧率与码率，避免选择设备带不动的轨道；关闭后画质上限更高，也更容易卡顿或解码失败。"));
-        options.add(option(ADAPTIVE_DOWNGRADE, BASIC, "自适应降级", "发生重缓冲、连续掉帧或带宽不足时逐级降低本次播放的视频规格；稳定性更好，但画质可能下降且当前实现不会自动升回。"));
-        options.add(option(BANDWIDTH_METER, BASIC, "带宽估算", "根据实际数据传输估算网络能力，辅助 EXO 选轨和降级；不会主动测速，但网络波动时可能提前降低画质。"));
-        options.add(option(TUNNEL, BASIC, "隧道模式", "让音视频尽量走硬件直通管线，可能降低 CPU 和改善同步；依赖 SurfaceView 和设备支持，部分电视会黑屏、无声或无法使用 LUT。"));
-        options.add(option(EXO_FRAME_RATE, BASIC, "帧率匹配", "Android 11及以上通过 Surface.setFrameRate 请求匹配内容帧率。当前 Media3 依赖版本只提供关闭和仅无缝两种策略；允许非无缝需要独立实现显示模式切换后再开放。"));
+        options.add(option(RENDER, BASIC, "渲染方式", "作用：决定视频输出控件。选择 SurfaceView（默认）通常最省 GPU、最适合电视和4K；只有需要动画、旋转或自由变换时才选 TextureView。代价：TextureView 会增加一次 GPU 合成，低性能电视更容易掉帧。"));
+        options.add(option(TRACK_LIMIT, BASIC, "视频轨道限制", "作用：阻止 EXO 选择超过屏幕/硬解能力的轨道。想要“少卡顿”请选择开启（默认）；关闭只适合确认设备能稳定解码最高画质的情况。代价：开启可能主动放弃过高分辨率，换取播放成功率。"));
+        options.add(option(ADAPTIVE_DOWNGRADE, BASIC, "自适应降级", "作用：重缓冲、连续掉帧或带宽不足时自动降到更容易播放的轨道。弱网、4K大文件建议开启（默认）；追求始终最高画质可关闭。代价：降级后本次播放不会自动升回，画质可能降低。"));
+        options.add(option(BANDWIDTH_METER, BASIC, "带宽估算", "作用：用实际下载速度帮助 EXO 选轨和判断是否降级。网络忽快忽慢时建议开启（默认），可减少反复切换和卡顿；固定高速内网可关闭。代价：估算偏保守时可能提前选择低画质，它不会额外测速。"));
+        options.add(option(TUNNEL, BASIC, "隧道模式", "作用：尝试让音视频走硬件直通，降低 CPU 并改善同步。电视硬解且只追求播放流畅时可尝试开启；出现黑屏、无声、字幕/LUT失效立即关闭。代价：依赖设备和 SurfaceView，兼容性不如普通路径。"));
+        options.add(option(EXO_FRAME_RATE, BASIC, "帧率匹配", "作用：请求显示刷新率贴合视频帧率。电视播放电影/25或24fps内容建议保持“仅无缝”（默认），可减少抖动；遇到切换黑屏或刷新率异常选关闭。代价：仅无缝不会强行切换显示模式，效果取决于电视系统。"));
         addSharedBuffer(options, true, false);
-        options.add(option(EXO_START_BUFFER, BUFFER, "起播阈值", "达到该缓冲量后开始播放。阈值低首帧更快，但弱网下更容易刚起播就再次缓冲。"));
-        options.add(option(EXO_REBUFFER, BUFFER, "重缓冲恢复", "播放中断后达到该缓冲量再恢复。阈值高恢复更稳定，但用户等待时间更长。"));
-        options.add(option(EXO_PRIORITIZE_TIME, BUFFER, "时间优先", "开启时即使达到目标字节容量，也尽量满足时间缓冲目标；抗弱网更好但可能增加内存。关闭更严格遵守容量上限。"));
-        options.add(option(LOAD_SELECTED_TRACKS, BUFFER, "只加载选中轨道", "只加载当前选中的音视频轨道，可节省带宽和内存；切换清晰度或音轨时可能需要重新请求。"));
+        options.add(option(EXO_START_BUFFER, BUFFER, "起播阈值", "作用：开始播放前至少准备多少秒。1.5秒（均衡/默认）适合大多数网络；弱网或4K卡顿可调到2～3秒，追求秒开可用0.5～1秒。代价：阈值越高首帧越慢。"));
+        options.add(option(EXO_REBUFFER, BUFFER, "重缓冲恢复", "作用：卡住后积累多少缓冲才恢复。自动档会在2～8秒间根据上一轮表现调整；手动建议均衡3秒、兼容5秒、轻量2秒。代价：数值越高越不易再次卡，但等待更久。"));
+        options.add(option(EXO_PRIORITIZE_TIME, BUFFER, "时间优先", "作用：优先满足“缓冲秒数”，不因目标字节容量已达到就停止加载。网络波动或长视频建议开启；内存紧张设备保持关闭。代价：可能超过目标容量并暂时占用更多内存，不能突破系统可用内存。"));
+        options.add(option(LOAD_SELECTED_TRACKS, BUFFER, "只加载选中轨道", "作用：只请求当前音视频轨道，减少带宽和内存。网速/内存紧张建议开启；经常切换清晰度、音轨时可关闭以减少重新请求。代价：切换轨道可能需要重新缓冲。"));
         addPreload(options);
-        options.add(option(CODEC_ASYNC, DECODE, "MediaCodec 队列", "自动模式交给 Media3 按系统版本选择；异步通常吞吐更高；同步适合少数异步回调实现异常的旧设备。"));
-        options.add(option(DYNAMIC_SCHEDULING, DECODE, "Media3 动态调度", "根据渲染器可继续工作的时间安排播放循环，减少无效 CPU 唤醒；属于较新的 Media3 路径，兼容模式会关闭。"));
-        options.add(option(DURATION_PROGRESS, DECODE, "解码耗时推进", "让异步视频渲染器把可推进时间反馈给播放器调度，有助于减少 CPU 唤醒；依赖 MediaCodec 异步路径。"));
-        options.add(option(LATE_DROP, DECODE, "输入丢帧阈值", "预测输入帧已经明显迟到时提前丢弃，以更快追上播放进度；会减少持续延迟，但卡顿时可能看到跳帧。"));
-        options.add(option(SURFACE_FIXED_SIZE, DECODE, "Surface 固定尺寸", "按视频和设备能力设置 Surface 缓冲尺寸，降低超高分辨率合成压力；部分设备在切清晰度或旋转时可能尺寸异常。"));
-        options.add(option(DECODER_FALLBACK, DECODE, "解码器兜底", "首选解码器初始化失败后尝试低优先级解码器，提高播放成功率；可能增加起播时间或使用性能较低的解码器。"));
-        options.add(option(SOFT_VIDEO_TUNE, DECODE, "软解降负载", "仅 EXO 的 FFmpeg 视频软解生效，通过减少滤波、跳过部分帧和降低解码负载改善低性能设备播放，代价是画质和流畅度下降。"));
-        options.add(option(AUDIO_PASSTHROUGH, AUDIO, "音频直通", "把 Dolby、DTS 等压缩音频交给电视或功放解码，可保留多声道；输出链不支持时可能无声。"));
-        options.add(option(PREFER_AAC, AUDIO, "AAC 优先", "存在 AAC 音轨时优先选择兼容性更广的 AAC，可规避部分高级音频无声问题，但可能放弃更高质量音轨。"));
-        options.add(option(AUDIO_SOFT_PREFER, AUDIO, "音频软解优先", "优先使用 FFmpeg 音频扩展解码冷门格式，兼容性更强但增加 CPU 和功耗。"));
-        options.add(option(VIDEO_SOFT_PREFER, AUDIO, "视频软解优先", "优先使用 FFmpeg 视频扩展绕过异常硬件解码器；高分辨率内容会显著增加 CPU、发热和掉帧风险。"));
+        options.add(option(CODEC_ASYNC, DECODE, "MediaCodec 队列", "作用：决定解码输出由异步还是同步队列驱动。保持自动（默认）通常吞吐最高；只有旧设备异步回调异常时才改同步。代价：同步可能更稳，但会增加等待和 CPU 调度压力。"));
+        options.add(option(DYNAMIC_SCHEDULING, DECODE, "Media3 动态调度", "作用：按渲染器可工作时间调度播放循环。保持开启（默认）通常更省 CPU、掉帧更少；遇到特定机型时序异常再关闭。代价：关闭后可能增加无效唤醒。"));
+        options.add(option(DURATION_PROGRESS, DECODE, "解码耗时推进", "作用：把异步解码耗时反馈给播放器，减少无效等待。异步队列下建议开启（默认）；同步队列不生效。代价很小，关闭只用于排查时序问题。"));
+        options.add(option(LATE_DROP, DECODE, "输入丢帧阈值", "作用：输入帧明显迟到时提前丢弃，优先保证“跟上进度”。CPU不足、4K掉帧时建议开启；希望保留每一帧可关闭。代价：画面可能跳帧，但通常比持续延迟更容易接受。"));
+        options.add(option(SURFACE_FIXED_SIZE, DECODE, "Surface 固定尺寸", "作用：按视频尺寸创建 Surface，减少超高分辨率合成压力。电视4K建议开启（默认）；切清晰度/旋转出现画面尺寸异常时关闭。代价：少数设备切换分辨率需要重建 Surface。"));
+        options.add(option(DECODER_FALLBACK, DECODE, "解码器兜底", "作用：首选硬解初始化失败时尝试其他解码器。兼容性优先建议开启（默认）；只想快速暴露硬件问题可关闭。代价：可能多等待一次初始化，且备用解码器性能可能较低。"));
+        options.add(option(SOFT_VIDEO_TUNE, DECODE, "软解降负载", "作用：仅在 EXO 使用 FFmpeg 软解时降低滤波和解码负载。低性能设备/软解视频可开启；硬解4K基本不受影响。代价：积极降负载会牺牲细节，不能替代硬解。"));
+        options.add(option(AUDIO_PASSTHROUGH, AUDIO, "音频直通", "作用：把 Dolby/DTS 等压缩音频交给电视或功放解码，保留多声道。设备明确支持且要环绕声才开启；出现无声立即关闭。代价：输出链不支持时不会自动变成可播放音频。"));
+        options.add(option(PREFER_AAC, AUDIO, "AAC 优先", "作用：有多条音轨时优先选兼容性更高的 AAC。电视无声、切换音轨失败时建议开启；追求原始多声道/高码率时关闭。代价：可能放弃质量更高的音轨。"));
+        options.add(option(AUDIO_SOFT_PREFER, AUDIO, "音频软解优先", "作用：优先用 FFmpeg 解码冷门音频格式。硬解无声或格式不支持时开启；普通设备保持关闭。代价：增加 CPU、功耗，通常不影响视频画面流畅度。"));
+        options.add(option(VIDEO_SOFT_PREFER, AUDIO, "视频软解优先", "作用：绕过异常硬件解码器，改用 FFmpeg。仅在硬解花屏/崩溃且分辨率较低时尝试；4K电视不要开启。代价：CPU、发热和掉帧风险显著增加。"));
     }
 
     private static void addMpv(List<PlaybackPerformanceOption> options) {
-        options.add(option(MPV_RENDER, BASIC, "渲染后端", "OpenGL 兼容性最好；Vulkan 使用 gpu-next/libplacebo，部分设备性能更好，也更依赖驱动。只有 native 和设备能力都满足时才会实际使用 Vulkan，否则自动回退 OpenGL。"));
-        options.add(option(MPV_HWDEC, BASIC, "硬解路径", "自动回退依次尝试 MediaCodec 零拷贝和兼容复制；零拷贝开销最低但设备兼容差异更大；兼容复制增加内存带宽，部分 Amlogic/Mali 设备仍可能绿屏。"));
-        options.add(option(MPV_FRAME_RATE, BASIC, "帧率匹配", "Android 11及以上根据 MPV 识别到的内容帧率调用 Surface.setFrameRate。仅无缝模式不会主动触发可能黑屏的显示模式切换；旧系统自动忽略。"));
-        options.add(option(MPV_OPTION_PRIORITY, BASIC, "参数优先级", "播放性能优先时，缓存、硬解、同步、丢帧和HLS码率等受性能档管理，同名mpv.conf参数会被覆盖，其他自定义仍生效；mpv.conf优先时由配置文件接管同名参数。"));
+        options.add(option(MPV_OUTPUT, BASIC, "输出模式", "怎么选：保持“自动”（默认）最省心；电视播放4K且不需要MPV字幕/LUT/shader/滤镜时会自动用“电视直出”，这是当前最低GPU开销、最优先保证流畅的路径。需要MPV完整图像处理选“GPU完整”；自动判断不正确时可手动选“电视直出”。代价：电视直出不经过OpenGL/Vulkan，MPV原生字幕和GPU滤镜不可用。"));
+        options.add(option(MPV_RENDER, BASIC, "渲染后端", "怎么选：GPU完整模式先选 OpenGL，兼容性最好；确认设备 Vulkan 驱动稳定且需要 gpu-next/libplacebo 时再选 Vulkan。电视直出时本参数不参与视频输出，切换也不会变快。代价：Vulkan可能更高效，也可能因驱动问题卡顿、黑屏并自动回退OpenGL。"));
+        options.add(option(MPV_HWDEC, BASIC, "硬解路径", "怎么选：保持“自动回退”（默认）；它先试 mediacodec 零拷贝，失败再试兼容复制。电视4K追求最高流畅可选“零拷贝优先”；只有零拷贝黑屏、崩溃或解码异常时选“兼容复制”。代价：兼容复制会复制每帧，4K 10bit内存带宽开销大，可能明显卡顿。"));
+        options.add(option(MPV_FRAME_RATE, BASIC, "帧率匹配", "怎么选：电影、剧集在电视上保持“仅无缝”（默认），可减少24/25fps抖动；切换后黑屏、闪屏或电视刷新率异常时关闭。代价：仅无缝不会强制切换不兼容模式，旧Android自动忽略。"));
+        options.add(option(MPV_OPTION_PRIORITY, BASIC, "参数优先级", "怎么选：普通用户选“播放性能优先”（默认），界面中的缓存、硬解、同步、丢帧和HLS设置才能可靠生效；只有明确维护了mpv.conf并希望同名配置覆盖界面时选“mpv.conf优先”。选错会出现“界面改了但实际被配置文件覆盖”。"));
         addSharedBuffer(options, false, true);
-        options.add(option(MPV_REBUFFER, BUFFER, "重缓冲恢复", "缓存耗尽后重新积累到指定时长再恢复播放，避免只下载一小段就反复播放、反复转圈。"));
-        options.add(option(MPV_HLS_BITRATE, BUFFER, "HLS码率首选", "按HLS清单声明的码率选择默认轨道。限制码率可降低网络、解码和内存压力，但可能降低画质；它不是动态ABR，服务端码率标记不准确时效果也会偏差。"));
+        options.add(option(MPV_REBUFFER, BUFFER, "重缓冲恢复", "作用：缓存耗尽后至少重新准备多少秒再继续。均衡建议2秒；网络反复卡顿可升到3～5秒；稳定高速网络可用1秒。代价：越高越不易刚恢复又卡住，但每次恢复等待越久。"));
+        options.add(option(MPV_HLS_BITRATE, BUFFER, "HLS码率首选", "怎么选：网络和设备足够时选“最高码率”（默认）；4K HLS卡顿先降到15Mbps，再降到8Mbps；只求能播选最低。代价：这是选初始轨道，不是动态ABR；限制越低画质越低，清单码率标错时判断也会失准。"));
         addPreload(options);
-        options.add(option(MPV_SYNC, DECODE, "同步模式", "音频同步是兼容默认；显示重采样会轻微调整音频速度以匹配屏幕刷新率，运动更平滑，但不适合音频直通。"));
-        options.add(option(MPV_FRAME_DROP, DECODE, "丢帧策略", "输出丢帧优先在渲染阶段追赶进度；关闭可保留每一帧但可能持续累积延迟；解码丢帧更积极，也更容易损失画面连续性。"));
-        options.add(option(MPV_INTERPOLATION, DECODE, "平滑运动", "配合显示同步在帧率不匹配时生成过渡帧，可改善运动平滑度；会明显增加 GPU 负载，HDR、LUT 或低性能电视建议关闭。"));
-        options.add(option(MPV_SOFT_TUNE, DECODE, "软解降负载", "MPV 软件解码时使用 lavc 快速解码和环路滤波裁剪。温和模式优先保留画质，积极模式进一步减轻 CPU，但会降低细节。"));
-        options.add(option(MPV_VERBOSE_LOG, DECODE, "详细日志", "正常模式仅保留 warn 级日志，减少 native 到 Java 的日志传递；详细模式用于排障，会增加 JNI、字符串和主线程处理负载。"));
-        options.add(option(AUDIO_PASSTHROUGH, AUDIO, "音频直通", "MPV 根据设备音频能力生成 SPDIF 格式列表，将压缩音频交给电视或功放；输出链不支持时可能无声。"));
-        options.add(option(PREFER_AAC, AUDIO, "AAC 优先", "MPV 在轨道列表可用后优先选择 AAC 音轨，兼容性更广，但可能放弃声道更多或质量更高的音轨。"));
+        options.add(option(MPV_SYNC, DECODE, "同步模式", "怎么选：保持“音频同步”（默认），兼容性最好。只有屏幕刷新率与视频不匹配、能感到规律性微抖且未开启音频直通时，才试“显示重采样”。代价：显示重采样会轻微调整音频速度并增加处理，直通音频不适用。"));
+        options.add(option(MPV_FRAME_DROP, DECODE, "丢帧策略", "怎么选：保持“输出丢帧”（默认），跟不上时优先丢渲染帧以维持音画进度；卡顿仍严重可试“解码丢帧”；不要为追求完整画面关闭丢帧，除非设备性能充足。代价：策略越积极，跳帧越明显。"));
+        options.add(option(MPV_INTERPOLATION, DECODE, "平滑运动", "怎么选：默认关闭。只有GPU余量充足、使用GPU完整＋显示重采样且想改善低帧率运动时才开启；电视4K、HDR、LUT或已经卡顿时必须关闭。代价：会明显增加GPU负载，电视直出时不生效。"));
+        options.add(option(MPV_SOFT_TUNE, DECODE, "软解降负载", "作用：仅软件解码时减少滤波和解码工作。默认“温和”；软解仍掉帧可选“积极”；硬解视频无需靠它提速。代价：模式越积极，细节和画面连续性损失越大。"));
+        options.add(option(MPV_VERBOSE_LOG, DECODE, "详细日志", "怎么选：正常播放保持“正常”（默认）；只在排查崩溃、解码或缓冲问题时临时打开详细日志。代价：增加JNI、字符串处理和日志I/O，可能干扰低性能设备的流畅度。"));
+        options.add(option(AUDIO_PASSTHROUGH, AUDIO, "音频直通", "怎么选：电视/功放明确支持Dolby、DTS且需要多声道时开启；出现无声、杂音或同步异常立即关闭。代价：压缩音频交给外部设备后，MPV无法完成所有混音和重采样处理。"));
+        options.add(option(PREFER_AAC, AUDIO, "AAC 优先", "怎么选：高级音轨无声或设备兼容性差时开启；功放支持原始多声道、希望保留最佳音轨时关闭。代价：可能从Dolby/DTS切到质量或声道较低的AAC。"));
     }
 
     private static void addIjk(List<PlaybackPerformanceOption> options) {
-        options.add(option(IJK_SCENE, BASIC, "场景模式", "自动模式按协议使用稳定策略；点播保留完整缓冲；直播稳定提高水位和队列；直播低延迟关闭 packet buffering 并降低探测和队列，网络抖动时更容易卡顿。"));
-        options.add(option(IJK_BUFFER, BUFFER, "读包缓冲", "限制 IJK native 预读队列。当前上游编译常量最大为15MB，因此只提供4、8、15MB三个真实档位。"));
-        options.add(option(IJK_PACKET_BUFFERING, BUFFER, "Packet缓冲", "数据不足时暂停输出，等待读包队列恢复。开启更抗网络抖动；关闭可降低直播延迟，但更容易卡顿或花屏。"));
-        options.add(option(IJK_WATER, BUFFER, "缓冲水位", "组合 IJK 的第一、第二和最终水位线。低水位响应快但抗抖动弱；稳定水位恢复更稳但等待更久。"));
-        options.add(option(IJK_PICTURE_QUEUE, BUFFER, "画面队列", "控制已解码画面队列3、5或8帧。队列小延迟和内存更低；队列大更抗渲染抖动但增加延迟。"));
-        options.add(option(PLAY_CACHE, BUFFER, "HLS 播放缓存", "限制 IJK HLS 代理可使用的磁盘播放缓存。它不改变 IJK native 固定的读包内存队列。"));
+        options.add(option(IJK_SCENE, BASIC, "场景模式", "怎么选：不确定就选“自动”（默认）；普通影视选“点播”；直播经常缓冲选“直播稳定”；只有网络很好且必须追求低延迟时选“直播低延迟”。代价：稳定模式延迟更高，低延迟模式更容易卡顿。"));
+        options.add(option(IJK_BUFFER, BUFFER, "读包缓冲", "怎么选：普通和大码率视频选15MB（默认，当前编译上限）；内存紧张选8MB；极低内存才选4MB。代价：缓冲越小越容易因网络抖动卡顿，越大占用更多内存。"));
+        options.add(option(IJK_PACKET_BUFFERING, BUFFER, "Packet缓冲", "怎么选：点播和稳定直播保持开启（默认），数据不足时等待队列恢复；只为降低直播延迟才关闭。代价：开启会增加延迟，关闭在网络抖动时更容易卡顿、花屏。"));
+        options.add(option(IJK_WATER, BUFFER, "缓冲水位", "怎么选：点播选“标准”（默认）；网络抖动/直播反复卡选“稳定”；只追求低延迟选“低”。代价：水位越高恢复越稳但等待更久，越低越容易再次断流。"));
+        options.add(option(IJK_PICTURE_QUEUE, BUFFER, "画面队列", "怎么选：点播和低延迟用3帧（默认）；渲染偶发抖动用5帧；8帧只用于明显不稳且能接受更高延迟。代价：队列越大，内存和直播延迟越高。"));
+        options.add(option(PLAY_CACHE, BUFFER, "HLS 播放缓存", "作用：限制IJK经HLS代理写入的磁盘缓存。频繁回看/拖动可增大；普通播放保持默认即可。代价：增加磁盘占用和写入，它不能扩大IJK native的15MB读包内存。"));
         addPreload(options);
-        options.add(option(IJK_FRAME_DROP, DECODE, "丢帧策略", "CPU或渲染跟不上时丢帧追赶。标准模式使用上游常见值1；积极模式使用受控值5，不向用户暴露-1～120的原始范围。"));
-        options.add(option(IJK_SOFT_TUNE, DECODE, "软解降负载", "软件解码时组合 FFmpeg fast、skip_loop_filter 和 skip_frame。温和模式仅跳过非参考滤波；积极模式进一步牺牲细节和连续性。"));
-        options.add(option(IJK_ACCURATE_SEEK, DECODE, "精确Seek", "解码到目标时间以提高拖动精度，代价是拖动恢复更慢和CPU占用增加；关闭时使用关键帧快速定位。"));
-        options.add(option(IJK_PROBE, DECODE, "流探测", "系统默认不覆盖 FFmpeg；快速模式减少起播探测但可能漏音轨或误判格式；完整模式提高识别率但延长起播。"));
-        options.add(option(IJK_RTSP_TRANSPORT, DECODE, "RTSP传输", "TCP 更稳定并能避免部分丢包；UDP 延迟更低但更依赖网络质量；自动交给 FFmpeg 选择。"));
-        options.add(option(IJK_RECONNECT, DECODE, "断线重连", "网络读取失败时允许 IJK/FFmpeg 重新连接，提高直播连续性；异常地址可能延长最终报错时间。"));
+        options.add(option(IJK_FRAME_DROP, DECODE, "丢帧策略", "怎么选：普通播放选“标准”（默认）；低性能设备持续落后时选“积极”；设备性能充足且必须保留每帧才关闭。代价：越积极越能追上进度，但画面跳帧越明显。"));
+        options.add(option(IJK_SOFT_TUNE, DECODE, "软解降负载", "怎么选：默认“温和”；软解高负载、持续掉帧选“积极”；CPU充足且重视画质选关闭。代价：越积极越省CPU，但细节和连续性越差，硬解时帮助有限。"));
+        options.add(option(IJK_ACCURATE_SEEK, DECODE, "精确Seek", "怎么选：默认关闭，拖动可更快恢复；只有必须准确落在目标时间点时开启。代价：需要从关键帧继续解码，拖动等待和CPU占用都会增加，不会改善正常播放流畅度。"));
+        options.add(option(IJK_PROBE, DECODE, "流探测", "怎么选：普通资源保持“系统默认”；起播太慢可试“快速”；漏音轨、格式识别失败或直播信息不全时选“完整”。代价：快速可能误判，完整会延长起播。"));
+        options.add(option(IJK_RTSP_TRANSPORT, DECODE, "RTSP传输", "怎么选：优先TCP（默认），公网和Wi-Fi更稳定；局域网质量很好且必须低延迟时选UDP；不确定可选自动。代价：TCP延迟略高，UDP丢包时会花屏或卡顿。"));
+        options.add(option(IJK_RECONNECT, DECODE, "断线重连", "怎么选：直播和不稳定网络保持开启（默认），短暂断线可自动恢复；需要失败立即返回时关闭。代价：无效地址或服务器故障时，开启会延长最终报错时间。"));
     }
 
     private static void addSharedBuffer(List<PlaybackPerformanceOption> options, boolean exo, boolean playCache) {
-        options.add(option(BUFFER_TIME, BUFFER, "缓冲时间", exo ? "控制 EXO LoadControl 的前向缓冲目标。数值高更抗网络波动，但占用更多内存并延长部分恢复等待。" : "控制 MPV demuxer 向前读取的时间窗口。数值高更抗网络波动，但会增加内存和流量占用。"));
-        options.add(option(BUFFER_BYTES, BUFFER, "缓冲容量", exo ? "限制 EXO LoadControl 的目标内存容量；自动模式按选中轨道计算，固定容量便于低内存设备控制上限。" : "限制 MPV demuxer 的前向缓存字节数。移动设备不宜沿用桌面端超大缓存。"));
-        options.add(option(BACK_BUFFER, BUFFER, "回退缓冲", exo ? "保留最近播放的数据以加快向后拖动，时间越长越占内存。" : "为 MPV 保留已播放数据，便于回退拖动；当前界面以时间档位换算成安全字节预算。"));
-        if (playCache) options.add(option(PLAY_CACHE, BUFFER, "HLS 播放缓存", "限制 MPV HLS 代理的磁盘播放缓存，改善回看和重复拖动；它与 MPV native 内存缓存是两套机制。"));
+        options.add(option(BUFFER_TIME, BUFFER, "缓冲时间", exo
+                ? "怎么选：保持档位默认最均衡；网盘大文件/网络波动频繁可提高1～2档，内存紧张或直播低延迟才降低。数值越高越能跨过短时断流，但起播/恢复可能更慢且占用更多内存。它不能解决上游持续低于视频码率的问题。"
+                : "怎么选：保持档位默认；网盘大文件/网络忽快忽慢可提高1～2档，低内存或低延迟直播才降低。数值越高越抗短时波动，但会增加MPV内存、预读流量和恢复等待；上游长期速度不足仍会卡。"));
+        options.add(option(BUFFER_BYTES, BUFFER, "缓冲容量", exo
+                ? "怎么选：优先“自动”（默认），EXO会按轨道估算；低内存设备固定64MB，普通设备可128MB，高码率4K且内存充足可256MB。容量过小会提前停止加载，过大增加内存压力，不能提升真实网速。"
+                : "怎么选：普通设备用档位默认；4K高码率、内存充足可提高，低内存设备降低。容量太小可能装不下目标缓冲时间，太大会挤压系统内存；移动/电视设备不建议照搬桌面端超大缓存。"));
+        options.add(option(BACK_BUFFER, BUFFER, "回退缓冲", exo
+                ? "怎么选：不常向后拖动可关闭以最省内存；常回看选15～30秒；60秒只适合内存充足设备。它只加快向后拖动，不会改善向前播放卡顿。代价是保留时间越长占用越多内存。"
+                : "怎么选：不常回退就关闭；常回看选15～30秒；60秒只用于内存充足设备。它只保留已播放数据、改善回退Seek，不会提高下载速度或解决向前卡顿；档位越高占用越大。"));
+        if (playCache) options.add(option(PLAY_CACHE, BUFFER, "HLS 播放缓存", "怎么选：普通播放保持默认128MB；频繁回看/拖动可选256～512MB；1～2GB只适合存储充足且长时间播放HLS。它是代理磁盘缓存，不会直接提高MPV解码流畅度；代价是更多磁盘占用和写入。"));
     }
 
     private static void addPreload(List<PlaybackPerformanceOption> options) {
-        options.add(option(PRELOAD, PRELOAD_SECTION, "预载", "提前准备当前播放位置之后的数据，改善拖动和网络波动；会增加网络流量、磁盘写入和后台连接。"));
-        options.add(option(PRELOAD_THREADS, PRELOAD_SECTION, "预载线程", "并发越高填充越快，也越可能挤占当前播放的网络、CPU和服务器连接。"));
-        options.add(option(PRELOAD_SIZE, PRELOAD_SECTION, "预载容量", "限制预载磁盘预算。容量越大可保存更多内容，也会占用更多存储空间。"));
-        options.add(option(PRELOAD_TIME, PRELOAD_SECTION, "预载时间", "控制每次向前预载的时间范围。范围越长越抗较长网络波动，也会下载更多数据。"));
+        options.add(option(PRELOAD, PRELOAD_SECTION, "预载", "怎么选：网盘点播和大文件建议保持自动/开启，可提前准备后续数据；直播、流量受限或播放本身已被预载抢带宽时关闭。代价：增加流量、磁盘写入和后台连接，预载不能抢占当前播放。"));
+        options.add(option(PRELOAD_THREADS, PRELOAD_SECTION, "预载线程", "怎么选：自动档使用0～2条；手动通常1条最稳，播放带宽有富余可试2条，不建议盲目加高。线程越多不等于播放越快，反而可能挤占当前播放、触发服务器限流或412。"));
+        options.add(option(PRELOAD_SIZE, PRELOAD_SECTION, "预载容量", "怎么选：保持档位默认；长视频/网盘大文件且存储充足可提高，空间紧张则降低。容量决定最多保存多少预载数据，不提高瞬时网速；越大占用磁盘越多。"));
+        options.add(option(PRELOAD_TIME, PRELOAD_SECTION, "预载时间", "怎么选：自动档每次10～30秒；网络有短时波动可适当提高，流量或磁盘受限则降低。范围越长越能跨过较长波动，也会下载更多；过长可能让预载持续占用连接。"));
     }
 
     private static String profileDescription(int kernel) {
         return switch (kernel) {
-            case PlayerSetting.MPV -> "自动档当前使用MPV均衡基线；第三批完成指标闭环后再增加动态能力。MPV独立组合输出、硬解、同步、缓存和诊断参数，参数优先级决定它与用户mpv.conf同名设置的覆盖关系。";
-            case PlayerSetting.IJK -> "自动档当前使用IJK均衡基线。IJK独立组合读包、缓冲、水位、丢帧、探测和直播策略，不修改EXO/MPV专用值。";
-            default -> "自动档以均衡参数起步，根据真实缓冲、码率和带宽把预载调整为0～2线程，并为下一播放会话选择2～8秒重缓冲恢复值；LoadControl容量、解码器和渲染器在单次会话内保持稳定。";
+            case PlayerSetting.MPV -> "首选“自动”：电视4K硬解且不需要MPV字幕/LUT/shader/滤镜时自动用低开销电视直出，其他场景保留GPU完整能力。“均衡”固定使用同一组通用参数；“兼容”改用GPU完整＋mediacodec-copy，适合零拷贝异常但4K可能更卡；“轻量”限制HLS至8Mbps并降低缓存，适合低内存/低性能设备。手动改任一项后显示“自定义”。";
+            case PlayerSetting.IJK -> "首选“自动”：按协议采用稳定的点播/直播基线。“均衡”固定使用15MB读包、标准水位和标准丢帧；“兼容”提高水位、探测和画面队列，起播/恢复更慢但更稳；“轻量”降到4MB、快速探测和积极丢帧，省内存但更容易卡顿和损失画面。手动改任一项后显示“自定义”。";
+            default -> "首选“自动”（也是默认）：以均衡参数起步，根据真实缓冲、码率和带宽把预载调为0～2线程，并在下一播放会话把重缓冲恢复调到2～8秒。“均衡”固定为1.5秒起播/3秒恢复；“兼容”用同步队列、2秒起播/5秒恢复，适合异步解码异常但启动更慢；“轻量”缩小缓存、1秒起播/2秒恢复，省内存但抗波动更弱。手动改任一项后显示“自定义”。";
         };
     }
 

@@ -118,6 +118,7 @@ import com.fongmi.android.tv.ui.helper.EpisodeDisplayPolicy;
 import com.fongmi.android.tv.ui.helper.PlayerControlFocusHelper;
 import com.fongmi.android.tv.ui.helper.TmdbEpisodeGridPolicy;
 import com.fongmi.android.tv.ui.helper.TmdbNavigation;
+import com.fongmi.android.tv.ui.helper.VodEventGuard;
 import com.fongmi.android.tv.ui.player.VodPlayerChrome;
 import com.fongmi.android.tv.ui.player.VodPlayerUiController;
 import com.fongmi.android.tv.ui.player.VodPlayerUiHost;
@@ -1699,9 +1700,8 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         updateFastTmdbPlaybackHistory(flag, episode);
         mBinding.control.action.opening.setText(mHistory.getOpening() <= 0 ? getString(R.string.play_op) : Util.timeMs(mHistory.getOpening()));
         mBinding.control.action.ending.setText(mHistory.getEnding() <= 0 ? getString(R.string.play_ed) : Util.timeMs(mHistory.getEnding()));
-        float speed = (mHistory.getSpeed() > 0 && mHistory.getSpeed() != 1f) ? mHistory.getSpeed() : 1f;
+        float speed = getPlaybackSpeed();
         mBinding.control.action.speed.setText(player().setSpeed(speed));
-        mHistory.setSpeed(player().getSpeed());
         PlaybackEventCollector.get().updateHistory(mHistory);
     }
 
@@ -1730,6 +1730,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     private void resetDetailForNewIntent() {
+        if (mTmdbUIAdapter != null) mTmdbUIAdapter.beginDetailRequest();
         detailRequested = false;
         detailHealthRecorded = false;
         playHealthRecorded = false;
@@ -1820,7 +1821,15 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         detailStartTime = System.currentTimeMillis();
         detailHealthRecorded = false;
         SpiderDebug.log("video-flow", "detail start key=%s id=%s name=%s", getKey(), getId(), getName());
+        prefetchDirectTmdbDetail();
         mViewModel.detailContent(getKey(), getId());
+    }
+
+    private void prefetchDirectTmdbDetail() {
+        if (mTmdbUIAdapter == null || !mTmdbUIAdapter.isReady()) return;
+        mTmdbUIAdapter.beginDetailRequest();
+        com.fongmi.android.tv.bean.TmdbItem item = getTmdbItem();
+        if (item != null) mTmdbUIAdapter.prefetch(item);
     }
 
     private void getDetail(Vod item) {
@@ -3227,32 +3236,31 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
 
     private void onSpeed() {
         mBinding.control.action.speed.setText(player().addSpeed());
-        saveDefaultSpeed();
+        saveUserSpeed();
         setR1Callback();
     }
 
     private void onSpeedAdd() {
         mBinding.control.action.speed.setText(player().addSpeed(0.25f));
-        saveDefaultSpeed();
+        saveUserSpeed();
         setR1Callback();
     }
 
     private void onSpeedSub() {
         mBinding.control.action.speed.setText(player().subSpeed(0.25f));
-        saveDefaultSpeed();
+        saveUserSpeed();
         setR1Callback();
     }
 
     private boolean onSpeedLong() {
-        mBinding.control.action.speed.setText(player().toggleSpeed());
-        saveDefaultSpeed();
+        mBinding.control.action.speed.setText(player().toggleSpeed(getPlaybackSpeed()));
+        saveUserSpeed();
         setR1Callback();
         return true;
     }
 
-    private void saveDefaultSpeed() {
-        PlayerSetting.putDefaultSpeed(player().getSpeed());
-        mHistory.setSpeed(player().getSpeed());
+    private void saveUserSpeed() {
+        mHistory.setUserSpeed(player().getSpeed());
     }
 
     private void onReset() {
@@ -3730,10 +3738,9 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         if (Setting.isIncognito() && mHistory.getKey().equals(getHistoryKey())) mHistory.delete();
         mBinding.control.action.opening.setText(mHistory.getOpening() <= 0 ? getString(R.string.play_op) : Util.timeMs(mHistory.getOpening()));
         mBinding.control.action.ending.setText(mHistory.getEnding() <= 0 ? getString(R.string.play_ed) : Util.timeMs(mHistory.getEnding()));
-        // 如果历史记录中已有速度（播放过的剧），使用历史记录中的速度；否则使用默认速度1.0x
-        float speed = (mHistory.getSpeed() > 0 && mHistory.getSpeed() != 1f) ? mHistory.getSpeed() : 1f;
+        // 如果历史记录中已有有效倍速，使用历史倍速；否则使用默认播放倍速
+        float speed = getPlaybackSpeed();
         mBinding.control.action.speed.setText(player().setSpeed(speed));
-        mHistory.setSpeed(player().getSpeed());
         mHistory.setVodName(item.getName());
         enrichHistoryMeta(item);
         PlaybackEventCollector.get().updateHistory(mHistory);
@@ -4229,20 +4236,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     private boolean isCurrentVodEvent(Vod item) {
-        if (item == null) return false;
-        String id = item.getId();
-        String siteKey = item.getSiteKey();
-        // 站点 id 可能包含分页标记（如 "140036/40"），而 Vod 的 id 通常不含（如 "140036"）
-        // 需要容忍 Intent id 中的分页后缀：去掉首个 "/" 之后的后缀再比较
-        if (!TextUtils.isEmpty(id) && !TextUtils.equals(id, stripPageSuffix(getId()))) return false;
-        return TextUtils.isEmpty(siteKey) || TextUtils.equals(siteKey, getKey());
-    }
-
-    /** 去掉 id 中的分页后缀，如 "140036/40" → "140036" */
-    private static String stripPageSuffix(String id) {
-        if (TextUtils.isEmpty(id)) return id;
-        int slash = id.indexOf('/');
-        return slash > 0 ? id.substring(0, slash) : id;
+        return VodEventGuard.matches(item, getKey(), getId());
     }
 
     private void loadNativePersonalRecommendations(Vod item) {
@@ -5309,10 +5303,11 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
 
     private void setSpeed() {
         if (mHistory == null) return;
-        float speed = mHistory.getSpeed();
-        if (speed > 0 && speed != 1f) {
-            mBinding.control.action.speed.setText(player().setSpeed(speed));
-        }
+        mBinding.control.action.speed.setText(player().setSpeed(getPlaybackSpeed()));
+    }
+
+    private float getPlaybackSpeed() {
+        return mHistory == null ? PlayerSetting.getDefaultSpeed() : mHistory.getPlaybackSpeed(PlayerSetting.getDefaultSpeed());
     }
 
     private void checkEnded(boolean notify) {
@@ -5811,8 +5806,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     public void onSpeedEnd() {
         mBinding.widget.speed.clearAnimation();
         mBinding.widget.speed.setVisibility(View.GONE);
-        mBinding.control.action.speed.setText(player().setSpeed(PlayerSetting.getDefaultSpeed()));
-        mHistory.setSpeed(player().getSpeed());
+        mBinding.control.action.speed.setText(player().setSpeed(getPlaybackSpeed()));
     }
 
     @Override
@@ -5948,6 +5942,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         App.removeCallbacks(mPendingFastTmdbPlaybackStart);
         App.removeCallbacks(mTmdbDetailTimeout);
         resetPendingTmdbBind();
+        if (mTmdbUIAdapter != null) mTmdbUIAdapter.release();
         mViewModel.getResult().removeObserver(mObserveDetail);
         mViewModel.getPlayer().removeObserver(mObservePlayer);
         mViewModel.getSearch().removeObserver(mObserveSearch);

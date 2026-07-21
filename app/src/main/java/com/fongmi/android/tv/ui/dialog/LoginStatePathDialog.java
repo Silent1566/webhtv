@@ -34,6 +34,7 @@ import com.fongmi.android.tv.ui.custom.SafeScrollEditText;
 import com.fongmi.android.tv.utils.FileUtil;
 import com.fongmi.android.tv.utils.Formatters;
 import com.fongmi.android.tv.utils.LoginStateSync;
+import com.fongmi.android.tv.utils.LoginStatePathIndex;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.Task;
@@ -57,6 +58,7 @@ public class LoginStatePathDialog extends BaseAlertDialog {
     private static final int MAX_EDIT_CHARS = 32 * 1024;
     private static final int MAX_EDIT_LINE_CHARS = 1600;
     private static final int TEXT_ROW_CHARS = 1200;
+    private static final int MAX_AUTO_EXPAND_PATHS = 128;
 
     private final Set<String> selected = new LinkedHashSet<>();
     private final Set<String> expanded = new LinkedHashSet<>();
@@ -64,16 +66,22 @@ public class LoginStatePathDialog extends BaseAlertDialog {
     private final Map<String, LoginStateSync.Candidate> findings = new HashMap<>();
     private final List<Row> appRows = new ArrayList<>();
     private final List<Row> sdcardRows = new ArrayList<>();
+    private LoginStatePathIndex selectedIndex = new LoginStatePathIndex();
+    private LoginStatePathIndex pendingIndex = new LoginStatePathIndex();
+    private LoginStatePathIndex visiblePendingIndex = new LoginStatePathIndex();
 
     private DialogLoginStatePathBinding binding;
     private TreeAdapter appAdapter;
     private TreeAdapter sdcardAdapter;
     private Runnable callback;
     private Dialog editor;
+    private boolean stateLoaded;
+    private int loadGeneration;
     private boolean appPanelCollapsed;
     private boolean sdcardPanelCollapsed;
     private boolean appPanelTouched;
     private boolean sdcardPanelTouched;
+    private boolean treeTruncated;
 
     public static void show(Fragment fragment, Runnable callback) {
         show(fragment.requireActivity(), callback);
@@ -97,24 +105,20 @@ public class LoginStatePathDialog extends BaseAlertDialog {
 
     @Override
     protected void initView() {
-        selected.addAll(LoginStateSync.learnedPaths());
-        reloadPending();
-        expandLearnedAndPending();
         binding.appRecycler.setHasFixedSize(false);
         binding.sdcardRecycler.setHasFixedSize(false);
         binding.appRecycler.addItemDecoration(new SpaceItemDecoration(1, 4));
         binding.sdcardRecycler.addItemDecoration(new SpaceItemDecoration(1, 4));
         binding.appRecycler.setAdapter(appAdapter = new TreeAdapter(appRows));
         binding.sdcardRecycler.setAdapter(sdcardAdapter = new TreeAdapter(sdcardRows));
-        rebuild();
+        binding.positive.setEnabled(false);
+        loadStateAsync(false);
     }
 
     @Override
     protected void initEvent() {
         binding.refresh.setOnClickListener(v -> {
-            reloadPending();
-            expandLearnedAndPending();
-            rebuild();
+            loadStateAsync(true);
         });
         binding.appTitle.setOnClickListener(v -> togglePanel(ROOT_APP));
         binding.sdcardTitle.setOnClickListener(v -> togglePanel(ROOT_SDCARD));
@@ -156,19 +160,43 @@ public class LoginStatePathDialog extends BaseAlertDialog {
         super.onDestroyView();
     }
 
-    private void reloadPending() {
-        pending.clear();
-        pending.addAll(LoginStateSync.pendingPaths());
-        findings.clear();
-        for (LoginStateSync.Candidate item : LoginStateSync.findings()) {
-            String path = normalize(item.getPath());
-            if (!path.isEmpty()) findings.put(path, item);
-        }
+    private void loadStateAsync(boolean preserveSelection) {
+        int generation = ++loadGeneration;
+        stateLoaded = false;
+        binding.refresh.setEnabled(false);
+        binding.positive.setEnabled(false);
+        Task.execute(() -> {
+            List<String> learned = LoginStateSync.learnedPaths();
+            List<String> pendingPaths = LoginStateSync.pendingPaths();
+            List<LoginStateSync.Candidate> candidateList = LoginStateSync.findings();
+            Map<String, LoginStateSync.Candidate> candidateMap = new HashMap<>();
+            for (LoginStateSync.Candidate item : candidateList) {
+                String path = LoginStateSync.normalizePath(item.getPath());
+                if (!path.isEmpty()) candidateMap.put(path, item);
+            }
+            App.post(() -> {
+                if (binding == null || generation != loadGeneration || !isAdded()) return;
+                if (!preserveSelection) {
+                    selected.clear();
+                    selected.addAll(learned);
+                }
+                pending.clear();
+                pending.addAll(pendingPaths);
+                findings.clear();
+                findings.putAll(candidateMap);
+                stateLoaded = true;
+                binding.refresh.setEnabled(true);
+                binding.positive.setEnabled(true);
+                expandLearnedAndPending();
+                rebuild();
+            });
+        });
     }
 
     private void expandLearnedAndPending() {
         expanded.add(ROOT_APP);
         expanded.add(ROOT_SDCARD);
+        if (selected.size() + pending.size() > MAX_AUTO_EXPAND_PATHS) return;
         for (String path : selected) expandPath(path);
         for (String path : pending) expandPath(path);
         for (LoginStateSync.PathState state : LoginStateSync.pathStates(new ArrayList<>(selected))) {
@@ -190,6 +218,8 @@ public class LoginStatePathDialog extends BaseAlertDialog {
     }
 
     private void rebuild() {
+        rebuildIndexes();
+        treeTruncated = false;
         appRows.clear();
         sdcardRows.clear();
         buildRows(ROOT_APP, 0, appRows);
@@ -203,6 +233,7 @@ public class LoginStatePathDialog extends BaseAlertDialog {
 
     private void buildRows(String dir, int depth, List<Row> rows) {
         LoginStateSync.Tree tree = LoginStateSync.tree(dir);
+        if (tree.isTruncated()) treeTruncated = true;
         for (LoginStateSync.TreeItem item : tree.getItems()) {
             Row row = new Row(item, depth);
             rows.add(row);
@@ -211,6 +242,7 @@ public class LoginStatePathDialog extends BaseAlertDialog {
     }
 
     private void appendMissingRows(String root, List<Row> rows) {
+        if (selected.size() + pending.size() > MAX_AUTO_EXPAND_PATHS) return;
         Set<String> visible = new LinkedHashSet<>();
         for (Row row : rows) visible.add(row.item.getPath());
         LinkedHashSet<String> paths = new LinkedHashSet<>();
@@ -270,6 +302,7 @@ public class LoginStatePathDialog extends BaseAlertDialog {
         String target = path;
         selected.removeIf(item -> covers(target, item) || covers(item, target));
         selected.add(target);
+        rebuildIndexes();
     }
 
     private void removePath(String path) {
@@ -277,9 +310,11 @@ public class LoginStatePathDialog extends BaseAlertDialog {
         if (path.isEmpty()) return;
         String target = path;
         selected.removeIf(item -> covers(item, target));
+        rebuildIndexes();
     }
 
     private void onPositive() {
+        if (!stateLoaded) return;
         LoginStateSync.savePaths(new ArrayList<>(selected));
         if (callback != null) callback.run();
         dismiss();
@@ -293,7 +328,9 @@ public class LoginStatePathDialog extends BaseAlertDialog {
             else missing++;
         }
         int pendingCount = pendingToConfirm().size();
-        binding.summary.setText(selected.isEmpty() ? getString(R.string.login_state_paths_empty_selected_with_pending, pendingCount) : getString(R.string.login_state_paths_selected_count_with_pending, selected.size(), ready, missing, pendingCount));
+        String summary = selected.isEmpty() ? getString(R.string.login_state_paths_empty_selected_with_pending, pendingCount) : getString(R.string.login_state_paths_selected_count_with_pending, selected.size(), ready, missing, pendingCount);
+        if (treeTruncated) summary += " · " + getString(R.string.login_state_tree_truncated);
+        binding.summary.setText(summary);
         binding.selectSafe.setEnabled(pendingCount > 0);
         binding.selectSafe.setText(pendingCount > 0 ? getString(R.string.login_state_reveal_pending_count, pendingCount) : getString(R.string.login_state_reveal_pending));
         binding.empty.setVisibility(appRows.isEmpty() && sdcardRows.isEmpty() ? View.VISIBLE : View.GONE);
@@ -346,16 +383,14 @@ public class LoginStatePathDialog extends BaseAlertDialog {
 
     private List<String> pendingToConfirm() {
         List<String> result = new ArrayList<>();
-        for (String path : pending) {
-            if (stateOf(path) != MaterialCheckBox.STATE_CHECKED) result.add(path);
-        }
+        for (String path : pending) if (!selectedIndex.hasAncestor(path)) result.add(path);
         return result;
     }
 
     private int stateOf(String path) {
         path = normalize(path);
-        for (String item : selected) if (covers(item, path)) return MaterialCheckBox.STATE_CHECKED;
-        for (String item : selected) if (covers(path, item)) return MaterialCheckBox.STATE_INDETERMINATE;
+        if (selectedIndex.hasAncestor(path)) return MaterialCheckBox.STATE_CHECKED;
+        if (selectedIndex.hasDescendant(path)) return MaterialCheckBox.STATE_INDETERMINATE;
         return MaterialCheckBox.STATE_UNCHECKED;
     }
 
@@ -367,13 +402,19 @@ public class LoginStatePathDialog extends BaseAlertDialog {
 
     private boolean isPending(String path) {
         path = normalize(path);
-        return pending.contains(path) && stateOf(path) != MaterialCheckBox.STATE_CHECKED;
+        return pendingIndex.contains(path) && !selectedIndex.hasAncestor(path);
     }
 
     private boolean hasPendingChild(String path) {
         path = normalize(path);
-        for (String item : pending) if (!item.equals(path) && covers(path, item) && stateOf(item) != MaterialCheckBox.STATE_CHECKED) return true;
-        return false;
+        return visiblePendingIndex.hasDescendant(path);
+    }
+
+    private void rebuildIndexes() {
+        selectedIndex = new LoginStatePathIndex(selected);
+        pendingIndex = new LoginStatePathIndex(pending);
+        visiblePendingIndex = new LoginStatePathIndex();
+        for (String path : pending) if (!selectedIndex.hasAncestor(path)) visiblePendingIndex.add(path);
     }
 
     private boolean isMissing(String path) {
@@ -482,9 +523,8 @@ public class LoginStatePathDialog extends BaseAlertDialog {
                 App.post(() -> {
                     dialog.dismiss();
                     Notify.show(R.string.login_state_saved);
-                    reloadPending();
+                    loadStateAsync(false);
                     expandPath(path);
-                    rebuild();
                 });
             } catch (Exception e) {
                 App.post(() -> Notify.show(e.getMessage()));

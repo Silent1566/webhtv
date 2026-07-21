@@ -34,6 +34,7 @@ import com.fongmi.android.tv.player.Source;
 import com.fongmi.android.tv.receiver.ShortcutReceiver;
 import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.service.PlaybackService;
+import com.fongmi.android.tv.setting.AutoBackupPolicy;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.custom.FragmentStateManager;
@@ -441,7 +442,13 @@ public class HomeActivity extends BaseActivity implements NavigationBarView.OnIt
         if (mChrome != null) mChrome.destroy();
         LiveConfig.get().clear();
         VodConfig.get().clear();
-        AppDatabase.backup();
+        if (AutoBackupPolicy.shouldRun(
+                Setting.isAutoBackup(),
+                Setting.hasFileAccess(),
+                isFinishing(),
+                isChangingConfigurations())) {
+            AppDatabase.backup();
+        }
         OkHttp.get().clear();
         Source.get().exit();
         Server.get().stop();

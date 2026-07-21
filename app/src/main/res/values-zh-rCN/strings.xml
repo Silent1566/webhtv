@@ -190,9 +190,11 @@
     <string name="group_rule_edit_item">编辑 · %1$s\n%2$s</string>
     <string name="group_rule_interface_item">接口 · %1$s\n%2$s</string>
     <string name="setting_home_vod_auto_load">默认加载点播</string>
+    <string name="setting_auto_backup">自动备份</string>
     <string name="setting_fullscreen_menu_key">全屏菜单键</string>
     <string name="setting_home_menu_key">首页菜单键</string>
     <string name="setting_play_back_to_detail">播放返回详情</string>
+    <string name="setting_play_speed">播放倍速</string>
     <string name="setting_home_history">首页最近观看</string>
     <string name="setting_personal_recommendation">个性推荐</string>
     <string name="setting_tmdb_episode_file_size">TMDB 剧集保留文件大小</string>
@@ -571,6 +573,7 @@
         <item>总时长，单位毫秒。</item>
         <item>进度比例，范围 0 到 1。</item>
         <item>播放倍速。</item>
+        <item>播放倍速是否显式覆盖个人默认值。</item>
         <item>是否视为完播。</item>
         <item>当前集原始 URL，可能包含源站参数。</item>
         <item>当前集序号，可识别时返回。</item>
@@ -824,6 +827,7 @@
     <string name="restore_fail">恢复失败</string>
     <string name="backup_success">备份成功</string>
     <string name="backup_fail">备份失败</string>
+    <string name="backup_permission_denied">需要存储权限才能备份或恢复数据</string>
 
     <!-- Device Sync -->
     <string name="device_select">选择设备</string>
@@ -902,6 +906,7 @@
     <string name="login_state_tree_title_count">%1$s · 已确认 %2$d · 待确认 %3$d</string>
     <string name="login_state_tree_expand">展开文件夹</string>
     <string name="login_state_tree_collapse">收起文件夹</string>
+    <string name="login_state_tree_truncated">目录项目过多已限量，请直接选择文件夹或缩小路径</string>
     <string name="login_state_state_selected">已选</string>
     <string name="login_state_state_pending">待确认</string>
     <string name="login_state_state_has_pending">含待确认</string>

@@ -26,7 +26,7 @@ on:
         default: false
         type: boolean
       sync_cnb:
-        description: "Upload APKs to CNB Release and sync JSON manifests"
+        description: "Optionally mirror APKs to CNB Release and sync CNB manifests"
         required: false
         default: false
         type: boolean
@@ -38,8 +38,8 @@ env:
   TZ: Asia/Shanghai
   CNB_API_ENDPOINT: https://api.cnb.cool
   CNB_WEB_ENDPOINT: https://cnb.cool
-  CNB_REPO_SLUG: fish2018/webhtv-release
-  CNB_REPO_URL: https://cnb.cool/fish2018/webhtv-release.git
+  CNB_REPO_SLUG: fish2035/webhtv-release
+  CNB_REPO_URL: https://cnb.cool/fish2035/webhtv-release.git
 
 jobs:
   release:
@@ -82,6 +82,14 @@ jobs:
           platform_jar="$(find /tmp/platform-37 -name android.jar -print -quit)"
           test -n "$platform_jar"
           mv "$(dirname "$platform_jar")" "$ANDROID_HOME/platforms/android-37"
+
+      - name: Run WebSocket danmaku tests
+        run: |
+          chmod +x ./gradlew
+          ./gradlew \
+            :app:testMobileArm64_v8aDebugUnitTest \
+            --tests 'com.fongmi.android.tv.player.danmaku.*' \
+            --no-daemon
 
       - name: Resolve release tag
         id: meta
@@ -210,6 +218,7 @@ jobs:
       - name: Generate update manifests
         env:
           RELEASE_NOTES: ${{ steps.release_notes.outputs.notes }}
+          GITHUB_RELEASE_DOWNLOAD_BASE: https://github.com/${{ github.repository }}/releases/download/${{ steps.meta.outputs.tag }}
         run: |
           python3 - <<'PY'
           import glob
@@ -219,6 +228,7 @@ jobs:
 
           tag = "${{ steps.meta.outputs.tag }}"
           notes = os.environ.get("RELEASE_NOTES", "").strip()
+          release_download_base = os.environ["GITHUB_RELEASE_DOWNLOAD_BASE"]
           for apk in glob.glob("dist/*.apk"):
               base = os.path.splitext(os.path.basename(apk))[0]
               with open(apk, "rb") as fh:
@@ -228,7 +238,7 @@ jobs:
                   "desc": f"{tag} - ${{ steps.meta.outputs.short_sha }}",
                   "channel": "${{ steps.meta.outputs.channel }}",
                   "code": int("${{ steps.meta.outputs.version_code }}"),
-                  "apk": f"{base}.apk",
+                  "apk": f"{release_download_base}/{base}.apk",
                   "size": len(content),
                   "sha256": hashlib.sha256(content).hexdigest(),
               }

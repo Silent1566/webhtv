@@ -8,11 +8,11 @@ on:
         required: false
         type: string
       cnb_repo_url:
-        description: "CNB repo URL, blank = fish2018/webhtv-release"
+        description: "CNB repo URL, blank = fish2035/webhtv-release"
         required: false
         type: string
       cnb_repo_slug:
-        description: "CNB repo slug, blank = fish2018/webhtv-release"
+        description: "CNB repo slug, blank = fish2035/webhtv-release"
         required: false
         type: string
 
@@ -24,8 +24,8 @@ env:
   GH_REPO: ${{ github.repository }}
   CNB_API_ENDPOINT: https://api.cnb.cool
   CNB_WEB_ENDPOINT: https://cnb.cool
-  CNB_REPO_SLUG: ${{ inputs.cnb_repo_slug || 'fish2018/webhtv-release' }}
-  CNB_REPO_URL: ${{ inputs.cnb_repo_url || 'https://cnb.cool/fish2018/webhtv-release.git' }}
+  CNB_REPO_SLUG: ${{ inputs.cnb_repo_slug || 'fish2035/webhtv-release' }}
+  CNB_REPO_URL: ${{ inputs.cnb_repo_url || 'https://cnb.cool/fish2035/webhtv-release.git' }}
 
 jobs:
   sync:

@@ -27,6 +27,10 @@ public record ConfigEvent(Type type) {
         LiveSetting.putBoot(false);
     }
 
+    public static void playerPerformance() {
+        EventBus.getDefault().post(new ConfigEvent(Type.PLAYER_PERFORMANCE));
+    }
+
     public boolean isVod() {
         return type == Type.VOD;
     }
@@ -35,7 +39,11 @@ public record ConfigEvent(Type type) {
         return type == Type.LIVE;
     }
 
+    public boolean isPlayerPerformance() {
+        return type == Type.PLAYER_PERFORMANCE;
+    }
+
     public enum Type {
-        COMMON, VOD, LIVE, WALL, BOOT
+        COMMON, VOD, LIVE, WALL, BOOT, PLAYER_PERFORMANCE
     }
 }

@@ -1,0 +1,416 @@
+diff --git a/libraries/ui_danmaku/src/main/java/androidx/media3/ui/danmaku/Danmaku.java b/libraries/ui_danmaku/src/main/java/androidx/media3/ui/danmaku/Danmaku.java
+--- a/libraries/ui_danmaku/src/main/java/androidx/media3/ui/danmaku/Danmaku.java
++++ b/libraries/ui_danmaku/src/main/java/androidx/media3/ui/danmaku/Danmaku.java
+@@ -63,0 +64 @@
++  boolean liveItem;
+@@ -67,0 +68 @@
++  long liveExpiryElapsedRealtimeMs;
+@@ -108,0 +110,5 @@
++  public Danmaku setLiveExpiryElapsedRealtimeMs(long expiryElapsedRealtimeMs) {
++    this.liveExpiryElapsedRealtimeMs = Math.max(0L, expiryElapsedRealtimeMs);
++    return this;
++  }
++
+diff --git a/libraries/ui_danmaku/build.gradle.kts b/libraries/ui_danmaku/build.gradle.kts
+--- a/libraries/ui_danmaku/build.gradle.kts
++++ b/libraries/ui_danmaku/build.gradle.kts
+@@ -27,4 +27,10 @@ dependencies {
+   implementation(libs.brotli.dec)
+   compileOnly(libs.checkerframework.qual)
+   compileOnly(libs.kotlin.annotations.jvm)
++
++  testImplementation(libs.androidx.test.core)
++  testImplementation(libs.androidx.test.ext.junit)
++  testImplementation(libs.junit)
++  testImplementation(libs.truth)
++  testImplementation(libs.robolectric)
+ }
+diff --git a/libraries/ui_danmaku/src/test/java/androidx/media3/ui/danmaku/DanmakuViewLiveLoadTest.java b/libraries/ui_danmaku/src/test/java/androidx/media3/ui/danmaku/DanmakuViewLiveLoadTest.java
+new file mode 100644
+--- /dev/null
++++ b/libraries/ui_danmaku/src/test/java/androidx/media3/ui/danmaku/DanmakuViewLiveLoadTest.java
+@@ -0,0 +1,175 @@
++/*
++ * Copyright (C) 2026 The Android Open Source Project
++ *
++ * Licensed under the Apache License, Version 2.0 (the "License");
++ * you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *      http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package androidx.media3.ui.danmaku;
++
++import static com.google.common.truth.Truth.assertThat;
++
++import android.app.Activity;
++import android.content.Context;
++import android.graphics.Canvas;
++import android.os.HandlerThread;
++import android.os.SystemClock;
++import androidx.test.ext.junit.runners.AndroidJUnit4;
++import java.lang.reflect.Field;
++import java.time.Duration;
++import java.util.ArrayList;
++import java.util.List;
++import java.util.function.BooleanSupplier;
++import org.junit.After;
++import org.junit.Before;
++import org.junit.Test;
++import org.junit.runner.RunWith;
++import org.robolectric.Robolectric;
++import org.robolectric.Shadows;
++import org.robolectric.annotation.Config;
++import org.robolectric.android.controller.ActivityController;
++import org.robolectric.shadows.ShadowLooper;
++import org.robolectric.shadows.ShadowSystemClock;
++
++@RunWith(AndroidJUnit4.class)
++@Config(sdk = 28)
++public final class DanmakuViewLiveLoadTest {
++
++  private static final int TARGET_RATE_PER_SECOND = 300;
++  private static final int DELIVERY_WINDOWS_PER_SECOND = 20;
++  private static final int MESSAGES_PER_WINDOW = TARGET_RATE_PER_SECOND / DELIVERY_WINDOWS_PER_SECOND;
++  private static final int LIVE_PENDING_CAPACITY = 144;
++  private static final int MAX_ACTIVATION_ATTEMPTS_PER_FRAME = 16;
++
++  private DanmakuView view;
++  private Canvas canvas;
++  private ActivityController<Activity> activityController;
++
++  @Before
++  public void setUp() {
++    activityController = Robolectric.buildActivity(Activity.class).setup();
++    Context context = activityController.get();
++    view = new DanmakuView(context);
++    view.setConfig(
++        DanmakuConfig.DEFAULT.buildUpon()
++            .setMaxOnScreen(1000)
++            .setAllowOverlapping(true)
++            .build());
++    view.setDrawEnabled(false);
++    activityController.get().setContentView(view);
++    view.layout(0, 0, 1920, 1080);
++    view.start(0L);
++    canvas = new Canvas();
++  }
++
++  @After
++  public void tearDown() {
++    view.release();
++    activityController.close();
++  }
++
++  @Test
++  public void sustainedThreeHundredPerSecond_drainsWithoutOverflow() throws Exception {
++    int offered = 0;
++    for (int window = 0; window < DELIVERY_WINDOWS_PER_SECOND; window++) {
++      view.offerLiveBatch(createBatch(MESSAGES_PER_WINDOW, offered, 0L));
++      offered += MESSAGES_PER_WINDOW;
++      int expectedOffered = offered;
++      waitUntil(() -> view.getLiveStats().offered == expectedOffered);
++
++      view.onDraw(canvas);
++      DanmakuView.LiveStats stats = view.getLiveStats();
++      assertThat(stats.pending).isEqualTo(0);
++      assertThat(stats.droppedOverflow).isEqualTo(0L);
++      ShadowSystemClock.advanceBy(Duration.ofMillis(50));
++    }
++
++    DanmakuView.LiveStats stats = view.getLiveStats();
++    assertThat(stats.offered).isEqualTo(TARGET_RATE_PER_SECOND);
++    assertThat(stats.admitted).isEqualTo(TARGET_RATE_PER_SECOND);
++    assertThat(stats.highWaterMark).isEqualTo(MESSAGES_PER_WINDOW);
++    assertThat(stats.droppedExpired).isEqualTo(0L);
++    assertThat(MESSAGES_PER_WINDOW).isLessThan(MAX_ACTIVATION_ATTEMPTS_PER_FRAME);
++  }
++
++  @Test
++  public void burstAboveCapacity_dropsOldestAndBoundsOneFrameWork() throws Exception {
++    view.offerLiveBatch(createBatch(300, 0, 0L));
++    waitUntil(() -> view.getLiveStats().offered == 300L);
++
++    DanmakuView.LiveStats beforeDraw = view.getLiveStats();
++    assertThat(beforeDraw.pending).isEqualTo(LIVE_PENDING_CAPACITY);
++    assertThat(beforeDraw.highWaterMark).isEqualTo(LIVE_PENDING_CAPACITY);
++    assertThat(beforeDraw.droppedOverflow).isEqualTo(300L - LIVE_PENDING_CAPACITY);
++
++    view.onDraw(canvas);
++
++    DanmakuView.LiveStats afterDraw = view.getLiveStats();
++    assertThat(afterDraw.admitted).isEqualTo(MAX_ACTIVATION_ATTEMPTS_PER_FRAME);
++    assertThat(afterDraw.pending)
++        .isEqualTo(LIVE_PENDING_CAPACITY - MAX_ACTIVATION_ATTEMPTS_PER_FRAME);
++  }
++
++  @Test
++  public void expiredAndClearedItems_neverReachActiveRenderer() throws Exception {
++    long expiryMs = SystemClock.elapsedRealtime() + 10L;
++    view.offerLiveBatch(createBatch(1, 0, expiryMs));
++    waitUntil(() -> view.getLiveStats().pending == 1);
++    ShadowSystemClock.advanceBy(Duration.ofMillis(11));
++
++    view.onDraw(canvas);
++
++    DanmakuView.LiveStats expiredStats = view.getLiveStats();
++    assertThat(expiredStats.admitted).isEqualTo(0L);
++    assertThat(expiredStats.droppedExpired).isEqualTo(1L);
++    assertThat(expiredStats.pending).isEqualTo(0);
++
++    view.offerLiveBatch(createBatch(300, 1, 0L));
++    view.clearLiveItems();
++    drainAsyncWork();
++
++    DanmakuView.LiveStats clearedStats = view.getLiveStats();
++    assertThat(clearedStats.offered).isEqualTo(0L);
++    assertThat(clearedStats.pending).isEqualTo(0);
++    assertThat(clearedStats.active).isEqualTo(0);
++  }
++
++  private static List<Danmaku> createBatch(int count, int offset, long expiryMs) {
++    List<Danmaku> items = new ArrayList<>(count);
++    for (int i = 0; i < count; i++) {
++      Danmaku danmaku = new Danmaku("live-load-" + (offset + i), 0L);
++      if (expiryMs > 0L) {
++        danmaku.setLiveExpiryElapsedRealtimeMs(expiryMs);
++      }
++      items.add(danmaku);
++    }
++    return items;
++  }
++
++  private void waitUntil(BooleanSupplier condition) throws Exception {
++    long deadlineMs = System.nanoTime() / 1_000_000L + 5_000L;
++    while (!condition.getAsBoolean() && System.nanoTime() / 1_000_000L < deadlineMs) {
++      drainAsyncWork();
++    }
++    drainAsyncWork();
++    assertThat(condition.getAsBoolean()).isTrue();
++  }
++
++  private void drainAsyncWork() throws Exception {
++    Field field = DanmakuView.class.getDeclaredField("backgroundThread");
++    field.setAccessible(true);
++    HandlerThread thread = (HandlerThread) field.get(view);
++    if (thread != null) {
++      Shadows.shadowOf(thread.getLooper()).idle();
++    }
++    ShadowLooper.idleMainLooper();
++  }
++}
+diff --git a/libraries/ui_danmaku/src/main/java/androidx/media3/ui/danmaku/DanmakuController.java b/libraries/ui_danmaku/src/main/java/androidx/media3/ui/danmaku/DanmakuController.java
+--- a/libraries/ui_danmaku/src/main/java/androidx/media3/ui/danmaku/DanmakuController.java
++++ b/libraries/ui_danmaku/src/main/java/androidx/media3/ui/danmaku/DanmakuController.java
+@@ -537,0 +538,16 @@
++    }
++  }
++
++  public void offerLiveBatch(List<Danmaku> items) {
++    if (danmakuView != null && items != null && !items.isEmpty()) {
++      danmakuView.offerLiveBatch(items);
++    }
++  }
++
++  public DanmakuView.LiveStats getLiveStats() {
++    return danmakuView == null ? DanmakuView.LiveStats.EMPTY : danmakuView.getLiveStats();
++  }
++
++  public void clearLiveItems() {
++    if (danmakuView != null) {
++      danmakuView.clearLiveItems();
+diff --git a/libraries/ui_danmaku/src/main/java/androidx/media3/ui/danmaku/DanmakuView.java b/libraries/ui_danmaku/src/main/java/androidx/media3/ui/danmaku/DanmakuView.java
+--- a/libraries/ui_danmaku/src/main/java/androidx/media3/ui/danmaku/DanmakuView.java
++++ b/libraries/ui_danmaku/src/main/java/androidx/media3/ui/danmaku/DanmakuView.java
+@@ -28,0 +29 @@
++import android.os.SystemClock;
+@@ -38,0 +40 @@
++import java.util.ArrayDeque;
+@@ -52,0 +55,2 @@
++  private static final int LIVE_PENDING_CAPACITY = 144;
++  private static final int MAX_LIVE_ACTIVATION_ATTEMPTS_PER_FRAME = 16;
+@@ -56,0 +61 @@
++  private final ArrayDeque<Danmaku> livePending = new ArrayDeque<>(LIVE_PENDING_CAPACITY);
+@@ -57,0 +63 @@
++  private final Paint measurePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+@@ -60,0 +67 @@
++  private final AtomicInteger liveGeneration = new AtomicInteger();
+@@ -80,0 +88,6 @@
++  private long liveOffered;
++  private long liveAdmitted;
++  private long liveDroppedOverflow;
++  private long liveDroppedExpired;
++  private long liveTrackWaits;
++  private int liveHighWaterMark;
+@@ -183,0 +197 @@
++    remeasureLivePending();
+@@ -204 +217,0 @@
+-      Paint measurePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+@@ -278,0 +292 @@
++    clearLivePending();
+@@ -308,0 +323,11 @@
++  public void offerLiveBatch(List<Danmaku> items) {
++    if (released || items.isEmpty()) {
++      return;
++    }
++    List<Danmaku> copy = new ArrayList<>(items);
++    float defaultSizePx = textSizePx;
++    float textScale = config.textScale;
++    int generation = liveGeneration.get();
++    measureLiveBatch(copy, defaultSizePx, textScale, generation);
++  }
++
+@@ -310,0 +336 @@
++    clearLivePending();
+@@ -329,0 +356,29 @@
++    }
++  }
++
++  private void clearLivePending() {
++    liveGeneration.incrementAndGet();
++    livePending.clear();
++    liveOffered = 0L;
++    liveAdmitted = 0L;
++    liveDroppedOverflow = 0L;
++    liveDroppedExpired = 0L;
++    liveTrackWaits = 0L;
++    liveHighWaterMark = 0;
++  }
++
++  public void clearLiveItems() {
++    clearLivePending();
++    int writeIndex = 0;
++    for (int i = 0; i < activeItems.size(); i++) {
++      Danmaku danmaku = activeItems.get(i);
++      if (danmaku.liveItem) {
++        danmaku.active = false;
++        danmaku.trackIndex = -1;
++        danmaku.activatedTimeMs = -1;
++        continue;
++      }
++      if (writeIndex != i) {
++        activeItems.set(writeIndex, danmaku);
++      }
++      writeIndex++;
+@@ -330,0 +386,5 @@
++    if (activeItems.size() > writeIndex) {
++      activeItems.subList(writeIndex, activeItems.size()).clear();
++    }
++    reconcileActiveItemsToTracks();
++    requestRedrawForExternalChange();
+@@ -412,0 +450 @@
++    activateLiveItems(currentMs);
+@@ -431 +469 @@
+-      if (writeIdx > 0) {
++      if (writeIdx > 0 || !livePending.isEmpty()) {
+@@ -488,0 +527,22 @@
++  }
++
++  private void activateLiveItems(long currentMs) {
++    int attempts = Math.min(livePending.size(), MAX_LIVE_ACTIVATION_ATTEMPTS_PER_FRAME);
++    long elapsedRealtimeMs = SystemClock.elapsedRealtime();
++    while (attempts-- > 0 && !livePending.isEmpty() && activeItems.size() < config.maxOnScreen) {
++      Danmaku danmaku = livePending.removeFirst();
++      if (danmaku.liveExpiryElapsedRealtimeMs > 0 && elapsedRealtimeMs > danmaku.liveExpiryElapsedRealtimeMs) {
++        liveDroppedExpired++;
++        continue;
++      }
++      if (!isTypeVisible(danmaku.type) || !isPoolVisible(danmaku.pool)) {
++        continue;
++      }
++      if (!tryActivate(danmaku, currentMs)) {
++        liveTrackWaits++;
++        livePending.addLast(danmaku);
++        continue;
++      }
++      activeItems.add(danmaku);
++      liveAdmitted++;
++    }
+@@ -865 +924,0 @@
+-      Paint measurePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+@@ -873,0 +933,22 @@
++        }
++      }
++    });
++  }
++
++  private void remeasureLivePending() {
++    if (livePending.isEmpty()) {
++      liveGeneration.incrementAndGet();
++      return;
++    }
++    List<Danmaku> copy = new ArrayList<>(livePending);
++    livePending.clear();
++    int generation = liveGeneration.incrementAndGet();
++    measureLiveBatch(copy, textSizePx, config.textScale, generation);
++  }
++
++  private void measureLiveBatch(List<Danmaku> items, float defaultSizePx, float textScale, int generation) {
++    postToBackground(() -> {
++      for (int i = 0; i < items.size(); i++) {
++        Danmaku danmaku = items.get(i);
++        if (danmaku == null || danmaku.text.isEmpty()) {
++          continue;
+@@ -874,0 +956,3 @@
++        float sizePx = danmaku.textSizeSp > 0 ? spToPx(danmaku.textSizeSp * textScale) : defaultSizePx;
++        measurePaint.setTextSize(sizePx);
++        danmaku.measuredWidth = measurePaint.measureText(danmaku.text);
+@@ -875,0 +960 @@
++      post(() -> addMeasuredLiveBatch(items, generation));
+@@ -878,0 +964,50 @@
++  private void addMeasuredLiveBatch(List<Danmaku> items, int generation) {
++    if (released || liveGeneration.get() != generation) {
++      return;
++    }
++    for (int i = 0; i < items.size(); i++) {
++      Danmaku danmaku = items.get(i);
++      if (danmaku == null || danmaku.text.isEmpty()) {
++        continue;
++      }
++      if (livePending.size() >= LIVE_PENDING_CAPACITY) {
++        livePending.removeFirst();
++        liveDroppedOverflow++;
++      }
++      livePending.addLast(danmaku);
++      danmaku.liveItem = true;
++      liveOffered++;
++      liveHighWaterMark = Math.max(liveHighWaterMark, livePending.size());
++    }
++    if (clock.started && !clock.paused && !livePending.isEmpty()) {
++      postInvalidateOnAnimation();
++    }
++  }
++
++  public LiveStats getLiveStats() {
++    return new LiveStats(liveOffered, liveAdmitted, liveDroppedOverflow, liveDroppedExpired, liveTrackWaits, livePending.size(), liveHighWaterMark, activeItems.size());
++  }
++
++  public static final class LiveStats {
++    public static final LiveStats EMPTY = new LiveStats(0L, 0L, 0L, 0L, 0L, 0, 0, 0);
++    public final long offered;
++    public final long admitted;
++    public final long droppedOverflow;
++    public final long droppedExpired;
++    public final long trackWaits;
++    public final int pending;
++    public final int highWaterMark;
++    public final int active;
++
++    public LiveStats(long offered, long admitted, long droppedOverflow, long droppedExpired, long trackWaits, int pending, int highWaterMark, int active) {
++      this.offered = offered;
++      this.admitted = admitted;
++      this.droppedOverflow = droppedOverflow;
++      this.droppedExpired = droppedExpired;
++      this.trackWaits = trackWaits;
++      this.pending = pending;
++      this.highWaterMark = highWaterMark;
++      this.active = active;
++    }
++  }
++

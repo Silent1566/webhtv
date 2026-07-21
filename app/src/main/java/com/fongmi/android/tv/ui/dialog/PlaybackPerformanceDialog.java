@@ -26,6 +26,7 @@ import androidx.fragment.app.FragmentActivity;
 
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.App;
+import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.setting.PlaybackPerformanceCatalog;
 import com.fongmi.android.tv.setting.PlaybackPerformanceOption;
 import com.fongmi.android.tv.setting.PlaybackPerformanceSetting;
@@ -176,7 +177,7 @@ public final class PlaybackPerformanceDialog extends DialogFragment {
         scrollParams.topMargin = dp(10);
         root.addView(scroll, scrollParams);
 
-        addHelpIntro(content, "当前播放器内核：" + playerName() + "。参数列表和本说明由同一份内核能力定义生成；切换内核后，两处内容会同步变化。默认使用“自动”档；EXO会根据缓冲、码率和带宽在安全范围内调整预载，并把重缓冲恢复值用于下一播放会话。MPV和IJK当前使用均衡基线。多数底层参数需要重新进入播放或重建播放器后生效。");
+        addHelpIntro(content, "当前播放器内核：" + playerName() + "。不知道怎么选时保持“自动”（默认）；每项说明都会明确告诉你什么情况更流畅、异常时改哪一档，以及对应代价。EXO会动态调整预载和下一会话的重缓冲恢复；MPV会在符合条件的电视4K场景自动使用低开销电视直出；IJK自动档采用稳定基线。多数底层参数需要重新进入播放或重建播放器后生效。");
         String section = "";
         for (PlaybackPerformanceOption option : options()) {
             if (!section.equals(option.section())) {
@@ -337,6 +338,7 @@ public final class PlaybackPerformanceDialog extends DialogFragment {
     private void refresh() {
         refreshRows();
         syncProfileTabs();
+        ConfigEvent.playerPerformance();
         if (callback != null) callback.run();
     }
 
@@ -351,6 +353,8 @@ public final class PlaybackPerformanceDialog extends DialogFragment {
         tabs.setUnboundedRipple(false);
         int[] labels = {R.string.player_performance_auto, R.string.player_performance_recommended, R.string.player_performance_compatible, R.string.player_performance_lightweight, R.string.player_performance_original};
         for (int label : labels) tabs.addTab(tabs.newTab().setText(label), false);
+        tabs.setFocusable(false);
+        tabs.post(() -> configureProfileTabFocus(tabs));
         tabs.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
             @Override
             public void onTabSelected(TabLayout.Tab tab) {
@@ -363,6 +367,18 @@ public final class PlaybackPerformanceDialog extends DialogFragment {
         });
         syncProfileTabs(tabs);
         return tabs;
+    }
+
+    private void configureProfileTabFocus(TabLayout tabs) {
+        if (!Util.isLeanback() || tabs.getChildCount() == 0) return;
+        View strip = tabs.getChildAt(0);
+        if (!(strip instanceof ViewGroup tabStrip)) return;
+        for (int i = 0; i < tabStrip.getChildCount(); i++) {
+            View tab = tabStrip.getChildAt(i);
+            tab.setFocusable(true);
+            tab.setFocusableInTouchMode(true);
+            tab.setBackgroundResource(R.drawable.selector_mpv_tab_focus);
+        }
     }
 
     private void syncProfileTabs() {
@@ -432,7 +448,6 @@ public final class PlaybackPerformanceDialog extends DialogFragment {
 
     private String optionValue(String id) {
         return switch (id) {
-            case PlaybackPerformanceCatalog.KERNEL -> playerName();
             case PlaybackPerformanceCatalog.PROFILE -> PlaybackPerformanceSetting.getProfileName();
             case PlaybackPerformanceCatalog.RENDER -> renderText();
             case PlaybackPerformanceCatalog.TRACK_LIMIT -> onOff(PlaybackPerformanceSetting.isTrackLimitEnabled());
@@ -459,6 +474,7 @@ public final class PlaybackPerformanceDialog extends DialogFragment {
             case PlaybackPerformanceCatalog.PREFER_AAC -> onOff(PlayerSetting.isPreferAAC());
             case PlaybackPerformanceCatalog.AUDIO_SOFT_PREFER -> onOff(PlayerSetting.isAudioPrefer());
             case PlaybackPerformanceCatalog.VIDEO_SOFT_PREFER -> onOff(PlayerSetting.isVideoPrefer());
+            case PlaybackPerformanceCatalog.MPV_OUTPUT -> MpvPerformanceSetting.getOutputModeText();
             case PlaybackPerformanceCatalog.MPV_RENDER -> mpvRenderText();
             case PlaybackPerformanceCatalog.MPV_HWDEC -> MpvPerformanceSetting.getHwdecText();
             case PlaybackPerformanceCatalog.MPV_FRAME_RATE -> MpvPerformanceSetting.getFrameRateText();
@@ -491,7 +507,7 @@ public final class PlaybackPerformanceDialog extends DialogFragment {
 
     private Runnable optionAction(String id) {
         return switch (id) {
-            case PlaybackPerformanceCatalog.KERNEL, PlaybackPerformanceCatalog.PROFILE -> null;
+            case PlaybackPerformanceCatalog.PROFILE -> null;
             case PlaybackPerformanceCatalog.RENDER -> this::toggleRender;
             case PlaybackPerformanceCatalog.TRACK_LIMIT -> () -> toggle(PlaybackPerformanceSetting::isTrackLimitEnabled, PlaybackPerformanceSetting::putTrackLimitEnabled);
             case PlaybackPerformanceCatalog.ADAPTIVE_DOWNGRADE -> () -> toggle(PlaybackPerformanceSetting::isAdaptiveDowngradeEnabled, PlaybackPerformanceSetting::putAdaptiveDowngradeEnabled);
@@ -528,6 +544,10 @@ public final class PlaybackPerformanceDialog extends DialogFragment {
             case PlaybackPerformanceCatalog.PREFER_AAC -> () -> togglePlayer(PlayerSetting::isPreferAAC, PlayerSetting::putPreferAAC);
             case PlaybackPerformanceCatalog.AUDIO_SOFT_PREFER -> () -> togglePlayer(PlayerSetting::isAudioPrefer, PlayerSetting::putAudioPrefer);
             case PlaybackPerformanceCatalog.VIDEO_SOFT_PREFER -> () -> togglePlayer(PlayerSetting::isVideoPrefer, PlayerSetting::putVideoPrefer);
+            case PlaybackPerformanceCatalog.MPV_OUTPUT -> () -> {
+                MpvPerformanceSetting.putOutputMode((MpvPerformanceSetting.getOutputMode() + 1) % 3);
+                refresh();
+            };
             case PlaybackPerformanceCatalog.MPV_RENDER -> !isMpvVulkanAvailable() && PlayerSetting.getMpvRender() == PlayerSetting.MPV_RENDER_OPENGL ? null : () -> {
                 PlayerSetting.putMpvRender(PlayerSetting.getMpvRender() == PlayerSetting.MPV_RENDER_OPENGL ? PlayerSetting.MPV_RENDER_VULKAN : PlayerSetting.MPV_RENDER_OPENGL);
                 PlaybackPerformanceSetting.markCustom();

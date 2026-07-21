@@ -148,6 +148,7 @@ import com.fongmi.android.tv.ui.helper.EpisodeRangePolicy;
 import com.fongmi.android.tv.ui.helper.PipExitDecision;
 import com.fongmi.android.tv.ui.helper.PlayerControlFocusHelper;
 import com.fongmi.android.tv.ui.helper.TmdbNavigation;
+import com.fongmi.android.tv.ui.helper.VodEventGuard;
 import com.fongmi.android.tv.ui.player.VodPlayerChrome;
 import com.fongmi.android.tv.ui.player.VodPlayerUiController;
 import com.fongmi.android.tv.ui.player.VodPlayerUiHost;
@@ -615,6 +616,15 @@ private int mAudioBackgroundRandomNonce;
         start(activity, key, id, name, pic, mark, false, tmdbItem);
     }
 
+    static void startFromHistory(Activity activity, History item) {
+        if (shouldOpenLegacyTmdbDetail(item.getSiteKey())) {
+            start(activity, item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic(), item.getVodRemarks());
+            return;
+        }
+        startDirect(activity, item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic(), item.getVodRemarks(),
+                item.getVodFlag(), item.getVodRemarks(), item.getEpisodeUrl());
+    }
+
     public static void startDirect(Activity activity, String key, String id, String name, String pic) {
         startDirect(activity, key, id, name, pic, null);
     }
@@ -933,7 +943,6 @@ private int mAudioBackgroundRandomNonce;
     @Override
     protected void onServiceConnected() {
         player().setDanmakuController(mBinding.exo.getDanmakuController());
-        player().setDanmakuEnabled(DanmakuSetting.isShow());
         syncDesktopLyricsAudioContent();
         setPlayerKernel();
         setDecode();
@@ -960,13 +969,16 @@ private int mAudioBackgroundRandomNonce;
 
     @Override
     protected void onNewIntent(Intent intent) {
+        String oldKey = getKey();
         String oldId = getId();
         super.onNewIntent(intent);
+        String key = Objects.toString(intent.getStringExtra("key"), "");
         String id = Objects.toString(intent.getStringExtra("id"), "");
-        if (TextUtils.isEmpty(id) || id.equals(oldId)) return;
+        if (TextUtils.isEmpty(id) || id.equals(oldId) && key.equals(oldKey)) return;
         mBinding.swipeLayout.setRefreshing(true);
         saveHistory();
         getIntent().putExtras(intent);
+        if (mTmdbUIAdapter != null) mTmdbUIAdapter.beginDetailRequest();
         setOrient();
         checkId();
     }
@@ -1551,7 +1563,15 @@ private int mAudioBackgroundRandomNonce;
         // 显示加载指示器
         mBinding.progressLayout.showProgress();
 
+        prefetchDirectTmdbDetail();
         mViewModel.detailContent(getKey(), getId());
+    }
+
+    private void prefetchDirectTmdbDetail() {
+        if (mTmdbUIAdapter == null || !mTmdbUIAdapter.isReady()) return;
+        mTmdbUIAdapter.beginDetailRequest();
+        com.fongmi.android.tv.bean.TmdbItem item = getTmdbItem();
+        if (item != null) mTmdbUIAdapter.prefetch(item);
     }
 
     private void getDetail(Vod item) {
@@ -2699,20 +2719,19 @@ private int mAudioBackgroundRandomNonce;
 
     private void onSpeed() {
         mBinding.control.action.speed.setText(player().addSpeed());
-        saveDefaultSpeed();
+        saveUserSpeed();
         setR1Callback();
     }
 
     private boolean onSpeedLong() {
-        mBinding.control.action.speed.setText(player().toggleSpeed());
-        saveDefaultSpeed();
+        mBinding.control.action.speed.setText(player().toggleSpeed(getPlaybackSpeed()));
+        saveUserSpeed();
         setR1Callback();
         return true;
     }
 
-    private void saveDefaultSpeed() {
-        PlayerSetting.putDefaultSpeed(player().getSpeed());
-        mHistory.setSpeed(player().getSpeed());
+    private void saveUserSpeed() {
+        mHistory.setUserSpeed(player().getSpeed());
     }
 
     private void onReset() {
@@ -3382,10 +3401,9 @@ private int mAudioBackgroundRandomNonce;
         if (Setting.isIncognito() && mHistory.getKey().equals(getHistoryKey())) mHistory.delete();
         mBinding.control.action.opening.setText(mHistory.getOpening() <= 0 ? getString(R.string.play_op) : Util.timeMs(mHistory.getOpening()));
         mBinding.control.action.ending.setText(mHistory.getEnding() <= 0 ? getString(R.string.play_ed) : Util.timeMs(mHistory.getEnding()));
-        // 如果历史记录中已有速度（播放过的剧），使用历史记录中的速度；否则使用默认速度1.0x
-        float speed = (mHistory.getSpeed() > 0 && mHistory.getSpeed() != 1f) ? mHistory.getSpeed() : 1f;
+        // 如果历史记录中已有有效倍速，使用历史倍速；否则使用默认播放倍速
+        float speed = getPlaybackSpeed();
         mBinding.control.action.speed.setText(player().setSpeed(speed));
-        mHistory.setSpeed(player().getSpeed());
         mHistory.setVodName(item.getName());
         enrichHistoryMeta(item);
         PlaybackEventCollector.get().updateHistory(mHistory);
@@ -3921,7 +3939,13 @@ private int mAudioBackgroundRandomNonce;
         if (isRedirect()) return;
         if (event.getType() == RefreshEvent.Type.DETAIL) getDetail();
         else if (event.getType() == RefreshEvent.Type.PLAYER) onRefresh();
-        else if (event.getType() == RefreshEvent.Type.VOD) updateVod(event.getVod());
+        else if (event.getType() == RefreshEvent.Type.VOD) {
+            if (!isCurrentVodEvent(event.getVod())) {
+                SpiderDebug.log("tmdb-mobile", "drop stale vod event current=%s/%s event=%s/%s", getKey(), getId(), event.getVod() == null ? "" : event.getVod().getSiteKey(), event.getVod() == null ? "" : event.getVod().getId());
+                return;
+            }
+            updateVod(event.getVod());
+        }
         else if (event.getType() == RefreshEvent.Type.HISTORY) refreshPersonalRecommendationsForHistory();
         else if (event.getType() == RefreshEvent.Type.SUBTITLE) player().setSub(Sub.from(event.getPath()));
         else if (event.getType() == RefreshEvent.Type.DANMAKU) {
@@ -3929,6 +3953,11 @@ private int mAudioBackgroundRandomNonce;
             refreshDanmakuControls();
         }
     }
+
+    private boolean isCurrentVodEvent(Vod item) {
+        return VodEventGuard.matches(item, getKey(), getId());
+    }
+
 
     private void requestIntroSkipPlan() {
         if (!Setting.isIntroSkipEnabled() || player() == null) {
@@ -4006,10 +4035,11 @@ private int mAudioBackgroundRandomNonce;
 
     private void setSpeed() {
         if (mHistory == null) return;
-        float speed = mHistory.getSpeed();
-        if (speed > 0 && speed != 1f) {
-            mBinding.control.action.speed.setText(player().setSpeed(speed));
-        }
+        mBinding.control.action.speed.setText(player().setSpeed(getPlaybackSpeed()));
+    }
+
+    private float getPlaybackSpeed() {
+        return mHistory == null ? PlayerSetting.getDefaultSpeed() : mHistory.getPlaybackSpeed(PlayerSetting.getDefaultSpeed());
     }
 
     private void checkOrientation() {
@@ -5160,8 +5190,7 @@ private int mAudioBackgroundRandomNonce;
     @Override
     public void onSpeedEnd() {
         mBinding.widget.speed.clearAnimation();
-        mBinding.control.action.speed.setText(player().setSpeed(PlayerSetting.getDefaultSpeed()));
-        mHistory.setSpeed(player().getSpeed());
+        mBinding.control.action.speed.setText(player().setSpeed(getPlaybackSpeed()));
     }
 
     @Override
@@ -5405,6 +5434,7 @@ private int mAudioBackgroundRandomNonce;
         DanmakuApi.cancel();
         RefreshEvent.keep();
         App.removeCallbacks(mR1, mR2, mR3, mR4, mSeekProgressFallback, mTmdbDetailTimeout);
+        if (mTmdbUIAdapter != null) mTmdbUIAdapter.release();
         mViewModel.getResult().removeObserver(mObserveDetail);
         mViewModel.getPlayer().removeObserver(mObservePlayer);
         mViewModel.getSearch().removeObserver(mObserveSearch);

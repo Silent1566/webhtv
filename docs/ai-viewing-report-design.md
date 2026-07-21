@@ -4,7 +4,7 @@
 > - `viewing/` 包完整：`ViewingReportGenerator` / `ViewingReportAiAnalyzer` / `ViewingReportCache` / `ViewingReportRange` / `ViewingReport`。
 > - `ViewingReportActivity` + `ViewingReportRangeDialog` 已实现。
 > - 入口已接入：mobile `HistoryActivity.onReport()`、leanback `HistoryActivity.onReport()`。
-> - DB 迁移 `MIGRATION_36_37` 已为 `History` 增 typeName/area/actor/director/year 字段。
+> - DB 迁移 `MIGRATION_36_37` 已为 `History` 增 typeName/area/actor/director/year 字段；这些字段同时作为 AI 推荐的长期偏好信号。
 > - 字符串资源含 values / zh-rCN / zh-rTW。
 
 ## 1. 概述
@@ -415,6 +415,12 @@ public class History {
 **数据来源**:
 - 播放时从 `Vod` 对象拷贝:`item.getTypeName()` / `item.getActor()` / `item.getDirector()`
 - TMDB 增强开启时,这些字段已自动从 TMDB 回填到 `Vod`
+
+**复用范围（2026-07-18 更新）**:
+- 上述字段不再只服务观影报告，也会进入 `AiRecommendationService` 的 `playHistory` 结构化上下文。
+- AI 推荐按最近去重历史综合题材、地区、演员、导演、年份、完成率和新近度判断长期偏好。
+- 富集元数据会进入 AI 推荐缓存指纹；仅播放进度变化不会导致缓存频繁失效。
+- 详细方案见 `docs/ai-recommendation-history-metadata-design.md`。
 
 #### 3.2.2 数据库迁移
 
@@ -1067,5 +1073,6 @@ Path.cache()/viewing_report/{range}_{historyFingerprint}.json
 
 ---
 
-**文档版本**: v1.0
+**文档版本**: v1.1
 **创建日期**: 2026-07-07
+**最近更新**: 2026-07-18

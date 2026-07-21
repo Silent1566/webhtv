@@ -9,6 +9,7 @@ import androidx.collection.ArrayMap;
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.bean.Danmaku;
 import com.fongmi.android.tv.impl.Callback;
+import com.fongmi.android.tv.player.danmaku.DanmakuUrlPolicy;
 import com.fongmi.android.tv.setting.DanmakuSetting;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.title.MediaTitleRequest;
@@ -47,7 +48,7 @@ public class DanmakuApi {
                 return OkHttp.newCall(url.replace("{name}", Uri.encode(name)).replace("{episode}", Uri.encode(episode)), TAG);
             } else {
                 url = getSearchUrl(url);
-                if (SpiderDebug.isEnabled()) SpiderDebug.log("danmaku", "search name=%s episode=%s url=%s", name, episode, url);
+                if (SpiderDebug.isEnabled()) SpiderDebug.log("danmaku", "search name=%s episode=%s %s", name, episode, DanmakuUrlPolicy.logSummary(url));
                 ArrayMap<String, String> params = new ArrayMap<>();
                 params.put("name", name);
                 params.put("episode", episode);
@@ -72,24 +73,15 @@ public class DanmakuApi {
 
     private static List<Danmaku> normalize(List<Danmaku> items) {
         if (items.isEmpty()) return items;
-        Uri api = Uri.parse(getSearchUrl(DanmakuSetting.getValidApiUrl()));
-        if (!"https".equalsIgnoreCase(api.getScheme())) return items;
+        String api = getSearchUrl(DanmakuSetting.getValidApiUrl());
         for (Danmaku item : items) item.setUrl(normalizeUrl(api, item.getUrl()));
         return items;
     }
 
-    private static String normalizeUrl(Uri api, String url) {
-        if (TextUtils.isEmpty(url)) return url;
-        try {
-            Uri uri = Uri.parse(url);
-            if (!"http".equalsIgnoreCase(uri.getScheme())) return url;
-            if (!TextUtils.equals(api.getHost(), uri.getHost()) || api.getPort() != uri.getPort()) return url;
-            String normalized = uri.buildUpon().scheme("https").build().toString();
-            if (SpiderDebug.isEnabled()) SpiderDebug.log("danmaku", "normalize result url=%s", normalized);
-            return normalized;
-        } catch (Throwable e) {
-            return url;
-        }
+    private static String normalizeUrl(String api, String url) {
+        String normalized = DanmakuUrlPolicy.normalize(api, url);
+        if (SpiderDebug.isEnabled() && !TextUtils.equals(url, normalized)) SpiderDebug.log("danmaku", "normalize result %s", DanmakuUrlPolicy.logSummary(normalized));
+        return normalized;
     }
 
     public static void search(String name, String episode, Consumer<Danmaku> found) {

@@ -40,6 +40,9 @@ public class FusionDetailController extends BaseTmdbDetailModeController {
 
         // 融合模式特有布局设置（从 TmdbDetailActivity line 595-602 迁移）
         binding.playerPanel.setVisibility(View.VISIBLE);
+        // spacer 必须与 playerPanel 同步可见：它在滚动流里占据播放器空间（否则 root 层的
+        // playerPanel 会压在下方按钮上），同时作为焦点桥梁让方向键能从周围按钮导航回播放器。
+        binding.playerPanelSpacer.setVisibility(View.VISIBLE);
         binding.heroSpacer.setVisibility(View.GONE);
         binding.fusionActions.setVisibility(View.VISIBLE);
         binding.detailActions.setVisibility(View.GONE);

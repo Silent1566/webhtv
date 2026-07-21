@@ -175,6 +175,7 @@ verify_abi() {
   contains_string "$directory/libmpv.so" "v$LIBPLACEBO_VERSION"
   contains_string "$directory/libmpv.so" "WebHTV stream_cb controls enabled"
   contains_string "$directory/libmpv.so" "Using Vulkan AHardwareBuffer GPU conversion"
+  contains_string "$directory/libmpv.so" "AImageReader has no buffer yet"
   if [ -n "$CURL_VERSION" ]; then
     contains_string "$directory/libmpv.so" "libcurl/$CURL_VERSION"
     contains_string "$directory/libmpv.so" "HTTP2"

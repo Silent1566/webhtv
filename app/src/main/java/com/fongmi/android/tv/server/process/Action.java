@@ -28,14 +28,19 @@ import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ProgressRequestBody;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.SyncFiles;
+import com.fongmi.android.tv.utils.Task;
 import com.github.catvod.net.OkHttp;
 import com.github.catvod.crawler.SpiderDebug;
 import com.github.catvod.utils.Path;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.security.MessageDigest;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 
 import fi.iki.elonen.NanoHTTPD.IHTTPSession;
 import fi.iki.elonen.NanoHTTPD.Response;
@@ -47,6 +52,7 @@ import okhttp3.RequestBody;
 public class Action implements Process {
 
     private static final MediaType ZIP = MediaType.parse("application/zip");
+    private static final String APK_PART = "apk";
 
     @Override
     public boolean isRequest(IHTTPSession session, String url) {
@@ -76,6 +82,7 @@ public class Action implements Process {
                 yield Nano.ok();
             }
             case "sync" -> onSync(params, files);
+            case "apk" -> onApk(params, files);
             case "search" -> {
                 onSearch(params);
                 yield Nano.ok();
@@ -195,6 +202,70 @@ public class Action implements Process {
             SpiderDebug.log("sync", e);
             return Nano.error(Notify.getError(R.string.sync_failed, e));
         }
+    }
+
+    private Response onApk(Map<String, String> params, Map<String, String> files) {
+        File target = null;
+        try {
+            if (files == null || !files.containsKey(APK_PART)) throw new IllegalArgumentException("Missing APK file");
+            String name = sanitizeApkName(params.get("name"));
+            if (!name.toLowerCase(Locale.ROOT).endsWith(".apk")) throw new IllegalArgumentException("Invalid APK name");
+            File source = new File(files.get(APK_PART));
+            long expectedSize = parseLong(params.get("size"));
+            if (!source.isFile() || source.length() <= 0) throw new IllegalArgumentException("Empty APK file");
+            if (expectedSize > 0 && source.length() != expectedSize) throw new IllegalArgumentException("APK size mismatch");
+            String expectedSha256 = params.get("sha256");
+            if (!TextUtils.isEmpty(expectedSha256) && !expectedSha256.equalsIgnoreCase(sha256(source))) throw new IllegalArgumentException("APK checksum mismatch");
+            if (App.get().getPackageManager().getPackageArchiveInfo(source.getAbsolutePath(), 0) == null) throw new IllegalArgumentException("Invalid APK package");
+            long available = FileUtil.getAvailableStorageSpace(Path.cache());
+            if (available > 0 && source.length() + 16L * 1024 * 1024 > available) throw new IllegalStateException("Insufficient storage");
+            target = Path.cache("pushed-" + System.currentTimeMillis() + ".apk");
+            Path.copy(source, target);
+            if (target.length() != source.length()) throw new IllegalStateException("APK copy incomplete");
+            File installFile = target;
+            Device senderDevice = Device.objectFrom(params.get("device"));
+            String sender = senderDevice == null ? "" : senderDevice.getName();
+            SpiderDebug.log("apk-push", "received name=%s size=%d sender=%s", name, target.length(), sender);
+            App.post(() -> {
+                try {
+                    FileUtil.openFile(installFile);
+                } catch (Exception e) {
+                    Path.clear(installFile);
+                    Notify.show(e.getMessage());
+                }
+            });
+            Task.schedule(() -> Path.clear(installFile), 30, TimeUnit.MINUTES);
+            return Nano.ok("APK received");
+        } catch (Exception e) {
+            if (target != null) Path.clear(target);
+            SpiderDebug.log("apk-push", e);
+            return Nano.error(fi.iki.elonen.NanoHTTPD.Response.Status.BAD_REQUEST, e.getMessage());
+        }
+    }
+
+    private String sanitizeApkName(String name) {
+        if (TextUtils.isEmpty(name)) return "app.apk";
+        return name.replace('\\', '_').replace('/', '_').replace('\u0000', '_').trim();
+    }
+
+    private long parseLong(String value) {
+        try {
+            return Long.parseLong(value);
+        } catch (Exception ignored) {
+            return 0;
+        }
+    }
+
+    private String sha256(File file) throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        try (FileInputStream input = new FileInputStream(file)) {
+            byte[] buffer = new byte[64 * 1024];
+            int count;
+            while ((count = input.read(buffer)) != -1) digest.update(buffer, 0, count);
+        }
+        StringBuilder result = new StringBuilder();
+        for (byte value : digest.digest()) result.append(String.format(Locale.ROOT, "%02x", value));
+        return result.toString();
     }
 
     private boolean post(Device device, String type, FormBody.Builder body) {

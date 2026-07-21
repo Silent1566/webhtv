@@ -75,10 +75,13 @@ public class HistoryPresenter extends Presenter {
         holder.binding.name.setText(item.getVodName());
         holder.binding.site.setText(item.getSiteName());
         holder.binding.remark.setText(item.getVodRemarks());
+        holder.setMarquee(holder.view.hasFocus());
         holder.binding.site.setVisibility(item.getSiteVisible());
+        holder.binding.playback.setText(item.getPlaybackTimeText());
+        holder.binding.playback.setVisibility(!delete && item.hasPlaybackTime() ? View.VISIBLE : View.GONE);
         setProgress(holder.binding, item);
         holder.binding.delete.setVisibility(!delete ? View.GONE : View.VISIBLE);
-        holder.binding.remark.setVisibility(delete || same ? View.GONE : View.VISIBLE);
+        holder.binding.remark.setVisibility(delete || same ? View.INVISIBLE : View.VISIBLE);
         ImgUtil.load(item.getVodName(), item.getVodPic(), holder.binding.image);
     }
 
@@ -93,6 +96,7 @@ public class HistoryPresenter extends Presenter {
     @Override
     public void onUnbindViewHolder(@NonNull Presenter.ViewHolder viewHolder) {
         ViewHolder holder = (ViewHolder) viewHolder;
+        holder.setMarquee(false);
         Glide.with(holder.binding.image).clear(holder.binding.image);
     }
 
@@ -103,6 +107,14 @@ public class HistoryPresenter extends Presenter {
         public ViewHolder(@NonNull AdapterVodBinding binding) {
             super(binding.getRoot());
             this.binding = binding;
+            view.setOnFocusChangeListener((v, hasFocus) -> {
+                setMarquee(hasFocus);
+            });
+        }
+
+        private void setMarquee(boolean active) {
+            binding.name.setSelected(active);
+            binding.remark.setSelected(active);
         }
     }
 }

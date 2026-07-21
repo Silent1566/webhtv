@@ -192,9 +192,11 @@
     <string name="group_rule_edit_item">Edit · %1$s\n%2$s</string>
     <string name="group_rule_interface_item">Interface · %1$s\n%2$s</string>
     <string name="setting_home_vod_auto_load">Auto-load VOD</string>
+    <string name="setting_auto_backup">Automatic backup</string>
     <string name="setting_fullscreen_menu_key">Fullscreen menu key</string>
     <string name="setting_home_menu_key">Home menu key</string>
     <string name="setting_play_back_to_detail">Return playback to detail</string>
+    <string name="setting_play_speed">Playback speed</string>
     <string name="setting_home_history">Home recent history</string>
     <string name="setting_personal_recommendation">Personal recommendations</string>
     <string name="setting_tmdb_episode_file_size">Keep file size in TMDB episodes</string>
@@ -574,6 +576,7 @@
         <item>Total duration in milliseconds.</item>
         <item>Progress ratio from 0 to 1.</item>
         <item>Playback speed.</item>
+        <item>Whether playback speed explicitly overrides the personal default.</item>
         <item>Whether this item is considered completed.</item>
         <item>Original episode URL. May contain source-site parameters.</item>
         <item>Episode index when available.</item>
@@ -827,6 +830,7 @@
     <string name="restore_fail">Restore failed</string>
     <string name="backup_success">Backup successful</string>
     <string name="backup_fail">Backup failed</string>
+    <string name="backup_permission_denied">Storage permission is required to back up or restore data</string>
 
     <!-- Device Sync -->
     <string name="device_select">Select devices</string>
@@ -921,6 +925,7 @@
     <string name="login_state_tree_title_count">%1$s · selected %2$d · pending %3$d</string>
     <string name="login_state_tree_expand">Expand folder</string>
     <string name="login_state_tree_collapse">Collapse folder</string>
+    <string name="login_state_tree_truncated">Large folder limited; select the folder directly or narrow the path</string>
     <string name="login_state_state_selected">Selected</string>
     <string name="login_state_state_pending">Pending</string>
     <string name="login_state_state_has_pending">Has pending</string>

@@ -4,6 +4,9 @@ import com.github.catvod.utils.Prefers;
 
 public final class MpvPerformanceSetting {
 
+    public static final int OUTPUT_AUTO = 0;
+    public static final int OUTPUT_GPU = 1;
+    public static final int OUTPUT_SURFACE_DIRECT = 2;
     public static final int HWDEC_AUTO = 0;
     public static final int HWDEC_DIRECT = 1;
     public static final int HWDEC_COPY = 2;
@@ -24,6 +27,7 @@ public final class MpvPerformanceSetting {
     public static final int PRIORITY_PERFORMANCE = 0;
     public static final int PRIORITY_CONFIG = 1;
 
+    private static final String KEY_OUTPUT_MODE = "perf_mpv_output_mode";
     private static final String KEY_HWDEC = "perf_mpv_hwdec";
     private static final String KEY_SYNC = "perf_mpv_sync";
     private static final String KEY_FRAME_DROP = "perf_mpv_frame_drop";
@@ -36,6 +40,36 @@ public final class MpvPerformanceSetting {
     private static final String KEY_OPTION_PRIORITY = "perf_mpv_option_priority";
 
     private MpvPerformanceSetting() {
+    }
+
+    public static int getOutputMode() {
+        return clamp(Prefers.getInt(KEY_OUTPUT_MODE, OUTPUT_AUTO), OUTPUT_AUTO, OUTPUT_SURFACE_DIRECT);
+    }
+
+    public static void putOutputMode(int value) {
+        Prefers.put(KEY_OUTPUT_MODE, clamp(value, OUTPUT_AUTO, OUTPUT_SURFACE_DIRECT));
+        PlaybackPerformanceSetting.markCustom();
+    }
+
+    public static String getOutputModeText() {
+        return switch (getOutputMode()) {
+            case OUTPUT_GPU -> "GPU完整";
+            case OUTPUT_SURFACE_DIRECT -> "电视直出";
+            default -> "自动";
+        };
+    }
+
+    public static boolean shouldUseSurfaceDirect(boolean autoEligible, boolean leanback, boolean hardDecode) {
+        return resolveSurfaceDirect(getOutputMode(), autoEligible, leanback, hardDecode);
+    }
+
+    static boolean resolveSurfaceDirect(int outputMode, boolean autoEligible, boolean leanback, boolean hardDecode) {
+        if (!hardDecode) return false;
+        return switch (clamp(outputMode, OUTPUT_AUTO, OUTPUT_SURFACE_DIRECT)) {
+            case OUTPUT_SURFACE_DIRECT -> true;
+            case OUTPUT_GPU -> false;
+            default -> leanback && autoEligible;
+        };
     }
 
     public static int getHwdecMode() {
@@ -220,6 +254,7 @@ public final class MpvPerformanceSetting {
     }
 
     public static void applyRecommended() {
+        Prefers.put(KEY_OUTPUT_MODE, OUTPUT_AUTO);
         Prefers.put(KEY_HWDEC, HWDEC_AUTO);
         Prefers.put(KEY_SYNC, SYNC_AUDIO);
         Prefers.put(KEY_FRAME_DROP, FRAME_DROP_OUTPUT);
@@ -232,6 +267,7 @@ public final class MpvPerformanceSetting {
     }
 
     public static void applyCompatible() {
+        Prefers.put(KEY_OUTPUT_MODE, OUTPUT_GPU);
         Prefers.put(KEY_HWDEC, HWDEC_COPY);
         Prefers.put(KEY_SYNC, SYNC_AUDIO);
         Prefers.put(KEY_FRAME_DROP, FRAME_DROP_OUTPUT);
@@ -244,6 +280,7 @@ public final class MpvPerformanceSetting {
     }
 
     public static void applyLightweight() {
+        Prefers.put(KEY_OUTPUT_MODE, OUTPUT_AUTO);
         Prefers.put(KEY_HWDEC, HWDEC_AUTO);
         Prefers.put(KEY_SYNC, SYNC_AUDIO);
         Prefers.put(KEY_FRAME_DROP, FRAME_DROP_OUTPUT);

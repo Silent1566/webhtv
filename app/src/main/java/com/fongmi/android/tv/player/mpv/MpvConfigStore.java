@@ -25,6 +25,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.Locale;
 
 public final class MpvConfigStore {
 
@@ -71,6 +72,40 @@ public final class MpvConfigStore {
 
     public static File scriptsDir() {
         return new File(configDir(), TARGET_SCRIPTS);
+    }
+
+    public static boolean hasGpuVideoProcessing() {
+        File[] scripts = scriptsDir().listFiles(file -> file.isFile() && isScriptName(file.getName()));
+        if (scripts != null && scripts.length > 0) return true;
+        try {
+            return containsGpuVideoProcessing(readText(configFile()));
+        } catch (IOException e) {
+            return true;
+        }
+    }
+
+    static boolean containsGpuVideoProcessing(String content) {
+        if (content == null || content.isEmpty()) return false;
+        String[] lines = content.split("\\r?\\n");
+        for (String raw : lines) {
+            String line = raw.trim().toLowerCase(Locale.ROOT);
+            if (line.isEmpty() || line.startsWith("#")) continue;
+            int comment = line.indexOf('#');
+            if (comment >= 0) line = line.substring(0, comment).trim();
+            int separator = line.indexOf('=');
+            String option = (separator < 0 ? line : line.substring(0, separator)).trim();
+            String value = separator < 0 ? "" : line.substring(separator + 1).trim();
+            if ((option.equals("vf") || option.startsWith("vf-") || option.equals("lavfi-complex")) && !value.isEmpty()) return true;
+            if (option.startsWith("glsl-shader") || option.equals("icc-profile") || option.startsWith("tone-mapping")) return true;
+            if ((option.equals("deband") || option.equals("interpolation")) && !isDisabledOptionValue(value)) return true;
+            if (option.equals("video-output-levels")) return true;
+            if (option.equals("scale") || option.equals("cscale") || option.equals("dscale") || option.equals("tscale")) return true;
+        }
+        return false;
+    }
+
+    private static boolean isDisabledOptionValue(String value) {
+        return value.isEmpty() || value.equals("no") || value.equals("false") || value.equals("0");
     }
 
     public static void ensureReady() {

@@ -16,6 +16,17 @@
     <string name="menu_site">站點</string>
     <string name="menu_reset">重設</string>
     <string name="menu_more">更多</string>
+    <string name="menu_push_apk">推送apk</string>
+    <string name="apk_push_preparing">正在準備APK…</string>
+    <string name="apk_push_select_device">推送apk · 選擇接收裝置</string>
+    <string name="apk_push_ready">推送apk · %1$s · %2$s</string>
+    <string name="apk_push_progress">推送apk · %1$d%% · %2$s / %3$s</string>
+    <string name="apk_push_success">APK已傳送，請在接收裝置確認安裝</string>
+    <string name="apk_push_failed">APK推送失敗：%1$s</string>
+    <string name="apk_push_invalid">請選擇有效的APK檔案</string>
+    <string name="apk_push_read_failed">無法讀取所選APK</string>
+    <string name="apk_push_no_space">儲存空間不足，無法準備APK</string>
+    <string name="apk_push_receiver_unsupported">接收裝置不支援APK推送，請先更新WebHTV</string>
 
     <!-- Vod -->
     <string name="vod_home">推薦</string>

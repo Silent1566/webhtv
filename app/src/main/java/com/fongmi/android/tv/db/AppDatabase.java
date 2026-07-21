@@ -28,16 +28,19 @@ import com.github.catvod.crawler.SpiderDebug;
 import com.github.catvod.utils.Path;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
 @Database(entities = {Keep.class, Site.class, Live.class, Track.class, Config.class, Device.class, History.class}, version = AppDatabase.VERSION)
 public abstract class AppDatabase extends RoomDatabase {
 
-    public static final int VERSION = 37;
+    public static final int VERSION = 38;
     public static final String NAME = "tv";
     public static final String SYMBOL = "@@@";
     private static final int BACKUP_KEEP_COUNT = 7;
+    private static final String BACKUP_TEMP_FILE = ".backup.tmp";
+    private static final Object BACKUP_LOCK = new Object();
 
     private static volatile AppDatabase instance;
 
@@ -56,19 +59,31 @@ public abstract class AppDatabase extends RoomDatabase {
 
     public static void backup(com.fongmi.android.tv.impl.Callback callback, AppBackup.Progress progress) {
         Task.execute(() -> {
-            File file = new File(Path.tv(), AppBackup.fileName());
-            try {
-                AppBackup.CreateResult result = AppBackup.create(file, progress);
-                App.post(() -> {
-                    callback.success();
-                    if (result.hasWarning()) Notify.show(result.warning);
-                });
-                cleanOld();
-            } catch (Exception e) {
-                SpiderDebug.log("backup", "local create failed error=%s", e.getMessage());
-                App.post(callback::error);
+            synchronized (BACKUP_LOCK) {
+                File target = new File(Path.tv(), AppBackup.fileName());
+                File temporary = new File(Path.tv(), BACKUP_TEMP_FILE);
+                try {
+                    AppBackup.CreateResult result = AppBackup.create(temporary, progress);
+                    publishBackup(temporary, target);
+                    App.post(() -> {
+                        callback.success();
+                        if (result.hasWarning()) Notify.show(result.warning);
+                    });
+                    cleanOld();
+                } catch (Exception e) {
+                    SpiderDebug.log("backup", "local create failed error=%s", e.getMessage());
+                    App.post(callback::error);
+                } finally {
+                    Path.clear(temporary);
+                }
             }
         });
+    }
+
+    static void publishBackup(File temporary, File target) throws IOException {
+        if (temporary.renameTo(target)) return;
+        if (target.exists() && !target.delete()) throw new IOException("Unable to replace backup: " + target.getAbsolutePath());
+        if (!temporary.renameTo(target)) throw new IOException("Unable to publish backup: " + target.getAbsolutePath());
     }
 
     public static void restore(File file, com.fongmi.android.tv.impl.Callback callback) {
@@ -108,6 +123,7 @@ public abstract class AppDatabase extends RoomDatabase {
                 .addMigrations(Migrations.MIGRATION_34_35)
                 .addMigrations(Migrations.MIGRATION_35_36)
                 .addMigrations(Migrations.MIGRATION_36_37)
+                .addMigrations(Migrations.MIGRATION_37_38)
                 .fallbackToDestructiveMigration(true)
                 .allowMainThreadQueries().build();
     }

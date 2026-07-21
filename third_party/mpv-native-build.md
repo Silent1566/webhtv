@@ -43,6 +43,7 @@ third_party/mpv-native-lock.json
 | NDK | `28.2.13676358`（r28c），API 24 |
 | MPV | `94335ab87ab225ca3e36e0faeac831639d3e1d4e`（`0.41.0-878-g94335ab87`） |
 | MediaCodec/Vulkan 互操作 | `FongMi/mpv@fd679c812149fe1f3e246897b1015ae109da7c74`，通过 AImageReader/AHardwareBuffer 保持 GPU 链路 |
+| AImageReader暂态处理 | `third_party/patches/mpv-aimagereader-transient-buffer.patch`，`NO_BUFFER_AVAILABLE`和短暂fence未就绪不再阻塞100ms或触发硬失败 |
 | FFmpeg | `8ae0b34901ba60a802f183ee75a250a9fc3e09a5`（n8.0.3） |
 | libplacebo | `a7a18af88ff0a17c04840dcb3246047bb6b46df3`（7.371.0） |
 | curl | 8.21.0，MbedTLS，HTTP/HTTPS、HTTP/2 |
@@ -148,13 +149,13 @@ scripts/build_mpv_native.sh --abi arm64-v8a --jobs 8 --work-dir /tmp/webhtv-mpv-
 2. 检查 NDK revision 和 LLVM 工具。
 3. 在独立 Python venv 中安装固定版本 Meson/Ninja及 MbedTLS 生成工具依赖。
 4. 下载构建框架和每个固定 commit，初始化 MbedTLS、libplacebo 子模块，并校验 Lua、libunibreak、curl、nghttp2 tar 包 SHA-256。
-5. 对固定 MPV commit 应用锁定的 FongMi Vulkan/MediaCodec 互操作提交，通过 AImageReader/AHardwareBuffer 将 MediaCodec 帧导入 Vulkan；随后应用 `third_party/patches/mpv-stream-cb-disc-controls.patch`，为自定义 Blu-ray ISO stream 暴露光盘时间轴控制。
+5. 对固定 MPV commit 应用锁定的 FongMi Vulkan/MediaCodec 互操作提交，通过 AImageReader/AHardwareBuffer 将 MediaCodec 帧导入 Vulkan；随后应用 `third_party/patches/mpv-stream-cb-disc-controls.patch` 和 `third_party/patches/mpv-aimagereader-transient-buffer.patch`。前者为自定义 Blu-ray ISO stream 暴露光盘时间轴控制，后者把无可用新图像和短暂fence未就绪保持为可恢复暂态。
 6. 按依赖顺序构建 MbedTLS、libunibreak、dav1d、FFmpeg、FreeType、FriBidi、HarfBuzz、libass、Lua、shaderc、libplacebo、nghttp2、curl 和 MPV。
 7. 把 FFmpeg 的文件名、ELF `SONAME` 和 `DT_NEEDED` 从 `libav*`/`libsw*` 等长修改为 `libmv*`/`libmw*`。
 8. 使用 NDK `llvm-strip --strip-unneeded` 处理最终库。
-9. 使用 NDK `llvm-readelf` 检查每个 SONAME、MPV 的完整依赖和 Vulkan 依赖，并检查 MPV/libplacebo/curl 版本字符串、HTTP/2 标记及光盘控制补丁标识。
+9. 使用 NDK `llvm-readelf` 检查每个 SONAME、MPV 的完整依赖和 Vulkan 依赖，并检查 MPV/libplacebo/curl 版本字符串、HTTP/2标记、光盘控制补丁及AImageReader暂态补丁标识。
 
-`scripts/verify_mpv_native_assets.sh` 对已提交 assets 执行同类校验，Android Release Action 会在 Gradle 打包四个 APK 前以 `--require-elf` 模式调用它，防止 lock、arm64/armv7 assets 或静态网络能力不一致的二进制进入 Release。
+`scripts/verify_mpv_native_assets.sh` 对已提交 assets 执行同类校验，Android Release Action 会在 Gradle 打包四个 APK 前以 `--require-elf` 模式调用它，并确认AImageReader暂态修复已进入两套`libmpv.so`，防止 lock、补丁、arm64/armv7 assets 或静态网络能力不一致的二进制进入 Release。
 
 未指定 `--install` 时，输出位于：
 
