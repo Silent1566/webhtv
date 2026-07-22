@@ -16,6 +16,17 @@
     <string name="menu_site">Site</string>
     <string name="menu_reset">Reset</string>
     <string name="menu_more">More</string>
+    <string name="menu_push_apk">Push APK</string>
+    <string name="apk_push_preparing">Preparing APK...</string>
+    <string name="apk_push_select_device">Push APK · Select receiving device</string>
+    <string name="apk_push_ready">Push APK · %1$s · %2$s</string>
+    <string name="apk_push_progress">Pushing APK · %1$d%% · %2$s / %3$s</string>
+    <string name="apk_push_success">APK sent. Confirm installation on the receiving device.</string>
+    <string name="apk_push_failed">APK push failed: %1$s</string>
+    <string name="apk_push_invalid">Select a valid APK file</string>
+    <string name="apk_push_read_failed">Unable to read the selected APK</string>
+    <string name="apk_push_no_space">Not enough storage to prepare the APK</string>
+    <string name="apk_push_receiver_unsupported">The receiving device does not support APK push. Update WebHTV first.</string>
 
     <!-- Vod -->
     <string name="vod_home">Home</string>

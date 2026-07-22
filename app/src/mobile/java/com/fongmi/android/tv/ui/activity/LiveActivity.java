@@ -1318,6 +1318,13 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
     }
 
     @Override
+    public void onLiveDisplayChanged() {
+        if (mOsd == null) return;
+        mOsd.setDiagnosticsVisible(PlayerSetting.isOsdDiagnostics());
+        mOsd.start();
+    }
+
+    @Override
     public void onLiveScalePanel(int scale) {
         if (mKeyDown.getScale() != 1.0f) mKeyDown.resetScale();
         setScale(scale);
@@ -2071,7 +2078,10 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
     @Override
     protected void onStart() {
         super.onStart();
-        if (mOsd != null) mOsd.start();
+        if (mOsd != null) {
+            mOsd.setDiagnosticsVisible(PlayerSetting.isOsdDiagnostics());
+            mOsd.start();
+        }
         setAudioOnly(false);
         setStop(false);
     }

@@ -13,6 +13,7 @@ import androidx.viewbinding.ViewBinding;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.databinding.DialogMpvConfigRenameBinding;
 import com.fongmi.android.tv.utils.ResUtil;
+import com.fongmi.android.tv.utils.Util;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 public class MpvConfigRenameDialog extends BaseAlertDialog {
@@ -46,6 +47,27 @@ public class MpvConfigRenameDialog extends BaseAlertDialog {
     protected void initView() {
         binding.name.setText(name);
         binding.name.setSelection(binding.name.length());
+        setupTvFocus();
+    }
+
+    private void setupTvFocus() {
+        if (!Util.isLeanback()) return;
+        tvFocusable(binding.close);
+        tvFocusable(binding.name);
+        tvFocusable(binding.cancel);
+        tvFocusable(binding.rename);
+        binding.close.setNextFocusDownId(R.id.name);
+        binding.name.setNextFocusUpId(R.id.close);
+        binding.name.setNextFocusDownId(R.id.cancel);
+        binding.cancel.setNextFocusUpId(R.id.name);
+        binding.cancel.setNextFocusRightId(R.id.rename);
+        binding.rename.setNextFocusUpId(R.id.name);
+        binding.rename.setNextFocusLeftId(R.id.cancel);
+    }
+
+    private static void tvFocusable(android.view.View view) {
+        view.setFocusable(true);
+        view.setFocusableInTouchMode(true);
     }
 
     @Override
@@ -86,5 +108,6 @@ public class MpvConfigRenameDialog extends BaseAlertDialog {
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         window.setAttributes(params);
         window.setLayout(params.width, WindowManager.LayoutParams.WRAP_CONTENT);
+        if (Util.isLeanback()) binding.name.post(() -> binding.name.requestFocus());
     }
 }

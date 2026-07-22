@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.appcompat.widget.LinearLayoutCompat xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@drawable/shape_shell_proxy_dialog"
@@ -16,8 +17,9 @@
             android:id="@+id/back"
             android:layout_width="48dp"
             android:layout_height="40dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
+            android:background="@drawable/selector_mpv_icon_button"
             android:contentDescription="@string/dialog_negative"
+            android:focusable="true"
             android:padding="10dp"
             android:src="@drawable/ic_git_cloud_back" />
 
@@ -51,13 +53,16 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/save"
-            style="@style/Widget.Material3.Button.TextButton"
+            style="@style/Widget.Material3.Button.OutlinedButton"
             android:layout_width="56dp"
             android:layout_height="40dp"
+            android:focusable="true"
             android:minWidth="0dp"
             android:padding="0dp"
             android:text="@string/mpv_config_save"
-            android:textColor="@color/dialog_text_button" />
+            android:textColor="@color/dialog_outlined_button_text"
+            app:backgroundTint="@color/dialog_outlined_button_bg"
+            app:strokeColor="@color/dialog_outlined_button_stroke" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 

@@ -92,17 +92,6 @@
                 android:src="@drawable/ic_control_keep_off" />
 
             <androidx.appcompat.widget.AppCompatImageView
-                android:id="@+id/display"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="@string/control_display"
-                android:scaleType="center"
-                android:src="@drawable/ic_control_display"
-                android:visibility="gone"
-                tools:visibility="visible" />
-
-            <androidx.appcompat.widget.AppCompatImageView
                 android:id="@+id/info"
                 android:layout_width="48dp"
                 android:layout_height="48dp"

@@ -1,6 +1,7 @@
 package com.fongmi.android.tv.server;
 
 import com.fongmi.android.tv.service.PlaybackService;
+import com.fongmi.android.tv.player.PlaybackRouteRegistry;
 import com.fongmi.android.tv.utils.Task;
 import com.github.catvod.Proxy;
 import com.github.catvod.utils.Util;
@@ -10,6 +11,7 @@ public class Server {
     private volatile PlaybackService service;
     private volatile Nano nano;
     private volatile boolean manage;
+    private PlaybackRouteRegistry.Registration routeRegistration;
 
     private static class Loader {
         static volatile Server INSTANCE = new Server();
@@ -64,6 +66,8 @@ public class Server {
                 nano = new Nano(i);
                 nano.start(500);
                 Proxy.set(i);
+                if (routeRegistration != null) routeRegistration.close();
+                routeRegistration = PlaybackRouteRegistry.registerAppService(i, PlaybackRouteRegistry.AppOwner.MAIN_SERVER);
                 break;
             } catch (Throwable e) {
                 nano = null;
@@ -77,6 +81,8 @@ public class Server {
                 if (manage || service != null) return;
                 if (nano != null) nano.stop();
                 nano = null;
+                if (routeRegistration != null) routeRegistration.close();
+                routeRegistration = null;
             }
         });
     }

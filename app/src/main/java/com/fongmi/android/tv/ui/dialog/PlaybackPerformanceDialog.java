@@ -26,6 +26,7 @@ import androidx.fragment.app.FragmentActivity;
 
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.App;
+import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.setting.PlaybackPerformanceCatalog;
 import com.fongmi.android.tv.setting.PlaybackPerformanceOption;
 import com.fongmi.android.tv.setting.PlaybackPerformanceSetting;
@@ -39,19 +40,18 @@ import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.Util;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.textview.MaterialTextView;
 
 import is.xyz.mpv.MPVLib;
-
-import java.util.ArrayList;
-import java.util.List;
 
 public final class PlaybackPerformanceDialog extends DialogFragment {
 
     private Runnable callback;
     private Dialog helpDialog;
     private LinearLayout list;
-    private final List<MaterialButton> profileButtons = new ArrayList<>();
+    private TabLayout profileTabs;
+    private boolean syncingProfileTabs;
 
     public static void show(Fragment fragment, Runnable callback) {
         PlaybackPerformanceDialog dialog = new PlaybackPerformanceDialog();
@@ -118,16 +118,10 @@ public final class PlaybackPerformanceDialog extends DialogFragment {
         titleBar.addView(help, helpParams);
         root.addView(titleBar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(40)));
 
-        LinearLayout actions = new LinearLayout(requireContext());
-        actions.setOrientation(LinearLayout.HORIZONTAL);
-        actions.setGravity(Gravity.CENTER);
-        actions.addView(profileButton(R.string.player_performance_recommended, PlaybackPerformanceSetting.PROFILE_RECOMMENDED), actionParams(true));
-        actions.addView(profileButton(R.string.player_performance_compatible, PlaybackPerformanceSetting.PROFILE_COMPATIBLE), actionParams(false));
-        actions.addView(profileButton(R.string.player_performance_lightweight, PlaybackPerformanceSetting.PROFILE_LIGHTWEIGHT), actionParams(false));
-        actions.addView(profileButton(R.string.player_performance_original, PlaybackPerformanceSetting.PROFILE_ORIGINAL), actionParams(false));
-        LinearLayout.LayoutParams actionLayout = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(40));
-        actionLayout.topMargin = dp(14);
-        root.addView(actions, actionLayout);
+        profileTabs = createProfileTabs();
+        LinearLayout.LayoutParams tabLayout = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46));
+        tabLayout.topMargin = dp(12);
+        root.addView(profileTabs, tabLayout);
 
         ScrollView scroll = new ScrollView(requireContext());
         scroll.setFillViewport(false);
@@ -139,7 +133,7 @@ public final class PlaybackPerformanceDialog extends DialogFragment {
         scrollParams.topMargin = dp(16);
         root.addView(scroll, scrollParams);
         refreshRows();
-        refreshProfileButtons();
+        syncProfileTabs();
         return root;
     }
 
@@ -183,7 +177,7 @@ public final class PlaybackPerformanceDialog extends DialogFragment {
         scrollParams.topMargin = dp(10);
         root.addView(scroll, scrollParams);
 
-        addHelpIntro(content, "当前播放器内核：" + playerName() + "。参数列表和本说明由同一份内核能力定义生成；切换内核后，两处内容会同步变化。推荐先使用当前内核的“推荐”预设，出现兼容性或内存问题时再调整。多数底层参数需要重新进入播放或重建播放器后生效。");
+        addHelpIntro(content, "当前播放器内核：" + playerName() + "。不知道怎么选时保持“自动”（默认）；每项说明都会明确告诉你什么情况更流畅、异常时改哪一档，以及对应代价。EXO会动态调整预载和下一会话的重缓冲恢复；MPV会在符合条件的电视4K场景自动使用低开销电视直出；IJK自动档采用稳定基线。多数底层参数需要重新进入播放或重建播放器后生效。");
         String section = "";
         for (PlaybackPerformanceOption option : options()) {
             if (!section.equals(option.section())) {
@@ -222,7 +216,8 @@ public final class PlaybackPerformanceDialog extends DialogFragment {
     public void onDestroyView() {
         if (helpDialog != null) helpDialog.dismiss();
         helpDialog = null;
-        profileButtons.clear();
+        profileTabs = null;
+        syncingProfileTabs = false;
         super.onDestroyView();
     }
 
@@ -297,21 +292,6 @@ public final class PlaybackPerformanceDialog extends DialogFragment {
         return button;
     }
 
-    private MaterialButton profileButton(int text, int profile) {
-        MaterialButton button = actionButton(text, view -> apply(profile));
-        button.setTag(profile);
-        profileButtons.add(button);
-        return button;
-    }
-
-    private void refreshProfileButtons() {
-        int profile = PlaybackPerformanceSetting.getProfile();
-        for (MaterialButton button : profileButtons) {
-            button.setSelected((int) button.getTag() == profile);
-            styleAction(button, button.hasFocus(), button.isSelected());
-        }
-    }
-
     private MaterialButton closeButton(View.OnClickListener listener) {
         MaterialButton button = new MaterialButton(requireContext());
         button.setText("×");
@@ -341,31 +321,96 @@ public final class PlaybackPerformanceDialog extends DialogFragment {
         button.setStrokeWidth(dp(selected && !focused ? 2 : 1));
     }
 
-    private LinearLayout.LayoutParams actionParams(boolean first) {
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1);
-        params.leftMargin = first ? 0 : dp(8);
-        return params;
-    }
-
     private void apply(int profile) {
-        switch (profile) {
-            case PlaybackPerformanceSetting.PROFILE_COMPATIBLE -> PlaybackPerformanceSetting.applyCompatible();
-            case PlaybackPerformanceSetting.PROFILE_LIGHTWEIGHT -> PlaybackPerformanceSetting.applyLightweight();
-            case PlaybackPerformanceSetting.PROFILE_ORIGINAL -> PlaybackPerformanceSetting.applyOriginal();
-            default -> PlaybackPerformanceSetting.applyRecommended();
-        }
+        if (profile == PlaybackPerformanceSetting.PROFILE_AUTO) PlaybackPerformanceSetting.applyAuto();
+        else if (profile == PlaybackPerformanceSetting.PROFILE_COMPATIBLE) PlaybackPerformanceSetting.applyCompatible();
+        else if (profile == PlaybackPerformanceSetting.PROFILE_LIGHTWEIGHT) PlaybackPerformanceSetting.applyLightweight();
+        else if (profile == PlaybackPerformanceSetting.PROFILE_ORIGINAL) PlaybackPerformanceSetting.applyOriginal();
+        else PlaybackPerformanceSetting.applyRecommended();
         refresh();
     }
 
     private void reset() {
-        int profile = PlaybackPerformanceSetting.getProfile();
-        apply(profile == PlaybackPerformanceSetting.PROFILE_CUSTOM ? PlaybackPerformanceSetting.PROFILE_RECOMMENDED : profile);
+        PlaybackPerformanceSetting.applyAuto();
+        refresh();
     }
 
     private void refresh() {
         refreshRows();
-        refreshProfileButtons();
+        syncProfileTabs();
+        ConfigEvent.playerPerformance();
         if (callback != null) callback.run();
+    }
+
+    private TabLayout createProfileTabs() {
+        TabLayout tabs = new TabLayout(requireContext());
+        tabs.setBackgroundColor(Color.TRANSPARENT);
+        tabs.setTabMode(TabLayout.MODE_FIXED);
+        tabs.setTabGravity(TabLayout.GRAVITY_FILL);
+        tabs.setSelectedTabIndicatorColor(Color.parseColor("#1A73E8"));
+        tabs.setTabTextColors(Color.parseColor("#5F6368"), Color.parseColor("#1A73E8"));
+        tabs.setTabRippleColor(ColorStateList.valueOf(Color.TRANSPARENT));
+        tabs.setUnboundedRipple(false);
+        int[] labels = {R.string.player_performance_auto, R.string.player_performance_recommended, R.string.player_performance_compatible, R.string.player_performance_lightweight, R.string.player_performance_original};
+        for (int label : labels) tabs.addTab(tabs.newTab().setText(label), false);
+        tabs.setFocusable(false);
+        tabs.post(() -> configureProfileTabFocus(tabs));
+        tabs.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
+            @Override
+            public void onTabSelected(TabLayout.Tab tab) {
+                if (syncingProfileTabs) return;
+                apply(profileAt(tab.getPosition()));
+            }
+
+            @Override public void onTabUnselected(TabLayout.Tab tab) { }
+            @Override public void onTabReselected(TabLayout.Tab tab) { }
+        });
+        syncProfileTabs(tabs);
+        return tabs;
+    }
+
+    private void configureProfileTabFocus(TabLayout tabs) {
+        if (!Util.isLeanback() || tabs.getChildCount() == 0) return;
+        View strip = tabs.getChildAt(0);
+        if (!(strip instanceof ViewGroup tabStrip)) return;
+        for (int i = 0; i < tabStrip.getChildCount(); i++) {
+            View tab = tabStrip.getChildAt(i);
+            tab.setFocusable(true);
+            tab.setFocusableInTouchMode(true);
+            tab.setBackgroundResource(R.drawable.selector_mpv_tab_focus);
+        }
+    }
+
+    private void syncProfileTabs() {
+        if (profileTabs != null) syncProfileTabs(profileTabs);
+    }
+
+    private void syncProfileTabs(TabLayout tabs) {
+        syncingProfileTabs = true;
+        int position = profilePosition(PlaybackPerformanceSetting.getProfile());
+        tabs.selectTab(position < 0 ? null : tabs.getTabAt(position));
+        syncingProfileTabs = false;
+    }
+
+    private int profileAt(int position) {
+        return switch (position) {
+            case 1 -> PlaybackPerformanceSetting.PROFILE_RECOMMENDED;
+            case 2 -> PlaybackPerformanceSetting.PROFILE_COMPATIBLE;
+            case 3 -> PlaybackPerformanceSetting.PROFILE_LIGHTWEIGHT;
+            case 4 -> PlaybackPerformanceSetting.PROFILE_ORIGINAL;
+            default -> PlaybackPerformanceSetting.PROFILE_AUTO;
+        };
+    }
+
+    private int profilePosition(int profile) {
+        return switch (profile) {
+            case PlaybackPerformanceSetting.PROFILE_AUTO -> 0;
+            case PlaybackPerformanceSetting.PROFILE_RECOMMENDED -> 1;
+            case PlaybackPerformanceSetting.PROFILE_COMPATIBLE -> 2;
+            case PlaybackPerformanceSetting.PROFILE_LIGHTWEIGHT -> 3;
+            case PlaybackPerformanceSetting.PROFILE_ORIGINAL -> 4;
+            default -> -1;
+        };
     }
 
     private void refreshRows() {
@@ -403,7 +448,6 @@ public final class PlaybackPerformanceDialog extends DialogFragment {
 
     private String optionValue(String id) {
         return switch (id) {
-            case PlaybackPerformanceCatalog.KERNEL -> playerName();
             case PlaybackPerformanceCatalog.PROFILE -> PlaybackPerformanceSetting.getProfileName();
             case PlaybackPerformanceCatalog.RENDER -> renderText();
             case PlaybackPerformanceCatalog.TRACK_LIMIT -> onOff(PlaybackPerformanceSetting.isTrackLimitEnabled());
@@ -415,10 +459,10 @@ public final class PlaybackPerformanceDialog extends DialogFragment {
             case PlaybackPerformanceCatalog.BACK_BUFFER -> backBufferText();
             case PlaybackPerformanceCatalog.PLAY_CACHE -> playCacheText();
             case PlaybackPerformanceCatalog.LOAD_SELECTED_TRACKS -> onOff(PlaybackPerformanceSetting.isLoadOnlySelectedTracksEnabled());
-            case PlaybackPerformanceCatalog.PRELOAD -> onOff(PreloadSetting.isPreload());
-            case PlaybackPerformanceCatalog.PRELOAD_THREADS -> PreloadSetting.getPreloadThreads() + " 条";
+            case PlaybackPerformanceCatalog.PRELOAD -> PlaybackPerformanceSetting.isAuto() ? "自动" : onOff(PreloadSetting.isPreload());
+            case PlaybackPerformanceCatalog.PRELOAD_THREADS -> PlaybackPerformanceSetting.isAuto() ? "自动 · 0～2 条" : PreloadSetting.getPreloadThreads() + " 条";
             case PlaybackPerformanceCatalog.PRELOAD_SIZE -> FileUtil.byteCountToDisplaySize(PreloadSetting.getPreloadSizeBytes());
-            case PlaybackPerformanceCatalog.PRELOAD_TIME -> PreloadSetting.getPreloadTimeSeconds() + " 秒";
+            case PlaybackPerformanceCatalog.PRELOAD_TIME -> PlaybackPerformanceSetting.isAuto() ? "自动 · 10～30 秒" : PreloadSetting.getPreloadTimeSeconds() + " 秒";
             case PlaybackPerformanceCatalog.CODEC_ASYNC -> ExoPerformanceSetting.getCodecQueueText();
             case PlaybackPerformanceCatalog.DYNAMIC_SCHEDULING -> onOff(PlaybackPerformanceSetting.isDynamicSchedulingEnabled());
             case PlaybackPerformanceCatalog.DURATION_PROGRESS -> ExoPerformanceSetting.getCodecQueueMode() == ExoPerformanceSetting.CODEC_QUEUE_SYNC ? "同步队列不可用" : onOff(PlaybackPerformanceSetting.isVideoDurationProgressEnabled());
@@ -430,6 +474,7 @@ public final class PlaybackPerformanceDialog extends DialogFragment {
             case PlaybackPerformanceCatalog.PREFER_AAC -> onOff(PlayerSetting.isPreferAAC());
             case PlaybackPerformanceCatalog.AUDIO_SOFT_PREFER -> onOff(PlayerSetting.isAudioPrefer());
             case PlaybackPerformanceCatalog.VIDEO_SOFT_PREFER -> onOff(PlayerSetting.isVideoPrefer());
+            case PlaybackPerformanceCatalog.MPV_OUTPUT -> MpvPerformanceSetting.getOutputModeText();
             case PlaybackPerformanceCatalog.MPV_RENDER -> mpvRenderText();
             case PlaybackPerformanceCatalog.MPV_HWDEC -> MpvPerformanceSetting.getHwdecText();
             case PlaybackPerformanceCatalog.MPV_FRAME_RATE -> MpvPerformanceSetting.getFrameRateText();
@@ -454,7 +499,7 @@ public final class PlaybackPerformanceDialog extends DialogFragment {
             case PlaybackPerformanceCatalog.IJK_RECONNECT -> onOff(IjkPerformanceSetting.isReconnect());
             case PlaybackPerformanceCatalog.EXO_FRAME_RATE -> ExoPerformanceSetting.getFrameRateText();
             case PlaybackPerformanceCatalog.EXO_START_BUFFER -> formatSeconds(ExoPerformanceSetting.getStartBufferMs());
-            case PlaybackPerformanceCatalog.EXO_REBUFFER -> formatSeconds(ExoPerformanceSetting.getRebufferMs());
+            case PlaybackPerformanceCatalog.EXO_REBUFFER -> PlaybackPerformanceSetting.isAuto() ? "自动 · " + formatSeconds(ExoPerformanceSetting.getRebufferMs()) + "（2～8秒）" : formatSeconds(ExoPerformanceSetting.getRebufferMs());
             case PlaybackPerformanceCatalog.EXO_PRIORITIZE_TIME -> onOff(ExoPerformanceSetting.isPrioritizeTime());
             default -> "";
         };
@@ -462,7 +507,7 @@ public final class PlaybackPerformanceDialog extends DialogFragment {
 
     private Runnable optionAction(String id) {
         return switch (id) {
-            case PlaybackPerformanceCatalog.KERNEL, PlaybackPerformanceCatalog.PROFILE -> null;
+            case PlaybackPerformanceCatalog.PROFILE -> null;
             case PlaybackPerformanceCatalog.RENDER -> this::toggleRender;
             case PlaybackPerformanceCatalog.TRACK_LIMIT -> () -> toggle(PlaybackPerformanceSetting::isTrackLimitEnabled, PlaybackPerformanceSetting::putTrackLimitEnabled);
             case PlaybackPerformanceCatalog.ADAPTIVE_DOWNGRADE -> () -> toggle(PlaybackPerformanceSetting::isAdaptiveDowngradeEnabled, PlaybackPerformanceSetting::putAdaptiveDowngradeEnabled);
@@ -499,6 +544,10 @@ public final class PlaybackPerformanceDialog extends DialogFragment {
             case PlaybackPerformanceCatalog.PREFER_AAC -> () -> togglePlayer(PlayerSetting::isPreferAAC, PlayerSetting::putPreferAAC);
             case PlaybackPerformanceCatalog.AUDIO_SOFT_PREFER -> () -> togglePlayer(PlayerSetting::isAudioPrefer, PlayerSetting::putAudioPrefer);
             case PlaybackPerformanceCatalog.VIDEO_SOFT_PREFER -> () -> togglePlayer(PlayerSetting::isVideoPrefer, PlayerSetting::putVideoPrefer);
+            case PlaybackPerformanceCatalog.MPV_OUTPUT -> () -> {
+                MpvPerformanceSetting.putOutputMode((MpvPerformanceSetting.getOutputMode() + 1) % 3);
+                refresh();
+            };
             case PlaybackPerformanceCatalog.MPV_RENDER -> !isMpvVulkanAvailable() && PlayerSetting.getMpvRender() == PlayerSetting.MPV_RENDER_OPENGL ? null : () -> {
                 PlayerSetting.putMpvRender(PlayerSetting.getMpvRender() == PlayerSetting.MPV_RENDER_OPENGL ? PlayerSetting.MPV_RENDER_VULKAN : PlayerSetting.MPV_RENDER_OPENGL);
                 PlaybackPerformanceSetting.markCustom();

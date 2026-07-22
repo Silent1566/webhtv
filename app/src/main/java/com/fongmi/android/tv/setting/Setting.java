@@ -741,8 +741,21 @@ public class Setting {
     }
 
     public static boolean hasFileAccess() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) return Environment.isExternalStorageManager();
-        return ContextCompat.checkSelfPermission(App.get(), Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED && ContextCompat.checkSelfPermission(App.get(), Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) return Environment.isExternalStorageManager() || hasLegacyFileAccess();
+        return hasLegacyFileAccess();
+    }
+
+    private static boolean hasLegacyFileAccess() {
+        boolean read = ContextCompat.checkSelfPermission(App.get(), Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
+        boolean write = ContextCompat.checkSelfPermission(App.get(), Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
+        boolean legacy = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && Environment.isExternalStorageLegacy();
+        return hasLegacyFileAccess(Build.VERSION.SDK_INT, App.get().getApplicationInfo().targetSdkVersion, read, write, legacy);
+    }
+
+    static boolean hasLegacyFileAccess(int sdkInt, int targetSdk, boolean read, boolean write, boolean legacyStorage) {
+        if (sdkInt >= Build.VERSION_CODES.R) return read && targetSdk < Build.VERSION_CODES.R;
+        if (sdkInt >= Build.VERSION_CODES.Q) return read && (write || legacyStorage);
+        return read && write;
     }
 
     public static boolean hasFileManager() {
@@ -1131,6 +1144,14 @@ public class Setting {
 
     public static void putHomeVodAutoLoad(boolean autoLoad) {
         Prefers.put("home_vod_auto_load", autoLoad);
+    }
+
+    public static boolean isAutoBackup() {
+        return Prefers.getBoolean("auto_backup", false);
+    }
+
+    public static void putAutoBackup(boolean autoBackup) {
+        Prefers.put("auto_backup", autoBackup);
     }
 
     public static int getFullscreenMenuKey() {

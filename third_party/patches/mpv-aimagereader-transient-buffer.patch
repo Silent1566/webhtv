@@ -1,0 +1,51 @@
+diff --git a/video/out/hwdec/hwdec_aimagereader.c b/video/out/hwdec/hwdec_aimagereader.c
+index 4355e60c..f74f0456 100644
+--- a/video/out/hwdec/hwdec_aimagereader.c
++++ b/video/out/hwdec/hwdec_aimagereader.c
+@@ -88,0 +89,2 @@ struct priv {
++    unsigned int no_buffer_count;
++    unsigned int fence_timeout_count;
+@@ -101,0 +104,4 @@ struct priv {
++#define IMAGE_WAIT_TIMEOUT_NS MP_TIME_MS_TO_NS(8)
++#define ACQUIRE_FENCE_TIMEOUT_MS 8
++#define TRANSIENT_LOG_INTERVAL 120
++
+@@ -412 +417,0 @@ static int mapper_map(struct ra_hwdec_mapper *mapper)
+-    bool image_available = false;
+@@ -415,3 +420 @@ static int mapper_map(struct ra_hwdec_mapper *mapper)
+-        mp_cond_timedwait(&p->cond, &p->lock, MP_TIME_MS_TO_NS(100));
+-        if (!p->image_available)
+-            MP_WARN(mapper, "Waiting for frame timed out!\n");
++        mp_cond_timedwait(&p->cond, &p->lock, IMAGE_WAIT_TIMEOUT_NS);
+@@ -419 +421,0 @@ static int mapper_map(struct ra_hwdec_mapper *mapper)
+-    image_available = p->image_available;
+@@ -434,0 +437,8 @@ static int mapper_map(struct ra_hwdec_mapper *mapper)
++    if (ret == AMEDIA_IMGREADER_NO_BUFFER_AVAILABLE) {
++        p->no_buffer_count++;
++        if (p->no_buffer_count % TRANSIENT_LOG_INTERVAL == 1) {
++            MP_VERBOSE(mapper, "AImageReader has no buffer yet (count=%u)\n",
++                       p->no_buffer_count);
++        }
++        return 0;
++    }
+@@ -437,3 +447 @@ static int mapper_map(struct ra_hwdec_mapper *mapper)
+-        // If we merely timed out waiting return success anyway to avoid
+-        // flashing frames of render errors.
+-        return image_available ? -1 : 0;
++        return -1;
+@@ -450 +458 @@ static int mapper_map(struct ra_hwdec_mapper *mapper)
+-            poll_result = poll(&fence, 1, 100);
++            poll_result = poll(&fence, 1, ACQUIRE_FENCE_TIMEOUT_MS);
+@@ -453 +461,11 @@ static int mapper_map(struct ra_hwdec_mapper *mapper)
+-        if (poll_result <= 0) {
++        if (poll_result == 0) {
++            p->fence_timeout_count++;
++            if (p->fence_timeout_count % TRANSIENT_LOG_INTERVAL == 1) {
++                MP_VERBOSE(mapper,
++                           "AImage acquire fence not ready yet (count=%u)\n",
++                           p->fence_timeout_count);
++            }
++            o->AImage_delete(image);
++            return 0;
++        }
++        if (poll_result < 0) {

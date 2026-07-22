@@ -98,7 +98,7 @@ public final class PlaybackProgressWriter {
         history.setEpisodeUrl(input.episodeUrl);
         history.setPosition(input.positionMs);
         history.setDuration(input.durationMs);
-        history.setSpeed(input.speed <= 0 ? 1f : input.speed);
+        applySpeed(history, input.speed, input.speedOverride);
         history.setCreateTime(input.updatedAt);
         if (local == null) {
             AppDatabase.get().getHistoryDao().insertOrUpdate(history);
@@ -108,6 +108,19 @@ public final class PlaybackProgressWriter {
         AppDatabase.get().getHistoryDao().insertOrUpdate(history);
         RefreshEvent.history();
         return PlaybackProgressApplyResult.updated(input, history.getKey());
+    }
+
+    static void applySpeed(History history, float speed, Boolean speedOverride) {
+        if (history == null) return;
+        float value = speed <= 0 ? 1f : speed;
+        if (speedOverride == null) {
+            history.setSpeed(value);
+        } else if (speedOverride) {
+            history.setUserSpeed(value);
+        } else {
+            history.setSpeed(1f);
+            history.setSpeedOverride(false);
+        }
     }
 
     private static PlaybackProgressApplyResult deleteInternal(PlaybackProgressDeleteInput input) {

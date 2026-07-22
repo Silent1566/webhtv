@@ -61,6 +61,7 @@ import com.fongmi.android.tv.ui.custom.PlayerOsdController;
 import com.fongmi.android.tv.ui.dialog.HistoryDialog;
 import com.fongmi.android.tv.ui.dialog.LiveDialog;
 import com.fongmi.android.tv.ui.dialog.PassDialog;
+import com.fongmi.android.tv.ui.dialog.PlayerOsdDialog;
 import com.fongmi.android.tv.ui.dialog.SubtitleDialog;
 import com.fongmi.android.tv.ui.dialog.TrackDialog;
 import com.fongmi.android.tv.utils.Clock;
@@ -211,6 +212,7 @@ public class LiveActivity extends PlaybackActivity implements GroupAdapter.OnCli
         mBinding.control.action.scale.setOnClickListener(view -> onScale());
         mBinding.control.action.speed.setOnClickListener(view -> onSpeed());
         mBinding.control.action.config.setOnClickListener(view -> onConfig());
+        mBinding.control.action.osdSettings.setOnClickListener(view -> onOsd());
         mBinding.control.action.action.setOnClickListener(view -> onAction());
         mBinding.control.action.invert.setOnClickListener(view -> onInvert());
         mBinding.control.action.across.setOnClickListener(view -> onAcross());
@@ -438,6 +440,17 @@ public class LiveActivity extends PlaybackActivity implements GroupAdapter.OnCli
 
     private void onConfig() {
         HistoryDialog.create().live().readOnly().show(this);
+        hideControl();
+    }
+
+    private void onOsd() {
+        PlayerOsdDialog.show(this, ResUtil.getStringArray(R.array.select_live_player_osd), PlayerSetting.getLiveDisplayChecked(), checked -> {
+            PlayerSetting.putLiveDisplayChecked(checked);
+            if (mOsd != null) {
+                mOsd.setDiagnosticsVisible(PlayerSetting.isOsdDiagnostics());
+                mOsd.start();
+            }
+        });
         hideControl();
     }
 

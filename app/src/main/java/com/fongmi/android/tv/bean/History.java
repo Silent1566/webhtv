@@ -6,6 +6,7 @@ import android.view.View;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.media3.common.C;
+import androidx.room.ColumnInfo;
 import androidx.room.Entity;
 import androidx.room.PrimaryKey;
 
@@ -17,6 +18,7 @@ import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.impl.Diffable;
 import com.fongmi.android.tv.setting.PlayerSetting;
+import com.fongmi.android.tv.utils.Util;
 import com.google.gson.annotations.SerializedName;
 import com.google.gson.reflect.TypeToken;
 
@@ -66,6 +68,9 @@ public class History implements Diffable<History> {
     private long duration;
     @SerializedName("speed")
     private float speed;
+    @SerializedName("speedOverride")
+    @ColumnInfo(defaultValue = "0")
+    private boolean speedOverride;
     @SerializedName("scale")
     private int scale;
     @SerializedName("cid")
@@ -111,6 +116,7 @@ public class History implements Diffable<History> {
         item.position = position;
         item.duration = duration;
         item.speed = speed;
+        item.speedOverride = speedOverride;
         item.scale = scale;
         item.cid = cid;
         item.typeName = typeName;
@@ -352,6 +358,27 @@ public class History implements Diffable<History> {
         this.speed = speed;
     }
 
+    public boolean getSpeedOverride() {
+        return speedOverride;
+    }
+
+    public void setSpeedOverride(boolean speedOverride) {
+        this.speedOverride = speedOverride;
+    }
+
+    public boolean hasUserSpeed() {
+        return speedOverride || (speed > 0 && Math.abs(speed - 1.0f) > 0.001f);
+    }
+
+    public float getPlaybackSpeed(float defaultSpeed) {
+        return hasUserSpeed() && speed > 0 ? speed : defaultSpeed;
+    }
+
+    public void setUserSpeed(float speed) {
+        this.speed = speed;
+        this.speedOverride = true;
+    }
+
     public int getScale() {
         return scale;
     }
@@ -454,7 +481,8 @@ public class History implements Diffable<History> {
     }
 
     public String getVodId() {
-        return getKey().split(AppDatabase.SYMBOL)[1];
+        String[] parts = Objects.toString(getKey(), "").split(AppDatabase.SYMBOL);
+        return parts.length > 1 ? parts[1] : "";
     }
 
     public Flag getFlag() {
@@ -467,6 +495,17 @@ public class History implements Diffable<History> {
 
     public int getSiteVisible() {
         return TextUtils.isEmpty(getSiteName()) ? View.GONE : View.VISIBLE;
+    }
+
+    public boolean hasPlaybackTime() {
+        return getPosition() >= 0 && getDuration() > 0;
+    }
+
+    public String getPlaybackTimeText() {
+        if (!hasPlaybackTime()) return "";
+        long duration = Math.max(0, getDuration());
+        long position = Math.max(0, Math.min(getPosition(), duration));
+        return Util.timeMs(position) + " / " + Util.timeMs(duration);
     }
 
     public int getRevPlayText() {
@@ -497,7 +536,7 @@ public class History implements Diffable<History> {
     private History copyTo(History item) {
         if (getOpening() > 0) item.setOpening(getOpening());
         if (getEnding() > 0) item.setEnding(getEnding());
-        if (getSpeed() != 1) item.setSpeed(getSpeed());
+        if (hasUserSpeed()) item.setUserSpeed(getSpeed());
         return this;
     }
 
@@ -558,7 +597,7 @@ public class History implements Diffable<History> {
 
     public History save() {
         History before = find(getKey());
-        boolean notify = recommendationIdentityChanged(before, this);
+        boolean notify = recommendationSignalsChanged(before, this);
         updateTime = System.currentTimeMillis();
         AppDatabase.get().getHistoryDao().insertOrUpdate(this);
         if (notify) notifyChanged();
@@ -576,12 +615,17 @@ public class History implements Diffable<History> {
         App.post(HISTORY_REFRESH, HISTORY_REFRESH_DEBOUNCE);
     }
 
-    private static boolean recommendationIdentityChanged(History before, History after) {
+    static boolean recommendationSignalsChanged(History before, History after) {
         if (after == null || TextUtils.isEmpty(after.getVodName())) return false;
         if (before == null) return true;
         return before.getCid() != after.getCid()
-                || !TextUtils.equals(before.getKey(), after.getKey())
-                || !TextUtils.equals(before.getVodName(), after.getVodName());
+                || !Objects.equals(before.getKey(), after.getKey())
+                || !Objects.equals(before.getVodName(), after.getVodName())
+                || !Objects.equals(before.getTypeName(), after.getTypeName())
+                || !Objects.equals(before.getArea(), after.getArea())
+                || !Objects.equals(before.getActor(), after.getActor())
+                || !Objects.equals(before.getDirector(), after.getDirector())
+                || !Objects.equals(before.getYear(), after.getYear());
     }
 
     public void findEpisode(List<Flag> flags) {
@@ -633,6 +677,15 @@ public class History implements Diffable<History> {
 
     @Override
     public boolean isSameContent(History other) {
-        return getVodName().equals(other.getVodName()) && getVodPic().equals(other.getVodPic()) && getWallPic().equals(other.getWallPic()) && getCreateTime() == other.getCreateTime();
+        return other != null
+                && Objects.equals(getVodName(), other.getVodName())
+                && Objects.equals(getVodPic(), other.getVodPic())
+                && Objects.equals(getWallPic(), other.getWallPic())
+                && Objects.equals(getVodFlag(), other.getVodFlag())
+                && Objects.equals(getVodRemarks(), other.getVodRemarks())
+                && Objects.equals(getEpisodeUrl(), other.getEpisodeUrl())
+                && getPosition() == other.getPosition()
+                && getDuration() == other.getDuration()
+                && getCreateTime() == other.getCreateTime();
     }
 }

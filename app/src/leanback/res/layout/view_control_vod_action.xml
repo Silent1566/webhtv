@@ -78,6 +78,15 @@
             android:text="@string/play_params" />
 
         <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/panDiagnostic"
+            style="@style/Control"
+            android:layout_marginEnd="8dp"
+            android:contentDescription="@string/pan_diagnostic_title"
+            android:text="@string/pan_diagnostic_entry"
+            android:visibility="gone"
+            tools:visibility="visible" />
+
+        <com.google.android.material.textview.MaterialTextView
             android:id="@+id/codecCapability"
             style="@style/Control"
             android:layout_marginEnd="8dp"

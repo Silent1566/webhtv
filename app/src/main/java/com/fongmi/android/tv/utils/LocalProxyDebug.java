@@ -3,6 +3,8 @@ package com.fongmi.android.tv.utils;
 import android.net.Uri;
 import android.text.TextUtils;
 
+import com.fongmi.android.tv.player.PlaybackRoute;
+import com.fongmi.android.tv.player.PlaybackRouteCapabilities;
 import com.github.catvod.crawler.DebugLogStore;
 import com.github.catvod.crawler.SpiderDebug;
 import com.github.catvod.utils.Path;
@@ -52,12 +54,12 @@ public final class LocalProxyDebug {
         while (System.currentTimeMillis() <= deadline) {
             attempt++;
             if (canConnect(host, port)) {
-                SpiderDebug.log(TAG, "ready host=%s port=%d urlLen=%d attempt=%d elapsed=%dms", host, port, url.length(), attempt, System.currentTimeMillis() - start);
+                SpiderDebug.log(TAG, "endpoint ready %s attempt=%d elapsed=%dms", routeSummary(url), attempt, System.currentTimeMillis() - start);
                 return true;
             }
             sleep(CONNECT_INTERVAL_MS);
         }
-        SpiderDebug.log(TAG, "ready timeout host=%s port=%d urlLen=%d attempts=%d elapsed=%dms", host, port, url.length(), attempt, System.currentTimeMillis() - start);
+        SpiderDebug.log(TAG, "endpoint ready timeout %s attempts=%d elapsed=%dms", routeSummary(url), attempt, System.currentTimeMillis() - start);
         return false;
     }
 
@@ -75,8 +77,9 @@ public final class LocalProxyDebug {
     }
 
     public static boolean isLocalProxyUrl(String url) {
-        if (TextUtils.isEmpty(url)) return false;
-        return url.startsWith("http://127.0.0.1") || url.startsWith("http://localhost");
+        if (url == null || url.isBlank()) return false;
+        PlaybackRoute.Resolution resolution = PlaybackRoute.resolve(url);
+        return resolution.loopback() && "http".equals(resolution.scheme());
     }
 
     private static String getHost(String url) {
@@ -113,12 +116,18 @@ public final class LocalProxyDebug {
     }
 
     private static void dump(String url, Throwable error) {
-        SpiderDebug.log(TAG, "diagnose start host=%s port=%d urlLen=%d error=%s", getHost(url), getPort(url), url == null ? 0 : url.length(), error == null ? "" : error.getMessage());
+        PlaybackRoute.Resolution resolution = PlaybackRoute.resolve(url);
+        PlaybackRouteCapabilities capabilities = PlaybackRouteCapabilities.resolve(resolution);
+        SpiderDebug.log(TAG, "diagnose start %s errorType=%s evidenceScope=best-effort", resolution.logSummary(), error == null ? "none" : error.getClass().getSimpleName());
         dumpDir(Path.files());
         dumpLog(new File(Path.files(), "goProxy.log"));
         dumpLog(new File(Path.cache(), "goProxy.log"));
         dumpProcessSnapshot();
-        SpiderDebug.log(TAG, "diagnose end");
+        SpiderDebug.log(TAG, "diagnose end %s hintsOnly=true authoritativeUpstreamState=false", capabilities.logSummary());
+    }
+
+    private static String routeSummary(String url) {
+        return PlaybackRoute.resolve(url).logSummary();
     }
 
     private static void dumpDir(File dir) {

@@ -26,21 +26,25 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/create"
-            style="@style/Widget.Material3.Button.TextButton"
+            style="@style/Widget.Material3.Button.OutlinedButton"
             android:layout_width="64dp"
             android:layout_height="40dp"
+            android:focusable="true"
             android:minWidth="0dp"
             android:padding="0dp"
             android:text="@string/mpv_config_new"
-            android:textColor="@color/dialog_text_button" />
+            android:textColor="@color/dialog_outlined_button_text"
+            app:backgroundTint="@color/dialog_outlined_button_bg"
+            app:strokeColor="@color/dialog_outlined_button_stroke" />
 
         <androidx.appcompat.widget.AppCompatImageButton
             android:id="@+id/close"
             android:layout_width="44dp"
             android:layout_height="40dp"
             android:layout_marginStart="4dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
+            android:background="@drawable/selector_mpv_icon_button"
             android:contentDescription="@string/mpv_config_close"
+            android:focusable="true"
             android:padding="10dp"
             android:src="@drawable/ic_dialog_close"
             android:tint="#5F6368" />
@@ -52,7 +56,7 @@
         android:layout_width="match_parent"
         android:layout_height="46dp"
         android:background="@android:color/transparent"
-        app:tabBackground="@android:color/transparent"
+        app:tabBackground="@drawable/selector_mpv_tab_focus"
         app:tabGravity="fill"
         app:tabMode="fixed" />
 
@@ -63,6 +67,8 @@
         android:layout_marginTop="12dp"
         android:layout_weight="1"
         android:clipToPadding="false"
+        android:descendantFocusability="afterDescendants"
+        android:focusable="false"
         android:overScrollMode="never"
         android:paddingBottom="4dp"
         app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"

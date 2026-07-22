@@ -85,6 +85,7 @@ import com.fongmi.android.tv.setting.PlayerButtonSetting;
 import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.setting.SiteHealthStore;
+import com.fongmi.android.tv.setting.TmdbSitePolicy;
 import com.fongmi.android.tv.title.MediaTitleLearningExample;
 import com.fongmi.android.tv.title.MediaTitleRequest;
 import com.fongmi.android.tv.subtitle.SubtitlePlaybackSession;
@@ -118,6 +119,7 @@ import com.fongmi.android.tv.ui.helper.EpisodeDisplayPolicy;
 import com.fongmi.android.tv.ui.helper.PlayerControlFocusHelper;
 import com.fongmi.android.tv.ui.helper.TmdbEpisodeGridPolicy;
 import com.fongmi.android.tv.ui.helper.TmdbNavigation;
+import com.fongmi.android.tv.ui.helper.VodEventGuard;
 import com.fongmi.android.tv.ui.player.VodPlayerChrome;
 import com.fongmi.android.tv.ui.player.VodPlayerUiController;
 import com.fongmi.android.tv.ui.player.VodPlayerUiHost;
@@ -181,6 +183,7 @@ import androidx.coordinatorlayout.widget.CoordinatorLayout;
 import androidx.palette.graphics.Palette;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import com.fongmi.android.tv.bean.CastVideo;
+import com.fongmi.android.tv.player.diagnostic.PanEndpointParser;
 import com.fongmi.android.tv.player.karaoke.KaraokeController;
 import com.fongmi.android.tv.player.karaoke.KaraokePitchTrackGenerator;
 import com.fongmi.android.tv.player.karaoke.KaraokeResult;
@@ -197,6 +200,7 @@ import com.fongmi.android.tv.ui.custom.AudioPlayerBackgroundDrawable;
 import com.fongmi.android.tv.ui.custom.KaraokeResultView;
 import com.fongmi.android.tv.ui.dialog.CastDialog;
 import com.fongmi.android.tv.ui.dialog.ControlDialog;
+import com.fongmi.android.tv.ui.dialog.PanNetworkDiagnosticDialog;
 import com.fongmi.android.tv.ui.dialog.TimerDialog;
 import com.fongmi.android.tv.utils.Traffic;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
@@ -390,9 +394,11 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     private final Map<String, PersonalRecommendationService.DoubanRating> mTmdbDoubanRatingCache = Collections.synchronizedMap(new HashMap<>());
     private final Set<String> mTmdbDoubanRatingLoading = Collections.synchronizedSet(new HashSet<>());
     private View mFocus2;
+    private View mDialogReturnFocus;
     private Result mPendingDetail;
     private Result mPendingPlayer;
     private AudioPlaybackResolver.Resolved mImmersiveAudioResolved;
+    private boolean mImmersiveAudioRequested;
     private String mContextWallUrl;
     private String mContextWallLockedUrl;
     private String playHealthKey;
@@ -496,15 +502,10 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         start(activity, key, id, name, pic, null, true, false, (TmdbItem) null, wallPic);
     }
 
-    private static boolean canOpenLegacyTmdbDetail(String key, boolean cast) {
+    private static boolean canOpenLegacyTmdbDetail(String key, String id, boolean cast) {
         if (cast || TextUtils.isEmpty(key)) return false;
-        if (SiteApi.PUSH.equals(key)) return isTmdbSiteEnabled(key);
-        return !AudioUtil.isAudioSiteEnabled(key) && !isShortDramaSiteEnabled(key) && isTmdbSiteEnabled(key);
-    }
-
-    private static boolean isTmdbSiteEnabled(String key) {
-        Site site = VodConfig.get().getSite(key);
-        return Setting.isTmdbSiteEnabled(key, site == null ? "" : site.getName());
+        if (SiteApi.PUSH.equals(key)) return TmdbSitePolicy.isEnabled(key, id);
+        return !AudioUtil.isAudioSiteEnabled(key) && !isShortDramaSiteEnabled(key) && TmdbSitePolicy.isEnabled(key, id);
     }
 
     private static boolean isShortDramaSiteEnabled(String key) {
@@ -512,9 +513,9 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         return Setting.isShortDramaSiteEnabled(key, site == null ? "" : site.getName());
     }
 
-    private static boolean shouldOpenLegacyTmdbDetail(String key, boolean cast) {
+    private static boolean shouldOpenLegacyTmdbDetail(String key, String id, boolean cast) {
         int mode = Setting.getDetailOpenMode();
-        return canOpenLegacyTmdbDetail(key, cast) && Setting.isTmdbDetailPage() && Setting.isStandaloneTmdbDetailMode(mode);
+        return canOpenLegacyTmdbDetail(key, id, cast) && Setting.isTmdbDetailPage() && Setting.isStandaloneTmdbDetailMode(mode);
     }
 
     public static void start(Activity activity, String url) {
@@ -583,7 +584,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
             SpiderDebug.log("video-flow", "dispatched to content handler key=%s", key);
             return;
         }
-        if (tmdbItem == null && shouldOpenLegacyTmdbDetail(key, cast)) {
+        if (tmdbItem == null && shouldOpenLegacyTmdbDetail(key, id, cast)) {
             TmdbDetailActivity.start(activity, key, id, name, pic, mark, null, Setting.getDetailOpenMode());
             return;
         }
@@ -838,8 +839,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         if (isTmdbMode()) return true;
         if (!Setting.isTmdbMode(Setting.getDetailOpenMode())) return false;
         if (!Setting.isTmdbEnabled()) return false;
-        Site site = getSite();
-        return Setting.isTmdbSiteEnabled(site == null ? getKey() : site.getKey(), site == null ? "" : site.getName());
+        return TmdbSitePolicy.isEnabled(getKey(), getId());
     }
 
     private com.fongmi.android.tv.bean.TmdbItem getTmdbItem() {
@@ -1050,9 +1050,10 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         mBinding.control.action.reset.setOnClickListener(guarded(this::onReset));
         mBinding.control.action.title.setOnClickListener(guarded(this::onTitle));
         mBinding.control.action.player.setOnClickListener(guarded(this::onPlayerKernel));
-        mBinding.control.action.player.setOnLongClickListener(view -> onPlayerKernelLong());
+        mBinding.control.action.player.setOnLongClickListener(view -> onChooseLong());
         mBinding.control.action.decode.setOnClickListener(guarded(this::onDecode));
         mBinding.control.action.playParams.setOnClickListener(guarded(this::onPlayParams));
+        mBinding.control.action.panDiagnostic.setOnClickListener(guarded(this::onPanDiagnostic));
         mBinding.control.action.codecCapability.setOnClickListener(guarded(this::onCodecCapability));
         mBinding.control.action.ending.setOnClickListener(guarded(this::onEnding));
         mBinding.control.action.repeat.setOnClickListener(guarded(this::onRepeat));
@@ -1217,25 +1218,33 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         addActionButton(PlayerButtonSetting.PREV, mBinding.control.action.prev);
         addActionButton(PlayerButtonSetting.EPISODES, mBinding.control.action.episodes);
         addActionButton(PlayerButtonSetting.RESET, mBinding.control.action.reset);
-        addActionButton("SEARCH", mBinding.control.action.search);
+        addActionButton(PlayerButtonSetting.SEARCH, mBinding.control.action.search);
         addActionButton(PlayerButtonSetting.CHANGE, mBinding.control.action.change2);
         addActionButton(PlayerButtonSetting.FULLSCREEN, mBinding.control.action.fullscreen);
         addActionButton(PlayerButtonSetting.PLAYER, mBinding.control.action.player);
         addActionButton(PlayerButtonSetting.DECODE, mBinding.control.action.decode);
         addActionButton(PlayerButtonSetting.PLAY_PARAMS, mBinding.control.action.playParams);
+        addActionButton(PlayerButtonSetting.PAN_DIAGNOSTIC, mBinding.control.action.panDiagnostic);
         addActionButton(PlayerButtonSetting.CODEC_CAPABILITY, mBinding.control.action.codecCapability);
         addActionButton(PlayerButtonSetting.SPEED, mBinding.control.action.speed);
         addActionButton(PlayerButtonSetting.SCALE, mBinding.control.action.scale);
+        addActionButton(PlayerButtonSetting.QUALITY, mBinding.control.action.actionQuality);
         addActionButton(PlayerButtonSetting.LUT, mBinding.control.action.lut);
+        addActionButton(PlayerButtonSetting.KARAOKE, mBinding.control.action.karaoke);
+        addActionButton(PlayerButtonSetting.IMMERSIVE_AUDIO, mBinding.control.action.immersiveAudio);
         addActionButton(PlayerButtonSetting.TEXT, mBinding.control.action.text);
         addActionButton(PlayerButtonSetting.AUDIO, mBinding.control.action.audio);
         addActionButton(PlayerButtonSetting.VIDEO, mBinding.control.action.video);
         addActionButton(PlayerButtonSetting.OPENING, mBinding.control.action.opening);
         addActionButton(PlayerButtonSetting.ENDING, mBinding.control.action.ending);
         addActionButton(PlayerButtonSetting.DANMAKU, mBinding.control.action.danmaku);
+        addActionButton(PlayerButtonSetting.AD_FEEDBACK, mBinding.control.action.adFeedback);
         addActionButton(PlayerButtonSetting.TITLE, mBinding.control.action.title);
+        addActionButton(PlayerButtonSetting.CAST, mBinding.control.action.cast);
+        addActionButton(PlayerButtonSetting.TIMER, mBinding.control.action.timer);
         addActionButton(PlayerButtonSetting.REPEAT, mBinding.control.action.repeat);
         PlayerButtonSetting.applyOrder(mBinding.control.action.container, mActionButtons);
+        applyActionButtonVisibility();
     }
 
     private void addActionButton(String id, View view) {
@@ -1243,7 +1252,36 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     private void applyActionButtonVisibility() {
+        updateImmersiveAudioAction();
+        updatePanDiagnosticAction();
         if (mActionButtons != null) PlayerButtonSetting.applyVisibility(mActionButtons);
+    }
+
+    private void updatePanDiagnosticAction() {
+        if (mBinding == null) return;
+        mBinding.control.action.panDiagnostic.setVisibility(isFullscreen() && canRunPanDiagnostic() ? View.VISIBLE : View.GONE);
+    }
+
+    private boolean canRunPanDiagnostic() {
+        if (service() == null || player().isEmpty()) return false;
+        try {
+            PanEndpointParser.parse(player().getUrl(), player().getHeaders());
+            return true;
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
+    private void updateImmersiveAudioAction() {
+        if (mBinding == null) return;
+        boolean audioContent = isAudioOnly() || isMusicLike();
+        mBinding.control.action.immersiveAudio.setVisibility(isFullscreen() && audioContent ? View.VISIBLE : View.GONE);
+        mBinding.control.action.immersiveAudio.setSelected(PlayerSetting.isImmersiveAudioMode());
+    }
+
+    private void toggleImmersiveAudioMode() {
+        PlayerSetting.putImmersiveAudioMode(!PlayerSetting.isImmersiveAudioMode());
+        onImmersiveAudioModeChanged();
     }
 
     private int getEpisodeColumn() {
@@ -1655,9 +1693,8 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         updateFastTmdbPlaybackHistory(flag, episode);
         mBinding.control.action.opening.setText(mHistory.getOpening() <= 0 ? getString(R.string.play_op) : Util.timeMs(mHistory.getOpening()));
         mBinding.control.action.ending.setText(mHistory.getEnding() <= 0 ? getString(R.string.play_ed) : Util.timeMs(mHistory.getEnding()));
-        float speed = (mHistory.getSpeed() > 0 && mHistory.getSpeed() != 1f) ? mHistory.getSpeed() : 1f;
+        float speed = getPlaybackSpeed();
         mBinding.control.action.speed.setText(player().setSpeed(speed));
-        mHistory.setSpeed(player().getSpeed());
         PlaybackEventCollector.get().updateHistory(mHistory);
     }
 
@@ -1686,6 +1723,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     private void resetDetailForNewIntent() {
+        if (mTmdbUIAdapter != null) mTmdbUIAdapter.beginDetailRequest();
         detailRequested = false;
         detailHealthRecorded = false;
         playHealthRecorded = false;
@@ -1776,7 +1814,15 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         detailStartTime = System.currentTimeMillis();
         detailHealthRecorded = false;
         SpiderDebug.log("video-flow", "detail start key=%s id=%s name=%s", getKey(), getId(), getName());
+        prefetchDirectTmdbDetail();
         mViewModel.detailContent(getKey(), getId());
+    }
+
+    private void prefetchDirectTmdbDetail() {
+        if (mTmdbUIAdapter == null || !mTmdbUIAdapter.isReady()) return;
+        mTmdbUIAdapter.beginDetailRequest();
+        com.fongmi.android.tv.bean.TmdbItem item = getTmdbItem();
+        if (item != null) mTmdbUIAdapter.prefetch(item);
     }
 
     private void getDetail(Vod item) {
@@ -2133,7 +2179,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         }
         applyAudioQueueMetadata(getPlaybackEpisode());
         if (result.hasPosition()) mHistory.setPosition(result.getPosition());
-        mBinding.control.parse.setVisibility(isUseParse() ? View.VISIBLE : View.GONE);
+        mBinding.control.parse.setVisibility(isUseParse() && PlayerButtonSetting.isVisible(PlayerButtonSetting.PARSE) ? View.VISIBLE : View.GONE);
         if (redirectToContentHandler(result)) return;
         List<Danmaku> siteDanmakus = result.getDanmaku();
         startPlayer(getHistoryKey(), result, isUseParse(), getSite().getTimeout(), buildMetadata());
@@ -2214,6 +2260,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         boolean useTmdbCards = EpisodeDisplayPolicy.shouldUseTmdbEpisodeCards(tmdbMode, items);
         mBinding.episodeContainer.setVisibility(isEmpty ? View.GONE : View.VISIBLE);
         mBinding.control.action.episodes.setVisibility(items.size() < 2 ? View.GONE : View.VISIBLE);
+        applyActionButtonVisibility();
 
         if (shouldUseUpstreamNativeEpisodeModule()) {
             setUpstreamNativeEpisodeItems(items, scrollToCurrent);
@@ -2349,6 +2396,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     private void setQualityVisible(boolean visible) {
         mBinding.quality.setVisibility(visible ? View.VISIBLE : View.GONE);
         mBinding.control.action.actionQuality.setVisibility(visible ? View.VISIBLE : View.GONE);
+        applyActionButtonVisibility();
         updateActionQuality(mViewModel.getPlayer().getValue());
         updateFocus();
         updateEpisodeWindow();
@@ -2936,6 +2984,28 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         mBinding.shortDisplay.setSelected(Setting.isCompactEpisodeTitle());
     }
 
+    private void onCodecCapability() {
+        CodecCapabilityDialog.show(this, player());
+        hideControl();
+    }
+
+    private void onSetting() {
+        ControlDialog.create().parent(mBinding).history(mHistory).parse(isUseParse()).player(player()).show(this);
+    }
+
+    private void onCast() {
+        if (mHistory == null || TextUtils.isEmpty(mHistory.getVodId()) || service() == null || player().isEmpty() || TextUtils.isEmpty(player().getUrl())) {
+            Notify.show(R.string.cast_not_ready);
+            return;
+        }
+        CastVideo video = new CastVideo(Objects.toString(mBinding.widget.title.getText(), ""), player().getUrl(), player().getPosition(), player().getHeaders());
+        CastDialog.create().history(mHistory).video(video).fm(true).show(this);
+    }
+
+    private void onTimer() {
+        TimerDialog.create().show(this);
+    }
+
     private void onKeep() {
         Keep keep = Keep.find(getHistoryKey());
         Notify.show(keep != null ? R.string.keep_del : R.string.keep_add);
@@ -2981,9 +3051,11 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         hideControl();
     }
 
-    private void onCodecCapability() {
-        CodecCapabilityDialog.show(this, player());
-        hideControl();
+    private void onPanDiagnostic() {
+        if (!canRunPanDiagnostic()) return;
+        mDialogReturnFocus = mBinding.control.action.panDiagnostic;
+        App.removeCallbacks(mR1);
+        PanNetworkDiagnosticDialog.show(this, player());
     }
 
     private void setPlayParamsState() {
@@ -3159,32 +3231,31 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
 
     private void onSpeed() {
         mBinding.control.action.speed.setText(player().addSpeed());
-        saveDefaultSpeed();
+        saveUserSpeed();
         setR1Callback();
     }
 
     private void onSpeedAdd() {
         mBinding.control.action.speed.setText(player().addSpeed(0.25f));
-        saveDefaultSpeed();
+        saveUserSpeed();
         setR1Callback();
     }
 
     private void onSpeedSub() {
         mBinding.control.action.speed.setText(player().subSpeed(0.25f));
-        saveDefaultSpeed();
+        saveUserSpeed();
         setR1Callback();
     }
 
     private boolean onSpeedLong() {
-        mBinding.control.action.speed.setText(player().toggleSpeed());
-        saveDefaultSpeed();
+        mBinding.control.action.speed.setText(player().toggleSpeed(getPlaybackSpeed()));
+        saveUserSpeed();
         setR1Callback();
         return true;
     }
 
-    private void saveDefaultSpeed() {
-        PlayerSetting.putDefaultSpeed(player().getSpeed());
-        mHistory.setSpeed(player().getSpeed());
+    private void saveUserSpeed() {
+        mHistory.setUserSpeed(player().getSpeed());
     }
 
     private void onReset() {
@@ -3345,6 +3416,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
 
     private void setAdFeedbackVisible() {
         mBinding.control.action.adFeedback.setVisibility(isAdFeedbackEnabled() ? View.VISIBLE : View.GONE);
+        applyActionButtonVisibility();
     }
 
     private void submitAdFeedback() {
@@ -3662,10 +3734,9 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         if (Setting.isIncognito() && mHistory.getKey().equals(getHistoryKey())) mHistory.delete();
         mBinding.control.action.opening.setText(mHistory.getOpening() <= 0 ? getString(R.string.play_op) : Util.timeMs(mHistory.getOpening()));
         mBinding.control.action.ending.setText(mHistory.getEnding() <= 0 ? getString(R.string.play_ed) : Util.timeMs(mHistory.getEnding()));
-        // 如果历史记录中已有速度（播放过的剧），使用历史记录中的速度；否则使用默认速度1.0x
-        float speed = (mHistory.getSpeed() > 0 && mHistory.getSpeed() != 1f) ? mHistory.getSpeed() : 1f;
+        // 如果历史记录中已有有效倍速，使用历史倍速；否则使用默认播放倍速
+        float speed = getPlaybackSpeed();
         mBinding.control.action.speed.setText(player().setSpeed(speed));
-        mHistory.setSpeed(player().getSpeed());
         mHistory.setVodName(item.getName());
         enrichHistoryMeta(item);
         PlaybackEventCollector.get().updateHistory(mHistory);
@@ -4161,20 +4232,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     private boolean isCurrentVodEvent(Vod item) {
-        if (item == null) return false;
-        String id = item.getId();
-        String siteKey = item.getSiteKey();
-        // 站点 id 可能包含分页标记（如 "140036/40"），而 Vod 的 id 通常不含（如 "140036"）
-        // 需要容忍 Intent id 中的分页后缀：去掉首个 "/" 之后的后缀再比较
-        if (!TextUtils.isEmpty(id) && !TextUtils.equals(id, stripPageSuffix(getId()))) return false;
-        return TextUtils.isEmpty(siteKey) || TextUtils.equals(siteKey, getKey());
-    }
-
-    /** 去掉 id 中的分页后缀，如 "140036/40" → "140036" */
-    private static String stripPageSuffix(String id) {
-        if (TextUtils.isEmpty(id)) return id;
-        int slash = id.indexOf('/');
-        return slash > 0 ? id.substring(0, slash) : id;
+        return VodEventGuard.matches(item, getKey(), getId());
     }
 
     private void loadNativePersonalRecommendations(Vod item) {
@@ -5241,10 +5299,11 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
 
     private void setSpeed() {
         if (mHistory == null) return;
-        float speed = mHistory.getSpeed();
-        if (speed > 0 && speed != 1f) {
-            mBinding.control.action.speed.setText(player().setSpeed(speed));
-        }
+        mBinding.control.action.speed.setText(player().setSpeed(getPlaybackSpeed()));
+    }
+
+    private float getPlaybackSpeed() {
+        return mHistory == null ? PlayerSetting.getDefaultSpeed() : mHistory.getPlaybackSpeed(PlayerSetting.getDefaultSpeed());
     }
 
     private void checkEnded(boolean notify) {
@@ -5481,6 +5540,18 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         if (mHistory != null) mHistory.setScale(scale);
         mBinding.exo.setResizeMode(scale);
         mBinding.control.action.scale.setText(array[scale]);
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (!hasFocus || mDialogReturnFocus == null) return;
+        View target = mDialogReturnFocus;
+        mDialogReturnFocus = null;
+        App.post(() -> {
+            if (isFinishing() || isDestroyed() || !isFullscreen() || target.getVisibility() != View.VISIBLE) return;
+            showControl(target);
+        }, 120);
     }
 
     private boolean isInitAuto() {
@@ -5731,8 +5802,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     public void onSpeedEnd() {
         mBinding.widget.speed.clearAnimation();
         mBinding.widget.speed.setVisibility(View.GONE);
-        mBinding.control.action.speed.setText(player().setSpeed(PlayerSetting.getDefaultSpeed()));
-        mHistory.setSpeed(player().getSpeed());
+        mBinding.control.action.speed.setText(player().setSpeed(getPlaybackSpeed()));
     }
 
     @Override
@@ -5868,6 +5938,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         App.removeCallbacks(mPendingFastTmdbPlaybackStart);
         App.removeCallbacks(mTmdbDetailTimeout);
         resetPendingTmdbBind();
+        if (mTmdbUIAdapter != null) mTmdbUIAdapter.release();
         mViewModel.getResult().removeObserver(mObserveDetail);
         mViewModel.getPlayer().removeObserver(mObservePlayer);
         mViewModel.getSearch().removeObserver(mObserveSearch);
@@ -6084,7 +6155,7 @@ private void setupAudioStageOverlay() {
         RelativeLayout.LayoutParams params = new RelativeLayout.LayoutParams(RelativeLayout.LayoutParams.MATCH_PARENT, RelativeLayout.LayoutParams.MATCH_PARENT);
         params.addRule(RelativeLayout.ALIGN_PARENT_TOP);
         params.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM);
-        ((ViewGroup) mBinding.getRoot()).addView(mBinding.audioStage, params);
+        mBinding.progressLayout.addOverlayView(mBinding.audioStage, params);
         mBinding.audioStage.bringToFront();
         // TV 歌曲舞台自动判断已暂时关闭，重挂 overlay 时也必须保持隐藏。
         mAudioStageVisible = false;
@@ -6134,18 +6205,6 @@ private View[] audioStageIconButtons() {
                 mBinding.audioRepeatAction, mBinding.audioPrev, mBinding.audioPlay, mBinding.audioNext, mBinding.audioQueueAction,
                 mBinding.audioLyricsAction, mBinding.audioKaraokeAction, mBinding.audioMoreAction
         };
-    }
-
-private void updateImmersiveAudioAction() {
-        if (mBinding == null) return;
-        boolean audioContent = isAudioOnly() || isMusicLike();
-        mBinding.control.action.immersiveAudio.setVisibility(isFullscreen() && audioContent ? View.VISIBLE : View.GONE);
-        mBinding.control.action.immersiveAudio.setSelected(PlayerSetting.isImmersiveAudioMode());
-    }
-
-private void toggleImmersiveAudioMode() {
-        PlayerSetting.putImmersiveAudioMode(!PlayerSetting.isImmersiveAudioMode());
-        onImmersiveAudioModeChanged();
     }
 
 private void restoreAudioEpisodeDisplayNames(List<Episode> items) {
@@ -6346,20 +6405,6 @@ private void submitLyricsSearchSheet(EditText input, @Nullable LyricsRequest req
         }
         Util.hideKeyboard(input);
         searchLyrics(keyword, request, false);
-    }
-
-private void onSetting() {
-        ControlDialog.create().parent(mBinding).history(mHistory).parse(isUseParse()).player(player()).show(this);
-    }
-
-private void onCast() {
-        if (service() == null || player().isEmpty()) return;
-        CastVideo video = new CastVideo(Objects.toString(mBinding.widget.title.getText(), ""), player().getUrl(), player().getPosition(), player().getHeaders());
-        CastDialog.create().history(mHistory).video(video).fm(true).show(this);
-    }
-
-private void onTimer() {
-        TimerDialog.create().show(this);
     }
 
 private void checkPlay() {
@@ -7577,7 +7622,8 @@ private void setAudioStageVisible(boolean visible) {
     }
 
     private boolean shouldUseImmersiveAudio() {
-        return PlayerSetting.isImmersiveAudioMode() && (isAudioOnly() || isMusicLike());
+        // TV 端只接受音频源入口或用户手动选择，不能再根据标题和早期轨道状态猜测。
+        return PlayerSetting.isImmersiveAudioMode() && mImmersiveAudioRequested;
     }
 
 private AudioPlaybackResolver.Resolved takeImmersiveAudioLaunch() {
@@ -7601,6 +7647,7 @@ private boolean consumeImmersiveAudioLaunch() {
     }
 
 private void prepareImmersiveAudioPlayback(AudioPlaybackResolver.Resolved resolved) {
+        mImmersiveAudioRequested = true;
         mImmersiveAudioResolved = resolved;
         Vod vod = resolved.getVod();
         Result result = resolved.getResult();
@@ -9171,6 +9218,14 @@ public void onDanmakuPanel() {
         onDanmaku();
     }
 
+@Override
+public void onDisplayChanged() {
+        if (mOsd == null) return;
+        mOsd.setDiagnosticsVisible(PlayerSetting.isOsdDiagnostics());
+        setPlayParamsState();
+        mOsd.start();
+    }
+
 public void onKaraokeModeChanged() {
         mBinding.control.action.karaoke.setSelected(false);
         mBinding.audioKaraokeAction.setSelected(false);
@@ -9185,6 +9240,7 @@ public void onKaraokeModeChanged() {
 
 @Override
     public void onImmersiveAudioModeChanged() {
+        mImmersiveAudioRequested = PlayerSetting.isImmersiveAudioMode();
         if (PlayerSetting.isImmersiveAudioMode()) {
             ensureImmersiveAudioControllers();
             refreshLyrics();

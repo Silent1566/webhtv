@@ -1,6 +1,7 @@
 package com.fongmi.android.tv.ui.adapter;
 
 import android.view.LayoutInflater;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 
@@ -9,6 +10,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.fongmi.android.tv.databinding.AdapterMpvConfigProfileBinding;
 import com.fongmi.android.tv.player.mpv.MpvConfigStore;
+import com.fongmi.android.tv.utils.Util;
 
 import java.text.DateFormat;
 import java.util.ArrayList;
@@ -58,8 +60,20 @@ public class MpvConfigProfileAdapter extends RecyclerView.Adapter<MpvConfigProfi
         holder.binding.detail.setText(detail(profile));
         holder.binding.active.setVisibility(profile.active && !scripts ? View.VISIBLE : View.GONE);
         holder.binding.root.setSelected(!scripts && profile.active);
+        holder.binding.root.setFocusable(true);
+        holder.binding.root.setFocusableInTouchMode(Util.isLeanback());
+        holder.binding.more.setFocusable(true);
+        holder.binding.more.setFocusableInTouchMode(Util.isLeanback());
         holder.binding.root.setOnClickListener(view -> listener.onSelect(profile));
         holder.binding.more.setOnClickListener(view -> listener.onMore(view, profile));
+        holder.binding.root.setOnKeyListener((view, keyCode, event) -> {
+            if (event.getAction() == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) return holder.binding.more.requestFocus();
+            return false;
+        });
+        holder.binding.more.setOnKeyListener((view, keyCode, event) -> {
+            if (event.getAction() == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_LEFT) return holder.binding.root.requestFocus();
+            return false;
+        });
     }
 
     private String detail(MpvConfigStore.ConfigProfile profile) {

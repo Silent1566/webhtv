@@ -54,6 +54,7 @@ public class AiRecommendationServiceTest {
         history.addProperty("episodeName", "第08集");
         history.addProperty("watchedMinutes", 360);
         history.addProperty("completionRate", 0.82);
+        history.addProperty("director", "张开宙");
         List<JsonObject> histories = new ArrayList<>();
         histories.add(history);
 
@@ -68,22 +69,145 @@ public class AiRecommendationServiceTest {
         assertTrue(prompt.contains("字段说明"));
         assertTrue(prompt.contains("completionRate: 单集观看完成比例"));
         assertTrue(prompt.contains("searchHistory: 用户搜索词"));
+        assertTrue(prompt.contains("actors/director: 演员与导演/主创"));
+        assertTrue(prompt.contains("重复出现在多条高完成率历史"));
+        assertTrue(prompt.contains("单条历史中的人员或导演只作为弱信号"));
         assertTrue(prompt.contains("最终只返回严格 JSON"));
     }
 
     @Test
-    public void historyContextItem_omitsPlaybackSourceBecauseLineNamesDoNotHelpRecommendation() {
+    public void historyContextItem_includesEnrichedPreferenceSignalsButOmitsPlaybackSource() {
         History history = new History();
         history.setVodName("爱情有烟火");
         history.setVodRemarks("第08集");
         history.setVodFlag("极速线路");
+        history.setTypeName("剧情,都市,电视剧");
+        history.setArea("中国大陆");
+        history.setActor("檀健次,王楚然");
+        history.setDirector("张开宙");
+        history.setYear("2025");
         history.setPosition(30 * 60 * 1000L);
         history.setDuration(45 * 60 * 1000L);
 
         JsonObject item = AiRecommendationService.historyContextItem(history);
 
         assertEquals("爱情有烟火", item.get("title").getAsString());
+        assertEquals("2025", item.get("year").getAsString());
+        assertEquals("中国大陆", item.get("country").getAsString());
+        assertEquals("中文", item.get("language").getAsString());
+        assertEquals("tv", item.get("mediaType").getAsString());
+        assertEquals("张开宙", item.get("director").getAsString());
+        assertEquals("剧情", item.getAsJsonArray("genres").get(0).getAsString());
+        assertEquals("檀健次", item.getAsJsonArray("actors").get(0).getAsString());
         assertFalse(item.has("source"));
+    }
+
+    @Test
+    public void historyContextItem_omitsUnknownEnrichedFields() {
+        History history = new History();
+        history.setVodName("只有标题");
+
+        JsonObject item = AiRecommendationService.historyContextItem(history);
+
+        assertFalse(item.has("year"));
+        assertFalse(item.has("mediaType"));
+        assertFalse(item.has("country"));
+        assertFalse(item.has("language"));
+        assertFalse(item.has("genres"));
+        assertFalse(item.has("director"));
+        assertFalse(item.has("actors"));
+    }
+
+    @Test
+    public void historyContextItem_infersTvFromEpisodeLabelButNotResolutionText() {
+        History episode = new History();
+        episode.setVodName("示例剧集");
+        episode.setTypeName("剧情");
+        episode.setVodRemarks("第01集");
+
+        JsonObject episodeItem = AiRecommendationService.historyContextItem(episode);
+
+        assertEquals("tv", episodeItem.get("mediaType").getAsString());
+
+        History resolution = new History();
+        resolution.setVodName("示例电影");
+        resolution.setTypeName("剧情");
+        resolution.setVodRemarks("1080P");
+
+        assertFalse(AiRecommendationService.historyContextItem(resolution).has("mediaType"));
+    }
+
+    @Test
+    public void historyContextItem_preservesSpacesInsideActorNames() {
+        History history = new History();
+        history.setVodName("复仇者联盟");
+        history.setActor("Robert Downey Jr. / Chris Evans");
+
+        JsonObject item = AiRecommendationService.historyContextItem(history);
+
+        assertEquals(2, item.getAsJsonArray("actors").size());
+        assertEquals("Robert Downey Jr.", item.getAsJsonArray("actors").get(0).getAsString());
+        assertEquals("Chris Evans", item.getAsJsonArray("actors").get(1).getAsString());
+    }
+
+    @Test
+    public void historyMetadataFingerprint_filtersCurrentTitleBeforeApplyingLimit() {
+        List<History> histories = new ArrayList<>();
+        History current = new History();
+        current.setVodName("当前作品");
+        current.setDirector("当前导演");
+        histories.add(current);
+        for (int index = 1; index <= 24; index++) {
+            History history = new History();
+            history.setVodName("历史作品" + index);
+            history.setDirector("导演" + index);
+            histories.add(history);
+        }
+
+        String initial = AiRecommendationService.historyMetadataFingerprint(histories, "当前作品");
+        histories.get(24).setDirector("变更后的导演");
+        String lastHistoryChanged = AiRecommendationService.historyMetadataFingerprint(histories, "当前作品");
+        assertFalse(initial.equals(lastHistoryChanged));
+
+        histories.get(0).setDirector("不应进入历史指纹的导演");
+        assertEquals(lastHistoryChanged, AiRecommendationService.historyMetadataFingerprint(histories, "当前作品"));
+    }
+
+    @Test
+    public void historyMetadataFingerprint_tracksDerivedMediaTypeWithoutTrackingEpisodeNumber() {
+        History history = new History();
+        history.setVodName("示例作品");
+        history.setTypeName("剧情");
+        history.setVodRemarks("1080P");
+        List<History> histories = List.of(history);
+
+        String unknownType = AiRecommendationService.historyMetadataFingerprint(histories);
+        history.setVodRemarks("第01集");
+        String tvType = AiRecommendationService.historyMetadataFingerprint(histories);
+        assertFalse(unknownType.equals(tvType));
+
+        history.setVodRemarks("第02集");
+        assertEquals(tvType, AiRecommendationService.historyMetadataFingerprint(histories));
+    }
+
+    @Test
+    public void historyMetadataFingerprint_changesForMetadataButNotPlaybackProgress() {
+        History history = new History();
+        history.setVodName("爱情有烟火");
+        history.setTypeName("剧情,都市,电视剧");
+        history.setArea("中国大陆");
+        history.setActor("檀健次,王楚然");
+        history.setDirector("张开宙");
+        history.setYear("2025");
+        List<History> histories = List.of(history);
+
+        String initial = AiRecommendationService.historyMetadataFingerprint(histories);
+        history.setPosition(30 * 60 * 1000L);
+        history.setDuration(45 * 60 * 1000L);
+        assertEquals(initial, AiRecommendationService.historyMetadataFingerprint(histories));
+
+        history.setDirector("张开宙,另一导演");
+        assertFalse(initial.equals(AiRecommendationService.historyMetadataFingerprint(histories)));
     }
 
     @Test

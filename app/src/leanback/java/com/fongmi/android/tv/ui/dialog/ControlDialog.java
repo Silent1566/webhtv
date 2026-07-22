@@ -49,6 +49,7 @@ public class ControlDialog extends BaseBottomSheetDialog implements ParseAdapter
     private ActivityVideoBinding parent;
     private List<TextView> scales;
     private List<TextView> speeds;
+    private List<TextView> displays;
     private PlayerManager player;
     private History history;
     private boolean parse;
@@ -120,6 +121,7 @@ public class ControlDialog extends BaseBottomSheetDialog implements ParseAdapter
         binding = DialogControlBinding.inflate(inflater, container, false);
         scales = Arrays.asList(binding.scale0, binding.scale1, binding.scale2, binding.scale3, binding.scale4);
         speeds = Arrays.asList(binding.speed05, binding.speed075, binding.speed10, binding.speed125, binding.speed15, binding.speed175, binding.speed20, binding.speed25, binding.speed30, binding.speed50);
+        displays = Arrays.asList(binding.displayTime, binding.displayTraffic, binding.displaySize, binding.displayProgress, binding.displayMini, binding.displayTitle, binding.displayParams);
         return binding;
     }
 
@@ -144,6 +146,7 @@ public class ControlDialog extends BaseBottomSheetDialog implements ParseAdapter
         setEpisodeColumn();
         setPlayer();
         setParse();
+        setDisplaySettings();
         binding.controlScroll.post(() -> binding.controlScroll.scrollTo(0, 0));
         binding.getRoot().post(this::focusInitialControl);
         binding.getRoot().postDelayed(this::focusInitialControl, 180);
@@ -162,6 +165,10 @@ public class ControlDialog extends BaseBottomSheetDialog implements ParseAdapter
         binding.speed.addOnChangeListener(this::setSpeed);
         for (TextView view : speeds) view.setOnClickListener(this::setSpeedPreset);
         for (TextView view : scales) view.setOnClickListener(this::setScale);
+        for (int i = 0; i < displays.size(); i++) {
+            int index = i;
+            displays.get(i).setOnClickListener(v -> toggleDisplaySetting(index));
+        }
         binding.reset.setOnClickListener(v -> dismiss(parent.control.action.reset));
         binding.fullscreen.setOnClickListener(v -> dismiss(parent.control.action.fullscreen));
         binding.text.setOnClickListener(v -> onTrack(binding.text));
@@ -178,6 +185,7 @@ public class ControlDialog extends BaseBottomSheetDialog implements ParseAdapter
         binding.lut.setOnClickListener(v -> onLut());
         binding.ending.setOnClickListener(v -> click(binding.ending, parent.control.action.ending));
         binding.opening.setOnClickListener(v -> click(binding.opening, parent.control.action.opening));
+        binding.panDiagnostic.setOnClickListener(v -> onPanDiagnostic());
         binding.player.setOnLongClickListener(v -> longClick(binding.player, parent.control.action.player));
         binding.ending.setOnLongClickListener(v -> longClick(binding.ending, parent.control.action.ending));
         binding.opening.setOnLongClickListener(v -> longClick(binding.opening, parent.control.action.opening));
@@ -192,7 +200,10 @@ public class ControlDialog extends BaseBottomSheetDialog implements ParseAdapter
         List<View> views = Arrays.asList(
                 binding.fullscreen, binding.lut, binding.reset, binding.repeat, binding.timer, binding.karaoke,
                 binding.player, binding.decode, binding.opening, binding.ending, binding.immersiveAudio,
+                binding.panDiagnostic,
                 binding.text, binding.audio, binding.video, binding.danmaku, binding.title,
+                binding.displayTime, binding.displayTraffic, binding.displaySize, binding.displayProgress,
+                binding.displayMini, binding.displayTitle, binding.displayParams,
                 binding.episodeColumn1, binding.episodeColumn2, binding.compactEpisodeTitle
         );
         for (View view : views) setRemoteFocusable(view);
@@ -231,6 +242,14 @@ public class ControlDialog extends BaseBottomSheetDialog implements ParseAdapter
         TimerDialog.create().show(getActivity());
     }
 
+    private void onPanDiagnostic() {
+        FragmentActivity activity = getActivity();
+        PlayerManager current = player;
+        if (activity == null || current == null) return;
+        dismissAllowingStateLoss();
+        App.post(() -> PanNetworkDiagnosticDialog.show(activity, current), 140);
+    }
+
     private void setKaraoke() {
         PlayerSetting.putKaraokeMode(!PlayerSetting.isKaraokeMode());
         binding.karaoke.setSelected(PlayerSetting.isKaraokeMode());
@@ -251,17 +270,30 @@ public class ControlDialog extends BaseBottomSheetDialog implements ParseAdapter
         binding.sheetWall.setVisibility(View.GONE);
     }
 
+    private void setDisplaySettings() {
+        boolean[] checked = PlayerSetting.getDisplayChecked();
+        for (int i = 0; i < displays.size(); i++) displays.get(i).setSelected(i < checked.length && checked[i]);
+    }
+
+    private void toggleDisplaySetting(int index) {
+        boolean[] checked = PlayerSetting.getDisplayChecked();
+        if (index < 0 || index >= checked.length) return;
+        checked[index] = !checked[index];
+        PlayerSetting.putDisplayChecked(checked);
+        setDisplaySettings();
+        ((Listener) requireActivity()).onDisplayChanged();
+    }
+
     private void setSpeed(@NonNull Slider slider, float value, boolean fromUser) {
         if (!fromUser) return;
         applySpeed(value);
     }
 
     private void applySpeed(float speed) {
-        PlayerSetting.putDefaultSpeed(speed);
         parent.control.action.speed.setText(player.setSpeed(speed));
         setSpeedPresets();
         binding.speed.setValue(Math.max(player.getSpeed(), 0.5f));
-        if (history != null) history.setSpeed(player.getSpeed());
+        if (history != null) history.setUserSpeed(player.getSpeed());
     }
 
     private void setSpeedPreset(View view) {
@@ -488,6 +520,8 @@ public class ControlDialog extends BaseBottomSheetDialog implements ParseAdapter
         void onTitlePanel();
 
         void onDanmakuPanel();
+
+        void onDisplayChanged();
 
         void onImmersiveAudioModeChanged();
 

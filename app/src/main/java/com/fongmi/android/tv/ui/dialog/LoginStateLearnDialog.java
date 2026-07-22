@@ -37,6 +37,7 @@ public final class LoginStateLearnDialog extends BaseAlertDialog {
     private DialogLoginStateLearnBinding binding;
     private Runnable callback;
     private boolean learning;
+    private int bindGeneration;
 
     public static void show(Fragment fragment, Runnable callback) {
         show(fragment.requireActivity(), callback);
@@ -82,13 +83,23 @@ public final class LoginStateLearnDialog extends BaseAlertDialog {
     private void bindState() {
         FragmentActivity activity = requireActivity();
         learning = LoginStateSync.hasLearningSnapshot();
-        int learned = LoginStateSync.learnedCount();
-        binding.message.setText(activity.getString(learning ? R.string.login_state_learning_message : R.string.login_state_message, learned));
         binding.positive.setText(learning ? R.string.login_state_finish : R.string.login_state_start);
-        binding.reset.setVisibility(LoginStateSync.pendingPaths().isEmpty() && LoginStateSync.findings().isEmpty() ? View.GONE : View.VISIBLE);
         binding.quickContent.removeAllViews();
-        binding.quickContent.addView(quickView(activity), new LinearLayoutCompat.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        setScrollHeight(activity);
+        int generation = ++bindGeneration;
+        Task.execute(() -> {
+            List<String> learned = LoginStateSync.learnedPaths();
+            List<String> pending = LoginStateSync.pendingPaths();
+            List<LoginStateSync.Candidate> findings = LoginStateSync.findings();
+            QuickState state = QuickState.create(learned, pending, findings);
+            App.post(() -> {
+                if (binding == null || generation != bindGeneration || !isAdded()) return;
+                binding.message.setText(activity.getString(learning ? R.string.login_state_learning_message : R.string.login_state_message, state.learnedCount()));
+                binding.reset.setVisibility(state.pendingCount() == 0 && state.findingsCount() == 0 ? View.GONE : View.VISIBLE);
+                binding.quickContent.removeAllViews();
+                binding.quickContent.addView(quickView(activity, state), new LinearLayoutCompat.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+                setScrollHeight(activity);
+            });
+        });
     }
 
     private void setScrollHeight(FragmentActivity activity) {
@@ -131,35 +142,44 @@ public final class LoginStateLearnDialog extends BaseAlertDialog {
         run(activity, finish, callback);
     }
 
-    private static LinearLayoutCompat quickView(FragmentActivity activity) {
+    private static LinearLayoutCompat quickView(FragmentActivity activity, QuickState state) {
         LinearLayoutCompat container = new LinearLayoutCompat(activity);
         container.setOrientation(LinearLayoutCompat.VERTICAL);
         container.setPadding(0, 0, 0, ResUtil.dp2px(2));
-        List<LoginStateSync.Candidate> findings = LoginStateSync.findings();
-        addSection(activity, container, R.string.login_state_learned_title, pathItems(LoginStateSync.learnedPaths(), R.string.login_state_state_selected), 0xFFEAF3FF, 0xFF174EA6);
-        addSection(activity, container, R.string.login_state_pending_title, pendingCandidates(findings), LoginStateSync.pendingPaths(), 0xFFFFF4E5, 0xFF9A5B00);
-        addSection(activity, container, R.string.login_state_findings_title, candidateItems(findings), 0xFFEAF7EE, 0xFF137333);
+        addSection(activity, container, R.string.login_state_learned_title, state.learned(), state.learnedCount(), 0xFFEAF3FF, 0xFF174EA6);
+        addSection(activity, container, R.string.login_state_pending_title, state.pending(), state.pendingCount(), 0xFFFFF4E5, 0xFF9A5B00);
+        addSection(activity, container, R.string.login_state_findings_title, state.findings(), state.findingsCount(), 0xFFEAF7EE, 0xFF137333);
         if (container.getChildCount() == 0) addEmpty(activity, container);
         return container;
     }
 
     private static List<QuickItem> pathItems(List<String> paths, int reasonRes) {
         List<QuickItem> result = new ArrayList<>();
-        for (String path : paths) result.add(new QuickItem(path, ResUtil.getString(reasonRes), LoginStateSync.displayPath(path)));
+        int count = 0;
+        for (String path : paths) {
+            if (count++ >= MAX_SECTION_ROWS) break;
+            result.add(new QuickItem(path, ResUtil.getString(reasonRes), LoginStateSync.displayPath(path)));
+        }
         return result;
     }
 
     private static List<QuickItem> candidateItems(List<LoginStateSync.Candidate> candidates) {
         List<QuickItem> result = new ArrayList<>();
-        for (LoginStateSync.Candidate item : candidates) result.add(new QuickItem(item.getPath(), item.getReason(), item.getDisplayPath()));
+        int count = 0;
+        for (LoginStateSync.Candidate item : candidates) {
+            if (count++ >= MAX_SECTION_ROWS) break;
+            result.add(new QuickItem(item.getPath(), item.getReason(), item.getDisplayPath()));
+        }
         return result;
     }
 
-    private static List<QuickItem> pendingCandidates(List<LoginStateSync.Candidate> findings) {
+    private static List<QuickItem> pendingCandidates(List<LoginStateSync.Candidate> findings, List<String> pending) {
         Map<String, LoginStateSync.Candidate> byPath = new LinkedHashMap<>();
         for (LoginStateSync.Candidate item : findings) byPath.put(LoginStateSync.normalizePath(item.getPath()), item);
         List<QuickItem> result = new ArrayList<>();
-        for (String path : LoginStateSync.pendingPaths()) {
+        int count = 0;
+        for (String path : pending) {
+            if (count++ >= MAX_SECTION_ROWS) break;
             path = LoginStateSync.normalizePath(path);
             LoginStateSync.Candidate item = byPath.get(path);
             result.add(item == null ? new QuickItem(path, ResUtil.getString(R.string.login_state_state_pending), LoginStateSync.displayPath(path)) : new QuickItem(item.getPath(), item.getReason(), item.getDisplayPath()));
@@ -167,36 +187,15 @@ public final class LoginStateLearnDialog extends BaseAlertDialog {
         return result;
     }
 
-    private static void addSection(FragmentActivity activity, LinearLayoutCompat parent, int titleRes, List<QuickItem> items, List<String> fallbackPaths, int bgColor, int accentColor) {
-        if ((items == null || items.isEmpty()) && (fallbackPaths == null || fallbackPaths.isEmpty())) return;
-        LinearLayoutCompat card = sectionCard(activity, titleRes, bgColor, accentColor);
-        if (items != null && !items.isEmpty()) {
-            int count = 0;
-            for (QuickItem item : items) {
-                if (count++ >= MAX_SECTION_ROWS) break;
-                addRow(activity, card, item.path, item.reason, item.displayPath);
-            }
-            if (items.size() > MAX_SECTION_ROWS) addMore(activity, card, items.size() - MAX_SECTION_ROWS);
-        } else {
-            int count = 0;
-            for (String path : fallbackPaths) {
-                if (count++ >= MAX_SECTION_ROWS) break;
-                addRow(activity, card, path, ResUtil.getString(R.string.login_state_state_selected), LoginStateSync.displayPath(path));
-            }
-            if (fallbackPaths.size() > MAX_SECTION_ROWS) addMore(activity, card, fallbackPaths.size() - MAX_SECTION_ROWS);
-        }
-        parent.addView(card, sectionParams(parent));
-    }
-
-    private static void addSection(FragmentActivity activity, LinearLayoutCompat parent, int titleRes, List<QuickItem> items, int bgColor, int accentColor) {
-        if (items.isEmpty()) return;
+    private static void addSection(FragmentActivity activity, LinearLayoutCompat parent, int titleRes, List<QuickItem> items, int totalCount, int bgColor, int accentColor) {
+        if (items == null || items.isEmpty()) return;
         LinearLayoutCompat card = sectionCard(activity, titleRes, bgColor, accentColor);
         int count = 0;
         for (QuickItem item : items) {
             if (count++ >= MAX_SECTION_ROWS) break;
             addRow(activity, card, item.path, item.reason, item.displayPath);
         }
-        if (items.size() > MAX_SECTION_ROWS) addMore(activity, card, items.size() - MAX_SECTION_ROWS);
+        if (totalCount > MAX_SECTION_ROWS) addMore(activity, card, totalCount - MAX_SECTION_ROWS);
         parent.addView(card, sectionParams(parent));
     }
 
@@ -291,6 +290,16 @@ public final class LoginStateLearnDialog extends BaseAlertDialog {
             this.path = path;
             this.reason = reason;
             this.displayPath = displayPath;
+        }
+    }
+
+    private record QuickState(List<QuickItem> learned, int learnedCount, List<QuickItem> pending, int pendingCount, List<QuickItem> findings, int findingsCount) {
+
+        private static QuickState create(List<String> learned, List<String> pending, List<LoginStateSync.Candidate> findings) {
+            return new QuickState(
+                    pathItems(learned, R.string.login_state_state_selected), learned.size(),
+                    pendingCandidates(findings, pending), pending.size(),
+                    candidateItems(findings), findings.size());
         }
     }
 }

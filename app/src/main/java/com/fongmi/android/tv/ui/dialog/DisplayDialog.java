@@ -71,6 +71,8 @@ public class DisplayDialog extends BaseAlertDialog {
 
     private void initPlayerOsdView() {
         initDisplayView();
+        binding.displayParams.setVisibility(View.VISIBLE);
+        binding.displayParams.setSelected(PlayerSetting.isOsdDiagnostics());
     }
 
     @Override
@@ -93,6 +95,12 @@ public class DisplayDialog extends BaseAlertDialog {
 
     private void initPlayerOsdEvent() {
         initDisplayEvent();
+        binding.displayParams.setOnClickListener(v -> {
+            boolean selected = !binding.displayParams.isSelected();
+            binding.displayParams.setSelected(selected);
+            PlayerSetting.putOsdDiagnostics(selected);
+            if (callback != null) callback.run();
+        });
     }
 
     private void setDisplay(TextView view, Display display) {

@@ -1170,6 +1170,7 @@ POST /action?do=cast
 | `durationMs` | number | 读取、写入、远端同步、Webhook | 视频总时长 |
 | `progress` | number | 读取、写入、Webhook | `positionMs / durationMs`，写入时可作为 `positionMs` 的辅助计算值 |
 | `speed` | number | 读取、写入、Webhook | 播放倍速，缺省按 `1.0` 处理 |
+| `speedOverride` | boolean | 读取、写入、Webhook | 是否由当前影片显式覆盖个人默认倍速；`false` 表示继承个人默认值 |
 | `completed` | boolean | 读取、写入、Webhook | 是否完播；写入时为辅助字段，最终仍以进度和阈值校验 |
 | `updatedAt` | number | 写入、远端同步 | 远端记录最后更新时间；缺省时 App 使用当前时间 |
 | `client` | string | 标准/完整 Webhook | 客户端 flavor，例如 mobile、leanback |
@@ -1211,6 +1212,7 @@ GET/POST /playback/current?siteKey=站点Key
   "durationMs": 456789,
   "progress": 0.2702,
   "speed": 1.0,
+  "speedOverride": false,
   "completed": false
 }
 ```
@@ -1248,6 +1250,7 @@ POST /playback/progress/delete
   "positionMs": 123456,
   "durationMs": 456789,
   "speed": 1.0,
+  "speedOverride": true,
   "completed": false,
   "updatedAt": 1781170000000,
   "clientKey": "crawler-or-device-id"
@@ -1278,6 +1281,7 @@ POST /playback/progress/delete
 | `episodeUrl` | 当前集 URL，用于优先匹配剧集 |
 | `progress` | 无 `positionMs` 时可用 `durationMs * progress` 推导 |
 | `speed` | 播放倍速，缺省为 `1.0` |
+| `speedOverride` | 是否显式覆盖个人默认倍速。`true` 保留 `speed`（包括显式 `1.0`）作为单剧设置；`false` 清除单剧覆盖并继承个人默认值。旧请求缺省此字段时，非 `1.0` 倍速按覆盖处理，`1.0` 按继承处理 |
 | `completed` | 为 true 且有 `durationMs` 时，进度会按总时长处理 |
 | `updatedAt` | 远端记录更新时间，缺省为当前时间 |
 | `cid` | 本机配置 id。只在没有 `configKey` 时用于同一设备内指定落库空间 |
@@ -1377,6 +1381,7 @@ X-WebHTV-Config-Name: <当前点播接口显示名>
       "positionMs": 123456,
       "durationMs": 456789,
       "speed": 1.0,
+      "speedOverride": false,
       "completed": false,
       "updatedAt": 1781170000000
     }
@@ -2234,6 +2239,7 @@ const history = await fm.history();
 | `position` | number | 最近播放位置，毫秒；未知时为负值 |
 | `duration` | number | 总时长，毫秒；未知时为负值 |
 | `speed` | number | 历史保存的播放倍速 |
+| `speedOverride` | boolean | 该历史是否保存了单剧倍速覆盖；`false` 表示播放时使用个人默认倍速 |
 | `scale` | number | 历史保存的画面比例索引；未设置时为 `-1` |
 | `cid` | number | 所属点播配置 ID |
 

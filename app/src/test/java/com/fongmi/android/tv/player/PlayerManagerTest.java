@@ -23,6 +23,26 @@ import java.util.List;
 public class PlayerManagerTest {
 
     @Test
+    public void speedToggle_restoresOriginalShowSpeedAfterFastToggle() {
+        PlayerManager.SpeedToggleState state = new PlayerManager.SpeedToggleState();
+
+        float fastSpeed = state.next(1.5f, 1.5f, 3.0f, 1.25f);
+        float restoredSpeed = state.next(fastSpeed, fastSpeed, 3.0f, 1.25f);
+
+        assertEquals(3.0f, fastSpeed, 0.001f);
+        assertEquals(1.5f, restoredSpeed, 0.001f);
+    }
+
+    @Test
+    public void speedToggle_withoutSessionBaselineFallsBackToPersonalDefault() {
+        PlayerManager.SpeedToggleState state = new PlayerManager.SpeedToggleState();
+
+        float restoredSpeed = state.next(3.0f, 3.0f, 3.0f, 1.25f);
+
+        assertEquals(1.25f, restoredSpeed, 0.001f);
+    }
+
+    @Test
     public void nextFallbackAction_obeysConfiguredMode() {
         assertEquals(PlayerManager.FALLBACK_DECODE, PlayerManager.nextFallbackAction(PlayerSetting.FALLBACK_FULL, PlayerEngine.HARD));
         assertEquals(PlayerManager.FALLBACK_PLAYER, PlayerManager.nextFallbackAction(PlayerSetting.FALLBACK_FULL, PlayerEngine.SOFT));

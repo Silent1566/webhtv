@@ -56,6 +56,24 @@ public class MpvConfigEditorDialog extends BaseAlertDialog {
         binding.editor.setText(content == null ? "" : content);
         binding.editor.setSelection(0);
         updateStats(binding.editor.length() == 0 ? "" : binding.editor.getText().toString());
+        setupTvFocus();
+    }
+
+    private void setupTvFocus() {
+        if (!Util.isLeanback()) return;
+        tvFocusable(binding.back);
+        tvFocusable(binding.save);
+        tvFocusable(binding.editor);
+        binding.back.setNextFocusRightId(R.id.save);
+        binding.back.setNextFocusDownId(R.id.editor);
+        binding.save.setNextFocusLeftId(R.id.back);
+        binding.save.setNextFocusDownId(R.id.editor);
+        binding.editor.setNextFocusUpId(R.id.back);
+    }
+
+    private static void tvFocusable(android.view.View view) {
+        view.setFocusable(true);
+        view.setFocusableInTouchMode(true);
     }
 
     @Override
@@ -102,6 +120,7 @@ public class MpvConfigEditorDialog extends BaseAlertDialog {
             binding.getRoot().setLayoutParams(rootParams);
         }
         binding.getRoot().post(() -> window.setLayout(params.width, params.height));
-        if (creating && !Util.isLeanback()) binding.editor.requestFocus();
+        if (Util.isLeanback()) binding.back.post(() -> binding.back.requestFocus());
+        else if (creating) binding.editor.requestFocus();
     }
 }

@@ -17,6 +17,7 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
+import androidx.fragment.app.FragmentManager;
 import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.App;
@@ -50,6 +51,7 @@ public class ControlDialog extends BaseBottomSheetDialog implements ParseAdapter
     private Listener listener;
     private List<TextView> scales;
     private List<TextView> speeds;
+    private List<TextView> displays;
     private PlayerManager player;
     private History history;
     private boolean parse;
@@ -190,6 +192,11 @@ public class ControlDialog extends BaseBottomSheetDialog implements ParseAdapter
             }
 
             @Override
+            public void onDisplayChanged() {
+                activity.inlineControlDialogDisplayChanged();
+            }
+
+            @Override
             public void onCodecCapabilityPanel() {
                 CodecCapabilityDialog.show(activity, player);
             }
@@ -259,6 +266,7 @@ public class ControlDialog extends BaseBottomSheetDialog implements ParseAdapter
         binding = DialogControlBinding.inflate(inflater, container, false);
         scales = Arrays.asList(binding.scale0, binding.scale1, binding.scale2, binding.scale3, binding.scale4);
         speeds = Arrays.asList(binding.speed05, binding.speed075, binding.speed10, binding.speed125, binding.speed15, binding.speed175, binding.speed20, binding.speed25, binding.speed30, binding.speed50);
+        displays = Arrays.asList(binding.displayTime, binding.displayTraffic, binding.displaySize, binding.displayProgress, binding.displayMini, binding.displayTitle, binding.displayParams);
         return binding;
     }
 
@@ -286,6 +294,7 @@ binding.ending.setText(controls.ending.getText());
         setEpisodeColumn();
         setPlayer();
         setParse();
+        setDisplaySettings();
         binding.controlScroll.post(() -> binding.controlScroll.scrollTo(0, 0));
     }
 
@@ -302,6 +311,10 @@ binding.ending.setText(controls.ending.getText());
         binding.speed.addOnChangeListener(this::setSpeed);
         for (TextView view : speeds) view.setOnClickListener(this::setSpeedPreset);
         for (TextView view : scales) view.setOnClickListener(this::setScale);
+        for (int i = 0; i < displays.size(); i++) {
+            int index = i;
+            displays.get(i).setOnClickListener(v -> toggleDisplaySetting(index));
+        }
         binding.reset.setOnClickListener(v -> dismiss(controls.reset));
         binding.fullscreen.setOnClickListener(v -> dismiss(controls.fullscreen));
         binding.text.setOnClickListener(v -> onTrack(binding.text));
@@ -316,6 +329,7 @@ binding.ending.setText(controls.ending.getText());
         binding.repeat.setOnClickListener(v -> active(binding.repeat, controls.repeat));
         binding.decode.setOnClickListener(v -> click(binding.decode, controls.decode));
         binding.codecCapability.setOnClickListener(v -> listener().onCodecCapabilityPanel());
+        binding.panDiagnostic.setOnClickListener(v -> onPanDiagnostic());
         binding.lut.setOnClickListener(v -> onLut());
         binding.ending.setOnClickListener(v -> click(binding.ending, controls.ending));
         binding.opening.setOnClickListener(v -> click(binding.opening, controls.opening));
@@ -326,6 +340,19 @@ binding.ending.setText(controls.ending.getText());
 
     private void onTimer(View view) {
         TimerDialog.create().show(getActivity());
+    }
+
+    private void onPanDiagnostic() {
+        FragmentActivity activity = getActivity();
+        PlayerManager current = player;
+        if (activity == null || current == null) return;
+        FragmentManager fragmentManager = activity.getSupportFragmentManager();
+        if (activity.isFinishing() || activity.isDestroyed() || fragmentManager.isStateSaved() || current.isReleased()) return;
+        dismissAllowingStateLoss();
+        App.post(() -> {
+            if (activity.isFinishing() || activity.isDestroyed() || fragmentManager.isStateSaved() || current.isReleased()) return;
+            PanNetworkDiagnosticDialog.show(activity, current);
+        }, 140);
     }
 
     private void setImmersiveAudio() {
@@ -342,17 +369,30 @@ binding.ending.setText(controls.ending.getText());
         binding.sheetWall.setVisibility(View.GONE);
     }
 
+    private void setDisplaySettings() {
+        boolean[] checked = PlayerSetting.getDisplayChecked();
+        for (int i = 0; i < displays.size(); i++) displays.get(i).setSelected(i < checked.length && checked[i]);
+    }
+
+    private void toggleDisplaySetting(int index) {
+        boolean[] checked = PlayerSetting.getDisplayChecked();
+        if (index < 0 || index >= checked.length) return;
+        checked[index] = !checked[index];
+        PlayerSetting.putDisplayChecked(checked);
+        setDisplaySettings();
+        listener().onDisplayChanged();
+    }
+
     private void setSpeed(@NonNull Slider slider, float value, boolean fromUser) {
         if (!fromUser) return;
         applySpeed(value);
     }
 
     private void applySpeed(float speed) {
-        PlayerSetting.putDefaultSpeed(speed);
         controls.speed.setText(player.setSpeed(speed));
         setSpeedPresets();
         binding.speed.setValue(Math.max(player.getSpeed(), 0.5f));
-        if (history != null) history.setSpeed(player.getSpeed());
+        if (history != null) history.setUserSpeed(player.getSpeed());
     }
 
     private void setSpeedPreset(View view) {
@@ -644,6 +684,8 @@ if (binding == null || controls == null || player == null) return;
         void onTitlePanel();
 
         void onDanmakuPanel();
+
+        void onDisplayChanged();
 
         void onImmersiveAudioModeChanged();
 

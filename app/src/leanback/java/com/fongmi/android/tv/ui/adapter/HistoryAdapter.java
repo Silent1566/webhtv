@@ -75,10 +75,13 @@ public class HistoryAdapter extends BaseDiffAdapter<History, HistoryAdapter.View
         holder.binding.name.setText(item.getVodName());
         holder.binding.site.setText(item.getSiteName());
         holder.binding.remark.setText(remark);
+        holder.setMarquee(holder.itemView.hasFocus());
         holder.binding.site.setVisibility(item.getSiteVisible());
+        holder.binding.playback.setText(item.getPlaybackTimeText());
+        holder.binding.playback.setVisibility(!delete && item.hasPlaybackTime() ? View.VISIBLE : View.GONE);
         setProgress(holder.binding, item);
         holder.binding.delete.setVisibility(!delete ? View.GONE : View.VISIBLE);
-        holder.binding.remark.setVisibility(delete || same ? View.GONE : View.VISIBLE);
+        holder.binding.remark.setVisibility(delete || same ? View.INVISIBLE : View.VISIBLE);
         ImgUtil.load(item.getVodName(), item.getVodPic(), holder.binding.image);
     }
 
@@ -102,16 +105,20 @@ public class HistoryAdapter extends BaseDiffAdapter<History, HistoryAdapter.View
 
         private void setFocusListener() {
             itemView.setOnFocusChangeListener((v, hasFocus) -> {
+                setMarquee(hasFocus);
                 if (hasFocus) {
                     v.animate().scaleX(1.1f).scaleY(1.1f).setDuration(150).start();
                     v.setTranslationZ(10f);
-                    v.setSelected(true);
                 } else {
                     v.animate().scaleX(1f).scaleY(1f).setDuration(150).start();
                     v.setTranslationZ(0f);
-                    v.setSelected(false);
                 }
             });
+        }
+
+        private void setMarquee(boolean active) {
+            binding.name.setSelected(active);
+            binding.remark.setSelected(active);
         }
     }
 }

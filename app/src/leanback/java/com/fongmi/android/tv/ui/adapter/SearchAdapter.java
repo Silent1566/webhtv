@@ -1,5 +1,6 @@
 package com.fongmi.android.tv.ui.adapter;
 
+import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.KeyEvent;
 import android.view.ViewGroup;
@@ -155,8 +156,14 @@ public class SearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
 
     @Override
     public void onViewRecycled(@NonNull RecyclerView.ViewHolder holder) {
-        if (holder instanceof ListHolder listHolder) Glide.with(listHolder.binding.image).clear(listHolder.binding.image);
-        if (holder instanceof GridHolder gridHolder) Glide.with(gridHolder.binding.image).clear(gridHolder.binding.image);
+        if (holder instanceof ListHolder listHolder) {
+            Glide.with(listHolder.binding.image).clear(listHolder.binding.image);
+            listHolder.setMarquee(false);
+        }
+        if (holder instanceof GridHolder gridHolder) {
+            Glide.with(gridHolder.binding.image).clear(gridHolder.binding.image);
+            gridHolder.setMarquee(false);
+        }
     }
 
     public class ListHolder extends RecyclerView.ViewHolder {
@@ -195,7 +202,10 @@ public class SearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
         GridHolder(@NonNull AdapterSearchBinding binding) {
             super(binding.getRoot());
             this.binding = binding;
-            binding.getRoot().setOnFocusChangeListener((v, hasFocus) -> setMarquee(hasFocus));
+            binding.name.setSingleLine(true);
+            binding.name.setHorizontallyScrolling(true);
+            binding.name.setMarqueeRepeatLimit(-1);
+            binding.getRoot().setOnFocusChangeListener((view, hasFocus) -> setMarquee(hasFocus));
         }
 
         private void initView(Vod item) {
@@ -210,10 +220,11 @@ public class SearchAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
             ImgUtil.load(item.getName(), item.getPic(), binding.image, width, height);
         }
 
-        private void setMarquee(boolean selected) {
-            binding.name.setSelected(selected);
-            binding.site.setSelected(selected);
-            binding.remark.setSelected(selected);
+        private void setMarquee(boolean focused) {
+            binding.name.setEllipsize(focused ? TextUtils.TruncateAt.MARQUEE : TextUtils.TruncateAt.END);
+            binding.name.setSelected(focused);
+            binding.site.setSelected(focused);
+            binding.remark.setSelected(focused);
         }
     }
 }

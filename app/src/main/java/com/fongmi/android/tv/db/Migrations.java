@@ -67,4 +67,12 @@ public class Migrations {
             database.execSQL("ALTER TABLE History ADD COLUMN year TEXT DEFAULT NULL");
         }
     };
+
+    public static final Migration MIGRATION_37_38 = new Migration(37, 38) {
+        @Override
+        public void migrate(@NonNull SupportSQLiteDatabase database) {
+            database.execSQL("ALTER TABLE History ADD COLUMN speedOverride INTEGER NOT NULL DEFAULT 0");
+            database.execSQL("UPDATE History SET speedOverride = 1 WHERE speed > 0 AND ABS(speed - 1.0) > 0.001");
+        }
+    };
 }

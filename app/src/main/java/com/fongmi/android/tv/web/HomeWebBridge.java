@@ -177,7 +177,8 @@ public class HomeWebBridge {
     }
 
     private String playVodInline(JsonObject payload) {
-        String vodId = WebHomeInlineVodStore.put(payload, this::resolveInlineEpisode);
+        Site originSite = VodConfig.get().getHome();
+        String vodId = WebHomeInlineVodStore.put(payload, this::resolveInlineEpisode, originSite);
         String title = Json.safeString(payload, "title");
         if (TextUtils.isEmpty(title)) title = Json.safeString(payload, "vod_name");
         String pic = Json.safeString(payload, "pic");

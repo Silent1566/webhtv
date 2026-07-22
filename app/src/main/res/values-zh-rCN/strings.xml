@@ -190,9 +190,11 @@
     <string name="group_rule_edit_item">编辑 · %1$s\n%2$s</string>
     <string name="group_rule_interface_item">接口 · %1$s\n%2$s</string>
     <string name="setting_home_vod_auto_load">默认加载点播</string>
+    <string name="setting_auto_backup">自动备份</string>
     <string name="setting_fullscreen_menu_key">全屏菜单键</string>
     <string name="setting_home_menu_key">首页菜单键</string>
     <string name="setting_play_back_to_detail">播放返回详情</string>
+    <string name="setting_play_speed">播放倍速</string>
     <string name="setting_home_history">首页最近观看</string>
     <string name="setting_personal_recommendation">个性推荐</string>
     <string name="setting_tmdb_episode_file_size">TMDB 剧集保留文件大小</string>
@@ -571,6 +573,7 @@
         <item>总时长，单位毫秒。</item>
         <item>进度比例，范围 0 到 1。</item>
         <item>播放倍速。</item>
+        <item>播放倍速是否显式覆盖个人默认值。</item>
         <item>是否视为完播。</item>
         <item>当前集原始 URL，可能包含源站参数。</item>
         <item>当前集序号，可识别时返回。</item>
@@ -824,10 +827,12 @@
     <string name="restore_fail">恢复失败</string>
     <string name="backup_success">备份成功</string>
     <string name="backup_fail">备份失败</string>
+    <string name="backup_permission_denied">需要存储权限才能备份或恢复数据</string>
 
     <!-- Device Sync -->
     <string name="device_select">选择设备</string>
     <string name="device_offline">设备已离线</string>
+    <string name="cast_not_ready">播放信息尚未就绪，请稍后重试</string>
     <string name="sync_success">同步完成</string>
     <string name="sync_progress">正在同步...</string>
     <string name="sync_failed">同步失败</string>
@@ -901,6 +906,7 @@
     <string name="login_state_tree_title_count">%1$s · 已确认 %2$d · 待确认 %3$d</string>
     <string name="login_state_tree_expand">展开文件夹</string>
     <string name="login_state_tree_collapse">收起文件夹</string>
+    <string name="login_state_tree_truncated">目录项目过多已限量，请直接选择文件夹或缩小路径</string>
     <string name="login_state_state_selected">已选</string>
     <string name="login_state_state_pending">待确认</string>
     <string name="login_state_state_has_pending">含待确认</string>
@@ -928,7 +934,7 @@
     <string name="player_default">默认播放核心</string>
     <string name="player_render">渲染方式</string>
     <string name="player_button_config">播放器按钮</string>
-    <string name="player_button_config_summary">显示 %1$d/%2$d</string>
+    <string name="player_button_config_summary">全局启用 %1$d/%2$d，各模式按支持与可用状态显示</string>
     <string name="player_pad_live">平板直播</string>
     <string name="player_button_up">上移</string>
     <string name="player_button_down">下移</string>
@@ -936,13 +942,17 @@
     <string name="player_exo_4k_compat">播放性能</string>
     <string name="player_immersive_audio_mode">沉浸音频模式</string>
     <string name="player_performance">播放性能</string>
-    <string name="player_performance_recommended">推荐</string>
+    <string name="player_performance_recommended">均衡</string>
+    <string name="player_performance_auto">自动</string>
     <string name="player_performance_compatible">兼容</string>
     <string name="player_performance_lightweight">轻量</string>
     <string name="player_performance_original">原版</string>
     <string name="player_performance_help">说明</string>
     <string name="player_performance_help_title">播放性能参数说明</string>
     <string name="player_performance_help_close">关闭</string>
+    <string name="pan_diagnostic_section">诊断工具</string>
+    <string name="pan_diagnostic_entry">链路诊断</string>
+    <string name="pan_diagnostic_title">播放链路诊断</string>
     <string name="player_kernel">播放器内核</string>
     <string name="player_scale">缩放比例</string>
     <string name="player_lut">LUT 调色</string>
@@ -987,6 +997,10 @@
     <string name="mpv_config_text_edit_desc">打开编辑器，输入并保存配置内容</string>
     <string name="mpv_config_import_file">导入配置文件</string>
     <string name="mpv_config_import_file_desc">从本地选择已有配置文件</string>
+    <string name="mpv_config_import_url">通过 URL 导入</string>
+    <string name="mpv_config_import_url_desc">下载远程配置并保存为新配置</string>
+    <string name="mpv_config_url_hint">https://example.com/mpv.conf</string>
+    <string name="mpv_config_import">导入</string>
     <string name="mpv_config_editor_new">新建配置</string>
     <string name="mpv_config_editor_edit">编辑配置</string>
     <string name="mpv_config_save">保存</string>
@@ -1199,6 +1213,15 @@
     <string name="error_play_mpv_invalid_data">MPV 识别到异常媒体数据，请更换线路或手动切换播放器</string>
     <string name="error_play_mpv_decode_failed">MPV 解码失败，请尝试切换软硬解或更换线路</string>
     <string name="error_play_mpv_video_output">MPV 视频输出初始化失败，请尝试切换解码或重新进入播放</string>
+    <string name="error_play_stage_app_local">App 本地播放服务连接失败，请重新进入播放或重启应用</string>
+    <string name="error_play_stage_external_local">本地代理端口连接失败，请重启代理或更换线路</string>
+    <string name="error_play_stage_external_supply">外部或未知本地代理未能持续提供数据，App 无法判断其内部 CDN、鉴权或缓存状态，请检查代理或更换线路</string>
+    <string name="error_play_stage_network">网络读取失败，请检查网络、请求头或更换线路</string>
+    <string name="error_play_stage_media">媒体解析失败或没有有效音视频轨道，请更换线路或播放器</string>
+    <string name="error_play_stage_decoder">音视频解码失败，请尝试切换软硬解或播放器</string>
+    <string name="error_play_stage_output">音视频输出失败，请重新进入播放或切换解码方式</string>
+    <string name="error_play_stage_drm">DRM 鉴权或受保护媒体处理失败，请更换线路或播放器</string>
+    <string name="error_play_stage_unknown">播放失败，当前证据不足，暂时无法确定具体阶段</string>
     <string name="error_play_flag">暂无线路数据</string>
     <string name="error_play_timeout">连接超时</string>
     <string name="error_play_fallback">%1$s 播放失败，已切换到 %2$s</string>
@@ -1487,6 +1510,14 @@
         <item>@string/display_mini</item>
         <item>@string/display_title</item>
         <item>播放参数</item>
+    </string-array>
+
+    <string-array name="select_live_player_osd">
+        <item>@string/display_time</item>
+        <item>@string/display_traffic</item>
+        <item>@string/display_size</item>
+        <item>@string/display_title</item>
+        <item>@string/play_params</item>
     </string-array>
 
     <string-array name="select_track">

@@ -14,9 +14,12 @@ import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.impl.Callback;
+import com.fongmi.android.tv.web.HomeWebController;
+import com.fongmi.android.tv.web.ext.WebHomeExtensionRegistry;
 import com.github.catvod.utils.Prefers;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonElement;
 import com.google.gson.ToNumberPolicy;
 import com.google.gson.annotations.SerializedName;
 
@@ -27,6 +30,9 @@ import java.util.Map;
 import java.util.Set;
 
 public class Backup {
+
+    public static final String PREF_WEB_HOME_EXTENSION = "web_home_extension";
+    public static final String PREF_WEB_HOME_EXTENSION_SOURCES = "web_home_extension_user_sources";
 
     private static final Set<String> APP_PREFS = Set.of("doh", "ua", "wall", "wall_type", "reset", "site_mode", "site_block_keys", "site_names", "search_column", "sync_mode", "sync_paths", "incognito", "drive_check", "drive_check_cache", "compact_episode_title", "web_home_fullscreen", "audio_config", "short_drama_config", "tmdb_enabled", "tmdb_config", "tmdb_model", "ai_config", "ai_title_extraction", "ai_ad_detection", "user_ad_rules", "user_group_rules", "disabled_group_rule_ids", "disabled_default_rule_ids", "builtin_hls_rule_overrides", "subtitle_ai_max_concurrency", "subtitle_ai_chunk_count", "detail_open_mode", "detail_interaction_mode", "detail_theme_mode", "tmdb_detail_theme", "tmdb_detail_backdrop_slide", "personal_recommendation", "ai_recommendation", "auto_skip_intro_outro", "viewing_record_sync_enabled", "viewing_record_sync_local_write", "playback_remote_sync_config", "playback_webhook_config", "playback_webhook_privacy_accepted", "shell_proxy", "shell_proxy_rules", "shell_proxy_url", "shell_proxy_hosts", "github_proxy", "update", "adblock", "zhuyin", "theme_color", "wall_color", "crash", "render", "ffmpeg_mode", "pad_live_mode", "size", "scale", "buffer", "buffer_bytes", "back_buffer", "play_cache", "preload", "preload_threads", "preload_size", "preload_time", "player_auto_change", "player_failure_fallback", "background", "speed", "play_speed", "caption", "tunnel", "exo_4k_compat", "playback_performance_profile", "playback_performance_initialized", "perf_codec_async_queueing", "perf_dynamic_scheduling", "perf_video_duration_progress", "perf_late_drop_input", "perf_track_limit", "perf_adaptive_downgrade", "perf_load_only_selected_tracks", "perf_surface_fixed_size", "perf_decoder_fallback", "perf_soft_video_tune", "perf_high_buffer", "perf_bandwidth_meter", "player_button_order", "player_button_hidden", "audio_prefer", "video_prefer", "prefer_aac", "subtitle_text_size", "subtitle_position", "display_time", "display_traffic", "display_size", "display_progress", "display_mini", "display_title", "player_osd_title", "player_osd_resolution", "player_osd_time", "player_osd_progress", "player_osd_traffic", "player_osd_mini", "player_osd_diagnostics", "boot_live", "across", "change", "invert", "scale_live", "live_epg_url", "live_epg_history");
 
@@ -84,6 +90,10 @@ public class Backup {
     }
 
     public void restore() {
+        restore(true);
+    }
+
+    public void restore(boolean preserveMissingWebHomePrefs) {
         AppDatabase.get().clearAllTables();
         AppDatabase.get().getSiteDao().insertOrUpdate(getSite());
         AppDatabase.get().getLiveDao().insertOrUpdate(getLive());
@@ -92,7 +102,7 @@ public class Backup {
         AppDatabase.get().getHistoryDao().insertOrUpdate(getHistory());
         AppDatabase.get().getTrackDao().insertOrUpdate(getTrack());
         AppDatabase.get().getDeviceDao().insertOrUpdate(getDevice());
-        restorePrefers(getPrefers(), true);
+        restorePrefers(getPrefers(), true, preserveMissingWebHomePrefs);
     }
 
     public void restore(SyncOptions options, boolean force) {
@@ -117,9 +127,10 @@ public class Backup {
             for (History item : getHistory()) if (cids.containsKey(item.getCid())) item.setCid(cids.get(item.getCid()));
             AppDatabase.get().getHistoryDao().insertOrUpdate(getHistory());
         }
-        restorePrefers(filter(getPrefers(), options), false);
-        if (options.isSpider() || options.isLoginState()) BaseLoader.get().clear();
-        if (options.isConfig() || options.isSpider() || options.isLoginState()) reloadConfig();
+        restorePrefers(filter(getPrefers(), options), false, false);
+        if (options.isConfig() || options.isSpider() || options.isWebHome() || options.isLoginState()) BaseLoader.get().clear();
+        if (options.isConfig() || options.isSpider() || options.isWebHome() || options.isLoginState()) reloadConfig();
+        if (options.isWebHome()) refreshWebHomeExtensions();
         if (options.isKeep()) RefreshEvent.keep();
         if (options.isHistory()) RefreshEvent.history();
         RefreshEvent.home();
@@ -154,8 +165,9 @@ public class Backup {
         return result;
     }
 
-    private static boolean include(String key, SyncOptions options) {
+    static boolean include(String key, SyncOptions options) {
         if (key.startsWith("remote_trust_")) return false;
+        if (isWebHomeExtensionPref(key)) return options.isWebHome();
         if (key.startsWith("cache_")) return false;
         if (key.startsWith("config_")) return options.isConfig();
         if ("site_names".equals(key)) return options.isConfig() || options.isSettings();
@@ -166,13 +178,30 @@ public class Backup {
         return options.isSpider();
     }
 
+    static boolean isWebHomeExtensionPref(String key) {
+        return PREF_WEB_HOME_EXTENSION.equals(key) || key.startsWith("web_home_extension_") || key.startsWith("web_home_ext_enabled_");
+    }
+
     private static boolean isAppPref(String key) {
         return APP_PREFS.contains(key) || key.startsWith("danmaku_") || key.startsWith("playback_performance_") || key.startsWith("perf_exo_") || key.startsWith("perf_mpv_") || key.startsWith("perf_ijk_") || key.startsWith("perf_kernel_");
     }
 
-    private static void restorePrefers(Map<String, ?> values, boolean clear) {
+    private static void restorePrefers(Map<String, ?> values, boolean clear, boolean preserveMissingWebHomePrefs) {
+        Map<String, Object> preserved = new HashMap<>();
+        if (clear && preserveMissingWebHomePrefs) {
+            for (Map.Entry<String, ?> entry : Prefers.getPrefers().getAll().entrySet()) {
+                if (isWebHomeExtensionPref(entry.getKey()) && !values.containsKey(entry.getKey())) preserved.put(entry.getKey(), entry.getValue());
+            }
+        }
         SharedPreferences.Editor editor = Prefers.getPrefers().edit();
         if (clear) editor.clear();
+        putPrefers(editor, preserved);
+        putPrefers(editor, values);
+        editor.commit();
+        HlsRuleConfig.invalidate();
+    }
+
+    private static void putPrefers(SharedPreferences.Editor editor, Map<String, ?> values) {
         for (Map.Entry<String, ?> entry : values.entrySet()) {
             Object value = entry.getValue();
             if (value instanceof String) editor.putString(entry.getKey(), (String) value);
@@ -186,8 +215,28 @@ public class Backup {
                 else editor.putInt(entry.getKey(), number.intValue());
             }
         }
-        editor.commit();
-        HlsRuleConfig.invalidate();
+    }
+
+    public static void refreshWebHomeExtensions() {
+        WebHomeExtensionRegistry.get().clear();
+        HomeWebController.requestExtensionReload();
+    }
+
+    public int getWebHomeExtensionPreferenceCount() {
+        int count = 0;
+        for (String key : getPrefers().keySet()) if (isWebHomeExtensionPref(key)) count++;
+        return count;
+    }
+
+    public int getWebHomeExtensionSourceCount() {
+        Object value = getPrefers().get(PREF_WEB_HOME_EXTENSION_SOURCES);
+        if (!(value instanceof String) || ((String) value).isEmpty()) return 0;
+        try {
+            JsonElement element = new Gson().fromJson((String) value, JsonElement.class);
+            return element != null && element.isJsonArray() ? element.getAsJsonArray().size() : 0;
+        } catch (Throwable e) {
+            return 0;
+        }
     }
 
     public List<Site> getSite() {

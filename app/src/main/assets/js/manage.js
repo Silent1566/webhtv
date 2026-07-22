@@ -23,6 +23,10 @@ let syncTreeLoading = new Set();
 let loginStateLoadedKey = '';
 let loginStateData = null;
 let loginStatePaths = [];
+let loginStatePathSet = new Set();
+let loginStatePathSorted = [];
+let loginStateVisiblePendingSet = new Set();
+let loginStateVisiblePendingSorted = [];
 let currentLoginStatePath = '';
 let currentLoginStateEditable = false;
 let loginStateExpanded = new Set(['app', 'sdcard']);
@@ -772,16 +776,19 @@ function loadLoginStateManage(force = false) {
 }
 
 function renderLoginStateManage() {
+    rebuildLoginStateIndexes();
     const data = loginStateData || {};
     const pendingItems = loginStatePendingItems();
     const findings = data.findings || [];
+    const findingsTotal = Number(data.findingsTotal == null ? findings.length : data.findingsTotal);
     const missing = ((data.states || []).filter(item => item && item.exists === false)).length;
-    $('#loginStateSummary').text(`${data.learning ? '学习中' : '未学习'} · 已确认 ${loginStatePaths.length} · 待确认 ${pendingItems.length} · 最近 ${findings.length}${missing ? ` · 缺失 ${missing}` : ''}`);
+    $('#loginStateSummary').text(`${data.learning ? '学习中' : '未学习'} · 已确认 ${loginStatePaths.length} · 待确认 ${pendingItems.length} · 最近 ${findingsTotal}${missing ? ` · 缺失 ${missing}` : ''}`);
     $('#loginStateLearnBtn').text(data.learning ? '完成学习' : '开始学习');
     $('#loginStateRevealBtn').prop('disabled', pendingItems.length === 0).text(pendingItems.length ? `显示待确认(${pendingItems.length})` : '显示待确认');
     $('#loginStateLearned').html(loginStatePathStates().map(item => buildLoginStateRow(item, 'selected')).join('') || '<div class="empty-state compact">未确认任何登录态路径</div>');
     $('#loginStatePending').html(pendingItems.map(item => buildLoginStateRow(item, 'pending')).join('') || '<div class="empty-state compact">暂无待确认项</div>');
-    $('#loginStateFindings').html(findings.map(item => buildLoginStateRow(item, 'finding')).join('') || '<div class="empty-state compact">暂无最近学习结果</div>');
+    const findingsMore = findingsTotal > findings.length ? `<div class="empty-state compact">结果较多，仅显示前 ${findings.length} 条；完整结果仍保留在设备中</div>` : '';
+    $('#loginStateFindings').html((findings.map(item => buildLoginStateRow(item, 'finding')).join('') + findingsMore) || '<div class="empty-state compact">暂无最近学习结果</div>');
     renderLoginStateTrees();
 }
 
@@ -1008,14 +1015,46 @@ function loginStateCovers(parent, child) {
     child = loginStateNormalize(child);
     return !!parent && (parent === child || child.startsWith(parent + '/'));
 }
+function loginStateHasAncestor(set, path) {
+    path = loginStateNormalize(path);
+    while (path) {
+        if (set.has(path)) return true;
+        const index = path.lastIndexOf('/');
+        path = index < 0 ? '' : path.substring(0, index);
+    }
+    return false;
+}
+function loginStateLowerBound(values, target) {
+    let low = 0, high = values.length;
+    while (low < high) {
+        const mid = (low + high) >>> 1;
+        if (values[mid] < target) low = mid + 1;
+        else high = mid;
+    }
+    return low;
+}
+function loginStateHasDescendant(values, path) {
+    const prefix = loginStateNormalize(path) + '/';
+    const index = loginStateLowerBound(values, prefix);
+    return !!prefix && index < values.length && values[index].startsWith(prefix);
+}
+function rebuildLoginStateIndexes() {
+    loginStatePathSet = new Set(loginStatePaths.map(loginStateNormalize).filter(Boolean));
+    loginStatePathSorted = Array.from(loginStatePathSet).sort();
+    const visiblePending = ((loginStateData && loginStateData.pending) || [])
+        .map(loginStateNormalize)
+        .filter(path => path && !loginStateHasAncestor(loginStatePathSet, path));
+    loginStateVisiblePendingSet = new Set(visiblePending);
+    loginStateVisiblePendingSorted = Array.from(loginStateVisiblePendingSet).sort();
+}
 function loginStateState(path) {
     path = loginStateNormalize(path);
-    if (loginStatePaths.some(item => loginStateCovers(item, path))) return 'checked';
-    if (loginStatePaths.some(item => loginStateCovers(path, item))) return 'partial';
+    if (loginStateHasAncestor(loginStatePathSet, path)) return 'checked';
+    if (loginStateHasDescendant(loginStatePathSorted, path)) return 'partial';
     return 'unchecked';
 }
 function loginStateHasPendingChild(path) {
-    return ((loginStateData && loginStateData.pending) || []).some(item => item !== path && loginStateCovers(path, item) && loginStateState(item) !== 'checked');
+    return loginStateHasDescendant(loginStateVisiblePendingSorted, path);
 }
 function expandLoginStatePath(path) {
     path = loginStateNormalize(path);
@@ -1029,6 +1068,7 @@ function expandLoginStatePath(path) {
 function expandLoginStateImportantPaths() {
     loginStateExpanded.add('app');
     loginStateExpanded.add('sdcard');
+    if (loginStatePaths.length + (((loginStateData && loginStateData.pending) || []).length) > 128) return;
     loginStatePaths.forEach(expandLoginStatePath);
     ((loginStateData && loginStateData.pending) || []).forEach(expandLoginStatePath);
 }
@@ -1095,6 +1135,7 @@ function buildLoginStateTreeRows(path, depth, rows) {
         rows.push(buildLoginStateTreeRow(item, depth));
         if (item.dir && loginStateExpanded.has(item.path)) buildLoginStateTreeRows(item.path, depth + 1, rows);
     });
+    if (tree.truncated) rows.push(`<div class="login-tree-row muted" style="--depth:${depth + 1}"><span class="login-tree-spacer"></span><span class="tree-check login-tree-check"></span><div class="login-tree-main"><span>目录共 ${Number(tree.total || 0)} 项，仅显示前 ${(tree.items || []).length} 项；可直接选择文件夹</span></div></div>`);
 }
 function appendMissingLoginStateRows(root, rows) {
     const visible = new Set();
@@ -1118,7 +1159,7 @@ function buildLoginStateTreeRow(item, depth) {
     const path = item.path || '';
     const ep = escPath(path);
     const state = loginStateState(path);
-    const pending = loginStatePendingItems().some(x => x.path === path);
+    const pending = loginStateVisiblePendingSet.has(path);
     const hasPending = item.dir && loginStateHasPendingChild(path);
     const missing = item.missing || (((loginStateData && loginStateData.states) || []).some(x => x && x.path === path && x.exists === false));
     const checked = state === 'checked' ? ' checked' : '';

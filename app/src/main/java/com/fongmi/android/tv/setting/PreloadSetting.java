@@ -3,11 +3,13 @@ package com.fongmi.android.tv.setting;
 public class PreloadSetting {
 
     public static final int MIN_THREADS = 1;
-    public static final int MAX_THREADS = 10;
+    public static final int MAX_THREADS = 4;
+    public static final int DEFAULT_THREADS = 1;
     public static final int MIN_SIZE_MB = 128;
     public static final int MAX_SIZE_MB = 4096;
     public static final int MIN_TIME_SECONDS = 20;
     public static final int MAX_TIME_SECONDS = 120;
+    public static final int DEFAULT_TIME_SECONDS = 20;
     public static final int STEP_TIME_SECONDS = 10;
     private static final int[] SIZE_OPTIONS_MB = {128, 256, 512, 1024, 2048, 4096};
 

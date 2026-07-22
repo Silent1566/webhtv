@@ -35,8 +35,8 @@ public final class RemoteSyncTransfer {
                 String backup = Backup.create(options).toString();
                 client.uploadSyncText(uploadBase, "backup", backup);
                 if (options.isRemoteRelay()) client.uploadSyncText(uploadBase, "remoteRelay", RemoteStore.exportRelayConfig());
-                if (options.isSpider()) {
-                    archive = SyncFiles.createArchive(SyncFiles.getPaths(options.getPaths()));
+                if (SyncFiles.hasPaths(options)) {
+                    archive = SyncFiles.createArchive(SyncFiles.getPaths(options));
                     if (archive != null) client.uploadSyncFile(uploadBase, "syncFiles", archive.getFile());
                 }
                 if (options.isLoginState()) {

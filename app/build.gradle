@@ -165,4 +165,5 @@ dependencies {
     annotationProcessor libs.glide.compiler
     coreLibraryDesugaring libs.desugar
     testImplementation libs.junit
+    testImplementation libs.okhttp.mockwebserver
 }

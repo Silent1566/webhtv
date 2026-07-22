@@ -118,6 +118,13 @@
             tools:visibility="visible" />
 
         <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/adFeedback"
+            style="@style/Control"
+            android:text="@string/play_ad_feedback"
+            android:visibility="gone"
+            tools:visibility="visible" />
+
+        <com.google.android.material.textview.MaterialTextView
             android:id="@+id/chapter"
             style="@style/Control"
             android:text="@string/play_title"

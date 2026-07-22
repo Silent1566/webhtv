@@ -450,6 +450,49 @@ public class TmdbUIAdapterTest {
     }
 
     @Test
+    public void tmdbDetailActivityRefreshesCurrentEpisodeForSelectedPlayerKernel() throws Exception {
+        Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int switchMethod = source.indexOf("private void switchInlinePlayer(int playerType)");
+        int refreshCall = source.indexOf("refreshAndSwitchInlinePlayer(playerType)", switchMethod);
+        int refreshMethod = source.indexOf("private boolean refreshAndSwitchInlinePlayer(int playerType)", refreshCall);
+        int samePlayerGuard = source.indexOf("if (playerType == player().getPlayerType()) {", refreshMethod);
+        int cancelSwitch = source.indexOf("cancelPendingInlinePlayerSwitch();", samePlayerGuard);
+        int contextGuard = source.indexOf("if (selectedFlag == null || selectedEpisode == null) return false;", cancelSwitch);
+        int emptyContextGuard = source.indexOf("if (TextUtils.isEmpty(flag) || TextUtils.isEmpty(episodeUrl)) return false;", contextGuard);
+        int generation = source.indexOf("int generation = ++inlinePlaybackGeneration;", emptyContextGuard);
+        int switchLoading = source.indexOf("inlinePlayerSwitchLoading = true;", generation);
+        int showLoading = source.indexOf("showInlineLoading();", switchLoading);
+        int position = source.indexOf("long position = player().getPosition();", showLoading);
+        int speed = source.indexOf("float speed = player().getSpeed();", position);
+        int repeat = source.indexOf("boolean repeat = player().isRepeatOne();", speed);
+        int request = source.indexOf("SiteApi.playerContent(key, flag, episodeUrl, playerType)", repeat);
+        int staleGuard = source.indexOf("isInlinePlayerSwitchRequestCurrent(generation, key, flag, episodeUrl)", request);
+        int lifecycleGuard = source.indexOf("private boolean isInlinePlayerSwitchRequestCurrent(int generation, String key, String flag, String episodeUrl)", staleGuard);
+        int pendingGuard = source.indexOf("return inlinePlayerSwitchLoading", lifecycleGuard);
+        int activeMode = source.indexOf("&& isInlinePlayerMode()", pendingGuard);
+        int activeOwner = source.indexOf("&& isOwner()", activeMode);
+        int activePlayer = source.indexOf("&& !player().isEmpty()", activeOwner);
+        int updateResult = source.indexOf("currentInlineResult = result;", staleGuard);
+        int updateParse = source.indexOf("useParse = result.shouldUseParse();", updateResult);
+        int switchResult = source.indexOf("player().switchPlayer(playerType, result, getHistoryKey(), metadata, useParse, position, speed, repeat);", updateParse);
+        int oldFallback = source.indexOf("player().switchPlayerManually(playerType);", switchMethod);
+
+        assertTrue(sourcePath + " is missing refreshed inline player-kernel switching", switchMethod >= 0 && refreshCall > switchMethod && refreshMethod > refreshCall);
+        assertTrue("choosing the active kernel must cancel only a pending kernel switch, while missing playback context must not invalidate the current playback request",
+                samePlayerGuard > refreshMethod && cancelSwitch > samePlayerGuard && contextGuard > cancelSwitch && emptyContextGuard > contextGuard && generation > emptyContextGuard);
+        assertTrue("inline kernel switching should expose a cancellable loading state and preserve playback state before refreshing the selected episode",
+                switchLoading > generation && showLoading > switchLoading && position > showLoading && speed > position && repeat > speed);
+        assertTrue("inline kernel switching should request a result resolved for the selected target kernel and ignore stale callbacks",
+                request > repeat && staleGuard > request);
+        assertTrue("inline kernel switch callbacks should require a pending switch and be ignored after leaving inline playback or losing player ownership",
+                lifecycleGuard > staleGuard && pendingGuard > lifecycleGuard && activeMode > pendingGuard && activeOwner > activeMode && activePlayer > activeOwner);
+        assertTrue("inline kernel switching should install the refreshed result before rebuilding the player",
+                updateResult > staleGuard && updateParse > updateResult && switchResult > updateParse);
+        assertTrue("inline kernel switching must not fall back to rebuilding from the stale PlaySpec", oldFallback < 0);
+    }
+
+    @Test
     public void tmdbDetailActivityGatesInlineSystemPipUpdatesOnMobileCapability() throws Exception {
         Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
@@ -471,6 +514,111 @@ public class TmdbUIAdapterTest {
                 actionHelper > sourceUpdate && actionGuard > actionHelper && actionUpdate > actionGuard);
         assertTrue("inline system PiP entry should share the same capability gate",
                 canEnter >= 0 && enterGate > canEnter);
+    }
+
+    @Test
+    public void directTmdbDetailPrefetchStartsBeforeCrawlerForBothFlavors() throws Exception {
+        assertDirectTmdbPrefetchOrder("leanback");
+        assertDirectTmdbPrefetchOrder("mobile");
+    }
+
+    @Test
+    public void tmdbAdapterConsumesPrefetchWithoutTemporaryVod() throws Exception {
+        Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "helper", "TmdbUIAdapter.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int prefetchMethod = source.indexOf("public void prefetch(TmdbItem item)");
+        int prefetchStart = source.indexOf("detailPrefetch.start(item", prefetchMethod);
+        int loadMethod = source.indexOf("public void load(TmdbItem item, Vod vod)");
+        int take = source.indexOf("detailPrefetch.take(item)", loadMethod);
+
+        String prefetchBody = source.substring(prefetchMethod, loadMethod);
+        assertTrue("TMDB adapter must expose direct-item prefetch", prefetchMethod >= 0 && prefetchStart > prefetchMethod);
+        assertTrue("normal load must consume the matching prefetch after the crawler Vod arrives", loadMethod >= 0 && take > loadMethod);
+        assertFalse("prefetch must not create a temporary Vod", prefetchBody.contains("new Vod("));
+        assertFalse("prefetch must not enrich a Vod before crawler detail returns", prefetchBody.contains("enrichVod("));
+        assertFalse("prefetch must not publish a Vod event before crawler detail returns", prefetchBody.contains("notifyVodChanged("));
+    }
+
+    @Test
+    public void detailSwitchInvalidatesTmdbBeforeCachedDetailCanApply() throws Exception {
+        Path leanbackPath = findFlavorJavaPath("leanback").resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String leanback = new String(Files.readAllBytes(leanbackPath), StandardCharsets.UTF_8);
+        int leanbackNewIntent = leanback.indexOf("protected void onNewIntent(Intent intent)");
+        int leanbackResetCall = leanback.indexOf("resetDetailForNewIntent();", leanbackNewIntent);
+        int leanbackCheck = leanback.indexOf("checkId();", leanbackResetCall);
+        int leanbackReset = leanback.indexOf("private void resetDetailForNewIntent()");
+        int leanbackInvalidate = leanback.indexOf("mTmdbUIAdapter.beginDetailRequest();", leanbackReset);
+        int leanbackResetEnd = leanback.indexOf("private void clearDetailAdapters()", leanbackReset);
+
+        Path mobilePath = findFlavorJavaPath("mobile").resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String mobile = new String(Files.readAllBytes(mobilePath), StandardCharsets.UTF_8);
+        int mobileNewIntent = mobile.indexOf("protected void onNewIntent(Intent intent)");
+        int mobileOldKey = mobile.indexOf("String oldKey = getKey();", mobileNewIntent);
+        int mobileNewKey = mobile.indexOf("String key = Objects.toString(intent.getStringExtra(\"key\"), \"\");", mobileOldKey);
+        int mobileIdentityCheck = mobile.indexOf("id.equals(oldId) && key.equals(oldKey)", mobileNewKey);
+        int mobileExtras = mobile.indexOf("getIntent().putExtras(intent);", mobileIdentityCheck);
+        int mobileInvalidate = mobile.indexOf("mTmdbUIAdapter.beginDetailRequest();", mobileExtras);
+        int mobileCheck = mobile.indexOf("checkId();", mobileInvalidate);
+
+        assertTrue("leanback new-intent flow must reset detail state before checking the next cached detail",
+                leanbackNewIntent >= 0 && leanbackResetCall > leanbackNewIntent && leanbackCheck > leanbackResetCall);
+        assertTrue("leanback detail reset must invalidate the old TMDB generation",
+                leanbackReset >= 0 && leanbackInvalidate > leanbackReset && leanbackResetEnd > leanbackInvalidate);
+        assertTrue("mobile must treat site key plus id as the detail identity",
+                mobileNewIntent >= 0 && mobileOldKey > mobileNewIntent && mobileNewKey > mobileOldKey && mobileIdentityCheck > mobileNewKey);
+        assertTrue("mobile must invalidate the old TMDB generation before checking the next cached detail",
+                mobileExtras > mobileIdentityCheck && mobileInvalidate > mobileExtras && mobileCheck > mobileInvalidate);
+    }
+
+    @Test
+    public void mobileDropsStaleVodEventsBeforeUpdatingCurrentPage() throws Exception {
+        Path sourcePath = findFlavorJavaPath("mobile").resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int observer = source.indexOf("public void onRefreshEvent(RefreshEvent event)");
+        int vodBranch = source.indexOf("event.getType() == RefreshEvent.Type.VOD", observer);
+        int currentGuard = source.indexOf("if (!isCurrentVodEvent(event.getVod()))", vodBranch);
+        int update = source.indexOf("updateVod(event.getVod());", currentGuard);
+        int helper = source.indexOf("private boolean isCurrentVodEvent(Vod item)", update);
+        int sharedGuard = source.indexOf("VodEventGuard.matches(item, getKey(), getId())", helper);
+
+        assertTrue("mobile VOD events must be identity-checked before mutating mVod and Intent state",
+                observer >= 0 && vodBranch > observer && currentGuard > vodBranch && update > currentGuard);
+        assertTrue("mobile stale-event guard must delegate to the shared site/id policy",
+                helper > update && sharedGuard > helper);
+    }
+
+    @Test
+    public void tmdbAdapterTracksAndCancelsAttachedPrefetchAndLogsReuseState() throws Exception {
+        Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "helper", "TmdbUIAdapter.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int activeField = source.indexOf("ListenableFuture<TmdbDetailPrefetch.Result> activePrefetch");
+        int attach = source.indexOf("setActivePrefetch(prefetched)");
+        int clear = source.indexOf("clearActivePrefetch(prefetched)", attach);
+        int begin = source.indexOf("public void beginDetailRequest()");
+        int cancel = source.indexOf("cancelActivePrefetch();", begin);
+        int release = source.indexOf("public void release()", cancel);
+        int reuseLog = source.indexOf("return \"reuse\"", release);
+        int failureLog = source.indexOf("logPrefetchFailure(", reuseLog);
+
+        assertTrue("adapter must retain the consumed future until it completes", activeField >= 0 && attach > activeField && clear > attach);
+        assertTrue("new detail requests and release must cancel an attached prefetch", begin >= 0 && cancel > begin && release > cancel);
+        assertTrue("prefetch logs must distinguish reuse and register failure logging", reuseLog > release && failureLog > reuseLog);
+    }
+
+    private static void assertDirectTmdbPrefetchOrder(String flavor) throws Exception {
+        Path sourcePath = findFlavorJavaPath(flavor).resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int getDetail = source.indexOf("private void getDetail()");
+        int prefetch = source.indexOf("prefetchDirectTmdbDetail();", getDetail);
+        int crawler = source.indexOf("mViewModel.detailContent(getKey(), getId());", getDetail);
+        int helper = source.indexOf("private void prefetchDirectTmdbDetail()", crawler);
+        int invalidate = source.indexOf("mTmdbUIAdapter.beginDetailRequest();", helper);
+        int explicitItem = source.indexOf("getTmdbItem()", invalidate);
+        int adapterPrefetch = source.indexOf("mTmdbUIAdapter.prefetch(item);", explicitItem);
+
+        assertTrue(sourcePath + " must start direct TMDB prefetch before crawler detail", getDetail >= 0 && prefetch > getDetail && crawler > prefetch);
+        assertTrue(sourcePath + " must invalidate the previous detail before reading the next explicit item", helper > crawler && invalidate > helper && explicitItem > invalidate);
+        assertTrue(sourcePath + " must only prefetch an explicit TmdbItem", adapterPrefetch > explicitItem);
     }
 
     private static Path findMainJavaPath() {

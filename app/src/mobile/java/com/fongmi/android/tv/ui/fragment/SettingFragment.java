@@ -359,36 +359,46 @@ public class SettingFragment extends BaseFragment implements ConfigListener, Sit
 
     private void onBackup(View view) {
         PermissionUtil.requestFile(this, allGranted -> {
+            if (!allGranted) {
+                Notify.show(R.string.backup_permission_denied);
+                return;
+            }
             BackupProgressDialog progress = BackupProgressDialog.open(getParentFragmentManager(), "备份应用数据");
             AppDatabase.backup(new Callback() {
-            @Override
-            public void success() {
-                progress.finish();
-                Notify.show(R.string.backup_success);
-            }
+                @Override
+                public void success() {
+                    progress.finish();
+                    Notify.show(R.string.backup_success);
+                }
 
-            @Override
-            public void error() {
-                progress.finish();
-                Notify.show(R.string.backup_fail);
-            }
+                @Override
+                public void error() {
+                    progress.finish();
+                    Notify.show(R.string.backup_fail);
+                }
             }, progress::update);
         });
     }
 
     private void onRestore(View view) {
-        PermissionUtil.requestFile(this, allGranted -> RestoreDialog.create().show(requireActivity(), new Callback() {
-            @Override
-            public void success() {
-                Notify.show(R.string.restore_success);
-                setOtherText();
+        PermissionUtil.requestFile(this, allGranted -> {
+            if (!allGranted) {
+                Notify.show(R.string.backup_permission_denied);
+                return;
             }
+            RestoreDialog.create().show(requireActivity(), new Callback() {
+                @Override
+                public void success() {
+                    Notify.show(R.string.restore_success);
+                    setOtherText();
+                }
 
-            @Override
-            public void error() {
-                Notify.show(R.string.restore_fail);
-            }
-        }));
+                @Override
+                public void error() {
+                    Notify.show(R.string.restore_fail);
+                }
+            });
+        });
     }
 
     private void initConfig() {

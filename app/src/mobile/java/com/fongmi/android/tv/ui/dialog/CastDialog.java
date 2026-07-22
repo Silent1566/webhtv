@@ -2,6 +2,7 @@ package com.fongmi.android.tv.ui.dialog;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -51,6 +52,7 @@ public class CastDialog extends BaseBottomSheetDialog implements DeviceAdapter.O
     private DeviceAdapter adapter;
     private ScanTask scanTask;
     private CastVideo video;
+    private boolean historyReady;
     private boolean fm;
 
     public CastDialog() {
@@ -66,12 +68,14 @@ public class CastDialog extends BaseBottomSheetDialog implements DeviceAdapter.O
     }
 
     public CastDialog history(History history) {
+        if (history == null || TextUtils.isEmpty(history.getVodId())) return this;
         String id = history.getVodId();
         String fd = history.getVodId();
         if (fd.startsWith("/")) fd = Server.get().getAddress() + "/file" + fd.replace(Path.rootPath(), "");
         if (fd.startsWith("file")) fd = Server.get().getAddress() + "/" + fd.replace(Path.rootPath(), "").replace("://", "");
         if (fd.contains("127.0.0.1")) fd = fd.replace("127.0.0.1", Util.getIp());
         body.add("history", history.toString().replace(id, fd));
+        historyReady = true;
         return this;
     }
 
@@ -178,8 +182,19 @@ public class CastDialog extends BaseBottomSheetDialog implements DeviceAdapter.O
 
     @Override
     public void onItemClick(Device item) {
-        if (item.isDLNA()) new DLNACast(video, this::onCasted).cast(item);
-        else OkHttp.newCall(client, item.getIp().concat("/action?do=cast"), body.build()).enqueue(this);
+        if (item.isDLNA()) {
+            if (video == null || TextUtils.isEmpty(video.url())) {
+                Notify.show(R.string.cast_not_ready);
+                return;
+            }
+            new DLNACast(video, this::onCasted).cast(item);
+        } else {
+            if (!historyReady) {
+                Notify.show(R.string.cast_not_ready);
+                return;
+            }
+            OkHttp.newCall(client, item.getIp().concat("/action?do=cast"), body.build()).enqueue(this);
+        }
     }
 
     @Override
