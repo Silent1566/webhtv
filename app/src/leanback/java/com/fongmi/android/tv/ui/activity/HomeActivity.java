@@ -891,7 +891,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
                 Setting.hasFileAccess(),
                 isFinishing(),
                 isChangingConfigurations())) {
-            AppDatabase.backup();
+            AppDatabase.autoBackup();
         }
         OkHttp.get().clear();
         Source.get().exit();

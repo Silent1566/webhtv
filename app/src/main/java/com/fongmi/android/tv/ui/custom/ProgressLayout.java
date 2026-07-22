@@ -75,6 +75,12 @@ public class ProgressLayout extends RelativeLayout {
         }
     }
 
+    /** Adds a child that must not follow CONTENT/PROGRESS/EMPTY visibility changes. */
+    public void addOverlayView(View child, ViewGroup.LayoutParams params) {
+        addView(child, params);
+        mContentViews.remove(child);
+    }
+
     public void showProgress() {
         switchState(State.PROGRESS);
     }

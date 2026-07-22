@@ -4,6 +4,7 @@ import android.text.TextUtils;
 
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.bean.Result;
+import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.player.Source;
 import com.github.catvod.crawler.SpiderDebug;
@@ -26,14 +27,20 @@ public class WebHomeInlineVodStore {
     private static final String HLS_FORMAT = "application/x-mpegURL";
 
     private static final Map<String, Entry> ITEMS = new ConcurrentHashMap<>();
+    // Inline playback uses a synthetic route key; keep the real site for site-level policies.
+    private static final Map<String, Site> ORIGIN_SITES = new ConcurrentHashMap<>();
     private static final Map<String, HeaderSpec> URL_HEADERS = new ConcurrentHashMap<>();
     private static final Map<String, EpisodeSpec> URL_EPISODES = new ConcurrentHashMap<>();
 
     public static String put(JsonObject payload) {
-        return put(payload, null);
+        return put(payload, null, null);
     }
 
     public static String put(JsonObject payload, Resolver resolver) {
+        return put(payload, resolver, null);
+    }
+
+    static String put(JsonObject payload, Resolver resolver, Site originSite) {
         Vod vod = App.gson().fromJson(payload, Vod.class);
         if (vod == null) vod = new Vod();
         String id = first(vod.getId(), Json.safeString(payload, "vodId"), Json.safeString(payload, "id"), "webhome-" + UUID.randomUUID());
@@ -46,7 +53,22 @@ public class WebHomeInlineVodStore {
         if (vod.getPlayFrom().isEmpty()) vod.setPlayFrom(first(Json.safeString(payload, "vodPlayFrom"), Json.safeString(payload, "playFrom"), "WebHome"));
         if (vod.getPlayUrl().isEmpty()) vod.setPlayUrl(playUrl);
         ITEMS.put(id, new Entry(App.gson().toJson(vod), headerSpec, resolver));
+        rememberOriginSite(id, originSite);
         return id;
+    }
+
+    static void rememberOriginSite(String id, Site site) {
+        if (TextUtils.isEmpty(id)) return;
+        if (site == null || TextUtils.isEmpty(site.getKey())) {
+            ORIGIN_SITES.remove(id);
+            return;
+        }
+        ORIGIN_SITES.put(id, Site.get(site.getKey(), site.getName()));
+    }
+
+    public static Site getOriginSite(String id) {
+        Site site = ORIGIN_SITES.get(id);
+        return site == null ? new Site() : Site.get(site.getKey(), site.getName());
     }
 
     public static Result detail(String id) {

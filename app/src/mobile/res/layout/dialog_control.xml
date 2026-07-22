@@ -147,6 +147,60 @@
 
             <com.google.android.material.textview.MaterialTextView
                 style="@style/ControlSheetTitle"
+                android:text="@string/player_osd" />
+
+            <androidx.appcompat.widget.LinearLayoutCompat
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/displayTime"
+                    style="@style/ControlSheetButton"
+                    android:text="@string/display_time" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/displayTraffic"
+                    style="@style/ControlSheetButton"
+                    android:text="@string/display_traffic" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/displaySize"
+                    style="@style/ControlSheetButton"
+                    android:text="@string/display_size" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/displayProgress"
+                    style="@style/ControlSheetButton"
+                    android:text="@string/display_progress" />
+
+            </androidx.appcompat.widget.LinearLayoutCompat>
+
+            <androidx.appcompat.widget.LinearLayoutCompat
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:orientation="horizontal">
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/displayMini"
+                    style="@style/ControlSheetButton"
+                    android:text="@string/display_mini" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/displayTitle"
+                    style="@style/ControlSheetButton"
+                    android:text="@string/display_title" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/displayParams"
+                    style="@style/ControlSheetButton"
+                    android:text="@string/play_params" />
+
+            </androidx.appcompat.widget.LinearLayoutCompat>
+
+            <com.google.android.material.textview.MaterialTextView
+                style="@style/ControlSheetTitle"
                 android:text="@string/control_speed" />
 
             <androidx.appcompat.widget.LinearLayoutCompat

@@ -25,13 +25,133 @@ public class PlayerPlaybackRegressionSourceTest {
                         && reorder > applyOrder
                         && source.indexOf("container.removeAllViews();", reorder) > reorder
                         && source.indexOf("if (managed.contains(child))", reorder) > reorder);
-        assertTrue("visibility refreshes must rebuild focus from the container's currently visible children",
+        assertTrue("visibility refreshes must rebuild a circular focus chain from the container's currently visible children",
                 applyVisibility >= 0
                         && source.indexOf("updateFocusNavigation(views);", applyVisibility) > applyVisibility
                         && focus >= 0
                         && source.indexOf("view.getVisibility() == View.VISIBLE && view.isFocusable()", focus) > focus
-                        && source.indexOf("current.setNextFocusLeftId(prev == null ? View.NO_ID : prev.getId());", focus) > focus
-                        && source.indexOf("current.setNextFocusRightId(next == null ? View.NO_ID : next.getId());", focus) > focus);
+                        && source.indexOf("View prev = i > 0 ? focusable.get(i - 1) : focusable.get(focusable.size() - 1);", focus) > focus
+                        && source.indexOf("View next = i < focusable.size() - 1 ? focusable.get(i + 1) : focusable.get(0);", focus) > focus
+                        && source.indexOf("current.setNextFocusLeftId(prev.getId());", focus) > focus
+                        && source.indexOf("current.setNextFocusRightId(next.getId());", focus) > focus);
+    }
+
+    @Test
+    public void runtimePlayerActionsRefreshFocusAfterVisibilityChanges() throws Exception {
+        String leanback = readLeanbackJava("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java");
+        String mobile = readMobileJava("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java");
+
+        assertFocusRefreshAfter(leanback,
+                "private void setEpisodeAdapter(List<Episode> items, boolean scrollToCurrent)",
+                "mBinding.control.action.episodes.setVisibility");
+        assertFocusRefreshAfter(leanback,
+                "private void setQualityVisible(boolean visible)",
+                "mBinding.control.action.actionQuality.setVisibility");
+        assertFocusRefreshAfter(leanback,
+                "private void setAdFeedbackVisible()",
+                "mBinding.control.action.adFeedback.setVisibility");
+        assertFocusRefreshAfter(mobile,
+                "private void setQualityVisible(boolean visible)",
+                "mBinding.control.action.actionQuality.setVisibility");
+        assertFocusRefreshAfter(mobile,
+                "private void setAdFeedbackVisible()",
+                "mBinding.control.action.adFeedback.setVisibility");
+
+        int refresh = leanback.indexOf("private void applyActionButtonVisibility()");
+        int refreshEnd = leanback.indexOf("\n    private ", refresh + 1);
+        int immersive = leanback.indexOf("updateImmersiveAudioAction();", refresh);
+        int diagnostic = leanback.indexOf("updatePanDiagnosticAction();", refresh);
+        int rebuild = leanback.indexOf("PlayerButtonSetting.applyVisibility(mActionButtons);", refresh);
+        assertTrue("leanback must update runtime-only action visibility before rebuilding the full focus chain",
+                refresh >= 0 && refreshEnd > refresh
+                        && immersive > refresh && immersive < rebuild
+                        && diagnostic > refresh && diagnostic < rebuild
+                        && rebuild < refreshEnd);
+    }
+
+    @Test
+    public void panDiagnosticRespectsTheConfiguredPlayerButtonOrder() throws Exception {
+        String leanback = readLeanbackJava("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java");
+        int setup = leanback.indexOf("private void setupActionButtons()");
+        int applyOrder = leanback.indexOf("PlayerButtonSetting.applyOrder(mBinding.control.action.container, mActionButtons);", setup);
+
+        assertTrue("pan diagnostic must remain in the configurable action catalog",
+                setup >= 0
+                        && applyOrder > setup
+                        && leanback.indexOf("addActionButton(PlayerButtonSetting.PAN_DIAGNOSTIC, mBinding.control.action.panDiagnostic);", setup) < applyOrder);
+        assertFalse("manual pan diagnostic placement is dead once the action is managed by PlayerButtonSetting",
+                leanback.contains("private void placePanDiagnosticAction()"));
+        assertFalse("configured order must not be overwritten by a second manual pan diagnostic placement",
+                leanback.contains("placePanDiagnosticAction();"));
+    }
+
+    @Test
+    public void allPlayerActionButtonsUseTheSharedSettingsCatalog() throws Exception {
+        String settings = readMainJava("com", "fongmi", "android", "tv", "setting", "PlayerButtonSetting.java");
+        String leanback = readLeanbackJava("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java");
+        String mobile = readMobileJava("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java");
+        String tmdb = readMainJava("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java");
+
+        String[] catalog = {
+                "new Item(QUALITY, R.string.detail_quality)",
+                "new Item(PAN_DIAGNOSTIC, R.string.pan_diagnostic_entry)",
+                "new Item(KARAOKE, R.string.player_karaoke_mode)",
+                "new Item(IMMERSIVE_AUDIO, R.string.player_immersive_audio_mode)",
+                "new Item(SEARCH, R.string.play_search)",
+                "new Item(PARSE, R.string.parse)",
+                "new Item(DISPLAY, R.string.control_display)",
+                "new Item(AD_FEEDBACK, R.string.play_ad_feedback)",
+                "new Item(CAST, R.string.play_cast)",
+                "new Item(TIMER, R.string.play_timer)"
+        };
+        for (String item : catalog) assertTrue("player button settings catalog is missing " + item, settings.contains(item));
+
+        String[] leanbackMappings = {
+                "addActionButton(PlayerButtonSetting.SEARCH, mBinding.control.action.search);",
+                "addActionButton(PlayerButtonSetting.PAN_DIAGNOSTIC, mBinding.control.action.panDiagnostic);",
+                "addActionButton(PlayerButtonSetting.QUALITY, mBinding.control.action.actionQuality);",
+                "addActionButton(PlayerButtonSetting.KARAOKE, mBinding.control.action.karaoke);",
+                "addActionButton(PlayerButtonSetting.IMMERSIVE_AUDIO, mBinding.control.action.immersiveAudio);",
+                "addActionButton(PlayerButtonSetting.AD_FEEDBACK, mBinding.control.action.adFeedback);",
+                "addActionButton(PlayerButtonSetting.CAST, mBinding.control.action.cast);",
+                "addActionButton(PlayerButtonSetting.TIMER, mBinding.control.action.timer);"
+        };
+        for (String mapping : leanbackMappings) assertTrue("leanback VideoActivity is missing " + mapping, leanback.contains(mapping));
+
+        String[] mobileMappings = {
+                "addActionButton(PlayerButtonSetting.QUALITY, mBinding.control.action.actionQuality);",
+                "addActionButton(PlayerButtonSetting.KARAOKE, mBinding.control.action.karaoke);",
+                "addActionButton(PlayerButtonSetting.AD_FEEDBACK, mBinding.control.action.adFeedback);"
+        };
+        for (String mapping : mobileMappings) assertTrue("mobile VideoActivity is missing " + mapping, mobile.contains(mapping));
+
+        String[] tmdbMappings = {
+                "buttons.put(PlayerButtonSetting.QUALITY, binding.playerQuality);",
+                "buttons.put(PlayerButtonSetting.PARSE, binding.playerParse);",
+                "buttons.put(PlayerButtonSetting.AD_FEEDBACK, binding.playerAdFeedback);",
+                "buttons.put(PlayerButtonSetting.DISPLAY, binding.playerDisplay);",
+                "buttons.put(PlayerButtonSetting.QUALITY, detailActionView(R.id.actionQuality, View.class));",
+                "buttons.put(PlayerButtonSetting.AD_FEEDBACK, detailActionView(R.id.adFeedback, View.class));"
+        };
+        for (String mapping : tmdbMappings) assertTrue("TmdbDetailActivity is missing " + mapping, tmdb.contains(mapping));
+
+        assertTrue("mobile VideoActivity auxiliary controls must obey the same player button visibility settings",
+                mobile.contains("PlayerButtonSetting.isVisible(PlayerButtonSetting.PREV)")
+                        && mobile.contains("PlayerButtonSetting.isVisible(PlayerButtonSetting.NEXT)")
+                        && mobile.contains("PlayerButtonSetting.isVisible(PlayerButtonSetting.DANMAKU)")
+                        && mobile.contains("PlayerButtonSetting.isVisible(PlayerButtonSetting.FULLSCREEN)")
+                        && mobile.contains("PlayerButtonSetting.isVisible(PlayerButtonSetting.CAST)")
+                        && mobile.contains("PlayerButtonSetting.isVisible(PlayerButtonSetting.PARSE)")
+                        && !mobile.contains("mBinding.control.parse.setVisibility(isFullscreen() && isUseParse() ? View.VISIBLE : View.GONE);"));
+        assertTrue("TmdbDetailActivity auxiliary controls must obey the same player button visibility settings",
+                tmdb.contains("PlayerButtonSetting.isVisible(PlayerButtonSetting.PREV)")
+                        && tmdb.contains("PlayerButtonSetting.isVisible(PlayerButtonSetting.NEXT)")
+                        && tmdb.contains("PlayerButtonSetting.isVisible(PlayerButtonSetting.DANMAKU)")
+                        && tmdb.contains("PlayerButtonSetting.isVisible(PlayerButtonSetting.FULLSCREEN)")
+                        && tmdb.contains("PlayerButtonSetting.isVisible(PlayerButtonSetting.CAST)")
+                        && tmdb.contains("PlayerButtonSetting.isVisible(PlayerButtonSetting.PARSE)"));
+        assertTrue("leanback parser controls must obey the shared parse visibility setting",
+                leanback.contains("PlayerButtonSetting.isVisible(PlayerButtonSetting.PARSE)"));
     }
 
     @Test
@@ -69,6 +189,21 @@ public class PlayerPlaybackRegressionSourceTest {
         assertTrue("configuration completion must run the same refresh in case rotation settles after the delayed callback",
                 configuration > refresh
                         && source.indexOf("if (!isFullscreen()) refreshEpisodeLayoutAfterFullscreen();", configuration) > configuration);
+    }
+
+    private static void assertFocusRefreshAfter(String source, String methodSignature, String visibilityMutation) {
+        int method = source.indexOf(methodSignature);
+        int methodEnd = source.indexOf("\n    private ", method + 1);
+        int mutation = source.indexOf(visibilityMutation, method);
+        int refresh = source.indexOf("applyActionButtonVisibility();", mutation);
+        assertTrue(methodSignature + " must rebuild focus after changing a runtime action's visibility",
+                method >= 0 && methodEnd > method
+                        && mutation > method && mutation < methodEnd
+                        && refresh > mutation && refresh < methodEnd);
+    }
+
+    private static String readLeanbackJava(String... parts) throws Exception {
+        return read(Path.of("src", "leanback", "java"), Path.of("app", "src", "leanback", "java"), parts);
     }
 
     private static String readMainJava(String... parts) throws Exception {

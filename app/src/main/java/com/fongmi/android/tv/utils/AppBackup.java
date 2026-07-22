@@ -47,7 +47,11 @@ public final class AppBackup {
     }
 
     public static String fileName() {
-        return PREFIX + LocalDateTime.now().format(STAMP) + SUFFIX;
+        return fileName(false);
+    }
+
+    public static String fileName(boolean partial) {
+        return PREFIX + LocalDateTime.now().format(STAMP) + (partial ? "-partial" : "") + SUFFIX;
     }
 
     public static boolean isBackup(File file) {
@@ -60,6 +64,10 @@ public final class AppBackup {
         return hasBackupPrefix(name) && name.endsWith(SUFFIX);
     }
 
+    public static boolean isPartialBackupName(String name) {
+        return isBackupZipName(name) && name.endsWith("-partial" + SUFFIX);
+    }
+
     public static boolean isBackupManifestName(String name) {
         return hasBackupPrefix(name) && name.endsWith(".json");
     }
@@ -67,7 +75,14 @@ public final class AppBackup {
     public static String backupSortKey(String name) {
         if (!isBackupZipName(name)) return "";
         int prefixLength = name.startsWith(PREFIX) ? PREFIX.length() : LEGACY_PREFIX.length();
-        return name.substring(prefixLength, name.length() - SUFFIX.length());
+        String key = name.substring(prefixLength, name.length() - SUFFIX.length());
+        return key.endsWith("-partial") ? key.substring(0, key.length() - "-partial".length()) : key;
+    }
+
+    public static int compareBackupNames(String left, String right) {
+        int timestamp = backupSortKey(left).compareToIgnoreCase(backupSortKey(right));
+        if (timestamp != 0) return timestamp;
+        return Boolean.compare(isPartialBackupName(right), isPartialBackupName(left));
     }
 
     private static boolean hasBackupPrefix(String name) {
@@ -75,13 +90,16 @@ public final class AppBackup {
     }
 
     public static File createTemp() throws IOException {
-        return createTemp(null);
+        return createTempResult(null).getFile();
     }
 
     public static File createTemp(Progress progress) throws IOException {
+        return createTempResult(progress).getFile();
+    }
+
+    public static CreatedBackup createTempResult(Progress progress) throws IOException {
         File file = File.createTempFile(PREFIX, SUFFIX, Path.cache());
-        create(file, progress);
-        return file;
+        return new CreatedBackup(file, create(file, progress));
     }
 
     public static CreateResult create(File target) throws IOException {
@@ -109,6 +127,7 @@ public final class AppBackup {
                 shared = null;
                 appendWarning(warning, "共享数据文件未写入备份");
                 SpiderDebug.log("backup", "shared archive warning error=%s", e.getMessage());
+                SpiderDebug.log("backup", e);
             }
             notifyProgress(progress, "整理登录态和云盘凭据", 30, shared == null ? 0 : shared.getZipSize(), 0);
             try {
@@ -428,11 +447,35 @@ public final class AppBackup {
         void onProgress(String stage, int percent, long bytes, long total);
     }
 
+    public static final class CreatedBackup {
+
+        private final File file;
+        private final CreateResult result;
+
+        CreatedBackup(File file, CreateResult result) {
+            this.file = file;
+            this.result = result;
+        }
+
+        public File getFile() {
+            return file;
+        }
+
+        public CreateResult getResult() {
+            return result;
+        }
+
+        public boolean hasWarning() {
+            return result != null && result.hasWarning();
+        }
+    }
+
+
     public static final class CreateResult {
 
         public final String warning;
 
-        private CreateResult(String warning) {
+        CreateResult(String warning) {
             this.warning = warning == null ? "" : warning;
         }
 

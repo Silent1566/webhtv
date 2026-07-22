@@ -1322,6 +1322,12 @@
                             android:visibility="gone" />
 
                         <com.google.android.material.textview.MaterialTextView
+                            android:id="@+id/playerDisplay"
+                            style="@style/Control"
+                            android:layout_marginEnd="8dp"
+                            android:text="@string/control_display" />
+
+                        <com.google.android.material.textview.MaterialTextView
                             android:id="@+id/playerTextTrack"
                             style="@style/Control"
                             android:layout_marginEnd="8dp"
@@ -1362,17 +1368,18 @@
                             android:visibility="gone" />
 
                         <com.google.android.material.textview.MaterialTextView
+                            android:id="@+id/playerAdFeedback"
+                            style="@style/Control"
+                            android:layout_marginEnd="8dp"
+                            android:text="@string/play_ad_feedback"
+                            android:visibility="gone" />
+
+                        <com.google.android.material.textview.MaterialTextView
                             android:id="@+id/playerChapter"
                             style="@style/Control"
                             android:layout_marginEnd="8dp"
                             android:text="@string/play_title"
                             android:visibility="gone" />
-
-                        <com.google.android.material.textview.MaterialTextView
-                            android:id="@+id/playerDisplay"
-                            style="@style/Control"
-                            android:layout_marginEnd="8dp"
-                            android:text="@string/control_display" />
 
                         <com.google.android.material.textview.MaterialTextView
                             android:id="@+id/playerRepeat"

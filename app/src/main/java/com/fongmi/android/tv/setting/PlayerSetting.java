@@ -451,6 +451,18 @@ public class PlayerSetting {
         putOsdDiagnostics(valueAt(checked, 6, isOsdDiagnostics()));
     }
 
+    public static boolean[] getLiveDisplayChecked() {
+        return new boolean[]{isDisplayTime(), isDisplayTraffic(), isDisplaySize(), isDisplayTitle(), isOsdDiagnostics()};
+    }
+
+    public static void putLiveDisplayChecked(boolean[] checked) {
+        putDisplayTime(valueAt(checked, 0, isDisplayTime()));
+        putDisplayTraffic(valueAt(checked, 1, isDisplayTraffic()));
+        putDisplaySize(valueAt(checked, 2, isDisplaySize()));
+        putDisplayTitle(valueAt(checked, 3, isDisplayTitle()));
+        putOsdDiagnostics(valueAt(checked, 4, isOsdDiagnostics()));
+    }
+
     public static float getBrightness() {
         return Math.min(Math.max(Prefers.getFloat("player_brightness", -1), -1), 1);
     }

@@ -54,5 +54,11 @@
             style="@style/DisplayControl"
             android:text="@string/display_title" />
 
+        <TextView
+            android:id="@+id/display_params"
+            style="@style/DisplayControl"
+            android:text="@string/play_params"
+            android:visibility="gone" />
+
     </com.google.android.flexbox.FlexboxLayout>
 </LinearLayout>

@@ -37,7 +37,7 @@ public class VideoActivityLayoutTest {
     private static final List<String> REQUIRED_FULLSCREEN_CONTROL_IDS = Arrays.asList(
             "cast",
             "keep",
-            "display",
+            "osdDiagnostics",
             "info"
     );
 
@@ -193,7 +193,7 @@ public class VideoActivityLayoutTest {
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
         int method = source.indexOf("private void setPlayer(Result result)");
         int setUseParse = source.indexOf("setUseParse(result.shouldUseParse());", method);
-        int guardedParseRow = source.indexOf("mBinding.control.parse.setVisibility(isFullscreen() && isUseParse() ? View.VISIBLE : View.GONE);", setUseParse);
+        int guardedParseRow = source.indexOf("mBinding.control.parse.setVisibility(isFullscreen() && isUseParse() && PlayerButtonSetting.isVisible(PlayerButtonSetting.PARSE) ? View.VISIBLE : View.GONE);", setUseParse);
         int startPlayer = source.indexOf("startPlayer(getHistoryKey(), result, isUseParse()", setUseParse);
 
         assertTrue(sourcePath + " is missing setPlayer", method >= 0);
@@ -239,13 +239,20 @@ public class VideoActivityLayoutTest {
     }
 
     @Test
-    public void leanbackImmersiveAudioModeUsesAudioContentGuard() throws Exception {
+    public void leanbackImmersiveAudioRequiresExplicitSessionActivation() throws Exception {
         Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
         String policyBody = methodBody(source, "private boolean shouldUseImmersiveAudio()", "private void syncAudioStageSurface(boolean visible)");
 
-        assertTrue("TV immersive audio must honor the selected mode for audio-only or music-like content",
-                policyBody.contains("return PlayerSetting.isImmersiveAudioMode() && (isAudioOnly() || isMusicLike());"));
+        assertTrue("TV immersive audio must only continue after an explicit source launch or manual selection",
+                policyBody.contains("return PlayerSetting.isImmersiveAudioMode() && mImmersiveAudioRequested;"));
+        assertFalse("ordinary videos must not enter immersive audio from title or early track guesses",
+                policyBody.contains("isAudioOnly()") || policyBody.contains("isMusicLike()"));
+        assertTrue("configured audio-source launches must explicitly activate the immersive session",
+                source.contains("mImmersiveAudioRequested = true;")
+                        && source.indexOf("mImmersiveAudioRequested = true;") > source.indexOf("private void prepareImmersiveAudioPlayback("));
+        assertTrue("manual playback-style selection must explicitly update the immersive session",
+                source.contains("mImmersiveAudioRequested = PlayerSetting.isImmersiveAudioMode();"));
     }
 
     @Test
@@ -274,16 +281,22 @@ public class VideoActivityLayoutTest {
     }
 
     @Test
-    public void leanbackAudioStageOverlayStartsHiddenWhileAutoDetectionIsDisabled() throws Exception {
+    public void leanbackAudioStageOverlayIsNotManagedAsContent() throws Exception {
         Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
         String setupBody = methodBody(source, "private void setupAudioStageOverlay()", "private void setupAudioStageFocusFeedback()");
+        String progress = new String(Files.readAllBytes(findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "custom", "ProgressLayout.java"))), StandardCharsets.UTF_8);
 
-        int reattach = setupBody.indexOf("addView(mBinding.audioStage, params);");
+        int reattach = setupBody.indexOf("addOverlayView(mBinding.audioStage, params);");
         int resetState = setupBody.indexOf("mAudioStageVisible = false;");
         int hideView = setupBody.indexOf("mBinding.audioStage.setVisibility(View.GONE);");
         assertTrue("TV audio stage overlay must not become visible merely because it was reattached to the root",
                 reattach >= 0 && resetState > reattach && hideView > resetState);
+        assertTrue("ProgressLayout must support overlays that are not managed as normal content",
+                progress.contains("public void addOverlayView(View child, ViewGroup.LayoutParams params)")
+                        && progress.contains("mContentViews.remove(child);"));
+        assertTrue("audio stage must be added as an unmanaged overlay so showContent cannot reveal it",
+                setupBody.contains("mBinding.progressLayout.addOverlayView(mBinding.audioStage, params);"));
     }
 
     @Test
@@ -604,11 +617,8 @@ public class VideoActivityLayoutTest {
                 host.contains("default boolean restoreDiagnosticsOnStart()") && host.contains("return true;"));
         assertTrue("shared controller should only restore diagnostics visibility when the host opts in",
                 controller.contains("if (host.restoreDiagnosticsOnStart()) osd.setDiagnosticsVisible(PlayerSetting.isOsdDiagnostics());"));
-        int mobileRestore = mobile.indexOf("public boolean restoreDiagnosticsOnStart()");
-        int mobileRestoreEnd = mobile.indexOf("}", mobileRestore);
-        String mobileRestoreBody = mobileRestore >= 0 && mobileRestoreEnd > mobileRestore ? mobile.substring(mobileRestore, mobileRestoreEnd) : "";
-        assertTrue("mobile VideoActivity must keep diagnostics as a manual transient overlay",
-                mobileRestoreBody.contains("return false;"));
+        assertTrue("mobile VideoActivity should restore persistent diagnostics via the host default",
+                !mobile.contains("public boolean restoreDiagnosticsOnStart()"));
         assertTrue("leanback VideoActivity should keep persistent diagnostics restore via the host default",
                 !leanback.contains("public boolean restoreDiagnosticsOnStart()"));
     }
@@ -1653,6 +1663,23 @@ public class VideoActivityLayoutTest {
     }
 
     @Test
+    public void mobileDirectTmdbPlaybackUsesCarriedSynopsisForUnmatchedFallback() throws Exception {
+        Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int carried = source.indexOf("intent.putExtra(\"tmdb_vod_content\", vod.getContent());");
+        int getter = source.indexOf("private String getTmdbVodContent()");
+        int getterRead = source.indexOf("getIntent().getStringExtra(\"tmdb_vod_content\")", getter);
+        int setDetail = source.indexOf("private void setDetail(Vod item)");
+        int fallback = source.indexOf("item.checkContent(getTmdbVodContent());", setDetail);
+        int render = source.indexOf("setText(item);", setDetail);
+
+        assertTrue("direct colorful-detail playback must carry the source synopsis independently of TMDB matching", carried >= 0);
+        assertTrue("mobile playback must read the carried source synopsis", getter >= 0 && getterRead > getter && getterRead < setDetail);
+        assertTrue("unmatched TMDB playback must restore the carried synopsis before rendering native details",
+                fallback > setDetail && render > fallback);
+    }
+
+    @Test
     public void mobileVideoDirectTmdbCarriesDetailThemeIntoPlayback() throws Exception {
         Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
@@ -2022,7 +2049,7 @@ public class VideoActivityLayoutTest {
         assertTrue("history clicks must use the history-aware playback entry point",
                 compactHistory.contains("VideoActivity.startFromHistory(this, item)"));
         assertTrue("history playback must respect the configured standalone detail mode",
-                historyStartBody.contains("if (shouldOpenLegacyTmdbDetail(item.getSiteKey()))"));
+                historyStartBody.contains("if (shouldOpenLegacyTmdbDetail(item.getSiteKey(), item.getVodId()))"));
         assertTrue("standalone detail mode must use the normal detail-aware start path",
                 historyStartBody.contains("start(activity, item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic(), item.getVodRemarks())"));
         assertTrue("non-detail playback must preserve flag, episode title, and episode url",

@@ -447,7 +447,7 @@ public class HomeActivity extends BaseActivity implements NavigationBarView.OnIt
                 Setting.hasFileAccess(),
                 isFinishing(),
                 isChangingConfigurations())) {
-            AppDatabase.backup();
+            AppDatabase.autoBackup();
         }
         OkHttp.get().clear();
         Source.get().exit();

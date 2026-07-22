@@ -911,7 +911,7 @@
     <string name="player_default">預設播放核心</string>
     <string name="player_render">渲染方式</string>
     <string name="player_button_config">播放器按鈕</string>
-    <string name="player_button_config_summary">顯示 %1$d/%2$d</string>
+    <string name="player_button_config_summary">全域啟用 %1$d/%2$d，各模式依支援與可用狀態顯示</string>
     <string name="player_pad_live">平板直播</string>
     <string name="player_button_up">上移</string>
     <string name="player_button_down">下移</string>
@@ -1425,6 +1425,14 @@
         <item>@string/display_mini</item>
         <item>@string/display_title</item>
         <item>播放參數</item>
+    </string-array>
+
+    <string-array name="select_live_player_osd">
+        <item>@string/display_time</item>
+        <item>@string/display_traffic</item>
+        <item>@string/display_size</item>
+        <item>@string/display_title</item>
+        <item>@string/play_params</item>
     </string-array>
 
     <string-array name="select_track">

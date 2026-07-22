@@ -158,14 +158,20 @@ public class TmdbDetailActivityLayoutTest {
     }
 
     @Test
-    public void fusionInlinePlayerButtonOrderMatchesNativeLeanbackPlayer() throws Exception {
+    public void inlinePlayerLayoutsExposeOnlySupportedActionsInStableOrder() throws Exception {
         String nativeLayout = readLeanbackLayout("view_control_vod_action.xml");
         String fusionLayout = readLayout("activity_tmdb_detail.xml");
-        List<String> nativeOrder = List.of("next", "prev", "episodes", "reset", "search", "fullscreen", "player", "decode", "playParams", "speed", "scale", "actionQuality", "lut", "text", "audio", "video", "opening", "ending", "danmaku", "title", "repeat");
-        List<String> fusionOrder = List.of("playerNext", "playerPrev", "playerEpisodes", "playerRefresh", "playerChangeSource", "playerFullscreenAction", "playerExternal", "playerDecode", "playerPlayParams", "playerSpeed", "playerScale", "playerQuality", "playerLut", "playerTextTrack", "playerAudioTrack", "playerVideoTrack", "playerOpening", "playerEnding", "playerDanmaku", "playerChapter", "playerRepeat");
+        List<String> nativeOrder = List.of("next", "prev", "episodes", "reset", "search", "change2", "fullscreen", "player", "decode", "playParams", "panDiagnostic", "codecCapability", "speed", "scale", "actionQuality", "lut", "karaoke", "immersiveAudio", "text", "audio", "video", "opening", "ending", "danmaku", "adFeedback", "title", "cast", "timer", "repeat");
+        List<String> fusionOrder = List.of("playerNext", "playerPrev", "playerEpisodes", "playerRefresh", "playerChangeSource", "playerFullscreenAction", "playerExternal", "playerDecode", "playerPlayParams", "playerCodecCapability", "playerSpeed", "playerScale", "playerQuality", "playerLut", "playerParse", "playerDisplay", "playerTextTrack", "playerAudioTrack", "playerVideoTrack", "playerOpening", "playerEnding", "playerDanmaku", "playerAdFeedback", "playerChapter", "playerRepeat");
 
         assertAndroidIdOrder("native leanback player control order", nativeLayout, nativeOrder);
         assertAndroidIdOrder("fusion inline player control order", fusionLayout, fusionOrder);
+        for (String id : List.of("actionParse", "display")) {
+            assertFalse("native leanback layout must not expose unbound action " + id, nativeLayout.contains("@+id/" + id));
+        }
+        for (String id : List.of("playerSearch", "playerPanDiagnostic", "playerKaraoke", "playerImmersiveAudio", "playerCastAction", "playerTimer")) {
+            assertFalse("fusion layout must not expose unsupported action " + id, fusionLayout.contains("@+id/" + id));
+        }
 
         String source = readJava("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java");
         int method = source.indexOf("private void setupHorizontalFocusChain()");
@@ -175,6 +181,36 @@ public class TmdbDetailActivityLayoutTest {
 
         assertTrue("fusion inline focus chain must keep 画质 before LUT like native leanback player",
                 method >= 0 && scale > method && scale < quality && quality < lut);
+    }
+
+    @Test
+    public void inlinePlayerExposesAdFeedbackAcrossDetailPlaybackModes() throws Exception {
+        String layout = readLayout("activity_tmdb_detail.xml");
+        String mobileAction = readLayout("view_control_vod_action_tmdb.xml");
+        String source = readJava("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java");
+
+        assertAndroidIdHasAttribute("fusion inline ad feedback action", layout, "playerAdFeedback", "android:text=\"@string/play_ad_feedback\"");
+        assertAndroidIdHasAttribute("mobile inline ad feedback action", mobileAction, "adFeedback", "android:text=\"@string/play_ad_feedback\"");
+
+        int update = source.indexOf("private void updateInlineButtons(boolean playing)");
+        int apply = source.indexOf("applyInlinePlayerButtonSettings();", update);
+        assertTrue("inline ad feedback visibility must be recalculated before rebuilding the action focus chain",
+                update >= 0
+                        && source.indexOf("binding.playerAdFeedback.setVisibility(inlineAdFeedback ? View.VISIBLE : View.GONE);", update) > update
+                        && source.indexOf("detailActionView(R.id.adFeedback, View.class).setVisibility(inlineAdFeedback ? View.VISIBLE : View.GONE);", update) > update
+                        && apply > source.indexOf("binding.playerAdFeedback.setVisibility", update));
+        assertTrue("wide and mobile inline controls must dispatch the ad feedback action",
+                source.contains("binding.playerAdFeedback.setOnClickListener(guarded(this::onInlineAdFeedback));")
+                        && source.contains("detailActionView(R.id.adFeedback, View.class).setOnClickListener(guarded(this::onInlineAdFeedback));"));
+        assertTrue("detail inline playback must use the same HLS and AI availability gate as the native player",
+                source.contains("private boolean isInlineAdFeedbackEnabled()")
+                        && source.contains("Setting.isAiConfigReady() && Setting.isAdblock() && Setting.isAiAdDetection()")
+                        && source.contains("MediaSourceFactory.isHlsUrl(player().getUrl())"));
+        assertTrue("detail inline playback must submit AI analysis and save confirmed user rules",
+                source.contains("private void submitInlineAdFeedback()")
+                        && source.contains("new AiAdDetectionService(config).analyze(request)")
+                        && source.contains("AdRulePreviewDialog.create(result).show(this, confirmedResult ->")
+                        && source.contains("UserAdRuleStore.add(rule);"));
     }
 
     @Test
@@ -213,6 +249,47 @@ public class TmdbDetailActivityLayoutTest {
                 body.contains("if (defaultPlaybackLaunchPending) return;"));
         assertTrue("detail playback must leave the current click/input dispatch before launching VideoActivity",
                 body.contains("ActivityLaunch.postOnAnimation(this, () ->"));
+    }
+
+    @Test
+    public void inlinePlaybackPublishesViewingRecordLifecycle() throws Exception {
+        String source = readJava("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java");
+        int update = source.indexOf("private void updateInlineHistory(Episode item)");
+        int updateEnd = source.indexOf("private ", update + 1);
+        String updateBody = source.substring(update, updateEnd);
+        int progress = source.indexOf("public void onTimeChanged(long time)");
+        int progressEnd = source.indexOf("private final PlaybackService.NavigationCallback", progress);
+        String progressBody = source.substring(progress, progressEnd);
+        int stop = source.indexOf("private void stopInlinePlaybackSync()");
+        assertTrue("TmdbDetailActivity is missing inline playback sync finalization", stop >= 0);
+        int stopEnd = source.indexOf("private ", stop + 1);
+        String stopBody = source.substring(stop, stopEnd);
+        int close = source.indexOf("private void closeDetailFullscreenPlayer()");
+        int closeEnd = source.indexOf("private ", close + 1);
+        String closeBody = source.substring(close, closeEnd);
+        int destroy = source.indexOf("protected void onDestroy()");
+        int destroyEnd = source.indexOf("private ", destroy + 1);
+        String destroyBody = source.substring(destroy, destroyEnd);
+        int navigation = source.indexOf("private final PlaybackService.NavigationCallback mNavigationCallback");
+        int navigationEnd = source.indexOf("private void updateInlineHistory(Episode item)", navigation);
+        String navigationBody = source.substring(navigation, navigationEnd);
+        int finish = source.indexOf("private void finishPlaybackToHome()");
+        int finishEnd = source.indexOf("private ", finish + 1);
+        String finishBody = source.substring(finish, finishEnd);
+
+        assertTrue("inline playback must publish the selected history before player state callbacks", updateBody.contains("PlaybackEventCollector.get().updateHistory(history);"));
+        assertTrue("inline playback must publish periodic progress for webhook and current-playback API", progressBody.contains("PlaybackEventCollector.get().onProgress(history, player());"));
+        assertTrue("inline playback finalization must refresh history before sending stop", stopBody.contains("PlaybackEventCollector.get().updateHistory(history);")
+                && stopBody.contains("PlaybackEventCollector.get().onStop(player());"));
+        assertTrue("switching episode or flag must finalize the previous viewing record",
+                updateBody.contains("if (inlineStarted && (!sameEpisode || !sameFlag)) stopInlinePlaybackSync();"));
+        assertTrue("media-session stop must run the complete inline playback exit path", navigationBody.contains("finishPlaybackToHome();"));
+        assertTrue("the media-session stop path must save, publish stop, and stop the player",
+                finishBody.indexOf("saveInlineHistory();") >= 0
+                        && finishBody.indexOf("stopInlinePlaybackSync();") > finishBody.indexOf("saveInlineHistory();")
+                        && finishBody.indexOf("finishPlayback();") > finishBody.indexOf("stopInlinePlaybackSync();"));
+        assertTrue("closing the detail player must send a final viewing-record event", closeBody.contains("stopInlinePlaybackSync();"));
+        assertTrue("destroying an active inline player must send a final viewing-record event", destroyBody.contains("stopInlinePlaybackSync();"));
     }
 
     @Test
@@ -363,8 +440,8 @@ public class TmdbDetailActivityLayoutTest {
                 initOsd >= 0
                         && controller.indexOf("this.osd.setPersistentSuppressed(host.suppressPersistentOsd());", initOsd) > initOsd
                         && suppressPersistentBody.contains("return false;"));
-        assertTrue("inline controls should suppress persistent OSD only while the controls overlay is visible",
-                showControlsBody.contains("inlineOsd.setSuppressed(true);")
+        assertTrue("inline controls should suppress the shared OSD only on mobile, whose control bar renders its own title and time",
+                showControlsBody.contains("inlineOsd.setSuppressed(Util.isMobile());")
                         && hideControlsBody.contains("inlineOsd.setSuppressed(false);"));
         assertTrue("the retired legacy display panel must not render alongside the shared OSD",
                 !body.contains("binding.playerDisplay")
