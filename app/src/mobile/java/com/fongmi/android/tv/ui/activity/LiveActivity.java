@@ -21,6 +21,7 @@ import android.widget.FrameLayout;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.widget.LinearLayoutCompat;
+import androidx.core.view.OneShotPreDrawListener;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -131,6 +132,7 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
     private boolean rotate;
     private int count;
     private PiP mPiP;
+    private OneShotPreDrawListener pipEntryListener;
     private boolean liveMenuRendered;
     private Boolean embeddedUiMode;
     private Channel lastLineClickChannel;
@@ -140,6 +142,7 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
     private boolean pendingShowProgram;
     private boolean playbackCatchup;
     private boolean liveMenuOverlay;
+    private boolean pipEntryPending;
     private VideoSize videoSize;
     private int groupBasePaddingBottom;
     private int channelBasePaddingBottom;
@@ -585,9 +588,55 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
     }
 
     private void onPiP() {
-        if (service() == null || !player().haveTrack(C.TRACK_TYPE_VIDEO)) return;
+        if (pipEntryPending || isInPictureInPictureMode()) return;
+        if (!preparePiP("panel")) return;
+        prepareLivePiPView();
+        pipEntryPending = true;
+        scheduleLivePiPEntry();
+    }
+
+    private void prepareLivePiPView() {
         hideControl();
-        mPiP.enter(this, LIVE_PIP_WIDTH, LIVE_PIP_HEIGHT, LiveSetting.getScale(), true);
+        hideInfo();
+        mBinding.recycler.setVisibility(View.GONE);
+        mBinding.navigation.setVisibility(View.GONE);
+        setVideoView(true);
+        mBinding.video.requestLayout();
+    }
+
+    private void scheduleLivePiPEntry() {
+        pipEntryListener = OneShotPreDrawListener.add(mBinding.video, this::enterPreparedLivePiP);
+    }
+
+    private void enterPreparedLivePiP() {
+        pipEntryListener = null;
+        if (!pipEntryPending) return;
+        pipEntryPending = false;
+        if (isInPictureInPictureMode()) return;
+        if (isFinishing() || isDestroyed() || service() == null || !player().haveTrack(C.TRACK_TYPE_VIDEO)) {
+            restoreAfterFailedLivePiP();
+            return;
+        }
+        mPiP.update(this, mBinding.video);
+        boolean entered = mPiP.enter(this, LIVE_PIP_WIDTH, LIVE_PIP_HEIGHT, LiveSetting.getScale(), true);
+        if (!entered && !isInPictureInPictureMode()) restoreAfterFailedLivePiP();
+    }
+
+    private void restoreAfterFailedLivePiP() {
+        if (mBinding == null || isFinishing() || isDestroyed()) return;
+        setVideoView(false);
+        updateEmbeddedUiMode();
+        showControl();
+    }
+
+    private void cancelPendingLivePiP(boolean restoreUi) {
+        if (pipEntryListener != null) {
+            pipEntryListener.removeListener();
+            pipEntryListener = null;
+        }
+        if (!pipEntryPending) return;
+        pipEntryPending = false;
+        if (restoreUi && !isInPictureInPictureMode()) restoreAfterFailedLivePiP();
     }
 
     private void enterFullscreenLive() {
@@ -1824,6 +1873,7 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
     @Override
     public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode, @NonNull Configuration newConfig) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
+        if (isInPictureInPictureMode) cancelPendingLivePiP(false);
         setVideoView(isInPictureInPictureMode);
         if (isInPictureInPictureMode) {
             dismissLiveControlDialog();
@@ -2088,6 +2138,7 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
 
     @Override
     protected void onStop() {
+        cancelPendingLivePiP(true);
         super.onStop();
         if (mOsd != null) mOsd.stop();
         if (!isAudioOnly()) setStop(true);
@@ -2104,6 +2155,7 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
 
     @Override
     protected void onDestroy() {
+        cancelPendingLivePiP(false);
         clearArtworkTarget();
         Source.get().exit();
         App.removeCallbacks(mR1, mR2, mR3);

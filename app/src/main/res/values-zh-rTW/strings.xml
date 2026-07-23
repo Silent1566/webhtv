@@ -2030,6 +2030,7 @@
     <string name="setting_home_menu_key">首頁菜單鍵</string>
     <string name="setting_play_back_to_detail">播放返回詳情</string>
     <string name="setting_play_speed">播放倍速</string>
+    <string name="setting_episode_history">記錄分集進度</string>
     <string name="setting_home_history">首頁最近觀看</string>
     <string name="site_health_report_ad_blocked">廣告攔截 · %1$d 次</string>
     <string name="setting_custom_csp_sort">排序</string>

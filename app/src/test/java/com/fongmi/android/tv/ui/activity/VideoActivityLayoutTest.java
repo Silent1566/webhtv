@@ -1247,6 +1247,60 @@ public class VideoActivityLayoutTest {
     }
 
     @Test
+    public void leanbackOriginalEnhancedKeepsLoadingUntilFinalDetailReveal() throws Exception {
+        Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int method = source.indexOf("private void checkCast()");
+        int end = source.indexOf("private void checkId()", method);
+        String body = method >= 0 && end > method ? source.substring(method, end) : "";
+        int enhancedLoading = body.indexOf("shouldLoadTmdbDetail() && Setting.isOriginalEnhancedDetailPage()");
+        int initialPreview = body.indexOf("hasInitialPreview()");
+
+        assertTrue(sourcePath + " is missing checkCast", method >= 0);
+        assertTrue("original enhanced mode must stay on loading instead of showing and then replacing an initial preview",
+                enhancedLoading >= 0
+                        && body.indexOf("mBinding.progressLayout.showProgress();", enhancedLoading) > enhancedLoading
+                        && initialPreview > enhancedLoading);
+    }
+
+    @Test
+    public void leanbackVideoPageRevealsAsSingleComposedContentLayer() throws Exception {
+        Path layoutFile = findLeanbackResPath().resolve(Path.of("layout", "activity_video.xml"));
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        factory.setNamespaceAware(false);
+        Element root = factory.newDocumentBuilder().parse(layoutFile.toFile()).getDocumentElement();
+        NodeList children = root.getChildNodes();
+        int directContentLayers = 0;
+        Element pageContent = null;
+        for (int i = 0; i < children.getLength(); i++) {
+            if (!(children.item(i) instanceof Element)) continue;
+            directContentLayers++;
+            pageContent = (Element) children.item(i);
+        }
+
+        assertTrue("ProgressLayout must reveal one composed page instead of fading each detail layer independently",
+                directContentLayers == 1);
+        assertTrue(layoutFile + " is missing @+id/videoPageContent",
+                pageContent != null && "@+id/videoPageContent".equals(pageContent.getAttribute("android:id")));
+        assertTrue("videoPageContent must be the direct RelativeLayout child managed by ProgressLayout",
+                pageContent != null && "RelativeLayout".equals(pageContent.getNodeName()));
+    }
+
+    @Test
+    public void leanbackAudioSurfaceDoesNotRestoreNativeTmdbMetadataOverSynopsis() throws Exception {
+        Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int method = source.indexOf("private void setVideoDetailsVisible(boolean visible)");
+        int end = source.indexOf("private void updateAudioStageText()", method);
+        String body = method >= 0 && end > method ? source.substring(method, end) : "";
+
+        assertTrue(sourcePath + " is missing setVideoDetailsVisible", method >= 0);
+        assertTrue("TMDB enhanced mode must keep the native director/actor rows hidden when audio surface state is restored",
+                body.contains("!shouldUseTmdbLayout() || isIntentTmdbPlayback()")
+                        && body.contains("showNativeMetadata"));
+    }
+
+    @Test
     public void leanbackTmdbPlaybackOverviewWrapsWithinRightPane() throws Exception {
         Path layoutFile = findLeanbackResPath().resolve(Path.of("layout", "activity_video.xml"));
         Element overview = findAndroidId(layoutFile.toFile(), "tmdbOverview");

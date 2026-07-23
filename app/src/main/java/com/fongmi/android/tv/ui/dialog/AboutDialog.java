@@ -28,8 +28,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 public final class AboutDialog {
 
-    private static final int DIALOG_VERTICAL_SAFE_SPACE_DP = 96;
-    private static final float DIALOG_MAX_HEIGHT_RATIO = 0.86f;
+    private static final int DIALOG_VERTICAL_SAFE_SPACE_DP = 24;
 
     private AboutDialog() {
     }
@@ -38,7 +37,9 @@ public final class AboutDialog {
         DialogAboutBinding binding = DialogAboutBinding.inflate(LayoutInflater.from(activity));
         binding.version.setText(activity.getString(R.string.about_version, AppVersion.fullName(), BuildConfig.FLAVOR_mode, BuildConfig.FLAVOR_abi));
 
-        Dialog dialog = LightDialog.create(activity, null, binding.getRoot());
+        Dialog dialog = new Dialog(activity);
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        dialog.setContentView(binding.getRoot());
         binding.confirm.setOnClickListener(v -> dialog.dismiss());
         binding.checkUpdate.setOnClickListener(v -> {
             dialog.dismiss();
@@ -132,7 +133,10 @@ public final class AboutDialog {
         params.width = (int) (ResUtil.getScreenWidth(activity) * (ResUtil.isLand(activity) ? 0.62f : 0.92f));
         params.height = getDialogHeight(activity);
         params.gravity = Gravity.CENTER;
+        params.dimAmount = 0.58f;
         window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+        window.getDecorView().setPadding(0, 0, 0, 0);
+        window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
         window.setAttributes(params);
         window.setLayout(params.width, params.height);
         return true;
@@ -140,8 +144,6 @@ public final class AboutDialog {
 
     static int getDialogHeight(Context context) {
         int screenHeight = ResUtil.getScreenHeight(context);
-        int safeHeight = screenHeight - ResUtil.dp2px(DIALOG_VERTICAL_SAFE_SPACE_DP);
-        int preferredHeight = (int) (screenHeight * DIALOG_MAX_HEIGHT_RATIO);
-        return Math.max(1, Math.min(safeHeight, preferredHeight));
+        return AboutDialogLayout.calculateHeight(screenHeight, ResUtil.dp2px(DIALOG_VERTICAL_SAFE_SPACE_DP));
     }
 }

@@ -462,11 +462,21 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
         view.setBackground(background);
     }
 
+    private void setMarquee(ViewHolder holder, boolean activated, boolean focused) {
+        boolean active = !Util.isLeanback() || activated || focused;
+        holder.binding.index.setSelected(active);
+        holder.binding.date.setSelected(active);
+        holder.binding.badge.setSelected(active);
+        holder.binding.fileSize.setSelected(active);
+    }
+
     private void applyCardFocus(ViewHolder holder, boolean activated) {
+        setMarquee(holder, activated, holder.binding.getRoot().hasFocus());
         if (isNativeEnhanced()) {
             applyNativeEnhancedCardFocus(holder, activated, holder.binding.getRoot().hasFocus());
             holder.binding.getRoot().setOnFocusChangeListener((view, focused) -> {
                 applyNativeEnhancedCardFocus(holder, activated, focused);
+                setMarquee(holder, activated, focused);
                 if (focusChangeListener != null) focusChangeListener.onFocusChange(view, focused);
             });
             return;
@@ -477,6 +487,7 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
                 activated ? activeStrokeColor : (light ? 0x33647480 : 0x33FFFFFF),
                 activated ? 2 : 1,
                 focused -> {
+                    setMarquee(holder, activated, focused);
                     if (focusChangeListener != null) focusChangeListener.onFocusChange(holder.binding.getRoot(), focused);
                 });
     }

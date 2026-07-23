@@ -64,6 +64,7 @@ public class SettingPersonalActivity extends BaseActivity {
         mBinding.fullscreenMenuKey.setOnClickListener(this::setFullscreenMenuKey);
         mBinding.homeMenuKey.setOnClickListener(this::setHomeMenuKey);
         mBinding.playBackToDetail.setOnClickListener(this::setPlayBackToDetail);
+        mBinding.episodeHistory.setOnClickListener(this::setEpisodeHistory);
         mBinding.playSpeed.setOnClickListener(this::setPlaySpeed);
         mBinding.tmdbMatchMode.setOnClickListener(this::setTmdbMatchMode);
         mBinding.personalRecommendation.setOnClickListener(this::setPersonalRecommendation);
@@ -83,6 +84,7 @@ public class SettingPersonalActivity extends BaseActivity {
         mBinding.fullscreenMenuKeyText.setText((fullscreenMenuKey = getResources().getStringArray(R.array.select_fullscreen_menu_key))[Setting.getFullscreenMenuKey()]);
         mBinding.homeMenuKeyText.setText((homeMenuKey = getResources().getStringArray(R.array.select_home_menu_key))[Setting.getHomeMenuKey()]);
         mBinding.playBackToDetailText.setText(getSwitch(Setting.isPlayBackToDetail()));
+        mBinding.episodeHistoryText.setText(getSwitch(Setting.isEpisodeHistory()));
         mBinding.playSpeedText.setText(getSpeedText(PlayerSetting.getDefaultSpeed()));
         mBinding.tmdbMatchModeText.setText((tmdbMatchMode = getResources().getStringArray(R.array.select_tmdb_match_mode))[Setting.getTmdbMatchMode()]);
         mBinding.personalRecommendationText.setText(getSwitch(Setting.isPersonalRecommendation()));
@@ -148,6 +150,11 @@ public class SettingPersonalActivity extends BaseActivity {
 
     private void setPlayBackToDetail(View view) {
         Setting.putPlayBackToDetail(!Setting.isPlayBackToDetail());
+        setText();
+    }
+
+    private void setEpisodeHistory(View view) {
+        Setting.putEpisodeHistory(!Setting.isEpisodeHistory());
         setText();
     }
 

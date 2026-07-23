@@ -219,6 +219,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private static final int FOCUS_STROKE = 0xFFFFD166;
     private static final int FOCUS_STROKE_DP = 3;
     private static final int CHIP_STROKE_DP = 1;
+    private static final int CHIP_MAX_WIDTH_DP = 240;
     private static final int PHOTO_PRELOAD_RADIUS = 2;
     private static final long BACKDROP_SLIDE_DELAY_MS = 10_000L;
     private static final long BACKDROP_SLIDE_RETRY_MS = 2_500L;
@@ -10044,6 +10045,11 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         button.setMinimumHeight(0);
         button.setInsetTop(0);
         button.setInsetBottom(0);
+        button.setMaxWidth(ResUtil.dp2px(CHIP_MAX_WIDTH_DP));
+        button.setEllipsize(TextUtils.TruncateAt.MARQUEE);
+        button.setMarqueeRepeatLimit(-1);
+        button.setHorizontallyScrolling(true);
+        button.setSingleLine(true);
         button.setTextColor(getColor(android.R.color.white));
         button.setPadding(24, 12, 24, 12);
         FlexboxLayout.LayoutParams params = new FlexboxLayout.LayoutParams(FlexboxLayout.LayoutParams.WRAP_CONTENT, FlexboxLayout.LayoutParams.WRAP_CONTENT);
@@ -10062,6 +10068,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private void applyChipFocus(MaterialButton button, boolean selected, boolean focused, ThemeColors colors) {
+        button.setSelected(!Util.isLeanback() || selected || focused);
         button.setStrokeWidth(ResUtil.dp2px(focused ? FOCUS_STROKE_DP : (selected ? 2 : CHIP_STROKE_DP)));
         button.setStrokeColor(ColorStateList.valueOf(focused ? FOCUS_STROKE : (selected ? colors.accent : colors.line)));
     }

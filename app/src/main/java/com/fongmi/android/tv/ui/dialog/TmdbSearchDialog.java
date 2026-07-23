@@ -3,6 +3,7 @@ package com.fongmi.android.tv.ui.dialog;
 import android.app.Activity;
 import android.text.TextUtils;
 import android.util.DisplayMetrics;
+import android.view.ContextThemeWrapper;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -57,7 +58,8 @@ public class TmdbSearchDialog {
 
     public TmdbSearchDialog(Activity activity) {
         this.activity = activity;
-        this.binding = DialogResultListBinding.inflate(LayoutInflater.from(activity));
+        ContextThemeWrapper dialogContext = new ContextThemeWrapper(activity, R.style.Theme_WebHTV_LightDialog);
+        this.binding = DialogResultListBinding.inflate(LayoutInflater.from(dialogContext));
     }
 
     public TmdbSearchDialog title(String title) {
@@ -92,9 +94,10 @@ public class TmdbSearchDialog {
 
     public void show() {
         if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
-        dialog = new MaterialAlertDialogBuilder(activity).setView(binding.getRoot()).create();
+        dialog = new MaterialAlertDialogBuilder(activity, R.style.Theme_WebHTV_LightDialog).setView(binding.getRoot()).create();
         if (activity.isFinishing() || activity.isDestroyed()) return;
         dialog.show();
+        LightDialog.apply(dialog);
         configureWindow();
         binding.title.setText(title);
         configureActions();
@@ -160,6 +163,7 @@ public class TmdbSearchDialog {
         binding.searchBar.setVisibility(searchable ? View.VISIBLE : View.GONE);
         if (!searchable) return;
         binding.query.setText(query);
+        if (query != null) binding.query.setSelection(query.length());
         binding.query.setSelectAllOnFocus(false);
         binding.query.setOnClickListener(view -> showKeyboard());
         binding.querySearch.setVisibility(View.VISIBLE);
@@ -179,9 +183,9 @@ public class TmdbSearchDialog {
                 search();
                 return true;
             }
+            if (KeyUtil.isRightKey(event) && isCursorAtEnd()) return binding.querySearch.requestFocus();
             if (KeyUtil.isDownKey(event)) return focusFirstResult();
             if (Util.isLeanback()) return false;
-            if (KeyUtil.isRightKey(event) && isCursorAtEnd()) return binding.querySearch.requestFocus();
             return false;
         });
     }

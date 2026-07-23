@@ -56,6 +56,7 @@ public class SettingPersonalFragment extends BaseFragment {
         mBinding.searchThread.setOnClickListener(this::setSearchThread);
         mBinding.autoBackup.setOnClickListener(this::setAutoBackup);
         mBinding.playBackToDetail.setOnClickListener(this::setPlayBackToDetail);
+        mBinding.episodeHistory.setOnClickListener(this::setEpisodeHistory);
         mBinding.playSpeed.setOnClickListener(this::setPlaySpeed);
         mBinding.tmdbMatchMode.setOnClickListener(this::setTmdbMatchMode);
         mBinding.personalRecommendation.setOnClickListener(this::setPersonalRecommendation);
@@ -71,6 +72,7 @@ public class SettingPersonalFragment extends BaseFragment {
         mBinding.searchThreadText.setText(String.valueOf(Setting.getSearchThread()));
         mBinding.autoBackupText.setText(getSwitch(isAutoBackupEnabled()));
         mBinding.playBackToDetailText.setText(getSwitch(Setting.isPlayBackToDetail()));
+        mBinding.episodeHistoryText.setText(getSwitch(Setting.isEpisodeHistory()));
         mBinding.playSpeedText.setText(getSpeedText(PlayerSetting.getDefaultSpeed()));
         mBinding.tmdbMatchModeText.setText((tmdbMatchMode = getResources().getStringArray(R.array.select_tmdb_match_mode))[Setting.getTmdbMatchMode()]);
         mBinding.personalRecommendationText.setText(getSwitch(Setting.isPersonalRecommendation()));
@@ -124,6 +126,11 @@ public class SettingPersonalFragment extends BaseFragment {
 
     private void setPlayBackToDetail(View view) {
         Setting.putPlayBackToDetail(!Setting.isPlayBackToDetail());
+        setText();
+    }
+
+    private void setEpisodeHistory(View view) {
+        Setting.putEpisodeHistory(!Setting.isEpisodeHistory());
         setText();
     }
 

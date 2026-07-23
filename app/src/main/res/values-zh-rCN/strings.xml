@@ -195,6 +195,7 @@
     <string name="setting_home_menu_key">首页菜单键</string>
     <string name="setting_play_back_to_detail">播放返回详情</string>
     <string name="setting_play_speed">播放倍速</string>
+    <string name="setting_episode_history">记录分集进度</string>
     <string name="setting_home_history">首页最近观看</string>
     <string name="setting_personal_recommendation">个性推荐</string>
     <string name="setting_tmdb_episode_file_size">TMDB 剧集保留文件大小</string>

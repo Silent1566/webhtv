@@ -1138,6 +1138,14 @@ public class Setting {
         Prefers.put("home_history", homeHistory);
     }
 
+    public static boolean isEpisodeHistory() {
+        return Prefers.getBoolean("episode_history", true);
+    }
+
+    public static void putEpisodeHistory(boolean episodeHistory) {
+        Prefers.put("episode_history", episodeHistory);
+    }
+
     public static boolean isHomeVodAutoLoad() {
         return Prefers.getBoolean("home_vod_auto_load", true);
     }

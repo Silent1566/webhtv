@@ -2,6 +2,7 @@ package com.fongmi.android.tv.bean;
 
 import android.text.TextUtils;
 
+import com.fongmi.android.tv.setting.Setting;
 import com.github.catvod.utils.Path;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
@@ -13,6 +14,7 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BooleanSupplier;
 
 /**
  * 集数播放位置缓存
@@ -31,6 +33,8 @@ public class EpisodePositionCache {
 
     private final Map<String, VodPositions> cache;
     private final Gson gson;
+    private final BooleanSupplier enabled;
+    private final File cacheFile;
     private boolean dirty = false;
 
     private static class Loader {
@@ -42,8 +46,14 @@ public class EpisodePositionCache {
     }
 
     private EpisodePositionCache() {
+        this(Setting::isEpisodeHistory, Path.cache(CACHE_FILE_NAME));
+    }
+
+    EpisodePositionCache(BooleanSupplier enabled, File cacheFile) {
         this.cache = new ConcurrentHashMap<>();
         this.gson = new Gson();
+        this.enabled = enabled;
+        this.cacheFile = cacheFile;
         load();
     }
 
@@ -138,6 +148,7 @@ public class EpisodePositionCache {
      * @param duration 总时长(毫秒)
      */
     public void put(String siteKey, String vodId, String flag, String episodeName, long position, long duration) {
+        if (!enabled.getAsBoolean()) return;
         if (TextUtils.isEmpty(episodeName) || position < 0) return;
 
         String vodKey = buildVodKey(siteKey, vodId, flag);
@@ -162,6 +173,7 @@ public class EpisodePositionCache {
      * @return 播放位置，如果没有缓存返回 null
      */
     public EpisodePosition get(String siteKey, String vodId, String flag, String episodeName) {
+        if (!enabled.getAsBoolean()) return null;
         if (TextUtils.isEmpty(episodeName)) return null;
 
         String vodKey = buildVodKey(siteKey, vodId, flag);
@@ -269,6 +281,6 @@ public class EpisodePositionCache {
     }
 
     private File getCacheFile() {
-        return Path.cache(CACHE_FILE_NAME);
+        return cacheFile;
     }
 }

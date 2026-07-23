@@ -197,6 +197,7 @@
     <string name="setting_home_menu_key">Home menu key</string>
     <string name="setting_play_back_to_detail">Return playback to detail</string>
     <string name="setting_play_speed">Playback speed</string>
+    <string name="setting_episode_history">Remember episode progress</string>
     <string name="setting_home_history">Home recent history</string>
     <string name="setting_personal_recommendation">Personal recommendations</string>
     <string name="setting_tmdb_episode_file_size">Keep file size in TMDB episodes</string>

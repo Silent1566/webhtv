@@ -1327,6 +1327,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     private void checkCast() {
         if (isCast() && !isFullscreen()) enterFullscreen();
         else if (mAudioStageVisible) mBinding.progressLayout.showContent();
+        else if (shouldLoadTmdbDetail() && Setting.isOriginalEnhancedDetailPage()) mBinding.progressLayout.showProgress();
         else if (hasInitialPreview()) showInitialPreview();
         else mBinding.progressLayout.showProgress();
     }
@@ -7735,11 +7736,12 @@ private void applyAudioStageLayout(boolean visible) {
 
 private void setVideoDetailsVisible(boolean visible) {
         int value = visible ? View.VISIBLE : View.GONE;
+        boolean showNativeMetadata = visible && (!shouldUseTmdbLayout() || isIntentTmdbPlayback());
         mBinding.name.setVisibility(value);
-        mBinding.remark.setVisibility(visible && !TextUtils.isEmpty(mBinding.remark.getText()) ? View.VISIBLE : View.GONE);
+        mBinding.remark.setVisibility(showNativeMetadata && !TextUtils.isEmpty(mBinding.remark.getText()) ? View.VISIBLE : View.GONE);
         mBinding.row1.setVisibility(value);
-        mBinding.director.setVisibility(visible && !TextUtils.isEmpty(mBinding.director.getText()) ? View.VISIBLE : View.GONE);
-        mBinding.actor.setVisibility(visible && !TextUtils.isEmpty(mBinding.actor.getText()) ? View.VISIBLE : View.GONE);
+        mBinding.director.setVisibility(showNativeMetadata && !TextUtils.isEmpty(mBinding.director.getText()) ? View.VISIBLE : View.GONE);
+        mBinding.actor.setVisibility(showNativeMetadata && !TextUtils.isEmpty(mBinding.actor.getText()) ? View.VISIBLE : View.GONE);
         mBinding.row2.setVisibility(value);
         mBinding.scroll.setVisibility(value);
     }

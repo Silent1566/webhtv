@@ -68,6 +68,7 @@ public class EpisodeGridHolder extends BaseEpisodeHolder {
     private void bindText(Episode item) {
         binding.card.setVisibility(View.GONE);
         binding.text.setVisibility(View.VISIBLE);
+        setCardMarquee(false);
         binding.text.setActivated(item.isSelected());
         binding.text.setHorizontallyScrolling(true);
         binding.text.setText(EpisodeAdapter.getNativeTitle(item));
@@ -82,6 +83,8 @@ public class EpisodeGridHolder extends BaseEpisodeHolder {
     private void bindCard(Episode item, TmdbEpisode episode) {
         binding.text.setVisibility(View.GONE);
         binding.card.setVisibility(View.VISIBLE);
+        binding.text.setActivated(false);
+        setMarquee(false);
         binding.card.setSelected(item.isSelected());
         bindCardActions(item, binding.getRoot(), binding.card, binding.imageFrame, binding.still, binding.textPanel, binding.cardTitle, binding.overview);
 
@@ -121,6 +124,7 @@ public class EpisodeGridHolder extends BaseEpisodeHolder {
         binding.meta.setVisibility(showMeta ? View.VISIBLE : View.GONE);
         binding.meta.setText(meta);
         bindFileSize(EpisodeAdapter.getCardFileSize(item, cardTitle), showMeta);
+        setCardMarquee(true);
     }
 
     private String getMeta(TmdbEpisode episode) {
@@ -155,6 +159,12 @@ public class EpisodeGridHolder extends BaseEpisodeHolder {
     private void setMarquee(boolean focused) {
         binding.text.setEllipsize(focused ? TextUtils.TruncateAt.MARQUEE : TextUtils.TruncateAt.END);
         binding.text.setSelected(focused);
+    }
+
+    private void setCardMarquee(boolean active) {
+        binding.cardTitle.setSelected(active);
+        binding.meta.setSelected(active);
+        binding.fileSize.setSelected(active);
     }
 
     private void bindDetailLongClick(Episode item, View... views) {

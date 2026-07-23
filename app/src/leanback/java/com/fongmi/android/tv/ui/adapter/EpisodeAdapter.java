@@ -277,8 +277,9 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
         textView.setEllipsize(TextUtils.TruncateAt.MARQUEE);
         textView.setNextFocusUpId(isTopEdge(position) && nextFocusUp != 0 ? nextFocusUp : View.NO_ID);
         textView.setNextFocusDownId(isBottomEdge(position) && nextFocusDown != 0 ? nextFocusDown : View.NO_ID);
-        textView.setSelected(item.isSelected());
+        textView.setSelected(item.isSelected() || textView.hasFocus());
         textView.setText(getTitle(item));
+        textView.setOnFocusChangeListener((view, hasFocus) -> textView.setSelected(item.isSelected() || hasFocus));
         textView.setOnKeyListener(keyListener);
         textView.setOnClickListener(v -> mListener.onItemClick(item));
         if (mLongClickListener != null) {
@@ -308,6 +309,8 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
         binding.cardContainer.setNextFocusUpId(isTopEdge(position) && nextFocusUp != 0 ? nextFocusUp : View.NO_ID);
         binding.cardContainer.setNextFocusDownId(isBottomEdge(position) && nextFocusDown != 0 ? nextFocusDown : View.NO_ID);
         binding.cardContainer.setOnKeyListener(keyListener);
+        setCardMarquee(binding, item.isSelected() || binding.cardContainer.hasFocus());
+        binding.cardContainer.setOnFocusChangeListener((view, hasFocus) -> setCardMarquee(binding, item.isSelected() || hasFocus));
 
         // 加载剧照
         String cardTitle = getCardTitle(item, tmdbEpisode);
@@ -347,6 +350,12 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
                 return true;
             });
         }
+    }
+
+    private void setCardMarquee(AdapterEpisodeCardBinding binding, boolean active) {
+        binding.cardTitle.setSelected(active);
+        binding.dateBadge.setSelected(active);
+        binding.fileSize.setSelected(active);
     }
 
     private void applyCardSize(AdapterEpisodeCardBinding binding) {
