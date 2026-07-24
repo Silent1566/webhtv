@@ -19,6 +19,11 @@ public class GroupRule {
     public static final String SOURCE_BUILTIN = "builtin";
     public static final String SOURCE_USER = "user";
     public static final String SOURCE_INTERFACE = "interface";
+    public static final String SOURCE_AI = "ai";
+
+    private static final int MAX_AI_MATCH_TEXT_LENGTH = 256;
+    private static final int MAX_AI_NESTING_DEPTH = 8;
+    private static final int MAX_AI_QUANTIFIERS_PER_DEPTH = 2;
 
     @SerializedName("id")
     private String id;
@@ -59,6 +64,12 @@ public class GroupRule {
         return rule;
     }
 
+    public static GroupRule createAi(String name, String regex) {
+        GroupRule rule = createUser(name, regex);
+        rule.source = SOURCE_AI;
+        return rule;
+    }
+
     public static List<GroupRule> arrayFrom(JsonElement element) {
         Type type = TypeToken.getParameterized(List.class, GroupRule.class).getType();
         List<GroupRule> items = new Gson().fromJson(element, type);
@@ -69,7 +80,7 @@ public class GroupRule {
         Type type = TypeToken.getParameterized(List.class, GroupRule.class).getType();
         try {
             return normalize(new Gson().fromJson(json, type));
-        } catch (Throwable e) {
+        } catch (Exception e) {
             return new ArrayList<>();
         }
     }
@@ -136,6 +147,106 @@ public class GroupRule {
         return SOURCE_USER.equals(getSource());
     }
 
+    public boolean isAi() {
+        return SOURCE_AI.equals(getSource());
+    }
+
+    public static boolean isSafeAiRegex(String regex) {
+        if (TextUtils.isEmpty(regex) || regex.length() > 256 || regex.contains("\n") || regex.contains("\r")) return false;
+        int index = regex.startsWith("(?i)") ? 4 : 0;
+        int depth = 0;
+        int captures = 0;
+        int[] quantifiersByDepth = new int[MAX_AI_NESTING_DEPTH + 1];
+        boolean inClass = false;
+        boolean escaped = false;
+        boolean hasClassContent = false;
+        boolean atom = false;
+        boolean groupAtom = false;
+        boolean quantified = false;
+        for (int i = index; i < regex.length(); i++) {
+            char c = regex.charAt(i);
+            if (escaped) {
+                if (Character.isDigit(c)) return false;
+                if (Character.isLetter(c) && "sSdDwW".indexOf(c) < 0) return false;
+                escaped = false;
+                if (inClass) {
+                    hasClassContent = true;
+                } else {
+                    atom = true;
+                    groupAtom = false;
+                    quantified = false;
+                }
+                continue;
+            }
+            if (c == '\\') {
+                escaped = true;
+                continue;
+            }
+            if (inClass) {
+                if (c == ']' && hasClassContent) {
+                    inClass = false;
+                    atom = true;
+                    groupAtom = false;
+                    quantified = false;
+                } else {
+                    hasClassContent = true;
+                }
+                continue;
+            }
+            if (c == '[') {
+                inClass = true;
+                hasClassContent = false;
+                atom = false;
+                groupAtom = false;
+                quantified = false;
+                continue;
+            }
+            if (c == '.' || c == '|' || c == '{' || c == '}') return false;
+            if (c == '(') {
+                if (i + 1 < regex.length() && regex.charAt(i + 1) == '?') {
+                    if (i + 2 >= regex.length() || regex.charAt(i + 2) != ':') return false;
+                    i += 2;
+                } else {
+                    captures++;
+                }
+                depth++;
+                if (depth > MAX_AI_NESTING_DEPTH) return false;
+                atom = false;
+                groupAtom = false;
+                quantified = false;
+                continue;
+            }
+            if (c == ')') {
+                if (depth <= 0) return false;
+                depth--;
+                atom = true;
+                groupAtom = true;
+                quantified = false;
+                continue;
+            }
+            if (c == '*' || c == '+' || c == '?') {
+                if (c == '?' && quantified) {
+                    quantified = false;
+                    continue;
+                }
+                if (!atom || groupAtom || quantified) return false;
+                if (++quantifiersByDepth[depth] > MAX_AI_QUANTIFIERS_PER_DEPTH) return false;
+                quantified = true;
+                continue;
+            }
+            if (c == '^' || c == '$') {
+                atom = false;
+                groupAtom = false;
+                quantified = false;
+                continue;
+            }
+            atom = true;
+            groupAtom = false;
+            quantified = false;
+        }
+        return !escaped && !inClass && depth == 0 && captures == 1;
+    }
+
     public boolean isWrapBracket() {
         return Boolean.TRUE.equals(wrapBracket);
     }
@@ -146,6 +257,7 @@ public class GroupRule {
 
     public List<String> extract(String text) {
         if (TextUtils.isEmpty(text) || TextUtils.isEmpty(getRegex())) return List.of();
+        if (isAi() && text.length() > MAX_AI_MATCH_TEXT_LENGTH) return List.of();
         Pattern compiled = compile();
         if (compiled == null) return List.of();
         List<String> groups = new ArrayList<>();
@@ -172,17 +284,18 @@ public class GroupRule {
     }
 
     private Pattern compile() {
+        if (isAi() && !isSafeAiRegex(getRegex())) return null;
         if (pattern != null) return pattern;
         try {
             pattern = Pattern.compile(getRegex());
             return pattern;
-        } catch (Throwable e) {
+        } catch (Exception e) {
             return null;
         }
     }
 
     public String getSummary() {
-        String label = isBuiltin() ? "内置" : SOURCE_INTERFACE.equals(getSource()) ? "接口" : "自定义";
+        String label = isBuiltin() ? "内置" : SOURCE_INTERFACE.equals(getSource()) ? "接口" : isAi() ? "AI" : "自定义";
         return label + " · " + getRegex();
     }
 }

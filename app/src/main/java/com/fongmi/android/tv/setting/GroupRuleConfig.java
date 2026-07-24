@@ -86,6 +86,10 @@ public final class GroupRuleConfig {
                 boolean enabled = rule.isEnabled() && !Boolean.TRUE.equals(disabled.get(rule.getId()));
                 items.add(new Entry(copy(rule, GroupRule.SOURCE_INTERFACE), enabled));
             }
+            for (GroupRule rule : AiGroupRuleStore.loadCurrent()) {
+                if (rule == null || TextUtils.isEmpty(rule.getId())) continue;
+                items.add(new Entry(copy(rule, GroupRule.SOURCE_AI), rule.isEnabled()));
+            }
             for (GroupRule rule : GroupRuleStore.loadUser()) {
                 if (rule == null || TextUtils.isEmpty(rule.getId())) continue;
                 boolean enabled = rule.isEnabled() && !Boolean.TRUE.equals(disabled.get(rule.getId()));

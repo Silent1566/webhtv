@@ -56,6 +56,12 @@ public class CollectAdapter extends RecyclerView.Adapter<CollectAdapter.ViewHold
         notifyChanged(position);
     }
 
+    public void setItems(List<Collect> items) {
+        mItems.clear();
+        if (items != null) mItems.addAll(items);
+        notifyDataSetChanged();
+    }
+
     public void clear() {
         mItems.clear();
         notifyDataSetChanged();

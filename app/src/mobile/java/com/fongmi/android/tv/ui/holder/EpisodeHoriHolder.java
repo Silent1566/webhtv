@@ -61,6 +61,8 @@ public class EpisodeHoriHolder extends BaseEpisodeHolder {
     private void bindCard(Episode item, TmdbEpisode tmdbEpisode) {
         binding.text.setVisibility(View.GONE);
         binding.card.setVisibility(View.VISIBLE);
+        binding.text.setActivated(false);
+        setTextMarquee(false);
 
         binding.card.setSelected(item.isSelected());
         bindCardActions(item, binding.getRoot(), binding.card, binding.still, binding.cardTitle, binding.overview);
@@ -93,18 +95,33 @@ public class EpisodeHoriHolder extends BaseEpisodeHolder {
             binding.rating.setVisibility(View.GONE);
         }
         bindFileSize(EpisodeAdapter.getCardFileSize(item, cardTitle));
+        setCardMarquee(true);
     }
 
     private void bindText(Episode item) {
         binding.text.setVisibility(View.VISIBLE);
         binding.card.setVisibility(View.GONE);
+        setCardMarquee(false);
 
         binding.text.setMaxWidth(maxWidth);
-        binding.text.setSelected(item.isSelected());
+        binding.text.setActivated(item.isSelected());
+        setTextMarquee(binding.text.isActivated() || binding.text.hasFocus());
         binding.text.setText(EpisodeAdapter.getNativeTitle(item));
+        binding.text.setOnFocusChangeListener((view, hasFocus) -> setTextMarquee(binding.text.isActivated() || hasFocus));
         binding.text.setOnClickListener(v -> listener.onItemClick(item));
+        binding.text.post(() -> setTextMarquee(binding.text.isActivated() || binding.text.hasFocus()));
         EpisodeAdapter.bindNativeTitlePopup(binding.getRoot(), item);
         EpisodeAdapter.bindNativeTitlePopup(binding.text, item);
+    }
+
+    private void setTextMarquee(boolean active) {
+        binding.text.setHorizontallyScrolling(true);
+        binding.text.setSelected(active);
+    }
+
+    private void setCardMarquee(boolean active) {
+        binding.cardTitle.setSelected(active);
+        binding.fileSize.setSelected(active);
     }
 
     private void bindFileSize(String fileSize) {

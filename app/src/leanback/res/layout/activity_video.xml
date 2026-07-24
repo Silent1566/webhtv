@@ -6,6 +6,12 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
+    <!-- ProgressLayout 只管理这一层，保持内部 GONE 状态并让最终页面整体一次淡入。 -->
+    <RelativeLayout
+        android:id="@+id/videoPageContent"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
     <!-- TMDB背景幻灯片层 -->
     <FrameLayout
         android:layout_width="match_parent"
@@ -1284,5 +1290,7 @@
         </androidx.appcompat.widget.LinearLayoutCompat>
 
     </androidx.core.widget.NestedScrollView>
+
+    </RelativeLayout>
 
 </com.fongmi.android.tv.ui.custom.ProgressLayout>

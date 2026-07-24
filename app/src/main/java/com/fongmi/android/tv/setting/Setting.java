@@ -1138,6 +1138,14 @@ public class Setting {
         Prefers.put("home_history", homeHistory);
     }
 
+    public static boolean isEpisodeHistory() {
+        return Prefers.getBoolean("episode_history", true);
+    }
+
+    public static void putEpisodeHistory(boolean episodeHistory) {
+        Prefers.put("episode_history", episodeHistory);
+    }
+
     public static boolean isHomeVodAutoLoad() {
         return Prefers.getBoolean("home_vod_auto_load", true);
     }
@@ -1307,5 +1315,13 @@ public class Setting {
 
     public static void putSearchResultSort(int sort) {
         Prefers.put("search_result_sort", sort == 0 ? 0 : 1);
+    }
+
+    public static boolean isSearchPrecise() {
+        return Prefers.getBoolean("search_precise", false);
+    }
+
+    public static void putSearchPrecise(boolean enabled) {
+        Prefers.put("search_precise", enabled);
     }
 }

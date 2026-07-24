@@ -74,6 +74,34 @@ public class VideoActivityLayoutTest {
     }
 
     @Test
+    public void mobileLandscapeTmdbMovableIdsDoNotPointIntoAudioStage() throws Exception {
+        List<Path> layoutFiles = Arrays.asList(
+                findMobileResPath().resolve(Path.of("layout-land", "activity_video.xml")),
+                findMobileResPath().resolve(Path.of("layout-sw600dp-land", "activity_video.xml"))
+        );
+
+        for (Path layoutFile : layoutFiles) {
+            assertTrue(layoutFile + " must exist", Files.exists(layoutFile));
+            Element audioStage = findAndroidId(layoutFile.toFile(), "audioStage");
+            Element flagTitleBar = findAndroidId(layoutFile.toFile(), "flagTitleBar");
+            Element episodeTitleBar = findAndroidId(layoutFile.toFile(), "episodeTitleBar");
+
+            assertTrue(layoutFile + " is missing @+id/audioStage", audioStage != null);
+            assertTrue(layoutFile + " is missing @+id/flagTitleBar", flagTitleBar != null);
+            assertTrue(layoutFile + " is missing @+id/episodeTitleBar", episodeTitleBar != null);
+            assertFalse(layoutFile + " must not bind flagTitleBar to the audio-stage layout",
+                    hasAncestorAndroidId(flagTitleBar, "audioStage"));
+            assertFalse(layoutFile + " must not bind episodeTitleBar to the audio-stage layout",
+                    hasAncestorAndroidId(episodeTitleBar, "audioStage"));
+            assertTrue(layoutFile + " must bind flagTitleBar to the source heading",
+                    hasDescendantAndroidText(flagTitleBar, "@string/detail_flag"));
+            assertTrue(layoutFile + " must bind episodeTitleBar to the episode heading",
+                    hasDescendantAndroidText(episodeTitleBar, "@string/detail_episode"));
+            assertTrue(layoutFile + " must place the source title before the episode title",
+                    isAndroidIdBefore(layoutFile, "flagTitleBar", "episodeTitleBar"));
+        }
+    }
+    @Test
     public void mobileActivityVideoLayoutsHaveFusionChromeHost() throws Exception {
         List<Path> layoutFiles = Files.walk(findMobileResPath())
                 .filter(path -> path.getFileName().toString().equals("activity_video.xml"))
@@ -1247,6 +1275,60 @@ public class VideoActivityLayoutTest {
     }
 
     @Test
+    public void leanbackOriginalEnhancedKeepsLoadingUntilFinalDetailReveal() throws Exception {
+        Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int method = source.indexOf("private void checkCast()");
+        int end = source.indexOf("private void checkId()", method);
+        String body = method >= 0 && end > method ? source.substring(method, end) : "";
+        int enhancedLoading = body.indexOf("shouldLoadTmdbDetail() && Setting.isOriginalEnhancedDetailPage()");
+        int initialPreview = body.indexOf("hasInitialPreview()");
+
+        assertTrue(sourcePath + " is missing checkCast", method >= 0);
+        assertTrue("original enhanced mode must stay on loading instead of showing and then replacing an initial preview",
+                enhancedLoading >= 0
+                        && body.indexOf("mBinding.progressLayout.showProgress();", enhancedLoading) > enhancedLoading
+                        && initialPreview > enhancedLoading);
+    }
+
+    @Test
+    public void leanbackVideoPageRevealsAsSingleComposedContentLayer() throws Exception {
+        Path layoutFile = findLeanbackResPath().resolve(Path.of("layout", "activity_video.xml"));
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        factory.setNamespaceAware(false);
+        Element root = factory.newDocumentBuilder().parse(layoutFile.toFile()).getDocumentElement();
+        NodeList children = root.getChildNodes();
+        int directContentLayers = 0;
+        Element pageContent = null;
+        for (int i = 0; i < children.getLength(); i++) {
+            if (!(children.item(i) instanceof Element)) continue;
+            directContentLayers++;
+            pageContent = (Element) children.item(i);
+        }
+
+        assertTrue("ProgressLayout must reveal one composed page instead of fading each detail layer independently",
+                directContentLayers == 1);
+        assertTrue(layoutFile + " is missing @+id/videoPageContent",
+                pageContent != null && "@+id/videoPageContent".equals(pageContent.getAttribute("android:id")));
+        assertTrue("videoPageContent must be the direct RelativeLayout child managed by ProgressLayout",
+                pageContent != null && "RelativeLayout".equals(pageContent.getNodeName()));
+    }
+
+    @Test
+    public void leanbackAudioSurfaceDoesNotRestoreNativeTmdbMetadataOverSynopsis() throws Exception {
+        Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int method = source.indexOf("private void setVideoDetailsVisible(boolean visible)");
+        int end = source.indexOf("private void updateAudioStageText()", method);
+        String body = method >= 0 && end > method ? source.substring(method, end) : "";
+
+        assertTrue(sourcePath + " is missing setVideoDetailsVisible", method >= 0);
+        assertTrue("TMDB enhanced mode must keep the native director/actor rows hidden when audio surface state is restored",
+                body.contains("!shouldUseTmdbLayout() || isIntentTmdbPlayback()")
+                        && body.contains("showNativeMetadata"));
+    }
+
+    @Test
     public void leanbackTmdbPlaybackOverviewWrapsWithinRightPane() throws Exception {
         Path layoutFile = findLeanbackResPath().resolve(Path.of("layout", "activity_video.xml"));
         Element overview = findAndroidId(layoutFile.toFile(), "tmdbOverview");
@@ -1657,8 +1739,8 @@ public class VideoActivityLayoutTest {
                             && body.contains("if (keyChanged) mHistory.replace(nextKey)"));
             assertFalse(sourcePath + " must not unconditionally replace history on every id update",
                     body.contains("if (id) mHistory.replace(getHistoryKey())"));
-            assertTrue(sourcePath + " must sync history after key migration even without pic/name",
-                    body.contains("if (keyChanged || pic || name) syncHistory()"));
+            assertTrue(sourcePath + " must sync history after key migration or an async episode-title refresh",
+                    body.contains("if (keyChanged || pic || name || episodeTitleChanged) syncHistory()"));
         }
     }
 
@@ -2187,6 +2269,27 @@ public class VideoActivityLayoutTest {
             if (id.endsWith("/" + value)) return element;
         }
         return null;
+    }
+
+    private static boolean hasAncestorAndroidId(Element element, String value) {
+        if (element == null) return false;
+        Node current = element.getParentNode();
+        while (current instanceof Element) {
+            String id = ((Element) current).getAttribute("android:id");
+            if (id.endsWith("/" + value)) return true;
+            current = current.getParentNode();
+        }
+        return false;
+    }
+
+    private static boolean hasDescendantAndroidText(Element element, String value) {
+        if (element == null) return false;
+        NodeList nodes = element.getElementsByTagName("*");
+        for (int i = 0; i < nodes.getLength(); i++) {
+            Element child = (Element) nodes.item(i);
+            if (value.equals(child.getAttribute("android:text"))) return true;
+        }
+        return false;
     }
 
     private static boolean isAndroidIdBefore(Path file, String firstId, String secondId) throws Exception {

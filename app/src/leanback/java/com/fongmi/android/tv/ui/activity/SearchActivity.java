@@ -2,6 +2,8 @@ package com.fongmi.android.tv.ui.activity;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextUtils;
@@ -12,8 +14,10 @@ import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
 import android.widget.LinearLayout;
 import android.widget.PopupWindow;
+import android.widget.ScrollView;
 
 import androidx.annotation.NonNull;
+import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewbinding.ViewBinding;
 
@@ -54,6 +58,11 @@ import okhttp3.Response;
 public class SearchActivity extends BaseActivity implements WordAdapter.OnClickListener, RecordAdapter.OnClickListener, CustomKeyboard.Callback {
 
     private static final int HOT_LIMIT = 10;
+    private static final int SCOPE_POPUP_ITEM_HEIGHT_DP = 52;
+    private static final int SCOPE_POPUP_ITEM_GAP_DP = 2;
+    private static final int SCOPE_POPUP_MAX_ITEMS = 7;
+    private static final int SCOPE_POPUP_MIN_WIDTH_DP = 184;
+    private static final int SCOPE_POPUP_PADDING_DP = 8;
 
     private ActivitySearchBinding mBinding;
     private RecordAdapter mRecordAdapter;
@@ -150,7 +159,7 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
             }
         });
         mBinding.mic.setOnClickListener(v -> mBinding.mic.start());
-        mBinding.searchScope.setOnClickListener(v -> onScope());
+        mBinding.searchScope.setOnClickListener(this::showScopeMenu);
         mBinding.searchScope.setOnLongClickListener(v -> {
             showScopeMenu(v);
             return true;
@@ -306,44 +315,55 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
         else mBinding.searchScope.setText(mCurrentSite ? R.string.search_scope_current : R.string.search_scope_all);
     }
 
-    private void onScope() {
-        mScopeGroup = "";
-        if (!mCurrentSite) {
-            Site site = getHome();
-            if (site.isEmpty() || !site.isSearchable()) {
-                Notify.show(R.string.detail_site_not_searchable);
-                return;
-            }
-            Notify.show(getString(R.string.search_scope_current_hint, site.getDisplayName()));
-        }
-        mCurrentSite = !mCurrentSite;
-        setSearchScope();
-    }
-
     private void showScopeMenu(View anchor) {
+        List<String> groups = Site.getGroups(VodConfig.get().getSites());
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setBackgroundColor(0xFFFFFFFF);
-        PopupWindow popup = new PopupWindow(content, ResUtil.dp2px(136), ViewGroup.LayoutParams.WRAP_CONTENT, true);
-        addScopeItem(content, getString(R.string.search_scope_all), () -> selectScope(false, "", popup));
-        addScopeItem(content, getString(R.string.search_scope_current), () -> selectCurrent(popup));
-        for (String group : Site.getGroups(VodConfig.get().getSites())) addScopeItem(content, group, () -> selectScope(false, group, popup));
+        int padding = ResUtil.dp2px(SCOPE_POPUP_PADDING_DP);
+        content.setPadding(padding, padding, padding, padding);
+        ScrollView scroll = new ScrollView(this);
+        scroll.setBackgroundResource(R.drawable.shape_search_scope_popup);
+        scroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        scroll.addView(content, new ScrollView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        int width = Math.max(ResUtil.getTextWidth(getString(R.string.search_scope_all), 18), ResUtil.getTextWidth(getString(R.string.search_scope_current), 18));
+        for (String group : groups) width = Math.max(width, ResUtil.getTextWidth(group, 18));
+        int itemHeight = ResUtil.dp2px(SCOPE_POPUP_ITEM_HEIGHT_DP);
+        int itemGap = ResUtil.dp2px(SCOPE_POPUP_ITEM_GAP_DP);
+        int popupWidth = Math.max(ResUtil.dp2px(SCOPE_POPUP_MIN_WIDTH_DP), width + ResUtil.dp2px(56));
+        popupWidth = Math.min(Math.max(anchor.getWidth(), popupWidth), ResUtil.getScreenWidth() - ResUtil.dp2px(48));
+        int rowHeight = itemHeight + itemGap * 2;
+        int popupHeight = Math.min((groups.size() + 2) * rowHeight + padding * 2, SCOPE_POPUP_MAX_ITEMS * rowHeight + padding * 2);
+        PopupWindow popup = new PopupWindow(scroll, popupWidth, popupHeight, true);
+        addScopeItem(content, getString(R.string.search_scope_all), !mCurrentSite && TextUtils.isEmpty(mScopeGroup), () -> selectScope(false, "", popup));
+        addScopeItem(content, getString(R.string.search_scope_current), mCurrentSite, () -> selectCurrent(popup));
+        for (String group : groups) addScopeItem(content, group, !mCurrentSite && TextUtils.equals(mScopeGroup, group), () -> selectScope(false, group, popup));
+        popup.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         popup.setOutsideTouchable(true);
-        popup.showAsDropDown(anchor, 0, 0, Gravity.NO_GRAVITY);
+        popup.setElevation(ResUtil.dp2px(12));
+        popup.setOnDismissListener(anchor::requestFocus);
+        popup.showAsDropDown(anchor, anchor.getWidth() - popupWidth, ResUtil.dp2px(8), Gravity.NO_GRAVITY);
     }
 
-    private void addScopeItem(LinearLayout parent, String text, Runnable action) {
+    private void addScopeItem(LinearLayout parent, String text, boolean selected, Runnable action) {
         com.google.android.material.textview.MaterialTextView view = new com.google.android.material.textview.MaterialTextView(this);
         view.setText(text);
-        view.setTextColor(0xFF000000);
+        view.setTextColor(ContextCompat.getColorStateList(this, R.color.selector_search_scope_text));
         view.setTextSize(18);
         view.setGravity(Gravity.CENTER_VERTICAL);
         view.setSingleLine(true);
+        view.setEllipsize(TextUtils.TruncateAt.END);
+        view.setIncludeFontPadding(false);
         view.setFocusable(true);
-        view.setBackgroundResource(R.drawable.selector_item);
-        view.setPadding(ResUtil.dp2px(28), 0, ResUtil.dp2px(28), 0);
+        view.setSelected(selected);
+        view.setBackgroundResource(R.drawable.selector_search_scope_item);
+        int padding = ResUtil.dp2px(20);
+        view.setPadding(padding, 0, padding, 0);
         view.setOnClickListener(v -> action.run());
-        parent.addView(view, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ResUtil.dp2px(68)));
+        int gap = ResUtil.dp2px(SCOPE_POPUP_ITEM_GAP_DP);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ResUtil.dp2px(SCOPE_POPUP_ITEM_HEIGHT_DP));
+        params.setMargins(gap, gap, gap, gap);
+        parent.addView(view, params);
+        if (selected) view.post(view::requestFocus);
     }
 
     private void selectCurrent(PopupWindow popup) {
@@ -383,6 +403,7 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
     private boolean findFocus(KeyEvent event) {
         View current = getCurrentFocus();
         if (current == mBinding.keyword) return handleKeywordKey(event);
+        if (current == mBinding.searchScope) return handleSearchScopeKey(event);
         View inKeyboard = mBinding.keyboard.findContainingItemView(current);
         View inWord = mBinding.wordRecycler.findContainingItemView(current);
         View inRecord = mBinding.recordRecycler.findContainingItemView(current);
@@ -445,6 +466,17 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
     private boolean handleKeywordKey(KeyEvent event) {
         if (!KeyUtil.isRightKey(event)) return false;
         if (mBinding.keyword.getSelectionEnd() < mBinding.keyword.getText().length()) return false;
+        mBinding.searchScope.requestFocus();
+        return true;
+    }
+
+    private boolean handleSearchScopeKey(KeyEvent event) {
+        if (KeyUtil.isLeftKey(event)) {
+            mBinding.keyword.requestFocus();
+            mBinding.keyword.setSelection(mBinding.keyword.length());
+            return true;
+        }
+        if (!KeyUtil.isRightKey(event)) return false;
         boolean hasRecord = mBinding.recordLayout.getVisibility() == View.VISIBLE;
         return hasRecord ? focusFirst(mBinding.recordRecycler) : focusFirstWord();
     }

@@ -34,6 +34,15 @@ public class BackupPreferenceFilterTest {
     }
 
     @Test
+    public void episodeHistoryFollowsSettingsOption() {
+        SyncOptions settingsOnly = new SyncOptions().config(false).spider(false).webHome(false).settings(true);
+        SyncOptions spiderOnly = new SyncOptions().config(false).spider(true).webHome(false).settings(false);
+
+        assertTrue(Backup.include("episode_history", settingsOnly));
+        assertFalse(Backup.include("episode_history", spiderOnly));
+    }
+
+    @Test
     public void manifestCountCoversSourcesSwitchAndPerExtensionState() {
         Backup backup = new Backup();
         backup.setPrefers(Map.of(

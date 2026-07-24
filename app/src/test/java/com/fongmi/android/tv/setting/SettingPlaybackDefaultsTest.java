@@ -49,12 +49,33 @@ public class SettingPlaybackDefaultsTest {
         assertPlayerOwnsAutoSkip("mobile", "fragment", "Fragment");
     }
 
+    @Test
+    public void episodeHistory_defaultsOn() {
+        assertTrue(Setting.isEpisodeHistory());
+    }
+
+    @Test
+    public void episodeHistory_isUnderPersonalSettings() throws Exception {
+        assertPersonalOwnsEpisodeHistory("leanback", "activity", "Activity");
+        assertPersonalOwnsEpisodeHistory("mobile", "fragment", "Fragment");
+    }
+
     private static void assertPlayerOwnsAutoSkip(String flavor, String layoutPrefix, String classSuffix) throws Exception {
         Path root = moduleRoot();
         assertTrue(read(root.resolve(Path.of("src", flavor, "res", "layout", layoutPrefix + "_setting_player.xml"))).contains("@+id/autoSkipIntroOutro"));
         assertTrue(read(root.resolve(Path.of("src", flavor, "java", "com", "fongmi", "android", "tv", "ui", classSuffix.equals("Activity") ? "activity" : "fragment", "SettingPlayer" + classSuffix + ".java"))).contains("autoSkipIntroOutro"));
         assertFalse(read(root.resolve(Path.of("src", flavor, "res", "layout", layoutPrefix + "_setting_personal.xml"))).contains("@+id/autoSkipIntroOutro"));
         assertFalse(read(root.resolve(Path.of("src", flavor, "java", "com", "fongmi", "android", "tv", "ui", classSuffix.equals("Activity") ? "activity" : "fragment", "SettingPersonal" + classSuffix + ".java"))).contains("autoSkipIntroOutro"));
+    }
+
+    private static void assertPersonalOwnsEpisodeHistory(String flavor, String layoutPrefix, String classSuffix) throws Exception {
+        Path root = moduleRoot();
+        String packageName = classSuffix.equals("Activity") ? "activity" : "fragment";
+        String layout = read(root.resolve(Path.of("src", flavor, "res", "layout", layoutPrefix + "_setting_personal.xml")));
+        String source = read(root.resolve(Path.of("src", flavor, "java", "com", "fongmi", "android", "tv", "ui", packageName, "SettingPersonal" + classSuffix + ".java")));
+
+        assertTrue(layout.contains("@+id/episodeHistory"));
+        assertTrue(source.contains("Setting.putEpisodeHistory(!Setting.isEpisodeHistory())"));
     }
 
     private static String read(Path path) throws Exception {

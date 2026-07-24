@@ -33,6 +33,7 @@ public class UpdateDialog extends BaseAlertDialog {
     private boolean stableExpanded = true;
     private boolean betaExpanded;
     private boolean downloading;
+    private int lastProgressPanelHeight = -1;
 
     public static UpdateDialog create() {
         return new UpdateDialog();
@@ -102,8 +103,7 @@ public class UpdateDialog extends BaseAlertDialog {
             getDialog().setOnKeyListener((dialog, keyCode, event) -> onDialogKey(keyCode, event));
         }
         clearWindowInset();
-        configureWindow();
-        configureScrollHeight();
+        configureDialogLayout(0);
         binding.stableItem.requestFocus();
     }
 
@@ -154,6 +154,7 @@ public class UpdateDialog extends BaseAlertDialog {
         updateFocusLinks();
         binding.close.setVisibility(View.VISIBLE);
         binding.progressPanel.setVisibility(View.GONE);
+        lastProgressPanelHeight = -1;
         downloading = false;
     }
 
@@ -282,12 +283,41 @@ public class UpdateDialog extends BaseAlertDialog {
         window.setLayout(width, WindowManager.LayoutParams.WRAP_CONTENT);
     }
 
-    private void configureScrollHeight() {
+    private void configureScrollHeight(int progressPanelHeight) {
         int screenHeight = ResUtil.getScreenHeight(requireContext());
-        int height = Math.max(ResUtil.dp2px(220), Math.min(ResUtil.dp2px(320), (int) (screenHeight * 0.42f)));
+        int height = UpdateDialogLayout.calculateScrollHeight(
+                screenHeight,
+                ResUtil.dp2px(220),
+                ResUtil.dp2px(320),
+                ResUtil.dp2px(160),
+                binding.progressPanel.getVisibility() == View.VISIBLE,
+                progressPanelHeight);
         ViewGroup.LayoutParams params = binding.listScroll.getLayoutParams();
         params.height = height;
         binding.listScroll.setLayoutParams(params);
+    }
+
+    private int getProgressPanelHeight() {
+        int width = binding.listScroll.getWidth();
+        if (width <= 0) width = binding.getRoot().getWidth() - binding.getRoot().getPaddingStart() - binding.getRoot().getPaddingEnd();
+        if (width > 0) {
+            int widthSpec = View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY);
+            int heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
+            binding.progressPanel.measure(widthSpec, heightSpec);
+        }
+        int height = binding.progressPanel.getMeasuredHeight();
+        ViewGroup.LayoutParams layoutParams = binding.progressPanel.getLayoutParams();
+        if (layoutParams instanceof ViewGroup.MarginLayoutParams) {
+            ViewGroup.MarginLayoutParams margins = (ViewGroup.MarginLayoutParams) layoutParams;
+            height += margins.topMargin + margins.bottomMargin;
+        }
+        return height;
+    }
+
+    private void configureDialogLayout(int progressPanelHeight) {
+        configureScrollHeight(progressPanelHeight);
+        binding.getRoot().requestLayout();
+        configureWindow();
     }
 
     private String getVersion(Update update) {
@@ -327,6 +357,11 @@ public class UpdateDialog extends BaseAlertDialog {
         if (!indeterminate) binding.progress.setProgress(value);
         binding.progressText.setText(getProgressText(indeterminate, value, bytes, total, speed, elapsed));
         binding.cancel.setText(R.string.update_cancel);
+        int progressPanelHeight = getProgressPanelHeight();
+        if (UpdateDialogLayout.hasProgressPanelHeightChanged(lastProgressPanelHeight, progressPanelHeight)) {
+            lastProgressPanelHeight = progressPanelHeight;
+            configureDialogLayout(progressPanelHeight);
+        }
         if (requestFocus) binding.cancel.requestFocus();
         return true;
     }

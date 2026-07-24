@@ -134,4 +134,40 @@ public class AiConfigTest {
         assertEquals(AiConfig.DEFAULT_AD_DETECTION_PROMPT, config.getAdDetectionPrompt());
         assertFalse(config.isAdDetectionPromptCustom());
     }
+
+    @Test
+    public void objectFrom_defaultsGroupRulePrompt() {
+        AiConfig config = AiConfig.objectFrom("{}");
+
+        assertEquals(AiConfig.DEFAULT_GROUP_RULE_PROMPT, config.getGroupRulePrompt());
+        assertEquals(AiConfig.DEFAULT_GROUP_RULE_PROMPT_VERSION, config.getGroupRulePromptVersion());
+        assertFalse(config.isGroupRulePromptCustom());
+    }
+
+    @Test
+    public void objectFrom_preservesCustomGroupRulePrompt() {
+        AiConfig config = AiConfig.objectFrom("{\"groupRulePrompt\":\"只识别名称末尾的稳定分类标签\"}");
+
+        assertEquals("只识别名称末尾的稳定分类标签", config.getGroupRulePrompt());
+        assertTrue(config.isGroupRulePromptCustom());
+    }
+
+    @Test
+    public void setGroupRulePrompt_marksCurrentDefaultAsSystemPrompt() {
+        AiConfig config = AiConfig.objectFrom("{}");
+        config.setGroupRulePrompt("只识别名称末尾的稳定分类标签");
+        config.setGroupRulePrompt(AiConfig.DEFAULT_GROUP_RULE_PROMPT);
+
+        assertEquals(AiConfig.DEFAULT_GROUP_RULE_PROMPT, config.getGroupRulePrompt());
+        assertFalse(config.isGroupRulePromptCustom());
+    }
+
+    @Test
+    public void objectFrom_upgradesOlderSystemGroupRulePromptVersion() {
+        AiConfig config = AiConfig.objectFrom("{\"groupRulePrompt\":\"" + AiConfig.LEGACY_GROUP_RULE_PROMPT_V1.replace("\"", "\\\"") + "\",\"groupRulePromptVersion\":1,\"groupRulePromptCustom\":false}");
+
+        assertEquals(AiConfig.DEFAULT_GROUP_RULE_PROMPT, config.getGroupRulePrompt());
+        assertEquals(AiConfig.DEFAULT_GROUP_RULE_PROMPT_VERSION, config.getGroupRulePromptVersion());
+        assertFalse(config.isGroupRulePromptCustom());
+    }
 }
