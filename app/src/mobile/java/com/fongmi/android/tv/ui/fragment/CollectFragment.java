@@ -49,7 +49,10 @@ import com.fongmi.android.tv.ui.adapter.SearchAdapter;
 import com.fongmi.android.tv.ui.base.BaseFragment;
 import com.fongmi.android.tv.ui.custom.CustomScroller;
 import com.fongmi.android.tv.utils.MobileWindow;
+import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
+import com.fongmi.android.tv.utils.SearchPageState;
+import com.fongmi.android.tv.utils.SearchResultFilter;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -73,14 +76,20 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
     private List<Site> mSites;
     private List<String> mGroups;
     private final List<Collect> mAllCollectItems;
+    private final Map<String, List<Vod>> mVisibleItems;
     private final Map<String, Integer> mSiteOrder;
     private String mFilterGroup;
+    private boolean mPrecise;
+    private boolean mSearchCompleted;
+    private final SearchPageState mPaging;
     private PopupWindow groupPopup;
     private int collectWidth;
 
     public CollectFragment() {
         mAllCollectItems = new ArrayList<>();
+        mVisibleItems = new HashMap<>();
         mSiteOrder = new HashMap<>();
+        mPaging = new SearchPageState();
         mFilterGroup = "";
     }
 
@@ -161,6 +170,7 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
     @Override
     protected void initView() {
         mScroller = new CustomScroller(this);
+        mPrecise = Setting.isSearchPrecise() && SearchResultFilter.canFilter(getKeyword());
         setSites();
         setWidth();
         setRecyclerView();
@@ -228,25 +238,16 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
     }
 
     private void search() {
-        if (mSites.isEmpty()) return;
-        Collect all = Collect.all();
+        mSearchCompleted = false;
+        mPaging.clear();
         mAllCollectItems.clear();
-        mAllCollectItems.add(all);
-
+        mVisibleItems.clear();
+        mAllCollectItems.add(Collect.all());
         if (Setting.getSearchResultSort() == 1) {
-            // 模式1：预先铺满所有源（按配置顺序）
-            List<Collect> initialCollects = new ArrayList<>();
-            initialCollects.add(all);
-            for (Site site : mSites) {
-                Collect empty = new Collect(site, new ArrayList<>());
-                mAllCollectItems.add(empty);
-                initialCollects.add(empty);
-            }
-            mCollectAdapter.setItems(new ArrayList<>(initialCollects), () -> mViewModel.searchContent(mSites, getKeyword(), false));
-        } else {
-            // 模式0：动态增量模式（现状）
-            mCollectAdapter.setItems(new ArrayList<>(mAllCollectItems), () -> mViewModel.searchContent(mSites, getKeyword(), false));
+            for (Site site : mSites) mAllCollectItems.add(new Collect(site, new ArrayList<>()));
         }
+        applyFilters("all", true);
+        if (!mSites.isEmpty()) mViewModel.searchContent(mSites, getKeyword(), false);
     }
 
     private int getCount() {
@@ -309,21 +310,22 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
 
     private void setCollect(Result result) {
         if (result == null || result.getList().isEmpty()) return;
-        List<Vod> items = new ArrayList<>(result.getList());
         String activeSiteKey = getActiveSiteKey();
-        Collect collect = addMasterCollect(items);
-        if (!matchFilter(collect.getSite())) return;
-
-        List<Collect> collects = getFilteredCollectItems(activeSiteKey);
-        Collect activated = getSelectedCollect(collects);
-        mCollectAdapter.setItems(collects);
-        if ("all".equals(activeSiteKey) || collect.getSite().getKey().equals(activeSiteKey)) {
-            mSearchAdapter.setItems(new ArrayList<>(activated.getList()));
+        List<Vod> items = new ArrayList<>(result.getList());
+        Collect raw = addMasterCollect(items);
+        raw.setPage(mPaging.getPage(raw.getSite().getKey()));
+        mPaging.recordInitial(raw.getSite().getKey(), result.getPageCount(), SearchPageState.pageToken(items));
+        boolean visiblePageHasItems = appendVisibleItems(raw.getSite().getKey(), items);
+        if (matchFilter(raw.getSite())) {
+            String pageSiteKey = raw.getSite().getKey();
+            applyFilters(activeSiteKey, false, () -> {
+                maybeLoadNextPage(pageSiteKey, true, visiblePageHasItems);
+                if (!pageSiteKey.equals(getActiveSiteKey())) maybeLoadSelectedPage();
+            });
         }
     }
 
     private Collect addMasterCollect(List<Vod> items) {
-        mAllCollectItems.get(0).getList().addAll(items);
         Site site = items.get(0).getSite();
         Collect collect = findCollect(mAllCollectItems, site.getKey());
         if (collect == null) {
@@ -332,6 +334,25 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
         }
         collect.getList().addAll(items);
         return collect;
+    }
+
+    private boolean appendVisibleItems(String siteKey, List<Vod> items) {
+        List<Vod> visible = SearchResultFilter.filter(items, getKeyword(), mPrecise);
+        mVisibleItems.computeIfAbsent(siteKey, key -> new ArrayList<>()).addAll(visible);
+        return !visible.isEmpty();
+    }
+
+    private void rebuildVisibleItems() {
+        mVisibleItems.clear();
+        for (int i = 1; i < mAllCollectItems.size(); i++) {
+            Collect raw = mAllCollectItems.get(i);
+            mVisibleItems.put(raw.getSite().getKey(), SearchResultFilter.filter(raw.getList(), getKeyword(), mPrecise));
+        }
+    }
+
+    private List<Vod> getVisibleItems(String siteKey) {
+        List<Vod> visible = mVisibleItems.get(siteKey);
+        return visible == null ? new ArrayList<>() : new ArrayList<>(visible);
     }
 
     private Collect findCollect(List<Collect> items, String siteKey) {
@@ -344,22 +365,51 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
     }
 
     private void setSearchProgress(SearchProgress progress) {
-        if (progress != null) mCollectAdapter.setProgress(progress.current(), progress.total());
+        if (progress == null) return;
+        mCollectAdapter.setProgress(progress.current(), progress.total());
+        mSearchCompleted = progress.total() > 0 && progress.current() >= progress.total();
+        if (mSearchCompleted && mCollectAdapter.getItemCount() > 0) updateEmptyState(mCollectAdapter.getActivated());
     }
 
     private void setSearch(Result result) {
         if (result == null) return;
-        mScroller.endLoading(result);
-        boolean same = !result.getList().isEmpty() && mCollectAdapter.getActivated().getSite().equals(result.getVod().getSite());
-        if (same) mCollectAdapter.getActivated().getList().addAll(result.getList());
-        if (same) mSearchAdapter.setItems(new ArrayList<>(mCollectAdapter.getActivated().getList()));
+        boolean hasItems = !result.getList().isEmpty();
+        String resultSiteKey = hasItems ? result.getVod().getSiteKey() : "";
+        SearchPageState.Completion completion = mPaging.complete(resultSiteKey, hasItems, result.getPageCount(), SearchPageState.pageToken(result.getList()));
+        if (!completion.handled()) return;
+        Collect raw = findCollect(mAllCollectItems, completion.siteKey());
+        if (completion.accepted() && raw != null) raw.setPage(completion.page());
+        restoreScroller(getActiveSiteKey());
+        if (!completion.accepted()) {
+            if (mCollectAdapter.getItemCount() > 0) updateEmptyState(mCollectAdapter.getActivated());
+            if (!completion.siteKey().equals(getActiveSiteKey())) maybeLoadSelectedPage();
+            return;
+        }
+        String activeSiteKey = getActiveSiteKey();
+        List<Vod> items = new ArrayList<>(result.getList());
+        raw = addMasterCollect(items);
+        String pageSiteKey = raw.getSite().getKey();
+        raw.setPage(mPaging.getPage(pageSiteKey));
+        boolean visiblePageHasItems = appendVisibleItems(pageSiteKey, items);
+        if (matchFilter(raw.getSite())) {
+            applyFilters(activeSiteKey, false, () -> {
+                maybeLoadNextPage(pageSiteKey, true, visiblePageHasItems);
+                if (!pageSiteKey.equals(getActiveSiteKey())) maybeLoadSelectedPage();
+            });
+        } else maybeLoadSelectedPage();
     }
 
     @Override
     public void onItemClick(int position, Collect item) {
-        mSearchAdapter.setItems(item.getList(), () -> mBinding.recycler.scrollToPosition(0));
         mCollectAdapter.setSelected(position);
-        mScroller.setPage(item.getPage());
+        restoreScroller(item.getSite().getKey());
+        mSearchAdapter.setItems(new ArrayList<>(item.getList()), () -> {
+            if (!item.getSite().getKey().equals(getActiveSiteKey())) return;
+            Collect current = mCollectAdapter.getActivated();
+            mBinding.recycler.scrollToPosition(0);
+            updateEmptyState(current);
+            maybeLoadNextPage(current.getSite().getKey(), hasRawResults(current.getSite().getKey()), !current.getList().isEmpty());
+        });
     }
 
     @Override
@@ -374,9 +424,24 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
     @Override
     public boolean onLoadMore(String page) {
         Collect activated = mCollectAdapter.getActivated();
-        if ("all".equals(activated.getSite().getKey())) return false;
-        mViewModel.searchContent(activated.getSite(), getKeyword(), false, page);
-        activated.setPage(Integer.parseInt(page));
+        String siteKey = activated.getSite().getKey();
+        if ("all".equals(siteKey)) return false;
+        Collect raw = findCollect(mAllCollectItems, siteKey);
+        if (raw == null || raw.getList().isEmpty()) return false;
+        int requestedPage;
+        try {
+            requestedPage = Integer.parseInt(page);
+        } catch (NumberFormatException e) {
+            return false;
+        }
+        if (!mPaging.begin(siteKey, requestedPage)) return false;
+        try {
+            mViewModel.searchContent(raw.getSite(), getKeyword(), false, page);
+        } catch (RuntimeException e) {
+            mPaging.cancelPending();
+            restoreScroller(siteKey);
+            return false;
+        }
         return true;
     }
 
@@ -391,6 +456,11 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
         if (group != null) {
             group.setVisible(canFilterGroup());
             group.setTitle(TextUtils.isEmpty(mFilterGroup) ? getString(R.string.search_scope_all) : mFilterGroup);
+        }
+        MenuItem precise = menu.findItem(R.id.action_precise);
+        if (precise != null) {
+            precise.setChecked(mPrecise);
+            precise.setTitle(mPrecise ? R.string.search_filter_precise_checked : R.string.search_filter_precise);
         }
         MenuItem item = menu.findItem(R.id.action_column);
         if (item == null) return;
@@ -408,6 +478,10 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
             onGroupFilter();
             return true;
         }
+        if (menuItem.getItemId() == R.id.action_precise) {
+            onPreciseFilter();
+            return true;
+        }
         if (menuItem.getItemId() == R.id.action_column) {
             onColumnToggle();
             return true;
@@ -417,6 +491,62 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
 
     private boolean canFilterGroup() {
         return !isSiteSearch() && !isGroupSearch() && mGroups != null && !mGroups.isEmpty();
+    }
+
+    private void onPreciseFilter() {
+        if (!SearchResultFilter.canFilter(getKeyword())) {
+            Notify.show(R.string.search_filter_keyword_too_short);
+            return;
+        }
+        mPrecise = !mPrecise;
+        Setting.putSearchPrecise(mPrecise);
+        rebuildVisibleItems();
+        applyFilters(getActiveSiteKey());
+        requireActivity().invalidateOptionsMenu();
+        Notify.show(mPrecise ? R.string.search_filter_precise_on : R.string.search_filter_precise_off);
+    }
+
+    private void updateEmptyState(Collect activated) {
+        String siteKey = activated.getSite().getKey();
+        boolean loading = "all".equals(siteKey) ? mPaging.hasPending() : mPaging.isPending(siteKey);
+        boolean show = mPrecise && mSearchCompleted && !loading && activated.getList().isEmpty() && hasRawResults(siteKey);
+        mBinding.empty.setVisibility(show ? View.VISIBLE : View.GONE);
+    }
+
+    private void restoreScroller(String siteKey) {
+        if (mPaging.isPending(siteKey)) return;
+        mScroller.reset();
+        if ("all".equals(siteKey)) return;
+        mScroller.setPage(mPaging.getPage(siteKey));
+        mScroller.setEnable(mPaging.getPageCount(siteKey));
+    }
+
+    private void maybeLoadNextPage(String siteKey, boolean rawPageHasItems, boolean visiblePageHasItems) {
+        if (!siteKey.equals(getActiveSiteKey())) return;
+        if (!mPaging.shouldContinue(siteKey, mPrecise, rawPageHasItems, visiblePageHasItems)) return;
+        restoreScroller(siteKey);
+        mScroller.checkMore(null);
+        if (mPaging.isPending(siteKey)) updateEmptyState(mCollectAdapter.getActivated());
+    }
+
+    private void maybeLoadSelectedPage() {
+        if (mCollectAdapter == null || mCollectAdapter.getItemCount() == 0) return;
+        Collect activated = mCollectAdapter.getActivated();
+        String siteKey = activated.getSite().getKey();
+        Collect raw = findCollect(mAllCollectItems, siteKey);
+        maybeLoadNextPage(siteKey, raw != null && !raw.getList().isEmpty(), !activated.getList().isEmpty());
+    }
+
+    private boolean hasRawResults(String siteKey) {
+        if (!"all".equals(siteKey)) {
+            Collect raw = findCollect(mAllCollectItems, siteKey);
+            return raw != null && !raw.getList().isEmpty();
+        }
+        for (int i = 1; i < mAllCollectItems.size(); i++) {
+            Collect raw = mAllCollectItems.get(i);
+            if (matchFilter(raw.getSite()) && !raw.getList().isEmpty()) return true;
+        }
+        return false;
     }
 
     private void onGroupFilter() {
@@ -503,7 +633,7 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
 
     private void setFilterGroup(String group) {
         mFilterGroup = group == null ? "" : group;
-        applyFilterGroup(getActiveSiteKey());
+        applyFilters(getActiveSiteKey());
         requireActivity().invalidateOptionsMenu();
     }
 
@@ -512,25 +642,47 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
         return mCollectAdapter.getActivated().getSite().getKey();
     }
 
-    private void applyFilterGroup(String activeSiteKey) {
+    private void applyFilters(String activeSiteKey) {
+        applyFilters(activeSiteKey, true, null);
+    }
+
+    private void applyFilters(String activeSiteKey, boolean scrollTop) {
+        applyFilters(activeSiteKey, scrollTop, null);
+    }
+
+    private void applyFilters(String activeSiteKey, boolean scrollTop, Runnable after) {
         List<Collect> items = getFilteredCollectItems(activeSiteKey);
-        Collect activated = getSelectedCollect(items);
         mCollectAdapter.setItems(items, () -> {
-            mSearchAdapter.setItems(activated.getList(), () -> mBinding.recycler.scrollToPosition(0));
-            mScroller.setPage(activated.getPage());
+            mCollectAdapter.setSelected(mCollectAdapter.getPosition());
+            Collect current = mCollectAdapter.getActivated();
+            mSearchAdapter.setItems(new ArrayList<>(current.getList()), () -> {
+                if (scrollTop) mBinding.recycler.scrollToPosition(0);
+                Collect latest = mCollectAdapter.getActivated();
+                updateEmptyState(latest);
+                String siteKey = latest.getSite().getKey();
+                Collect raw = findCollect(mAllCollectItems, siteKey);
+                maybeLoadNextPage(siteKey, raw != null && !raw.getList().isEmpty(), !latest.getList().isEmpty());
+                if (after != null) after.run();
+            });
+            restoreScroller(current.getSite().getKey());
         });
     }
 
     private List<Collect> getFilteredCollectItems(String activeSiteKey) {
         List<Collect> items = new ArrayList<>();
         Collect all = Collect.all();
-        all.setSelected(false);
+        all.setSelected("all".equals(activeSiteKey));
         items.add(all);
+        boolean fixedOrder = Setting.getSearchResultSort() == 1;
         for (int i = 1; i < mAllCollectItems.size(); i++) {
-            Collect item = mAllCollectItems.get(i);
-            if (!matchFilter(item.getSite())) continue;
-            all.getList().addAll(item.getList());
-            item.setSelected(item.getSite().getKey().equals(activeSiteKey));
+            Collect raw = mAllCollectItems.get(i);
+            if (!matchFilter(raw.getSite())) continue;
+            List<Vod> visible = getVisibleItems(raw.getSite().getKey());
+            if (!fixedOrder && visible.isEmpty() && (!mPrecise || raw.getList().isEmpty())) continue;
+            Collect item = new Collect(raw.getSite(), visible);
+            item.setPage(mPaging.getPage(raw.getSite().getKey()));
+            item.setSelected(raw.getSite().getKey().equals(activeSiteKey));
+            all.getList().addAll(visible);
             items.add(item);
         }
         if (getSelectedCollect(items) == all) all.setSelected(true);
@@ -552,9 +704,11 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
     public void onDestroyView() {
         super.onDestroyView();
         mViewModel.stopSearch();
+        mPaging.clear();
         if (groupPopup != null) groupPopup.dismiss();
         SiteHealthStore.flush();
         mAllCollectItems.clear();
+        mVisibleItems.clear();
         requireActivity().removeMenuProvider(this);
     }
 }

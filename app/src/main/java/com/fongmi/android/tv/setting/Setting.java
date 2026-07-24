@@ -1316,4 +1316,12 @@ public class Setting {
     public static void putSearchResultSort(int sort) {
         Prefers.put("search_result_sort", sort == 0 ? 0 : 1);
     }
+
+    public static boolean isSearchPrecise() {
+        return Prefers.getBoolean("search_precise", false);
+    }
+
+    public static void putSearchPrecise(boolean enabled) {
+        Prefers.put("search_precise", enabled);
+    }
 }

@@ -77,4 +77,35 @@ public class GroupRuleTest {
         assertTrue(rules.get(0).isEnabled());
         assertEquals(List.of("分组A"), rules.get(0).extract("前缀#分组A"));
     }
+
+    @Test
+    public void aiRuleAcceptsOnlySafeLinearRegexSubset() {
+        assertTrue(GroupRule.createAi("方括号", "\\[([^\\]]+)\\]").isValid());
+        assertTrue(GroupRule.createAi("竖线", "(?i)(?:[|｜])\\s*([^|｜]+?)\\s*$").isValid());
+        assertTrue(GroupRule.createAi("框线", "(?i)┆\\s*([^┆]+)\\s*$").isValid());
+        assertTrue(GroupRule.createAi("圆点", "(?i)(?:[•·])\\s*([^•·]+?)\\s*$").isValid());
+        assertTrue(GroupRule.createAi("前缀", "^([^:：]+)[:：]").isValid());
+    }
+
+    @Test
+    public void aiRuleRejectsBacktrackingProneRegex() {
+        assertFalse(GroupRule.createAi("交替回溯", "^(a|aa)+$").isValid());
+        assertFalse(GroupRule.createAi("重复分组", "^(\\w+\\s?)*$").isValid());
+        assertFalse(GroupRule.createAi("任意通配", "^(.+)$").isValid());
+        assertFalse(GroupRule.createAi("回溯引用", "^(a+)\\1$").isValid());
+        assertFalse(GroupRule.createAi("多段回溯", "^(a*a*a*b)$").isValid());
+    }
+
+    @Test
+    public void aiRuleSkipsOverlongSourceNames() {
+        GroupRule rule = GroupRule.createAi("前缀", "^([^:：]+)[:：]");
+
+        assertTrue(rule.extract("a".repeat(300) + ":短剧").isEmpty());
+    }
+
+    @Test
+    public void userRuleStillAllowsAdvancedRegex() {
+        assertTrue(GroupRule.createUser("用户自定义", "^(a|aa)+$").isValid());
+    }
+
 }

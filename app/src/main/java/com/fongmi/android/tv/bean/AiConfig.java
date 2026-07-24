@@ -106,6 +106,20 @@ public class AiConfig {
             + "- confidence 取 0.0-1.0，低于 0.5 时在 reasoning 中说明证据不足，建议人工审核\n"
             + "- 若无明显广告特征（无 DISCONTINUITY、无跨域、无关键词），confidence 应低于 0.3";
 
+    public static final int DEFAULT_GROUP_RULE_PROMPT_VERSION = 2;
+    public static final String LEGACY_GROUP_RULE_PROMPT_V1 = "你是影视点播源名称分组规则生成器。请根据源名称生成 Java 正则表达式数组，每条规则的第 1 个捕获组作为分组名。只返回 JSON：{\"rules\":[{\"name\":\"规则名称\",\"regex\":\"Java正则\"}]}。";
+    public static final String DEFAULT_GROUP_RULE_PROMPT = "你是影视点播源名称的分组规则生成器。\n"
+            + "你的任务是从点播源显示名称中识别可重复出现的分类、线路、采集方、内容类型或质量标签，并生成尽可能少而稳定的 Java 正则规则。\n"
+            + "严格要求：\n"
+            + "1. 只返回严格 JSON，不要 Markdown、解释、注释或多余文字。\n"
+            + "2. 输出格式：{\"rules\":[{\"name\":\"规则名称\",\"regex\":\"Java正则\",\"reason\":\"一句简短说明\"}]}。\n"
+            + "3. 每条 regex 必须兼容 java.util.regex.Pattern，第 1 个捕获组必须是最终分组名。\n"
+            + "4. 分组名必须来自多个源名称中重复出现的稳定片段，不要捕获整个源名称。\n"
+            + "5. 优先识别方括号、圆括号、竖线、短横线、冒号、圆点等分隔符附近的标签。\n"
+            + "6. 不要为只出现一次的文字生成规则；不要生成重复或等价规则。\n"
+            + "7. 不要使用回溯引用、复杂嵌套量词或不受支持的语法。\n"
+            + "8. 最多输出 6 条规则，JSON 中的反斜杠必须正确转义。";
+
     @SerializedName("enabled")
     private boolean enabled;
     @SerializedName(value = "protocol", alternate = {"apiFormat", "format"})
@@ -142,12 +156,18 @@ public class AiConfig {
     private int adDetectionPromptVersion;
     @SerializedName("adDetectionPromptCustom")
     private boolean adDetectionPromptCustom;
+    @SerializedName("groupRulePrompt")
+    private String groupRulePrompt;
+    @SerializedName("groupRulePromptVersion")
+    private int groupRulePromptVersion;
+    @SerializedName("groupRulePromptCustom")
+    private boolean groupRulePromptCustom;
 
     public static AiConfig objectFrom(String json) {
         try {
             AiConfig config = GSON.fromJson(json, AiConfig.class);
             return config == null ? new AiConfig().sanitize() : config.sanitize();
-        } catch (Throwable e) {
+        } catch (Exception e) {
             return new AiConfig().sanitize();
         }
     }
@@ -162,6 +182,7 @@ public class AiConfig {
         sanitizeTitleExtractionPrompt();
         sanitizeViewingReportPrompt();
         sanitizeAdDetectionPrompt();
+        sanitizeGroupRulePrompt();
         return this;
     }
 
@@ -343,6 +364,35 @@ public class AiConfig {
         adDetectionPromptVersion = DEFAULT_AD_DETECTION_PROMPT_VERSION;
     }
 
+    public String getGroupRulePrompt() {
+        return groupRulePrompt;
+    }
+
+    public void setGroupRulePrompt(String groupRulePrompt) {
+        String value = groupRulePrompt == null ? "" : groupRulePrompt.trim();
+        if (isEmpty(value) || isBuiltInGroupRulePrompt(value)) {
+            resetGroupRulePrompt();
+        } else {
+            this.groupRulePrompt = value;
+            this.groupRulePromptCustom = true;
+            this.groupRulePromptVersion = DEFAULT_GROUP_RULE_PROMPT_VERSION;
+        }
+    }
+
+    public int getGroupRulePromptVersion() {
+        return groupRulePromptVersion;
+    }
+
+    public boolean isGroupRulePromptCustom() {
+        return groupRulePromptCustom;
+    }
+
+    public void resetGroupRulePrompt() {
+        groupRulePrompt = DEFAULT_GROUP_RULE_PROMPT;
+        groupRulePromptCustom = false;
+        groupRulePromptVersion = DEFAULT_GROUP_RULE_PROMPT_VERSION;
+    }
+
     public static String defaultEndpoint(String protocol) {
         if (PROTOCOL_OPENAI_CHAT.equals(protocol)) return DEFAULT_OPENAI_CHAT_ENDPOINT;
         if (PROTOCOL_ANTHROPIC_MESSAGES.equals(protocol)) return DEFAULT_ANTHROPIC_ENDPOINT;
@@ -411,6 +461,17 @@ public class AiConfig {
         if (adDetectionPromptVersion <= 0) adDetectionPromptVersion = DEFAULT_AD_DETECTION_PROMPT_VERSION;
     }
 
+    private void sanitizeGroupRulePrompt() {
+        String value = groupRulePrompt == null ? "" : groupRulePrompt.trim();
+        if (isEmpty(value) || isBuiltInGroupRulePrompt(value)) {
+            resetGroupRulePrompt();
+            return;
+        }
+        groupRulePrompt = value;
+        groupRulePromptCustom = true;
+        if (groupRulePromptVersion <= 0) groupRulePromptVersion = DEFAULT_GROUP_RULE_PROMPT_VERSION;
+    }
+
     public static boolean isBuiltInRecommendPrompt(String prompt) {
         if (prompt == null) return false;
         String value = prompt.trim();
@@ -439,6 +500,13 @@ public class AiConfig {
         return DEFAULT_AD_DETECTION_PROMPT_V1.equals(value);
     }
 
+    public static boolean isBuiltInGroupRulePrompt(String prompt) {
+        if (prompt == null) return false;
+        String value = prompt.trim();
+        if (DEFAULT_GROUP_RULE_PROMPT.equals(value)) return true;
+        return LEGACY_GROUP_RULE_PROMPT_V1.equals(value);
+    }
+
     public static String[] systemRecommendPromptsForCache() {
         return new String[]{DEFAULT_RECOMMEND_PROMPT, LEGACY_RECOMMEND_PROMPT_V1};
     }
@@ -453,5 +521,9 @@ public class AiConfig {
 
     public static String[] systemAdDetectionPromptsForCache() {
         return new String[]{DEFAULT_AD_DETECTION_PROMPT};
+    }
+
+    public static String[] systemGroupRulePromptsForCache() {
+        return new String[]{DEFAULT_GROUP_RULE_PROMPT, LEGACY_GROUP_RULE_PROMPT_V1};
     }
 }

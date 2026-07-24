@@ -4654,8 +4654,10 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
 
     private ArrayList<String> fastPlaybackEpisodeTitles() {
         ArrayList<String> result = new ArrayList<>(1);
-        String title = playbackEpisodeName();
-        if (!TextUtils.isEmpty(title)) result.add((selectedEpisode == null ? 0 : selectedEpisode.getNumber()) + "\t" + title);
+        if (selectedEpisode == null) return result;
+        int number = episodeNumberForHistory(selectedEpisode);
+        String title = tmdbEpisodeTitle(number);
+        if (number > 0 && !TextUtils.isEmpty(title)) result.add(number + "\t" + title);
         return result;
     }
 

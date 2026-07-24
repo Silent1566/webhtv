@@ -74,6 +74,34 @@ public class VideoActivityLayoutTest {
     }
 
     @Test
+    public void mobileLandscapeTmdbMovableIdsDoNotPointIntoAudioStage() throws Exception {
+        List<Path> layoutFiles = Arrays.asList(
+                findMobileResPath().resolve(Path.of("layout-land", "activity_video.xml")),
+                findMobileResPath().resolve(Path.of("layout-sw600dp-land", "activity_video.xml"))
+        );
+
+        for (Path layoutFile : layoutFiles) {
+            assertTrue(layoutFile + " must exist", Files.exists(layoutFile));
+            Element audioStage = findAndroidId(layoutFile.toFile(), "audioStage");
+            Element flagTitleBar = findAndroidId(layoutFile.toFile(), "flagTitleBar");
+            Element episodeTitleBar = findAndroidId(layoutFile.toFile(), "episodeTitleBar");
+
+            assertTrue(layoutFile + " is missing @+id/audioStage", audioStage != null);
+            assertTrue(layoutFile + " is missing @+id/flagTitleBar", flagTitleBar != null);
+            assertTrue(layoutFile + " is missing @+id/episodeTitleBar", episodeTitleBar != null);
+            assertFalse(layoutFile + " must not bind flagTitleBar to the audio-stage layout",
+                    hasAncestorAndroidId(flagTitleBar, "audioStage"));
+            assertFalse(layoutFile + " must not bind episodeTitleBar to the audio-stage layout",
+                    hasAncestorAndroidId(episodeTitleBar, "audioStage"));
+            assertTrue(layoutFile + " must bind flagTitleBar to the source heading",
+                    hasDescendantAndroidText(flagTitleBar, "@string/detail_flag"));
+            assertTrue(layoutFile + " must bind episodeTitleBar to the episode heading",
+                    hasDescendantAndroidText(episodeTitleBar, "@string/detail_episode"));
+            assertTrue(layoutFile + " must place the source title before the episode title",
+                    isAndroidIdBefore(layoutFile, "flagTitleBar", "episodeTitleBar"));
+        }
+    }
+    @Test
     public void mobileActivityVideoLayoutsHaveFusionChromeHost() throws Exception {
         List<Path> layoutFiles = Files.walk(findMobileResPath())
                 .filter(path -> path.getFileName().toString().equals("activity_video.xml"))
@@ -1711,8 +1739,8 @@ public class VideoActivityLayoutTest {
                             && body.contains("if (keyChanged) mHistory.replace(nextKey)"));
             assertFalse(sourcePath + " must not unconditionally replace history on every id update",
                     body.contains("if (id) mHistory.replace(getHistoryKey())"));
-            assertTrue(sourcePath + " must sync history after key migration even without pic/name",
-                    body.contains("if (keyChanged || pic || name) syncHistory()"));
+            assertTrue(sourcePath + " must sync history after key migration or an async episode-title refresh",
+                    body.contains("if (keyChanged || pic || name || episodeTitleChanged) syncHistory()"));
         }
     }
 
@@ -2241,6 +2269,27 @@ public class VideoActivityLayoutTest {
             if (id.endsWith("/" + value)) return element;
         }
         return null;
+    }
+
+    private static boolean hasAncestorAndroidId(Element element, String value) {
+        if (element == null) return false;
+        Node current = element.getParentNode();
+        while (current instanceof Element) {
+            String id = ((Element) current).getAttribute("android:id");
+            if (id.endsWith("/" + value)) return true;
+            current = current.getParentNode();
+        }
+        return false;
+    }
+
+    private static boolean hasDescendantAndroidText(Element element, String value) {
+        if (element == null) return false;
+        NodeList nodes = element.getElementsByTagName("*");
+        for (int i = 0; i < nodes.getLength(); i++) {
+            Element child = (Element) nodes.item(i);
+            if (value.equals(child.getAttribute("android:text"))) return true;
+        }
+        return false;
     }
 
     private static boolean isAndroidIdBefore(Path file, String firstId, String secondId) throws Exception {

@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.app.Application;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.os.Bundle;
 import android.os.Handler;
@@ -129,10 +130,15 @@ public class App extends Application implements Application.ActivityLifecycleCal
     }
 
     @Override
+    @SuppressWarnings("deprecation")
     public Resources getResources() {
         int language = Setting.getLanguage();
         if (resources == null || resourcesLanguage != language) {
-            resources = Setting.wrapLanguage(getBaseContext()).getResources();
+            Resources resources = super.getResources();
+            Configuration configuration = Setting.wrapLanguage(getBaseContext()).getResources().getConfiguration();
+            // WebView adds its resource package to the framework-owned AssetManager on Android 9.
+            resources.updateConfiguration(configuration, resources.getDisplayMetrics());
+            this.resources = resources;
             resourcesLanguage = language;
         }
         return resources;

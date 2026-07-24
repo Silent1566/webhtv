@@ -126,6 +126,7 @@ import com.fongmi.android.tv.ui.player.VodPlayerUiHost;
 import com.fongmi.android.tv.utils.ActivityLaunch;
 import com.fongmi.android.tv.utils.AudioUtil;
 import com.fongmi.android.tv.utils.Clock;
+import com.fongmi.android.tv.utils.EpisodeHistoryTitleResolver;
 import com.fongmi.android.tv.utils.EpisodeTitleFormatter;
 import com.fongmi.android.tv.utils.FileChooser;
 import com.fongmi.android.tv.utils.ImgUtil;
@@ -1719,7 +1720,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
             }
         }
         mHistory.setVodFlag(flag.getFlag());
-        mHistory.setVodRemarks(episode.getName());
+        mHistory.setVodRemarks(getHistoryEpisodeName(episode));
         mHistory.setEpisodeUrl(episode.getUrl());
     }
 
@@ -3832,7 +3833,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         }
         mHistory.setVodFlag(flag.getFlag());
         if (episode == null) return;
-        mHistory.setVodRemarks(episode.getName());
+        mHistory.setVodRemarks(getHistoryEpisodeName(episode));
         mHistory.setEpisodeUrl(episode.getUrl());
     }
 
@@ -3863,13 +3864,14 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
             " incognito=" + Setting.isIncognito());
         if (mHistory == null || Setting.isIncognito()) return;
         if (service() != null && isOwner()) {
-            // 保存当前集的播放位置到缓存
-            if (!TextUtils.isEmpty(mHistory.getVodRemarks())) {
+            // 播放位置缓存继续使用源站集名，避免刮削展示名变化后无法恢复。
+            String cacheName = getCurrentHistoryEpisodeCacheName();
+            if (!TextUtils.isEmpty(cacheName)) {
                 EpisodePositionCache.get().put(
                     getKey(),
                     getId(),
                     getFlag().getFlag(),
-                    mHistory.getVodRemarks(),
+                    cacheName,
                     player().getPosition(),
                     player().getDuration()
                 );
@@ -3897,17 +3899,18 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     private void updateHistory(Episode item) {
-        boolean sameEpisode = item.matchesName(mHistory.getEpisode());
+        boolean sameEpisode = item.matches(mHistory.getEpisode()) || item.matchesName(mHistory.getEpisode());
         boolean sameFlag = TextUtils.equals(mHistory.getVodFlag(), getFlag().getFlag());
         if (!sameEpisode || !sameFlag) mIntroSkipPlayback.reset();
         if ((!sameEpisode || !sameFlag) && service() != null) {
-            // 保存当前集的播放位置到缓存
-            if (!TextUtils.isEmpty(mHistory.getVodRemarks())) {
+            // 播放位置缓存继续使用源站集名，History 仅负责展示刮削后的标题。
+            String cacheName = getCurrentHistoryEpisodeCacheName();
+            if (!TextUtils.isEmpty(cacheName)) {
                 EpisodePositionCache.get().put(
                     getKey(),
                     getId(),
                     getFlag().getFlag(),
-                    mHistory.getVodRemarks(),
+                    cacheName,
                     player().getPosition(),
                     player().getDuration()
                 );
@@ -3935,7 +3938,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         }
 
         mHistory.setVodFlag(getFlag().getFlag());
-        mHistory.setVodRemarks(item.getName());
+        mHistory.setVodRemarks(getHistoryEpisodeName(item));
         mHistory.setEpisodeUrl(item.getUrl());
         PlaybackEventCollector.get().updateHistory(mHistory);
     }
@@ -3985,12 +3988,13 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         // 原生增强：TMDB 富集完成后回写题材/地区/演员/主创到 History（enrichVod 已填充 item），仅补空字段
         if (mHistory != null) mHistory.enrichMeta(item.getTypeName(), item.getArea(), item.getActor(), item.getDirector(), item.getYear());
         updateFlag(getFlag(), item.getFlags());
+        boolean episodeTitleChanged = refreshCurrentHistoryEpisodeTitle();
         CharSequence playbackTitle = getPlaybackControlTitle();
         if (!TextUtils.equals(mBinding.widget.title.getText(), playbackTitle)) mBinding.widget.title.setText(playbackTitle);
         if (pic) setArtwork(item.getPic());
         if (pic || name) setMetadata();
         // key 迁移后必须写回，避免 replace 删旧 key 后未 save 导致历史消失
-        if (keyChanged || pic || name) syncHistory();
+        if (keyChanged || pic || name || episodeTitleChanged) syncHistory();
         if (pic || name) updateKeep();
         if (id) updateNavigationKey();
         if (name) setPartAdapter();
@@ -4008,6 +4012,45 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         mBinding.remark.setVisibility(View.GONE);
         mBinding.actor.setVisibility(View.GONE);
         mBinding.director.setVisibility(View.GONE);
+    }
+
+    private String getHistoryEpisodeName(Episode episode) {
+        return EpisodeHistoryTitleResolver.resolve(
+                episode,
+                getEpisodeTitles(),
+                Setting.getTmdbEpisodeShowScrapedName(),
+                Setting.isTmdbEpisodeFileSize());
+    }
+
+    private String getCurrentHistoryEpisodeCacheName() {
+        if (mHistory == null || mFlagAdapter == null) return "";
+        Episode historyEpisode = mHistory.getEpisode();
+        for (Flag flag : mFlagAdapter.getItems()) {
+            if (!TextUtils.equals(flag.getFlag(), mHistory.getVodFlag())) continue;
+            Episode episode = flag.find(historyEpisode, true);
+            if (episode != null) return episode.getName();
+        }
+        if (!TextUtils.isEmpty(historyEpisode.getUrl())) {
+            for (Flag flag : mFlagAdapter.getItems()) {
+                for (Episode episode : flag.getEpisodes()) {
+                    if (TextUtils.equals(episode.getUrl(), historyEpisode.getUrl())) return episode.getName();
+                }
+            }
+        }
+        return "";
+    }
+
+    private boolean refreshCurrentHistoryEpisodeTitle() {
+        if (mHistory == null || mFlagAdapter == null || mFlagAdapter.getItemCount() == 0) return false;
+        Flag flag = getFlag();
+        if (flag == null) return false;
+        Episode episode = flag.find(mHistory.getEpisode(), true);
+        if (episode == null) return false;
+        String title = getHistoryEpisodeName(episode);
+        if (TextUtils.isEmpty(title) || TextUtils.equals(title, mHistory.getVodRemarks())) return false;
+        mHistory.setVodRemarks(title);
+        mHistory.setEpisodeUrl(episode.getUrl());
+        return true;
     }
 
     private void updateFlag(Flag activated, List<Flag> items) {
