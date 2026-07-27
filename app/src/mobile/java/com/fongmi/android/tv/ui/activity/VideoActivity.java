@@ -868,6 +868,33 @@ private int mAudioBackgroundRandomNonce;
         return (com.fongmi.android.tv.bean.TmdbItem) getIntent().getSerializableExtra("tmdbItem");
     }
 
+    /**
+     * 跨源聚合：取当前已知的 TMDB ID（优先适配器匹配结果，其次 intent 携带的 tmdbItem）。
+     * 从 TMDB 详情进入播放时 intent 已带 tmdbItem，checkHistory 阶段即可拿到，用于首次进入就跨源续播。
+     */
+    private int getMatchedTmdbId() {
+        if (!Setting.isHistoryAggregationEffective()) return 0;
+        com.fongmi.android.tv.bean.TmdbItem item = mTmdbUIAdapter == null ? null : mTmdbUIAdapter.getTmdbItem();
+        if (item == null) item = getTmdbItem();
+        return item == null ? 0 : item.getTmdbId();
+    }
+
+    /**
+     * TMDB 匹配完成后把 tmdbId/mediaType 盖章到 History，供列表去重与跨源续播使用。
+     *
+     * @return 是否有字段被更新（需调用方持久化）
+     */
+    private boolean stampHistoryTmdbId() {
+        if (mHistory == null || !Setting.isHistoryAggregationEffective()) return false;
+        com.fongmi.android.tv.bean.TmdbItem item = mTmdbUIAdapter == null ? null : mTmdbUIAdapter.getTmdbItem();
+        if (item == null) item = getTmdbItem();
+        if (item == null || item.getTmdbId() <= 0) return false;
+        if (mHistory.getTmdbId() == item.getTmdbId()) return false;
+        mHistory.setTmdbId(item.getTmdbId());
+        mHistory.setMediaType(item.getMediaType());
+        return true;
+    }
+
     private String getOsdTitle() {
         return EpisodeTitleFormatter.buildPlaybackTitle(getPlaybackName(), getCurrentEpisodeTitle());
     }
@@ -1993,6 +2020,8 @@ private int mAudioBackgroundRandomNonce;
     @Override
     public void onItemClick(Flag item) {
         if (item.isSelected()) return;
+        Flag previous = getFlag();
+        SpiderDebug.log("playback-action", "flag switch ui=mobile site=%s from=%s to=%s fullscreen=%s", getKey(), previous == null ? "" : previous.getFlag(), item.getFlag(), isFullscreen());
         mFlagAdapter.setSelected(item);
         scrollToPosition(mBinding.flag, mFlagAdapter.getPosition());
         setEpisodeAdapter(item.getEpisodes());
@@ -2058,8 +2087,9 @@ private int mAudioBackgroundRandomNonce;
         mBinding.control.action.next.setVisibility(size < 2 ? View.GONE : View.VISIBLE);
         mBinding.control.action.prev.setVisibility(size < 2 ? View.GONE : View.VISIBLE);
         applyActionButtonVisibility();
-        mBinding.control.next.setVisibility(size < 2 || !PlayerButtonSetting.isVisible(PlayerButtonSetting.NEXT) ? View.GONE : View.VISIBLE);
-        mBinding.control.prev.setVisibility(size < 2 || !PlayerButtonSetting.isVisible(PlayerButtonSetting.PREV) ? View.GONE : View.VISIBLE);
+        // 中间悬浮的上集/下集按钮：只根据集数显示，不受 PlayerButtonSetting 影响
+        mBinding.control.next.setVisibility(size < 2 ? View.GONE : View.VISIBLE);
+        mBinding.control.prev.setVisibility(size < 2 ? View.GONE : View.VISIBLE);
         mBinding.reverse.setVisibility(size < 2 ? View.GONE : View.VISIBLE);
         if (shouldUseUpstreamNativeEpisodeModule()) {
             setUpstreamNativeEpisodeItems(items);
@@ -2965,16 +2995,17 @@ private int mAudioBackgroundRandomNonce;
 
     private void enterFullscreen() {
         if (isFullscreen()) return;
-        if (player() == null) return;
+        PlayerManager current = player();
+        if (current == null) return;
         logVideoFrame("enterFullscreen before");
         setFullscreen(true);
-        if (isLand() && !player().isPortrait()) setTransition();
+        if (isLand() && !current.isPortrait()) setTransition();
         mBinding.video.setLayoutParams(new RelativeLayout.LayoutParams(RelativeLayout.LayoutParams.MATCH_PARENT, RelativeLayout.LayoutParams.MATCH_PARENT));
         mBinding.video.bringToFront();
-        setRequestedOrientation(PlaybackOrientation.getEnterFullscreenOrientation(player().isPortrait()));
+        setRequestedOrientation(PlaybackOrientation.getEnterFullscreenOrientation(current.isPortrait()));
         mBinding.control.title.setVisibility(View.VISIBLE);
         setSizeText();
-        setRotate(player().isPortrait());
+        setRotate(current.isPortrait());
         mKeyDown.resetScale();
         App.post(mR3, 2000);
         hideControl();
@@ -2993,9 +3024,10 @@ private int mAudioBackgroundRandomNonce;
 
     private void exitFullscreen() {
         if (!isFullscreen()) return;
+        PlayerManager current = player();
         logVideoFrame("exitFullscreen before");
         setFullscreen(false);
-        if (isLand() && !player().isPortrait()) setTransition();
+        if (current != null && isLand() && !current.isPortrait()) setTransition();
         setRequestedOrientation(PlaybackOrientation.getExitFullscreenOrientation(isPort()));
         mBinding.episodeGroup.postDelayed(() -> scrollToPosition(mBinding.episodeGroup, mEpisodeGroupAdapter.getPosition()), 100);
         mBinding.episode.postDelayed(this::scrollEpisodeToSelected, 100);
@@ -3044,8 +3076,9 @@ private int mAudioBackgroundRandomNonce;
     }
 
     private void setTransition() {
-        if (!shouldAnimateVideoFrameTransition()) {
-            Log.d(SIZE_TAG, "video transition skipped native player=" + player().getPlayerText());
+        PlayerManager current = player();
+        if (!shouldAnimateVideoFrameTransition(current)) {
+            Log.d(SIZE_TAG, "video transition skipped native player=" + current.getPlayerText());
             return;
         }
         ChangeBounds transition = new ChangeBounds();
@@ -3054,8 +3087,8 @@ private int mAudioBackgroundRandomNonce;
         TransitionManager.beginDelayedTransition(parent, transition);
     }
 
-    private boolean shouldAnimateVideoFrameTransition() {
-        return service() == null || !player().isNativePlayer();
+    private boolean shouldAnimateVideoFrameTransition(PlayerManager current) {
+        return current == null || !current.isNativePlayer();
     }
 
     private int getLockOrient() {
@@ -3130,7 +3163,8 @@ private int mAudioBackgroundRandomNonce;
         mBinding.control.action.danmaku.setVisibility(DanmakuSetting.isLoad() ? View.VISIBLE : View.GONE);
         mBinding.control.action.adFeedback.setVisibility(isAdFeedbackEnabled() ? View.VISIBLE : View.GONE);
         applyActionButtonVisibility();
-        if (mBinding.control.getRoot().getVisibility() == View.VISIBLE) mBinding.control.danmaku.setVisibility(isLock() || !player().haveDanmaku() || !PlayerButtonSetting.isVisible(PlayerButtonSetting.DANMAKU) ? View.GONE : View.VISIBLE);
+        // 顶部的弹幕图标按钮：只根据功能可用性显示，不受 PlayerButtonSetting 影响
+        if (mBinding.control.getRoot().getVisibility() == View.VISIBLE) mBinding.control.danmaku.setVisibility(isLock() || !player().haveDanmaku() ? View.GONE : View.VISIBLE);
     }
 
     private void showControl() {
@@ -3139,12 +3173,14 @@ private int mAudioBackgroundRandomNonce;
         boolean shortDrama = isShortDramaSource();
         boolean showPiP = canShowPiP(shortDrama);
         hideWidgetOverlay();
-        mBinding.control.danmaku.setVisibility(isLock() || !player().haveDanmaku() || !PlayerButtonSetting.isVisible(PlayerButtonSetting.DANMAKU) ? View.GONE : View.VISIBLE);
+        // 顶部的弹幕图标按钮：只根据功能可用性显示，不受 PlayerButtonSetting 影响
+        mBinding.control.danmaku.setVisibility(isLock() || !player().haveDanmaku() ? View.GONE : View.VISIBLE);
         mBinding.control.setting.setVisibility(mHistory == null || (isFullscreen() && !shortDrama) ? View.GONE : View.VISIBLE);
         mBinding.control.right.getRoot().setVisibility(isFullscreen() || showPiP ? View.VISIBLE : View.GONE);
         mBinding.control.right.rotate.setVisibility(isFullscreen() && !isLock() ? View.VISIBLE : View.GONE);
         mBinding.control.right.pip.setVisibility(showPiP ? View.VISIBLE : View.GONE);
-        mBinding.control.fullscreen.setVisibility(isLock() || shortDrama || !PlayerButtonSetting.isVisible(PlayerButtonSetting.FULLSCREEN) ? View.GONE : View.VISIBLE);
+        // 进度条旁的全屏按钮：只根据锁定状态和短剧判断，不受 PlayerButtonSetting 影响
+        mBinding.control.fullscreen.setVisibility(isLock() || shortDrama ? View.GONE : View.VISIBLE);
         mBinding.control.keep.setVisibility(mHistory == null ? View.GONE : View.VISIBLE);
         mBinding.control.nightMode.setVisibility(mHistory == null ? View.GONE : View.VISIBLE);
         mBinding.control.osdDiagnostics.setVisibility(PlayerSetting.isOsdDiagnostics() && !player().isEmpty() ? View.VISIBLE : View.GONE);
@@ -3158,7 +3194,8 @@ private int mAudioBackgroundRandomNonce;
         mBinding.control.action.getRoot().setVisibility(isLandscapeFullscreen || isFusionPlayerActionsDocked() ? View.VISIBLE : View.GONE);
         mBinding.control.right.lock.setVisibility(isFullscreen() ? View.VISIBLE : View.GONE);
         mBinding.control.info.setVisibility(player().isEmpty() ? View.GONE : View.VISIBLE);
-        mBinding.control.cast.setVisibility(isFullscreen() && mHistory != null && !player().isEmpty() && PlayerButtonSetting.isVisible(PlayerButtonSetting.CAST) ? View.VISIBLE : View.GONE);
+        // 顶部的投屏图标按钮：只根据全屏状态和播放状态显示，不受 PlayerButtonSetting 影响
+        mBinding.control.cast.setVisibility(isFullscreen() && mHistory != null && !player().isEmpty() ? View.VISIBLE : View.GONE);
         mBinding.control.center.setVisibility(isLock() ? View.GONE : View.VISIBLE);
         mBinding.control.bottom.setVisibility(isLock() ? View.GONE : View.VISIBLE);
         mBinding.control.back.setVisibility(isLock() ? View.GONE : View.VISIBLE);
@@ -3397,7 +3434,8 @@ private int mAudioBackgroundRandomNonce;
     }
 
     private void checkHistory(Vod item) {
-        mHistory = History.findPlayback(getHistoryKey(), List.of(item.getName(), getName()), item.getFlags());
+        int tmdbId = getMatchedTmdbId();
+        mHistory = History.findPlayback(getHistoryKey(), List.of(item.getName(), getName()), item.getFlags(), tmdbId);
         mHistory = mHistory == null ? createHistory(item) : mHistory;
         if (!TextUtils.isEmpty(getWallPic())) mHistory.setWallPic(getWallPic());
         if (!TextUtils.isEmpty(getMark())) mHistory.setVodRemarks(getMark());
@@ -3495,8 +3533,10 @@ private int mAudioBackgroundRandomNonce;
         Flag flag = findIntentPlaybackFlag(item.getFlags(), playFlag, playUrl);
         if (flag == null) return;
         Episode episode = findIntentPlaybackEpisode(flag, playName, playUrl);
-        boolean sameFlag = TextUtils.equals(mHistory.getVodFlag(), flag.getFlag());
-        boolean sameEpisode = episode != null && episode.matches(mHistory.getEpisode());
+        // 跨源续播：线路名与剧集 URL 在不同源必然不同，只按集名判断是否同一集，避免误判换集而重置进度。
+        boolean crossSource = mHistory.isCrossSourcePlayback();
+        boolean sameFlag = crossSource || TextUtils.equals(mHistory.getVodFlag(), flag.getFlag());
+        boolean sameEpisode = episode != null && (crossSource ? (episode.matchesName(mHistory.getEpisode()) || episode.matchesNumber(mHistory.getEpisode())) : episode.matches(mHistory.getEpisode()));
         if (!sameFlag || (episode != null && !sameEpisode)) {
             mHistory.setPosition(C.TIME_UNSET);
             mHistory.setDuration(C.TIME_UNSET);
@@ -3565,7 +3605,9 @@ private int mAudioBackgroundRandomNonce;
     }
 
     private void updateHistory(Episode item) {
-        boolean sameEpisode = item.matches(mHistory.getEpisode()) || item.matchesName(mHistory.getEpisode());
+        // 换线路时同一集在不同线路的 URL 与集名格式往往不同（如“第9集”与“[277.1MB] 9. xxx”），
+        // 仅靠 URL/集名严格比对会误判为换集而清空进度；补充集号匹配（与 seamless 的找集逻辑同源）。
+        boolean sameEpisode = item.matches(mHistory.getEpisode()) || item.matchesName(mHistory.getEpisode()) || item.matchesNumber(mHistory.getEpisode());
         boolean sameFlag = TextUtils.equals(mHistory.getVodFlag(), getFlag().getFlag());
         if (!sameEpisode || !sameFlag) mIntroSkipPlayback.reset();
         if ((!sameEpisode || !sameFlag) && service() != null) {
@@ -3670,13 +3712,15 @@ private int mAudioBackgroundRandomNonce;
         if (mHistory != null) {
             mHistory.enrichMeta(item.getTypeName(), item.getArea(), item.getActor(), item.getDirector(), item.getYear());
         }
+        // 跨源聚合：TMDB 匹配完成后把 tmdbId 盖章到 History，供列表去重与跨源续播使用（不依赖脆弱的名称回查缓存）
+        boolean tmdbIdStamped = stampHistoryTmdbId();
         updateFlag(getFlag(), item.getFlags());
         boolean episodeTitleChanged = refreshCurrentHistoryEpisodeTitle();
         mBinding.control.title.setText(getPlaybackControlTitle());
         if (pic) setArtwork(item.getPic());
         if (pic || name) setMetadata();
         // key 迁移后必须写回，避免 replace 删旧 key 后未 save 导致历史消失
-        if (keyChanged || pic || name || episodeTitleChanged) syncHistory();
+        if (keyChanged || pic || name || episodeTitleChanged || tmdbIdStamped) syncHistory();
         if (pic || name) updateKeep();
         if (id) updateNavigationKey();
         PlaybackEventCollector.get().updateHistory(mHistory);
@@ -3985,7 +4029,10 @@ private int mAudioBackgroundRandomNonce;
         if (isRedirect()) return;
         if (event.getType() == RefreshEvent.Type.DETAIL) getDetail();
         else if (event.getType() == RefreshEvent.Type.PLAYER) onRefresh();
-        else if (event.getType() == RefreshEvent.Type.VOD) {
+        else if (event.getType() == RefreshEvent.Type.VOD_CORE ||
+                 event.getType() == RefreshEvent.Type.VOD_RECOMMENDATIONS ||
+                 event.getType() == RefreshEvent.Type.VOD_PERSONAL ||
+                 event.getType() == RefreshEvent.Type.VOD_EPISODE_TITLES) {
             if (!isCurrentVodEvent(event.getVod())) {
                 SpiderDebug.log("tmdb-mobile", "drop stale vod event current=%s/%s event=%s/%s", getKey(), getId(), event.getVod() == null ? "" : event.getVod().getSiteKey(), event.getVod() == null ? "" : event.getVod().getId());
                 return;

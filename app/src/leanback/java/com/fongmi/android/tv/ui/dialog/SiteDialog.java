@@ -285,6 +285,14 @@ public class SiteDialog extends BaseAlertDialog implements SiteAdapter.OnClickLi
         dismiss();
     }
 
+    @Override
+    public boolean onItemKeyUp(int position) {
+        if (position >= getCount()) return false;
+        if (binding == null || binding.groupList.getChildCount() == 0) return false;
+        requestGroupFocus();
+        return true;
+    }
+
     private void loadConfig(FragmentActivity activity, Config config) {
         if (config.getUrl().equals(VodConfig.getUrl())) return;
         VodConfig.load(config, new Callback() {

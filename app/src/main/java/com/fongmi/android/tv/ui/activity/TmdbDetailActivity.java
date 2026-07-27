@@ -353,6 +353,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private int tmdbDialogGeneration;
     private int tmdbApplyGeneration;
     private int tmdbEpisodeDetailGeneration;
+    private int pendingManualTmdbEpisodeRebindGeneration = -1;
+    private TmdbItem pendingManualTmdbEpisodeRebindItem;
     private int sourceSearchGeneration;
     private int backdropSlideGeneration;
     private int backdropSlideIndex;
@@ -2671,6 +2673,26 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         });
     }
 
+    private void scheduleManualTmdbEpisodeRebind(int generation, TmdbItem item) {
+        pendingManualTmdbEpisodeRebindGeneration = generation;
+        pendingManualTmdbEpisodeRebindItem = item;
+        if (hasWindowFocus()) flushPendingManualTmdbEpisodeRebind();
+    }
+
+    private void flushPendingManualTmdbEpisodeRebind() {
+        int generation = pendingManualTmdbEpisodeRebindGeneration;
+        TmdbItem item = pendingManualTmdbEpisodeRebindItem;
+        if (generation < 0 || item == null) return;
+        pendingManualTmdbEpisodeRebindGeneration = -1;
+        pendingManualTmdbEpisodeRebindItem = null;
+        if (isFinishing() || isDestroyed()) return;
+        binding.episodeContainer.postOnAnimation(() -> {
+            if (isFinishing() || isDestroyed()) return;
+            if (generation != tmdbApplyGeneration || !isSameTmdbItem(item, matchedTmdbItem)) return;
+            rerenderEpisodeViewportOnly(false, true, true);
+        });
+    }
+
     private void applyManualTmdb(TmdbItem item) {
         binding.loading.setVisibility(View.VISIBLE);
         int generation = loadGeneration;
@@ -2686,13 +2708,11 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
                         binding.loading.setVisibility(View.GONE);
                         return;
                     }
-                    binding.loading.setVisibility(View.GONE);
-                    applyTmdbBundle(bundle);
-                    saveTmdbMatch(bundle.item());
+                    resetManualTmdbPresentation();
+                    applyTmdbResultNow(new TmdbLoadResult(bundle, List.of()));
+                    scheduleManualTmdbEpisodeRebind(applyGeneration, bundle.item());
                     saveManualTmdbLearning(bundle.item());
-                    enrichVod();
-                    bindPage();
-                    loadTmdbMediaBlocks(bundle);
+                    binding.loading.setVisibility(View.GONE);
                     Notify.show(R.string.detail_tmdb_match_saved);
                 });
             } catch (Throwable e) {
@@ -2706,6 +2726,30 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
                 });
             }
         });
+    }
+
+    private void resetManualTmdbPresentation() {
+        tmdbEpisodeDetailGeneration++;
+        selectedEpisode = null;
+        selectedSeasonNumber = -1;
+        lastEpisodeMediaSeason = Integer.MIN_VALUE;
+        clearEpisodeRenderCaches();
+        resetEpisodeRange();
+        tmdbSeasonEpisodes.clear();
+        tmdbSeasonCast.clear();
+        tmdbSeasonPhotos.clear();
+        loadingSeasons.clear();
+        if (episodeAdapter != null) {
+            episodeAdapter.setFallbackStillUrl("");
+            episodeAdapter.setItems(List.of(), Map.of(), null);
+        }
+        if (episodePhotoAdapter != null) episodePhotoAdapter.setItems(List.of());
+        if (castAdapter != null) castAdapter.setItems(List.of());
+        if (creatorAdapter != null) creatorAdapter.setItems(List.of());
+        if (relatedAdapter != null) relatedAdapter.setItems(List.of());
+        if (personalTmdbAdapter != null) personalTmdbAdapter.setItems(List.of());
+        if (personalDoubanAdapter != null) personalDoubanAdapter.setItems(List.of());
+        if (personalAiAdapter != null) personalAiAdapter.setItems(List.of());
     }
 
     private void enrichVod() {
@@ -3561,10 +3605,70 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         updateEpisodeViewport(items.size(), spanCount);
         lastDetailEpisodeFocusRowStart = RecyclerView.NO_POSITION;
         episodeAdapter.setFallbackStillUrl(episodeFallbackStillUrl());
-        episodeAdapter.setItems(items, tmdbEpisodes, episodeNumbers, selectedEpisode, forceRefresh);
+        boolean changed = episodeAdapter.setItems(items, tmdbEpisodes, episodeNumbers, selectedEpisode, forceRefresh);
+
+        // 根因（日志实测锁定）：TMDB 多阶段异步 apply 会在匹配过程中先把适配器清空、再填入数据。
+        // 若某帧布局遍历正好定格在“适配器为空”的瞬间，RecyclerView 会以 childCount=0 完成布局，
+        // 顶层视图（DecorView 等）清除 FORCE_LAYOUT 认为布局已结束，但 RecyclerView 子树残留了
+        // 未被消费的 FORCE_LAYOUT 脏标志。此后新数据到达时 requestLayout 沿父链上传，会因“父节点
+        // 已是 layoutRequested”而在中途短路、到不了 ViewRootImpl，布局遍历再不被调度；同时相同数据
+        // 被 setItems 去重（changed=false），恢复逻辑失效——形成“适配器有数据、屏上 0 卡片”的死锁。
+        // 修复：
+        // 1) changed 时对已附着的可见 ViewHolder 直接重绑，覆盖“卡片还在、仅数据变化”；
+        // 2) 不论 changed，下一帧检测错位态（有数据却 0 子 View），命中则给整条祖先链逐级补上
+        //    FORCE_LAYOUT 脏标志、再从顶层发起 requestLayout，绕过短路强制一次自顶向下的重新布局。
+        if (changed) {
+            episodeAdapter.rebindAttached(binding.episodeContainer);
+            binding.episodeContainer.requestLayout();
+        }
+        binding.episodeContainer.post(this::recoverEpisodeViewportIfDetached);
         updateEpisodeSkeleton();
         if (scrollToSelection) scrollEpisodeToSelected();
         updatePlayLabel();
+    }
+
+    private void recoverEpisodeViewportIfDetached() {
+        recoverRecyclerViewIfDetached(binding == null ? null : binding.episodeContainer);
+    }
+
+    // 恢复错位态：适配器有数据、但 RecyclerView 屏上 0 个子 View（childCount=0）。
+    // 成因见 applyEpisodeViewport 注释——某帧布局定格在“空适配器”瞬间后，RecyclerView 子树残留
+    // 未消费的 FORCE_LAYOUT 脏标志，导致后续 requestLayout 沿父链上传时因“父已 layoutRequested”
+    // 而中途短路、到不了 ViewRootImpl，布局遍历再不被调度。
+    // 破法：给整条祖先链逐级 forceLayout() 补上脏标志，再从最顶层 View 发起 requestLayout()——
+    // 顶层的父是 ViewRootImpl，必定触发 scheduleTraversals，绕过中途短路强制一次自顶向下重新布局。
+    private void recoverRecyclerViewIfDetached(RecyclerView rv) {
+        if (rv == null) return;
+        if (rv.getVisibility() != View.VISIBLE) return;
+        RecyclerView.Adapter<?> adapter = rv.getAdapter();
+        if (adapter == null || adapter.getItemCount() == 0) return;
+        if (rv.getChildCount() > 0) return; // 已有子 View，未处于错位态
+        if (rv.isComputingLayout()) {
+            rv.post(() -> recoverRecyclerViewIfDetached(rv));
+            return;
+        }
+        android.view.View root = rv;
+        rv.forceLayout();
+        android.view.ViewParent p = rv.getParent();
+        while (p instanceof android.view.View v) {
+            v.forceLayout();
+            root = v;
+            p = v.getParent();
+        }
+        root.requestLayout();
+    }
+
+    // 防御性加固：TMDB 额外信息的 7 个固定高度列表也可能在慢查询下碰到同一 requestLayout 短路，
+    // 逐一检测并恢复错位态（有数据却 0 子 View）。
+    private void recoverTmdbSectionListsIfDetached() {
+        if (binding == null) return;
+        recoverRecyclerViewIfDetached(binding.episodePhotoList);
+        recoverRecyclerViewIfDetached(binding.castList);
+        recoverRecyclerViewIfDetached(binding.creatorList);
+        recoverRecyclerViewIfDetached(binding.relatedList);
+        recoverRecyclerViewIfDetached(binding.personalTmdbList);
+        recoverRecyclerViewIfDetached(binding.personalDoubanList);
+        recoverRecyclerViewIfDetached(binding.personalAiList);
     }
 
     private void rerenderEpisodeViewportOnly(boolean scrollToSelection) {
@@ -4306,7 +4410,13 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
                     tmdbSeasonPhotos.put(seasonNumber, photos);
                     clearVisibleEpisodeCache();
                     lastEpisodeMediaSeason = Integer.MIN_VALUE;
-                    if (seasonNumber == tmdbEpisodeDataSeason(selectedFlag == null ? null : selectedFlag.getEpisodes()) || usesSingleTmdbSeasonEpisodeData(selectedFlag == null ? null : selectedFlag.getEpisodes())) renderEpisodes();
+                    if (seasonNumber == tmdbEpisodeDataSeason(selectedFlag == null ? null : selectedFlag.getEpisodes()) || usesSingleTmdbSeasonEpisodeData(selectedFlag == null ? null : selectedFlag.getEpisodes())) {
+                        renderEpisodes();
+                        binding.episodeContainer.post(() -> {
+                            if (!isTmdbRequestCurrent(generation, item)) return;
+                            rerenderEpisodeViewportOnly(false, true, true);
+                        });
+                    }
                 });
             } catch (Throwable ignored) {
                 runOnAliveUi(() -> {
@@ -4502,37 +4612,49 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         binding.episodePhotoTitle.setVisibility(hasPhotos ? View.VISIBLE : View.GONE);
         binding.episodePhotoList.setVisibility(hasPhotos ? View.VISIBLE : View.GONE);
         episodePhotoAdapter.setItems(tmdbEpisodePhotos);
+        episodePhotoAdapter.rebindAttached(binding.episodePhotoList);
 
         setTopMargin(binding.castTitle, hasPhotos ? 20 : 0);
         binding.castTitle.setVisibility(hasCast ? View.VISIBLE : View.GONE);
         binding.castList.setVisibility(hasCast ? View.VISIBLE : View.GONE);
         castAdapter.setItems(castItems);
+        castAdapter.rebindAttached(binding.castList);
 
         setTopMargin(binding.creatorTitle, hasCast ? 20 : hasPhotos ? 20 : 0);
         binding.creatorTitle.setVisibility(hasCreators ? View.VISIBLE : View.GONE);
         binding.creatorList.setVisibility(hasCreators ? View.VISIBLE : View.GONE);
         creatorAdapter.setItems(creatorItems);
+        creatorAdapter.rebindAttached(binding.creatorList);
 
         setTopMargin(binding.relatedTitle, hasPhotos || hasCast || hasCreators ? 20 : 0);
         binding.relatedTitle.setVisibility(hasRelated ? View.VISIBLE : View.GONE);
         binding.relatedList.setVisibility(hasRelated ? View.VISIBLE : View.GONE);
         relatedAdapter.setItems(relatedItems);
+        relatedAdapter.rebindAttached(binding.relatedList);
 
         setTopMargin(binding.personalTmdbTitle, hasPhotos || hasCast || hasCreators || hasRelated ? 20 : 0);
         binding.personalTmdbTitle.setVisibility(hasPersonalTmdb ? View.VISIBLE : View.GONE);
         binding.personalTmdbList.setVisibility(hasPersonalTmdb ? View.VISIBLE : View.GONE);
         personalTmdbAdapter.setItems(personalTmdbItems);
+        personalTmdbAdapter.rebindAttached(binding.personalTmdbList);
 
         setTopMargin(binding.personalDoubanTitle, hasPhotos || hasCast || hasCreators || hasRelated || hasPersonalTmdb ? 20 : 0);
         binding.personalDoubanTitle.setVisibility(hasPersonalDouban ? View.VISIBLE : View.GONE);
         binding.personalDoubanList.setVisibility(hasPersonalDouban ? View.VISIBLE : View.GONE);
         personalDoubanAdapter.setItems(personalDoubanItems);
+        personalDoubanAdapter.rebindAttached(binding.personalDoubanList);
 
         setTopMargin(binding.personalAiTitle, hasPhotos || hasCast || hasCreators || hasRelated || hasPersonalTmdb || hasPersonalDouban ? 20 : 0);
         binding.personalAiTitle.setVisibility(hasPersonalAi ? View.VISIBLE : View.GONE);
         binding.personalAiList.setVisibility(hasPersonalAi ? View.VISIBLE : View.GONE);
         personalAiAdapter.setItems(personalAiItems);
+        personalAiAdapter.rebindAttached(binding.personalAiList);
         if (!hasPersonalAi) showAiRecommendationReason(null, false);
+
+        // 防御性加固：这些列表与选集同为嵌套 RecyclerView，慢查询多阶段 apply 下理论上也可能
+        // 卡成“适配器有数据、屏上 0 卡片”的错位态（实测未复现，因它们是固定高度不会塌陷，触发
+        // 条件苛刻得多）。下一帧统一检测并恢复，成因与破法见 recoverRecyclerViewIfDetached。
+        binding.episodePhotoList.post(this::recoverTmdbSectionListsIfDetached);
 
         setTopMargin(binding.externalLinksTitle, hasPhotos || hasCast || hasCreators || hasRelated || hasPersonalTmdb || hasPersonalDouban || hasPersonalAi ? 20 : 0);
         binding.externalLinksTitle.setVisibility(hasExternalLinks ? View.VISIBLE : View.GONE);
@@ -6065,17 +6187,20 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         detailControlView(R.id.center, View.class).setVisibility(locked ? View.GONE : View.VISIBLE);
         detailControlView(R.id.bottom, View.class).setVisibility(locked ? View.GONE : View.VISIBLE);
         detailControlView(R.id.back, View.class).setVisibility(locked ? View.GONE : View.VISIBLE);
-        detailControlView(R.id.fullscreen, View.class).setVisibility(locked || !PlayerButtonSetting.isVisible(PlayerButtonSetting.FULLSCREEN) ? View.GONE : View.VISIBLE);
+        // 进度条旁的全屏按钮：只根据锁定状态显示，不受 PlayerButtonSetting 影响
+        detailControlView(R.id.fullscreen, View.class).setVisibility(locked ? View.GONE : View.VISIBLE);
         detailControlView(R.id.lock, View.class).setVisibility(inlineFullscreen ? View.VISIBLE : View.GONE);
         detailControlView(R.id.rotate, View.class).setVisibility(inlineFullscreen && !locked && !inlineShortDramaMode ? View.VISIBLE : View.GONE);
         detailControlView(R.id.pip, View.class).setVisibility(canShowInlinePiP(hasPlayer, locked) ? View.VISIBLE : View.GONE);
-        // 上集/下集按钮始终可见（只要有集数），点击时如果没有相邻集数会显示提示（与影视原生模式保持一致）
-        detailControlView(R.id.prev, View.class).setVisibility(!locked && hasPlayer && episodeCount > 0 && PlayerButtonSetting.isVisible(PlayerButtonSetting.PREV) ? View.VISIBLE : View.GONE);
-        detailControlView(R.id.next, View.class).setVisibility(!locked && hasPlayer && episodeCount > 0 && PlayerButtonSetting.isVisible(PlayerButtonSetting.NEXT) ? View.VISIBLE : View.GONE);
-        detailControlView(R.id.cast, View.class).setVisibility(!locked && hasInlineCast() && PlayerButtonSetting.isVisible(PlayerButtonSetting.CAST) ? View.VISIBLE : View.GONE);
+        // 中间悬浮的上集/下集按钮：只根据集数显示（需≥2集，与 VideoActivity 一致），不受 PlayerButtonSetting 影响
+        detailControlView(R.id.prev, View.class).setVisibility(!locked && hasPlayer && episodeCount >= 2 ? View.VISIBLE : View.GONE);
+        detailControlView(R.id.next, View.class).setVisibility(!locked && hasPlayer && episodeCount >= 2 ? View.VISIBLE : View.GONE);
+        // 顶部投屏按钮：只根据功能可用性显示，不受 PlayerButtonSetting 影响
+        detailControlView(R.id.cast, View.class).setVisibility(!locked && hasInlineCast() ? View.VISIBLE : View.GONE);
         detailControlView(R.id.info, View.class).setVisibility(!locked && hasInlineInfo() ? View.VISIBLE : View.GONE);
         detailControlView(R.id.setting, View.class).setVisibility(!locked && hasPlayer ? View.VISIBLE : View.GONE);
-        detailControlView(R.id.danmaku, View.class).setVisibility(!locked && hasPlayer && inlineControlController.hasDanmakuControl() && PlayerButtonSetting.isVisible(PlayerButtonSetting.DANMAKU) ? View.VISIBLE : View.GONE);
+        // 顶部弹幕按钮：只根据功能可用性显示，不受 PlayerButtonSetting 影响
+        detailControlView(R.id.danmaku, View.class).setVisibility(!locked && hasPlayer && inlineControlController.hasDanmakuControl() ? View.VISIBLE : View.GONE);
         detailControlView(R.id.parse, RecyclerView.class).setVisibility(!locked && inlineFullscreen && useParse && !VodConfig.get().getParses().isEmpty() && PlayerButtonSetting.isVisible(PlayerButtonSetting.PARSE) ? View.VISIBLE : View.GONE);
         if (inlineParseAdapter != null) inlineParseAdapter.notifyDataSetChanged();
         detailActionView(R.id.player, View.class).setVisibility(hasPlayer ? View.VISIBLE : View.GONE);
@@ -8847,7 +8972,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
 
     @Override
     public void onSubtitleClick() {
-        SubtitleDialog.create().view(binding.exo.getSubtitleView()).search(this::showSubtitleSearch).show(this);
+        SubtitleDialog.create().view(binding.exo.getSubtitleView()).player(player()).search(this::showSubtitleSearch).show(this);
     }
 
     private void showSubtitleSearch() {
@@ -8869,6 +8994,12 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         } else if (event.getType() == RefreshEvent.Type.SUBTITLE) {
             player().setSub(Sub.from(event.getPath()));
         }
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) flushPendingManualTmdbEpisodeRebind();
     }
 
     @Override

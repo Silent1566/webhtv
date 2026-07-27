@@ -744,7 +744,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
 
     @Override
     public void reloadConfig() {
-        VodConfig.get().clear().config(getConfig()).load(new Callback() {
+        VodConfig.get().clear("leanback-home-reload").config(getConfig()).load(new Callback() {
             @Override
             public void start() {
                 mBinding.progressLayout.showProgress();
@@ -885,7 +885,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         if (mWeb != null) mWeb.destroy();
         DLNARendererService.stop(this);
         LiveConfig.get().clear();
-        VodConfig.get().clear();
+        VodConfig.get().clear("leanback-home-destroy");
         if (AutoBackupPolicy.shouldRun(
                 Setting.isAutoBackup(),
                 Setting.hasFileAccess(),

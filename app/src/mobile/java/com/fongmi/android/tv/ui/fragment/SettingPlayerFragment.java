@@ -104,6 +104,7 @@ public class SettingPlayerFragment extends BaseFragment implements UaListener, B
         mBinding.scaleText.setText((scale = ResUtil.getStringArray(R.array.select_scale))[PlayerSetting.getScale()]);
         mBinding.lutText.setText(LutSetting.getSummary());
         setMpvRows();
+        setFfmpegModeVisibility();
         mBinding.renderText.setText((render = ResUtil.getStringArray(R.array.select_render))[PlayerSetting.getRender()]);
         mBinding.captionText.setText((caption = ResUtil.getStringArray(R.array.select_caption))[PlayerSetting.isCaption() ? 1 : 0]);
         mBinding.backgroundText.setText((background = ResUtil.getStringArray(R.array.select_background))[PlayerSetting.getBackground()]);
@@ -172,6 +173,7 @@ public class SettingPlayerFragment extends BaseFragment implements UaListener, B
             mBinding.kernelText.setText(kernel[which]);
             PlayerSetting.putPlayer(which);
             setMpvRows();
+            setFfmpegModeVisibility();
             setPerformanceText();
         });
     }
@@ -193,6 +195,11 @@ public class SettingPlayerFragment extends BaseFragment implements UaListener, B
         mBinding.mpvRender.setVisibility(visible ? View.VISIBLE : View.GONE);
         mBinding.mpvConfigText.setText(MpvConfigStore.summary());
         mBinding.mpvRenderText.setText(getMpvRenderText());
+    }
+
+    private void setFfmpegModeVisibility() {
+        boolean visible = PlayerSetting.getPlayer() == PlayerSetting.EXO;
+        mBinding.ffmpegMode.setVisibility(visible ? View.VISIBLE : View.GONE);
     }
 
     private void onMpvRender(View view) {

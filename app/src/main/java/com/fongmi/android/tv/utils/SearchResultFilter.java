@@ -19,30 +19,40 @@ public final class SearchResultFilter {
     private SearchResultFilter() {
     }
 
-    public static boolean canFilter(String keyword) {
-        return normalize(keyword).compact.length() >= 2;
+    public static boolean matches(String keyword, String title, int similarityPercent) {
+        if (similarityPercent <= 0) return true;
+        return score(normalize(keyword), normalize(title)) >= clamp(similarityPercent);
     }
 
-    public static boolean matches(String keyword, String title) {
-        return matches(normalize(keyword), normalize(title));
-    }
-
-    private static boolean matches(Normalized query, Normalized candidate) {
-        if (query.compact.isEmpty() || candidate.compact.isEmpty()) return false;
-        if (candidate.compact.equals(query.compact)) return true;
-        if (!canContain(query) || !contains(candidate, query)) return fuzzyMatches(candidate, query);
-        return true;
-    }
-
-    public static List<Vod> filter(List<Vod> items, String keyword, boolean enabled) {
+    public static List<Vod> filter(List<Vod> items, String keyword, int similarityPercent) {
         if (items == null || items.isEmpty()) return new ArrayList<>();
-        if (!enabled) return new ArrayList<>(items);
+        int threshold = clamp(similarityPercent);
+        if (threshold == 0) return new ArrayList<>(items);
         Normalized query = normalize(keyword);
         List<Vod> result = new ArrayList<>();
         for (Vod item : items) {
-            if (item != null && matches(query, normalize(item.getName()))) result.add(item);
+            if (item != null && score(query, normalize(item.getName())) >= threshold) result.add(item);
         }
         return result;
+    }
+
+    private static int score(Normalized query, Normalized candidate) {
+        if (query.compact.isEmpty() || candidate.compact.isEmpty()) return 0;
+        if (candidate.compact.equals(query.compact)) return 100;
+        if (canContain(query) && contains(candidate, query)) {
+            int coverage = Math.round(query.compact.length() * 100f / candidate.compact.length());
+            return Math.min(99, coverage);
+        }
+        if (!numbersCompatible(candidate.digits, query.digits)) return 0;
+        int maxLength = Math.max(candidate.compact.length(), query.compact.length());
+        if (maxLength < 4) return 0;
+        int maxGap = Math.max(2, (int) Math.floor(maxLength * 0.2));
+        if (Math.abs(candidate.compact.length() - query.compact.length()) > maxGap) return 0;
+        return (int) Math.round(similarity(candidate.compact, query.compact) * 100);
+    }
+
+    private static int clamp(int similarityPercent) {
+        return Math.max(0, Math.min(100, similarityPercent));
     }
 
     private static boolean canContain(Normalized query) {
@@ -88,15 +98,6 @@ public final class SearchResultFilter {
         return -1;
     }
 
-    private static boolean fuzzyMatches(Normalized candidate, Normalized query) {
-        int maxLength = Math.max(candidate.compact.length(), query.compact.length());
-        if (maxLength < 4) return false;
-        int maxGap = Math.max(2, (int) Math.floor(maxLength * 0.2));
-        if (Math.abs(candidate.compact.length() - query.compact.length()) > maxGap) return false;
-        if (!numbersCompatible(candidate.digits, query.digits)) return false;
-        double threshold = hasHan(query.compact) ? 0.75 : 0.82;
-        return similarity(candidate.compact, query.compact) >= threshold;
-    }
 
     private static boolean numbersCompatible(String candidateDigits, String queryDigits) {
         if (queryDigits.isEmpty()) return true;

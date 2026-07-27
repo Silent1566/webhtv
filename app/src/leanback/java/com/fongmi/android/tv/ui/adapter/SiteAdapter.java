@@ -48,6 +48,8 @@ public class SiteAdapter extends RecyclerView.Adapter<SiteAdapter.ViewHolder> {
     public interface OnClickListener {
 
         void onItemClick(Site item);
+
+        boolean onItemKeyUp(int position);
     }
 
     public void setType(int type) {
@@ -199,6 +201,7 @@ public class SiteAdapter extends RecyclerView.Adapter<SiteAdapter.ViewHolder> {
             binding.getRoot().setOnClickListener(v -> click());
             binding.getRoot().setOnLongClickListener(v -> longClick());
             binding.getRoot().setOnFocusChangeListener((v, hasFocus) -> binding.text.setSelected(hasFocus || isSelected()));
+            binding.getRoot().setOnKeyListener((v, keyCode, event) -> onKey(keyCode, event));
         }
 
         ViewHolder(@NonNull AdapterSiteSwitchBinding binding) {
@@ -209,6 +212,7 @@ public class SiteAdapter extends RecyclerView.Adapter<SiteAdapter.ViewHolder> {
             binding.getRoot().setOnClickListener(v -> click());
             binding.getRoot().setOnLongClickListener(v -> longClick());
             binding.getRoot().setOnFocusChangeListener((v, hasFocus) -> binding.text.setSelected(hasFocus || isSelected()));
+            binding.getRoot().setOnKeyListener((v, keyCode, event) -> onKey(keyCode, event));
         }
 
         void bind(Site item) {
@@ -235,6 +239,14 @@ public class SiteAdapter extends RecyclerView.Adapter<SiteAdapter.ViewHolder> {
             int position = getBindingAdapterPosition();
             if (position == RecyclerView.NO_POSITION || item == null) return;
             setListener(item, position);
+        }
+
+        private boolean onKey(int keyCode, android.view.KeyEvent event) {
+            if (event.getAction() != android.view.KeyEvent.ACTION_DOWN) return false;
+            if (keyCode != android.view.KeyEvent.KEYCODE_DPAD_UP) return false;
+            int position = getBindingAdapterPosition();
+            if (position == RecyclerView.NO_POSITION) return false;
+            return listener.onItemKeyUp(position);
         }
 
         private boolean longClick() {

@@ -155,6 +155,42 @@ public class VideoActivityLayoutTest {
     }
 
     @Test
+    public void mobileOverlayButtonsIgnorePlayerButtonSetting() throws Exception {
+        Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+
+        // 悬浮/图标按钮（中间上下集、进度条旁全屏、顶部弹幕/投屏）只受集数、锁定、功能可用性控制，
+        // 不受「播放器按钮设置」影响——那是仅面向底部横向动作栏的偏好。锁定这些可见性表达式，
+        // 防止有人再次把 PlayerButtonSetting 判断加回悬浮按钮（历史回归点）。
+        assertTrue("middle overlay next button must depend only on episode count",
+                source.contains("mBinding.control.next.setVisibility(size < 2 ? View.GONE : View.VISIBLE);"));
+        assertTrue("middle overlay prev button must depend only on episode count",
+                source.contains("mBinding.control.prev.setVisibility(size < 2 ? View.GONE : View.VISIBLE);"));
+        assertTrue("seekbar fullscreen button must depend only on lock and short-drama state",
+                source.contains("mBinding.control.fullscreen.setVisibility(isLock() || shortDrama ? View.GONE : View.VISIBLE);"));
+        assertTrue("top cast button must depend only on fullscreen and playback state",
+                source.contains("mBinding.control.cast.setVisibility(isFullscreen() && mHistory != null && !player().isEmpty() ? View.VISIBLE : View.GONE);"));
+        assertTrue("top danmaku button must depend only on lock and danmaku availability",
+                source.contains("mBinding.control.danmaku.setVisibility(isLock() || !player().haveDanmaku() ? View.GONE : View.VISIBLE);"));
+
+        // 逐个提取每个悬浮按钮的可见性语句，确认其中不含 PlayerButtonSetting（防止把偏好判断加回来）。
+        for (String id : List.of("next", "prev", "fullscreen", "cast", "danmaku")) {
+            int line = source.indexOf("mBinding.control." + id + ".setVisibility(");
+            assertTrue("missing overlay visibility line for mBinding.control." + id, line >= 0);
+            String stmt = source.substring(line, source.indexOf(';', line));
+            assertFalse("overlay button mBinding.control." + id + " must not gate on PlayerButtonSetting", stmt.contains("PlayerButtonSetting"));
+        }
+
+        // 底部横向动作栏按钮仍必须通过 addActionButton 跟随设置，确认解耦没有误伤动作栏。
+        assertTrue("bottom action bar fullscreen must still follow PlayerButtonSetting",
+                source.contains("addActionButton(PlayerButtonSetting.FULLSCREEN, mBinding.control.action.fullscreen);"));
+        assertTrue("bottom action bar prev must still follow PlayerButtonSetting",
+                source.contains("addActionButton(PlayerButtonSetting.PREV, mBinding.control.action.prev);"));
+        assertTrue("bottom action bar next must still follow PlayerButtonSetting",
+                source.contains("addActionButton(PlayerButtonSetting.NEXT, mBinding.control.action.next);"));
+    }
+
+    @Test
     public void mobilePlayerGesturesUseVideoViewBoundsAfterFullscreen() throws Exception {
         List<Path> gestureFiles = Arrays.asList(
                 findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "custom", "CustomKeyDown.java")),
@@ -740,6 +776,41 @@ public class VideoActivityLayoutTest {
                 configBody.contains("if (isFullscreen()) {")
                         && configBody.contains("Util.hideSystemUI(this);")
                         && configBody.contains("if (isVisible(mBinding.control.getRoot())) showControl();"));
+    }
+
+    @Test
+    public void mobileFullscreenTransitionsUseStablePlayerSnapshot() throws Exception {
+        Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int enter = source.indexOf("private void enterFullscreen()");
+        int schedule = source.indexOf("private void scheduleFullscreenControlReveal()", enter);
+        int exit = source.indexOf("private void exitFullscreen()", schedule);
+        int restore = source.indexOf("private void restoreEmbeddedVideoLayoutAfterFullscreen()", exit);
+        int transition = source.indexOf("private void setTransition()", restore);
+        int policy = source.indexOf("private boolean shouldAnimateVideoFrameTransition", transition);
+
+        assertTrue(sourcePath + " is missing fullscreen transition methods",
+                enter >= 0 && schedule > enter && exit > schedule && restore > exit && transition > restore && policy > transition);
+
+        String enterBody = source.substring(enter, schedule);
+        String exitBody = source.substring(exit, restore);
+        String transitionBody = source.substring(transition, policy);
+        assertTrue("fullscreen entry must snapshot the player before lifecycle-sensitive work",
+                enterBody.contains("PlayerManager current = player();")
+                        && enterBody.contains("if (current == null) return;")
+                        && enterBody.contains("current.isPortrait()"));
+        assertFalse("fullscreen entry must not repeatedly dereference a disconnectable service player",
+                enterBody.contains("player().isPortrait()"));
+        assertTrue("fullscreen exit must tolerate playback service disconnection",
+                exitBody.contains("PlayerManager current = player();")
+                        && exitBody.contains("current != null && isLand() && !current.isPortrait()"));
+        assertFalse("fullscreen exit must not repeatedly dereference a disconnectable service player",
+                exitBody.contains("player().isPortrait()"));
+        assertTrue("frame transitions must use the same stable player snapshot",
+                transitionBody.contains("PlayerManager current = player();")
+                        && transitionBody.contains("shouldAnimateVideoFrameTransition(current)"));
+        assertFalse("frame transitions must not dereference player() after the snapshot",
+                transitionBody.contains("player()."));
     }
 
     @Test

@@ -8,6 +8,7 @@ import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
 
@@ -28,7 +29,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 public final class AboutDialog {
 
-    private static final int DIALOG_VERTICAL_SAFE_SPACE_DP = 24;
+    private static final int DIALOG_VERTICAL_MARGIN_DP = 96;
 
     private AboutDialog() {
     }
@@ -48,7 +49,7 @@ public final class AboutDialog {
         binding.githubProxy.setOnClickListener(v -> showGithubProxy(activity));
         dialog.setCanceledOnTouchOutside(false);
         dialog.show();
-        configureWindow(activity, dialog);
+        configureWindow(activity, dialog, binding);
         binding.confirm.requestFocus();
     }
 
@@ -126,12 +127,12 @@ public final class AboutDialog {
         ((GithubProxyAdapter) binding.list.getAdapter()).setItems(GithubProxy.getSources(), GithubProxy.getActive());
     }
 
-    private static boolean configureWindow(FragmentActivity activity, Dialog dialog) {
+    private static boolean configureWindow(FragmentActivity activity, Dialog dialog, DialogAboutBinding binding) {
         Window window = dialog.getWindow();
         if (window == null) return false;
         WindowManager.LayoutParams params = window.getAttributes();
         params.width = (int) (ResUtil.getScreenWidth(activity) * (ResUtil.isLand(activity) ? 0.62f : 0.92f));
-        params.height = getDialogHeight(activity);
+        params.height = WindowManager.LayoutParams.WRAP_CONTENT;
         params.gravity = Gravity.CENTER;
         params.dimAmount = 0.58f;
         window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
@@ -139,11 +140,26 @@ public final class AboutDialog {
         window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
         window.setAttributes(params);
         window.setLayout(params.width, params.height);
-        return true;
-    }
 
-    static int getDialogHeight(Context context) {
-        int screenHeight = ResUtil.getScreenHeight(context);
-        return AboutDialogLayout.calculateHeight(screenHeight, ResUtil.dp2px(DIALOG_VERTICAL_SAFE_SPACE_DP));
+        int availableHeight = activity.findViewById(android.R.id.content).getHeight();
+        if (availableHeight == 0) {
+            availableHeight = ResUtil.getScreenHeight(activity);
+            android.view.WindowInsets insets = window.getDecorView().getRootWindowInsets();
+            if (insets != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                android.graphics.Insets systemBars = insets.getInsets(android.view.WindowInsets.Type.systemBars());
+                availableHeight -= (systemBars.top + systemBars.bottom);
+            }
+        }
+
+        int widthSpec = View.MeasureSpec.makeMeasureSpec(params.width, View.MeasureSpec.EXACTLY);
+        int heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
+        binding.contentScroll.getLayoutParams().height = 1;
+        binding.getRoot().measure(widthSpec, heightSpec);
+        int chromeHeight = binding.getRoot().getMeasuredHeight() - 1;
+        binding.contentScroll.getLayoutParams().height = ViewGroup.LayoutParams.WRAP_CONTENT;
+
+        int maxScrollHeight = Math.max(ResUtil.dp2px(200), availableHeight - chromeHeight - ResUtil.dp2px(DIALOG_VERTICAL_MARGIN_DP));
+        binding.contentScroll.setMaxHeight(maxScrollHeight);
+        return true;
     }
 }

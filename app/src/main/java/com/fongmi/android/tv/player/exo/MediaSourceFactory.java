@@ -5,7 +5,6 @@ import static androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory.FLAG_EN
 import androidx.annotation.NonNull;
 import androidx.media3.common.C;
 import androidx.media3.common.MediaItem;
-import androidx.media3.common.MimeTypes;
 import androidx.media3.common.PriorityTaskManager;
 import androidx.media3.database.StandaloneDatabaseProvider;
 import androidx.media3.datasource.DataSource;
@@ -65,7 +64,7 @@ public class MediaSourceFactory implements MediaSource.Factory {
     static DataSource.Factory createUpstreamDataSourceFactory(Map<String, String> headers) {
         OkHttpDataSource.Factory factory = new OkHttpDataSource.Factory(OkHttp.player());
         applyHeaders(factory, headers);
-        DataSource.Factory upstream = new DefaultDataSource.Factory(App.get(), LocalProxyRangeDataSource.wrap(factory));
+        DataSource.Factory upstream = new DefaultDataSource.Factory(App.get(), factory);
         return new PriorityTaskDataSource.Factory(upstream, PLAYBACK_PRIORITY_MANAGER, C.PRIORITY_PLAYBACK_PRELOAD, true);
     }
 
@@ -138,8 +137,7 @@ public class MediaSourceFactory implements MediaSource.Factory {
 
     private DataSource.Factory getDataSourceFactory() {
         if (dataSourceFactory == null) {
-            DataSource.Factory upstream = new DefaultDataSource.Factory(App.get(), LocalProxyRangeDataSource.wrap(getHttpDataSourceFactory()));
-            DataSource.Factory cacheDataSource = getCacheDataSource(upstream);
+            DataSource.Factory cacheDataSource = getCacheDataSource(new DefaultDataSource.Factory(App.get(), getHttpDataSourceFactory()));
             dataSourceFactory = new PriorityTaskDataSource.Factory(cacheDataSource, PLAYBACK_PRIORITY_MANAGER, C.PRIORITY_PLAYBACK, false);
         }
         return dataSourceFactory;
@@ -183,16 +181,6 @@ public class MediaSourceFactory implements MediaSource.Factory {
             iterator.remove();
         }
         return userAgent;
-    }
-
-    static boolean isLocalProxyUrl(String url) {
-        return LocalProxyRangeDataSource.isLocalProxyUrl(url);
-    }
-
-    private static boolean isHls(MediaItem mediaItem, String url) {
-        String mimeType = mediaItem.localConfiguration == null ? null : mediaItem.localConfiguration.mimeType;
-        if (MimeTypes.APPLICATION_M3U8.equals(mimeType)) return true;
-        return isHlsUrl(url);
     }
 
     public static boolean isHlsUrl(String url) {

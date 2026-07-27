@@ -374,6 +374,9 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     private Runnable mBackdropRunnable;
     private String mBackdropSignature;
     private int mCurrentBackdropPage = 0;
+    // TMDB 剧照幻灯片激活时，它成为背景权威并隐藏 contextWall；此时其它 setArtwork 调用
+    // 不得再把 contextWall 翻回顶层遮住幻灯片。
+    private boolean mBackdropSlideshowActive;
     private Clock mClock;
     private PiP mPiP;
     private View mFocus1;
@@ -845,6 +848,17 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
 
     private com.fongmi.android.tv.bean.TmdbItem getTmdbItem() {
         return (com.fongmi.android.tv.bean.TmdbItem) getIntent().getSerializableExtra("tmdbItem");
+    }
+
+    /**
+     * 载入历史时可同步拿到的 TMDB ID：优先已匹配项，其次 intent 携带项（从 TMDB 详情进入）。
+     * 用于跨源续播——checkHistory 早于异步 autoMatch 执行，此处提供尽早可用的 tmdbId。
+     */
+    private int getMatchedTmdbId() {
+        if (!Setting.isHistoryAggregationEffective()) return 0;
+        com.fongmi.android.tv.bean.TmdbItem item = getMatchedTmdbItem();
+        if (item == null) item = getTmdbItem();
+        return item == null ? 0 : item.getTmdbId();
     }
 
     private String getOsdTitle() {
@@ -1684,7 +1698,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     private void prepareFastTmdbPlaybackHistory(Vod item, Flag flag, Episode episode) {
-        mHistory = History.findPlayback(getHistoryKey(), List.of(item.getName(), getName()), item.getFlags());
+        mHistory = History.findPlayback(getHistoryKey(), List.of(item.getName(), getName()), item.getFlags(), getMatchedTmdbId());
         mHistory = mHistory == null ? createHistory(item) : mHistory;
         if (!TextUtils.isEmpty(getWallPic())) mHistory.setWallPic(getWallPic());
         if (!TextUtils.isEmpty(getMark())) mHistory.setVodRemarks(getMark());
@@ -1706,8 +1720,10 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     private void updateFastTmdbPlaybackHistory(Flag flag, Episode episode) {
-        boolean sameEpisode = episode.matches(mHistory.getEpisode()) || episode.matchesName(mHistory.getEpisode());
-        boolean sameFlag = TextUtils.equals(mHistory.getVodFlag(), flag.getFlag());
+        // 跨源续播：只按集名判断换集，避免因线路名不同而误判；集名格式跨线路/跨源不一致时再按集号兜底。
+        boolean crossSource = mHistory.isCrossSourcePlayback();
+        boolean sameEpisode = episode.matches(mHistory.getEpisode()) || episode.matchesName(mHistory.getEpisode()) || episode.matchesNumber(mHistory.getEpisode());
+        boolean sameFlag = crossSource || TextUtils.equals(mHistory.getVodFlag(), flag.getFlag());
         if (!sameEpisode || !sameFlag) mIntroSkipPlayback.reset();
         if (!sameEpisode || !sameFlag) {
             EpisodePositionCache.EpisodePosition cached = EpisodePositionCache.get().get(getKey(), getId(), flag.getFlag(), episode.getName());
@@ -1751,6 +1767,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         resetPendingTmdbBind();
         stopBackdropAutoScroll();
         mBackdropSignature = null;
+        mBackdropSlideshowActive = false;
         if (mViewModel != null) mViewModel.stopSearch();
         if (mBroken != null) mBroken.clear();
         clearDetailAdapters();
@@ -1795,6 +1812,10 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         clearTmdbGrid(mBinding.tmdbCrew, R.id.tmdbCrewLabel);
         clearTmdbGrid(mBinding.tmdbRecommendations, R.id.tmdbRecommendationsLabel);
         clearNativePersonalRecommendations();
+        // 重置背景幻灯片去重签名：切换条目时 setupBackdropSlideshow 靠 signature 去重，
+        // 不清则新条目剧照与旧 signature 判定“相同”而跳过更新，导致背景海报不换。
+        stopBackdropAutoScroll();
+        mBackdropSignature = null;
         mBinding.tmdbOverview.setText("");
         mBinding.tmdbOverview.setVisibility(View.GONE);
         mTmdbDetailFieldsApplied = false;
@@ -2237,6 +2258,8 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     @Override
     public void onItemClick(Flag item) {
         if (mFlagAdapter.getItemCount() == 0 || item.isSelected()) return;
+        Flag previous = getFlag();
+        SpiderDebug.log("playback-action", "flag switch ui=leanback site=%s from=%s to=%s fullscreen=%s", getKey(), previous == null ? "" : previous.getFlag(), item.getFlag(), isFullscreen());
         int oldPosition = mFlagAdapter.getSelectedPosition();
         mFlagAdapter.setSelected(item);
         int newPosition = mFlagAdapter.getSelectedPosition();
@@ -3651,6 +3674,9 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     private void setContextWall(String url) {
+        // TMDB 背景幻灯片激活时，contextWall 让位于底层跟随 TMDB 条目更新的 slideshow，
+        // 不再翻回顶层遮挡（否则背景固定为进入页时的 wallPic，切换条目不生效）。
+        if (mBackdropSlideshowActive) return;
         if (!Setting.isPlaybackArtworkWall()) {
             mContextWallUrl = "";
             hideContextWall();
@@ -3694,6 +3720,9 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     private void hideContextWall() {
+        // 清空 url，使后续 setContextWall 不会因去重（Objects.equals(mContextWallUrl, wall)）
+        // 而跳过重新加载——否则从“有剧照”切到“无剧照”条目时 contextWall 会保持隐藏、背景变黑。
+        mContextWallUrl = "";
         resetContextWallAlpha();
         mBinding.contextWall.setImageDrawable(null);
         mBinding.contextWall.setBackgroundColor(0x00000000);
@@ -3728,7 +3757,8 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     private void checkHistory(Vod item) {
-        mHistory = History.findPlayback(getHistoryKey(), List.of(item.getName(), getName()), item.getFlags());
+        int tmdbId = getMatchedTmdbId();
+        mHistory = History.findPlayback(getHistoryKey(), List.of(item.getName(), getName()), item.getFlags(), tmdbId);
         mHistory = mHistory == null ? createHistory(item) : mHistory;
         if (!TextUtils.isEmpty(getWallPic())) mHistory.setWallPic(getWallPic());
         if (!TextUtils.isEmpty(getMark())) mHistory.setVodRemarks(getMark());
@@ -3773,6 +3803,15 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     private String getEpisodeFallbackStillUrl() {
+        // 分集无 TMDB 剧照时的兜底图：优先取当前 TMDB 条目自己的图（backdrop→poster），
+        // 这样切换条目后兜底图跟随当前剧集，而非停留在进场时固定的 getPic()/tmdb_vod_pic
+        // （那些是 intent 里进场时的值，切换条目不变，会导致所有卡片显示切换前那部剧的海报）。
+        if (mTmdbUIAdapter != null && mTmdbUIAdapter.isLoaded()) {
+            java.util.List<String> photos = mTmdbUIAdapter.getPhotos();
+            if (photos != null && !photos.isEmpty() && !TextUtils.isEmpty(photos.get(0))) return photos.get(0);
+            String poster = mTmdbUIAdapter.getPosterUrl();
+            if (!TextUtils.isEmpty(poster)) return poster;
+        }
         if (!TextUtils.isEmpty(getPic())) return getPic();
         if (!TextUtils.isEmpty(getTmdbVodPic())) return getTmdbVodPic();
         if (mVod != null && !TextUtils.isEmpty(mVod.getPic())) return mVod.getPic();
@@ -3825,8 +3864,10 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         Flag flag = findIntentPlaybackFlag(item.getFlags(), playFlag, playUrl);
         if (flag == null) return;
         Episode episode = findIntentPlaybackEpisode(flag, playName, playUrl);
-        boolean sameFlag = TextUtils.equals(mHistory.getVodFlag(), flag.getFlag());
-        boolean sameEpisode = episode != null && episode.matches(mHistory.getEpisode());
+        // 跨源续播：线路名与剧集 URL 在不同源必然不同，只按集名判断是否同一集，避免误判换集而重置进度。
+        boolean crossSource = mHistory.isCrossSourcePlayback();
+        boolean sameFlag = crossSource || TextUtils.equals(mHistory.getVodFlag(), flag.getFlag());
+        boolean sameEpisode = episode != null && (crossSource ? (episode.matchesName(mHistory.getEpisode()) || episode.matchesNumber(mHistory.getEpisode())) : episode.matches(mHistory.getEpisode()));
         if (!sameFlag || (episode != null && !sameEpisode)) {
             mHistory.setPosition(C.TIME_UNSET);
             mHistory.setDuration(C.TIME_UNSET);
@@ -3899,7 +3940,9 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     private void updateHistory(Episode item) {
-        boolean sameEpisode = item.matches(mHistory.getEpisode()) || item.matchesName(mHistory.getEpisode());
+        // 换线路时同一集在不同线路的 URL 与集名格式往往不同（如“第9集”与“[277.1MB] 9. xxx”），
+        // 仅靠 URL/集名严格比对会误判为换集而清空进度；补充集号匹配（与 seamless 的找集逻辑同源）。
+        boolean sameEpisode = item.matches(mHistory.getEpisode()) || item.matchesName(mHistory.getEpisode()) || item.matchesNumber(mHistory.getEpisode());
         boolean sameFlag = TextUtils.equals(mHistory.getVodFlag(), getFlag().getFlag());
         if (!sameEpisode || !sameFlag) mIntroSkipPlayback.reset();
         if ((!sameEpisode || !sameFlag) && service() != null) {
@@ -3987,6 +4030,8 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         }
         // 原生增强：TMDB 富集完成后回写题材/地区/演员/主创到 History（enrichVod 已填充 item），仅补空字段
         if (mHistory != null) mHistory.enrichMeta(item.getTypeName(), item.getArea(), item.getActor(), item.getDirector(), item.getYear());
+        // 跨源聚合：TMDB 匹配完成后把 tmdbId 盖章到 History，供列表去重与跨源续播使用（不依赖脆弱的名称回查缓存）
+        boolean tmdbIdStamped = stampHistoryTmdbId();
         updateFlag(getFlag(), item.getFlags());
         boolean episodeTitleChanged = refreshCurrentHistoryEpisodeTitle();
         CharSequence playbackTitle = getPlaybackControlTitle();
@@ -3994,13 +4039,30 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         if (pic) setArtwork(item.getPic());
         if (pic || name) setMetadata();
         // key 迁移后必须写回，避免 replace 删旧 key 后未 save 导致历史消失
-        if (keyChanged || pic || name || episodeTitleChanged) syncHistory();
+        if (keyChanged || pic || name || episodeTitleChanged || tmdbIdStamped) syncHistory();
         if (pic || name) updateKeep();
         if (id) updateNavigationKey();
         if (name) setPartAdapter();
         PlaybackEventCollector.get().updateHistory(mHistory);
         setText(item);
         if (shouldUseTmdbLayout()) suppressTmdbNativeTextFields();
+    }
+
+    /**
+     * TMDB 匹配完成后把 tmdbId/mediaType 盖章到当前 History。
+     * 直接用已匹配的 TmdbItem，绕开 enrichTmdbId 依赖的脆弱名称回查缓存，
+     * 保证每条历史都能可靠打上 tmdbId，供列表去重与跨源续播使用。
+     *
+     * @return 是否有写入（需要 syncHistory 持久化）
+     */
+    private boolean stampHistoryTmdbId() {
+        if (mHistory == null || !Setting.isHistoryAggregationEffective()) return false;
+        com.fongmi.android.tv.bean.TmdbItem item = getMatchedTmdbItem();
+        if (item == null || item.getTmdbId() <= 0) return false;
+        if (mHistory.getTmdbId() == item.getTmdbId()) return false;
+        mHistory.setTmdbId(item.getTmdbId());
+        mHistory.setMediaType(item.getMediaType());
+        return true;
     }
 
     private boolean shouldUseTmdbLayout() {
@@ -4263,12 +4325,24 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         if (isRedirect()) return;
         if (event.getType() == RefreshEvent.Type.DETAIL) getDetail();
         else if (event.getType() == RefreshEvent.Type.PLAYER) onRefresh();
-        else if (event.getType() == RefreshEvent.Type.VOD) {
+        else if (event.getType() == RefreshEvent.Type.VOD_CORE) {
             if (!isCurrentVodEvent(event.getVod())) {
                 SpiderDebug.log("tmdb-tv", "drop stale vod event current=%s/%s event=%s/%s", getKey(), getId(), event.getVod() == null ? "" : event.getVod().getSiteKey(), event.getVod() == null ? "" : event.getVod().getId());
                 return;
             }
             queueTmdbBind(event.getVod());
+        }
+        else if (event.getType() == RefreshEvent.Type.VOD_RECOMMENDATIONS) {
+            if (!isCurrentVodEvent(event.getVod())) return;
+            refreshTmdbRecommendations();
+        }
+        else if (event.getType() == RefreshEvent.Type.VOD_PERSONAL) {
+            if (!isCurrentVodEvent(event.getVod())) return;
+            refreshTmdbPersonalRecommendations();
+        }
+        else if (event.getType() == RefreshEvent.Type.VOD_EPISODE_TITLES) {
+            if (!isCurrentVodEvent(event.getVod())) return;
+            refreshTmdbEpisodeTitles();
         }
         else if (event.getType() == RefreshEvent.Type.SUBTITLE) player().setSub(Sub.from(event.getPath()));
         else if (event.getType() == RefreshEvent.Type.DANMAKU) player().reloadDanmaku(Danmaku.from(event.getPath()));
@@ -4520,6 +4594,52 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
             mBinding.tmdbPersonalTmdbRecommendations.setNextFocusDownId(hasAi ? R.id.tmdbPersonalAiRecommendations : R.id.flag);
         }
         mBinding.tmdbPersonalAiRecommendations.setNextFocusDownId(R.id.flag);
+    }
+
+    // 细粒度刷新：相关推荐（“猜你喜欢”）异步到达时只重绑该列表，不触碰详情头部与集数，
+    // 避免整页重绑造成的闪烁与二次全屏 loading。
+    private void refreshTmdbRecommendations() {
+        if (mTmdbUIAdapter == null || !mTmdbUIAdapter.isLoaded() || mTmdbDetailLoading) return;
+        bindRecommendationGrid(mBinding.tmdbRecommendations, mBinding.tmdbRecommendationsLabel, mTmdbUIAdapter.getRecommendations(), RecommendationRow.RECOMMENDATIONS);
+    }
+
+    // 细粒度刷新：个性化推荐（TMDB / 豆瓣）异步到达时只重绑这两个列表。
+    private void refreshTmdbPersonalRecommendations() {
+        if (mTmdbUIAdapter == null || !mTmdbUIAdapter.isLoaded() || mTmdbDetailLoading) return;
+        bindRecommendationGrid(mBinding.tmdbPersonalTmdbRecommendations, mBinding.tmdbPersonalTmdbRecommendationsLabel, mTmdbUIAdapter.getPersonalTmdbRecommendations(), RecommendationRow.PERSONAL_TMDB);
+        bindRecommendationGrid(mBinding.tmdbPersonalDoubanRecommendations, mBinding.tmdbPersonalDoubanRecommendationsLabel, mTmdbUIAdapter.getPersonalDoubanRecommendations(), RecommendationRow.PERSONAL_DOUBAN);
+    }
+
+    // 细粒度刷新：集数标题异步补全。useTmdbCard 由 shouldUseTmdbEpisodeCards(hasTmdbEpisodeData)
+    // 决定，首次进入时集数先以纯文本渲染，TMDB 数据是此刻才补齐的——只 notify 不会重算卡片模式，
+    // 会卡在文本态。这里重算卡片模式与 chrome 可见性即可，不走完整 setEpisodeAdapter：那会把
+    // 列表拽回第一个分段（它只装载 items 的首段），用户停在 81-120 段时会被拉回 1-40。
+    private void refreshTmdbEpisodeTitles() {
+        if (mTmdbUIAdapter == null || !mTmdbUIAdapter.isLoaded() || mTmdbDetailLoading) return;
+        if (mEpisodeAdapter == null || mEpisodeGridAdapter == null) return;
+        if (mFlagAdapter == null || mFlagAdapter.getItemCount() == 0) return;
+        Flag flag = getFlag();
+        if (flag == null) return;
+        List<Episode> items = flag.getEpisodes();
+        boolean hasMultiple = items.size() > 1;
+        boolean tmdbMode = isTmdbSourceEnabled();
+        boolean useTmdbCards = EpisodeDisplayPolicy.shouldUseTmdbEpisodeCards(tmdbMode, items);
+        boolean showTmdbEpisodeChrome = EpisodeDisplayPolicy.shouldShowTmdbEpisodeChrome(tmdbMode, false, items);
+        if (showTmdbEpisodeChrome && hasMultiple) episodeGridMode = Setting.getTmdbEpisodeGridMode();
+        if (!showTmdbEpisodeChrome || !hasMultiple) episodeGridMode = false;
+        mBinding.episodeHeader.setVisibility(showTmdbEpisodeChrome && !items.isEmpty() ? View.VISIBLE : View.GONE);
+        mBinding.episodeReverse.setVisibility(showTmdbEpisodeChrome && hasMultiple ? View.VISIBLE : View.GONE);
+        mBinding.episodeViewMode.setVisibility(showTmdbEpisodeChrome && hasMultiple && useTmdbCards ? View.VISIBLE : View.GONE);
+        mBinding.episodeFileName.setVisibility(showTmdbEpisodeChrome && hasMultiple ? View.VISIBLE : View.GONE);
+        updateEpisodeFallbackStillUrl();
+        // setUseTmdbCard 内部对相同值无操作，变化时才 notifyDataSetChanged 触发卡片重绑
+        mEpisodeAdapter.setUseTmdbCard(useTmdbCards);
+        mEpisodeGridAdapter.setUseTmdbCard(useTmdbCards);
+        applyEpisodeViewMode(false);
+        applyActionButtonVisibility();
+        // 卡片模式未变化时 setUseTmdbCard 不会 notify，仍需刷新标题/日期等已补齐的字段
+        mEpisodeAdapter.notifyDataSetChanged();
+        mEpisodeGridAdapter.notifyDataSetChanged();
     }
 
     private void rememberRecommendationAdapter(RecommendationRow row, ArrayObjectAdapter adapter) {
@@ -4876,7 +4996,11 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     private void applyManualTmdb(TmdbItem item) {
         if (mTmdbUIAdapter == null || mVod == null || item == null) return;
         mTmdbDialogGeneration++;
-        showTmdbDetailLoading();
+        // 手动重新匹配是从已揭示的详情页触发的，细粒度事件（VOD_CORE/推荐/个性/集数标题）
+        // 已能就地替换各区域，无需再盖全屏 loading（那会隐藏含视频窗口的全部内容、造成
+        // “整页加载中”观感并重放揭示动画）。这里只清空旧的 TMDB 展示与背景 signature，
+        // 让新数据到达时由 VOD_CORE 就地重绑，空区域走各自 else 分支隐藏、不残留旧数据。
+        clearTmdbDetailViews();
         mTmdbUIAdapter.rememberManualMatch(mVod, item);
         mTmdbUIAdapter.load(item, mVod);
         Notify.show(R.string.detail_tmdb_match_saved);
@@ -5191,12 +5315,20 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
 
     private void setupBackdropSlideshow(java.util.List<String> photos) {
         if (photos == null || photos.isEmpty()) {
+            // 无 TMDB 剧照：清除幻灯片激活标志并隐藏 pager，恢复 contextWall 作为后备背景。
             mBackdropSignature = null;
+            mBackdropSlideshowActive = false;
             if (mBinding.backdropPager != null) {
                 mBinding.backdropPager.setVisibility(View.GONE);
             }
+            setContextWall(getContextWall());
             return;
         }
+        // contextWall（ImageView）叠在 backdropPager 之上，其图源是进入页时固定的 wallPic，
+        // 与 TMDB 条目无关。有 TMDB 剧照时以幻灯片为背景权威：隐藏 contextWall、露出会随
+        // TMDB 切换更新的 slideshow，并置标志阻止后续 setArtwork 把 contextWall 翻回顶层。
+        mBackdropSlideshowActive = true;
+        hideContextWall();
         String signature = backdropSignature(photos);
         if (TextUtils.equals(mBackdropSignature, signature)) {
             if (mBinding.backdropPager != null) mBinding.backdropPager.setVisibility(View.VISIBLE);
@@ -5213,10 +5345,12 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
             }
         }
 
-        // 设置图片数据
+        // 设置图片数据；切换条目时重置轮播页码，避免停在越界或旧位置
+        mCurrentBackdropPage = 0;
         mBackdropAdapter.setItems(photos);
         mBackdropSignature = signature;
         if (mBinding.backdropPager != null) {
+            mBinding.backdropPager.setCurrentItem(0, false);
             mBinding.backdropPager.setVisibility(View.VISIBLE);
         }
 

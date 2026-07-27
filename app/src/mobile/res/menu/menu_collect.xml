@@ -9,9 +9,8 @@
         app:showAsAction="always|withText" />
 
     <item
-        android:id="@+id/action_precise"
-        android:checkable="true"
-        android:title="@string/search_filter_precise"
+        android:id="@+id/action_similarity"
+        android:title="@string/search_filter_similarity"
         app:showAsAction="always|withText" />
 
     <item

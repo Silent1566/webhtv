@@ -15,11 +15,23 @@ import java.util.List;
 public class CollectAdapter extends BaseDiffAdapter<Collect, CollectAdapter.ViewHolder> {
 
     private final OnClickListener listener;
+    private boolean horizontal;
     private int progressCurrent;
     private int progressTotal;
 
     public CollectAdapter(OnClickListener listener) {
+        this(listener, false);
+    }
+
+    public CollectAdapter(OnClickListener listener, boolean horizontal) {
         this.listener = listener;
+        this.horizontal = horizontal;
+    }
+
+    public void setHorizontal(boolean horizontal) {
+        if (this.horizontal == horizontal) return;
+        this.horizontal = horizontal;
+        notifyDataSetChanged();
     }
 
     public interface OnClickListener {
@@ -55,11 +67,14 @@ public class CollectAdapter extends BaseDiffAdapter<Collect, CollectAdapter.View
     @NonNull
     @Override
     public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        return new ViewHolder(AdapterCollectBinding.inflate(LayoutInflater.from(parent.getContext()), parent, false));
+        ViewHolder holder = new ViewHolder(AdapterCollectBinding.inflate(LayoutInflater.from(parent.getContext()), parent, false));
+        setItemWidth(holder);
+        return holder;
     }
 
     @Override
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
+        setItemWidth(holder);
         Collect item = getItem(position);
         boolean all = "all".equals(item.getSite().getKey());
         holder.binding.text.setSelected(item.isSelected());
@@ -69,6 +84,14 @@ public class CollectAdapter extends BaseDiffAdapter<Collect, CollectAdapter.View
             int pos = holder.getBindingAdapterPosition();
             if (pos != RecyclerView.NO_POSITION) listener.onItemClick(pos, getItem(pos));
         });
+    }
+
+    private void setItemWidth(ViewHolder holder) {
+        ViewGroup.LayoutParams params = holder.binding.getRoot().getLayoutParams();
+        int width = horizontal ? ViewGroup.LayoutParams.WRAP_CONTENT : ViewGroup.LayoutParams.MATCH_PARENT;
+        if (params.width == width) return;
+        params.width = width;
+        holder.binding.getRoot().setLayoutParams(params);
     }
 
     public class ViewHolder extends RecyclerView.ViewHolder {

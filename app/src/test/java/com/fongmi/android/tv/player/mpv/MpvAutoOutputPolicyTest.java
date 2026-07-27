@@ -44,6 +44,15 @@ public class MpvAutoOutputPolicyTest {
     }
 
     @Test
+    public void leavesAutoSurfaceDirectWhenSubtitleNeedsGpuComposition() {
+        assertTrue(MpvAutoOutputPolicy.shouldLeaveSurfaceDirectForSubtitle(true, true, true, false));
+        assertTrue(MpvAutoOutputPolicy.shouldLeaveSurfaceDirectForSubtitle(true, true, false, true));
+        assertFalse(MpvAutoOutputPolicy.shouldLeaveSurfaceDirectForSubtitle(true, true, false, false));
+        assertFalse(MpvAutoOutputPolicy.shouldLeaveSurfaceDirectForSubtitle(false, true, true, false));
+        assertFalse(MpvAutoOutputPolicy.shouldLeaveSurfaceDirectForSubtitle(true, false, true, false));
+    }
+
+    @Test
     public void keepsDirectOutputWhenNextItemRemainsEligible() {
         assertEquals(MpvAutoOutputPolicy.Transition.KEEP_SURFACE_DIRECT, MpvAutoOutputPolicy.transition(true, true));
     }

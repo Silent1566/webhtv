@@ -91,6 +91,7 @@ public class TmdbUIAdapter {
     private volatile int loadGeneration;
     private volatile int pendingVodRefreshGeneration;
     private volatile Vod pendingVodRefreshVod;
+    private final java.util.EnumSet<RefreshEvent.Type> pendingVodRefreshTypes = java.util.EnumSet.noneOf(RefreshEvent.Type.class);
     private Runnable pendingStartupBackgroundLoads;
     private PersonalAiUpdateListener personalAiUpdateListener;
 
@@ -488,7 +489,7 @@ public class TmdbUIAdapter {
                 enrichVod(vod, item, detail);
                 SpiderDebug.log("tmdb", "detail core enrichVod cost=%dms title=%s", System.currentTimeMillis() - enrichStart, item.getTitle());
                 if (!isCurrentGeneration(generation)) return;
-                notifyVodChanged(vod, generation);
+                notifyVodChanged(vod, generation, RefreshEvent.Type.VOD_CORE);
                 SpiderDebug.log("tmdb", "detail core first refresh queued cost=%dms title=%s", System.currentTimeMillis() - start, item.getTitle());
             }
             scheduleStartupBackgroundLoads(vod, item, detail, generation);
@@ -535,20 +536,44 @@ public class TmdbUIAdapter {
         }
     }
 
-    private void notifyVodChanged(Vod vod, int generation) {
+    private void notifyVodChanged(Vod vod, int generation, RefreshEvent.Type type) {
         if (vod == null || !isCurrentGeneration(generation)) return;
         pendingVodRefreshVod = vod;
         pendingVodRefreshGeneration = generation;
+        // 累积待发送类型：240ms 合并窗口内若多种异步数据先后到达（如推荐与个性化），
+        // 逐一派发各自的细粒度事件，避免后到者覆盖先到者的类型而丢刷新。
+        // notifyVodChanged 会从后台线程（detail core / 集数标题）与主线程（推荐 / 个性）
+        // 同时调用，EnumSet 非线程安全，故对其复合读写加锁串行化，避免并发修改异常与丢事件。
+        synchronized (pendingVodRefreshTypes) {
+            pendingVodRefreshTypes.add(type);
+        }
         App.post(pendingVodRefresh, VOD_REFRESH_COALESCE_MS);
     }
 
     private void dispatchPendingVodRefresh() {
         Vod vod = pendingVodRefreshVod;
         int generation = pendingVodRefreshGeneration;
+        // add（后台线程）与 drain+clear（此处，主线程）跨线程访问同一 EnumSet，
+        // 复合操作须同锁串行化，避免 ConcurrentModificationException 或漏掉类型。
+        java.util.EnumSet<RefreshEvent.Type> types;
+        synchronized (pendingVodRefreshTypes) {
+            types = pendingVodRefreshTypes.isEmpty()
+                    ? java.util.EnumSet.noneOf(RefreshEvent.Type.class)
+                    : java.util.EnumSet.copyOf(pendingVodRefreshTypes);
+            pendingVodRefreshTypes.clear();
+        }
         pendingVodRefreshVod = null;
         if (vod == null || !isCurrentGeneration(generation)) return;
-        SpiderDebug.log("tmdb", "vod refresh coalesced dispatch title=%s", vod.getName());
-        RefreshEvent.vod(vod);
+        SpiderDebug.log("tmdb", "vod refresh coalesced dispatch title=%s types=%s", vod.getName(), types);
+        for (RefreshEvent.Type type : types) {
+            switch (type) {
+                case VOD_CORE -> RefreshEvent.vodCore(vod);
+                case VOD_RECOMMENDATIONS -> RefreshEvent.vodRecommendations(vod);
+                case VOD_PERSONAL -> RefreshEvent.vodPersonal(vod);
+                case VOD_EPISODE_TITLES -> RefreshEvent.vodEpisodeTitles(vod);
+                default -> RefreshEvent.vod(vod);
+            }
+        }
     }
 
     private void scheduleStartupBackgroundLoads(Vod vod, TmdbItem item, JsonObject detail, int generation) {
@@ -569,7 +594,7 @@ public class TmdbUIAdapter {
             long start = System.currentTimeMillis();
             boolean changed = applyEpisodeTitles(vod, item);
             SpiderDebug.log("tmdb", "episode titles async cost=%dms changed=%s title=%s", System.currentTimeMillis() - start, changed, item.getTitle());
-            if (changed) notifyVodChanged(vod, generation);
+            if (changed) notifyVodChanged(vod, generation, RefreshEvent.Type.VOD_EPISODE_TITLES);
         });
     }
 
@@ -605,7 +630,7 @@ public class TmdbUIAdapter {
                 recommendations = loadedItems;
                 recommendationPage = 1;
                 recommendationHasMore = hasMore;
-                if (vod != null && !loadedItems.isEmpty()) notifyVodChanged(vod, generation);
+                if (vod != null && !loadedItems.isEmpty()) notifyVodChanged(vod, generation, RefreshEvent.Type.VOD_RECOMMENDATIONS);
             });
         });
     }
@@ -631,7 +656,7 @@ public class TmdbUIAdapter {
                 personalDoubanPage = loadedPages.getDouban();
                 personalTmdbRecommendations = personalTmdbPage.getItems();
                 personalDoubanRecommendations = personalDoubanPage.getItems();
-                if (vod != null && (!personalTmdbRecommendations.isEmpty() || !personalDoubanRecommendations.isEmpty())) notifyVodChanged(vod, generation);
+                if (vod != null && (!personalTmdbRecommendations.isEmpty() || !personalDoubanRecommendations.isEmpty())) notifyVodChanged(vod, generation, RefreshEvent.Type.VOD_PERSONAL);
             });
         });
         loadPersonalAiRecommendationsAsync(vod, item, generation);
@@ -696,7 +721,7 @@ public class TmdbUIAdapter {
 
     private void notifyLoadComplete(Vod vod, int generation) {
         // TMDB 加载失败或跳过时，仍然发送 RefreshEvent 让 UI 继续
-        if (vod != null && isCurrentGeneration(generation)) notifyVodChanged(vod, generation);
+        if (vod != null && isCurrentGeneration(generation)) notifyVodChanged(vod, generation, RefreshEvent.Type.VOD_CORE);
     }
 
     private TmdbItem getCachedMatch(Vod vod) {

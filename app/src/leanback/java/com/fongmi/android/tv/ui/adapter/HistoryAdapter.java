@@ -49,6 +49,13 @@ public class HistoryAdapter extends BaseDiffAdapter<History, HistoryAdapter.View
         notifyItemRangeChanged(0, getItemCount());
     }
 
+    @Override
+    public void clear() {
+        super.clear();
+        setDelete(false);
+        History.delete(com.fongmi.android.tv.api.config.VodConfig.getCid());
+    }
+
     private void setClickListener(View root, History item) {
         root.setOnLongClickListener(view -> listener.onLongClick());
         root.setOnClickListener(view -> {

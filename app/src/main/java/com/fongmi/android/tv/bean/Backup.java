@@ -9,7 +9,6 @@ import com.fongmi.android.tv.api.config.LiveConfig;
 import com.fongmi.android.tv.api.config.HlsRuleConfig;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.api.config.WallConfig;
-import com.fongmi.android.tv.api.loader.BaseLoader;
 import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.event.RefreshEvent;
@@ -128,7 +127,6 @@ public class Backup {
             AppDatabase.get().getHistoryDao().insertOrUpdate(getHistory());
         }
         restorePrefers(filter(getPrefers(), options), false, false);
-        if (options.isConfig() || options.isSpider() || options.isWebHome() || options.isLoginState()) BaseLoader.get().clear();
         if (options.isConfig() || options.isSpider() || options.isWebHome() || options.isLoginState()) reloadConfig();
         if (options.isWebHome()) refreshWebHomeExtensions();
         if (options.isKeep()) RefreshEvent.keep();
@@ -137,7 +135,7 @@ public class Backup {
     }
 
     private void reloadConfig() {
-        VodConfig.get().clear().init().load(new Callback());
+        VodConfig.get().clear("sync-restore").init().load(new Callback());
         LiveConfig.get().clear().init().load();
         WallConfig.get().init().load();
         ConfigEvent.common();

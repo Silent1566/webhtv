@@ -136,7 +136,7 @@ public class TmdbUIAdapterTest {
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
         int constants = source.indexOf("VOD_REFRESH_COALESCE_MS");
         int backgroundDelay = source.indexOf("TMDB_STARTUP_BACKGROUND_DELAY_MS", constants);
-        int firstRefresh = source.indexOf("notifyVodChanged(vod, generation);", backgroundDelay);
+        int firstRefresh = source.indexOf("notifyVodChanged(vod, generation, RefreshEvent.Type.VOD_CORE);", backgroundDelay);
         int deferredLoads = source.indexOf("scheduleStartupBackgroundLoads(vod, item, detail, generation);", firstRefresh);
         int scheduler = source.indexOf("private void scheduleStartupBackgroundLoads", deferredLoads);
         int episode = source.indexOf("loadEpisodeTitlesAsync(vod, item, generation);", scheduler);
@@ -146,9 +146,9 @@ public class TmdbUIAdapterTest {
         int pending = source.indexOf("pendingVodRefresh", notify);
         int post = source.indexOf("App.post(pendingVodRefresh, VOD_REFRESH_COALESCE_MS);", pending);
         int relatedMethod = source.indexOf("private void loadRelatedRecommendationsAsync");
-        int relatedNotify = source.indexOf("notifyVodChanged(vod, generation);", relatedMethod);
+        int relatedNotify = source.indexOf("notifyVodChanged(vod, generation, RefreshEvent.Type.VOD_RECOMMENDATIONS);", relatedMethod);
         int personalMethod = source.indexOf("private void loadPersonalRecommendationsAsync");
-        int personalNotify = source.indexOf("notifyVodChanged(vod, generation);", personalMethod);
+        int personalNotify = source.indexOf("notifyVodChanged(vod, generation, RefreshEvent.Type.VOD_PERSONAL);", personalMethod);
 
         assertTrue(sourcePath + " is missing TMDB playback refresh throttle constants", constants >= 0 && backgroundDelay > constants);
         assertTrue("TMDB detail should queue one lightweight VOD refresh before deferred background work",

@@ -26,11 +26,16 @@ public final class SliderNumberDialog {
     }
 
     public static void show(FragmentActivity activity, int titleRes, int currentValue, int minValue, int maxValue, IntCallback callback) {
+        show(activity, titleRes, currentValue, minValue, maxValue, "", 0, callback);
+    }
+
+    public static void show(FragmentActivity activity, int titleRes, int currentValue, int minValue, int maxValue, String suffix, int hintRes, IntCallback callback) {
         if (activity == null || minValue > maxValue) return;
         int current = clamp(currentValue, minValue, maxValue);
+        String valueSuffix = suffix == null ? "" : suffix;
 
         MaterialTextView valueView = new MaterialTextView(activity);
-        valueView.setText(String.valueOf(current));
+        valueView.setText(formatValue(current, valueSuffix));
         valueView.setTextColor(Color.parseColor("#202124"));
         valueView.setTextSize(28);
         valueView.setGravity(Gravity.CENTER);
@@ -57,6 +62,16 @@ public final class SliderNumberDialog {
         int horizontal = ResUtil.dp2px(12);
         container.setPadding(horizontal, 0, horizontal, 0);
         container.addView(valueView, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        if (hintRes != 0) {
+            MaterialTextView hintView = new MaterialTextView(activity);
+            hintView.setText(hintRes);
+            hintView.setTextColor(Color.parseColor("#5F6368"));
+            hintView.setTextSize(14);
+            hintView.setGravity(Gravity.CENTER);
+            LinearLayout.LayoutParams hintParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            hintParams.topMargin = ResUtil.dp2px(8);
+            container.addView(hintView, hintParams);
+        }
         LinearLayout.LayoutParams sliderParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         sliderParams.topMargin = ResUtil.dp2px(8);
         container.addView(slider, sliderParams);
@@ -64,7 +79,7 @@ public final class SliderNumberDialog {
         int[] selected = {current};
         slider.addOnChangeListener((source, value, fromUser) -> {
             selected[0] = Math.round(value);
-            valueView.setText(String.valueOf(selected[0]));
+            valueView.setText(formatValue(selected[0], valueSuffix));
         });
 
         Dialog[] holder = new Dialog[1];
@@ -88,6 +103,10 @@ public final class SliderNumberDialog {
 
         dialog.setOnShowListener(d -> slider.requestFocus());
         dialog.show();
+    }
+
+    private static String formatValue(int value, String suffix) {
+        return value + suffix;
     }
 
     private static int clamp(int value, int min, int max) {

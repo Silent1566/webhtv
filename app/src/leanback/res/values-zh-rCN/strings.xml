@@ -38,5 +38,9 @@
     <string name="timer_30">30 分钟</string>
     <string name="timer_60">1 小时</string>
     <string name="timer_delay">延长 5 分钟</string>
-    <string name="timer_cancel">取消定时器</string>
+   <string name="timer_cancel">取消定时器</string>
+
+    <!-- Delete Dialog -->
+    <string name="dialog_delete_record">删除全部记录？</string>
+    <string name="dialog_delete_history">观看记录将会全部删除。</string>
 </resources>

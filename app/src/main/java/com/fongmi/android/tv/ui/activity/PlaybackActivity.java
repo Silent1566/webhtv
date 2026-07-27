@@ -245,10 +245,29 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
     }
 
     private int effectiveResizeMode(int resizeMode) {
-        if (mService != null && player().isMpv() && !player().isMpvSurfaceDirect() && resizeMode == AspectRatioFrameLayout.RESIZE_MODE_FIT) {
+        // MPV's gpu/gpu-next vo normally keeps aspect inside a layout-sized surface, so FIT is forced to
+        // FILL and the vo draws its own letterbox. But when the surface buffer is locked to the video
+        // resolution (fixed-size path in syncVideoSurfaceSize), the buffer already carries the video aspect
+        // ratio — forcing FILL would stretch it. In that case keep FIT so AspectRatioFrameLayout letterboxes
+        // and SurfaceFlinger scales the video-aspect buffer correctly, matching EXO.
+        if (mService != null && player().isMpv() && !player().isMpvSurfaceDirect()
+                && !isMpvGpuFixedSizeSurface() && resizeMode == AspectRatioFrameLayout.RESIZE_MODE_FIT) {
             return AspectRatioFrameLayout.RESIZE_MODE_FILL;
         }
         return resizeMode;
+    }
+
+    // Whether MPV's gpu/gpu-next vo currently drives a fixed-size surface buffer (locked to the video
+    // resolution) rather than a layout-sized one. Must mirror the fixed-size branch in syncVideoSurfaceSize.
+    // Requires a known video size: before the first onVideoSizeChanged the buffer cannot be locked, so
+    // syncVideoSurfaceSize stays on the layout path — gating on the size here keeps effectiveResizeMode in
+    // step (FILL) during that startup window and flips both to the fixed-size path (FIT) together once the
+    // size arrives, avoiding a transient aspect-mode mismatch.
+    private boolean isMpvGpuFixedSizeSurface() {
+        return mService != null && player().isMpv() && !player().isMpvSurfaceDirect()
+                && PlaybackPerformanceSetting.isSurfaceFixedSizeEnabled()
+                && getRender() == PlayerSetting.RENDER_SURFACE
+                && player().getVideoWidth() > 0 && player().getVideoHeight() > 0;
     }
 
     protected void onReclaim() {
@@ -418,7 +437,13 @@ getSeekView().setSeekListener(this::onSeekStarted);
         if (mService == null) return;
         View surface = getExoView().getVideoSurfaceView();
         if (!(surface instanceof SurfaceView surfaceView)) return;
-        if (!PlaybackPerformanceSetting.isSurfaceFixedSizeEnabled() || getRender() != PlayerSetting.RENDER_SURFACE || player().isNativePlayer()) {
+        // MPV's gpu/gpu-next vo owns an EGL viewport tied to the surface buffer size; letting the buffer
+        // follow the view layout (setSizeFromLayout) forces a costly vo rebuild on every fullscreen toggle.
+        // Lock its buffer to the video resolution like EXO so SurfaceFlinger handles the on-screen scaling
+        // and the buffer size stays constant across fullscreen toggles (no surfaceChanged, no vo rebuild).
+        boolean mpvGpuFixed = isMpvGpuFixedSizeSurface();
+        boolean exoFixed = PlaybackPerformanceSetting.isSurfaceFixedSizeEnabled() && getRender() == PlayerSetting.RENDER_SURFACE && !player().isNativePlayer();
+        if (!mpvGpuFixed && !exoFixed) {
             surfaceView.getHolder().setSizeFromLayout();
             logSurfaceState("syncVideoSurfaceSize layout size=" + (size == null ? "null" : size.width + "x" + size.height));
             return;
@@ -428,12 +453,25 @@ getSeekView().setSeekListener(this::onSeekStarted);
         if (width <= 0 || height <= 0) return;
         ExoUtil.EnhancedVideoProfile profile = ExoUtil.getEnhancedVideoProfile();
         float scale = Math.min((float) profile.width() / width, (float) profile.height() / height);
-        if (scale < 1f) {
+        // EXO locks the buffer to the native video resolution (only downscaling to the codec/display
+        // profile) and relies on MediaCodec + SurfaceFlinger to present it. MPV's gpu vo instead renders
+        // through its own high-quality scaler, so its buffer must track the display resolution — scale the
+        // video aspect UP as well as down to fit the profile. Otherwise a sub-display video would render at
+        // native resolution and SurfaceFlinger would bilinear-upscale it, bypassing mpv's scaler and
+        // degrading quality. Because the buffer is derived from the video + profile (not the view layout),
+        // it stays constant across fullscreen toggles, so mpv's gpu vo never rebuilds its EGL viewport.
+        //
+        // Trade-off: the embedded (non-fullscreen) player now also renders at the display resolution rather
+        // than at its smaller view size, raising GPU cost while embedded. This is the unavoidable price of a
+        // constant buffer — shrinking it for the embedded case would change the buffer on every fullscreen
+        // toggle and reintroduce the vo rebuild this whole path exists to avoid. Users on weak devices can
+        // fall back to the layout-sized path by disabling the "surface fixed size" setting (isMpvGpuFixedSizeSurface).
+        if (mpvGpuFixed || scale < 1f) {
             width = Math.max(1, Math.round(width * scale));
             height = Math.max(1, Math.round(height * scale));
         }
         surfaceView.getHolder().setFixedSize(width, height);
-        logSurfaceState("syncVideoSurfaceSize fixed=" + width + "x" + height);
+        logSurfaceState("syncVideoSurfaceSize fixed=" + width + "x" + height + (mpvGpuFixed ? " mpv-gpu" : ""));
     }
 
     private void logSurfaceState(String step) {

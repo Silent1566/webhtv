@@ -230,6 +230,8 @@
     <string name="setting_play_back_to_detail">播放返回详情</string>
     <string name="setting_play_speed">播放倍速</string>
     <string name="setting_episode_history">记录分集进度</string>
+    <string name="setting_history_aggregation">历史记录跨源聚合</string>
+    <string name="setting_history_aggregation_hint">基于 TMDB 匹配统一不同源的历史记录</string>
     <string name="setting_home_history">首页最近观看</string>
     <string name="setting_personal_recommendation">个性推荐</string>
     <string name="setting_tmdb_episode_file_size">TMDB 剧集保留文件大小</string>
@@ -1354,13 +1356,11 @@
     <string name="search_result_all">%1$s 的搜索结果</string>
     <string name="search_result_current">当前站搜索：%1$s</string>
     <string name="search_result_group">%1$s 搜索：%2$s</string>
-    <string name="search_filter_precise">精准</string>
-    <string name="search_filter_precise_checked">精准 ✓</string>
-    <string name="search_filter_precise_on">精准过滤已开启</string>
-    <string name="search_filter_precise_off">精准过滤已关闭</string>
-    <string name="search_filter_precise_hint">只显示标题高度匹配的结果</string>
-    <string name="search_filter_keyword_too_short">关键词过短，无法精准过滤</string>
-    <string name="search_filter_empty">暂无高匹配结果，可关闭精准过滤查看全部</string>
+    <string name="search_filter_similarity">相似度</string>
+    <string name="search_filter_similarity_value">相似度 %d%%</string>
+    <string name="search_filter_similarity_hint">调整搜索结果的匹配宽松度，100为完全相等，0为不过滤</string>
+    <string name="search_filter_similarity_description">%1$s，%2$s</string>
+    <string name="search_filter_empty">暂无达到 %1$d%% 相似度的结果，可降低相似度查看更多</string>
     <string name="detail_site_not_searchable">当前站源不支持搜索</string>
 
     <string-array name="select_player">

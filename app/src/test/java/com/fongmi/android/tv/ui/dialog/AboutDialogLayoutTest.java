@@ -6,16 +6,19 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class AboutDialogLayoutTest {
 
     @Test
-    public void aboutDialogUsesNearlyAllAvailableScreenHeight() {
-        assertEquals(696, AboutDialogLayout.calculateHeight(720, 24));
-        assertEquals(1, AboutDialogLayout.calculateHeight(20, 24));
+    public void aboutDialogWindowWrapsItsContentInsteadOfForcingFullHeight() throws Exception {
+        String source = read(findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "dialog", "AboutDialog.java")));
+
+        assertTrue("About dialog window height should wrap its content so short text does not float above the buttons",
+                source.contains("params.height = WindowManager.LayoutParams.WRAP_CONTENT;"));
+        assertFalse("About dialog must not force a near-full-screen window height",
+                source.contains("getDialogHeight"));
     }
 
     @Test
@@ -27,12 +30,13 @@ public class AboutDialogLayoutTest {
                 source.contains("dialog.setContentView(binding.getRoot());"));
         assertFalse("About dialog content must not be wrapped in a second padded dialog shell",
                 source.contains("LightDialog.create(activity, null, binding.getRoot())"));
-        assertTrue("About dialog root must fill the bounded window height",
-                layout.contains("android:layout_height=\"match_parent\""));
+        assertTrue("About dialog root should wrap its content so the window can size to the disclaimer",
+                layout.contains("android:layout_height=\"wrap_content\""));
+        assertTrue("About dialog should set maxHeight dynamically in code based on screen size",
+                source.contains("binding.contentScroll.setMaxHeight(maxScrollHeight);"));
         String contentScroll = layout.substring(layout.indexOf("android:id=\"@+id/contentScroll\""));
-        assertTrue("About dialog disclaimer should shrink before the update buttons are clipped",
-                contentScroll.contains("android:layout_height=\"0dp\"")
-                        && contentScroll.contains("android:layout_weight=\"1\""));
+        assertFalse("About dialog should not hardcode maxHeight in XML — it must adapt to screen size",
+                contentScroll.contains("app:maxHeight="));
     }
 
     @Test

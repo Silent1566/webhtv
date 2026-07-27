@@ -74,6 +74,7 @@ public class TmdbDetailActivityLayoutTest {
         int playbackName = source.indexOf("private String playbackHistoryName()");
         int enrichVod = source.indexOf("private void enrichVod()");
         int manual = source.indexOf("private void applyManualTmdb(TmdbItem item)");
+        int canonical = source.indexOf("private void applyTmdbResultNow(TmdbLoadResult result)");
 
         assertTrue("TMDB detail loading must normalize stale cached item titles from the detail payload",
                 loadBundle >= 0 && source.indexOf("item = normalizeTmdbItemTitle(item, detail);", loadBundle) > loadBundle);
@@ -86,8 +87,113 @@ public class TmdbDetailActivityLayoutTest {
                 playbackName >= 0 && source.indexOf("coalesce(matchedTmdbTitle()", playbackName) > playbackName);
         assertTrue("detail page vod title must use normalized TMDB title",
                 enrichVod >= 0 && source.indexOf("String title = matchedTmdbTitle();", enrichVod) > enrichVod);
-        assertTrue("manual matching must save the normalized bundle item, not the pre-detail item",
-                manual >= 0 && source.indexOf("saveTmdbMatch(bundle.item());", manual) > manual);
+        assertTrue("manual matching must route the normalized bundle through the matcher-saving refresh pipeline",
+                manual >= 0 && source.indexOf("applyTmdbResultNow(new TmdbLoadResult(bundle, List.of()));", manual) > manual
+                        && canonical >= 0 && source.indexOf("saveTmdbMatch(bundle.item());", canonical) > canonical);
+    }
+
+    @Test
+    public void manualTmdbReplacementUsesCompleteResultRefreshPipeline() throws Exception {
+        String source = readJava("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java");
+        int manual = source.indexOf("private void applyManualTmdb(TmdbItem item)");
+        int manualEnd = source.indexOf("private void resetManualTmdbPresentation()", manual);
+        int reset = manualEnd;
+        int resetEnd = source.indexOf("private void enrichVod()", reset);
+        int canonical = source.indexOf("private void applyTmdbResultNow(TmdbLoadResult result)");
+        int canonicalEnd = source.indexOf("private TmdbBundle loadTmdbBundle", canonical);
+
+        assertTrue("manual and canonical TMDB refresh methods must be present in source order",
+                manual >= 0 && manualEnd > manual && resetEnd > reset && canonical >= 0 && canonicalEnd > canonical);
+        String manualBody = source.substring(manual, manualEnd);
+        String resetBody = source.substring(reset, resetEnd);
+        String canonicalBody = source.substring(canonical, canonicalEnd);
+        int clearPresentation = manualBody.indexOf("resetManualTmdbPresentation();");
+        int applyResult = manualBody.indexOf("applyTmdbResultNow(new TmdbLoadResult(bundle, List.of()));");
+        int episodeMediaReset = canonicalBody.indexOf("lastEpisodeMediaSeason = Integer.MIN_VALUE;");
+        int episodeRender = canonicalBody.indexOf("renderEpisodes();");
+
+        assertTrue("manual TMDB replacement must clear stale presentation before applying the new result",
+                clearPresentation >= 0 && applyResult > clearPresentation);
+        assertTrue("manual TMDB replacement must reset season selection and cached episode rendering",
+                resetBody.contains("tmdbEpisodeDetailGeneration++;")
+                        && resetBody.contains("selectedEpisode = null;")
+                        && resetBody.contains("selectedSeasonNumber = -1;")
+                        && resetBody.contains("clearEpisodeRenderCaches();")
+                        && resetBody.contains("resetEpisodeRange();"));
+        assertTrue("manual TMDB replacement must clear all season-level TMDB caches to prevent stale data leaks",
+                resetBody.contains("tmdbSeasonEpisodes.clear();")
+                        && resetBody.contains("tmdbSeasonCast.clear();")
+                        && resetBody.contains("tmdbSeasonPhotos.clear();")
+                        && resetBody.contains("loadingSeasons.clear();"));
+        assertTrue("manual TMDB replacement must immediately remove old episode cards and TMDB rails",
+                resetBody.contains("episodeAdapter.setItems(List.of(), Map.of(), null);")
+                        && resetBody.contains("episodePhotoAdapter.setItems(List.of());")
+                        && resetBody.contains("castAdapter.setItems(List.of());")
+                        && resetBody.contains("creatorAdapter.setItems(List.of());")
+                        && resetBody.contains("relatedAdapter.setItems(List.of());")
+                        && resetBody.contains("personalTmdbAdapter.setItems(List.of());")
+                        && resetBody.contains("personalDoubanAdapter.setItems(List.of());")
+                        && resetBody.contains("personalAiAdapter.setItems(List.of());"));
+        assertFalse("manual TMDB replacement must not keep a partial duplicate binding pipeline",
+                manualBody.contains("applyTmdbBundle(bundle);") || manualBody.contains("bindPage();") || manualBody.contains("loadTmdbMediaBlocks(bundle);"));
+        assertTrue("manual TMDB replacement must defer the second episode viewport rebind until the search dialog closes",
+                manualBody.contains("scheduleManualTmdbEpisodeRebind(applyGeneration, bundle.item());"));
+        assertTrue("the canonical TMDB refresh must invalidate the episode media season before re-rendering cards",
+                episodeMediaReset >= 0 && episodeRender > episodeMediaReset);
+        assertTrue("the canonical TMDB refresh must reload cast, photos, recommendations, and season media",
+                canonicalBody.contains("binding.getRoot().post(() -> loadTmdbMediaBlocks(bundle));"));
+    }
+
+    @Test
+    public void asyncSeasonLoadForcesEpisodeRebindAfterLayoutSettles() throws Exception {
+        String source = readJava("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java");
+        int fetch = source.indexOf("private void fetchSeasonIfNeeded(int seasonNumber, boolean refresh)");
+        int fetchEnd = source.indexOf("private void refreshFirstSeasonIfStaleSplit", fetch);
+
+        assertTrue("TMDB season fetch method must be present", fetch >= 0 && fetchEnd > fetch);
+        String fetchBody = source.substring(fetch, fetchEnd);
+        int storeEpisodes = fetchBody.indexOf("tmdbSeasonEpisodes.put(seasonNumber, episodes);");
+        int renderEpisodes = fetchBody.indexOf("renderEpisodes();", storeEpisodes);
+        int forceRebind = fetchBody.indexOf("binding.episodeContainer.post(() -> {", renderEpisodes);
+
+        assertTrue("async TMDB season data must render before scheduling a forced visible-card rebind",
+                storeEpisodes >= 0 && renderEpisodes > storeEpisodes && forceRebind > renderEpisodes);
+        assertTrue("the delayed rebind must ignore stale TMDB requests and force every visible card to refresh",
+                fetchBody.indexOf("if (!isTmdbRequestCurrent(generation, item)) return;", forceRebind) > forceRebind
+                        && fetchBody.indexOf("rerenderEpisodeViewportOnly(false, true, true);", forceRebind) > forceRebind);
+    }
+
+    @Test
+    public void manualTmdbEpisodeRebindWaitsForWindowFocusBeforeNextFrame() throws Exception {
+        String source = readJava("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java");
+        int schedule = source.indexOf("private void scheduleManualTmdbEpisodeRebind(int generation, TmdbItem item)");
+        int flush = source.indexOf("private void flushPendingManualTmdbEpisodeRebind()", schedule);
+        int applyManual = source.indexOf("private void applyManualTmdb(TmdbItem item)", flush);
+        int windowFocus = source.indexOf("public void onWindowFocusChanged(boolean hasFocus)");
+        int windowFocusEnd = source.indexOf("protected void onResume()", windowFocus);
+
+        assertTrue("manual TMDB episode rebind helpers and window focus callback must be present",
+                schedule >= 0 && flush > schedule && applyManual > flush && windowFocus >= 0 && windowFocusEnd > windowFocus);
+        String scheduleBody = source.substring(schedule, flush);
+        String flushBody = source.substring(flush, applyManual);
+        String windowFocusBody = source.substring(windowFocus, windowFocusEnd);
+
+        assertTrue("manual rebind scheduling must remember only the latest TMDB request and wait while the dialog owns focus",
+                source.contains("private int pendingManualTmdbEpisodeRebindGeneration = -1;")
+                        && source.contains("private TmdbItem pendingManualTmdbEpisodeRebindItem;")
+                        && scheduleBody.contains("pendingManualTmdbEpisodeRebindGeneration = generation;")
+                        && scheduleBody.contains("pendingManualTmdbEpisodeRebindItem = item;")
+                        && scheduleBody.contains("if (hasWindowFocus()) flushPendingManualTmdbEpisodeRebind();")
+                        && !scheduleBody.contains("rerenderEpisodeViewportOnly("));
+        assertTrue("regaining Activity window focus must flush the deferred rebind",
+                windowFocusBody.indexOf("super.onWindowFocusChanged(hasFocus);") >= 0
+                        && windowFocusBody.indexOf("if (hasFocus) flushPendingManualTmdbEpisodeRebind();")
+                        > windowFocusBody.indexOf("super.onWindowFocusChanged(hasFocus);"));
+        assertTrue("the deferred rebind must run on the next frame and reject destroyed or stale Activity state",
+                flushBody.contains("binding.episodeContainer.postOnAnimation(() -> {")
+                        && flushBody.contains("if (isFinishing() || isDestroyed()) return;")
+                        && flushBody.contains("if (generation != tmdbApplyGeneration || !isSameTmdbItem(item, matchedTmdbItem)) return;")
+                        && flushBody.contains("rerenderEpisodeViewportOnly(false, true, true);"));
     }
 
     @Test
@@ -131,6 +237,21 @@ public class TmdbDetailActivityLayoutTest {
                 source.indexOf("buttons.put(PlayerButtonSetting.RESET, binding.playerRefresh)", method) > method);
         assertTrue("fusion source button must be mapped to the change setting",
                 source.indexOf("buttons.put(PlayerButtonSetting.CHANGE, binding.playerChangeSource)", method) > method);
+    }
+
+    @Test
+    public void fusionOverlayButtonsDoNotFollowPlayerButtonSettings() throws Exception {
+        String source = readJava("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java");
+        // 融合模式全屏播放器的悬浮/图标按钮只根据集数、锁定、功能可用性显示，不受「播放器按钮设置」控制
+        // （PlayerButtonSetting 只控制 playerActionRow 的横向文字按钮）。这些按钮的可见性行在
+        // updateInlineButtons(...) 中，用 detailControlView(R.id.X).setVisibility(...) 更新。
+        for (String id : List.of("prev", "next", "fullscreen", "cast", "danmaku")) {
+            int line = source.indexOf("detailControlView(R.id." + id + ", View.class).setVisibility(");
+            assertTrue("missing detailControlView visibility line for R.id." + id, line >= 0);
+            int lineEnd = source.indexOf(';', line);
+            String stmt = source.substring(line, lineEnd);
+            assertFalse("fusion overlay button R.id." + id + " must not follow PlayerButtonSetting", stmt.contains("PlayerButtonSetting"));
+        }
     }
 
     @Test

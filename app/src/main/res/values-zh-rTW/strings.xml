@@ -2066,6 +2066,8 @@
     <string name="setting_play_back_to_detail">播放返回詳情</string>
     <string name="setting_play_speed">播放倍速</string>
     <string name="setting_episode_history">記錄分集進度</string>
+    <string name="setting_history_aggregation">歷史記錄跨源聚合</string>
+    <string name="setting_history_aggregation_hint">基於 TMDB 匹配統一不同源的歷史記錄</string>
     <string name="setting_home_history">首頁最近觀看</string>
     <string name="site_health_report_ad_blocked">廣告攔截 · %1$d 次</string>
     <string name="setting_custom_csp_sort">排序</string>
@@ -2100,13 +2102,11 @@
     <string name="search_result_all">%1$s 的搜索結果</string>
     <string name="search_result_current">當前站搜索：%1$s</string>
     <string name="search_result_group">%1$s 搜索：%2$s</string>
-    <string name="search_filter_precise">精準</string>
-    <string name="search_filter_precise_checked">精準 ✓</string>
-    <string name="search_filter_precise_on">精準篩選已開啟</string>
-    <string name="search_filter_precise_off">精準篩選已關閉</string>
-    <string name="search_filter_precise_hint">僅顯示標題高度匹配的結果</string>
-    <string name="search_filter_keyword_too_short">關鍵詞過短，無法進行精準篩選</string>
-    <string name="search_filter_empty">暫無高度匹配的結果，可關閉精準篩選查看全部</string>
+    <string name="search_filter_similarity">相似度</string>
+    <string name="search_filter_similarity_value">相似度 %d%%</string>
+    <string name="search_filter_similarity_hint">調整搜尋結果的匹配寬鬆度，100為完全相等，0為不過濾</string>
+    <string name="search_filter_similarity_description">%1$s，%2$s</string>
+    <string name="search_filter_empty">暫無達到 %1$d%% 相似度的結果，可降低相似度查看更多</string>
     <string name="detail_site_not_searchable">當前站源不支持搜索</string>
     <string name="viewing_report_refreshing">刷新報告中...</string>
     <string name="setting_ai_ad_detection">AI 智能去廣</string>

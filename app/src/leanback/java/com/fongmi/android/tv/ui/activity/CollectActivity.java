@@ -26,6 +26,7 @@ import androidx.viewbinding.ViewBinding;
 
 import com.bumptech.glide.Glide;
 import com.fongmi.android.tv.App;
+import com.fongmi.android.tv.Product;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Collect;
@@ -41,6 +42,7 @@ import com.fongmi.android.tv.ui.adapter.CollectAdapter;
 import com.fongmi.android.tv.ui.adapter.SearchAdapter;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.custom.CustomScroller;
+import com.fongmi.android.tv.ui.dialog.SliderNumberDialog;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.SearchPageState;
@@ -74,7 +76,7 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
     private final List<Collect> mAllCollectItems = new ArrayList<>();
     private String mFilterGroup = "";
     private PopupWindow mGroupPopup;
-    private boolean mPrecise;
+    private int mSimilarity;
     private boolean mSearchCompleted;
     private final SearchPageState mPaging = new SearchPageState();
     private final List<Vod> mPendingItems = new ArrayList<>();
@@ -136,7 +138,7 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
         getIntent().putExtras(intent);
         if (mViewModel != null) mViewModel.stopSearch();
         mFilterGroup = "";
-        mPrecise = Setting.isSearchPrecise() && SearchResultFilter.canFilter(getKeyword());
+        mSimilarity = Setting.getSearchSimilarity();
         saveKeyword();
         setSites();
         updateFilterControls();
@@ -145,7 +147,7 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
 
     @Override
     protected void initView(Bundle savedInstanceState) {
-        mPrecise = Setting.isSearchPrecise() && SearchResultFilter.canFilter(getKeyword());
+        mSimilarity = Setting.getSearchSimilarity();
         setRecyclerView();
         setViewModel();
         saveKeyword();
@@ -158,15 +160,15 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
     @Override
     protected void initEvent() {
         mBinding.searchGroup.setOnClickListener(this::showGroupPopup);
-        mBinding.preciseFilter.setOnClickListener(v -> onPreciseFilter());
+        mBinding.similarityFilter.setOnClickListener(v -> onSimilarityFilter());
         mBinding.searchColumn.setOnClickListener(v -> toggleSearchColumn());
         mBinding.searchGroup.setOnKeyListener((v, keyCode, event) -> {
             if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
-            if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) return mBinding.preciseFilter.requestFocus();
+            if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) return mBinding.similarityFilter.requestFocus();
             if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) return focusBelowTop();
             return keyCode == KeyEvent.KEYCODE_DPAD_LEFT;
         });
-        mBinding.preciseFilter.setOnKeyListener((v, keyCode, event) -> {
+        mBinding.similarityFilter.setOnKeyListener((v, keyCode, event) -> {
             if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
             if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT && mBinding.searchGroup.getVisibility() == View.VISIBLE) return mBinding.searchGroup.requestFocus();
             if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) return mBinding.searchColumn.requestFocus();
@@ -175,7 +177,7 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
         });
         mBinding.searchColumn.setOnKeyListener((v, keyCode, event) -> {
             if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
-            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) return mBinding.preciseFilter.requestFocus();
+            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) return mBinding.similarityFilter.requestFocus();
             if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) return focusBelowTop();
             return false;
         });
@@ -303,22 +305,20 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
         mBinding.searchGroup.setVisibility(canFilterGroup() ? View.VISIBLE : View.GONE);
         if (TextUtils.isEmpty(mFilterGroup)) mBinding.searchGroup.setText(R.string.search_scope_all);
         else mBinding.searchGroup.setText(mFilterGroup);
-        mBinding.preciseFilter.setText(mPrecise ? R.string.search_filter_precise_checked : R.string.search_filter_precise);
-        mBinding.preciseFilter.setSelected(mPrecise);
-        mBinding.preciseFilter.setContentDescription(getString(R.string.search_filter_precise_hint));
+        String value = getString(R.string.search_filter_similarity_value, mSimilarity);
+        mBinding.similarityFilter.setText(value);
+        mBinding.similarityFilter.setSelected(mSimilarity > 0);
+        mBinding.similarityFilter.setContentDescription(getString(R.string.search_filter_similarity_description, value, getString(R.string.search_filter_similarity_hint)));
     }
 
-    private void onPreciseFilter() {
-        if (!SearchResultFilter.canFilter(getKeyword())) {
-            Notify.show(R.string.search_filter_keyword_too_short);
-            return;
-        }
+    private void onSimilarityFilter() {
         String activeSiteKey = getActiveSiteKey();
-        mPrecise = !mPrecise;
-        Setting.putSearchPrecise(mPrecise);
-        updateFilterControls();
-        applyFilters(activeSiteKey);
-        Notify.show(mPrecise ? R.string.search_filter_precise_on : R.string.search_filter_precise_off);
+        SliderNumberDialog.show(this, R.string.search_filter_similarity, mSimilarity, 0, 100, "%", R.string.search_filter_similarity_hint, value -> {
+            mSimilarity = value;
+            Setting.putSearchSimilarity(value);
+            updateFilterControls();
+            applyFilters(activeSiteKey);
+        });
     }
 
     private void showGroupPopup(View anchor) {
@@ -428,8 +428,8 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
         for (int i = 1; i < mAllCollectItems.size(); i++) {
             Collect raw = mAllCollectItems.get(i);
             if (!matchFilter(raw.getSite())) continue;
-            List<Vod> visible = SearchResultFilter.filter(raw.getList(), getKeyword(), mPrecise);
-            if (!fixedOrder && visible.isEmpty() && (!mPrecise || raw.getList().isEmpty())) continue;
+            List<Vod> visible = SearchResultFilter.filter(raw.getList(), getKeyword(), mSimilarity);
+            if (!fixedOrder && visible.isEmpty() && (mSimilarity == 0 || raw.getList().isEmpty())) continue;
             Collect item = new Collect(raw.getSite(), visible);
             item.setPage(mPaging.getPage(raw.getSite().getKey()));
             item.setSelected(raw.getSite().getKey().equals(activeSiteKey));
@@ -467,7 +467,8 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
     private void updateEmptyState(Collect activated) {
         String siteKey = activated.getSite().getKey();
         boolean loading = "all".equals(siteKey) ? mPaging.hasPending() : mPaging.isPending(siteKey);
-        boolean show = mPrecise && mSearchCompleted && !loading && activated.getList().isEmpty() && hasRawResults(siteKey);
+        boolean show = mSimilarity > 0 && mSearchCompleted && !loading && activated.getList().isEmpty() && hasRawResults(siteKey);
+        if (show) mBinding.empty.setText(getString(R.string.search_filter_empty, mSimilarity));
         mBinding.empty.setVisibility(show ? View.VISIBLE : View.GONE);
     }
 
@@ -481,7 +482,7 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
 
     private void maybeLoadNextPage(String siteKey, boolean rawPageHasItems, boolean visiblePageHasItems) {
         if (!siteKey.equals(getActiveSiteKey())) return;
-        if (!mPaging.shouldContinue(siteKey, mPrecise, rawPageHasItems, visiblePageHasItems)) return;
+        if (!mPaging.shouldContinue(siteKey, mSimilarity > 0, rawPageHasItems, visiblePageHasItems)) return;
         restoreScroller(siteKey);
         mScroller.checkMore();
         if (mPaging.isPending(siteKey)) updateEmptyState(mCollectAdapter.getActivated());
@@ -541,10 +542,7 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
     }
 
     private int getAutoCount() {
-        int width = getResultWidth();
-        int itemWidth = ResUtil.dp2px(120);
-        int spacing = ResUtil.dp2px(8);
-        return Math.max(3, Math.min(isSearchLandscape() ? 6 : 7, (width + spacing) / (itemWidth + spacing)));
+        return Product.getColumn();
     }
 
     private boolean isSearchLandscape() {
@@ -648,7 +646,7 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
         Collect raw = addMasterCollect(rawItems);
         raw.setPage(mPaging.getPage(raw.getSite().getKey()));
         if (!matchFilter(raw.getSite())) return;
-        List<Vod> visible = SearchResultFilter.filter(rawItems, getKeyword(), mPrecise);
+        List<Vod> visible = SearchResultFilter.filter(rawItems, getKeyword(), mSimilarity);
         updateProjectedCollect(raw, visible);
         if (visible.isEmpty()) {
             updateEmptyState(mCollectAdapter.getActivated());
@@ -664,7 +662,7 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
     private void updateProjectedCollect(Collect raw, List<Vod> visible) {
         int index = mCollectAdapter.findCollectIndex(raw.getSite().getKey());
         if (index < 0) {
-            if (visible.isEmpty() && (!mPrecise || raw.getList().isEmpty())) return;
+            if (visible.isEmpty() && (mSimilarity == 0 || raw.getList().isEmpty())) return;
             Collect collect = new Collect(raw.getSite(), new ArrayList<>(visible));
             collect.setPage(mPaging.getPage(raw.getSite().getKey()));
             mCollectAdapter.add(collect);

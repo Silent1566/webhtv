@@ -15,8 +15,10 @@
         app:titleTextAppearance="@style/ToolbarTextAppearance" />
 
     <androidx.appcompat.widget.LinearLayoutCompat
+        android:id="@+id/content"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
         android:orientation="horizontal">
 
         <com.fongmi.android.tv.ui.custom.CustomRecyclerView
@@ -34,8 +36,10 @@
             tools:listitem="@layout/adapter_collect" />
 
         <FrameLayout
-            android:layout_width="match_parent"
-            android:layout_height="match_parent">
+            android:id="@+id/resultContainer"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1">
 
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/recycler"

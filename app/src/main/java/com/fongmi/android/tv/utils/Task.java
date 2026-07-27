@@ -19,6 +19,7 @@ public class Task {
 
     private static final ListeningExecutorService executor = MoreExecutors.listeningDecorator(Executors.newFixedThreadPool(5));
     private static final ListeningExecutorService largeExecutor = MoreExecutors.listeningDecorator(Executors.newFixedThreadPool(20));
+    private static final ListeningExecutorService loaderExecutor = MoreExecutors.listeningDecorator(Executors.newSingleThreadExecutor());
     private static final ThreadPoolExecutor searchPool = createSearchPool();
     private static final ListeningExecutorService searchExecutor = MoreExecutors.listeningDecorator(searchPool);
     private static final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
@@ -35,6 +36,10 @@ public class Task {
 
     public static ListeningExecutorService largeExecutor() {
         return largeExecutor;
+    }
+
+    public static ListeningExecutorService loaderExecutor() {
+        return loaderExecutor;
     }
 
     public static ListeningExecutorService searchExecutor() {

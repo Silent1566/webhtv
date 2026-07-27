@@ -60,6 +60,21 @@ public class TmdbRailAdapter extends RecyclerView.Adapter<TmdbRailAdapter.ViewHo
         notifyDataSetChanged();
     }
 
+    /**
+     * 直接重新绑定当前已附着的可见 ViewHolder，不依赖 RecyclerView 的布局遍历。
+     * 用于 RecyclerView 嵌套在 NestedScrollView(wrap_content) 中、requestLayout 被祖先的
+     * stuck layout 标志吞掉、notifyDataSetChanged 无法触发重绑的场景。用 getLayoutPosition()
+     * 而非 getBindingAdapterPosition()：后者在有未派发的适配器更新时返回 NO_POSITION。
+     */
+    public void rebindAttached(RecyclerView recyclerView) {
+        for (int index = 0; index < recyclerView.getChildCount(); index++) {
+            RecyclerView.ViewHolder holder = recyclerView.getChildViewHolder(recyclerView.getChildAt(index));
+            int position = holder.getLayoutPosition();
+            if (!(holder instanceof ViewHolder) || position == RecyclerView.NO_POSITION || position >= items.size()) continue;
+            onBindViewHolder((ViewHolder) holder, position);
+        }
+    }
+
     public void setCinema(boolean cinema) {
         this.cinema = cinema;
         notifyDataSetChanged();

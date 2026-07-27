@@ -624,7 +624,13 @@ public class PlayerManager implements ParseCallback {
         Track.delete(getKey(), C.TRACK_TYPE_TEXT);
         engine.resetTrack(C.TRACK_TYPE_TEXT);
         spec.setSub(sub);
-        restartCurrentItemWithState();
+        boolean automaticOutput = MpvPerformanceSetting.getOutputMode() == MpvPerformanceSetting.OUTPUT_AUTO;
+        if (MpvAutoOutputPolicy.shouldLeaveSurfaceDirectForSubtitle(automaticOutput, isMpvSurfaceDirect(), true, false)) {
+            resetMpvOutputEvaluationState();
+            rebuildAndRestartMpv(false, "external-subtitle-selected");
+        } else {
+            restartCurrentItemWithState();
+        }
     }
 
     public void setFormat(String format) {
@@ -1200,7 +1206,11 @@ public void resetTrack(int type) {
         resetMpvOutputEvaluationState();
         mpvExplicitSubtitlePreference = hasRequestedSubtitle(Track.find(getKey()));
         if (!(engine instanceof MpvPlayerEngine mpv)) return;
-        if (MpvPerformanceSetting.getOutputMode() == MpvPerformanceSetting.OUTPUT_AUTO && mpv.isSurfaceDirect()) {
+        boolean automaticOutput = MpvPerformanceSetting.getOutputMode() == MpvPerformanceSetting.OUTPUT_AUTO;
+        boolean externalSubtitleActive = spec != null && spec.getSubs() != null && !spec.getSubs().isEmpty();
+        boolean leaveForSubtitle = MpvAutoOutputPolicy.shouldLeaveSurfaceDirectForSubtitle(
+                automaticOutput, mpv.isSurfaceDirect(), externalSubtitleActive, mpvExplicitSubtitlePreference);
+        if (automaticOutput && mpv.isSurfaceDirect() && !leaveForSubtitle) {
             if (SpiderDebug.isEnabled()) SpiderDebug.log("mpv-output", "preserve direct output for new item reason=auto-sticky");
             return;
         }
@@ -1376,7 +1386,7 @@ public void resetTrack(int type) {
     }
 
     private boolean reparseForPlayerSwitch(long position, float speed, boolean repeat) {
-        if (spec == null || !spec.canReparse()) return false;
+        if (spec == null || !spec.canReparse() || !spec.isParseSource()) return false;
         Result result = spec.getParseResult();
         boolean useParse = spec.isParseUseParse();
         MediaMetadata metadata = spec.getMetadata();

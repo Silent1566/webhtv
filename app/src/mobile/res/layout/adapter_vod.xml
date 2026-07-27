@@ -22,7 +22,7 @@
         android:layout_alignStart="@+id/image"
         android:layout_alignTop="@+id/image"
         android:layout_alignEnd="@+id/image"
-        android:layout_alignBottom="@+id/history_info"
+        android:layout_alignBottom="@+id/image"
         android:background="@color/black_50"
         android:scaleType="center"
         android:src="@drawable/ic_vod_delete"
