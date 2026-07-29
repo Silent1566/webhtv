@@ -409,7 +409,7 @@ public class ExoUtil {
     }
 
     private static RenderersFactory buildRenderersFactory(int audioRenderMode, int videoRenderMode, boolean audioPrefer, boolean videoPrefer, boolean softVideoTune, boolean realtimePipeline) {
-        int mode = PlayerSetting.getFFmpegMode();
+        int mode = PlayerSetting.getEffectiveFFmpegMode();
         if (mode == PlayerSetting.FFMPEG_MODE_NEXTLIB) {
             return buildNextLibRenderersFactory(audioRenderMode, videoRenderMode, audioPrefer, videoPrefer, softVideoTune, realtimePipeline);
         }

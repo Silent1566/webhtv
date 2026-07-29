@@ -516,16 +516,16 @@ public class SettingPlayerFragment extends BaseFragment implements UaListener, B
     }
 
     private void setFfmpegMode(View view) {
-        int mode = (PlayerSetting.getFFmpegMode() + 1) % 3;
+        int mode = (PlayerSetting.getFFmpegMode() + 1) % 4;
         PlayerSetting.putFFmpegMode(mode);
         mBinding.ffmpegModeText.setText(getFFmpegModeText());
     }
 
     private String getFFmpegModeText() {
         return switch (PlayerSetting.getFFmpegMode()) {
-            case 0 -> "NextLib";
-            case 1 -> "Official";
-            case 2 -> "Simple";
+            case PlayerSetting.FFMPEG_MODE_OFFICIAL -> "Official";
+            case PlayerSetting.FFMPEG_MODE_SIMPLE -> "Simple";
+            case PlayerSetting.FFMPEG_MODE_AUTO -> "自动";
             default -> "NextLib";
         };
     }

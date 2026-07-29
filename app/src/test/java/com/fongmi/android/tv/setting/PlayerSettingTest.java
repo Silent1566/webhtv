@@ -36,11 +36,12 @@ public class PlayerSettingTest {
         assertEquals(PlayerSetting.FFMPEG_MODE_NEXTLIB, PlayerSetting.sanitizeFFmpegMode(PlayerSetting.FFMPEG_MODE_NEXTLIB, PlayerSetting.FFMPEG_MODE_SIMPLE));
         assertEquals(PlayerSetting.FFMPEG_MODE_OFFICIAL, PlayerSetting.sanitizeFFmpegMode(PlayerSetting.FFMPEG_MODE_OFFICIAL, PlayerSetting.FFMPEG_MODE_SIMPLE));
         assertEquals(PlayerSetting.FFMPEG_MODE_SIMPLE, PlayerSetting.sanitizeFFmpegMode(PlayerSetting.FFMPEG_MODE_SIMPLE, PlayerSetting.FFMPEG_MODE_NEXTLIB));
+        assertEquals(PlayerSetting.FFMPEG_MODE_AUTO, PlayerSetting.sanitizeFFmpegMode(PlayerSetting.FFMPEG_MODE_AUTO, PlayerSetting.FFMPEG_MODE_SIMPLE));
     }
 
     @Test
     public void sanitizeFFmpegMode_fallsBackForUnknownMode() {
         assertEquals(PlayerSetting.FFMPEG_MODE_NEXTLIB, PlayerSetting.sanitizeFFmpegMode(-1, PlayerSetting.FFMPEG_MODE_NEXTLIB));
-        assertEquals(PlayerSetting.FFMPEG_MODE_SIMPLE, PlayerSetting.sanitizeFFmpegMode(3, PlayerSetting.FFMPEG_MODE_SIMPLE));
+        assertEquals(PlayerSetting.FFMPEG_MODE_SIMPLE, PlayerSetting.sanitizeFFmpegMode(4, PlayerSetting.FFMPEG_MODE_SIMPLE));
     }
 }

@@ -21,8 +21,8 @@ public final class EpisodeDisplayPolicy {
         return tmdbSourceEnabled && hasTmdbEpisodeData(items);
     }
 
-    public static boolean shouldWaitForTmdbEpisodes(boolean tmdbSourceEnabled, boolean tmdbDetailLoading, boolean tmdbAdapterReady, boolean tmdbAdapterLoaded, List<Episode> items) {
-        return tmdbSourceEnabled && tmdbDetailLoading && tmdbAdapterReady && !tmdbAdapterLoaded && items != null && !items.isEmpty() && !hasTmdbEpisodeData(items);
+    public static boolean shouldWaitForTmdbEpisodes(boolean tmdbSourceEnabled, boolean tmdbEpisodeEnrichmentPending, boolean tmdbAdapterReady, boolean tmdbEpisodeMetadataLoaded, List<Episode> items) {
+        return tmdbSourceEnabled && tmdbEpisodeEnrichmentPending && tmdbAdapterReady && !tmdbEpisodeMetadataLoaded && items != null && !items.isEmpty() && !hasTmdbEpisodeData(items);
     }
 
     public static boolean shouldShowTmdbEpisodeChrome(boolean tmdbSourceEnabled, boolean waitingForTmdbEpisodes, List<Episode> items) {

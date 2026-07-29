@@ -34,6 +34,7 @@ public class EpisodeGridHolder extends BaseEpisodeHolder {
     private String fallbackStillUrl = "";
     private final int maxSingleWidth;
     private final int horizontalPadding;
+    private final int cardMargin;
 
     public EpisodeGridHolder(@NonNull AdapterEpisodeGridBinding binding, EpisodeAdapter.OnClickListener listener) {
         super(binding.getRoot());
@@ -41,6 +42,7 @@ public class EpisodeGridHolder extends BaseEpisodeHolder {
         this.listener = listener;
         this.maxSingleWidth = ResUtil.getScreenWidth();
         this.horizontalPadding = ResUtil.dp2px(12);
+        this.cardMargin = ResUtil.dp2px(6);
     }
 
     @Override
@@ -145,6 +147,16 @@ public class EpisodeGridHolder extends BaseEpisodeHolder {
     }
 
     private void updateLayout() {
+        ViewGroup.LayoutParams rootParams = binding.getRoot().getLayoutParams();
+        if (rootParams instanceof ViewGroup.MarginLayoutParams marginParams) {
+            int margin = useTmdbCard ? cardMargin : 0;
+            if (marginParams.leftMargin != margin || marginParams.topMargin != margin
+                    || marginParams.rightMargin != margin || marginParams.bottomMargin != margin) {
+                marginParams.setMargins(margin, margin, margin, margin);
+                binding.getRoot().setLayoutParams(marginParams);
+            }
+        }
+
         boolean single = getBindingAdapter() != null && getBindingAdapter().getItemCount() == 1;
         ViewGroup.LayoutParams params = binding.text.getLayoutParams();
         int width = single ? ViewGroup.LayoutParams.WRAP_CONTENT : ViewGroup.LayoutParams.MATCH_PARENT;
@@ -157,7 +169,7 @@ public class EpisodeGridHolder extends BaseEpisodeHolder {
     }
 
     private void setMarquee(boolean focused) {
-        binding.text.setEllipsize(focused ? TextUtils.TruncateAt.MARQUEE : TextUtils.TruncateAt.END);
+        binding.text.setEllipsize(focused ? TextUtils.TruncateAt.MARQUEE : TextUtils.TruncateAt.START);
         binding.text.setSelected(focused);
     }
 

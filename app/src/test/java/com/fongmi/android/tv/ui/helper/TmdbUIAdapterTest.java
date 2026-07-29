@@ -97,6 +97,23 @@ public class TmdbUIAdapterTest {
     }
 
     @Test
+    public void autoMatchExceptionsAlwaysReleaseEpisodePlaceholder() throws Exception {
+        Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "helper", "TmdbUIAdapter.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int method = source.indexOf("public void autoMatch(String videoName, Vod vod)");
+        int task = source.indexOf("Task.execute(() -> {", method);
+        int nextMethod = source.indexOf("private TmdbItem searchResolvedMatch", task);
+        String body = source.substring(task, nextMethod);
+        int failureHandler = body.indexOf("} catch (Exception e) {");
+        int failureLog = body.indexOf("auto match failed", failureHandler);
+        int completion = body.indexOf("notifyLoadComplete(vod, generation);", failureHandler);
+
+        assertTrue(sourcePath + " is missing autoMatch", method >= 0 && task > method && nextMethod > task);
+        assertTrue("TMDB auto-match background failures must be caught", failureHandler >= 0);
+        assertTrue("TMDB auto-match failures must be logged and release the episode placeholder",
+                failureLog > failureHandler && completion > failureLog);
+    }
+    @Test
     public void loadDetailNormalizesCachedOrPassedTitleFromTmdbDetail() throws Exception {
         Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "helper", "TmdbUIAdapter.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
@@ -159,6 +176,34 @@ public class TmdbUIAdapterTest {
                 notify >= 0 && pending > notify && post > pending);
         assertTrue("related and personal recommendation completion should reuse the coalesced VOD refresh path",
                 relatedNotify > relatedMethod && personalNotify > personalMethod);
+    }
+
+    @Test
+    public void episodeMetadataCompletionIsTrackedSeparatelyFromCoreDetail() throws Exception {
+        Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "helper", "TmdbUIAdapter.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int field = source.indexOf("private volatile boolean episodeMetadataLoaded;");
+        int getter = source.indexOf("public boolean isEpisodeMetadataLoaded()");
+        int resetMethod = source.indexOf("private int resetLoadState()");
+        int reset = source.indexOf("episodeMetadataLoaded = false;", resetMethod);
+        int coreMethod = source.indexOf("private void loadDetailSync(Vod vod, TmdbItem item, JsonObject cachedDetail");
+        int coreLoaded = source.indexOf("loaded = true;", coreMethod);
+        int coreEpisodeState = source.indexOf("episodeMetadataLoaded = vod == null || item == null || !item.isTv();", coreLoaded);
+        int firstRefresh = source.indexOf("notifyVodChanged(vod, generation, RefreshEvent.Type.VOD_CORE);", coreEpisodeState);
+        int episodeMethod = source.indexOf("private void loadEpisodeTitlesAsync(Vod vod, TmdbItem item, int generation)");
+        int episodeComplete = source.indexOf("finishEpisodeMetadataLoad(vod, generation);", episodeMethod);
+        int completionMethod = source.indexOf("private void finishEpisodeMetadataLoad(Vod vod, int generation)", episodeComplete);
+        int markComplete = source.indexOf("episodeMetadataLoaded = true;", completionMethod);
+        int completionRefresh = source.indexOf("notifyVodChanged(vod, generation, RefreshEvent.Type.VOD_EPISODE_TITLES);", markComplete);
+        int failureMethod = source.indexOf("private void notifyLoadComplete(Vod vod, int generation)");
+        int failureComplete = source.indexOf("episodeMetadataLoaded = true;", failureMethod);
+        int failureRefresh = source.indexOf("notifyVodChanged(vod, generation, RefreshEvent.Type.VOD_CORE);", failureComplete);
+
+        assertTrue(sourcePath + " should track episode metadata independently from core detail", field >= 0 && getter > field);
+        assertTrue("starting a new TMDB load should clear episode metadata completion", reset > resetMethod);
+        assertTrue("the first core-detail refresh must keep TV episode metadata pending", coreLoaded > coreMethod && coreEpisodeState > coreLoaded && firstRefresh > coreEpisodeState);
+        assertTrue("episode loading should always publish a terminal completion refresh", episodeComplete > episodeMethod && completionMethod > episodeComplete && markComplete > completionMethod && completionRefresh > markComplete);
+        assertTrue("TMDB skip/failure should also release the episode placeholder", failureComplete > failureMethod && failureRefresh > failureComplete);
     }
 
     @Test

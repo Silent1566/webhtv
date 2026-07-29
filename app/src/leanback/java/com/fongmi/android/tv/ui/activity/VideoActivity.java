@@ -339,17 +339,19 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     private boolean detailRequested;
     private boolean detailHealthRecorded;
     private boolean playHealthRecorded;
-    private boolean episodeGridSpacingAdded;
+    private SpaceItemDecoration episodeGridDecoration;
     private boolean episodeGridMode;
     private Runnable mR1;
     private Runnable mR2;
     private Runnable mSeekProgressFallback;
     private Runnable mTmdbDetailTimeout;
+    private Runnable mTmdbEpisodeTimeout;
     private final Runnable mPendingTmdbBind = this::flushPendingTmdbBind;
     private final Runnable mDeferredTmdbDataBind = this::applyDeferredTmdbDataBind;
     private final Runnable mPendingFastTmdbPlaybackStart = this::startPendingFastTmdbPlayback;
     private boolean mTmdbDetailLoading;
     private boolean mTmdbDetailRevealed;
+    private boolean mTmdbEpisodeFallbackReleased;
     private boolean mTmdbDetailFieldsApplied;
     private boolean mTmdbBindPending;
     private boolean mTmdbDataBindPending;
@@ -979,6 +981,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         long start = System.currentTimeMillis();
         SpiderDebug.log("video-flow", "initView start sinceLaunch=%dms key=%s id=%s", getLaunchCost(start), getKey(), getId());
         mTmdbDetailTimeout = this::showTmdbDetailFallback;
+        mTmdbEpisodeTimeout = this::showTmdbEpisodeFallback;
         initTmdbMode();
         super.initView(savedInstanceState);
         SpiderDebug.log("video-flow", "initView after playback cost=%dms", System.currentTimeMillis() - start);
@@ -1765,10 +1768,12 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         mTmdbAutoDialogShown = false;
         mTmdbDetailLoading = false;
         mTmdbDetailRevealed = false;
+        mTmdbEpisodeFallbackReleased = false;
         mPersonalRecommendationGeneration++;
         mTmdbDialogGeneration++;
         App.removeCallbacks(mR4);
         App.removeCallbacks(mTmdbDetailTimeout);
+        App.removeCallbacks(mTmdbEpisodeTimeout);
         resetPendingTmdbBind();
         stopBackdropAutoScroll();
         mBackdropSignature = null;
@@ -1790,6 +1795,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     private void clearDetailAdapters() {
+        clearEpisodeGridDecoration();
         if (mFlagAdapter != null) mFlagAdapter.clear();
         if (mEpisodeAdapter != null) {
             mEpisodeAdapter.setUseTmdbCard(false);
@@ -1911,6 +1917,8 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         resetPendingTmdbBind();
         mTmdbAutoDialogShown = false;
         mTmdbDetailFieldsApplied = false;
+        mTmdbEpisodeFallbackReleased = false;
+        App.removeCallbacks(mTmdbEpisodeTimeout);
         item.checkPic(getPic());
         item.checkName(getName());
         boolean loadTmdbDetail = shouldLoadTmdbDetail();
@@ -1930,6 +1938,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         checkKeepImg();
         setText(item);
         updateKeep();
+        if (loadTmdbDetail) App.post(mTmdbEpisodeTimeout, TMDB_DETAIL_LOAD_TIMEOUT);
         if (loadTmdbDetail) hideNativePersonalRecommendations();
         else loadNativePersonalRecommendations(item);
         if (loadTmdbDetail && shouldShowTmdbLoadingOverlay()) showTmdbDetailLoading();
@@ -2089,6 +2098,18 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         SpiderDebug.log("tmdb-tv", "detail loading overlay timeout fallback");
         revealTmdbDetail();
         suppressTmdbNativeTextFields();
+        showTmdbEpisodeFallback();
+    }
+
+    private void showTmdbEpisodeFallback() {
+        if (mBinding.episodeLoadingIndicator.getVisibility() != View.VISIBLE) return;
+        if (!isTmdbSourceEnabled() || mTmdbUIAdapter == null || !mTmdbUIAdapter.isReady()) return;
+        if (mTmdbUIAdapter.isEpisodeMetadataLoaded()) {
+            refreshEpisodeTitles();
+            return;
+        }
+        mTmdbEpisodeFallbackReleased = true;
+        SpiderDebug.log("tmdb-tv", "episode metadata timeout fallback, reveal native list");
         finishEpisodeLoading();
     }
 
@@ -2284,8 +2305,13 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         boolean hasMultiple = items.size() > 1;
         boolean tmdbMode = isTmdbSourceEnabled();
         boolean tmdbAdapterReady = mTmdbUIAdapter != null && mTmdbUIAdapter.isReady();
-        boolean tmdbAdapterLoaded = mTmdbUIAdapter != null && mTmdbUIAdapter.isLoaded();
-        boolean waitTmdbEpisodes = EpisodeDisplayPolicy.shouldWaitForTmdbEpisodes(tmdbMode, mTmdbDetailLoading, tmdbAdapterReady, tmdbAdapterLoaded, items);
+        boolean tmdbEpisodeMetadataLoaded = mTmdbUIAdapter != null && mTmdbUIAdapter.isEpisodeMetadataLoaded();
+        if (tmdbEpisodeMetadataLoaded) App.removeCallbacks(mTmdbEpisodeTimeout);
+        // 快速直达播放会跳过全屏 TMDB loading，但卡片数据返回前仍不能先闪出原生文字选集。
+        // 超时后保留已经揭开的原生列表，避免稍后的核心详情刷新再次把它隐藏。
+        boolean tmdbEpisodeEnrichmentPending = !mTmdbEpisodeFallbackReleased
+                && (mTmdbDetailLoading || (tmdbAdapterReady && !tmdbEpisodeMetadataLoaded));
+        boolean waitTmdbEpisodes = EpisodeDisplayPolicy.shouldWaitForTmdbEpisodes(tmdbMode, tmdbEpisodeEnrichmentPending, tmdbAdapterReady, tmdbEpisodeMetadataLoaded, items);
         boolean showTmdbEpisodeChrome = EpisodeDisplayPolicy.shouldShowTmdbEpisodeChrome(tmdbMode, waitTmdbEpisodes, items);
         boolean useTmdbCards = EpisodeDisplayPolicy.shouldUseTmdbEpisodeCards(tmdbMode, items);
         mBinding.episodeContainer.setVisibility(isEmpty ? View.GONE : View.VISIBLE);
@@ -2370,6 +2396,11 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     // 隐藏指示器并以普通文本模式揭开选集列表，避免「正在加载剧集信息...」永久停留
     private void finishEpisodeLoading() {
         if (mBinding.episodeLoadingIndicator.getVisibility() != View.VISIBLE) return;
+        if (isTmdbSourceEnabled()
+                && mTmdbUIAdapter != null
+                && mTmdbUIAdapter.isReady()
+                && !mTmdbEpisodeFallbackReleased
+                && !mTmdbUIAdapter.isEpisodeMetadataLoaded()) return;
         episodeGridMode = false;
         mEpisodeAdapter.setUseTmdbCard(false);
         mEpisodeGridAdapter.setUseTmdbCard(false);
@@ -2561,7 +2592,14 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         return episodeGridMode ? mBinding.episodeGrid : mBinding.episode;
     }
 
+    private void clearEpisodeGridDecoration() {
+        if (episodeGridDecoration == null) return;
+        mBinding.episodeGrid.removeItemDecoration(episodeGridDecoration);
+        episodeGridDecoration = null;
+    }
+
     private void updateEpisodeGridViewport() {
+        clearEpisodeGridDecoration();
         ViewGroup.LayoutParams params = mBinding.episodeGrid.getLayoutParams();
         if (params.height != ViewGroup.LayoutParams.WRAP_CONTENT) {
             params.height = ViewGroup.LayoutParams.WRAP_CONTENT;
@@ -2578,12 +2616,11 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
             params.height = height;
             mBinding.episodeGrid.setLayoutParams(params);
         }
-        if (!episodeGridSpacingAdded) {
-            RecyclerView.LayoutManager layoutManager = mBinding.episodeGrid.getLayoutManager();
-            int spanCount = layoutManager instanceof GridLayoutManager gridLayoutManager ? gridLayoutManager.getSpanCount() : 2;
-            mBinding.episodeGrid.addItemDecoration(new SpaceItemDecoration(spanCount, 12));
-            episodeGridSpacingAdded = true;
-        }
+        RecyclerView.LayoutManager layoutManager = mBinding.episodeGrid.getLayoutManager();
+        int spanCount = layoutManager instanceof GridLayoutManager gridLayoutManager ? gridLayoutManager.getSpanCount() : 2;
+        // 列数会随标题长度变化，旧 Decoration 会继续按过期的 spanCount 计算左右偏移。
+        clearEpisodeGridDecoration();
+        mBinding.episodeGrid.addItemDecoration(episodeGridDecoration = new SpaceItemDecoration(spanCount, 12));
         mBinding.episodeGrid.setNestedScrollingEnabled(true);
     }
 
@@ -6120,6 +6157,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         App.removeCallbacks(mR1, mR2, mR3, mR4, mSeekProgressFallback, mAudioRefreshLyricsRunnable, mApplyAudioBackgroundRunnable, mHideAudioFocusRunnable);
         App.removeCallbacks(mPendingFastTmdbPlaybackStart);
         App.removeCallbacks(mTmdbDetailTimeout);
+        App.removeCallbacks(mTmdbEpisodeTimeout);
         resetPendingTmdbBind();
         if (mTmdbUIAdapter != null) mTmdbUIAdapter.release();
         mViewModel.getResult().removeObserver(mObserveDetail);
