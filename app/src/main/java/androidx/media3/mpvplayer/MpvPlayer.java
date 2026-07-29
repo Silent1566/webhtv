@@ -1571,17 +1571,10 @@ public final class MpvPlayer extends SimpleBasePlayer implements MPVLib.EventObs
                     detachMpvSurface();
                     // Fall through to full attach below
                 } else {
-                    // MPV gpu vo grows its EGL viewport automatically when the surface enlarges, so a
-                    // property-only resize is enough (fast). Shrinking, however, leaves the viewport at
-                    // the old larger geometry and the video renders into the top-left corner — that case
-                    // needs a full reattach to rebuild the output. Only pay the reattach cost when shrinking.
-                    boolean shrinking = surfaceWidth < attachedSurfaceWidth || surfaceHeight < attachedSurfaceHeight;
-                    if (shrinking) {
-                        // Shrinking leaves mpv's gpu vo EGL surface at the old larger geometry and the video
-                        // renders into the top-left corner. mpv's gpu vo can only rebuild its output through a
-                        // full vo teardown (vo=null) + reattach — toggling `wid` alone collapses the vo to 0x0
-                        // and freezes the pipeline. Pay the full reattach cost here; it is the only correct path.
-                        Log.i(SIZE_TAG, "mpv surface shrank " + attachedSurfaceWidth + "x" + attachedSurfaceHeight + " -> " + surfaceWidth + "x" + surfaceHeight + ", reattach");
+                    // Force full reattach if surface size changed — MPV gpu vo doesn't reliably reconfigure on property-only changes
+                    boolean sizeChanged = attachedSurfaceWidth != surfaceWidth || attachedSurfaceHeight != surfaceHeight;
+                    if (sizeChanged) {
+                        Log.i(SIZE_TAG, "mpv surface size changed " + attachedSurfaceWidth + "x" + attachedSurfaceHeight + " -> " + surfaceWidth + "x" + surfaceHeight + ", reattach");
                         detachMpvSurface();
                         // Fall through to full attach below
                     } else {
@@ -1592,9 +1585,6 @@ public final class MpvPlayer extends SimpleBasePlayer implements MPVLib.EventObs
                             safeSetPropertyString("vo", config.vo());
                             attachedVo = config.vo();
                         }
-                        // Track the current size so a later shrink can be detected against it.
-                        attachedSurfaceWidth = surfaceWidth;
-                        attachedSurfaceHeight = surfaceHeight;
                         Log.d(SIZE_TAG, "mpv resize attached surface cached=" + surfaceWidth + "x" + surfaceHeight + " vo=" + config.vo());
                         SpiderDebug.log("mpv", "surface resized surface=%s size=%dx%d vo=%s", surface, surfaceWidth, surfaceHeight, config.vo());
                         return;

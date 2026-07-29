@@ -2103,10 +2103,13 @@
     <string name="search_result_current">當前站搜索：%1$s</string>
     <string name="search_result_group">%1$s 搜索：%2$s</string>
     <string name="search_filter_similarity">相似度</string>
-    <string name="search_filter_similarity_value">相似度 %d%%</string>
-    <string name="search_filter_similarity_hint">調整搜尋結果的匹配寬鬆度，100為完全相等，0為不過濾</string>
+    <string name="search_filter_similarity_unlimited">不限</string>
+    <string name="search_filter_similarity_value">相似 %d%%</string>
+    <string name="search_filter_similarity_exact">精確</string>
+    <string name="search_filter_similarity_hint">調整搜尋結果的匹配寬鬆度，100為精確匹配，0為不限</string>
     <string name="search_filter_similarity_description">%1$s，%2$s</string>
     <string name="search_filter_empty">暫無達到 %1$d%% 相似度的結果，可降低相似度查看更多</string>
+    <string name="search_filter_empty_exact">暫無精確匹配結果，可降低相似度查看更多</string>
     <string name="detail_site_not_searchable">當前站源不支持搜索</string>
     <string name="viewing_report_refreshing">刷新報告中...</string>
     <string name="setting_ai_ad_detection">AI 智能去廣</string>

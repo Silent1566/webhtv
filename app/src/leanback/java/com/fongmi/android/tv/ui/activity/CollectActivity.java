@@ -47,6 +47,7 @@ import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.SearchPageState;
 import com.fongmi.android.tv.utils.SearchResultFilter;
+import com.fongmi.android.tv.utils.SearchSourceVisibility;
 import com.github.catvod.crawler.SpiderDebug;
 import com.google.android.material.textview.MaterialTextView;
 import com.google.gson.reflect.TypeToken;
@@ -81,7 +82,7 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
     private final SearchPageState mPaging = new SearchPageState();
     private final List<Vod> mPendingItems = new ArrayList<>();
     private Runnable mApplyCollect;
-    private int mPendingCollectPosition = RecyclerView.NO_POSITION;
+    private String mPendingCollectSiteKey = "";
     private boolean mScrolling;
     private boolean mLeavingForPlayback;
 
@@ -301,11 +302,17 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
         return TextUtils.isEmpty(getSiteKey()) && TextUtils.isEmpty(getGroup()) && !mGroups.isEmpty();
     }
 
+    private String getSimilarityFilterTitle() {
+        if (mSimilarity == 0) return getString(R.string.search_filter_similarity_unlimited);
+        if (mSimilarity == 100) return getString(R.string.search_filter_similarity_exact);
+        return getString(R.string.search_filter_similarity_value, mSimilarity);
+    }
+
     private void updateFilterControls() {
         mBinding.searchGroup.setVisibility(canFilterGroup() ? View.VISIBLE : View.GONE);
         if (TextUtils.isEmpty(mFilterGroup)) mBinding.searchGroup.setText(R.string.search_scope_all);
         else mBinding.searchGroup.setText(mFilterGroup);
-        String value = getString(R.string.search_filter_similarity_value, mSimilarity);
+        String value = getSimilarityFilterTitle();
         mBinding.similarityFilter.setText(value);
         mBinding.similarityFilter.setSelected(mSimilarity > 0);
         mBinding.similarityFilter.setContentDescription(getString(R.string.search_filter_similarity_description, value, getString(R.string.search_filter_similarity_hint)));
@@ -429,7 +436,7 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
             Collect raw = mAllCollectItems.get(i);
             if (!matchFilter(raw.getSite())) continue;
             List<Vod> visible = SearchResultFilter.filter(raw.getList(), getKeyword(), mSimilarity);
-            if (!fixedOrder && visible.isEmpty() && (mSimilarity == 0 || raw.getList().isEmpty())) continue;
+            if (!SearchSourceVisibility.shouldShow(mSimilarity, fixedOrder, !visible.isEmpty())) continue;
             Collect item = new Collect(raw.getSite(), visible);
             item.setPage(mPaging.getPage(raw.getSite().getKey()));
             item.setSelected(raw.getSite().getKey().equals(activeSiteKey));
@@ -468,7 +475,10 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
         String siteKey = activated.getSite().getKey();
         boolean loading = "all".equals(siteKey) ? mPaging.hasPending() : mPaging.isPending(siteKey);
         boolean show = mSimilarity > 0 && mSearchCompleted && !loading && activated.getList().isEmpty() && hasRawResults(siteKey);
-        if (show) mBinding.empty.setText(getString(R.string.search_filter_empty, mSimilarity));
+        if (show) {
+            String text = mSimilarity == 100 ? getString(R.string.search_filter_empty_exact) : getString(R.string.search_filter_empty, mSimilarity);
+            mBinding.empty.setText(text);
+        }
         mBinding.empty.setVisibility(show ? View.VISIBLE : View.GONE);
     }
 
@@ -659,13 +669,23 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
         updateEmptyState(mCollectAdapter.getActivated());
     }
 
+    private int getProjectedCollectPosition(String siteKey) {
+        int position = 1;
+        for (int i = 1; i < mAllCollectItems.size(); i++) {
+            Collect item = mAllCollectItems.get(i);
+            if (item.getSite().getKey().equals(siteKey)) break;
+            if (mCollectAdapter.findCollectIndex(item.getSite().getKey()) >= 0) position++;
+        }
+        return position;
+    }
+
     private void updateProjectedCollect(Collect raw, List<Vod> visible) {
         int index = mCollectAdapter.findCollectIndex(raw.getSite().getKey());
         if (index < 0) {
-            if (visible.isEmpty() && (mSimilarity == 0 || raw.getList().isEmpty())) return;
+            if (visible.isEmpty()) return;
             Collect collect = new Collect(raw.getSite(), new ArrayList<>(visible));
             collect.setPage(mPaging.getPage(raw.getSite().getKey()));
-            mCollectAdapter.add(collect);
+            mCollectAdapter.add(getProjectedCollectPosition(raw.getSite().getKey()), collect);
         } else {
             Collect collect = mCollectAdapter.get(index);
             collect.setPage(mPaging.getPage(raw.getSite().getKey()));
@@ -731,22 +751,22 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
     private void scheduleCollect(int position, long delayMillis) {
         if (position < 0 || position >= mCollectAdapter.getItemCount()) return;
         Collect item = mCollectAdapter.get(position);
-        boolean same = mCollectAdapter.getPosition() == position;
+        String siteKey = item.getSite().getKey();
+        boolean same = siteKey.equals(getActiveSiteKey());
         mCollectAdapter.setSelected(position);
-        restoreScroller(item.getSite().getKey());
+        restoreScroller(siteKey);
         mPendingItems.clear();
-        if (same && delayMillis > 0 && mPendingCollectPosition == position) return;
-        applyCollectDeferred(position, item, delayMillis);
+        if (same && delayMillis > 0 && siteKey.equals(mPendingCollectSiteKey)) return;
+        applyCollectDeferred(siteKey, delayMillis);
     }
 
-    private void applyCollectDeferred(int position, Collect item, long delayMillis) {
+    private void applyCollectDeferred(String siteKey, long delayMillis) {
         removeApplyCollect();
-        mPendingCollectPosition = position;
+        mPendingCollectSiteKey = siteKey;
         mApplyCollect = () -> {
             if (isFinishing() || isDestroyed()) return;
-            if (mCollectAdapter.getPosition() != position) return;
-            if (!item.getSite().getKey().equals(getActiveSiteKey())) return;
-            Collect activated = mCollectAdapter.getActivated();
+            Collect activated = mCollectAdapter.findActivated(siteKey);
+            if (activated == null) return;
             setSearchItemsLazy(new ArrayList<>(activated.getList()));
             updateEmptyState(activated);
             maybeLoadSelectedPage();
@@ -757,7 +777,7 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
     private void removeApplyCollect() {
         if (mApplyCollect != null) App.removeCallbacks(mApplyCollect);
         mApplyCollect = null;
-        mPendingCollectPosition = RecyclerView.NO_POSITION;
+        mPendingCollectSiteKey = "";
     }
 
     private void setSearchItemsLazy(List<Vod> items) {

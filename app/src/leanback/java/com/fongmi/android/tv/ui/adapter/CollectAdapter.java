@@ -5,6 +5,7 @@ import android.view.LayoutInflater;
 import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.fongmi.android.tv.App;
@@ -34,8 +35,13 @@ public class CollectAdapter extends RecyclerView.Adapter<CollectAdapter.ViewHold
     }
 
     public void add(Collect item) {
-        mItems.add(item);
-        notifyItemInserted(mItems.size() - 1);
+        add(mItems.size(), item);
+    }
+
+    public void add(int position, Collect item) {
+        int index = Math.max(0, Math.min(position, mItems.size()));
+        mItems.add(index, item);
+        notifyItemInserted(index);
     }
 
     public void add(List<Vod> items) {
@@ -75,8 +81,24 @@ public class CollectAdapter extends RecyclerView.Adapter<CollectAdapter.ViewHold
         return mItems.isEmpty() ? Collect.all() : mItems.get(getPosition());
     }
 
+    @Nullable
+    public Collect findActivated(String siteKey) {
+        return findActivated(mItems, siteKey);
+    }
+
+    @Nullable
+    static Collect findActivated(List<Collect> items, String siteKey) {
+        if (items.isEmpty()) return null;
+        Collect activated = items.get(getPosition(items));
+        return activated.getSite().getKey().equals(siteKey) ? activated : null;
+    }
+
     public int getPosition() {
-        for (int i = 0; i < mItems.size(); i++) if (mItems.get(i).isSelected()) return i;
+        return getPosition(mItems);
+    }
+
+    private static int getPosition(List<Collect> items) {
+        for (int i = 0; i < items.size(); i++) if (items.get(i).isSelected()) return i;
         return 0;
     }
 
@@ -90,8 +112,10 @@ public class CollectAdapter extends RecyclerView.Adapter<CollectAdapter.ViewHold
 
     private void notifyChanged(int position) {
         if (position < 0 || position >= getItemCount()) return;
+        String siteKey = mItems.get(position).getSite().getKey();
         App.post(() -> {
-            if (position >= 0 && position < getItemCount()) notifyItemChanged(position);
+            int index = findCollectIndex(siteKey);
+            if (index >= 0) notifyItemChanged(index);
         });
     }
 

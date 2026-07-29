@@ -150,6 +150,25 @@ public class SearchResultLayoutTest {
     }
 
     @Test
+    public void tvDeferredSourceActivationUsesStableSiteKey() throws Exception {
+        Path activityPath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "CollectActivity.java"));
+        String activity = read(activityPath);
+
+        assertTrue("Delayed source activation must track the selected site instead of a movable adapter position",
+                activity.contains("private String mPendingCollectSiteKey = \"\";"));
+        assertTrue("The delayed activation API must receive a stable site key",
+                activity.contains("private void applyCollectDeferred(String siteKey, long delayMillis)"));
+        assertTrue("Source selection must schedule delayed activation with the selected site key",
+                activity.contains("applyCollectDeferred(siteKey, delayMillis);"));
+        assertTrue("Delayed source activation must resolve the current selection by its stable key",
+                activity.contains("Collect activated = mCollectAdapter.findActivated(siteKey);"));
+        assertTrue("Delayed work for a source that is no longer active must be discarded",
+                activity.contains("if (activated == null) return;"));
+        assertFalse("Inserting an earlier source must not cancel delayed activation through a stale numeric position",
+                activity.contains("mCollectAdapter.getPosition() != position"));
+    }
+
+    @Test
     public void personalSettingsExposeSearchLayoutSwitch() throws Exception {
         Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "SettingPersonalActivity.java"));
         String source = read(sourcePath);

@@ -1357,10 +1357,13 @@
     <string name="search_result_current">当前站搜索：%1$s</string>
     <string name="search_result_group">%1$s 搜索：%2$s</string>
     <string name="search_filter_similarity">相似度</string>
-    <string name="search_filter_similarity_value">相似度 %d%%</string>
-    <string name="search_filter_similarity_hint">调整搜索结果的匹配宽松度，100为完全相等，0为不过滤</string>
+    <string name="search_filter_similarity_unlimited">不限</string>
+    <string name="search_filter_similarity_value">相似 %d%%</string>
+    <string name="search_filter_similarity_exact">精确</string>
+    <string name="search_filter_similarity_hint">调整搜索结果的匹配宽松度，100为精确匹配，0为不限</string>
     <string name="search_filter_similarity_description">%1$s，%2$s</string>
     <string name="search_filter_empty">暂无达到 %1$d%% 相似度的结果，可降低相似度查看更多</string>
+    <string name="search_filter_empty_exact">暂无精确匹配结果，可降低相似度查看更多</string>
     <string name="detail_site_not_searchable">当前站源不支持搜索</string>
 
     <string-array name="select_player">

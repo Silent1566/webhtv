@@ -831,6 +831,11 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         return 0;
     }
 
+    private String getDanmakuEpisodeName() {
+        Episode episode = getEpisode();
+        return episode == null ? "" : episode.getName();
+    }
+
     private boolean isTmdbMode() {
         return getIntent().getBooleanExtra("tmdbMode", false);
     }
@@ -3410,7 +3415,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     private void onDanmaku() {
-        DanmakuDialog.create().player(player()).identity(getKey(), getId(), mHistory == null ? "" : mHistory.getVodName(), getEpisode().getName()).show(this);
+        DanmakuDialog.create().player(player()).identity(getKey(), getId(), mHistory == null ? "" : mHistory.getVodName(), getDanmakuEpisodeName()).show(this);
         hideControl();
     }
 

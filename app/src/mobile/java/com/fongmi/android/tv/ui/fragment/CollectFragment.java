@@ -54,6 +54,7 @@ import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.SearchGridLayout;
 import com.fongmi.android.tv.utils.SearchPageState;
 import com.fongmi.android.tv.utils.SearchResultFilter;
+import com.fongmi.android.tv.utils.SearchSourceVisibility;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -479,6 +480,12 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
         menuInflater.inflate(R.menu.menu_collect, menu);
     }
 
+    private String getSimilarityFilterTitle() {
+        if (mSimilarity == 0) return getString(R.string.search_filter_similarity_unlimited);
+        if (mSimilarity == 100) return getString(R.string.search_filter_similarity_exact);
+        return getString(R.string.search_filter_similarity_value, mSimilarity);
+    }
+
     @Override
     public void onPrepareMenu(@NonNull Menu menu) {
         MenuItem group = menu.findItem(R.id.action_group);
@@ -487,7 +494,7 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
             group.setTitle(TextUtils.isEmpty(mFilterGroup) ? getString(R.string.search_scope_all) : mFilterGroup);
         }
         MenuItem similarity = menu.findItem(R.id.action_similarity);
-        if (similarity != null) similarity.setTitle(getString(R.string.search_filter_similarity_value, mSimilarity));
+        if (similarity != null) similarity.setTitle(getSimilarityFilterTitle());
         MenuItem item = menu.findItem(R.id.action_column);
         if (item == null) return;
         Drawable icon = ContextCompat.getDrawable(requireContext(), getCount() == 1 ? R.drawable.ic_site_double_column : R.drawable.ic_site_single_column);
@@ -533,7 +540,10 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
         String siteKey = activated.getSite().getKey();
         boolean loading = "all".equals(siteKey) ? mPaging.hasPending() : mPaging.isPending(siteKey);
         boolean show = mSimilarity > 0 && mSearchCompleted && !loading && activated.getList().isEmpty() && hasRawResults(siteKey);
-        if (show) mBinding.empty.setText(getString(R.string.search_filter_empty, mSimilarity));
+        if (show) {
+            String text = mSimilarity == 100 ? getString(R.string.search_filter_empty_exact) : getString(R.string.search_filter_empty, mSimilarity);
+            mBinding.empty.setText(text);
+        }
         mBinding.empty.setVisibility(show ? View.VISIBLE : View.GONE);
     }
 
@@ -701,8 +711,9 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
         for (int i = 1; i < mAllCollectItems.size(); i++) {
             Collect raw = mAllCollectItems.get(i);
             if (!matchFilter(raw.getSite())) continue;
-            List<Vod> visible = getVisibleItems(raw.getSite().getKey());
-            if (!fixedOrder && visible.isEmpty() && (mSimilarity == 0 || raw.getList().isEmpty())) continue;
+            String siteKey = raw.getSite().getKey();
+            List<Vod> visible = getVisibleItems(siteKey);
+            if (!SearchSourceVisibility.shouldShow(mSimilarity, fixedOrder, !visible.isEmpty())) continue;
             Collect item = new Collect(raw.getSite(), visible);
             item.setPage(mPaging.getPage(raw.getSite().getKey()));
             item.setSelected(raw.getSite().getKey().equals(activeSiteKey));

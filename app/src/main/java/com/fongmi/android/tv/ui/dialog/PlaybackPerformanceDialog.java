@@ -454,7 +454,7 @@ public final class PlaybackPerformanceDialog extends DialogFragment {
             case PlaybackPerformanceCatalog.ADAPTIVE_DOWNGRADE -> onOff(PlaybackPerformanceSetting.isAdaptiveDowngradeEnabled());
             case PlaybackPerformanceCatalog.BANDWIDTH_METER -> onOff(PlaybackPerformanceSetting.isBandwidthMeterEnabled());
             case PlaybackPerformanceCatalog.TUNNEL -> onOff(PlayerSetting.isTunnel());
-            case PlaybackPerformanceCatalog.BUFFER_TIME -> PlayerSetting.getBuffer() + "/10";
+            case PlaybackPerformanceCatalog.BUFFER_TIME -> PlayerSetting.getBuffer() + "/15";
             case PlaybackPerformanceCatalog.BUFFER_BYTES -> bufferBytesText();
             case PlaybackPerformanceCatalog.BACK_BUFFER -> backBufferText();
             case PlaybackPerformanceCatalog.PLAY_CACHE -> playCacheText();
@@ -723,7 +723,7 @@ public final class PlaybackPerformanceDialog extends DialogFragment {
     }
 
     private void cycleBuffer() {
-        PlayerSetting.putBuffer(PlayerSetting.getBuffer() >= 10 ? 1 : PlayerSetting.getBuffer() + 1);
+        PlayerSetting.putBuffer(PlayerSetting.getBuffer() >= 15 ? 1 : PlayerSetting.getBuffer() + 1);
         PlaybackPerformanceSetting.markCustom();
         refresh();
     }

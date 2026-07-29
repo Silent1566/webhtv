@@ -478,6 +478,6 @@ public class MpvPlayerEngine implements PlayerEngine {
     }
 
     private int getDemuxerReadAheadSeconds() {
-        return Math.min(60, Math.max(15, PlayerSetting.getBuffer(PlayerSetting.MPV) * 3));
+        return Math.min(120, Math.max(15, PlayerSetting.getBuffer(PlayerSetting.MPV) * 4));
     }
 }
