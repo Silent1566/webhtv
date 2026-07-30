@@ -812,6 +812,10 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         return getKey().concat(AppDatabase.SYMBOL).concat(getId()).concat(AppDatabase.SYMBOL) + VodConfig.getCid();
     }
 
+    private void restoreImmersiveAudioRequest() {
+        mImmersiveAudioRequested = PlayerSetting.isImmersiveAudioPlayback(getHistoryKey());
+    }
+
     private Site getSite() {
         return VodConfig.get().getSite(getKey());
     }
@@ -972,6 +976,8 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         if (TextUtils.isEmpty(id) || (id.equals(oldId) && key.equals(oldKey))) return;
         saveHistory();
         getIntent().putExtras(intent);
+        setAudioStageVisible(false);
+        restoreImmersiveAudioRequest();
         resetDetailForNewIntent();
         checkId();
     }
@@ -980,6 +986,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     protected void initView(Bundle savedInstanceState) {
         long start = System.currentTimeMillis();
         SpiderDebug.log("video-flow", "initView start sinceLaunch=%dms key=%s id=%s", getLaunchCost(start), getKey(), getId());
+        restoreImmersiveAudioRequest();
         mTmdbDetailTimeout = this::showTmdbDetailFallback;
         mTmdbEpisodeTimeout = this::showTmdbEpisodeFallback;
         initTmdbMode();
@@ -1299,11 +1306,11 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         if (mBinding == null) return;
         boolean audioContent = isAudioOnly() || isMusicLike();
         mBinding.control.action.immersiveAudio.setVisibility(isFullscreen() && audioContent ? View.VISIBLE : View.GONE);
-        mBinding.control.action.immersiveAudio.setSelected(PlayerSetting.isImmersiveAudioMode());
+        mBinding.control.action.immersiveAudio.setSelected(shouldUseImmersiveAudio());
     }
 
     private void toggleImmersiveAudioMode() {
-        PlayerSetting.putImmersiveAudioMode(!PlayerSetting.isImmersiveAudioMode());
+        PlayerSetting.putImmersiveAudioMode(!shouldUseImmersiveAudio());
         onImmersiveAudioModeChanged();
     }
 
@@ -6089,13 +6096,6 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     @Override
-    protected void onResume() {
-        // TV 歌曲舞台自动判断已暂时关闭，首帧绘制前清除任何恢复出来的可见状态。
-        setAudioStageVisible(false);
-        super.onResume();
-    }
-
-    @Override
     protected void onStart() {
         super.onStart();
         mClock.stop().start();
@@ -7816,6 +7816,14 @@ private void setAudioStageVisible(boolean visible) {
         if (visible) ensureImmersiveAudioControllers();
         // Android may restore the View visibility independently of this cached flag.
         mBinding.audioStage.setVisibility(visible ? View.VISIBLE : View.GONE);
+        // Song changes can expose progress/control layers without changing the cached stage state.
+        if (visible) {
+            mBinding.audioStage.bringToFront();
+            hideProgress();
+            hideControl();
+            hideInfo();
+            Util.hideSystemUI(this);
+        }
         if (mAudioStageVisible == visible) {
             syncAudioStageSurface(visible);
             updateAudioStageText();
@@ -7823,14 +7831,8 @@ private void setAudioStageVisible(boolean visible) {
             return;
         }
         mAudioStageVisible = visible;
-        if (!visible) mAudioLightEffectAnimated = false;
-        if (visible) {
-            mBinding.audioStage.bringToFront();
-            hideProgress();
-            hideControl();
-            hideInfo();
-            Util.hideSystemUI(this);
-        } else {
+        if (!visible) {
+            mAudioLightEffectAnimated = false;
             setAudioToolRowVisible(false, false);
         }
         if (visible) scheduleAudioBackground(96);
@@ -7876,6 +7878,7 @@ private void prepareImmersiveAudioPlayback(AudioPlaybackResolver.Resolved resolv
         String pic = result.hasArtwork() ? result.getArtwork() : vod.getPic();
         getIntent().putExtra("key", resolved.getSiteKey());
         getIntent().putExtra("id", resolved.getVodId());
+        PlayerSetting.putImmersiveAudioPlayback(getHistoryKey());
         getIntent().putExtra("name", vod.getName());
         getIntent().putExtra("pic", pic);
         putIntentPlaybackSelection(getIntent(), resolved.getFlag().getFlag(), episode.getName(), episode.getUrl());
@@ -9462,8 +9465,10 @@ public void onKaraokeModeChanged() {
 
 @Override
     public void onImmersiveAudioModeChanged() {
-        mImmersiveAudioRequested = PlayerSetting.isImmersiveAudioMode();
-        if (PlayerSetting.isImmersiveAudioMode()) {
+        boolean enabled = PlayerSetting.isImmersiveAudioMode();
+        mImmersiveAudioRequested = enabled;
+        PlayerSetting.putImmersiveAudioPlayback(enabled ? getHistoryKey() : "");
+        if (enabled) {
             ensureImmersiveAudioControllers();
             refreshLyrics();
         } else {

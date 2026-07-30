@@ -136,7 +136,7 @@ public class ControlDialog extends BaseBottomSheetDialog implements ParseAdapter
         binding.opening.setText(parent.control.action.opening.getText());
         binding.repeat.setSelected(parent.control.action.repeat.isSelected());
         binding.karaoke.setSelected(PlayerSetting.isKaraokeMode());
-        binding.immersiveAudio.setSelected(PlayerSetting.isImmersiveAudioMode());
+        binding.immersiveAudio.setSelected(parent.control.action.immersiveAudio.isSelected());
         setKaraokeVisible();
         setImmersiveAudioVisible();
         binding.timer.setSelected(Timer.get().isRunning());
@@ -257,8 +257,9 @@ public class ControlDialog extends BaseBottomSheetDialog implements ParseAdapter
     }
 
     private void setImmersiveAudio() {
-        PlayerSetting.putImmersiveAudioMode(!PlayerSetting.isImmersiveAudioMode());
-        binding.immersiveAudio.setSelected(PlayerSetting.isImmersiveAudioMode());
+        boolean enabled = !binding.immersiveAudio.isSelected();
+        PlayerSetting.putImmersiveAudioMode(enabled);
+        binding.immersiveAudio.setSelected(enabled);
         ((Listener) requireActivity()).onImmersiveAudioModeChanged();
     }
 

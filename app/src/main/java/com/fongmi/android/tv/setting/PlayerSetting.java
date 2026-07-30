@@ -51,6 +51,7 @@ public class PlayerSetting {
     public static final int NIGHT_MODE_ALWAYS_OFF = 1;
     public static final int NIGHT_MODE_ALWAYS_ON = 2;
     private static final int DEFAULT_PLAY_CACHE_OPTION = 0;
+    private static final String KEY_IMMERSIVE_AUDIO_PLAYBACK = "immersive_audio_playback";
     private static final String KEY_FAILURE_FALLBACK = "player_failure_fallback";
     private static final String KEY_FFMPEG_MODE = "ffmpeg_mode";
     private static final String KEY_DISPLAY_TIME = "display_time";
@@ -84,6 +85,14 @@ public class PlayerSetting {
 
     public static void putImmersiveAudioMode(boolean enabled) {
         Prefers.put("immersive_audio_mode", enabled);
+    }
+
+    public static boolean isImmersiveAudioPlayback(String playbackKey) {
+        return playbackKey != null && !playbackKey.isEmpty() && playbackKey.equals(Prefers.getString(KEY_IMMERSIVE_AUDIO_PLAYBACK));
+    }
+
+    public static void putImmersiveAudioPlayback(String playbackKey) {
+        Prefers.put(KEY_IMMERSIVE_AUDIO_PLAYBACK, playbackKey == null ? "" : playbackKey);
     }
 
     public static int getAudioPlaybackStyle() {

@@ -117,9 +117,10 @@ public class SiteApi {
         if (WebHomeInlineVodStore.KEY.equals(key)) return WebHomeInlineVodStore.detail(id);
         Site site = VodConfig.get().getSite(key);
         PushParser.Parsed push = PUSH.equals(key) ? PushParser.fromId(id) : null;
-        if (site.isEmpty() && PUSH.equals(key)) return pushDetail(id, push);
+        String requestId = push == null ? id : push.getUrl();
+        if (push != null && (site.isEmpty() || isLocalFileUrl(requestId))) return pushDetail(id, push);
         if (isSpider(site)) {
-            String detailContent = site.recent().spider().detailContent(Arrays.asList(id));
+            String detailContent = site.recent().spider().detailContent(Arrays.asList(requestId));
             SpiderDebug.log("detail", detailContent);
             Result result = Result.fromJson(detailContent);
             Source.get().parse(result.getVod().setFlags());
@@ -127,7 +128,7 @@ public class SiteApi {
         } else {
             ArrayMap<String, String> params = new ArrayMap<>();
             params.put("ac", ac(site.getType()));
-            params.put("ids", id);
+            params.put("ids", requestId);
             String detailContent = call(site, params);
             SpiderDebug.log("detail", detailContent);
             Result result = Result.fromType(site.getType(), detailContent);
@@ -153,8 +154,10 @@ public class SiteApi {
         Source.get().stop();
         if (WebHomeInlineVodStore.KEY.equals(key)) return WebHomeInlineVodStore.player(flag, id);
         Site site = VodConfig.get().getSite(key);
+        String requestId = PUSH.equals(key) ? resolvePushPlayerUrl(id) : id;
+        if (PUSH.equals(key) && (site.isEmpty() || isLocalFileUrl(requestId))) return pushPlayer(flag, requestId, playerType);
         if (site.getType() == 3) {
-            String playerContent = site.recent().spider().playerContent(flag, id, VodConfig.get().getFlags());
+            String playerContent = site.recent().spider().playerContent(flag, requestId, VodConfig.get().getFlags());
             SpiderDebug.log("player", playerContent);
             Result result = Result.fromJson(playerContent);
             if (result.getFlag().isEmpty()) result.setFlag(flag);
@@ -164,7 +167,7 @@ public class SiteApi {
             return result;
         } else if (site.getType() == 4) {
             ArrayMap<String, String> params = new ArrayMap<>();
-            params.put("play", id);
+            params.put("play", requestId);
             params.put("flag", flag);
             String playerContent = call(site, params);
             SpiderDebug.log("player", playerContent);
@@ -173,25 +176,35 @@ public class SiteApi {
             result.setUrl(Source.get().fetch(result, playerType));
             result.setHeader(site.getHeader());
             return result;
-        } else if (site.isEmpty() && "push_agent".equals(key)) {
-            Result result = new Result();
-            result.setUrl(id);
-            result.setParse(0);
-            result.setFlag(flag);
-            result.setUrl(Source.get().fetch(result, playerType));
-            SpiderDebug.log("player", result.toString());
-            return result;
         } else {
             Result result = new Result();
-            result.setUrl(id);
+            result.setUrl(requestId);
             result.setFlag(flag);
             result.setHeader(site.getHeader());
             result.setPlayUrl(site.getPlayUrl());
-            result.setParse(Sniffer.isVideoFormat(id) && result.getPlayUrl().isEmpty() ? 0 : 1);
+            result.setParse(Sniffer.isVideoFormat(requestId) && result.getPlayUrl().isEmpty() ? 0 : 1);
             result.setUrl(Source.get().fetch(result, playerType));
             SpiderDebug.log("player", result.toString());
             return result;
         }
+    }
+
+    static String resolvePushPlayerUrl(String id) {
+        return PushParser.fromId(id).getUrl();
+    }
+
+    static boolean isLocalFileUrl(String url) {
+        return url.regionMatches(true, 0, "file:", 0, 5);
+    }
+
+    private static Result pushPlayer(String flag, String url, int playerType) throws Exception {
+        Result result = new Result();
+        result.setUrl(url);
+        result.setParse(0);
+        result.setFlag(flag);
+        result.setUrl(Source.get().fetch(result, playerType));
+        SpiderDebug.log("player", result.toString());
+        return result;
     }
 
     private static Result pushDetail(@NonNull String id, PushParser.Parsed push) throws Exception {

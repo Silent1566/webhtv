@@ -315,8 +315,74 @@ public class VideoActivityLayoutTest {
         assertTrue("configured audio-source launches must explicitly activate the immersive session",
                 source.contains("mImmersiveAudioRequested = true;")
                         && source.indexOf("mImmersiveAudioRequested = true;") > source.indexOf("private void prepareImmersiveAudioPlayback("));
+        String modeBody = methodBody(source, "public void onImmersiveAudioModeChanged()", "private boolean dispatchAudioStageKey");
         assertTrue("manual playback-style selection must explicitly update the immersive session",
-                source.contains("mImmersiveAudioRequested = PlayerSetting.isImmersiveAudioMode();"));
+                modeBody.contains("mImmersiveAudioRequested = enabled;"));
+    }
+
+    @Test
+    public void leanbackImmersiveAudioSelectionPersistsForMatchingPlayback() throws Exception {
+        Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        Path settingPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "setting", "PlayerSetting.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        String setting = new String(Files.readAllBytes(settingPath), StandardCharsets.UTF_8);
+        String initBody = methodBody(source, "protected void initView(Bundle savedInstanceState)", "protected void initEvent()");
+        String newIntentBody = methodBody(source, "protected void onNewIntent(Intent intent)", "protected void initView(Bundle savedInstanceState)");
+        String restoreBody = methodBody(source, "private void restoreImmersiveAudioRequest()", "private Site getSite()");
+        String modeBody = methodBody(source, "public void onImmersiveAudioModeChanged()", "private boolean dispatchAudioStageKey");
+        String launchBody = methodBody(source, "private void prepareImmersiveAudioPlayback(AudioPlaybackResolver.Resolved resolved)", "private void applyImmersiveAudioSelection");
+
+        assertTrue("the explicit TV immersive-audio request must have a playback-scoped preference",
+                setting.contains("private static final String KEY_IMMERSIVE_AUDIO_PLAYBACK = \"immersive_audio_playback\";")
+                        && setting.contains("public static boolean isImmersiveAudioPlayback(String playbackKey)")
+                        && setting.contains("public static void putImmersiveAudioPlayback(String playbackKey)"));
+        assertTrue("a recreated TV playback must restore only the matching explicit request",
+                restoreBody.contains("mImmersiveAudioRequested = PlayerSetting.isImmersiveAudioPlayback(getHistoryKey());"));
+        assertFalse("restoring an explicit request must not fall back to title or early-track guesses",
+                restoreBody.contains("isAudioOnly()") || restoreBody.contains("isMusicLike()"));
+        assertTrue("TV initialization must restore the playback-scoped request before playback setup",
+                initBody.indexOf("restoreImmersiveAudioRequest();") >= 0
+                        && initBody.indexOf("restoreImmersiveAudioRequest();") < initBody.indexOf("super.initView(savedInstanceState);"));
+
+        int replaceIntent = newIntentBody.indexOf("getIntent().putExtras(intent);");
+        int hideOldStage = newIntentBody.indexOf("setAudioStageVisible(false);");
+        int restoreNewRequest = newIntentBody.indexOf("restoreImmersiveAudioRequest();");
+        assertTrue("singleTop playback changes must hide the old stage and recompute the request for the new content",
+                replaceIntent >= 0 && hideOldStage > replaceIntent && restoreNewRequest > hideOldStage);
+        assertTrue("manual selection must remember or clear the current playback identity",
+                modeBody.contains("boolean enabled = PlayerSetting.isImmersiveAudioMode();")
+                        && modeBody.contains("mImmersiveAudioRequested = enabled;")
+                        && modeBody.contains("PlayerSetting.putImmersiveAudioPlayback(enabled ? getHistoryKey() : \"\");"));
+
+        int launchIdentity = launchBody.indexOf("getIntent().putExtra(\"id\", resolved.getVodId());");
+        int rememberLaunch = launchBody.indexOf("PlayerSetting.putImmersiveAudioPlayback(getHistoryKey());");
+        assertTrue("configured audio-source launches must also remember their resolved playback identity",
+                launchIdentity >= 0 && rememberLaunch > launchIdentity);
+    }
+
+    @Test
+    public void leanbackImmersiveAudioHighlightReflectsActivePlayback() throws Exception {
+        Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        Path dialogPath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "dialog", "ControlDialog.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        String dialog = new String(Files.readAllBytes(dialogPath), StandardCharsets.UTF_8);
+        String actionBody = methodBody(source, "private void updateImmersiveAudioAction()", "private void toggleImmersiveAudioMode()");
+        String toggleBody = methodBody(source, "private void toggleImmersiveAudioMode()", "private int getEpisodeColumn()");
+        String dialogInit = methodBody(dialog, "protected void initView()", "protected void initEvent()");
+        String dialogToggle = methodBody(dialog, "private void setImmersiveAudio()", "private void onTrack(View view)");
+
+        assertTrue("the TV action highlight must represent the active playback session, not only the global preference",
+                actionBody.contains("mBinding.control.action.immersiveAudio.setSelected(shouldUseImmersiveAudio());"));
+        assertFalse("the TV action must not remain highlighted while the current playback request is absent",
+                actionBody.contains("setSelected(PlayerSetting.isImmersiveAudioMode())"));
+        assertTrue("clicking an inactive highlighted-capable action must enable this playback instead of disabling the global preference",
+                toggleBody.contains("PlayerSetting.putImmersiveAudioMode(!shouldUseImmersiveAudio());"));
+        assertTrue("the control dialog must initialize from the current playback action state",
+                dialogInit.contains("binding.immersiveAudio.setSelected(parent.control.action.immersiveAudio.isSelected());"));
+        assertTrue("the control dialog must toggle its actual session state rather than a stale global value",
+                dialogToggle.contains("boolean enabled = !binding.immersiveAudio.isSelected();")
+                        && dialogToggle.contains("PlayerSetting.putImmersiveAudioMode(enabled);")
+                        && dialogToggle.contains("binding.immersiveAudio.setSelected(enabled);"));
     }
 
     @Test
@@ -329,6 +395,25 @@ public class VideoActivityLayoutTest {
         int stateFastPath = visibilityBody.indexOf("if (mAudioStageVisible == visible)");
         assertTrue("TV audio stage must reconcile the real View before trusting its cached visibility flag",
                 reconcileView >= 0 && stateFastPath > reconcileView);
+    }
+
+    @Test
+    public void leanbackVisibleAudioStageReclaimsForegroundOnSongChange() throws Exception {
+        Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        String visibilityBody = methodBody(source, "private void setAudioStageVisible(boolean visible)", "private boolean shouldUseImmersiveAudio()");
+
+        int stateFastPath = visibilityBody.indexOf("if (mAudioStageVisible == visible)");
+        int bringToFront = visibilityBody.indexOf("mBinding.audioStage.bringToFront();");
+        int hideProgress = visibilityBody.indexOf("hideProgress();");
+        int hideControl = visibilityBody.indexOf("hideControl();");
+        int hideInfo = visibilityBody.indexOf("hideInfo();");
+        assertTrue("TV song changes must reclaim the audio-stage foreground even when its cached visibility is already true",
+                stateFastPath >= 0
+                        && bringToFront >= 0 && bringToFront < stateFastPath
+                        && hideProgress >= 0 && hideProgress < stateFastPath
+                        && hideControl >= 0 && hideControl < stateFastPath
+                        && hideInfo >= 0 && hideInfo < stateFastPath);
     }
 
     @Test
@@ -364,7 +449,7 @@ public class VideoActivityLayoutTest {
     }
 
     @Test
-    public void leanbackDisabledAudioStageStaysHiddenBeforeFirstFrame() throws Exception {
+    public void leanbackAudioStageRestoreProtectionDoesNotClearActiveSession() throws Exception {
         Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
         Element audioStage = findAndroidId(findLeanbackResPath().resolve(Path.of("layout", "activity_video.xml")).toFile(), "audioStage");
@@ -374,10 +459,10 @@ public class VideoActivityLayoutTest {
                         && "false".equals(audioStage.getAttribute("android:saveEnabled"))
                         && source.contains("mBinding.audioStage.setSaveFromParentEnabled(false);"));
         int onResume = source.indexOf("protected void onResume()");
-        int hideStage = source.indexOf("setAudioStageVisible(false);", onResume);
-        int superResume = source.indexOf("super.onResume();", onResume);
-        assertTrue("TV audio stage must be hidden in onResume before Android draws the first frame",
-                onResume >= 0 && hideStage > onResume && superResume > hideStage);
+        int nextOverride = onResume >= 0 ? source.indexOf("\n    @Override", onResume + 1) : -1;
+        String resumeBody = onResume < 0 ? "" : source.substring(onResume, nextOverride > onResume ? nextOverride : source.length());
+        assertFalse("TV resume must not clear an explicitly activated immersive-audio session",
+                resumeBody.contains("setAudioStageVisible(false);"));
     }
 
     @Test
