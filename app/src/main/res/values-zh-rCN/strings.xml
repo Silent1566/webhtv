@@ -518,6 +518,13 @@
     <string name="site_health_reason_detail_failed">详情失败</string>
     <string name="site_health_reason_play_failed">播放失败</string>
     <string name="setting_web_home_extension">WebHome 扩展</string>
+    <string name="setting_web_home_theme">全局 WebHome 皮肤</string>
+    <string name="setting_web_home_theme_eclipse">Eclipse（内置）</string>
+    <string name="setting_web_home_theme_custom">自定义网址</string>
+    <string name="setting_web_home_theme_url_hint">https://example.com/webhome.html</string>
+    <string name="setting_web_home_theme_invalid_url">请输入 HTTPS WebHome 网址</string>
+    <string name="setting_web_home_theme_remote_warning_title">信任这个远程主题吗？</string>
+    <string name="setting_web_home_theme_remote_warning_message">来自 %1$s 的远程主题会运行网站代码，并可请求媒体库数据或触发获准的应用操作。仅在信任提供方时继续。</string>
     <string name="setting_web_home_fullscreen">WebHome 主页全屏</string>
     <string name="setting_csp_warmup">CSP预热</string>
     <string name="setting_csp_warmup_default">默认</string>

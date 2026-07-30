@@ -508,6 +508,13 @@
     <string name="site_health_reason_detail_failed">詳情失敗</string>
     <string name="site_health_reason_play_failed">播放失敗</string>
     <string name="setting_web_home_extension">WebHome 擴展</string>
+    <string name="setting_web_home_theme">全域 WebHome 主題</string>
+    <string name="setting_web_home_theme_eclipse">Eclipse（內建）</string>
+    <string name="setting_web_home_theme_custom">自訂網址</string>
+    <string name="setting_web_home_theme_url_hint">https://example.com/webhome.html</string>
+    <string name="setting_web_home_theme_invalid_url">請輸入 HTTPS WebHome 網址</string>
+    <string name="setting_web_home_theme_remote_warning_title">信任這個遠端主題嗎？</string>
+    <string name="setting_web_home_theme_remote_warning_message">來自 %1$s 的遠端主題會執行網站程式碼，並可要求媒體庫資料或觸發獲准的應用程式操作。僅在信任提供者時繼續。</string>
     <string name="setting_web_home_fullscreen">WebHome 主頁全屏</string>
     <string name="setting_csp_warmup">CSP預熱</string>
     <string name="setting_csp_warmup_default">預設</string>

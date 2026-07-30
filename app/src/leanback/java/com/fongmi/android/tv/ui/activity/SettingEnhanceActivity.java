@@ -45,6 +45,7 @@ import com.fongmi.android.tv.ui.dialog.SiteHealthDialog;
 import com.fongmi.android.tv.ui.dialog.SiteNameDialog;
 import com.fongmi.android.tv.ui.dialog.ViewingRecordSyncDialog;
 import com.fongmi.android.tv.ui.dialog.WebHomeExtensionDialog;
+import com.fongmi.android.tv.ui.dialog.WebHomeThemeDialog;
 import com.fongmi.android.tv.utils.LoginStateSync;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.PermissionUtil;
@@ -101,6 +102,7 @@ public class SettingEnhanceActivity extends BaseActivity {
         mBinding.siteHealthSort.setOnLongClickListener(this::clearSiteHealth);
         mBinding.webHomeExtension.setOnClickListener(view -> WebHomeExtensionDialog.show(this, this::setText));
         mBinding.webHomeExtension.setOnLongClickListener(this::clearWebHomeExtension);
+        mBinding.webHomeTheme.setOnClickListener(view -> WebHomeThemeDialog.show(this, this::setText));
         mBinding.webHomeFullscreen.setOnClickListener(this::setWebHomeFullscreen);
         mBinding.cspWarmup.setOnClickListener(this::setCspWarmup);
         mBinding.playbackArtworkWall.setOnClickListener(this::setPlaybackArtworkWall);
@@ -132,6 +134,7 @@ public class SettingEnhanceActivity extends BaseActivity {
                 mBinding.shellProxy,
                 mBinding.shellProxyConfig,
                 mBinding.managePage,
+                mBinding.webHomeTheme,
                 mBinding.webHomeFullscreen,
                 mBinding.cspWarmup,
                 mBinding.playbackArtworkWall,
@@ -177,6 +180,7 @@ public class SettingEnhanceActivity extends BaseActivity {
             WebHomeExtensionRegistry.Snapshot webHomeExtension = WebHomeExtensionRegistry.get().snapshot();
             return getSwitch(Setting.isWebHomeExtension()) + " · " + webHomeExtension.readyCount + "/" + webHomeExtension.installedCount;
         });
+        safeSet("webHomeTheme", mBinding.webHomeThemeText, () -> WebHomeThemeDialog.summary(this));
         safeSet("webHomeFullscreen", mBinding.webHomeFullscreenText, () -> getSwitch(Setting.isWebHomeFullscreen()));
         safeSet("cspWarmup", mBinding.cspWarmupText, this::getCspWarmupText);
         safeSet("playbackArtworkWall", mBinding.playbackArtworkWallText, () -> getSwitch(Setting.isPlaybackArtworkWall()));

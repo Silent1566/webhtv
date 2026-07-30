@@ -992,6 +992,26 @@ public class VideoActivityLayoutTest {
     }
 
     @Test
+    public void leanbackReadyStateKeepsPlaybackInitializationAfterPendingResumeSeek() throws Exception {
+        Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int method = source.indexOf("protected void onStateChanged(int state)");
+        int ready = source.indexOf("case Player.STATE_READY:", method);
+        int seek = source.indexOf("boolean pendingResumeSeekApplied = applyPendingResumeSeek();", ready);
+        int reset = source.indexOf("player().reset();", ready);
+        int shortDrama = source.indexOf("applyShortDramaMode();", ready);
+        int introSkip = source.indexOf("requestIntroSkipPlan();", ready);
+        int autoSkipGuard = source.indexOf("if (!pendingResumeSeekApplied) applyAutoIntroSkip();", ready);
+
+        assertTrue(sourcePath + " is missing onStateChanged", method >= 0);
+        assertTrue("TV ready playback must capture whether a pending resume seek was applied", seek > ready);
+        assertTrue("TV pending resume seek must not skip playback reset", reset > seek);
+        assertTrue("TV pending resume seek must not skip short-drama readiness", shortDrama > reset);
+        assertTrue("TV pending resume seek must not skip intro-skip planning", introSkip > shortDrama);
+        assertTrue("TV auto intro skip should wait for the deferred seek to settle", autoSkipGuard > introSkip);
+    }
+
+    @Test
     public void mobileTmdbImageReadyRebindsDeferredSummaryAndRevealsDetailContent() throws Exception {
         Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
@@ -1758,6 +1778,37 @@ public class VideoActivityLayoutTest {
     }
 
     @Test
+    public void leanbackPlaybackEpisodeDialogFocusesCurrentEpisodeOnOpen() throws Exception {
+        Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "dialog", "EpisodeListDialog.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int selected = source.indexOf("private void scrollToSelectedEpisode()");
+        int selectedEnd = source.indexOf("private void scrollToSegment(int episodePosition)", selected);
+        int focus = source.indexOf("private void focusPosition(BaseGridView grid, int position)");
+        int focusEnd = source.indexOf("\n    private ", focus + 1);
+        int scroll = source.indexOf("private void scrollToEpisode(int position, boolean requestFocus)");
+        int scrollEnd = source.indexOf("\n    @Override", scroll);
+        String selectedBody = selected >= 0 && selectedEnd > selected ? source.substring(selected, selectedEnd) : "";
+        String focusBody = focus >= 0 && focusEnd > focus ? source.substring(focus, focusEnd) : "";
+        String scrollBody = scroll >= 0 && scrollEnd > scroll ? source.substring(scroll, scrollEnd) : "";
+
+        assertTrue(sourcePath + " is missing current episode focus hooks", selected >= 0 && focus >= 0 && scroll >= 0);
+        assertTrue("episode dialog must resolve and reveal the currently playing episode when it opens",
+                selectedBody.contains("int position = getSelectedEpisodePosition(allEpisodes);")
+                        && selectedBody.contains("scrollToSegment(position);")
+                        && selectedBody.contains("scrollToEpisode(position - getSegmentStart(selectedSegment), true);"));
+        assertTrue("episode dialog must focus the current episode card instead of the grid's default child",
+                scrollBody.contains("if (requestFocus) focusPosition(binding.episode, position);"));
+        assertTrue("episode dialog must wait until Leanback has attached the current episode card before requesting focus",
+                focusBody.contains("grid.setSelectedPosition(target, holder -> holder.itemView.requestFocus());"));
+        assertFalse("episode dialog must not use a one-shot post that can run before the current episode card is attached",
+                focusBody.contains("grid.post("));
+        assertFalse("episode dialog must not fall back to container focus because it can select the wrong episode",
+                focusBody.contains("grid.requestFocus();"));
+        assertFalse("episode dialog must not rely on container focus because it can select the first or previously focused card",
+                scrollBody.contains("if (requestFocus) binding.episode.requestFocus();"));
+    }
+
+    @Test
     public void leanbackNativeEnhancedEpisodeGridExpandsWithDetailScroll() throws Exception {
         Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
@@ -2409,9 +2460,59 @@ public class VideoActivityLayoutTest {
         assertTrue("standalone detail mode must use the normal detail-aware start path",
                 historyStartBody.contains("start(activity, item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic(), item.getVodRemarks())"));
         assertTrue("non-detail playback must preserve flag, episode title, and episode url",
-                historyStartBody.contains("startDirect(activity, item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic(), item.getVodRemarks(), item.getVodFlag(), item.getVodRemarks(), item.getEpisodeUrl())"));
+                historyStartBody.contains("startDirect(activity, item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic(), item.getVodRemarks(), item.getVodFlag(), item.getVodRemarks(), item.getEpisodeUrl(), true)"));
         assertTrue("direct playback must preserve the requested episode selection in the intent",
                 video.contains("putIntentPlaybackSelection(intent, playFlag, playEpisodeName, playEpisodeUrl);"));
+    }
+
+    @Test
+    public void leanbackHistoryEntryRespectsDetailModeAndPreservesExactPlaybackSelection() throws Exception {
+        Path historyPath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "HistoryActivity.java"));
+        Path videoPath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String history = new String(Files.readAllBytes(historyPath), StandardCharsets.UTF_8);
+        String video = new String(Files.readAllBytes(videoPath), StandardCharsets.UTF_8);
+        String compactHistory = history.replaceAll("\\s+", " ");
+        int historyStart = video.indexOf("static void startFromHistory(Activity activity, History item)");
+        int historyStartEnd = video.indexOf("public static void startDirect(", historyStart);
+        String historyStartBody = historyStart >= 0 && historyStartEnd > historyStart ? video.substring(historyStart, historyStartEnd).replaceAll("\\s+", " ") : "";
+
+        assertTrue("TV history clicks must use the history-aware playback entry point",
+                compactHistory.contains("VideoActivity.startFromHistory(this, item)"));
+        assertTrue("TV history playback must respect the configured standalone detail mode",
+                historyStartBody.contains("if (shouldOpenLegacyTmdbDetail(item.getSiteKey(), item.getVodId(), false))"));
+        assertTrue("TV standalone detail mode must use the normal detail-aware start path",
+                historyStartBody.contains("start(activity, item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic(), item.getVodRemarks())"));
+        assertTrue("TV non-detail playback must preserve flag, episode title, and episode url",
+                historyStartBody.contains("startDirect(activity, item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic(), item.getVodRemarks(), item.getVodFlag(), item.getVodRemarks(), item.getEpisodeUrl(), true)"));
+        assertTrue("TV direct playback must preserve the requested episode selection in the intent",
+                video.contains("putIntentPlaybackSelection(intent, playFlag, playEpisodeName, playEpisodeUrl);"));
+    }
+
+    @Test
+    public void bothPlaybackModesUseTolerantEpisodeIdentityOnlyForHistoryResume() throws Exception {
+        for (Path root : List.of(findLeanbackJavaPath(), findMobileJavaPath())) {
+            Path sourcePath = root.resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+            String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+            String selection = methodBody(source, "private void applyIntentPlaybackSelection(Vod item)", "private Flag findIntentPlaybackFlag");
+            String update = methodBody(source, "private void updateHistory(Episode item)", "private void checkKeepImg()");
+
+            assertTrue(sourcePath + " must mark history launches as resume requests",
+                    source.contains("intent.putExtra(EXTRA_RESUME_FROM_HISTORY, resumeFromHistory);"));
+            assertTrue(sourcePath + " must clear a stale history marker when singleTop handles another launch",
+                    source.contains("getIntent().removeExtra(EXTRA_RESUME_FROM_HISTORY);"));
+            assertTrue(sourcePath + " must clear stale explicit playback selection before merging another launch",
+                    source.contains("getIntent().removeExtra(EXTRA_TMDB_PLAY_FLAG);")
+                            && source.contains("getIntent().removeExtra(EXTRA_TMDB_PLAY_EPISODE_NAME);")
+                            && source.contains("getIntent().removeExtra(EXTRA_TMDB_PLAY_EPISODE_URL);"));
+            assertTrue(sourcePath + " must read the history-resume marker before matching episodes",
+                    selection.contains("boolean tolerantResume = crossSource || isResumeFromHistory();"));
+            assertTrue(sourcePath + " must keep URL-strict matching for ordinary explicit episode launches",
+                    selection.replaceAll("\\s+", " ").contains("tolerantResume ? episode.matchesPlayback(mHistory.getEpisode()) : episode.matches(mHistory.getEpisode())"));
+            assertTrue(sourcePath + " must preserve progress when a history source refresh changes only the episode URL",
+                    selection.contains("episode.matchesPlayback(mHistory.getEpisode())"));
+            assertTrue(sourcePath + " must use the same tolerant episode identity when playback updates history",
+                    update.contains("item.matchesPlayback(mHistory.getEpisode())"));
+        }
     }
 
     @Test

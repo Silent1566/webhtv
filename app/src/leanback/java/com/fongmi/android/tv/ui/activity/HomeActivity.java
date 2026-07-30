@@ -76,6 +76,8 @@ import com.fongmi.android.tv.utils.PermissionUtil;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.UrlUtil;
 import com.fongmi.android.tv.web.HomeWebController;
+import com.fongmi.android.tv.web.WebHomeTarget;
+
 import com.fongmi.android.tv.web.WebHomeViewport;
 import com.github.catvod.crawler.SpiderDebug;
 import com.github.catvod.net.OkHttp;
@@ -412,7 +414,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     }
 
     private void getVideo(boolean forceNative) {
-        if (!forceNative && getHome().hasHomePage()) {
+        if (!forceNative && WebHomeTarget.canLoad(getHome())) {
             ensureWebView();
         }
         if (!forceNative && mWeb != null && mWeb.load(getHome())) {

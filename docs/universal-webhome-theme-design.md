@@ -1,0 +1,1147 @@
+# 全局可配置主题（Universal Web Theme / WebHome V2）设计文档
+
+> 状态：🟡 V1 首页能力已实现，V2 多页面能力处于设计阶段<br>
+> 首次设计：2026-07-27<br>
+> 本次更新：2026-07-28<br>
+> 适用端：mobile / leanback（Android TV）<br>
+> 当前落地范围：全局 WebHome 首页、当前内容源取数、分类筛选、自动分页、遥控焦点和原生页面/播放器入口<br>
+> 后续规划范围：详情页、搜索页、收藏/历史页、播放器控制层、设置页及全局设计变量<br>
+> 关联文档：`docs/universal-webhome-theme-development.md`<br>
+> 说明：羊壳 `.rfwtxt` 仅作为效果和架构参考，不支持其格式/语法，也不规划直接兼容
+
+## 0. 结论
+
+后续可以把当前“全局首页皮肤”扩展为覆盖详情、搜索、收藏、历史、播放控制和设置等页面的“全应用主题系统”，但不应简单地把所有原生页面全部替换成 WebView。
+
+推荐采用以下边界：
+
+- **页面视觉与布局可替换**：首页、列表、搜索、详情、收藏、历史等内容页面允许主题完全接管渲染。
+- **播放器内核保持原生**：解码、DRM、字幕、音轨、播放状态机、画中画和生命周期继续由原生负责；主题只定制播放器控制层和视觉。
+- **设置业务保持原生**：主题可以渲染设置页，但配置定义、权限校验、值校验和持久化必须由原生负责。
+- **所有页面独立回退**：主题没有声明某个页面、加载失败或协议不兼容时，仅该页面回退原生，不影响其他页面。
+- **桥接接口按页面授权**：远程主题视为不可信代码，只能调用当前页面所需的受控能力。
+
+因此，整体方向不是“把 App 改成一个大网页”，而是：
+
+> **保留原生数据、业务和播放能力，把页面渲染层做成可插拔主题。**
+
+当前 WebHome V1 已验证“同一份皮肤读取不同内容源”的核心可行性。下一步最合适的是先建设 WebTheme V2 公共宿主，再实现 Web 详情页 MVP。
+
+---
+
+## 1. 背景与当前基础
+
+### 1.1 参考模型：远程 UI 主题
+
+羊壳 `.rfwtxt` 的关键价值不在具体 DSL，而在它把主题拆成了三部分：
+
+1. **宿主能力**：数据请求、图片、播放、导航和系统能力由 App 提供。
+2. **稳定数据契约**：主题只消费宿主提供的结构化数据。
+3. **稳定事件契约**：主题通过明确事件请求打开内容、切换分类或播放。
+
+主题本身不需要理解 JAR、JS、Python 等爬虫差异，也不应该直接依赖应用内部 Bean。只要所有内容源最终被原生归一化为同一份 DTO，同一主题就能跨源工作。
+
+本项目继续使用自己的 HTML/JavaScript 载体和桥接协议，不引入 Flutter Engine，也不兼容 `.rfwtxt`。
+
+### 1.2 WebHome V1 已实现能力
+
+当前工作区已经完成 WebHome 首页阶段的主要能力：
+
+- 全局 WebHome 皮肤设置，支持内置 Eclipse 和自定义 HTTPS 地址。
+- 首页加载优先级：
+
+```text
+内容源自己的 homePage
+    > 已启用的全局 WebHome 皮肤
+    > 原生首页
+```
+
+- `vod.home`：通过当前内容源读取首页分类、筛选和条目。
+- `vod.category`：按分类、页码和筛选条件读取真实分页数据。
+- 当前内容源隔离：全局主题不能通过伪造 `siteKey` 跨源读取或播放。
+- `player.playVod`、`player.playVodInline`、`player.playUrl` 等原生播放入口。
+- 搜索、媒体库、设置、直播和返回等原生导航入口。
+- mobile / leanback 双端加载、错误回退和页面 identity 刷新。
+- Eclipse 示例主题的分类筛选、自动分页和电视遥控焦点。
+- V1 DTO、目标解析和关键交互的 Java/JavaScript 回归测试。
+
+主要代码位置：
+
+| 文件 | 当前职责 |
+| --- | --- |
+| `WebHomeTarget.java` | 解析站点首页、全局主题和原生首页优先级 |
+| `WebHomeVodContract.java` | 将内部 `Result` / `Vod` 映射为稳定的 V1 DTO |
+| `HomeWebBridge.java` | 受信站点首页和内置主题使用的完整桥接 |
+| `WebHomeThemeBridge.java` | 不可信远程主题使用的最小能力桥接 |
+| `HomeWebController.java` | WebView 生命周期、SDK 注入、目标切换和错误回退 |
+| `WebHomeThemeDialog.java` | 双端共用的主题选择与 URL 配置 |
+| `assets/webhome/eclipse.html` | 内置示例主题 |
+
+实现和第三方主题开发细节以 `docs/universal-webhome-theme-development.md` 为准。
+
+### 1.3 V1 尚未解决的问题
+
+V1 是首页专用实现，还不能自然覆盖整个应用：
+
+- `HomeWebController` 和 `HomeWebBridge` 的语义仍然绑定 Home。
+- 当前只有 `vod.home`、`vod.category`，没有稳定的 `vod.detail`、`vod.search` 等数据接口。
+- `app.search`、`app.openSetting` 等接口只能跳转原生页面，不能让主题渲染这些页面。
+- 没有多页面主题 Manifest、页面路由、页面级权限和协议能力协商。
+- 详情页、播放器和设置页包含大量原生状态，不能直接复用首页的扁平列表模型。
+- 电视焦点逻辑目前由单个主题实现，尚未形成跨页面统一规范。
+- `HomeWebBridge` 如果继续直接增加所有页面接口，会逐渐变成难以维护的“大桥”。
+
+### 1.4 现有原生页面的约束
+
+以下页面已经有成熟而复杂的原生实现：
+
+- 详情页：`TmdbDetailActivity` 及其多个 detail mode controller。
+- 播放页：mobile 和 leanback 各自的 `VideoActivity`，并依赖原生播放服务。
+- 设置页：mobile fragment 与 leanback activity 两套页面组织。
+
+这些页面不仅负责布局，还包含来源线路、选集、历史、收藏、播放恢复、遥控器、生命周期、权限和配置校验等逻辑。V2 的目标是把它们的“显示层”逐步可替换，而不是复制或绕开其核心业务。
+
+---
+
+## 2. 目标、边界与非目标
+
+### 2.1 目标
+
+1. 一份主题可以同时声明首页、详情、搜索、历史、收藏等多个页面。
+2. 每个页面独立启用、独立授权、独立回退原生。
+3. 主题只依赖版本化 DTO 和桥接方法，不依赖内部 Java Bean、Activity 或数据库结构。
+4. JAR、JS、Python 等内容源继续通过统一的原生 `SiteApi` / Spider 链路取数。
+5. 同一主题支持手机触控和电视遥控，并有明确的焦点行为规范。
+6. 主题升级或应用升级时保持向后兼容；破坏性变化必须提升协议版本。
+7. 远程主题不获得任意原生调用、任意设置写入或敏感数据读取能力。
+8. 原生页面始终可作为安全兜底，用户可以一键关闭主题。
+9. 首页 V1 单文件 HTML 继续可用，不强迫现有主题迁移。
+
+### 2.2 能力边界
+
+| 能力 | 主题负责 | 原生负责 |
+| --- | --- | --- |
+| 颜色、字体、间距、圆角、焦点效果 | 是 | 提供默认值和能力边界 |
+| 页面结构和内容排列 | 是 | 提供数据 DTO |
+| 分类、筛选、分页状态展示 | 是 | 真实取数与参数校验 |
+| 详情信息、线路和选集展示 | 是 | 详情解析、播放引用生成 |
+| 收藏和历史交互 | 是 | 数据读取、写入和一致性 |
+| 视频画面与解码 | 否 | 是 |
+| 播放状态机、字幕、音轨、DRM | 否 | 是 |
+| 播放器控制层视觉 | 可选 | 提供受控命令和状态 |
+| 设置项布局 | 可选 | Schema、校验、保存、权限 |
+| 文件、凭据、Cookie、站点扩展代码 | 否 | 始终不直接暴露 |
+
+### 2.3 非目标
+
+- 不引入 Flutter Engine 或运行真正的 RFW。
+- 不自动转换或兼容 `.rfwtxt`。
+- 不把 ExoPlayer/原生播放器替换成 HTML5 Video。
+- 不允许主题直接访问 Room、SharedPreferences、文件系统或任意 Android API。
+- 不要求每个主题实现全部页面；部分主题只实现首页是合法场景。
+- 不在 V2 第一阶段开放任意插件代码或无边界的 `net.request`。
+- 不在同一版本中一次性重写所有原生页面。
+
+---
+
+## 3. 方案选择
+
+### 3.1 候选方案
+
+| 方案 | 优点 | 缺点 | 结论 |
+| --- | --- | --- | --- |
+| 全部页面 WebView 化 | 表达力强、开发统一 | 播放、设置、安全、焦点和生命周期风险最高 | 否决 |
+| 只做原生颜色/资源换肤 | 性能和稳定性最好 | 无法改变详情结构和信息层级 | 仅作为基础层 |
+| 自研原生 DSL | 原生性能、理论上可远程配置 | 解析器、组件工厂和双端维护成本很高 | 暂不启动 |
+| Web 页面 + 原生能力的混合模式 | 复用 WebHome、布局自由、核心能力可靠 | 需要稳定契约、权限和统一焦点运行时 | 选定 |
+
+### 3.2 选定架构
+
+```text
+┌──────────────────────────────────────────────────────────┐
+│ Theme Package                                            │
+│ HTML / CSS / JS / assets / theme.json / design tokens   │
+└────────────────────────────┬─────────────────────────────┘
+                             │ versioned contracts
+┌────────────────────────────▼─────────────────────────────┐
+│ WebTheme Runtime                                         │
+│ Page Host / Router / Focus / Lifecycle / Permission      │
+└────────────────────────────┬─────────────────────────────┘
+                             │ page-scoped bridge
+┌────────────────────────────▼─────────────────────────────┐
+│ Native Capability Layer                                 │
+│ Vod / Detail / Search / History / Favorite / Player /   │
+│ Settings / Navigation / Device                           │
+└────────────────────────────┬─────────────────────────────┘
+                             │ existing domain services
+┌────────────────────────────▼─────────────────────────────┐
+│ SiteApi / Spider / Database / PlaybackService / Android  │
+└──────────────────────────────────────────────────────────┘
+```
+
+### 3.3 核心原则
+
+1. **DTO 优先**：内部 Bean 不直接穿过桥。
+2. **页面隔离**：详情页不自动获得设置写入能力。
+3. **当前源默认**：VOD 页面默认只能访问当前内容源。
+4. **原生内核**：播放、存储、权限和校验不交给主题。
+5. **渐进增强**：主题缺少能力时继续使用原生页面。
+6. **显式版本**：Manifest、Host API 和每类 DTO 均有版本。
+7. **安全失败**：超时、异常或不兼容优先回退，而不是留白或卡死。
+8. **TV 优先验证**：任何新页面在完成遥控焦点验收前不算完成。
+
+---
+
+## 4. 页面覆盖与推荐实现方式
+
+| 页面/区域 | 可定制程度 | 推荐方式 | 复杂度 | 优先级 |
+| --- | --- | --- | --- | --- |
+| 首页 | 完全定制 | 当前 WebHome V1 / V2 page host | 已实现 | P0 |
+| 分类页 | 完全定制 | `vod.category` + 自动分页 | 已实现基础 | P0 |
+| 搜索结果 | 完全定制 | 新增 `vod.search` 数据接口 | 中 | P2 |
+| 详情页 | 基本完全定制 | Web 渲染，原生详情与播放能力 | 中高 | P1 |
+| 收藏页 | 完全定制 | 归一化收藏 DTO + 原生写入 | 中 | P2 |
+| 历史页 | 完全定制 | 归一化历史 DTO + 原生写入 | 中 | P2 |
+| 专题/推荐页 | 完全定制 | 通用列表页契约 | 中 | P2 |
+| 播放器背景和控制视觉 | 高度定制 | 原生 Player Chrome + tokens | 高 | P3 |
+| 播放器内核 | 不定制 | 保留原生 | 极高风险 | 不做 |
+| 设置页视觉 | 高度定制 | 先原生 tokens，后 Schema 页面 | 中高 | P3/P4 |
+| 全局弹窗、Toast、加载态 | 部分到高度定制 | 原生组件消费设计变量 | 中 | P3 |
+| 直播频道列表 | 可定制 | Web/原生列表 + 原生直播播放 | 高 | 后续 |
+
+最优先的新页面是详情页，因为：
+
+- 用户感知价值最高。
+- 已有 `player.playVod` 原生入口可复用。
+- 可以验证复杂 DTO、路由参数、收藏/历史和原生播放衔接。
+- 详情页跑通后，搜索、历史和收藏大多可以复用同一个通用页面宿主。
+
+---
+
+## 5. WebTheme V2 主题包
+
+### 5.1 V1 兼容
+
+现有“直接配置一个 HTML URL”的方式继续保留：
+
+- 没有 Manifest 的 HTML 按 **WebHome V1 首页主题**处理。
+- 只能接管首页，继续使用现有 `fm` SDK 和 V1 DTO。
+- 不因为 V2 上线而改变现有加载优先级或接口行为。
+
+V2 主题使用 Manifest 声明页面和权限。V1 与 V2 可以长期并存。
+
+### 5.2 建议目录结构
+
+```text
+theme/
+├── theme.json
+├── pages/
+│   ├── home.html
+│   ├── detail.html
+│   ├── search.html
+│   ├── history.html
+│   ├── favorite.html
+│   └── settings.html
+├── shared/
+│   ├── runtime.js
+│   ├── focus.js
+│   └── theme.css
+└── assets/
+    ├── icons/
+    ├── fonts/
+    └── images/
+```
+
+第一阶段可以支持“远程 Manifest URL + 同源文件”和内置 assets。ZIP 安装、签名包和主题市场属于后续分发议题，不阻塞多页面架构。
+
+### 5.3 Manifest 草案
+
+```jsonc
+{
+  "schemaVersion": 2,
+  "id": "maple.eclipse",
+  "name": "枫叶 · 光影",
+  "version": "2.0.0",
+  "minHostApi": 2,
+  "targets": ["mobile", "leanback"],
+
+  "pages": {
+    "home": {
+      "entry": "pages/home.html",
+      "contract": "vod.home@1",
+      "fallback": "native"
+    },
+    "detail": {
+      "entry": "pages/detail.html",
+      "contract": "vod.detail@1",
+      "fallback": "native"
+    },
+    "search": {
+      "entry": "pages/search.html",
+      "contract": "vod.search@1",
+      "fallback": "native"
+    },
+    "history": {
+      "entry": "pages/history.html",
+      "contract": "history.list@1",
+      "fallback": "native"
+    },
+    "favorite": {
+      "entry": "pages/favorite.html",
+      "contract": "favorite.list@1",
+      "fallback": "native"
+    },
+    "settings": {
+      "entry": "pages/settings.html",
+      "mode": "schema",
+      "fallback": "native"
+    }
+  },
+
+  "player": {
+    "engine": "native",
+    "chrome": "tokens"
+  },
+
+  "permissions": {
+    "home": ["vod.home", "vod.category", "navigation.openDetail"],
+    "detail": ["vod.detail", "favorite.read", "favorite.write", "history.read", "player.playVod"],
+    "search": ["vod.search", "navigation.openDetail"],
+    "history": ["history.read", "history.write", "navigation.openDetail"],
+    "favorite": ["favorite.read", "favorite.write", "navigation.openDetail"],
+    "settings": ["settings.schema", "settings.read", "settings.write.safe"]
+  },
+
+  "tokens": {
+    "color.background": "#070B18",
+    "color.surface": "#11172B",
+    "color.primary": "#51DDF2",
+    "color.focus": "#7B61FF",
+    "color.text.primary": "#F4F6FF",
+    "color.text.secondary": "#8C96B4",
+    "radius.card": 16,
+    "radius.control": 999,
+    "motion.focusScale": 1.04
+  }
+}
+```
+
+Manifest 中声明的权限只是“申请”，最终权限由宿主按页面白名单取交集。主题不能通过自行声明获得宿主未开放的能力。
+
+### 5.4 页面解析优先级
+
+首页保留 V1 既有优先级：
+
+```text
+站点 homePage > 全局主题 pages.home > 原生首页
+```
+
+其他页面按页面独立解析：
+
+```text
+全局主题声明且兼容该页面 > 原生页面
+```
+
+规则：
+
+- 某个内容源有 `homePage`，只影响首页，不阻止全局主题接管详情页。
+- 主题只声明首页时，详情、播放和设置继续走原生。
+- 单个 Web 页面失败时，只回退该页面。
+- 用户设置中应允许“启用全局主题，但关闭某个页面接管”。
+
+### 5.5 设计变量
+
+设计变量应同时服务 Web 页面和原生页面，以实现真正统一的视觉语言：
+
+- 颜色：background、surface、primary、focus、text、danger、divider。
+- 排版：字体族、标题/正文/说明字号、字重和行高。
+- 形状：卡片、按钮、弹窗和图片圆角。
+- 间距：页面边距、网格间距、分组间距。
+- 动效：焦点缩放、过渡时长、透明度。
+- 图片：默认海报、横图占位、头像占位。
+
+原生组件必须对字段做范围限制。例如焦点缩放不能无限增大，动画时长不能为负，远程字体需要明确的下载和缓存策略。
+
+---
+
+## 6. WebTheme Runtime
+
+### 6.1 建议组件拆分
+
+在现有 WebHome 实现基础上，建议逐步抽出以下通用组件，名称为设计建议，落地时可按项目风格调整：
+
+| 组件 | 职责 |
+| --- | --- |
+| `WebThemeManager` | 读取主题设置、Manifest、缓存和版本 |
+| `WebThemeResolver` | 按页面、端类型和能力决定 Web/原生目标 |
+| `WebThemePageActivity` / `WebThemePageFragment` | 通用 Web 页面宿主 |
+| `WebThemeController` | 从 `HomeWebController` 抽取通用 WebView 生命周期 |
+| `WebThemeBridgeRouter` | 根据当前页面注册允许的桥接模块 |
+| `ThemePageContext` | 向页面提供路由、客户端、主题和当前源信息 |
+| `NativePageFallback` | 页面失败时打开对应原生实现 |
+| `TvFocusRuntime` | 统一电视端焦点、恢复和自动分页行为 |
+
+不建议立即删除或大改 `HomeWebController`。先让新的通用宿主复用已验证的加载、安全区、SDK 注入和错误恢复逻辑；详情页稳定后，再判断是否合并公共基类。
+
+### 6.2 页面上下文
+
+每个页面加载后先通过 `theme.info` 或初始化事件获得上下文：
+
+```jsonc
+{
+  "hostApiVersion": 2,
+  "page": "detail",
+  "theme": {
+    "id": "maple.eclipse",
+    "version": "2.0.0"
+  },
+  "client": {
+    "isLeanback": true,
+    "isLandscape": true,
+    "width": 1920,
+    "height": 1080,
+    "density": 1.0,
+    "safeArea": { "top": 0, "right": 0, "bottom": 0, "left": 0 }
+  },
+  "source": {
+    "key": "current-source-key",
+    "name": "当前内容源"
+  },
+  "route": {
+    "vodId": "opaque-vod-id"
+  },
+  "capabilities": [
+    "vod.detail@1",
+    "favorite.read@1",
+    "favorite.write@1",
+    "player.playVod@1"
+  ]
+}
+```
+
+路由参数由原生注入，主题不应从 URL 查询串猜测内部 Activity 参数。
+
+### 6.3 生命周期
+
+建议定义统一页面状态：
+
+```text
+CREATED
+  → LOADING
+  → SDK_READY
+  → DATA_LOADING
+  → ACTIVE
+  → SUSPENDED
+  → DESTROYED
+```
+
+要求：
+
+- 主文档加载和 SDK 就绪分别超时处理。
+- 页面暂停时停止轮询、动画和非必要网络任务。
+- 进入原生播放器前调用现有的 native playback preparation，避免 WebView 抢占媒体资源。
+- 返回页面时恢复路由、滚动位置、选中筛选和焦点 ID。
+- 页面销毁时取消未完成桥接任务，禁止长期 observe LiveData。
+- 同一时刻不保留多个不可见的重型 WebView；使用原生 back stack 管理页面。
+
+### 6.4 导航与返回
+
+统一返回优先级：
+
+```text
+页面内弹层/筛选面板
+    > 页面内历史栈
+    > 当前 Web 页面
+    > 原生 Activity/Fragment 返回栈
+```
+
+主题不能拦截系统返回后永久不释放。宿主应允许页面声明“已处理返回”，但连续异常或超时后仍由原生完成返回。
+
+---
+
+## 7. 桥接接口设计
+
+### 7.1 接口规则
+
+1. 方法按领域拆分，不继续全部堆进 `HomeWebBridge`。
+2. 方法名使用 `domain.action`，例如 `vod.detail`、`favorite.set`。
+3. 输入输出必须有长度、数量和类型限制。
+4. DTO 字段默认可选；主题必须容忍空值和未知字段。
+5. 新增字段保持向后兼容；删除、改名或改变语义必须提升 contract major version。
+6. Promise rejection 返回结构化错误：
+
+```json
+{
+  "code": "SOURCE_CHANGED",
+  "message": "Active VOD source changed",
+  "retryable": true
+}
+```
+
+建议错误码：`INVALID_ARGUMENT`、`NOT_SUPPORTED`、`PERMISSION_DENIED`、`SOURCE_CHANGED`、`BUSY`、`RESPONSE_TOO_LARGE`、`NETWORK_ERROR`、`TIMEOUT`、`NATIVE_FAILURE`。
+
+### 7.2 建议桥接模块
+
+```text
+ThemeBridge
+├── ThemeInfoBridge
+├── NavigationBridge
+├── VodBridge
+├── DetailBridge
+├── SearchBridge
+├── FavoriteBridge
+├── HistoryBridge
+├── PlayerBridge
+├── SettingsBridge
+├── UiBridge
+└── DeviceBridge
+```
+
+桥路由根据当前页面只注册允许模块。例如详情页不注册 `settings.write`，设置页不注册 `player.playUrl`。
+
+### 7.3 当前 V1 接口
+
+以下能力已经存在，应保持兼容：
+
+- `vod.home`
+- `vod.category`
+- `player.playUrl`
+- `player.playVod`
+- `player.playVodInline`
+- `player.preloadArtwork`
+- `player.control`
+- `player.status`
+- `app.search`
+- `app.openVod`
+- `app.openLive`
+- `app.openKeep`
+- `app.openSetting`
+- `app.history`
+- 既有 cache、device、site、config、ui 和 navigation 能力
+
+其中导航型 `app.search` 与未来数据型 `vod.search` 含义不同，必须同时保留：
+
+- `app.search`：打开原生搜索页。
+- `vod.search`：给自定义搜索页返回结果数据。
+
+### 7.4 V2 建议新增接口
+
+| 方法 | 用途 | 主要页面 |
+| --- | --- | --- |
+| `theme.info` | Host API、上下文和能力协商 | 全部 |
+| `vod.detail` | 获取归一化详情、线路和选集 | 详情 |
+| `vod.search` | 在允许的来源范围内搜索并分页 | 搜索 |
+| `favorite.list` | 获取收藏列表 | 收藏 |
+| `favorite.status` | 查询单条收藏状态 | 详情 |
+| `favorite.set` | 收藏/取消收藏 | 详情、收藏 |
+| `history.list` | 获取播放历史 | 历史 |
+| `history.item` | 获取单条进度 | 详情 |
+| `history.remove` | 删除历史 | 历史 |
+| `navigation.openDetail` | 打开 Web 或原生详情 | 列表 |
+| `navigation.openNativeDetail` | 强制使用原生详情兜底 | 详情 |
+| `player.playVod` 扩展参数 | 指定线路/集数/恢复进度 | 详情 |
+| `settings.schema` | 获取允许展示的设置定义 | 设置 |
+| `settings.get` | 获取允许读取的设置值 | 设置 |
+| `settings.set` | 校验并写入安全设置 | 设置 |
+
+### 7.5 详情 DTO 草案
+
+```jsonc
+{
+  "version": 1,
+  "source": {
+    "key": "source-key",
+    "name": "内容源"
+  },
+  "item": {
+    "vodId": "opaque-id",
+    "name": "影片名",
+    "pic": "https://...",
+    "wallPic": "https://...",
+    "remarks": "更新至 10 集",
+    "year": "2026",
+    "area": "内地",
+    "typeName": "剧情",
+    "actor": "演员",
+    "director": "导演",
+    "score": "8.6",
+    "duration": "45 分钟",
+    "content": "简介",
+    "tags": ["剧情", "悬疑"]
+  },
+  "sources": [
+    {
+      "sourceId": "line-0",
+      "name": "线路一",
+      "selected": true,
+      "episodes": [
+        {
+          "episodeId": "episode-0",
+          "name": "第 1 集",
+          "number": 1,
+          "playRef": "opaque-play-reference",
+          "selected": false
+        }
+      ]
+    }
+  ],
+  "state": {
+    "favorite": false,
+    "history": {
+      "sourceId": "line-0",
+      "episodeId": "episode-0",
+      "positionMs": 0,
+      "durationMs": 0,
+      "updatedAt": 0
+    }
+  },
+  "recommendations": [],
+  "capabilities": {
+    "canFavorite": true,
+    "canPlay": true,
+    "hasRecommendations": false
+  }
+}
+```
+
+设计要求：
+
+- `vodId`、`sourceId`、`episodeId` 和 `playRef` 对主题来说都是不透明值。
+- 不直接把内部 `vod_play_url` 或解析器对象暴露给主题。
+- 主题选择集数后，把 `playRef` 交回原生；原生验证其与当前详情会话匹配。
+- 超长选集需要分页、分组或虚拟化，不能一次创建数千个 DOM 节点。
+- 缺失演员、导演、评分等字段时，主题应直接隐藏对应区域。
+
+### 7.6 播放接口扩展
+
+当前 `player.playVod` 可以按 `siteKey + vodId` 打开原生播放器。详情页需要进一步支持指定线路和集数，建议兼容性扩展为：
+
+```jsonc
+{
+  "siteKey": "current-source-key",
+  "vodId": "opaque-vod-id",
+  "playRef": "opaque-play-reference",
+  "title": "影片名",
+  "pic": "https://...",
+  "wallPic": "https://...",
+  "resume": true
+}
+```
+
+约束：
+
+- `playRef` 只能由当前 `vod.detail` 响应产生。
+- 全局主题仍只能播放当前源内容。
+- 原生播放器决定最终线路、集数、历史恢复和错误重试。
+- 未传 `playRef` 时保持现有行为，由原生详情/播放器选择默认集数。
+
+### 7.7 设置 Schema 草案
+
+```jsonc
+{
+  "version": 1,
+  "groups": [
+    {
+      "id": "playback",
+      "title": "播放设置",
+      "items": [
+        {
+          "key": "player.auto_next",
+          "type": "switch",
+          "title": "自动播放下一集",
+          "description": "当前集播放结束后自动继续",
+          "value": true,
+          "writable": true
+        },
+        {
+          "key": "player.default_scale",
+          "type": "select",
+          "title": "默认画面比例",
+          "value": "fit",
+          "options": [
+            { "label": "适应", "value": "fit" },
+            { "label": "填充", "value": "fill" },
+            { "label": "原始", "value": "original" }
+          ],
+          "writable": true
+        }
+      ]
+    }
+  ]
+}
+```
+
+设置桥必须：
+
+- 只接受 Schema 中存在且 `writable=true` 的 key。
+- 由原生完成类型、范围、依赖和权限校验。
+- 高风险操作继续打开原生确认页或系统页面。
+- 写入成功后返回最终值，避免主题假定保存成功。
+
+默认不开放：备份恢复、清除全部数据、凭据、Cookie、本地文件路径、调试开关、任意 Intent 和任意 URL Scheme。
+
+---
+
+## 8. 页面设计
+
+### 8.1 详情页
+
+推荐调用链：
+
+```text
+首页/搜索/收藏点击影片
+    → navigation.openDetail(siteKey, vodId)
+    → WebThemeResolver 检查 pages.detail
+    → WebThemePageActivity(detail)
+    → theme.info
+    → vod.detail
+    → 主题渲染详情、线路、选集和推荐
+    → favorite.set / player.playVod
+    → 原生播放器
+```
+
+实现策略：
+
+1. 保留当前 `TmdbDetailActivity` 作为完整兜底。
+2. 新建平行的 Web 详情宿主，不直接把现有大型 Activity 改成半原生半 Web。
+3. 第一版只做海报、简介、线路、选集、收藏和播放。
+4. 演员、剧照、预告、推荐、跨源搜索等作为后续可选能力。
+5. Web 详情加载失败时原地切换到原生详情，而不是返回首页。
+6. 返回详情页时恢复线路、集数、滚动位置和焦点。
+
+详情页 MVP 验收：
+
+- JAR、JS、Python 源各至少一个详情可正常展示。
+- 能选择线路和集数并进入正确原生播放。
+- 收藏状态和历史进度正确。
+- 空详情、无线路、超长选集和接口错误有明确状态。
+- 手机触控和电视遥控均可完整操作。
+- 主题缺少详情页或加载失败时原生详情可用。
+
+### 8.2 播放页
+
+播放器采用分层能力：
+
+#### L0：设计变量换肤（优先）
+
+原生播放器控制层读取主题颜色、圆角、文字和焦点变量。改动风险最低，可以最先落地。
+
+#### L1：可配置原生 Player Chrome（推荐目标）
+
+主题通过声明式配置决定控制项排列、显示密度、背景和面板样式，但控件仍是原生 View，由原生处理遥控、触摸和无障碍。
+
+#### L2：Web Overlay（实验性，不作为默认方案）
+
+仅把非关键的信息层叠加为 Web UI。需要解决视频层级、透明 WebView、遥控焦点、性能和生命周期问题，不应在 V2 第一阶段使用。
+
+始终保持原生的能力：
+
+- 视频解码和渲染 Surface。
+- DRM、字幕、弹幕、音轨和解码器选择。
+- 进度、缓冲、错误恢复和播放队列。
+- 前后台、画中画、媒体通知和音频焦点。
+- 遥控器快进/快退、长按和关键播放按键。
+
+因此，“播放页全定制”的正确含义是视觉和控制布局可定制，而不是用网页重新实现播放器。
+
+### 8.3 设置页
+
+分两步实施：
+
+1. **原生设置页消费全局 tokens**：先统一颜色、背景、焦点、分组、按钮和弹窗样式。
+2. **Schema 驱动的 Web 设置页**：主题负责布局，原生提供安全设置定义和读写。
+
+设置页是高权限页面，不能直接复用首页的全部桥。若主题设置页崩溃或协议不兼容，必须能从系统入口进入原生设置并关闭主题。
+
+### 8.4 搜索、历史和收藏
+
+这些页面应共享通用列表能力：
+
+- 相同的 `items[]` 基础 DTO。
+- 统一分页元数据和空态/错误态。
+- `navigation.openDetail` 打开主题或原生详情。
+- 统一图片代理、预加载和焦点恢复。
+- 历史/收藏的删除操作由原生确认和持久化。
+
+不建议每个页面复制一份首页分页和焦点脚本，应由 `shared/runtime.js` 或宿主注入的公共运行时提供。
+
+---
+
+## 9. 电视遥控、焦点与自动分页规范
+
+遥控焦点必须成为 WebTheme Runtime 的公共能力，而不是每个主题自由猜测。
+
+### 9.1 焦点元素约定
+
+建议使用：
+
+```html
+<button
+  data-focus-id="category-tv"
+  data-focus-group="categories"
+  data-focus-row="0"
+  data-focus-col="5">
+  电视剧
+</button>
+```
+
+可选显式方向：
+
+```html
+<button
+  data-nav-left="category-short"
+  data-nav-right="category-movie"
+  data-nav-down="filter-type-all">
+</button>
+```
+
+### 9.2 方向键选择顺序
+
+统一算法：
+
+1. 如果声明了 `data-nav-*`，优先走显式目标。
+2. 否则优先在**当前 focus group** 内寻找同主轴目标。
+3. 同组无目标时，再在方向锥形区域内计算最近可见元素。
+4. 只有已经到达当前组边界时，才允许跨组。
+5. 隐藏、禁用、透明或屏幕外元素不得参与计算。
+
+这一规则可以避免“分类按钮按右键却跳到下方筛选按钮”的问题。分类横向移动应先遍历完整分类组，到达末端后才允许进入其他区域。
+
+### 9.3 动态内容与焦点恢复
+
+- 每个逻辑条目使用稳定 `data-focus-id`，不要只用 DOM index。
+- 分类、筛选或分页重绘后，优先恢复同一 ID。
+- 条目不存在时，恢复到同组最近元素；仍不存在才回退页面默认焦点。
+- 弹层关闭后恢复打开弹层前的焦点。
+- 返回页面时同时恢复焦点、滚动位置和筛选状态。
+
+### 9.4 自动分页
+
+默认不向电视用户暴露可聚焦的“加载更多”按钮。分页状态机：
+
+```text
+IDLE → LOADING → APPEND_SUCCESS → IDLE
+                 └→ EXHAUSTED
+                 └→ ERROR_RETRYABLE
+```
+
+触发条件：
+
+- 手机滚动接近列表末尾时自动预取。
+- 电视焦点进入倒数一至两行时自动预取。
+- 同一页只允许一个请求，防止重复加载。
+- 分类或筛选变化时取消旧请求并重置页码。
+- `pageCount > 0 && page >= pageCount`，或在 `pageCount == 0` 时返回空列表，才进入 `EXHAUSTED`。
+- 出错时可显示可聚焦“重试”，但普通加载更多控件默认不参与焦点。
+- 追加数据后保持当前卡片焦点，不自动跳到新条目。
+
+### 9.5 返回键
+
+- 筛选面板打开：先关闭面板。
+- 详情内选集弹层打开：先关闭弹层。
+- 页面有内部历史：退回内部状态。
+- 无内部状态：交还原生返回栈。
+
+---
+
+## 10. 安全与权限模型
+
+### 10.1 信任模型
+
+远程主题本质上是可执行 HTML/JavaScript，必须视为不可信：
+
+- 首次启用远程主题时显示来源域名和风险提示。
+- 已信任 URL 作为本机同意状态保存，不随设置备份迁移；配置 URL 与同意记录不匹配时直接回退原生首页。
+- 设置中始终提供“关闭主题”和“恢复原生界面”。
+- 主题失败不能阻止用户进入原生设置。
+- 不因主题声明权限而自动授予权限。
+- 远程主题只接受 HTTPS，并绑定到配置 URL 的精确 Origin；跨 Origin 主文档导航会被拒绝。
+- 远程主题通过 `WebViewCompat.addWebMessageListener` 通信，宿主同时校验来源 Origin 和 `isMainFrame`，iframe 无法调用原生能力。
+- 监听器固定远程会话 generation，主文档导航轮换不可猜 nonce；切源、重载、WebView 重建和主文档错误都会让旧会话失效。
+- 远程请求设置消息长度、在途数量、页码、返回条数和响应字节上限，避免占满共享执行器或向 WebView 传输超大消息。
+- 远程协议不暴露 `net.*`、`cache.*`、`ext.*`、设备/站点完整配置、任意 URL 播放或 raw 资源代理，也不携带 Cookie、Authorization 和站点请求头。
+
+### 10.2 页面级能力白名单
+
+宿主维护硬编码白名单，例如：
+
+| 页面 | 默认允许 |
+| --- | --- |
+| home | `vod.home`、`vod.category`、受控导航、当前源播放 |
+| detail | `vod.detail`、收藏、历史读取、当前详情播放 |
+| search | `vod.search`、打开详情 |
+| history | 历史读写、打开详情 |
+| favorite | 收藏读写、打开详情 |
+| settings | 安全设置 Schema 和受控写入 |
+
+主题 Manifest 的权限与宿主白名单取交集。没有授权的方法返回 `PERMISSION_DENIED`。
+
+### 10.3 内容源隔离
+
+- 默认只允许当前源。
+- `siteKey` 为空时自动使用当前源。
+- 传入不同 `siteKey` 时拒绝，而不是静默切源。
+- 页面加载期间内容源发生变化时，取消旧请求并返回 `SOURCE_CHANGED`。
+- 未来若支持多源搜索，应设计单独的显式能力和用户开关，不能复用普通 `vod.search` 偷渡跨源访问。
+
+### 10.4 数据最小化
+
+默认不向主题暴露：
+
+- Cookie、Authorization、完整请求头。
+- 站点扩展脚本和 Spider 实例。
+- 本地数据库实体和内部路径。
+- 设备唯一标识和账号凭据。
+- 任意文件读写、Intent 和系统设置。
+
+图片和受保护资源继续通过受控资源代理处理。
+
+### 10.5 网络能力
+
+通用主题不应默认获得无限制的 `net.request`。建议区分：
+
+- 内容数据：必须走 `vod.*`、`history.*`、`favorite.*`。
+- 主题静态资源：由 WebView 正常加载，受 CSP、同源和 URL 校验约束。
+- 第三方 API：只有主题显式申请、用户允许并满足域名白名单时才开放。
+
+V1 兼容接口可以保留，但 V2 多页面主题应使用更严格的默认策略。
+
+---
+
+## 11. 兼容、回退与恢复
+
+### 11.1 兼容策略
+
+- V1 HTML 继续按首页主题加载。
+- V2 Manifest 未识别字段应忽略。
+- `minHostApi` 高于当前应用时，不加载不兼容页面。
+- 单个页面 contract 不支持时，只回退该页面。
+- 现有方法只做兼容性扩展，不改变已有参数语义。
+- 破坏性接口使用新 major version，例如 `vod.detail@2`。
+
+### 11.2 回退矩阵
+
+| 故障 | 行为 |
+| --- | --- |
+| Manifest 获取失败 | 使用上次有效缓存；无缓存则原生 |
+| 页面入口不存在 | 该页面原生 |
+| 主文档加载错误 | 尝试一次恢复；仍失败则原生 |
+| SDK 未就绪 | 超时后该页面原生 |
+| 数据接口失败 | 页面显示错误/重试；严重错误可原生 |
+| 焦点运行时异常 | 切换安全焦点模式或原生 |
+| 主题连续崩溃 | 临时禁用该页面并提示用户 |
+| 设置主题不可用 | 强制保留原生设置入口 |
+
+### 11.3 更新与回滚
+
+- 缓存最后一份成功加载的 Manifest 和资源版本。
+- 新版本首次加载失败时自动回滚到上一版本。
+- 主题缓存必须有大小上限和清理策略。
+- 调试模式记录页面、主题版本、Host API、方法名和错误码，不记录敏感 payload。
+
+---
+
+## 12. 性能与资源管理
+
+### 12.1 原则
+
+- 不在播放器上方长期保留 WebView。
+- 同一时刻只保持必要的可见 WebView；后台页面暂停定时器和动画。
+- 图片使用懒加载、合适尺寸和原生资源代理。
+- 首页和列表按页追加，不一次性加载全部内容。
+- 长选集使用虚拟列表、分组或分页。
+- CSS 动画优先 transform/opacity，避免大面积重排。
+- 内置主题不依赖外部字体和运行时 CDN。
+
+### 12.2 性能验收
+
+在设定硬指标前，先在低配 Android TV 上记录原生页面和 WebHome V1 基线。V2 至少需要监测：
+
+- WebView 创建到首个可见骨架的时间。
+- SDK_READY 和首批数据返回时间。
+- 分类/筛选切换耗时。
+- 详情长选集 DOM 数量和内存。
+- 遥控连续移动时的掉帧和焦点丢失。
+- 页面退出后 WebView、LiveData 和异步任务是否释放。
+
+如果 Web 详情或列表在低配 TV 上长期无法达到可接受体验，再评估把特定页面切换为原生 DSL，而不是先建设一套全应用 DSL。
+
+---
+
+## 13. 实施路线
+
+### M0：首页 V1（当前已完成）
+
+- `vod.home` / `vod.category` 当前源取数。
+- 全局皮肤选择和加载优先级。
+- Eclipse 示例、分类筛选、自动分页和 TV 焦点。
+- 双端设置、回退和基本测试。
+
+### M1：WebTheme V2 基础设施
+
+- 定义 `theme.json` Schema V2。
+- 增加 `theme.info` 和能力协商。
+- 增加页面级 resolver、权限白名单和原生 fallback。
+- 从 Home WebView 中抽取最小公共生命周期能力。
+- 建立统一 TV focus runtime。
+- V1 HTML 回归保持不变。
+
+验收：同一主题只声明 `pages.home` 时行为与 V1 等价；添加空的 `pages.detail` 后能进入独立宿主并可靠回退。
+
+### M2：详情页 MVP
+
+- `vod.detail@1` DTO。
+- `navigation.openDetail`。
+- `player.playVod` 的 `playRef`/集数扩展。
+- 收藏状态、历史进度读取和写入。
+- 内置 Eclipse detail 示例。
+- 原生详情兜底。
+
+验收见 §8.1。
+
+### M3：通用列表页面
+
+- `vod.search`。
+- `history.list/item/remove`。
+- `favorite.list/status/set`。
+- 共用列表分页、图片、空态、错误态和焦点恢复。
+
+验收：搜索、历史和收藏三页共用同一套基础运行时，不复制三套分页实现。
+
+### M4：全局设计变量与原生组件换肤
+
+- Manifest tokens 解析、校验和默认值。
+- 设置、弹窗、加载态和播放器控制层消费 tokens。
+- 主题切换时原生组件同步刷新。
+
+### M5：播放器控制层
+
+- 先实现 L0 tokens。
+- 再评估 L1 声明式原生 Player Chrome。
+- 不把播放器内核迁入 WebView。
+
+### M6：Schema 设置页
+
+- 建立安全设置 Schema。
+- 实现 `settings.get/set` 白名单。
+- 高风险设置继续跳原生确认页。
+- 保留任何情况下都可进入的原生安全设置入口。
+
+---
+
+## 14. 测试与验收策略
+
+### 14.1 契约测试
+
+建议新增：
+
+- `WebThemeManifestTest`
+- `WebThemeResolverTest`
+- `WebThemePermissionTest`
+- `WebDetailContractTest`
+- `WebThemePageContextTest`
+- `WebThemeFallbackTest`
+
+每个 DTO 覆盖：空字段、超长字段、未知字段、分页边界、来源切换和异常映射。
+
+### 14.2 JavaScript 运行时测试
+
+在现有 Eclipse JS 测试基础上扩展：
+
+- 同组左右移动不会跳入下方筛选组。
+- 组边界上下移动正确。
+- 动态隐藏筛选后不会聚焦隐藏元素。
+- 自动分页不会重复请求。
+- 分类切换时旧分页响应不会污染新分类。
+- 追加条目后焦点保持。
+- 详情线路和选集重绘后焦点恢复。
+- 返回键按弹层、页面、原生顺序处理。
+
+### 14.3 双端集成测试
+
+手机：
+
+- 触控、滚动、旋转和返回。
+- 页面间跳转和状态恢复。
+- 详情进入播放器并返回。
+- 远程主题错误后的原生回退。
+
+电视：
+
+- 从首个元素遍历到页面所有可操作区域。
+- 横向分类不误跳到筛选区。
+- 最后一行触发自动分页。
+- 超长选集不会卡顿或丢焦点。
+- 播放返回后恢复正确影片和集数焦点。
+- 原生设置始终可达。
+
+### 14.4 安全测试
+
+- 伪造其他 `siteKey` 被拒绝。
+- 未声明或未授权方法返回 `PERMISSION_DENIED`。
+- 设置页不能写入 Schema 外 key。
+- 超长 payload、过多筛选项和非法 URL 被限制。
+- 内容源切换期间的旧请求被取消。
+- 主题加载失败不会形成返回死循环。
+
+---
+
+## 15. 风险与缓解
+
+| 风险 | 影响 | 缓解 |
+| --- | --- | --- |
+| Bridge 持续膨胀 | 难维护、权限不清 | 按领域模块化并按页面注册 |
+| DTO 复制内部 Bean | 内部改动导致主题破坏 | 独立 Mapper、版本化 DTO、契约测试 |
+| TV 焦点不稳定 | 页面不可用 | 公共 focus runtime + 显式导航 + 真机测试 |
+| WebView 内存和冷启动 | 低配 TV 卡顿 | 单可见宿主、懒加载、缓存和原生回退 |
+| 远程主题滥用能力 | 隐私和安全问题 | 最小权限、当前源隔离、设置白名单 |
+| 详情选集过长 | DOM 和焦点性能差 | 虚拟化、分组、分页 |
+| 主题阻断设置入口 | 用户无法恢复 | 原生安全设置入口永远保留 |
+| 播放器 Web 化诱惑 | 性能和兼容性退化 | 明确原生 engine 边界 |
+| 多端行为分叉 | 维护成本增加 | 同一 DTO/JS runtime，端差异仅通过 client context |
+| 一次改动范围过大 | 回归难定位 | 按 M1～M6 增量交付，每阶段独立回退 |
+
+---
+
+## 16. 待决策问题
+
+以下问题不阻塞详情页 MVP，但在正式冻结 V2 前需要决定：
+
+1. V2 主题初期只支持 Manifest URL，还是同时支持本地目录/ZIP 安装。
+2. Manifest 和静态资源是否强制同源。
+3. 是否允许第三方域名字体和图片，允许时如何做域名白名单。
+4. `playRef` 使用会话内 token，还是稳定的线路/集数索引组合。
+5. 搜索页默认只搜索当前源，还是允许用户显式选择多源搜索。
+6. Player Chrome 第一版只做 tokens，还是同步建设声明式布局。
+7. 设置 Schema 第一批开放哪些低风险配置项。
+8. 主题更新是否需要签名、哈希校验和版本回滚 UI。
+9. mobile 页面宿主采用 Activity 还是 Fragment 为主；leanback 是否保持 Activity 导航。
+10. 是否将公共 focus runtime 作为宿主注入脚本，还是随官方 SDK 发布并由主题引用。
+
+默认建议：
+
+- 第一阶段使用 Manifest URL + 同源资源。
+- `playRef` 使用短生命周期、当前详情会话有效的 opaque token。
+- 搜索默认当前源，多源搜索另设权限。
+- Player Chrome 先 tokens。
+- focus runtime 由宿主注入，确保版本和修复统一。
+
+---
+
+## 17. 下一步建议
+
+下一步只实施 **M1 + M2 的最小闭环**：
+
+1. 冻结 `theme.json` 最小 Schema。
+2. 新建通用 WebTheme page host 和页面级 resolver。
+3. 实现 `theme.info`、`vod.detail@1`、`navigation.openDetail`。
+4. 扩展 `player.playVod` 以接收安全的集数引用。
+5. 制作一个最小 Eclipse 详情页。
+6. 详情加载或交互失败时回退 `TmdbDetailActivity`。
+7. 完成手机、电视遥控、收藏、历史和播放返回测试。
+
+暂时不要同时改播放器内核、设置 Schema 和所有列表页。详情页是验证多页面主题架构是否成立的最佳切片；它成功后，再按相同宿主和契约扩展搜索、历史和收藏。
+
+最终架构目标可以概括为：
+
+> **视觉上尽可能全局可定制，业务上保持原生可信；页面可替换，核心不失控；每页可失败，整机仍可用。**

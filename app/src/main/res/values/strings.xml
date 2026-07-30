@@ -521,6 +521,13 @@
     <string name="site_health_reason_detail_failed">Detail failed</string>
     <string name="site_health_reason_play_failed">Playback failed</string>
     <string name="setting_web_home_extension">WebHome extensions</string>
+    <string name="setting_web_home_theme">Global WebHome theme</string>
+    <string name="setting_web_home_theme_eclipse">Eclipse (built-in)</string>
+    <string name="setting_web_home_theme_custom">Custom URL</string>
+    <string name="setting_web_home_theme_url_hint">https://example.com/webhome.html</string>
+    <string name="setting_web_home_theme_invalid_url">Enter an HTTPS WebHome URL</string>
+    <string name="setting_web_home_theme_remote_warning_title">Trust this remote theme?</string>
+    <string name="setting_web_home_theme_remote_warning_message">The remote theme from %1$s runs website code and can request catalog data or trigger permitted app actions. Continue only if you trust its provider.</string>
     <string name="setting_web_home_fullscreen">WebHome homepage fullscreen</string>
     <string name="setting_csp_warmup">CSP warmup</string>
     <string name="setting_csp_warmup_default">Default</string>

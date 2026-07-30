@@ -318,6 +318,7 @@ private int mAudioBackgroundRandomNonce;
     private static final String EXTRA_TMDB_PLAY_FLAG = "tmdb_play_flag";
     private static final String EXTRA_TMDB_PLAY_EPISODE_NAME = "tmdb_play_episode_name";
     private static final String EXTRA_TMDB_PLAY_EPISODE_URL = "tmdb_play_episode_url";
+    private static final String EXTRA_RESUME_FROM_HISTORY = "resume_from_history";
     private static final String EXTRA_TMDB_VOD_CACHE_KEY = "tmdb_vod_cache_key";
     private static final String EXTRA_TMDB_DETAIL_THEME = "tmdb_detail_theme";
     private static final String EXTRA_IMMERSIVE_AUDIO_CACHE_KEY = "immersive_audio_cache_key";
@@ -618,7 +619,7 @@ private int mAudioBackgroundRandomNonce;
             return;
         }
         startDirect(activity, item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic(), item.getVodRemarks(),
-                item.getVodFlag(), item.getVodRemarks(), item.getEpisodeUrl());
+                item.getVodFlag(), item.getVodRemarks(), item.getEpisodeUrl(), true);
     }
 
     public static void startDirect(Activity activity, String key, String id, String name, String pic) {
@@ -667,6 +668,11 @@ private int mAudioBackgroundRandomNonce;
 
     public static void startDirect(Activity activity, String key, String id, String name, String pic, String mark,
             String playFlag, String playEpisodeName, String playEpisodeUrl) {
+        startDirect(activity, key, id, name, pic, mark, playFlag, playEpisodeName, playEpisodeUrl, false);
+    }
+
+    private static void startDirect(Activity activity, String key, String id, String name, String pic, String mark,
+            String playFlag, String playEpisodeName, String playEpisodeUrl, boolean resumeFromHistory) {
         if (AudioActivity.startSite(activity, key, id, name, pic, mark)) return;
         Intent intent = new Intent(activity, VideoActivity.class);
         intent.putExtra("collect", false);
@@ -675,6 +681,7 @@ private int mAudioBackgroundRandomNonce;
         intent.putExtra("pic", pic);
         intent.putExtra("key", key);
         intent.putExtra("id", id);
+        intent.putExtra(EXTRA_RESUME_FROM_HISTORY, resumeFromHistory);
         putIntentPlaybackSelection(intent, playFlag, playEpisodeName, playEpisodeUrl);
         activity.startActivity(intent);
     }
@@ -797,6 +804,10 @@ private int mAudioBackgroundRandomNonce;
 
     private String getIntentPlaybackEpisodeUrl() {
         return Objects.toString(getIntent().getStringExtra(EXTRA_TMDB_PLAY_EPISODE_URL), "");
+    }
+
+    private boolean isResumeFromHistory() {
+        return getIntent().getBooleanExtra(EXTRA_RESUME_FROM_HISTORY, false);
     }
 
     private String getTmdbVodCacheKey() {
@@ -1008,6 +1019,10 @@ private int mAudioBackgroundRandomNonce;
         if (TextUtils.isEmpty(id) || id.equals(oldId) && key.equals(oldKey)) return;
         mBinding.swipeLayout.setRefreshing(true);
         saveHistory();
+        getIntent().removeExtra(EXTRA_TMDB_PLAY_FLAG);
+        getIntent().removeExtra(EXTRA_TMDB_PLAY_EPISODE_NAME);
+        getIntent().removeExtra(EXTRA_TMDB_PLAY_EPISODE_URL);
+        getIntent().removeExtra(EXTRA_RESUME_FROM_HISTORY);
         getIntent().putExtras(intent);
         if (mTmdbUIAdapter != null) mTmdbUIAdapter.beginDetailRequest();
         setOrient();
@@ -3538,10 +3553,13 @@ private int mAudioBackgroundRandomNonce;
         Flag flag = findIntentPlaybackFlag(item.getFlags(), playFlag, playUrl);
         if (flag == null) return;
         Episode episode = findIntentPlaybackEpisode(flag, playName, playUrl);
-        // 跨源续播：线路名与剧集 URL 在不同源必然不同，只按集名判断是否同一集，避免误判换集而重置进度。
+        // 仅历史入口和跨源续播允许 URL 刷新后按集名/集号恢复；普通显式选集仍按 URL 严格匹配。
         boolean crossSource = mHistory.isCrossSourcePlayback();
+        boolean tolerantResume = crossSource || isResumeFromHistory();
         boolean sameFlag = crossSource || TextUtils.equals(mHistory.getVodFlag(), flag.getFlag());
-        boolean sameEpisode = episode != null && (crossSource ? (episode.matchesName(mHistory.getEpisode()) || episode.matchesNumber(mHistory.getEpisode())) : episode.matches(mHistory.getEpisode()));
+        boolean sameEpisode = episode != null && (tolerantResume
+                ? episode.matchesPlayback(mHistory.getEpisode())
+                : episode.matches(mHistory.getEpisode()));
         if (!sameFlag || (episode != null && !sameEpisode)) {
             mHistory.setPosition(C.TIME_UNSET);
             mHistory.setDuration(C.TIME_UNSET);
@@ -3610,9 +3628,8 @@ private int mAudioBackgroundRandomNonce;
     }
 
     private void updateHistory(Episode item) {
-        // 换线路时同一集在不同线路的 URL 与集名格式往往不同（如“第9集”与“[277.1MB] 9. xxx”），
-        // 仅靠 URL/集名严格比对会误判为换集而清空进度；补充集号匹配（与 seamless 的找集逻辑同源）。
-        boolean sameEpisode = item.matches(mHistory.getEpisode()) || item.matchesName(mHistory.getEpisode()) || item.matchesNumber(mHistory.getEpisode());
+        // 换线路或源站刷新时同一集的 URL、集名格式可能变化，统一按播放恢复规则识别。
+        boolean sameEpisode = item.matchesPlayback(mHistory.getEpisode());
         boolean sameFlag = TextUtils.equals(mHistory.getVodFlag(), getFlag().getFlag());
         if (!sameEpisode || !sameFlag) mIntroSkipPlayback.reset();
         if ((!sameEpisode || !sameFlag) && service() != null) {

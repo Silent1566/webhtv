@@ -44,6 +44,7 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
+import androidx.lifecycle.Lifecycle;
 import androidx.media3.common.C;
 import androidx.media3.common.MediaMetadata;
 import androidx.media3.common.Player;
@@ -139,6 +140,7 @@ import com.fongmi.android.tv.ui.dialog.TrackDialog;
 import com.fongmi.android.tv.ui.helper.DetailThemeVisibility;
 import com.fongmi.android.tv.ui.helper.EpisodeRangePolicy;
 import com.fongmi.android.tv.ui.helper.EpisodeSeasonPolicy;
+import com.fongmi.android.tv.ui.helper.PipExitDecision;
 import com.fongmi.android.tv.ui.helper.PlayerControlFocusHelper;
 import com.fongmi.android.tv.ui.helper.TmdbCinemaTheme;
 import com.fongmi.android.tv.ui.helper.TmdbDetailLabels;
@@ -8335,6 +8337,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         inlinePiPSourceFrozen = true;
         // 不再 reparent：playerPanel 常驻 root，PiP 时直接铺满
         applyInlinePlayerFullscreenLayout();
+        binding.playerPanel.setTranslationY(0f);
         binding.playerPanel.setTranslationZ(32f);
         binding.playerPanel.setVisibility(View.VISIBLE);
         binding.playerPanel.setRadius(0);
@@ -8946,6 +8949,16 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         updateInlineButtons(service() != null && player() != null && !player().isEmpty() && player().isPlaying());
         updateInlineDisplayPanel();
         updateDetailThemeButtonVisibility();
+        App.post(this::finishIfInlinePipClosed, 0);
+    }
+
+    private void finishIfInlinePipClosed() {
+        boolean atLeastStarted = getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.STARTED);
+        if (!PipExitDecision.shouldFinishAfterPipExit(atLeastStarted, isFinishing(), isDestroyed())) return;
+        saveInlineHistory();
+        stopInlinePlaybackSync();
+        inlineStarted = false;
+        finishPlayback();
     }
 
     @Override

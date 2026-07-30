@@ -144,6 +144,17 @@ public class Episode implements Parcelable, Diffable<Episode> {
         return matchesName(other);
     }
 
+    /**
+     * 播放恢复时判断是否仍是同一集。源站刷新后 URL 可能变化，
+     * 因此在严格 URL 匹配失败时回退到集名和集号。
+     */
+    public boolean matchesPlayback(Episode other) {
+        if (other == null) return false;
+        if (!isEmpty(getUrl()) && !isEmpty(other.getUrl()) && getUrl().equals(other.getUrl())) return true;
+        if (!isEmpty(getName()) && !isEmpty(other.getName()) && matchesName(other)) return true;
+        return matchesNumber(other);
+    }
+
     private boolean isEmpty(String value) {
         return value == null || value.length() == 0;
     }

@@ -537,6 +537,30 @@ public class Setting {
         Prefers.put("web_home_extension", extension);
     }
 
+    public static boolean isWebHomeThemeEnabled() {
+        return Prefers.getBoolean("web_home_theme_enabled");
+    }
+
+    public static void putWebHomeThemeEnabled(boolean enabled) {
+        Prefers.put("web_home_theme_enabled", enabled);
+    }
+
+    public static String getWebHomeThemeUrl() {
+        return Prefers.getString("web_home_theme_url", "file:///android_asset/webhome/eclipse.html");
+    }
+
+    public static void putWebHomeThemeUrl(String url) {
+        Prefers.put("web_home_theme_url", url);
+    }
+
+    public static String getWebHomeThemeTrustedUrl() {
+        return Prefers.getString("web_home_theme_trusted_url");
+    }
+
+    public static void putWebHomeThemeTrustedUrl(String url) {
+        Prefers.put("web_home_theme_trusted_url", url);
+    }
+
     public static boolean isWebHomeFullscreen() {
         return Prefers.getBoolean("web_home_fullscreen", true);
     }

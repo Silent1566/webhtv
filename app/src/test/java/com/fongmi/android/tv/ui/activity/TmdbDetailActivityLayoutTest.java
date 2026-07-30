@@ -1968,6 +1968,37 @@ public class TmdbDetailActivityLayoutTest {
     }
 
     @Test
+    public void mobileInlinePipClearsEmbeddedOffsetAndStopsPlaybackWhenClosed() throws Exception {
+        Path activityPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
+        String activity = new String(Files.readAllBytes(activityPath), StandardCharsets.UTF_8);
+
+        int enterPipLayout = activity.indexOf("private void enterInlinePiPLayout()");
+        int exitPipLayout = activity.indexOf("private void exitInlinePiPLayout()", enterPipLayout);
+        int onPipChanged = activity.indexOf("public void onPictureInPictureModeChanged(");
+        int onPipChangedEnd = activity.indexOf("protected boolean onSourceHttpError", onPipChanged);
+        int finishClosedPip = activity.indexOf("private void finishIfInlinePipClosed()");
+        int finishClosedPipEnd = activity.indexOf("protected boolean onSourceHttpError", finishClosedPip);
+
+        assertTrue(activityPath + " is missing enterInlinePiPLayout", enterPipLayout >= 0 && exitPipLayout > enterPipLayout);
+        assertTrue(activityPath + " is missing onPictureInPictureModeChanged", onPipChanged >= 0 && onPipChangedEnd > onPipChanged);
+        assertTrue(activityPath + " is missing finishIfInlinePipClosed", finishClosedPip >= 0 && finishClosedPipEnd > finishClosedPip);
+
+        String enterBody = activity.substring(enterPipLayout, exitPipLayout);
+        String pipChangedBody = activity.substring(onPipChanged, onPipChangedEnd);
+        String finishBody = activity.substring(finishClosedPip, finishClosedPipEnd);
+        assertTrue("PiP layout must clear the portrait embedded translation so the video stays centered in the system window",
+                enterBody.contains("binding.playerPanel.setTranslationY(0f);"));
+        assertTrue("leaving PiP must defer close detection until the Activity lifecycle settles",
+                pipChangedBody.contains("App.post(this::finishIfInlinePipClosed, 0);"));
+        assertTrue("closing PiP must save progress, stop inline synchronization, and release playback while expanding keeps it alive",
+                finishBody.contains("getLifecycle().getCurrentState().isAtLeast(Lifecycle.State.STARTED)")
+                        && finishBody.contains("PipExitDecision.shouldFinishAfterPipExit(")
+                        && finishBody.contains("saveInlineHistory();")
+                        && finishBody.contains("stopInlinePlaybackSync();")
+                        && finishBody.contains("finishPlayback();"));
+    }
+
+    @Test
     public void inlinePlayerScaleSurvivesPlayerCoreRebuild() throws Exception {
         String activity = readJava("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java");
         int setScale = activity.indexOf("private void setInlineScale(int scale)");
