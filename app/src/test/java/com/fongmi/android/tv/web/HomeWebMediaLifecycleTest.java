@@ -7,6 +7,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 public class HomeWebMediaLifecycleTest {
@@ -55,6 +56,21 @@ public class HomeWebMediaLifecycleTest {
 
         assertTrue(ordered(destroy, "destroyed = true;", "cancelPendingNativePlaybacks();"));
         assertTrue(ordered(destroy, "cancelPendingNativePlaybacks();", "webView.destroy();"));
+    }
+
+    @Test
+    public void remoteRequestGateKeepsUntrustedWorkOutOfTheSharedQueue() {
+        HomeWebController.RemoteRequestGate gate = new HomeWebController.RemoteRequestGate(2);
+
+        assertTrue(gate.tryAcquire());
+        assertTrue(gate.tryAcquire());
+        assertFalse(gate.tryAcquire());
+        gate.release();
+        assertTrue(gate.tryAcquire());
+        gate.release();
+        gate.release();
+        gate.release();
+        assertEquals(0, gate.inFlight());
     }
 
     private static void assertNativeRoutePausesMedia(String source, String start, String end) {

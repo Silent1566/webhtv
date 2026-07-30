@@ -10,6 +10,7 @@ import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.databinding.FragmentSettingPersonalBinding;
+import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.setting.AutoBackupPolicy;
 import com.fongmi.android.tv.setting.GroupRuleConfig;
 import com.fongmi.android.tv.setting.PlayerSetting;
@@ -57,6 +58,7 @@ public class SettingPersonalFragment extends BaseFragment {
         mBinding.autoBackup.setOnClickListener(this::setAutoBackup);
         mBinding.playBackToDetail.setOnClickListener(this::setPlayBackToDetail);
         mBinding.episodeHistory.setOnClickListener(this::setEpisodeHistory);
+        mBinding.historyAggregation.setOnClickListener(this::setHistoryAggregation);
         mBinding.playSpeed.setOnClickListener(this::setPlaySpeed);
         mBinding.tmdbMatchMode.setOnClickListener(this::setTmdbMatchMode);
         mBinding.personalRecommendation.setOnClickListener(this::setPersonalRecommendation);
@@ -73,6 +75,8 @@ public class SettingPersonalFragment extends BaseFragment {
         mBinding.autoBackupText.setText(getSwitch(isAutoBackupEnabled()));
         mBinding.playBackToDetailText.setText(getSwitch(Setting.isPlayBackToDetail()));
         mBinding.episodeHistoryText.setText(getSwitch(Setting.isEpisodeHistory()));
+        mBinding.historyAggregation.setVisibility(Setting.isTmdbReady() ? View.VISIBLE : View.GONE);
+        mBinding.historyAggregationText.setText(getSwitch(Setting.isHistoryAggregationByTmdb()));
         mBinding.playSpeedText.setText(getSpeedText(PlayerSetting.getDefaultSpeed()));
         mBinding.tmdbMatchModeText.setText((tmdbMatchMode = getResources().getStringArray(R.array.select_tmdb_match_mode))[Setting.getTmdbMatchMode()]);
         mBinding.personalRecommendationText.setText(getSwitch(Setting.isPersonalRecommendation()));
@@ -134,6 +138,12 @@ public class SettingPersonalFragment extends BaseFragment {
         setText();
     }
 
+    private void setHistoryAggregation(View view) {
+        Setting.putHistoryAggregationByTmdb(!Setting.isHistoryAggregationByTmdb());
+        RefreshEvent.history();
+        setText();
+    }
+
     private void setPlaySpeed(View view) {
         SpeedSettingDialog.show(requireActivity(), R.string.setting_play_speed, PlayerSetting.getDefaultSpeed(), 0.5f, 5f, 0.25f, value -> {
             PlayerSetting.putDefaultSpeed(value);
@@ -191,6 +201,12 @@ public class SettingPersonalFragment extends BaseFragment {
 
     private void setSearchResultSort(View view) {
         Setting.putSearchResultSort((Setting.getSearchResultSort() + 1) % searchResultSort.length);
+        setText();
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
         setText();
     }
 

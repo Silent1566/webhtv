@@ -75,4 +75,14 @@ public class Migrations {
             database.execSQL("UPDATE History SET speedOverride = 1 WHERE speed > 0 AND ABS(speed - 1.0) > 0.001");
         }
     };
+
+    public static final Migration MIGRATION_38_39 = new Migration(38, 39) {
+        @Override
+        public void migrate(@NonNull SupportSQLiteDatabase database) {
+            database.execSQL("ALTER TABLE History ADD COLUMN tmdbId INTEGER NOT NULL DEFAULT 0");
+            database.execSQL("ALTER TABLE History ADD COLUMN mediaType TEXT DEFAULT ''");
+            database.execSQL("ALTER TABLE History ADD COLUMN legacyKey TEXT DEFAULT ''");
+            database.execSQL("UPDATE History SET legacyKey = `key`");
+        }
+    };
 }

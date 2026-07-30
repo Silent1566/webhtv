@@ -64,6 +64,47 @@ public class HistoryPlaybackTest {
     }
 
     @Test
+    public void playbackEpisodeMatchAcceptsRefreshedUrlForSameEpisode() {
+        Episode saved = Episode.create("第9集", "old-url");
+        Episode refreshed = Episode.create("第9集", "new-url");
+
+        assertTrue(refreshed.matchesPlayback(saved));
+    }
+
+    @Test
+    public void ordinaryEpisodeMatchStaysUrlStrictWhilePlaybackResumeIsTolerant() {
+        Episode saved = Episode.create("第9集", "old-url");
+        Episode refreshed = Episode.create("第9集", "new-url");
+
+        assertFalse(refreshed.matches(saved));
+        assertTrue(refreshed.matchesPlayback(saved));
+    }
+
+    @Test
+    public void playbackEpisodeMatchRejectsBlankIdentityWithDifferentUrls() {
+        Episode saved = Episode.create("", "old-url");
+        Episode unrelated = Episode.create("", "new-url");
+
+        assertFalse(unrelated.matchesPlayback(saved));
+    }
+
+    @Test
+    public void playbackEpisodeMatchAcceptsSameEpisodeNumberAcrossLabels() {
+        Episode saved = Episode.create("第9集", "old-url");
+        Episode refreshed = Episode.create("[277.1MB] 9. xxx", "new-url");
+
+        assertTrue(refreshed.matchesPlayback(saved));
+    }
+
+    @Test
+    public void playbackEpisodeMatchRejectsDifferentEpisode() {
+        Episode saved = Episode.create("第9集", "old-url");
+        Episode different = Episode.create("第10集", "new-url");
+
+        assertFalse(different.matchesPlayback(saved));
+    }
+
+    @Test
     public void findPlaybackCandidateCopiesSyncedProgressToRequestedKey() {
         History synced = history("site@@vod@@1", "武神主宰", "第2集", "url-2", 120_000, 300_000);
         Flag flag = flag(Episode.create("第1集", "url-1"), Episode.create("第2集", "url-2"));

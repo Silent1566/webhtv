@@ -73,7 +73,7 @@ public class VodConfig extends BaseConfig {
     }
 
     public static void load(Config config, Callback callback) {
-        get().clear().config(config).load(callback);
+        get().clear("vod-config-load").config(config).load(callback);
     }
 
     public VodConfig init() {
@@ -86,6 +86,10 @@ public class VodConfig extends BaseConfig {
     }
 
     public VodConfig clear() {
+        return clear("vod-config-clear");
+    }
+
+    public VodConfig clear(String reason) {
         ads = null;
         doh = null;
         home = null;
@@ -97,7 +101,7 @@ public class VodConfig extends BaseConfig {
         hlsRules = null;
         parses = null;
         WebHomeExtensionRegistry.get().setGlobalSources(null, "");
-        BaseLoader.get().clear();
+        BaseLoader.get().clear(reason);
         RuleConfig.get().invalidate();
         HlsRuleConfig.invalidate();
         GroupRuleConfig.setInterfaceRules(List.of());

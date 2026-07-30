@@ -94,7 +94,7 @@ class SystemSimplePlayer extends SimpleBasePlayer implements MediaPlayer.OnPrepa
                 .setAvailableCommands(COMMANDS)
                 .setPlayWhenReady(playWhenReady, Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)
                 .setPlaybackState(playbackState)
-                .setIsLoading(loading)
+                .setIsLoading(SystemPlayerState.loadingFor(playbackState, loading))
                 .setPlayerError(playerError)
                 .setRepeatMode(repeatOne ? Player.REPEAT_MODE_ONE : Player.REPEAT_MODE_OFF)
                 .setPlaybackParameters(playbackParameters)
@@ -129,6 +129,7 @@ class SystemSimplePlayer extends SimpleBasePlayer implements MediaPlayer.OnPrepa
         mediaItem = mediaItems.isEmpty() ? null : mediaItems.get(0);
         pendingSeekPositionMs = mediaItem != null && startPositionMs > 0 ? startPositionMs : C.TIME_UNSET;
         playbackState = Player.STATE_IDLE;
+        loading = false;
         playerError = null;
         return Futures.immediateVoidFuture();
     }
@@ -149,6 +150,7 @@ class SystemSimplePlayer extends SimpleBasePlayer implements MediaPlayer.OnPrepa
     protected ListenableFuture<?> handleRemoveMediaItems(int fromIndex, int toIndex) {
         mediaItem = null;
         playbackState = Player.STATE_IDLE;
+        loading = false;
         return Futures.immediateVoidFuture();
     }
 

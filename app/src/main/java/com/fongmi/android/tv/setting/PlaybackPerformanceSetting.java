@@ -343,7 +343,7 @@ public class PlaybackPerformanceSetting {
         return "配置：" + getProfileName()
                 + "\n渲染：" + (PlayerSetting.getRender() == PlayerSetting.RENDER_SURFACE ? "SurfaceView" : "TextureView")
                 + "\n轨道限制：" + onOff(isTrackLimitEnabled()) + "，自适应降级：" + onOff(isAdaptiveDowngradeEnabled())
-                + "\n缓冲：" + PlayerSetting.getBuffer() + "/10，容量：" + bufferBytesText() + "，回退：" + backBufferText()
+                + "\n缓冲：" + PlayerSetting.getBuffer() + "/15，容量：" + bufferBytesText() + "，回退：" + backBufferText()
                 + bufferWatermarksText()
                 + "\n播放缓存：" + playCacheText()
                 + preloadDetailText()

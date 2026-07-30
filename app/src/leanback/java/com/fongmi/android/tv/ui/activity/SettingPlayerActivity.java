@@ -101,6 +101,7 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
         mBinding.scaleText.setText((scale = ResUtil.getStringArray(R.array.select_scale))[PlayerSetting.getScale()]);
         mBinding.lutText.setText(LutSetting.getSummary());
         setMpvRows();
+        setFfmpegModeVisibility();
         mBinding.renderText.setText((render = ResUtil.getStringArray(R.array.select_render))[PlayerSetting.getRender()]);
         mBinding.captionText.setText((caption = ResUtil.getStringArray(R.array.select_caption))[PlayerSetting.isCaption() ? 1 : 0]);
         hidePerformanceRows();
@@ -172,6 +173,7 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
         mBinding.kernelText.setText(kernel[index]);
         PlayerSetting.putPlayer(index);
         setMpvRows();
+        setFfmpegModeVisibility();
         setPerformanceText();
     }
 
@@ -191,6 +193,11 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
         mBinding.mpvRender.setVisibility(visible ? View.VISIBLE : View.GONE);
         mBinding.mpvConfigText.setText(MpvConfigStore.summary());
         mBinding.mpvRenderText.setText(getMpvRenderText());
+    }
+
+    private void setFfmpegModeVisibility() {
+        boolean visible = PlayerSetting.getPlayer() == PlayerSetting.EXO;
+        mBinding.ffmpegMode.setVisibility(visible ? View.VISIBLE : View.GONE);
     }
 
     private void setMpvRender(View view) {
@@ -454,16 +461,16 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
     }
 
     private void setFfmpegMode(View view) {
-        int mode = (PlayerSetting.getFFmpegMode() + 1) % 3;
+        int mode = (PlayerSetting.getFFmpegMode() + 1) % 4;
         PlayerSetting.putFFmpegMode(mode);
         mBinding.ffmpegModeText.setText(getFFmpegModeText());
     }
 
     private String getFFmpegModeText() {
         return switch (PlayerSetting.getFFmpegMode()) {
-            case 0 -> "NextLib";
-            case 1 -> "Official";
-            case 2 -> "Simple";
+            case PlayerSetting.FFMPEG_MODE_OFFICIAL -> "Official";
+            case PlayerSetting.FFMPEG_MODE_SIMPLE -> "Simple";
+            case PlayerSetting.FFMPEG_MODE_AUTO -> "自动";
             default -> "NextLib";
         };
     }

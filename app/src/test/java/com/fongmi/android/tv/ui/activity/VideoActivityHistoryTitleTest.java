@@ -23,8 +23,8 @@ public class VideoActivityHistoryTitleTest {
 
             assertTrue(sourcePath + " must persist the displayed/scraped title for intent-selected episodes",
                     intentSelection.contains("mHistory.setVodRemarks(getHistoryEpisodeName(episode));"));
-            assertTrue(sourcePath + " must compare episodes by URL before falling back to source names",
-                    updateHistory.contains("item.matches(mHistory.getEpisode())"));
+            assertTrue(sourcePath + " must compare episodes by URL before falling back to source names or numbers",
+                    updateHistory.contains("item.matchesPlayback(mHistory.getEpisode())"));
             assertTrue(sourcePath + " must persist the displayed/scraped title whenever playback changes episodes",
                     updateHistory.contains("mHistory.setVodRemarks(getHistoryEpisodeName(item));"));
             assertTrue(sourcePath + " must keep position-cache keys on stable source episode names when saving",

@@ -54,6 +54,7 @@ public class SettingPersonalActivity extends BaseActivity {
     protected void initView(Bundle savedInstanceState) {
         mBinding.homeVodAutoLoad.requestFocus();
         setText();
+        updateHistoryAggregationVisibility();
     }
 
     @Override
@@ -65,6 +66,7 @@ public class SettingPersonalActivity extends BaseActivity {
         mBinding.homeMenuKey.setOnClickListener(this::setHomeMenuKey);
         mBinding.playBackToDetail.setOnClickListener(this::setPlayBackToDetail);
         mBinding.episodeHistory.setOnClickListener(this::setEpisodeHistory);
+        mBinding.historyAggregation.setOnClickListener(this::setHistoryAggregation);
         mBinding.playSpeed.setOnClickListener(this::setPlaySpeed);
         mBinding.tmdbMatchMode.setOnClickListener(this::setTmdbMatchMode);
         mBinding.personalRecommendation.setOnClickListener(this::setPersonalRecommendation);
@@ -77,6 +79,12 @@ public class SettingPersonalActivity extends BaseActivity {
         // mBinding.searchColumn.setOnClickListener(this::setSearchColumn); // 在搜索页面切换更方便
     }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+        setText();
+    }
+
     private void setText() {
         mBinding.homeVodAutoLoadText.setText(getSwitch(Setting.isHomeVodAutoLoad()));
         mBinding.autoBackupText.setText(getSwitch(isAutoBackupEnabled()));
@@ -85,6 +93,8 @@ public class SettingPersonalActivity extends BaseActivity {
         mBinding.homeMenuKeyText.setText((homeMenuKey = getResources().getStringArray(R.array.select_home_menu_key))[Setting.getHomeMenuKey()]);
         mBinding.playBackToDetailText.setText(getSwitch(Setting.isPlayBackToDetail()));
         mBinding.episodeHistoryText.setText(getSwitch(Setting.isEpisodeHistory()));
+        mBinding.historyAggregation.setVisibility(Setting.isTmdbReady() ? View.VISIBLE : View.GONE);
+        mBinding.historyAggregationText.setText(getSwitch(Setting.isHistoryAggregationByTmdb()));
         mBinding.playSpeedText.setText(getSpeedText(PlayerSetting.getDefaultSpeed()));
         mBinding.tmdbMatchModeText.setText((tmdbMatchMode = getResources().getStringArray(R.array.select_tmdb_match_mode))[Setting.getTmdbMatchMode()]);
         mBinding.personalRecommendationText.setText(getSwitch(Setting.isPersonalRecommendation()));
@@ -156,6 +166,16 @@ public class SettingPersonalActivity extends BaseActivity {
     private void setEpisodeHistory(View view) {
         Setting.putEpisodeHistory(!Setting.isEpisodeHistory());
         setText();
+    }
+
+    private void setHistoryAggregation(View view) {
+        Setting.putHistoryAggregationByTmdb(!Setting.isHistoryAggregationByTmdb());
+        RefreshEvent.history();
+        setText();
+    }
+
+    private void updateHistoryAggregationVisibility() {
+        mBinding.historyAggregation.setVisibility(Setting.isTmdbReady() ? View.VISIBLE : View.GONE);
     }
 
     private void setPlaySpeed(View view) {

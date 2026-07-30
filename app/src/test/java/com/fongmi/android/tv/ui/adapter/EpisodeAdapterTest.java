@@ -52,6 +52,21 @@ public class EpisodeAdapterTest {
     }
 
     @Test
+    public void mobileNativeEpisodeGridPreservesUpstreamTextWidth() throws Exception {
+        String gridLayout = read(findMobileResPath().resolve(Path.of("layout", "adapter_episode_grid.xml")));
+        String gridHolder = read(findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "holder", "EpisodeGridHolder.java")));
+        Element root = parseLayout(gridLayout);
+
+        assertTrue("native episode rows must not inherit the TMDB card margin",
+                androidAttribute(root, "layout_margin").isEmpty());
+        assertTrue("TMDB card spacing must be applied only when card mode is active",
+                gridHolder.contains("int margin = useTmdbCard ? cardMargin : 0;")
+                        && gridHolder.contains("marginParams.setMargins(margin, margin, margin, margin);"));
+        assertTrue("inactive native episode labels must preserve the episode suffix like upstream",
+                gridHolder.contains("focused ? TextUtils.TruncateAt.MARQUEE : TextUtils.TruncateAt.START"));
+    }
+
+    @Test
     public void leanbackTmdbEpisodeCardsBindFileSizeBadge() throws Exception {
         String adapter = read(findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "adapter", "EpisodeAdapter.java")));
         String layout = read(findLeanbackResPath().resolve(Path.of("layout", "adapter_episode_card.xml")));

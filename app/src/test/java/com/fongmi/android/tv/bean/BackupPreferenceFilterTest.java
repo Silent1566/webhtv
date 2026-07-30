@@ -30,7 +30,12 @@ public class BackupPreferenceFilterTest {
         SyncOptions settingsOnly = new SyncOptions().config(false).spider(false).webHome(false).settings(true);
 
         assertFalse(Backup.include("web_home_fullscreen", webHomeOnly));
+        assertFalse(Backup.include("web_home_theme_enabled", webHomeOnly));
+        assertFalse(Backup.include("web_home_theme_url", webHomeOnly));
         assertTrue(Backup.include("web_home_fullscreen", settingsOnly));
+        assertTrue(Backup.include("web_home_theme_enabled", settingsOnly));
+        assertTrue(Backup.include("web_home_theme_url", settingsOnly));
+        assertFalse(Backup.include("web_home_theme_trusted_url", settingsOnly));
     }
 
     @Test

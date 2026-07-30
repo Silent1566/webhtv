@@ -18,13 +18,17 @@ import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.impl.Diffable;
 import com.fongmi.android.tv.setting.PlayerSetting;
+import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.utils.Util;
 import com.google.gson.annotations.SerializedName;
 import com.google.gson.reflect.TypeToken;
 
 import java.lang.reflect.Type;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
@@ -85,6 +89,15 @@ public class History implements Diffable<History> {
     private String director;
     @SerializedName("year")
     private String year;
+    @SerializedName("tmdbId")
+    @ColumnInfo(defaultValue = "0")
+    private int tmdbId;
+    @SerializedName("mediaType")
+    @ColumnInfo(defaultValue = "")
+    private String mediaType;
+    @SerializedName("legacyKey")
+    @ColumnInfo(defaultValue = "")
+    private String legacyKey;
 
     private transient int player = PlayerSetting.NONE;
     private transient long updateTime;
@@ -124,6 +137,9 @@ public class History implements Diffable<History> {
         item.actor = actor;
         item.director = director;
         item.year = year;
+        item.tmdbId = tmdbId;
+        item.mediaType = mediaType;
+        item.legacyKey = legacyKey;
         item.player = player;
         item.updateTime = updateTime;
         item.playbackSourceKey = playbackSourceKey;
@@ -145,7 +161,32 @@ public class History implements Diffable<History> {
     }
 
     public static List<History> get(int cid) {
-        return AppDatabase.get().getHistoryDao().find(cid);
+        List<History> items = AppDatabase.get().getHistoryDao().find(cid);
+        if (Setting.isHistoryAggregationEffective()) {
+            return deduplicateByTmdbId(items);
+        }
+        return items;
+    }
+
+    private static List<History> deduplicateByTmdbId(List<History> items) {
+        // 整剧级折叠：同一 tmdbId 的多源记录合并为一条，保留最近播放的那条（含其集名/进度）。
+        // 这样跨源看同一部剧在「最近观看」只显示一张卡，展示全剧最新进度，而非每集/每源各一张。
+        Map<Integer, History> tmdbMap = new HashMap<>();
+        List<History> result = new ArrayList<>();
+        for (History item : items) {
+            if (item.getTmdbId() > 0) {
+                int key = item.getTmdbId();
+                History existing = tmdbMap.get(key);
+                if (existing == null || item.getCreateTime() > existing.getCreateTime()) {
+                    tmdbMap.put(key, item);
+                }
+            } else {
+                result.add(item);
+            }
+        }
+        result.addAll(tmdbMap.values());
+        Collections.sort(result, (a, b) -> Long.compare(b.getCreateTime(), a.getCreateTime()));
+        return result;
     }
 
     public static History find(String key) {
@@ -157,6 +198,17 @@ public class History implements Diffable<History> {
     }
 
     public static History findPlayback(String key, List<String> vodNames, List<Flag> flags) {
+        return findPlayback(key, vodNames, flags, 0);
+    }
+
+    /**
+     * @param explicitTmdbId 调用方（如从 TMDB 详情进入播放）已知的 TMDB ID，>0 时优先用它跨源查找，
+     *                       避免依赖尚未完成的异步匹配缓存。
+     */
+    public static History findPlayback(String key, List<String> vodNames, List<Flag> flags, int explicitTmdbId) {
+        // 聚合模式：优先按 TMDB ID 跨源查找最新历史，命中则复用该记录并切换到当前 key。
+        History aggregated = findPlaybackByTmdb(key, vodNames, flags, explicitTmdbId);
+        if (aggregated != null) return aggregated;
         History history = find(key);
         if (history != null) return history;
         if (vodNames != null) {
@@ -167,6 +219,48 @@ public class History implements Diffable<History> {
             }
         }
         return null;
+    }
+
+    /**
+     * 聚合模式下按 TMDB ID 跨源查找历史。
+     * 优先用调用方传入的 explicitTmdbId，其次从 key/剧名解析。
+     * 命中当前 key 自身记录时直接返回；否则走 findPlaybackCandidate 做跨源剧集匹配
+     * （按剧集名/URL 对齐源 B 的线路与集数），仅复用可续播的进度。
+     */
+    private static History findPlaybackByTmdb(String key, List<String> vodNames, List<Flag> flags, int explicitTmdbId) {
+        if (!Setting.isHistoryAggregationEffective()) return null;
+        int tmdbId = explicitTmdbId > 0 ? explicitTmdbId : resolveTmdbId(key, vodNames);
+        if (tmdbId <= 0) return null;
+        List<History> list = AppDatabase.get().getHistoryDao().findByTmdbId(VodConfig.getCid(), tmdbId);
+        if (list.isEmpty()) return null;
+        // 整剧级统一进度：不再因当前 key 命中自身记录就直接返回该源旧进度，
+        // 统一交给 findPlaybackCandidate 在全部同剧记录中选「最近可续播」的那条
+        // （list 已按 createTime DESC 排序），使回到任一源都续到全剧最新进度。
+        return findPlaybackCandidate(key, list, flags);
+    }
+
+    /**
+     * 从 key（siteKey@@@vodId）与候选剧名解析 TMDB ID。
+     * 优先读当前 key 已存历史记录里的 tmdbId（来自 DB，可靠），
+     * 未命中再回退到 TmdbMatchCache 按 siteKey/vodId/名称查询（异步匹配可能尚未完成）。
+     */
+    private static int resolveTmdbId(String key, List<String> vodNames) {
+        if (TextUtils.isEmpty(key)) return 0;
+        History existing = find(key);
+        if (existing != null && existing.getTmdbId() > 0) return existing.getTmdbId();
+        String[] parts = key.split(AppDatabase.SYMBOL);
+        if (parts.length < 2) return 0;
+        String siteKey = parts[0];
+        String vodId = parts[1];
+        TmdbMatchCache cache = Setting.getTmdbMatchCache();
+        if (vodNames != null) {
+            for (String vodName : vodNames) {
+                TmdbItem item = cache.find(siteKey, vodId, vodName);
+                if (item != null && item.getTmdbId() > 0) return item.getTmdbId();
+            }
+        }
+        TmdbItem item = cache.find(siteKey, vodId);
+        return item != null ? item.getTmdbId() : 0;
     }
 
     public static List<History> findByName(String name) {
@@ -230,7 +324,16 @@ public class History implements Diffable<History> {
         String episodeUrl = item.getEpisodeUrl();
         if (!episodeUrl.isEmpty() && episodeUrl.equals(episode.getUrl())) return true;
         String remarks = item.getVodRemarks();
-        return !remarks.isEmpty() && (remarks.equalsIgnoreCase(episode.getName()) || remarks.equals(episode.getDisplayName()));
+        boolean match = !remarks.isEmpty() && (remarks.equalsIgnoreCase(episode.getName()) || remarks.equals(episode.getDisplayName()));
+        if (!match) {
+            // 跨源同剧集名格式常不同（如「第2集」与「2. 众人在燕歌坊遇刺客」），严格比对会失败，
+            // 退化到源自身旧记录。此处所有候选同属一个 tmdbId（同一部剧），集号即可靠同集判据，
+            // 故用集号回退匹配，与 Flag.find/Episode.matchesNumber 同源。
+            int itemNumber = com.fongmi.android.tv.utils.Util.getEpisodeNumber(remarks);
+            int episodeNumber = episode.getNumber() > 0 ? episode.getNumber() : com.fongmi.android.tv.utils.Util.getEpisodeNumber(episode.getName());
+            match = itemNumber > 0 && itemNumber == episodeNumber;
+        }
+        return match;
     }
 
     @NonNull
@@ -456,6 +559,30 @@ public class History implements Diffable<History> {
         this.year = year;
     }
 
+    public int getTmdbId() {
+        return tmdbId;
+    }
+
+    public void setTmdbId(int tmdbId) {
+        this.tmdbId = tmdbId;
+    }
+
+    public String getMediaType() {
+        return mediaType == null ? "" : mediaType;
+    }
+
+    public void setMediaType(String mediaType) {
+        this.mediaType = mediaType;
+    }
+
+    public String getLegacyKey() {
+        return legacyKey == null ? "" : legacyKey;
+    }
+
+    public void setLegacyKey(String legacyKey) {
+        this.legacyKey = legacyKey;
+    }
+
     /**
      * 仅在本记录对应字段为空时补齐富集元数据（题材/地区/演员/主创/年份）。
      * 用于老记录重新播放时逐步补全，供观影报告统计使用。避免用空值覆盖已有数据。
@@ -493,6 +620,14 @@ public class History implements Diffable<History> {
         return Episode.create(getVodRemarks(), getEpisodeUrl());
     }
 
+    /**
+     * 是否为跨源聚合复制出的播放记录（key 已切到当前源，但进度沿用自 playbackSourceKey 指向的源）。
+     * 跨源时线路名与剧集 URL 必然不同，判断"是否同一集"应改用集名而非线路/URL。
+     */
+    public boolean isCrossSourcePlayback() {
+        return !TextUtils.isEmpty(playbackSourceKey);
+    }
+
     public int getSiteVisible() {
         return TextUtils.isEmpty(getSiteName()) ? View.GONE : View.VISIBLE;
     }
@@ -526,6 +661,12 @@ public class History implements Diffable<History> {
 
     boolean shouldMerge(History item, boolean force) {
         if (!canMergeByName() || !item.canMergeByName()) return false;
+        // 聚合模式下跨源合并由 tmdbId 统一接管：列表按 tmdbId 折叠（deduplicateByTmdbId），
+        // 续播按 tmdbId 跨源找最新进度（findPlaybackByTmdb）。二者都要求各源记录保留在库中。
+        // 而遗留的 name-merge 会 copyTo(this).delete() 物理删掉同名记录，且 delete() 在聚合模式下
+        // 会按 tmdbId 级联删除（见 delete()），导致同剧的 TMDB 记录与原生记录互相覆盖、进度丢失。
+        // 因此聚合生效时禁用 name-merge，改由 tmdbId 聚合处理，避免破坏跨源续播所需的多源记录。
+        if (Setting.isHistoryAggregationEffective()) return false;
         if (!force && TextUtils.equals(getKey(), item.getKey())) return false;
         if (!force && TextUtils.equals(getKey(), item.playbackSourceKey)) return false;
         if (force) return true;
@@ -595,7 +736,20 @@ public class History implements Diffable<History> {
         return cid(cid).merge(true).save();
     }
 
+    private void enrichTmdbId() {
+        if (tmdbId > 0 || !Setting.isHistoryAggregationEffective()) return;
+        String siteKey = getSiteKey();
+        String vodId = getVodId();
+        if (TextUtils.isEmpty(siteKey) || TextUtils.isEmpty(vodId)) return;
+        TmdbItem item = Setting.getTmdbMatchCache().find(siteKey, vodId, getVodName());
+        if (item != null && item.getTmdbId() > 0) {
+            this.tmdbId = item.getTmdbId();
+            this.mediaType = item.getMediaType();
+        }
+    }
+
     public History save() {
+        enrichTmdbId();
         History before = find(getKey());
         boolean notify = recommendationSignalsChanged(before, this);
         updateTime = System.currentTimeMillis();
@@ -605,8 +759,18 @@ public class History implements Diffable<History> {
     }
 
     public History delete() {
-        boolean deleted = AppDatabase.get().getHistoryDao().delete(VodConfig.getCid(), getKey()) > 0;
-        AppDatabase.get().getTrackDao().delete(getKey());
+        boolean deleted;
+        if (getTmdbId() > 0 && Setting.isHistoryAggregationEffective()) {
+            List<History> relatedItems = AppDatabase.get().getHistoryDao().findByTmdbId(VodConfig.getCid(), getTmdbId());
+            deleted = !relatedItems.isEmpty();
+            for (History item : relatedItems) {
+                AppDatabase.get().getHistoryDao().delete(VodConfig.getCid(), item.getKey());
+                AppDatabase.get().getTrackDao().delete(item.getKey());
+            }
+        } else {
+            deleted = AppDatabase.get().getHistoryDao().delete(VodConfig.getCid(), getKey()) > 0;
+            AppDatabase.get().getTrackDao().delete(getKey());
+        }
         if (deleted) notifyChanged();
         return this;
     }

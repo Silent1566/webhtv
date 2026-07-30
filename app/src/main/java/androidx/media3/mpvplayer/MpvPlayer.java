@@ -144,8 +144,6 @@ public final class MpvPlayer extends SimpleBasePlayer implements MPVLib.EventObs
     private final MpvMediaReplacementCoordinator mediaReplacementCoordinator;
     private final List<String> recentLogs;
     private final List<ParcelFileDescriptor> contentFds;
-    @Nullable
-    private final File subtitleDiagnosticFile;
     private MediaItem mediaItem;
     private SurfaceHolder surfaceHolder;
     private Surface surface;
@@ -216,6 +214,8 @@ public final class MpvPlayer extends SimpleBasePlayer implements MPVLib.EventObs
     private int cachedCacheBufferingState;
     private int surfaceWidth;
     private int surfaceHeight;
+    private int attachedSurfaceWidth = -1;  // -1 means not attached yet
+    private int attachedSurfaceHeight = -1;
     private String attachedVo;
     private String lastFailureLog;
     private int lastEndFileReason;
@@ -257,9 +257,6 @@ public final class MpvPlayer extends SimpleBasePlayer implements MPVLib.EventObs
         hlsProxy = new MpvHlsProxy();
         recentLogs = new ArrayList<>();
         contentFds = new ArrayList<>();
-        File externalFiles = this.context.getExternalFilesDir(null);
-        subtitleDiagnosticFile = externalFiles == null ? null : new File(externalFiles, "mpv-subtitle-debug.log");
-        if (subtitleDiagnosticFile != null && subtitleDiagnosticFile.length() > 2 * 1024 * 1024) subtitleDiagnosticFile.delete();
         playbackParameters = PlaybackParameters.DEFAULT;
         currentTracks = Tracks.EMPTY;
         currentChapters = List.of();
@@ -647,7 +644,6 @@ public final class MpvPlayer extends SimpleBasePlayer implements MPVLib.EventObs
             rememberLog(line);
             markFailureSignal(line);
             String lower = line.toLowerCase(Locale.US);
-            if (lower.contains("sub") || lower.contains("font") || lower.contains("track switched") || lower.contains("mkv: select track")) appendSubtitleDiagnostic("native " + line);
             if (shouldDebugLogMpvLine(line)) PlaybackTrace.log("mpv", playbackTraceId, "%s", line);
         });
     }
@@ -815,7 +811,10 @@ public final class MpvPlayer extends SimpleBasePlayer implements MPVLib.EventObs
         // fontconfig provider. Keep this in native initialization because user configs
         // may replace the bundled defaults.
         setOption("sub-ass", "yes");
-        setOption("sub-ass-override", "yes");
+        // "scale" applies --sub-scale to ASS/SSA subtitles too. With plain "yes",
+        // sub-pos is honored but sub-scale is silently ignored for ASS/SSA, which is
+        // why subtitle position could be adjusted but text size could not.
+        setOption("sub-ass-override", "scale");
         setOption("embeddedfonts", "yes");
         setOption("sub-fix-timing", "yes");
         setOption("sub-use-margins", "yes");
@@ -1013,13 +1012,7 @@ public final class MpvPlayer extends SimpleBasePlayer implements MPVLib.EventObs
             audioTrackManuallySelected = true;
             preferAacApplied = true;
         }
-        if (type == C.TRACK_TYPE_TEXT) logSubtitleState("before-select requested=" + mpvId);
         setMpvTrack(type, mpvId);
-        if (type == C.TRACK_TYPE_TEXT) {
-            logSubtitleState("after-select requested=" + mpvId);
-            mainHandler.postDelayed(() -> logSubtitleState("after-select-100ms requested=" + mpvId), 100);
-            mainHandler.postDelayed(() -> logSubtitleState("after-select-500ms requested=" + mpvId), 500);
-        }
         refreshTracks();
         invalidateState();
     }
@@ -1070,39 +1063,10 @@ public final class MpvPlayer extends SimpleBasePlayer implements MPVLib.EventObs
         try {
             MPVLib.setPropertyString(property, mpvId);
             Log.d(TAG, "set track property=" + property + " requested=" + mpvId + " actual=" + propertyStringOrInt(property));
-            appendSubtitleDiagnostic("set-track property=" + property + " requested=" + mpvId + " actual=" + propertyStringOrInt(property));
         } catch (Throwable e) {
             Log.e(TAG, "set track failed property=" + property + " requested=" + mpvId, e);
-            appendSubtitleDiagnostic("set-track-failed property=" + property + " requested=" + mpvId + " error=" + e);
         }
         SpiderDebug.log("mpv", "select track type=%d property=%s id=%s", type, property, mpvId);
-    }
-
-    private void logSubtitleState(String reason) {
-        if (!initialized) return;
-        String text = stringProperty("sub-text", "");
-        String state = reason
-                + " positionMs=" + cachedPositionMs
-                + " sid=" + propertyStringOrInt("sid")
-                + " currentSub=" + propertyStringOrInt("current-tracks/sub/id")
-                + " visible=" + booleanProperty("sub-visibility", true)
-                + " subStart=" + doubleProperty("sub-start", Double.NaN)
-                + " subEnd=" + doubleProperty("sub-end", Double.NaN)
-                + " textLength=" + text.length()
-                + " text=" + (text.length() > 80 ? text.substring(0, 80) : text);
-        Log.d(TAG, "subtitle-state " + state);
-        appendSubtitleDiagnostic("state " + state);
-    }
-
-    private synchronized void appendSubtitleDiagnostic(String text) {
-        if (subtitleDiagnosticFile == null) return;
-        File parent = subtitleDiagnosticFile.getParentFile();
-        if (parent != null && !parent.exists()) parent.mkdirs();
-        String line = System.currentTimeMillis() + " " + text + "\n";
-        try (OutputStream out = new FileOutputStream(subtitleDiagnosticFile, true)) {
-            out.write(line.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-        } catch (IOException ignored) {
-        }
     }
 
     @Nullable
@@ -1510,11 +1474,56 @@ public final class MpvPlayer extends SimpleBasePlayer implements MPVLib.EventObs
         if (mediaItem == null || mediaItem.localConfiguration == null || mediaItem.localConfiguration.subtitleConfigurations.isEmpty()) return;
         for (MediaItem.SubtitleConfiguration sub : mediaItem.localConfiguration.subtitleConfigurations) {
             Uri uri = sub.uri;
+            String mode = MpvSubtitleSourcePolicy.addMode(sub.selectionFlags);
+            String format = null;
             try {
-                MPVLib.command(new String[]{"sub-add", playableUri(uri), "auto"});
-            } catch (Throwable ignored) {
+                String source = playableSubtitleUri(uri);
+                if (source.startsWith("fd://")) {
+                    format = MpvSubtitleSourcePolicy.lavfFormat(uri == null ? null : uri.toString(), sub.mimeType);
+                    if (!TextUtils.isEmpty(format)) configureSubtitleDemuxer(format);
+                }
+                MPVLib.command(subtitleAddCommand(source, mode, sub.label, sub.language));
+                if ("select".equals(mode) && booleanProperty("sub-visibility", true)) safeSetPropertyBoolean("sub-visibility", true);
+            } catch (Throwable e) {
+                Log.e(TAG, "add external subtitle failed uri=" + uri, e);
+            } finally {
+                if (!TextUtils.isEmpty(format)) resetSubtitleDemuxer();
             }
         }
+    }
+
+    private void configureSubtitleDemuxer(String format) {
+        MPVLib.command(new String[]{"set", "sub-demuxer", "lavf"});
+        MPVLib.command(new String[]{"set", "demuxer-lavf-format", format});
+    }
+
+    private void resetSubtitleDemuxer() {
+        try {
+            MPVLib.command(new String[]{"set", "demuxer-lavf-format", ""});
+        } finally {
+            MPVLib.command(new String[]{"set", "sub-demuxer", ""});
+        }
+    }
+
+    private String playableSubtitleUri(Uri uri) throws IOException {
+        String path = uri == null ? null : uri.getPath();
+        String scheme = uri == null ? null : uri.getScheme();
+        if (!MpvSubtitleSourcePolicy.requiresFileDescriptor(scheme, path)) return playableUri(uri);
+        ParcelFileDescriptor fd = null;
+        try {
+            fd = ParcelFileDescriptor.open(new File(path), ParcelFileDescriptor.MODE_READ_ONLY);
+            contentFds.add(fd);
+            return "fd://" + fd.getFd();
+        } catch (Exception e) {
+            if (fd != null) try { fd.close(); } catch (IOException ignored) {}
+            throw e;
+        }
+    }
+
+    private String[] subtitleAddCommand(String source, String mode, @Nullable String title, @Nullable String language) {
+        if (!TextUtils.isEmpty(language)) return new String[]{"sub-add", source, mode, TextUtils.isEmpty(title) ? "" : title, language};
+        if (!TextUtils.isEmpty(title)) return new String[]{"sub-add", source, mode, title};
+        return new String[]{"sub-add", source, mode};
     }
 
     private void setVideoOutput(Object output) {
@@ -1555,21 +1564,39 @@ public final class MpvPlayer extends SimpleBasePlayer implements MPVLib.EventObs
         if (!initialized || surface == null || !surface.isValid()) return;
         try {
             if (surfaceAttached && attachedSurface == surface) {
-                setRuntimeString("force-window", "yes");
-                applyAndroidSurfaceSize();
-                applySurfaceFrameRate();
-                if (!TextUtils.equals(attachedVo, config.vo())) {
-                    safeSetPropertyString("vo", config.vo());
-                    attachedVo = config.vo();
+                // Re-read holder size on fast-path resize — surfaceChanged may not fire after fullscreen exit
+                boolean sizeValid = surfaceHolder != null && updateSurfaceSize(surfaceHolder);
+                if (!sizeValid) {
+                    Log.w(SIZE_TAG, "mpv fast-path size invalid, force reattach");
+                    detachMpvSurface();
+                    // Fall through to full attach below
+                } else {
+                    // Force full reattach if surface size changed — MPV gpu vo doesn't reliably reconfigure on property-only changes
+                    boolean sizeChanged = attachedSurfaceWidth != surfaceWidth || attachedSurfaceHeight != surfaceHeight;
+                    if (sizeChanged) {
+                        Log.i(SIZE_TAG, "mpv surface size changed " + attachedSurfaceWidth + "x" + attachedSurfaceHeight + " -> " + surfaceWidth + "x" + surfaceHeight + ", reattach");
+                        detachMpvSurface();
+                        // Fall through to full attach below
+                    } else {
+                        setRuntimeString("force-window", "yes");
+                        applyAndroidSurfaceSize();
+                        applySurfaceFrameRate();
+                        if (!TextUtils.equals(attachedVo, config.vo())) {
+                            safeSetPropertyString("vo", config.vo());
+                            attachedVo = config.vo();
+                        }
+                        Log.d(SIZE_TAG, "mpv resize attached surface cached=" + surfaceWidth + "x" + surfaceHeight + " vo=" + config.vo());
+                        SpiderDebug.log("mpv", "surface resized surface=%s size=%dx%d vo=%s", surface, surfaceWidth, surfaceHeight, config.vo());
+                        return;
+                    }
                 }
-                Log.d(SIZE_TAG, "mpv resize attached surface cached=" + surfaceWidth + "x" + surfaceHeight + " vo=" + config.vo());
-                SpiderDebug.log("mpv", "surface resized surface=%s size=%dx%d vo=%s", surface, surfaceWidth, surfaceHeight, config.vo());
-                return;
             }
             if (surfaceAttached) detachMpvSurface();
             MPVLib.attachSurface(surface);
             surfaceAttached = true;
             attachedSurface = surface;
+            attachedSurfaceWidth = surfaceWidth;
+            attachedSurfaceHeight = surfaceHeight;
             setRuntimeString("force-window", "yes");
             applyAndroidSurfaceSize();
             applySurfaceFrameRate();
@@ -1603,6 +1630,8 @@ public final class MpvPlayer extends SimpleBasePlayer implements MPVLib.EventObs
         }
         surfaceAttached = false;
         attachedSurface = null;
+        attachedSurfaceWidth = -1;
+        attachedSurfaceHeight = -1;
         attachedVo = null;
     }
 
@@ -1622,13 +1651,14 @@ public final class MpvPlayer extends SimpleBasePlayer implements MPVLib.EventObs
         Log.d(SIZE_TAG, "mpv updateSurfaceSize view=" + surfaceOutputName(view) + " size=" + surfaceWidth + "x" + surfaceHeight);
     }
 
-    private void updateSurfaceSize(SurfaceHolder holder) {
-        if (holder == null) return;
+    private boolean updateSurfaceSize(SurfaceHolder holder) {
+        if (holder == null) return false;
         Rect frame = holder.getSurfaceFrame();
-        if (frame == null || frame.width() <= 0 || frame.height() <= 0) return;
+        if (frame == null || frame.width() <= 0 || frame.height() <= 0) return false;
         surfaceWidth = frame.width();
         surfaceHeight = frame.height();
         Log.d(SIZE_TAG, "mpv updateSurfaceSize holder frame=" + frame.width() + "x" + frame.height());
+        return true;
     }
 
     private void updateSurfaceSize(int width, int height) {
@@ -3059,6 +3089,12 @@ public final class MpvPlayer extends SimpleBasePlayer implements MPVLib.EventObs
         safeSetPropertyDouble("sub-border-size", style.borderSize);
         safeSetPropertyDouble("sub-shadow-offset", style.shadowOffset);
         safeSetPropertyString("sub-ass-style-overrides", assStyleOverrides(style));
+        // Force MPV to re-render ASS/SSA subtitles with the new sub-scale value.
+        // Toggling sub-visibility triggers layout recalculation. Save and restore
+        // the original state so we don't accidentally enable subtitles if user disabled them.
+        boolean wasVisible = booleanProperty("sub-visibility", true);
+        safeSetPropertyBoolean("sub-visibility", false);
+        safeSetPropertyBoolean("sub-visibility", wasVisible);
     }
 
     private double subtitleScale() {

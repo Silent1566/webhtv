@@ -88,9 +88,11 @@ public class TmdbUIAdapter {
     private boolean personalRefreshLoading;
     private boolean personalAiLoading;
     private boolean loaded;
+    private volatile boolean episodeMetadataLoaded;
     private volatile int loadGeneration;
     private volatile int pendingVodRefreshGeneration;
     private volatile Vod pendingVodRefreshVod;
+    private final java.util.EnumSet<RefreshEvent.Type> pendingVodRefreshTypes = java.util.EnumSet.noneOf(RefreshEvent.Type.class);
     private Runnable pendingStartupBackgroundLoads;
     private PersonalAiUpdateListener personalAiUpdateListener;
 
@@ -116,6 +118,10 @@ public class TmdbUIAdapter {
 
     public boolean isLoaded() {
         return loaded;
+    }
+
+    public boolean isEpisodeMetadataLoaded() {
+        return episodeMetadataLoaded;
     }
 
     public void setPersonalAiUpdateListener(PersonalAiUpdateListener listener) {
@@ -316,31 +322,38 @@ public class TmdbUIAdapter {
         }
         Task.execute(() -> {
             long start = System.currentTimeMillis();
-            if (!isCurrentGeneration(generation)) return;
-            TmdbItem matched = getCachedMatch(vod);
-            if (matched != null) {
-                SpiderDebug.log("tmdb", "auto match cache hit title=%s cost=%dms", matched.getTitle(), System.currentTimeMillis() - start);
-                if (isCachedSplitSeasonMismatch(videoName, vod, matched)) {
-                    SpiderDebug.log("tmdb", "auto match cache skipped split-season variant title=%s id=%d name=%s", matched.getTitle(), matched.getTmdbId(), videoName);
-                    matched = null;
+            try {
+                if (!isCurrentGeneration(generation)) return;
+                TmdbItem matched = getCachedMatch(vod);
+                if (matched != null) {
+                    SpiderDebug.log("tmdb", "auto match cache hit title=%s cost=%dms", matched.getTitle(), System.currentTimeMillis() - start);
+                    if (isCachedSplitSeasonMismatch(videoName, vod, matched)) {
+                        SpiderDebug.log("tmdb", "auto match cache skipped split-season variant title=%s id=%d name=%s", matched.getTitle(), matched.getTmdbId(), videoName);
+                        matched = null;
+                    }
                 }
-            }
-            if (matched == null) {
-                long searchStart = System.currentTimeMillis();
-                matched = searchResolvedMatch(videoName, vod);
-                SpiderDebug.log("tmdb", "auto match search cost=%dms hit=%s name=%s", System.currentTimeMillis() - searchStart, matched != null, videoName);
-            }
-            if (!isCurrentGeneration(generation)) return;
-            if (matched == null) {
-                SpiderDebug.log("tmdb", "auto match miss name=%s total=%dms", videoName, System.currentTimeMillis() - start);
+                if (matched == null) {
+                    long searchStart = System.currentTimeMillis();
+                    matched = searchResolvedMatch(videoName, vod);
+                    SpiderDebug.log("tmdb", "auto match search cost=%dms hit=%s name=%s", System.currentTimeMillis() - searchStart, matched != null, videoName);
+                }
+                if (!isCurrentGeneration(generation)) return;
+                if (matched == null) {
+                    SpiderDebug.log("tmdb", "auto match miss name=%s total=%dms", videoName, System.currentTimeMillis() - start);
+                    tmdbItem = null;
+                    notifyLoadComplete(vod, generation);
+                    return;
+                }
+                saveMatch(vod, matched);
+                tmdbItem = matched;
+                SpiderDebug.log("tmdb", "auto match ready title=%s total=%dms", matched.getTitle(), System.currentTimeMillis() - start);
+                loadDetailSync(vod, matched, generation);
+            } catch (Exception e) {
+                SpiderDebug.log("tmdb", "auto match failed name=%s total=%dms error=%s", videoName, System.currentTimeMillis() - start, e.getMessage());
+                if (!isCurrentGeneration(generation)) return;
                 tmdbItem = null;
                 notifyLoadComplete(vod, generation);
-                return;
             }
-            saveMatch(vod, matched);
-            tmdbItem = matched;
-            SpiderDebug.log("tmdb", "auto match ready title=%s total=%dms", matched.getTitle(), System.currentTimeMillis() - start);
-            loadDetailSync(vod, matched, generation);
         });
     }
 
@@ -437,6 +450,7 @@ public class TmdbUIAdapter {
         personalRefreshLoading = false;
         personalAiLoading = false;
         loaded = false;
+        episodeMetadataLoaded = false;
         pendingVodRefreshVod = null;
         pendingVodRefreshGeneration = generation;
         App.removeCallbacks(pendingVodRefresh);
@@ -482,13 +496,14 @@ public class TmdbUIAdapter {
             personalDoubanRecommendations = personalDoubanPage.getItems();
             personalAiRecommendations = personalAiPage.getItems();
             loaded = true;
+            episodeMetadataLoaded = vod == null || item == null || !item.isTv();
             if (vod != null) {
                 saveMatch(vod, item);
                 long enrichStart = System.currentTimeMillis();
                 enrichVod(vod, item, detail);
                 SpiderDebug.log("tmdb", "detail core enrichVod cost=%dms title=%s", System.currentTimeMillis() - enrichStart, item.getTitle());
                 if (!isCurrentGeneration(generation)) return;
-                notifyVodChanged(vod, generation);
+                notifyVodChanged(vod, generation, RefreshEvent.Type.VOD_CORE);
                 SpiderDebug.log("tmdb", "detail core first refresh queued cost=%dms title=%s", System.currentTimeMillis() - start, item.getTitle());
             }
             scheduleStartupBackgroundLoads(vod, item, detail, generation);
@@ -535,20 +550,44 @@ public class TmdbUIAdapter {
         }
     }
 
-    private void notifyVodChanged(Vod vod, int generation) {
+    private void notifyVodChanged(Vod vod, int generation, RefreshEvent.Type type) {
         if (vod == null || !isCurrentGeneration(generation)) return;
         pendingVodRefreshVod = vod;
         pendingVodRefreshGeneration = generation;
+        // 累积待发送类型：240ms 合并窗口内若多种异步数据先后到达（如推荐与个性化），
+        // 逐一派发各自的细粒度事件，避免后到者覆盖先到者的类型而丢刷新。
+        // notifyVodChanged 会从后台线程（detail core / 集数标题）与主线程（推荐 / 个性）
+        // 同时调用，EnumSet 非线程安全，故对其复合读写加锁串行化，避免并发修改异常与丢事件。
+        synchronized (pendingVodRefreshTypes) {
+            pendingVodRefreshTypes.add(type);
+        }
         App.post(pendingVodRefresh, VOD_REFRESH_COALESCE_MS);
     }
 
     private void dispatchPendingVodRefresh() {
         Vod vod = pendingVodRefreshVod;
         int generation = pendingVodRefreshGeneration;
+        // add（后台线程）与 drain+clear（此处，主线程）跨线程访问同一 EnumSet，
+        // 复合操作须同锁串行化，避免 ConcurrentModificationException 或漏掉类型。
+        java.util.EnumSet<RefreshEvent.Type> types;
+        synchronized (pendingVodRefreshTypes) {
+            types = pendingVodRefreshTypes.isEmpty()
+                    ? java.util.EnumSet.noneOf(RefreshEvent.Type.class)
+                    : java.util.EnumSet.copyOf(pendingVodRefreshTypes);
+            pendingVodRefreshTypes.clear();
+        }
         pendingVodRefreshVod = null;
         if (vod == null || !isCurrentGeneration(generation)) return;
-        SpiderDebug.log("tmdb", "vod refresh coalesced dispatch title=%s", vod.getName());
-        RefreshEvent.vod(vod);
+        SpiderDebug.log("tmdb", "vod refresh coalesced dispatch title=%s types=%s", vod.getName(), types);
+        for (RefreshEvent.Type type : types) {
+            switch (type) {
+                case VOD_CORE -> RefreshEvent.vodCore(vod);
+                case VOD_RECOMMENDATIONS -> RefreshEvent.vodRecommendations(vod);
+                case VOD_PERSONAL -> RefreshEvent.vodPersonal(vod);
+                case VOD_EPISODE_TITLES -> RefreshEvent.vodEpisodeTitles(vod);
+                default -> RefreshEvent.vod(vod);
+            }
+        }
     }
 
     private void scheduleStartupBackgroundLoads(Vod vod, TmdbItem item, JsonObject detail, int generation) {
@@ -569,7 +608,7 @@ public class TmdbUIAdapter {
             long start = System.currentTimeMillis();
             boolean changed = applyEpisodeTitles(vod, item);
             SpiderDebug.log("tmdb", "episode titles async cost=%dms changed=%s title=%s", System.currentTimeMillis() - start, changed, item.getTitle());
-            if (changed) notifyVodChanged(vod, generation);
+            finishEpisodeMetadataLoad(vod, generation);
         });
     }
 
@@ -605,7 +644,7 @@ public class TmdbUIAdapter {
                 recommendations = loadedItems;
                 recommendationPage = 1;
                 recommendationHasMore = hasMore;
-                if (vod != null && !loadedItems.isEmpty()) notifyVodChanged(vod, generation);
+                if (vod != null && !loadedItems.isEmpty()) notifyVodChanged(vod, generation, RefreshEvent.Type.VOD_RECOMMENDATIONS);
             });
         });
     }
@@ -631,7 +670,7 @@ public class TmdbUIAdapter {
                 personalDoubanPage = loadedPages.getDouban();
                 personalTmdbRecommendations = personalTmdbPage.getItems();
                 personalDoubanRecommendations = personalDoubanPage.getItems();
-                if (vod != null && (!personalTmdbRecommendations.isEmpty() || !personalDoubanRecommendations.isEmpty())) notifyVodChanged(vod, generation);
+                if (vod != null && (!personalTmdbRecommendations.isEmpty() || !personalDoubanRecommendations.isEmpty())) notifyVodChanged(vod, generation, RefreshEvent.Type.VOD_PERSONAL);
             });
         });
         loadPersonalAiRecommendationsAsync(vod, item, generation);
@@ -694,9 +733,17 @@ public class TmdbUIAdapter {
         if (personalAiUpdateListener != null) personalAiUpdateListener.onPersonalAiRecommendationsUpdated();
     }
 
+    private void finishEpisodeMetadataLoad(Vod vod, int generation) {
+        if (!isCurrentGeneration(generation)) return;
+        episodeMetadataLoaded = true;
+        notifyVodChanged(vod, generation, RefreshEvent.Type.VOD_EPISODE_TITLES);
+    }
+
     private void notifyLoadComplete(Vod vod, int generation) {
         // TMDB 加载失败或跳过时，仍然发送 RefreshEvent 让 UI 继续
-        if (vod != null && isCurrentGeneration(generation)) notifyVodChanged(vod, generation);
+        if (!isCurrentGeneration(generation)) return;
+        episodeMetadataLoaded = true;
+        if (vod != null) notifyVodChanged(vod, generation, RefreshEvent.Type.VOD_CORE);
     }
 
     private TmdbItem getCachedMatch(Vod vod) {

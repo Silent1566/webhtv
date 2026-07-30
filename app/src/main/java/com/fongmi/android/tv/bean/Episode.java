@@ -126,10 +126,33 @@ public class Episode implements Parcelable, Diffable<Episode> {
         return getName().equalsIgnoreCase(other.getName());
     }
 
+    /**
+     * 按集号匹配：不同线路/不同源对同一集的命名格式往往不同（如“第9集”与“[277.1MB] 9. xxx”），
+     * URL 与集名严格比对都会失败。与 Flag.find 的打分找集逻辑同源，用 Util.getEpisodeNumber
+     * 提取两侧集号，双方都能解析出有效集号且相等时视为同一集。
+     */
+    public boolean matchesNumber(Episode other) {
+        if (other == null) return false;
+        int mine = getNumber();
+        int theirs = other.getNumber() > 0 ? other.getNumber() : com.fongmi.android.tv.utils.Util.getEpisodeNumber(other.getName());
+        return mine > 0 && theirs > 0 && mine == theirs;
+    }
+
     public boolean matches(Episode other) {
         if (other == null) return false;
         if (!isEmpty(getUrl()) && !isEmpty(other.getUrl())) return getUrl().equals(other.getUrl());
         return matchesName(other);
+    }
+
+    /**
+     * 播放恢复时判断是否仍是同一集。源站刷新后 URL 可能变化，
+     * 因此在严格 URL 匹配失败时回退到集名和集号。
+     */
+    public boolean matchesPlayback(Episode other) {
+        if (other == null) return false;
+        if (!isEmpty(getUrl()) && !isEmpty(other.getUrl()) && getUrl().equals(other.getUrl())) return true;
+        if (!isEmpty(getName()) && !isEmpty(other.getName()) && matchesName(other)) return true;
+        return matchesNumber(other);
     }
 
     private boolean isEmpty(String value) {

@@ -74,16 +74,16 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
         setItems(episodes, tmdbEpisodes, Map.of(), selected);
     }
 
-    public void setItems(List<Episode> episodes, Map<Integer, TmdbEpisode> tmdbEpisodes, Map<Episode, Integer> numbers, Episode selected) {
-        setItems(episodes, tmdbEpisodes, numbers, selected, false);
+    public boolean setItems(List<Episode> episodes, Map<Integer, TmdbEpisode> tmdbEpisodes, Map<Episode, Integer> numbers, Episode selected) {
+        return setItems(episodes, tmdbEpisodes, numbers, selected, false);
     }
 
-    public void setItems(List<Episode> episodes, Map<Integer, TmdbEpisode> tmdbEpisodes, Map<Episode, Integer> numbers, Episode selected, boolean forceRefresh) {
+    public boolean setItems(List<Episode> episodes, Map<Integer, TmdbEpisode> tmdbEpisodes, Map<Episode, Integer> numbers, Episode selected, boolean forceRefresh) {
         boolean displaySettingsChanged = updateDisplaySettings();
         if (!forceRefresh && !displaySettingsChanged && sameItems(episodes, tmdbEpisodes, numbers)) {
-            if (Objects.equals(this.selected, selected)) return;
+            if (Objects.equals(this.selected, selected)) return false;
             setSelected(selected);
-            return;
+            return false;
         }
         items.clear();
         items.addAll(episodes);
@@ -94,6 +94,7 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
         compactPlain = items.size() == 1 && tmdbItems.isEmpty() && TextUtils.isEmpty(items.get(0).getDesc());
         this.selected = selected;
         notifyDataSetChanged();
+        return true;
     }
 
     public void setSelected(Episode selected) {
@@ -173,9 +174,20 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
 
     public void refreshDisplaySettings(RecyclerView recyclerView) {
         updateDisplaySettings();
+        rebindAttached(recyclerView);
+    }
+
+    /**
+     * 直接重新绑定当前已附着的可见 ViewHolder，不依赖 RecyclerView 的布局遍历。
+     * 用于 RecyclerView 嵌套在 NestedScrollView(wrap_content) 中、requestLayout 被祖先
+     * 的 stuck layout 标志吞掉、notifyDataSetChanged 无法触发重绑的场景。
+     * 用 getLayoutPosition() 而非 getBindingAdapterPosition()：后者在有未派发的适配器
+     * 更新时返回 NO_POSITION，而这里数据已同步，用上一次布局的位置即为可见项的正确位置。
+     */
+    public void rebindAttached(RecyclerView recyclerView) {
         for (int index = 0; index < recyclerView.getChildCount(); index++) {
             RecyclerView.ViewHolder holder = recyclerView.getChildViewHolder(recyclerView.getChildAt(index));
-            int position = holder.getBindingAdapterPosition();
+            int position = holder.getLayoutPosition();
             if (!(holder instanceof ViewHolder) || position == RecyclerView.NO_POSITION || position >= items.size()) continue;
             onBindViewHolder((ViewHolder) holder, position);
         }

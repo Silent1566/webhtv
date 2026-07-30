@@ -43,6 +43,57 @@ public class PlayerManagerTest {
     }
 
     @Test
+    public void exoSpeedRestore_defersSpeedUntilMatchingPrepareIsReady() {
+        PlayerManager.ExoSpeedRestoreState state = new PlayerManager.ExoSpeedRestoreState();
+
+        assertEquals(1.0f, state.beginPrepare(7, 1.5f), 0.001f);
+        assertEquals(1.5f, state.effectiveSpeed(1.0f), 0.001f);
+        assertTrue(state.deferSpeed(1.25f));
+        assertEquals(1.25f, state.effectiveSpeed(1.0f), 0.001f);
+        assertTrue(Float.isNaN(state.takeReadySpeed(6)));
+        assertEquals(1.25f, state.takeReadySpeed(7), 0.001f);
+        assertEquals(1.0f, state.effectiveSpeed(1.0f), 0.001f);
+    }
+
+    @Test
+    public void exoSpeedRestore_carriesPendingTargetIntoReplacementPrepare() {
+        PlayerManager.ExoSpeedRestoreState state = new PlayerManager.ExoSpeedRestoreState();
+
+        state.beginPrepare(7, 1.5f);
+        float desiredSpeed = state.effectiveSpeed(1.0f);
+        state.beginPrepare(8, desiredSpeed);
+
+        assertTrue(Float.isNaN(state.takeReadySpeed(7)));
+        assertEquals(1.5f, state.takeReadySpeed(8), 0.001f);
+    }
+
+    @Test
+    public void exoSpeedRestore_cancelledPrepareKeepsTargetButRejectsLateReady() {
+        PlayerManager.ExoSpeedRestoreState state = new PlayerManager.ExoSpeedRestoreState();
+
+        state.beginPrepare(7, 1.5f);
+        state.cancelPrepare(7);
+
+        assertTrue(Float.isNaN(state.takeReadySpeed(7)));
+        assertEquals(1.5f, state.effectiveSpeed(1.0f), 0.001f);
+        assertTrue(state.deferSpeed(1.25f));
+        assertEquals(1.0f, state.beginPrepare(8, state.effectiveSpeed(1.0f)), 0.001f);
+        assertTrue(Float.isNaN(state.takeReadySpeed(7)));
+        assertEquals(1.25f, state.takeReadySpeed(8), 0.001f);
+    }
+
+    @Test
+    public void exoSpeedRestore_staleCancellationDoesNotCancelReplacementPrepare() {
+        PlayerManager.ExoSpeedRestoreState state = new PlayerManager.ExoSpeedRestoreState();
+
+        state.beginPrepare(7, 1.5f);
+        state.beginPrepare(8, state.effectiveSpeed(1.0f));
+        state.cancelPrepare(7);
+
+        assertEquals(1.5f, state.takeReadySpeed(8), 0.001f);
+    }
+
+    @Test
     public void nextFallbackAction_obeysConfiguredMode() {
         assertEquals(PlayerManager.FALLBACK_DECODE, PlayerManager.nextFallbackAction(PlayerSetting.FALLBACK_FULL, PlayerEngine.HARD));
         assertEquals(PlayerManager.FALLBACK_PLAYER, PlayerManager.nextFallbackAction(PlayerSetting.FALLBACK_FULL, PlayerEngine.SOFT));
@@ -132,5 +183,25 @@ public class PlayerManagerTest {
     @Test
     public void httpStatus_returnsZeroWithoutResponseCode() {
         assertEquals(0, PlayerManager.httpStatus(new IOException("Socket closed")));
+    }
+
+    @Test
+    public void nextUntriedFfmpegMode_walksOrderThenExhausts() {
+        int[] order = PlayerSetting.FFMPEG_AUTO_ORDER;
+        boolean[] tried = new boolean[order.length];
+
+        int first = PlayerManager.nextUntriedFfmpegMode(order, tried);
+        assertEquals(order[0], first);
+        tried[0] = true;
+
+        int second = PlayerManager.nextUntriedFfmpegMode(order, tried);
+        assertEquals(order[1], second);
+        tried[1] = true;
+
+        int third = PlayerManager.nextUntriedFfmpegMode(order, tried);
+        assertEquals(order[2], third);
+        tried[2] = true;
+
+        assertEquals(PlayerSetting.NONE, PlayerManager.nextUntriedFfmpegMode(order, tried));
     }
 }

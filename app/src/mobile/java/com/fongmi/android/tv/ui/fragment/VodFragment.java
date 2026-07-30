@@ -256,7 +256,7 @@ public class VodFragment extends BaseFragment implements ConfigListener, SiteLis
     }
 
     private boolean reloadConfig(View view) {
-        VodConfig.get().clear().config(getConfig()).load(new Callback() {
+        VodConfig.get().clear("mobile-vod-reload").config(getConfig()).load(new Callback() {
             @Override
             public void start() {
                 showProgress();

@@ -1,6 +1,7 @@
 package com.fongmi.android.tv.web;
 
 import android.app.Activity;
+import android.content.res.Configuration;
 import android.text.TextUtils;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
@@ -10,6 +11,7 @@ import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.api.SiteApi;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.History;
+import com.fongmi.android.tv.bean.Result;
 import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.bean.drive.DriveCheckRequest;
 import com.fongmi.android.tv.server.Server;
@@ -23,13 +25,16 @@ import com.fongmi.android.tv.utils.AppCache;
 import com.fongmi.android.tv.utils.ImgUtil;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.Task;
+import com.fongmi.android.tv.utils.Util;
 import com.fongmi.android.tv.web.ext.WebHomeExtensionRegistry;
 import com.github.catvod.crawler.SpiderDebug;
 import com.github.catvod.utils.Json;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
@@ -108,9 +113,18 @@ public class HomeWebBridge {
     private void handle(String requestId, String method, JsonObject payload) {
         try {
             SpiderDebug.log("webhome", "invoke method=%s payload=%s", method, payload);
-            String result = switch (method) {
+            resolve(requestId, execute(method, payload));
+        } catch (Throwable e) {
+            reject(requestId, e.getMessage());
+        }
+    }
+
+    private String execute(String method, JsonObject payload) throws Exception {
+        return switch (method) {
                 case "net.request" -> WebCall.request(payload, controller);
                 case "net.resourceUrl" -> quote(resourceUrl(Json.safeString(payload, "url"), payload.toString()));
+                case "vod.home" -> vodHome(payload);
+                case "vod.category" -> vodCategory(payload);
                 case "player.playUrl" -> playUrl(payload);
                 case "player.playVod" -> playVod(payload);
                 case "player.playVodInline" -> playVodInline(payload);
@@ -142,10 +156,78 @@ public class HomeWebBridge {
                 case "navigation.reload" -> reload();
                 default -> throw new IllegalArgumentException("Unknown method: " + method);
             };
-            resolve(requestId, result);
-        } catch (Throwable e) {
-            reject(requestId, e.getMessage());
+    }
+
+    private String vodHome(JsonObject payload) throws Exception {
+        Site site = activeSite(payload);
+        Result result = SiteApi.homeContent(site);
+        return WebHomeVodContract.home(site, result, Util.isLeanback(), isLandscape(), suggestedColumns()).toString();
+    }
+
+    private String vodCategory(JsonObject payload) throws Exception {
+        Site site = activeSite(payload);
+        String typeId = limited(Json.safeString(payload, "typeId"), 256);
+        if (TextUtils.isEmpty(typeId)) throw new IllegalArgumentException("typeId is required");
+        int page = positiveInt(payload, "page", 1);
+        boolean filter = booleanValue(payload, "filter", false);
+        HashMap<String, String> extend = extend(payload);
+        Result result = SiteApi.categoryContent(site.getKey(), typeId, String.valueOf(page), filter, extend);
+        return WebHomeVodContract.category(site, typeId, page, filter, extend, result, Util.isLeanback(), isLandscape(), suggestedColumns()).toString();
+    }
+
+    private Site activeSite(JsonObject payload) {
+        Site site = controller.getContentSite();
+        if (site == null || TextUtils.isEmpty(site.getKey())) throw new IllegalStateException("No active VOD source");
+        String requested = limited(Json.safeString(payload, "siteKey"), 256);
+        if (!TextUtils.isEmpty(requested) && !TextUtils.equals(requested, site.getKey())) {
+            throw new SecurityException("Cross-source VOD access is not allowed");
         }
+        return site;
+    }
+
+    private HashMap<String, String> extend(JsonObject payload) {
+        HashMap<String, String> result = new HashMap<>();
+        JsonElement element = payload.get("extend");
+        if (element == null || !element.isJsonObject()) return result;
+        int count = 0;
+        for (Map.Entry<String, JsonElement> entry : element.getAsJsonObject().entrySet()) {
+            if (count++ >= 32 || entry.getValue() == null || !entry.getValue().isJsonPrimitive()) continue;
+            String key = limited(entry.getKey(), 64);
+            String value = limited(entry.getValue().getAsString(), 512);
+            if (!TextUtils.isEmpty(key)) result.put(key, value);
+        }
+        return result;
+    }
+
+    private int positiveInt(JsonObject payload, String key, int fallback) {
+        try {
+            int value = payload.has(key) ? payload.get(key).getAsInt() : fallback;
+            return Math.max(1, value);
+        } catch (Exception ignored) {
+            return fallback;
+        }
+    }
+
+    private boolean booleanValue(JsonObject payload, String key, boolean fallback) {
+        try {
+            return payload.has(key) ? payload.get(key).getAsBoolean() : fallback;
+        } catch (Exception ignored) {
+            return fallback;
+        }
+    }
+
+    private boolean isLandscape() {
+        return App.get().getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE;
+    }
+
+    private int suggestedColumns() {
+        if (Util.isLeanback()) return 6;
+        return isLandscape() ? 5 : 3;
+    }
+
+    private static String limited(String value, int maxLength) {
+        if (value == null) return "";
+        return value.length() <= maxLength ? value : value.substring(0, maxLength);
     }
 
     private String playUrl(JsonObject payload) {
@@ -166,13 +248,17 @@ public class HomeWebBridge {
     }
 
     private String playVod(JsonObject payload) {
-        String siteKey = Json.safeString(payload, "siteKey");
+        String requestedSiteKey = Json.safeString(payload, "siteKey");
+        Site contentSite = controller.getContentSite();
+        if (controller.isGlobalTheme()) contentSite = activeSite(payload);
+        String siteKey = TextUtils.isEmpty(requestedSiteKey) && contentSite != null ? contentSite.getKey() : requestedSiteKey;
         String vodId = Json.safeString(payload, "vodId");
         String title = Json.safeString(payload, "title");
         String pic = Json.safeString(payload, "pic");
         String wall = wallPic(payload);
         String content = content(payload);
-        App.post(() -> controller.prepareNativePlayback(() -> VideoActivity.start(activity, siteKey, vodId, title, pic, null, wall, content)));
+        final String playSiteKey = siteKey;
+        App.post(() -> controller.prepareNativePlayback(() -> VideoActivity.start(activity, playSiteKey, vodId, title, pic, null, wall, content)));
         return "{}";
     }
 
@@ -380,24 +466,28 @@ public class HomeWebBridge {
     }
 
     private String site() {
-        Site site = VodConfig.get().getHome();
+        Site site = controller.getContentSite();
         JsonObject object = new JsonObject();
         object.addProperty("key", site.getKey());
         object.addProperty("name", site.getName());
-        object.addProperty("homePage", site.getHomePage());
-        object.addProperty("chromeMode", site.getChromeMode());
-        object.add("webHomeChrome", site.getWebHomeChrome());
         object.addProperty("type", site.getType());
-        object.add("header", App.gson().toJsonTree(site.getHeader()));
+        object.addProperty("globalTheme", controller.isGlobalTheme());
+        if (!controller.isGlobalTheme()) {
+            object.addProperty("homePage", site.getHomePage());
+            object.addProperty("chromeMode", site.getChromeMode());
+            object.add("webHomeChrome", site.getWebHomeChrome());
+            object.add("header", App.gson().toJsonTree(site.getHeader()));
+        }
         return object.toString();
     }
 
     private String config() {
         JsonObject object = new JsonObject();
         object.addProperty("id", VodConfig.getCid());
-        object.addProperty("url", VodConfig.getUrl());
         object.addProperty("desc", VodConfig.getDesc());
         object.addProperty("driveCheck", Setting.isDriveCheck());
+        object.addProperty("globalTheme", controller.isGlobalTheme());
+        if (!controller.isGlobalTheme()) object.addProperty("url", VodConfig.getUrl());
         return object.toString();
     }
 

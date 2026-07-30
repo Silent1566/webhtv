@@ -19,6 +19,7 @@ public class PlayerSetting {
     public static final int FFMPEG_MODE_NEXTLIB = 0;
     public static final int FFMPEG_MODE_OFFICIAL = 1;
     public static final int FFMPEG_MODE_SIMPLE = 2;
+    public static final int FFMPEG_MODE_AUTO = 3;
     public static final int MPV_RENDER_OPENGL = 0;
     public static final int MPV_RENDER_VULKAN = 1;
     public static final int AUDIO_BACKGROUND_ARTWORK = 0;
@@ -50,6 +51,7 @@ public class PlayerSetting {
     public static final int NIGHT_MODE_ALWAYS_OFF = 1;
     public static final int NIGHT_MODE_ALWAYS_ON = 2;
     private static final int DEFAULT_PLAY_CACHE_OPTION = 0;
+    private static final String KEY_IMMERSIVE_AUDIO_PLAYBACK = "immersive_audio_playback";
     private static final String KEY_FAILURE_FALLBACK = "player_failure_fallback";
     private static final String KEY_FFMPEG_MODE = "ffmpeg_mode";
     private static final String KEY_DISPLAY_TIME = "display_time";
@@ -83,6 +85,14 @@ public class PlayerSetting {
 
     public static void putImmersiveAudioMode(boolean enabled) {
         Prefers.put("immersive_audio_mode", enabled);
+    }
+
+    public static boolean isImmersiveAudioPlayback(String playbackKey) {
+        return playbackKey != null && !playbackKey.isEmpty() && playbackKey.equals(Prefers.getString(KEY_IMMERSIVE_AUDIO_PLAYBACK));
+    }
+
+    public static void putImmersiveAudioPlayback(String playbackKey) {
+        Prefers.put(KEY_IMMERSIVE_AUDIO_PLAYBACK, playbackKey == null ? "" : playbackKey);
     }
 
     public static int getAudioPlaybackStyle() {
@@ -553,6 +563,12 @@ public class PlayerSetting {
         KernelPerformanceSetting.putVideoPrefer(getPlayer(), videoPrefer);
     }
 
+    // AUTO 模式失败遍历顺序：能力从全到简（NextLib 有 ffmpeg 音视频兜底+解码调度调优；Simple 有音视频兜底；Official 纯官方）。
+    public static final int[] FFMPEG_AUTO_ORDER = {FFMPEG_MODE_NEXTLIB, FFMPEG_MODE_SIMPLE, FFMPEG_MODE_OFFICIAL};
+
+    // 进程内运行时覆盖，仅在设置为 AUTO 时生效，用于失败链遍历具体模式；不写盘。
+    private static volatile int ffmpegModeOverride = NONE;
+
     public static int getFFmpegMode() {
         int defaultMode = getDefaultFFmpegMode();
         return sanitizeFFmpegMode(Prefers.getInt(KEY_FFMPEG_MODE, defaultMode), defaultMode);
@@ -560,6 +576,27 @@ public class PlayerSetting {
 
     public static void putFFmpegMode(int mode) {
         Prefers.put(KEY_FFMPEG_MODE, sanitizeFFmpegMode(mode, getDefaultFFmpegMode()));
+        clearFFmpegModeOverride();
+    }
+
+    // ExoUtil 构造渲染器时使用的具体模式。AUTO 时解析成运行时覆盖，无覆盖则取遍历首项。
+    public static int getEffectiveFFmpegMode() {
+        int mode = getFFmpegMode();
+        if (mode != FFMPEG_MODE_AUTO) return mode;
+        int override = ffmpegModeOverride;
+        return isConcreteFFmpegMode(override) ? override : FFMPEG_AUTO_ORDER[0];
+    }
+
+    public static boolean isAutoFFmpegMode() {
+        return getFFmpegMode() == FFMPEG_MODE_AUTO;
+    }
+
+    public static void setFFmpegModeOverride(int mode) {
+        ffmpegModeOverride = isConcreteFFmpegMode(mode) ? mode : NONE;
+    }
+
+    public static void clearFFmpegModeOverride() {
+        ffmpegModeOverride = NONE;
     }
 
     static int getDefaultFFmpegMode() {
@@ -572,11 +609,15 @@ public class PlayerSetting {
     }
 
     private static boolean isFFmpegMode(int mode) {
+        return isConcreteFFmpegMode(mode) || mode == FFMPEG_MODE_AUTO;
+    }
+
+    private static boolean isConcreteFFmpegMode(int mode) {
         return mode == FFMPEG_MODE_NEXTLIB || mode == FFMPEG_MODE_OFFICIAL || mode == FFMPEG_MODE_SIMPLE;
     }
 
     public static boolean useNextLibFFmpeg() {
-        return getFFmpegMode() == FFMPEG_MODE_NEXTLIB;
+        return getEffectiveFFmpegMode() == FFMPEG_MODE_NEXTLIB;
     }
 
     public static void putUseNextLibFFmpeg(boolean useNextLib) {

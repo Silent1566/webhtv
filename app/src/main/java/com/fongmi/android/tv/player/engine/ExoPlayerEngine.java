@@ -27,23 +27,49 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class ExoPlayerEngine implements PlayerEngine {
+
+    private static final AtomicInteger PREPARE_GENERATION = new AtomicInteger();
+
+    public interface PrepareListener {
+
+        PrepareListener NONE = new PrepareListener() {
+        };
+
+        default void onPrepareStarted(int generation) {
+        }
+
+        default void onPrepareReady(int generation) {
+        }
+
+        default void onPrepareCanceled(int generation) {
+        }
+    }
 
     private final ErrorMsgProvider provider;
     private final PreCache preCache;
     private final Set<String> attemptedFormats;
+    private final PrepareListener prepareListener;
     private PlaySpec spec;
     private String activeFormat;
     private ExoPlayer player;
+    private Player.Listener prepareReadyListener;
     private int decode;
+    private int pendingPrepareGeneration = -1;
     private boolean playWhenReady;
 
     public ExoPlayerEngine(int decode, Player.Listener listener) {
+        this(decode, listener, PrepareListener.NONE);
+    }
+
+    public ExoPlayerEngine(int decode, Player.Listener listener, PrepareListener prepareListener) {
         this.player = ExoUtil.buildPlayer(decode, listener);
         this.provider = new ErrorMsgProvider();
         this.preCache = new PreCache();
         this.attemptedFormats = new HashSet<>();
+        this.prepareListener = prepareListener == null ? PrepareListener.NONE : prepareListener;
         this.decode = decode;
     }
 
@@ -54,6 +80,7 @@ public class ExoPlayerEngine implements PlayerEngine {
 
     @Override
     public void release() {
+        cancelPendingPrepare();
         preCache.release();
         PlaybackAnalyticsListener.finishSession(player.getCurrentPosition());
         player.release();
@@ -61,6 +88,7 @@ public class ExoPlayerEngine implements PlayerEngine {
 
     @Override
     public Player rebuild(Player.Listener listener) {
+        cancelPendingPrepare();
         preCache.stop("engine-rebuild");
         PlaybackAnalyticsListener.finishSession(player.getCurrentPosition());
         player.release();
@@ -130,6 +158,7 @@ public class ExoPlayerEngine implements PlayerEngine {
         this.playWhenReady = playWhenReady;
         resetAttemptedFormats();
         PlaybackTrace.log("player-engine", getPlaybackTraceId(), "restart decode=%d format=%s position=%d play=%s headers=%s urlLen=%d", decode, spec.getFormat(), position, playWhenReady, spec.getHeaders() == null ? 0 : spec.getHeaders().size(), spec.getUrl() == null ? 0 : spec.getUrl().length());
+        cancelPendingPrepare();
         preCache.stop("engine-restart");
         player.stop();
         startInternal(position, playWhenReady);
@@ -137,6 +166,7 @@ public class ExoPlayerEngine implements PlayerEngine {
 
     @Override
     public void stop() {
+        cancelPendingPrepare();
         preCache.stop("player-stop");
         PlaybackAnalyticsListener.finishSession(player.getCurrentPosition());
         player.stop();
@@ -263,13 +293,49 @@ public void resetTrack(int type) {
         MediaItem item = ExoUtil.getMediaItem(spec.copyWithFormat(activeFormat), decode);
         player.setMediaItem(item, position);
         preCache.start(player, item, spec.getPlaybackTraceId(), spec.getPlaybackRoute());
-        player.prepare();
+        preparePlayer();
         if (playWhenReady) player.play();
+    }
+
+    private void preparePlayer() {
+        int generation = beginPrepare();
+        prepareListener.onPrepareStarted(generation);
+        player.prepare();
+    }
+
+    private int beginPrepare() {
+        cancelPendingPrepare();
+        int generation = PREPARE_GENERATION.incrementAndGet();
+        pendingPrepareGeneration = generation;
+        Player.Listener readyListener = new Player.Listener() {
+            @Override
+            public void onPlaybackStateChanged(int state) {
+                if (state != Player.STATE_READY || generation != pendingPrepareGeneration || prepareReadyListener != this) return;
+                player.removeListener(this);
+                prepareReadyListener = null;
+                pendingPrepareGeneration = -1;
+                prepareListener.onPrepareReady(generation);
+            }
+        };
+        prepareReadyListener = readyListener;
+        player.addListener(readyListener);
+        return generation;
+    }
+
+    @Override
+    public void cancelPendingPrepare() {
+        int generation = pendingPrepareGeneration;
+        if (generation < 0) return;
+        pendingPrepareGeneration = -1;
+        Player.Listener readyListener = prepareReadyListener;
+        prepareReadyListener = null;
+        if (readyListener != null) player.removeListener(readyListener);
+        prepareListener.onPrepareCanceled(generation);
     }
 
     private ErrorAction seekToDefaultPosition() {
         player.seekToDefaultPosition();
-        player.prepare();
+        preparePlayer();
         return ErrorAction.RECOVERED;
     }
 

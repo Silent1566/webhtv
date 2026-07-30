@@ -14,11 +14,12 @@ public class PreCacheTest {
     }
 
     @Test
-    public void canPreCache_skipsLocalProxyMedia() {
-        assertFalse(PreCache.canPreCache("http", "http://127.0.0.1:9978/proxy?do=js"));
-        assertFalse(PreCache.canPreCache("http", "http://localhost:9978/proxy?siteKey=drive"));
-        assertFalse(PreCache.canPreCache("http", "http://[::1]:9978/proxy?do=py"));
-        assertFalse(PreCache.canPreCache("http", "http://127.0.0.1:5000/proxy/1_4213_0_0"));
+    public void canPreCache_allowsLocalProxyMediaLikeUpstream() {
+        // Local proxy URLs are passed through to ExoPlayer for jar-based multi-threading.
+        assertTrue(PreCache.canPreCache("http", "http://127.0.0.1:9978/proxy?do=js"));
+        assertTrue(PreCache.canPreCache("http", "http://localhost:9978/proxy?siteKey=drive"));
+        assertTrue(PreCache.canPreCache("http", "http://[::1]:9978/proxy?do=py"));
+        assertTrue(PreCache.canPreCache("http", "http://127.0.0.1:5000/proxy/1_4213_0_0"));
     }
 
     @Test

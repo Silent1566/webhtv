@@ -11,12 +11,12 @@ public final class KernelPerformanceSetting {
 
     public static int getBuffer(int kernel) {
         ensureMigrated();
-        return clamp(Prefers.getInt(key(kernel, "buffer"), 1), 1, 10);
+        return clamp(Prefers.getInt(key(kernel, "buffer"), 1), 1, 15);
     }
 
     public static void putBuffer(int kernel, int value) {
         ensureMigrated();
-        Prefers.put(key(kernel, "buffer"), clamp(value, 1, 10));
+        Prefers.put(key(kernel, "buffer"), clamp(value, 1, 15));
     }
 
     public static int getBufferBytesOption(int kernel) {
@@ -230,7 +230,7 @@ public final class KernelPerformanceSetting {
 
     private static synchronized void ensureMigrated() {
         if (Prefers.getBoolean(KEY_MIGRATED)) return;
-        int buffer = clamp(Prefers.getInt("buffer"), 1, 10);
+        int buffer = clamp(Prefers.getInt("buffer"), 1, 15);
         int bufferBytes = clamp(Prefers.getInt("buffer_bytes"), 0, 3);
         int backBuffer = clamp(Prefers.getInt("back_buffer"), 0, 3);
         int playCache = clamp(Prefers.getInt("play_cache"), 0, 4);

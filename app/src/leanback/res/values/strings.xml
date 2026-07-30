@@ -39,4 +39,8 @@
     <string name="timer_60">1 hour</string>
     <string name="timer_delay">Delay 5 minutes</string>
     <string name="timer_cancel">Cancel timer</string>
+
+    <!-- Delete Dialog -->
+    <string name="dialog_delete_record">Delete all records?</string>
+    <string name="dialog_delete_history">All history records will be removed.</string>
 </resources>

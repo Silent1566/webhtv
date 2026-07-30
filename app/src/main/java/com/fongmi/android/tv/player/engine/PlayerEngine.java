@@ -53,6 +53,9 @@ public interface PlayerEngine {
         getPlayer().stop();
     }
 
+    default void cancelPendingPrepare() {
+    }
+
     void setMetadata(MediaMetadata data);
 
     boolean isLive();

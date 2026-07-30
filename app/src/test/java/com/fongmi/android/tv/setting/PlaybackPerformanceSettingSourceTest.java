@@ -129,6 +129,15 @@ public class PlaybackPerformanceSettingSourceTest {
                 "TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(button, 10, 14, 1, TypedValue.COMPLEX_UNIT_SP)");
     }
 
+    @Test
+    public void exoNonEnhancedProfilesKeepMedia3DefaultLoadControl() throws Exception {
+        String source = read(sourcePath("main", "java", "com", "fongmi", "android", "tv", "player", "exo", "ExoUtil.java"));
+        String buildPlayer = methodBody(source, "public static ExoPlayer buildPlayer", "public static MediaItem getMediaItem");
+
+        assertTrue(buildPlayer.contains("if (PlaybackPerformanceSetting.isHighBufferEnabled()) builder.setLoadControl(buildEnhancedLoadControl());"));
+        assertFalse(buildPlayer.contains("buildLoadControl()"));
+    }
+
     private static void assertContainsAll(String source, String... values) {
         for (String value : values) assertTrue("Missing: " + value, source.contains(value));
     }

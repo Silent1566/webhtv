@@ -31,6 +31,10 @@ public final class MpvAutoOutputPolicy {
         return externalSubtitleActive || userRequestedSubtitle;
     }
 
+    public static boolean shouldLeaveSurfaceDirectForSubtitle(boolean automaticOutput, boolean currentlyDirect, boolean externalSubtitleActive, boolean userRequestedSubtitle) {
+        return automaticOutput && currentlyDirect && requiresGpuSubtitle(externalSubtitleActive, userRequestedSubtitle);
+    }
+
     public enum Transition {
         KEEP_GPU,
         ENTER_SURFACE_DIRECT,

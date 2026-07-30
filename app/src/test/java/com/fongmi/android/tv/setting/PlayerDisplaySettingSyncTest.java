@@ -64,6 +64,12 @@ public class PlayerDisplaySettingSyncTest {
     }
 
     @Test
+    public void ffmpegModeIsVisibleOnlyForExoKernel() throws Exception {
+        assertFfmpegModeVisibility(read(sourcePath("mobile", "java").resolve(Path.of("com", "fongmi", "android", "tv", "ui", "fragment", "SettingPlayerFragment.java"))));
+        assertFfmpegModeVisibility(read(sourcePath("leanback", "java").resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "SettingPlayerActivity.java"))));
+    }
+
+    @Test
     public void backupIncludesPlaybackDisplayPreferences() throws Exception {
         String source = read(mainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "bean", "Backup.java")));
         assertTrue(source.contains("\"display_time\""));
@@ -78,6 +84,20 @@ public class PlayerDisplaySettingSyncTest {
     public void backupIncludesFfmpegModePreference() throws Exception {
         String source = read(mainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "bean", "Backup.java")));
         assertTrue(source.contains("\"ffmpeg_mode\""));
+    }
+
+    private static void assertFfmpegModeVisibility(String source) {
+        String visibility = "private void setFfmpegModeVisibility()";
+        assertTrue(source.contains(visibility));
+        assertTrue(source.contains("PlayerSetting.getPlayer() == PlayerSetting.EXO"));
+        assertTrue(source.contains("mBinding.ffmpegMode.setVisibility(visible ? View.VISIBLE : View.GONE)"));
+        assertTrue(count(source, "setFfmpegModeVisibility();") >= 2);
+    }
+
+    private static int count(String source, String token) {
+        int count = 0;
+        for (int from = 0; (from = source.indexOf(token, from)) >= 0; from += token.length()) count++;
+        return count;
     }
 
     private static void assertSettingPageUsesDisplayPreferences(String source) {

@@ -44,12 +44,15 @@ public class JarLoader {
 
     public void clear() {
         SpiderDebug.log("jar-loader", "clear loaders=%s spiders=%s methods=%s", loaders.size(), spiders.size(), methods.size());
-        spiders.values().forEach(Spider::destroy);
-        loaders.clear();
-        methods.clear();
-        spiders.clear();
-        locks.clear();
-        recent = null;
+        try {
+            SpiderCleanup.destroy("jar-loader", spiders);
+        } finally {
+            loaders.clear();
+            methods.clear();
+            spiders.clear();
+            locks.clear();
+            recent = null;
+        }
     }
 
     public void setRecent(String recent) {

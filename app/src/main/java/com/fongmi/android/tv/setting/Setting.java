@@ -537,6 +537,30 @@ public class Setting {
         Prefers.put("web_home_extension", extension);
     }
 
+    public static boolean isWebHomeThemeEnabled() {
+        return Prefers.getBoolean("web_home_theme_enabled");
+    }
+
+    public static void putWebHomeThemeEnabled(boolean enabled) {
+        Prefers.put("web_home_theme_enabled", enabled);
+    }
+
+    public static String getWebHomeThemeUrl() {
+        return Prefers.getString("web_home_theme_url", "file:///android_asset/webhome/eclipse.html");
+    }
+
+    public static void putWebHomeThemeUrl(String url) {
+        Prefers.put("web_home_theme_url", url);
+    }
+
+    public static String getWebHomeThemeTrustedUrl() {
+        return Prefers.getString("web_home_theme_trusted_url");
+    }
+
+    public static void putWebHomeThemeTrustedUrl(String url) {
+        Prefers.put("web_home_theme_trusted_url", url);
+    }
+
     public static boolean isWebHomeFullscreen() {
         return Prefers.getBoolean("web_home_fullscreen", true);
     }
@@ -1146,6 +1170,18 @@ public class Setting {
         Prefers.put("episode_history", episodeHistory);
     }
 
+    public static boolean isHistoryAggregationByTmdb() {
+        return isTmdbReady() && Prefers.getBoolean("history_aggregation_by_tmdb", true);
+    }
+
+    public static void putHistoryAggregationByTmdb(boolean value) {
+        Prefers.put("history_aggregation_by_tmdb", value);
+    }
+
+    public static boolean isHistoryAggregationEffective() {
+        return isHistoryAggregationByTmdb();
+    }
+
     public static boolean isHomeVodAutoLoad() {
         return Prefers.getBoolean("home_vod_auto_load", true);
     }
@@ -1317,11 +1353,11 @@ public class Setting {
         Prefers.put("search_result_sort", sort == 0 ? 0 : 1);
     }
 
-    public static boolean isSearchPrecise() {
-        return Prefers.getBoolean("search_precise", false);
+    public static int getSearchSimilarity() {
+        return Prefers.getInt("search_similarity", 30);
     }
 
-    public static void putSearchPrecise(boolean enabled) {
-        Prefers.put("search_precise", enabled);
+    public static void putSearchSimilarity(int percent) {
+        Prefers.put("search_similarity", Math.max(0, Math.min(100, percent)));
     }
 }
