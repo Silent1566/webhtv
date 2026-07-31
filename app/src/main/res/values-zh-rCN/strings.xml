@@ -1,8 +1,8 @@
 <resources xmlns:xliff="http://schemas.android.com/apk/res-auto">
 
     <!-- App -->
-    <string name="app_name">默影视</string>
     <string name="app_exit_confirm">再按一次退出应用</string>
+    <string name="app_name">影视</string>
 
     <!-- Live -->
     <string name="live_pass">密码</string>
