@@ -3,6 +3,9 @@ package com.fongmi.android.tv.web;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import java.util.Arrays;
+import java.util.HashSet;
+
 import org.junit.Test;
 
 public class WebHomeThemePolicyTest {
@@ -44,5 +47,57 @@ public class WebHomeThemePolicyTest {
         assertFalse(WebHomeThemePolicy.allowsMessage(expected, "https://theme.example/path", true));
         assertFalse(WebHomeThemePolicy.allowsMessage("data:text/html,theme", "data:text/html,theme", true));
         assertFalse(WebHomeThemePolicy.allowsMessage(expected, "not an origin", true));
+    }
+
+    @Test
+    public void v2Detail_requiresBothHostAndManifestPermission() {
+        HashSet<String> permissions = new HashSet<>(Arrays.asList(
+                "vod.detail", "favorite.read", "player.playVod", "app.search", "app.openSetting"));
+
+        assertTrue(WebHomeThemePolicy.allowsMethod(WebThemePage.DETAIL, permissions, "theme.info"));
+        assertTrue(WebHomeThemePolicy.allowsMethod(WebThemePage.DETAIL, permissions, "vod.detail"));
+        assertTrue(WebHomeThemePolicy.allowsMethod(WebThemePage.DETAIL, permissions, "favorite.status"));
+        assertTrue(WebHomeThemePolicy.allowsMethod(WebThemePage.DETAIL, permissions, "player.playVod"));
+        assertTrue(WebHomeThemePolicy.allowsMethod(WebThemePage.DETAIL, permissions, "navigation.openNativeDetail"));
+        assertTrue(WebHomeThemePolicy.allowsMethod(WebThemePage.DETAIL, permissions, "app.search"));
+
+        assertFalse(WebHomeThemePolicy.allowsMethod(WebThemePage.DETAIL, permissions, "favorite.set"));
+        assertFalse(WebHomeThemePolicy.allowsMethod(WebThemePage.DETAIL, permissions, "history.item"));
+        assertFalse(WebHomeThemePolicy.allowsMethod(WebThemePage.DETAIL, permissions, "app.openSetting"));
+        assertFalse(WebHomeThemePolicy.allowsMethod(WebThemePage.DETAIL, permissions, "net.request"));
+    }
+
+    @Test
+    public void v2Home_cannotUseDetailCapabilities() {
+        HashSet<String> permissions = new HashSet<>(Arrays.asList(
+                "vod.home", "navigation.openDetail", "vod.detail", "player.playVod"));
+
+        assertTrue(WebHomeThemePolicy.allowsMethod(WebThemePage.HOME, permissions, "vod.home"));
+        assertTrue(WebHomeThemePolicy.allowsMethod(WebThemePage.HOME, permissions, "navigation.openDetail"));
+        assertFalse(WebHomeThemePolicy.allowsMethod(WebThemePage.HOME, permissions, "app.search"));
+        assertFalse(WebHomeThemePolicy.allowsMethod(WebThemePage.HOME, permissions, "app.openVod"));
+        assertFalse(WebHomeThemePolicy.allowsMethod(WebThemePage.HOME, permissions, "app.openSetting"));
+        assertFalse(WebHomeThemePolicy.allowsMethod(WebThemePage.HOME, permissions, "vod.detail"));
+        assertFalse(WebHomeThemePolicy.allowsMethod(WebThemePage.HOME, permissions, "player.playVod"));
+
+        permissions.add("app.search");
+        permissions.add("app.openVod");
+        permissions.add("app.openSetting");
+        assertTrue(WebHomeThemePolicy.allowsMethod(WebThemePage.HOME, permissions, "app.search"));
+        assertTrue(WebHomeThemePolicy.allowsMethod(WebThemePage.HOME, permissions, "app.openVod"));
+        assertTrue(WebHomeThemePolicy.allowsMethod(WebThemePage.HOME, permissions, "app.openSetting"));
+    }
+
+    @Test
+    public void v2CapabilitiesExposeOnlyPermissionsSupportedByTheCurrentPage() {
+        assertTrue(WebHomeThemePolicy.allowsPermission(WebThemePage.HOME, "vod.home"));
+        assertTrue(WebHomeThemePolicy.allowsPermission(WebThemePage.HOME, "app.openSetting"));
+        assertFalse(WebHomeThemePolicy.allowsPermission(WebThemePage.HOME, "vod.detail"));
+        assertFalse(WebHomeThemePolicy.allowsPermission(WebThemePage.HOME, "net.request"));
+
+        assertTrue(WebHomeThemePolicy.allowsPermission(WebThemePage.DETAIL, "vod.detail"));
+        assertTrue(WebHomeThemePolicy.allowsPermission(WebThemePage.DETAIL, "favorite.write"));
+        assertFalse(WebHomeThemePolicy.allowsPermission(WebThemePage.DETAIL, "app.openSetting"));
+        assertFalse(WebHomeThemePolicy.allowsPermission(null, "vod.home"));
     }
 }

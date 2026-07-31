@@ -12,7 +12,7 @@ public class TmdbEpisode {
     private final double voteAverage;
     private final int runtime;
     private final int tmdbId;       // TMDB 剧集 ID
-    private final int seasonNumber; // 季数
+    private final int seasonNumber; // 季数，0 为特别篇，负数表示未知
 
     public TmdbEpisode(int number, String title, String date, String overview, String stillUrl, double voteAverage, int runtime) {
         this(number, title, date, overview, stillUrl, voteAverage, runtime, 0, 1);

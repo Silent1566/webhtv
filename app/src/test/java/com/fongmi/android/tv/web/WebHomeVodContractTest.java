@@ -5,21 +5,34 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import com.fongmi.android.tv.bean.Filter;
+import com.fongmi.android.tv.bean.Episode;
+import com.fongmi.android.tv.bean.Flag;
+import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.bean.Result;
 import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.bean.Style;
+import com.fongmi.android.tv.bean.TmdbEpisode;
+import com.fongmi.android.tv.bean.TmdbItem;
+import com.fongmi.android.tv.bean.TmdbPerson;
+import com.fongmi.android.tv.bean.Value;
 import com.fongmi.android.tv.bean.Vod;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
 import org.junit.Test;
 
 import java.lang.reflect.Field;
+import java.nio.charset.StandardCharsets;
+import java.util.AbstractList;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class WebHomeVodContractTest {
 
@@ -156,6 +169,422 @@ public class WebHomeVodContractTest {
         assertEquals(WebHomeVodContract.MAX_REMOTE_ITEMS, json.getAsJsonArray("items").size());
         assertTrue(json.get("truncated").getAsBoolean());
         assertTrue(json.get("hasMore").getAsBoolean());
+    }
+
+    @Test
+    public void detail_exposesOpaqueEpisodeReferencesWithoutRawPlaybackUrls() {
+        Site site = Site.get("current", "Current Source");
+        Vod vod = TestVod.vod("vod-1", "Eclipse Detail")
+                .details("https://img.example/poster.jpg", "更新至 2 集", "2026", "科幻", "安全简介");
+        vod.setPlayFrom("line-a$$$line-b");
+        vod.setPlayUrl("第 1 集$https://media.example/a1.m3u8#第 2 集$https://media.example/a2.m3u8"
+                + "$$$正片$https://media.example/b1.m3u8");
+        vod.setFlags();
+        WebThemePlaySession session = new WebThemePlaySession();
+
+        JsonObject json = WebHomeVodContract.detail(site, vod, session, true, null, true, true);
+
+        assertEquals("vod-1", json.getAsJsonObject("item").get("vodId").getAsString());
+        assertEquals(2, json.getAsJsonArray("sources").size());
+        JsonObject episode = json.getAsJsonArray("sources").get(0).getAsJsonObject()
+                .getAsJsonArray("episodes").get(0).getAsJsonObject();
+        String playRef = episode.get("playRef").getAsString();
+        assertTrue(playRef.startsWith("play_"));
+        assertFalse(json.toString().contains("media.example"));
+        assertFalse(json.toString().contains("vod_play_url"));
+        assertEquals("https://media.example/a1.m3u8",
+                session.resolve(playRef, "current", "vod-1").getEpisodeUrl());
+        assertTrue(json.getAsJsonObject("state").get("favorite").getAsBoolean());
+        assertFalse(json.getAsJsonObject("state").has("history"));
+        assertTrue(json.getAsJsonObject("capabilities").get("canPlay").getAsBoolean());
+    }
+
+    @Test
+    public void detail_capsEpisodeReferencesAndMarksTruncation() {
+        Site site = Site.get("current", "Current Source");
+        Vod vod = TestVod.vod("vod-1", "Many Episodes");
+        StringBuilder urls = new StringBuilder();
+        for (int i = 0; i <= WebThemePlaySession.MAX_REFERENCES; i++) {
+            if (i > 0) urls.append('#');
+            urls.append("第 ").append(i + 1).append(" 集$url-").append(i);
+        }
+        vod.setFlags(List.of(Flag.create("line-a", urls.toString())));
+
+        JsonObject json = WebHomeVodContract.detail(site, vod, new WebThemePlaySession(), false, null, false, false);
+
+        assertEquals(WebThemePlaySession.MAX_REFERENCES,
+                json.getAsJsonArray("sources").get(0).getAsJsonObject().getAsJsonArray("episodes").size());
+        assertTrue(json.get("truncated").getAsBoolean());
+        assertFalse(json.getAsJsonObject("capabilities").get("canFavorite").getAsBoolean());
+        assertFalse(json.getAsJsonObject("capabilities").get("canPlay").getAsBoolean());
+    }
+
+    @Test
+    public void detail_incrementalRefreshKeepsExistingPlayReferencesValid() {
+        Site site = Site.get("current", "Current Source");
+        Vod vod = TestVod.vod("vod-1", "Stable Session");
+        vod.setFlags(List.of(Flag.create("line-a", "第 1 集$https://media.example/a1.m3u8")));
+        WebThemePlaySession session = new WebThemePlaySession();
+
+        JsonObject first = WebHomeVodContract.detail(site, vod, session, false, null, true, true);
+        String firstRef = first.getAsJsonArray("sources").get(0).getAsJsonObject()
+                .getAsJsonArray("episodes").get(0).getAsJsonObject().get("playRef").getAsString();
+        JsonObject refreshed = WebHomeVodContract.detail(site, vod, session, false, null, true, true,
+                true, WebThemeDetailMetadata.EMPTY);
+        String refreshedRef = refreshed.getAsJsonArray("sources").get(0).getAsJsonObject()
+                .getAsJsonArray("episodes").get(0).getAsJsonObject().get("playRef").getAsString();
+
+        assertEquals(firstRef, refreshedRef);
+        assertEquals("https://media.example/a1.m3u8",
+                session.resolve(firstRef, "current", "vod-1").getEpisodeUrl());
+    }
+
+    @Test
+    public void detail_episodeIdentitySurvivesTmdbReorderingWithinTheSameSession() {
+        Site site = Site.get("current", "Current Source");
+        Vod vod = TestVod.vod("vod-1", "Stable Episode Identity");
+        vod.setFlags(List.of(Flag.create("line-a", "第一集$url-a#第二集$url-b")));
+        WebThemePlaySession session = new WebThemePlaySession();
+
+        JsonObject first = WebHomeVodContract.detail(site, vod, session, false, null, true, true);
+        String firstId = episodeByName(first, "第二集").get("episodeId").getAsString();
+        Collections.swap(vod.getFlags().get(0).getEpisodes(), 0, 1);
+        JsonObject refreshed = WebHomeVodContract.detail(site, vod, session, false, null, true, true);
+
+        assertEquals(firstId, episodeByName(refreshed, "第二集").get("episodeId").getAsString());
+        assertEquals("url-b", session.resolve(firstId, "current", "vod-1").getEpisodeUrl());
+    }
+
+    @Test
+    public void detail_matchesHistoryByEpisodeNameWhenSignedPlaybackUrlChanges() {
+        Site site = Site.get("current", "Current Source");
+        Vod vod = TestVod.vod("vod-1", "Refreshed Signed URL");
+        vod.setFlags(List.of(Flag.create("line-a",
+                "第一集$https://media.example/one?sig=new#第二集$https://media.example/two?sig=new")));
+        History history = new History();
+        history.setVodFlag("line-a");
+        history.setVodRemarks("第二集");
+        history.setEpisodeUrl("https://media.example/two?sig=expired");
+
+        JsonObject detail = WebHomeVodContract.detail(site, vod, new WebThemePlaySession(),
+                false, history, true, true);
+
+        assertTrue(episodeByName(detail, "第二集").get("selected").getAsBoolean());
+        assertFalse(episodeByName(detail, "第一集").get("selected").getAsBoolean());
+    }
+
+    @Test
+    public void detail_hidesFavoriteAndHistoryWithoutReadPermissions() {
+        Site site = Site.get("current", "Current Source");
+        Vod vod = TestVod.vod("vod-1", "Private State");
+        vod.setFlags(List.of(Flag.create("line-a", "第一集$url-a#第二集$url-b")));
+        History history = new History();
+        history.setVodFlag("line-a");
+        history.setVodRemarks("第二集");
+        history.setEpisodeUrl("url-b");
+        history.setPosition(12_000);
+        history.setDuration(60_000);
+
+        JsonObject detail = WebHomeVodContract.detail(site, vod, new WebThemePlaySession(), true, history,
+                false, false, true, true, true, WebThemeDetailMetadata.EMPTY);
+
+        JsonObject state = detail.getAsJsonObject("state");
+        assertFalse(state.has("favorite"));
+        assertFalse(state.has("history"));
+        assertTrue(detail.getAsJsonArray("sources").get(0).getAsJsonObject().get("selected").getAsBoolean());
+        assertFalse(episodeByName(detail, "第一集").get("selected").getAsBoolean());
+        assertFalse(episodeByName(detail, "第二集").get("selected").getAsBoolean());
+        assertFalse(detail.getAsJsonObject("capabilities").get("canFavorite").getAsBoolean());
+    }
+
+    @Test
+    public void detail_rejectsOversizedPlaybackUrlsBeforeIssuingIntentReferences() {
+        Vod vod = TestVod.vod("vod-1", "Oversized URL");
+        vod.setFlags(List.of(Flag.create("line-a", "第一集$"
+                + "x".repeat(WebThemePlaySession.MAX_EPISODE_URL_LENGTH + 1))));
+
+        JsonObject json = WebHomeVodContract.detail(Site.get("current", "Current Source"), vod,
+                new WebThemePlaySession(), false, null, true, true);
+
+        assertEquals(0, json.getAsJsonArray("sources").get(0).getAsJsonObject()
+                .getAsJsonArray("episodes").size());
+        assertTrue(json.get("truncated").getAsBoolean());
+        assertFalse(json.getAsJsonObject("capabilities").get("canPlay").getAsBoolean());
+    }
+
+    @Test
+    public void detail_totalUtf8PayloadStaysBelowTheBridgeLimit() {
+        Vod vod = TestVod.vod("vod-1", "Budgeted Detail")
+                .details("p".repeat(4096), "r".repeat(1024), "2026", "Drama", "简".repeat(20_000));
+        StringBuilder urls = new StringBuilder();
+        for (int i = 0; i < WebThemePlaySession.MAX_REFERENCES; i++) {
+            if (i > 0) urls.append('#');
+            urls.append("第").append(i).append("集$url-").append(i);
+        }
+        vod.setFlags(List.of(Flag.create("line-a", urls.toString())));
+        for (Episode episode : vod.getFlags().get(0).getEpisodes()) {
+            episode.setTmdbEpisode(new TmdbEpisode(1, "标".repeat(512), "2026-01-01",
+                    "介".repeat(4_000), "https://img.example/" + "x".repeat(4_096),
+                    8, 45, 1, 1));
+        }
+
+        JsonObject json = WebHomeVodContract.detail(Site.get("current", "Current Source"), vod,
+                new WebThemePlaySession(), false, null, true, true);
+
+        assertTrue(json.toString().getBytes(StandardCharsets.UTF_8).length
+                <= WebHomeVodContract.MAX_CONTRACT_BYTES);
+        assertTrue(json.get("truncated").getAsBoolean());
+    }
+
+    @Test
+    public void detail_addsBoundedTmdbMediaPeopleArtworkAndRecommendations() {
+        Site site = Site.get("current", "Current Source");
+        Vod vod = TestVod.vod("vod-1", "Eclipse Detail")
+                .details("https://img.example/poster.jpg", "更新至 1 集", "2026", "剧情", "安全简介");
+        vod.setFlags(List.of(Flag.create("line-a", "第 1 集$https://media.example/a1.m3u8")));
+        vod.getFlags().get(0).getEpisodes().get(0).setTmdbEpisode(new TmdbEpisode(
+                1, "相遇", "2026-01-02", "第一集简介", "https://img.example/still.jpg", 8.4, 46, 100, 1));
+
+        TmdbItem tmdbItem = new TmdbItem(100, "tv", "Eclipse Detail", "2026 · 剧情", "TMDB 简介",
+                "https://img.example/tmdb-poster.jpg", "https://img.example/backdrop.jpg", "", 8.6);
+        JsonObject tmdbDetail = new Gson().fromJson("""
+                {
+                  "original_name":"Original Eclipse",
+                  "tagline":"光影仍在继续",
+                  "first_air_date":"2026-01-02",
+                  "last_air_date":"2026-02-20",
+                  "status":"Returning Series",
+                  "vote_average":8.6,
+                  "vote_count":321,
+                  "episode_run_time":[46],
+                  "number_of_seasons":2,
+                  "number_of_episodes":18,
+                  "genres":[{"name":"剧情"},{"name":"悬疑"}]
+                }
+                """, JsonObject.class);
+        WebThemeDetailMetadata metadata = WebThemeDetailMetadata.fromTmdb(
+                tmdbItem,
+                tmdbDetail,
+                List.of(new TmdbPerson(1, "演员甲", "角色甲", "https://img.example/cast.jpg", "Acting", "")),
+                List.of(new TmdbPerson(2, "导演乙", "导演", "https://img.example/crew.jpg", "Directing", "")),
+                List.of("https://img.example/photo-1.jpg", "https://img.example/photo-2.jpg"),
+                List.of(new TmdbItem(200, "movie", "推荐影片", "2025 · 电影", "推荐简介",
+                        "https://img.example/recommend.jpg", "https://img.example/recommend-backdrop.jpg", "", 7.9)));
+
+        JsonObject json = WebHomeVodContract.detail(site, vod, new WebThemePlaySession(), false, null,
+                true, true, true, metadata);
+
+        JsonObject media = json.getAsJsonObject("media");
+        assertEquals(100, media.get("tmdbId").getAsInt());
+        assertEquals("tv", media.get("mediaType").getAsString());
+        assertEquals("Original Eclipse", media.get("originalName").getAsString());
+        assertEquals("https://img.example/backdrop.jpg", media.get("backdrop").getAsString());
+        assertEquals(8.6, media.get("rating").getAsDouble(), 0.001);
+        assertEquals(2, media.get("seasonCount").getAsInt());
+        assertEquals(18, media.get("episodeCount").getAsInt());
+        assertEquals("剧情", media.getAsJsonArray("genres").get(0).getAsString());
+
+        JsonArray people = json.getAsJsonArray("people");
+        assertEquals(2, people.size());
+        assertEquals("cast", people.get(0).getAsJsonObject().get("kind").getAsString());
+        assertEquals("角色甲", people.get(0).getAsJsonObject().get("role").getAsString());
+        assertEquals("crew", people.get(1).getAsJsonObject().get("kind").getAsString());
+        assertEquals(2, json.getAsJsonArray("gallery").size());
+
+        JsonObject episode = json.getAsJsonArray("sources").get(0).getAsJsonObject()
+                .getAsJsonArray("episodes").get(0).getAsJsonObject();
+        assertEquals("相遇", episode.get("title").getAsString());
+        assertEquals("https://img.example/still.jpg", episode.get("still").getAsString());
+        assertEquals(46, episode.get("runtimeMinutes").getAsInt());
+
+        JsonObject recommendation = json.getAsJsonArray("recommendations").get(0).getAsJsonObject();
+        assertEquals(200, recommendation.get("tmdbId").getAsInt());
+        assertEquals("推荐影片", recommendation.get("name").getAsString());
+        assertEquals("https://img.example/recommend.jpg", recommendation.get("pic").getAsString());
+        assertTrue(json.getAsJsonObject("capabilities").get("hasPeople").getAsBoolean());
+        assertTrue(json.getAsJsonObject("capabilities").get("hasGallery").getAsBoolean());
+        assertTrue(json.getAsJsonObject("capabilities").get("hasRecommendations").getAsBoolean());
+        assertTrue(json.getAsJsonObject("capabilities").get("hasEpisodeMetadata").getAsBoolean());
+        assertTrue(json.getAsJsonObject("capabilities").get("canSearchRecommendations").getAsBoolean());
+        assertFalse(json.toString().contains("media.example"));
+    }
+
+    @Test
+    public void detail_skipsNullTmdbEntriesWithoutDroppingLaterResults() {
+        TmdbPerson firstPerson = new TmdbPerson(1, "演员甲", "角色甲", "", "Acting", "");
+        TmdbPerson secondPerson = new TmdbPerson(2, "演员乙", "角色乙", "", "Acting", "");
+        TmdbItem firstRecommendation = new TmdbItem(0, "movie", "推荐甲", "", "", "", "", "", 0);
+        TmdbItem secondRecommendation = new TmdbItem(0, "movie", "推荐乙", "", "", "", "", "", 0);
+        WebThemeDetailMetadata metadata = WebThemeDetailMetadata.fromTmdb(null, null,
+                Arrays.asList(firstPerson, null, secondPerson), List.of(), List.of(),
+                Arrays.asList(firstRecommendation, null, secondRecommendation));
+
+        JsonObject json = WebHomeVodContract.detail(Site.get("current", "Current Source"),
+                TestVod.vod("vod-1", "Detail"), new WebThemePlaySession(), false, null,
+                true, true, true, metadata);
+
+        assertEquals(2, json.getAsJsonArray("people").size());
+        assertEquals("演员乙", json.getAsJsonArray("people").get(1).getAsJsonObject().get("name").getAsString());
+        assertEquals(2, json.getAsJsonArray("recommendations").size());
+        assertEquals("推荐乙", json.getAsJsonArray("recommendations").get(1).getAsJsonObject()
+                .get("name").getAsString());
+    }
+
+    @Test
+    public void home_boundsRemoteCollectionsAndPublicTextFields() throws Exception {
+        String longText = "x".repeat(25_000);
+        Site site = Site.get(longText, longText);
+        Result result = new Result();
+        com.fongmi.android.tv.bean.Class type = new Gson().fromJson(
+                "{\"type_id\":\"" + longText + "\",\"type_name\":\"" + longText + "\"}",
+                com.fongmi.android.tv.bean.Class.class);
+        result.setTypes(Collections.nCopies(257, type));
+
+        Filter oversizedFilter = new Gson().fromJson(
+                "{\"key\":\"" + longText + "\",\"name\":\"" + longText
+                        + "\",\"init\":\"" + longText + "\",\"value\":[]}", Filter.class);
+        List<Value> filterValues = new ArrayList<>();
+        for (int i = 0; i < 257; i++) filterValues.add(Value.create(longText, longText));
+        setField(oversizedFilter, "value", filterValues);
+        Filter emptyFilter = new Gson().fromJson("{\"value\":[]}", Filter.class);
+        List<Filter> groupFilters = new ArrayList<>();
+        groupFilters.add(oversizedFilter);
+        groupFilters.addAll(Collections.nCopies(64, emptyFilter));
+        LinkedHashMap<String, List<Filter>> filters = new LinkedHashMap<>();
+        filters.put("group-0-" + longText, groupFilters);
+        for (int i = 1; i < 257; i++) filters.put("group-" + i, List.of());
+        setField(result, "filters", filters);
+
+        result.setList(List.of(TestVod.vod(longText, longText)
+                .details(longText, longText, longText, longText, longText)));
+
+        JsonObject json = WebHomeVodContract.home(site, result, false, true, 4);
+
+        assertEquals(256, json.getAsJsonObject("source").get("key").getAsString().length());
+        assertEquals(512, json.getAsJsonObject("source").get("name").getAsString().length());
+        assertTrue(json.getAsJsonArray("classes").size() > 0);
+        assertTrue(json.getAsJsonArray("classes").size() <= WebHomeVodContract.MAX_REMOTE_CLASSES);
+        JsonObject firstClass = json.getAsJsonArray("classes").get(0).getAsJsonObject();
+        assertEquals(256, firstClass.get("typeId").getAsString().length());
+        assertEquals(512, firstClass.get("typeName").getAsString().length());
+
+        JsonObject boundedFilters = json.getAsJsonObject("filters");
+        assertTrue(boundedFilters.size() > 0);
+        assertTrue(boundedFilters.size() <= WebHomeVodContract.MAX_REMOTE_FILTER_GROUPS);
+        Map.Entry<String, JsonElement> firstGroup = boundedFilters.entrySet().iterator().next();
+        assertEquals(256, firstGroup.getKey().length());
+        JsonArray mappedFilters = firstGroup.getValue().getAsJsonArray();
+        assertTrue(mappedFilters.size() > 0);
+        assertTrue(mappedFilters.size() <= WebHomeVodContract.MAX_REMOTE_FILTERS_PER_GROUP);
+        JsonObject firstFilter = mappedFilters.get(0).getAsJsonObject();
+        assertEquals(64, firstFilter.get("key").getAsString().length());
+        assertEquals(256, firstFilter.get("name").getAsString().length());
+        assertEquals(512, firstFilter.get("init").getAsString().length());
+        assertTrue(firstFilter.getAsJsonArray("values").size() > 0);
+        assertTrue(firstFilter.getAsJsonArray("values").size()
+                <= WebHomeVodContract.MAX_REMOTE_FILTER_VALUES);
+        assertEquals(512, firstFilter.getAsJsonArray("values").get(0).getAsJsonObject()
+                .get("name").getAsString().length());
+        assertEquals(512, firstFilter.getAsJsonArray("values").get(0).getAsJsonObject()
+                .get("value").getAsString().length());
+
+        JsonObject item = json.getAsJsonArray("items").get(0).getAsJsonObject();
+        assertEquals(2048, item.get("vodId").getAsString().length());
+        assertEquals(512, item.get("name").getAsString().length());
+        assertEquals(4096, item.get("pic").getAsString().length());
+        assertEquals(1024, item.get("remarks").getAsString().length());
+        assertEquals(64, item.get("year").getAsString().length());
+        assertEquals(256, item.get("typeName").getAsString().length());
+        assertEquals(20_000, item.get("content").getAsString().length());
+        assertTrue(json.toString().getBytes(StandardCharsets.UTF_8).length
+                <= WebHomeVodContract.MAX_CONTRACT_BYTES);
+        assertTrue(json.get("truncated").getAsBoolean());
+    }
+
+    @Test
+    public void category_boundsRemoteQueryEcho() {
+        String longText = "x".repeat(2_000);
+        LinkedHashMap<String, String> extend = new LinkedHashMap<>();
+        for (int i = 0; i < 33; i++) extend.put("key-" + i + "-" + longText, longText);
+
+        JsonObject query = WebHomeVodContract.category(Site.get("current", "Current Source"),
+                longText, 1, true, extend, new Result(), false, true, 4).getAsJsonObject("query");
+
+        assertEquals(256, query.get("typeId").getAsString().length());
+        JsonObject mappedExtend = query.getAsJsonObject("extend");
+        assertEquals(32, mappedExtend.size());
+        Map.Entry<String, JsonElement> first = mappedExtend.entrySet().iterator().next();
+        assertEquals(64, first.getKey().length());
+        assertEquals(512, first.getValue().getAsString().length());
+    }
+
+    @Test
+    public void home_normalizesNullFilterGroupsAndInvalidStyles() throws Exception {
+        Result result = new Result();
+        LinkedHashMap<String, List<Filter>> filters = new LinkedHashMap<>();
+        filters.put("null-group", null);
+        setField(result, "filters", filters);
+        result.setList(List.of(TestVod.vod("vod-1", "Name")
+                .style(new Style("x".repeat(100), Float.NaN))));
+
+        JsonObject json = WebHomeVodContract.home(Site.get("demo", "Demo"), result,
+                false, true, 4);
+
+        assertEquals(0, json.getAsJsonObject("filters").getAsJsonArray("null-group").size());
+        JsonObject style = json.getAsJsonArray("items").get(0).getAsJsonObject()
+                .getAsJsonObject("style");
+        assertEquals(32, style.get("type").getAsString().length());
+        assertTrue(Float.isFinite(style.get("ratio").getAsFloat()));
+        assertEquals(Style.rect().getRatio(), style.get("ratio").getAsFloat(), 0.001f);
+    }
+
+    @Test
+    public void home_stopsInspectingInvalidItemsAndKeepsThePayloadWithinBudget() throws Exception {
+        AtomicInteger inspected = new AtomicInteger();
+        List<Vod> hostile = new AbstractList<>() {
+            @Override
+            public Vod get(int index) {
+                if (index >= WebHomeVodContract.MAX_REMOTE_ITEMS) {
+                    throw new AssertionError("Mapper scanned beyond its inspection budget");
+                }
+                inspected.accumulateAndGet(index + 1, Math::max);
+                return index == 0 ? TestVod.vod("first", "First") : null;
+            }
+
+            @Override
+            public int size() {
+                return 1_000_000;
+            }
+        };
+        Result invalid = new Result();
+        invalid.setList(hostile);
+
+        JsonObject invalidJson = WebHomeVodContract.home(Site.get("demo", "Demo"), invalid,
+                false, true, 4);
+        assertEquals(WebHomeVodContract.MAX_REMOTE_ITEMS, inspected.get());
+        assertTrue(invalidJson.get("truncated").getAsBoolean());
+
+        Result oversized = new Result();
+        oversized.setList(Collections.nCopies(WebHomeVodContract.MAX_REMOTE_ITEMS,
+                TestVod.vod("v".repeat(2048), "n".repeat(512))
+                        .details("p".repeat(4096), "r".repeat(1024), "2026", "type",
+                                "内".repeat(20_000))));
+        JsonObject oversizedJson = WebHomeVodContract.home(Site.get("demo", "Demo"), oversized,
+                false, true, 4);
+
+        assertTrue(oversizedJson.toString().getBytes(StandardCharsets.UTF_8).length
+                <= WebHomeVodContract.MAX_CONTRACT_BYTES);
+        assertTrue(oversizedJson.get("truncated").getAsBoolean());
+    }
+
+    private static JsonObject episodeByName(JsonObject detail, String name) {
+        for (JsonElement source : detail.getAsJsonArray("sources")) {
+            for (JsonElement episode : source.getAsJsonObject().getAsJsonArray("episodes")) {
+                JsonObject object = episode.getAsJsonObject();
+                if (name.equals(object.get("name").getAsString())) return object;
+            }
+        }
+        throw new AssertionError("Episode not found: " + name);
     }
 
     private static void setField(Object target, String name, Object value) throws Exception {

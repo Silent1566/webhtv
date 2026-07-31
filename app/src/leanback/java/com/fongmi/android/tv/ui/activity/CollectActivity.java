@@ -30,6 +30,7 @@ import com.fongmi.android.tv.Product;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Collect;
+import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.bean.Result;
 import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.bean.Vod;
@@ -106,6 +107,41 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
         intent.putExtra("pic", pic);
         intent.putExtra("wallPic", wallPic);
         activity.startActivity(intent);
+    }
+
+    public static void startFromHistory(Activity activity, History history) {
+        startFromHistory(activity, history, history.getVodName(), VodConfig.getCid());
+    }
+
+    public static void startFromHistory(Activity activity, History history, String keyword) {
+        startFromHistory(activity, history, keyword, VodConfig.getCid());
+    }
+
+    public static void startFromHistory(Activity activity, History history, String keyword, int targetCid) {
+        Intent intent = new Intent(activity, CollectActivity.class);
+        intent.putExtra("keyword", keyword == null || keyword.isEmpty() ? history.getVodName() : keyword);
+        intent.putExtra("pic", history.getVodPic());
+        intent.putExtra("wallPic", history.getWallPic());
+        intent.putExtra("historyResumeCid", history.getCid());
+        intent.putExtra("historyResumeKey", history.getKey());
+        intent.putExtra("historyResumeTargetCid", targetCid);
+        activity.startActivity(intent);
+    }
+
+    private int getHistoryResumeCid() {
+        return getIntent().getIntExtra("historyResumeCid", -1);
+    }
+
+    private String getHistoryResumeKey() {
+        return Objects.toString(getIntent().getStringExtra("historyResumeKey"), "");
+    }
+
+    private int getHistoryResumeTargetCid() {
+        return getIntent().getIntExtra("historyResumeTargetCid", -1);
+    }
+
+    private boolean isHistoryResume() {
+        return getHistoryResumeCid() >= 0 && getHistoryResumeTargetCid() >= 0 && !getHistoryResumeKey().isEmpty();
     }
 
     private String getKeyword() {
@@ -791,6 +827,10 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
 
     @Override
     public void onItemClick(Vod item) {
+        if (!item.isFolder() && isHistoryResume()) {
+            HistoryResumeCoordinator.openSelected(this, getHistoryResumeCid(), getHistoryResumeKey(), getHistoryResumeTargetCid(), item);
+            return;
+        }
         long start = System.currentTimeMillis();
         setResult(Activity.RESULT_OK);
         mLeavingForPlayback = true;
@@ -799,7 +839,8 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
         removeApplyCollect();
         SpiderDebug.log("collect-flow", "item click site=%s id=%s name=%s folder=%s", item.getSiteKey(), item.getId(), item.getName(), item.isFolder());
         if (item.isFolder()) {
-            VodActivity.start(this, item.getSiteKey(), Result.folder(item));
+            if (isHistoryResume()) VodActivity.start(this, item.getSiteKey(), Result.folder(item), 0, getHistoryResumeCid(), getHistoryResumeKey(), getHistoryResumeTargetCid());
+            else VodActivity.start(this, item.getSiteKey(), Result.folder(item));
         } else {
             String pic = item.getPic().isEmpty() ? getPic() : item.getPic();
             VideoActivity.collect(this, item.getSiteKey(), item.getId(), item.getName(), pic, getWallPic());

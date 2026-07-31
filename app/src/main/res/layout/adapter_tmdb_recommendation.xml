@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- TMDB 推荐影片卡片：竖版海报 + 标题 + 评分 -->
+<!-- TMDB 推荐影片卡片：竖版海报 + 标题 + 分来源评分 -->
 <androidx.appcompat.widget.LinearLayoutCompat xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
@@ -9,8 +9,8 @@
     android:background="@drawable/selector_tmdb_card"
     android:focusable="true"
     android:focusableInTouchMode="true"
-    android:padding="6dp"
-    android:orientation="vertical">
+    android:orientation="vertical"
+    android:padding="6dp">
 
     <androidx.cardview.widget.CardView
         android:layout_width="108dp"
@@ -27,8 +27,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:background="#1C2530"
-                android:scaleType="centerCrop"
                 android:contentDescription="@null"
+                android:scaleType="centerCrop"
                 tools:src="@color/black" />
 
             <androidx.appcompat.widget.LinearLayoutCompat
@@ -56,25 +56,56 @@
 
             </androidx.appcompat.widget.LinearLayoutCompat>
 
-            <com.google.android.material.textview.MaterialTextView
-                android:id="@+id/rating"
+            <LinearLayout
+                android:id="@+id/ratingGroup"
                 android:layout_width="wrap_content"
-                android:layout_height="24dp"
+                android:layout_height="wrap_content"
                 android:layout_gravity="top|end"
                 android:layout_margin="6dp"
-                android:background="@drawable/shape_tmdb_recommendation_rating_badge"
-                android:gravity="center"
-                android:includeFontPadding="false"
-                android:maxLines="1"
-                android:minWidth="42dp"
-                android:paddingStart="7dp"
-                android:paddingEnd="7dp"
-                android:textColor="#FFD35C"
-                android:textSize="11sp"
-                android:textStyle="bold"
+                android:divider="@drawable/divider_rating_chip_vertical"
+                android:gravity="end"
+                android:orientation="vertical"
+                android:showDividers="middle"
                 android:visibility="gone"
-                tools:text="★ 8.0"
-                tools:visibility="visible" />
+                tools:visibility="visible">
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/tmdbRating"
+                    android:layout_width="wrap_content"
+                    android:layout_height="20dp"
+                    android:background="@drawable/shape_tmdb_recommendation_rating_badge"
+                    android:gravity="center"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:minWidth="48dp"
+                    android:paddingStart="6dp"
+                    android:paddingEnd="6dp"
+                    android:textColor="#FFD35C"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:visibility="gone"
+                    tools:text="TMDB 8.3"
+                    tools:visibility="visible" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/doubanRating"
+                    android:layout_width="wrap_content"
+                    android:layout_height="20dp"
+                    android:background="@drawable/shape_tmdb_recommendation_rating_badge"
+                    android:gravity="center"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:minWidth="48dp"
+                    android:paddingStart="6dp"
+                    android:paddingEnd="6dp"
+                    android:textColor="#78E08F"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:visibility="gone"
+                    tools:text="豆瓣 8.7"
+                    tools:visibility="visible" />
+
+            </LinearLayout>
 
         </FrameLayout>
 

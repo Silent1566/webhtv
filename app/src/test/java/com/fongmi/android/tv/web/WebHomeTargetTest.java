@@ -38,11 +38,35 @@ public class WebHomeTargetTest {
     }
 
     @Test
+    public void remoteIpv6ThemeUsesBracketedOriginRule() {
+        String url = "https://[2606:4700:4700::1111]/theme.json";
+
+        WebHomeTarget target = WebHomeTarget.resolve("", true, url, url);
+
+        assertEquals("https://[2606:4700:4700::1111]", target.getOriginRule());
+    }
+
+    @Test
+    public void routePreservesOpaqueVodIdWhitespace() {
+        WebThemeRoute route = WebThemeRoute.detail("  opaque-id  ", " title ", " pic ", " remarks ");
+
+        assertEquals("  opaque-id  ", route.getVodId());
+    }
+
+    @Test
     public void resolve_usesBuiltInEclipseWhenEnabledUrlIsBlank() {
         WebHomeTarget target = WebHomeTarget.resolve(null, true, "  ");
 
         assertEquals(WebHomeTarget.Mode.GLOBAL, target.getMode());
         assertEquals(WebHomeTarget.ECLIPSE_URL, target.getUrl());
+    }
+
+    @Test
+    public void resolve_migratesLegacyBundledHomeToTheV2Manifest() {
+        WebHomeTarget target = WebHomeTarget.resolve("", true, WebHomeTarget.ECLIPSE_HOME_URL);
+
+        assertEquals(WebHomeTarget.ECLIPSE_URL, target.getUrl());
+        assertTrue(target.isManifest());
     }
 
     @Test
@@ -108,5 +132,23 @@ public class WebHomeTargetTest {
         assertFalse(target.allowsMainFrameUrl("https://cdn.theme.example:8443/next"));
         assertFalse(target.allowsMainFrameUrl("http://theme.example:8443/next"));
         assertFalse(target.allowsMainFrameUrl("https:missing-host"));
+    }
+
+    @Test
+    public void manifestPageTarget_usesResolvedEntryAndCarriesPageCapabilities() {
+        WebHomeTarget configured = WebHomeTarget.resolve("", true, "https://theme.example/theme.json");
+        WebThemeManifest manifest = WebThemeManifest.parse(configured.getUrl(), "{"
+                + "\"schemaVersion\":2,\"id\":\"maple.eclipse\",\"version\":\"2\",\"minHostApi\":2,"
+                + "\"pages\":{\"detail\":{\"entry\":\"detail.html\",\"contract\":\"vod.detail@1\"}},"
+                + "\"permissions\":{\"detail\":[\"vod.detail\"]}}", "mobile");
+
+        WebHomeTarget detail = WebHomeTarget.forManifestPage(configured, manifest, WebThemePage.DETAIL);
+
+        assertTrue(configured.isManifest());
+        assertTrue(detail.isV2());
+        assertEquals(WebThemePage.DETAIL, detail.getPage());
+        assertEquals("https://theme.example/detail.html", detail.getUrl());
+        assertTrue(detail.getPermissions().contains("vod.detail"));
+        assertTrue(detail.identity("source-a").contains("maple.eclipse:2:detail"));
     }
 }

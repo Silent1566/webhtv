@@ -795,15 +795,32 @@
           loadCategory(state.active, 1, false);
           return;
         }
-        if (state.native && w.fm && typeof w.fm.vod === 'function') {
+        if (state.native && w.fm && typeof w.fm.openDetail === 'function') {
           status('正在打开 ' + (item.name || '内容'), true);
-          w.fm.vod(item.siteKey || state.source.key, item.vodId, item.name || '', item.pic || '', {
+          w.fm.openDetail({
+            siteKey: item.siteKey || state.source.key,
+            vodId: item.vodId,
+            title: item.name || '',
+            pic: item.pic || '',
             content: item.content || '',
             remarks: item.remarks || ''
-          }).then(function () { status('已交给原生播放器', false); }).catch(function (error) {
-            status('打开失败', false);
-            toast(error && error.message ? error.message : '无法打开此内容');
+          }).then(function () { status('正在进入详情页', false); }).catch(function (error) {
+            if (typeof w.fm.vod !== 'function') {
+              status('打开失败', false);
+              toast(error && error.message ? error.message : '无法打开此内容');
+              return;
+            }
+            w.fm.vod(item.siteKey || state.source.key, item.vodId, item.name || '', item.pic || '', {
+              content: item.content || '', remarks: item.remarks || ''
+            }).then(function () { status('已交给原生播放器', false); }).catch(function (fallbackError) {
+              status('打开失败', false);
+              toast(fallbackError && fallbackError.message ? fallbackError.message : '无法打开此内容');
+            });
           });
+        } else if (state.native && w.fm && typeof w.fm.vod === 'function') {
+          w.fm.vod(item.siteKey || state.source.key, item.vodId, item.name || '', item.pic || '', {
+            content: item.content || '', remarks: item.remarks || ''
+          }).catch(function (error) { toast(error && error.message ? error.message : '无法打开此内容'); });
         } else {
           toast('浏览器演示：' + (item.name || '内容'));
         }

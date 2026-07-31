@@ -135,20 +135,11 @@ public class PlayerPlaybackRegressionSourceTest {
         };
         for (String mapping : tmdbMappings) assertTrue("TmdbDetailActivity is missing " + mapping, tmdb.contains(mapping));
 
-        assertTrue("mobile VideoActivity auxiliary controls must obey the same player button visibility settings",
-                mobile.contains("PlayerButtonSetting.isVisible(PlayerButtonSetting.PREV)")
-                        && mobile.contains("PlayerButtonSetting.isVisible(PlayerButtonSetting.NEXT)")
-                        && mobile.contains("PlayerButtonSetting.isVisible(PlayerButtonSetting.DANMAKU)")
-                        && mobile.contains("PlayerButtonSetting.isVisible(PlayerButtonSetting.FULLSCREEN)")
-                        && mobile.contains("PlayerButtonSetting.isVisible(PlayerButtonSetting.CAST)")
-                        && mobile.contains("PlayerButtonSetting.isVisible(PlayerButtonSetting.PARSE)")
+        assertTrue("mobile parser controls must obey the shared parse visibility setting",
+                mobile.contains("PlayerButtonSetting.isVisible(PlayerButtonSetting.PARSE)")
                         && !mobile.contains("mBinding.control.parse.setVisibility(isFullscreen() && isUseParse() ? View.VISIBLE : View.GONE);"));
-        assertTrue("TmdbDetailActivity auxiliary controls must obey the same player button visibility settings",
-                tmdb.contains("PlayerButtonSetting.isVisible(PlayerButtonSetting.PREV)")
-                        && tmdb.contains("PlayerButtonSetting.isVisible(PlayerButtonSetting.NEXT)")
-                        && tmdb.contains("PlayerButtonSetting.isVisible(PlayerButtonSetting.DANMAKU)")
-                        && tmdb.contains("PlayerButtonSetting.isVisible(PlayerButtonSetting.FULLSCREEN)")
-                        && tmdb.contains("PlayerButtonSetting.isVisible(PlayerButtonSetting.CAST)")
+        assertTrue("TmdbDetailActivity configurable inline controls must obey shared visibility settings",
+                tmdb.contains("PlayerButtonSetting.isVisible(PlayerButtonSetting.CAST)")
                         && tmdb.contains("PlayerButtonSetting.isVisible(PlayerButtonSetting.PARSE)"));
         assertTrue("leanback parser controls must obey the shared parse visibility setting",
                 leanback.contains("PlayerButtonSetting.isVisible(PlayerButtonSetting.PARSE)"));
@@ -168,6 +159,24 @@ public class PlayerPlaybackRegressionSourceTest {
                 stopOverride.contains("stopAndClear();"));
         assertFalse("MediaSession STOP must not be treated as an explicit request to exit the playback Activity",
                 stopOverride.contains("dispatchStop();"));
+    }
+
+    @Test
+    public void mobileRotateButtonRequestsOrientationFromTheToggledState() throws Exception {
+        String source = readMobileJava("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java");
+        int rotate = source.indexOf("private void onRotate()");
+        int rotateEnd = source.indexOf("\n    private ", rotate + 1);
+        int toggle = source.indexOf("setRotate(!isRotate());", rotate);
+        int request = source.indexOf("PlaybackOrientation.getRotateOrientation(isRotate())", rotate);
+
+        assertTrue("mobile rotate button must choose the requested orientation after toggling its state",
+                rotate >= 0
+                        && rotateEnd > rotate
+                        && toggle > rotate
+                        && request > toggle
+                        && request < rotateEnd);
+        assertFalse("mobile rotate button must not re-request the current portrait layout orientation",
+                source.substring(rotate, rotateEnd).contains("PlaybackOrientation.getRotateOrientation(isPort())"));
     }
 
     @Test

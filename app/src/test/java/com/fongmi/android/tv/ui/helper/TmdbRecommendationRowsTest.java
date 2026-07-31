@@ -72,6 +72,32 @@ public class TmdbRecommendationRowsTest {
     }
 
     @Test
+    public void sameIdentity_distinguishesKnownMovieAndTvWhenTmdbIdMissing() {
+        TmdbItem movie = new TmdbItem(0, "movie", "同名作品", "电影 · 2024", "", "", "");
+        TmdbItem tv = new TmdbItem(0, "tv", "同名作品", "剧集 · 2024", "", "", "");
+        TmdbItem unknown = new TmdbItem(0, "", "同名作品", "2024", "", "", "");
+
+        assertFalse(TmdbRecommendationRows.sameIdentity(movie, tv));
+        assertTrue(TmdbRecommendationRows.sameIdentity(movie, unknown));
+    }
+
+    @Test
+    public void sameDisplayList_detectsDoubanRatingUpgradeForSameItem() {
+        TmdbItem unrated = ratedItem(123, "movie", "指环王2：双塔奇兵", 8.4, 8.4, 0.0);
+        TmdbItem enriched = ratedItem(123, "movie", "指环王2：双塔奇兵", 8.4, 8.4, 9.2);
+
+        assertFalse(TmdbRecommendationRows.sameDisplayList(List.of(unrated), List.of(enriched)));
+    }
+
+    @Test
+    public void sameDisplayList_detectsTmdbRatingUpgradeForSameItem() {
+        TmdbItem unrated = ratedItem(123, "movie", "指环王2：双塔奇兵", 9.2, 0.0, 9.2);
+        TmdbItem enriched = ratedItem(123, "movie", "指环王2：双塔奇兵", 9.2, 8.4, 9.2);
+
+        assertFalse(TmdbRecommendationRows.sameDisplayList(List.of(unrated), List.of(enriched)));
+    }
+
+    @Test
     public void sameDisplayList_detectsPosterUpgradeForSameTitle() {
         TmdbItem placeholder = new TmdbItem(-1, "tv", "长安十二时辰", "剧集 · 2019", "推荐理由", "", "");
         TmdbItem resolved = new TmdbItem(123, "tv", "长安十二时辰", "剧集 · 2019", "推荐理由", "poster.jpg", "backdrop.jpg");
@@ -86,6 +112,11 @@ public class TmdbRecommendationRowsTest {
 
     private static TmdbItem item(int id, String title, double rating, String language, String country, List<Integer> genreIds) {
         return new TmdbItem(id, "movie", title, "", "", "", "", "", rating, language, country, genreIds);
+    }
+
+    private static TmdbItem ratedItem(int id, String mediaType, String title, double rating, double tmdbRating, double doubanRating) {
+        return new TmdbItem(id, mediaType, title, "电影 · 2002", "", "", "", "", rating,
+                "en", "US", List.of(12), "", tmdbRating, doubanRating);
     }
 
     private static List<String> titles(List<TmdbItem> items) {

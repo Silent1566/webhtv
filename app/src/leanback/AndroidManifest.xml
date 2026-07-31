@@ -140,6 +140,13 @@
             android:screenOrientation="sensorLandscape" />
 
         <activity
+            android:name=".ui.activity.WebThemeDetailActivity"
+            android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation"
+            android:exported="false"
+            android:parentActivityName=".ui.activity.HomeActivity"
+            android:screenOrientation="sensorLandscape" />
+
+        <activity
             android:name=".ui.activity.TmdbPersonActivity"
             android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation"
             android:parentActivityName=".ui.activity.HomeActivity"

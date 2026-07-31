@@ -45,7 +45,15 @@ public class TmdbMatcher {
         return searchAndMatch(videoName, null);
     }
 
+    public TmdbItem searchAndMatch(String videoName, String mediaType, int year) {
+        return searchAndMatch(videoName, null, normalizeMediaType(mediaType), year);
+    }
+
     public TmdbItem searchAndMatch(String videoName, Vod vod) {
+        return searchAndMatch(videoName, vod, "", 0);
+    }
+
+    private TmdbItem searchAndMatch(String videoName, Vod vod, String expectedMediaType, int expectedYear) {
         if (TextUtils.isEmpty(videoName) || !tmdbConfig.isReady()) {
             SpiderDebug.log("TMDB 匹配跳过: name=" + videoName + " ready=" + tmdbConfig.isReady());
             return null;
@@ -55,13 +63,14 @@ public class TmdbMatcher {
             String cleanName = cleanVideoName(videoName);
             SpiderDebug.log("TMDB 搜索: " + cleanName);
 
-            List<TmdbItem> results = search(cleanName);
-            TmdbItem match = chooseTmdbMatch(results, cleanName, vod);
+            List<TmdbItem> results = filterByMediaType(search(cleanName), expectedMediaType);
+            int matchYear = expectedYear > 0 ? expectedYear : sourceYear(cleanName, vod);
+            TmdbItem match = chooseTmdbMatch(results, cleanName, vod, matchYear);
             if (match == null) {
-                SplitYearQuery split = splitYearQuery(cleanName, vod);
+                SplitYearQuery split = splitYearQuery(cleanName, vod, expectedYear);
                 if (split != null) {
                     SpiderDebug.log("TMDB 年份拆分重试: title=" + split.query + " year=" + split.year);
-                    match = chooseTmdbMatch(search(split.query), split.query, vod, split.year);
+                    match = chooseTmdbMatch(filterByMediaType(search(split.query), expectedMediaType), split.query, vod, split.year);
                 }
             }
             if (match == null) {
@@ -76,6 +85,21 @@ public class TmdbMatcher {
             SpiderDebug.log("TMDB 搜索失败: " + e.getMessage());
             return null;
         }
+    }
+
+    private List<TmdbItem> filterByMediaType(List<TmdbItem> items, String expectedMediaType) {
+        if (items == null || items.isEmpty() || TextUtils.isEmpty(expectedMediaType)) return items;
+        List<TmdbItem> filtered = new ArrayList<>();
+        for (TmdbItem item : items) {
+            if (item != null && expectedMediaType.equals(normalizeMediaType(item.getMediaType()))) filtered.add(item);
+        }
+        return filtered;
+    }
+
+    private String normalizeMediaType(String mediaType) {
+        if ("tv".equalsIgnoreCase(mediaType)) return "tv";
+        if ("movie".equalsIgnoreCase(mediaType)) return "movie";
+        return "";
     }
 
     public List<TmdbItem> search(String keyword) throws Exception {
@@ -103,7 +127,9 @@ public class TmdbMatcher {
     private TmdbItem chooseTmdbMatch(List<TmdbItem> items, String keyword, Vod vod, int sourceYear) {
         if (items == null || items.isEmpty()) return null;
         TmdbItem strict = chooseStrictMatch(items, keyword, vod, sourceYear);
-        if (strict != null || !Setting.isTmdbSmartMatch()) return strict;
+        if (strict != null) return strict;
+        TmdbItem containedYear = chooseContainedYearMatch(items, keyword, vod, sourceYear);
+        if (containedYear != null || !Setting.isTmdbSmartMatch()) return containedYear;
         return chooseSmartMatch(items, keyword, vod, sourceYear);
     }
 
@@ -119,6 +145,22 @@ public class TmdbMatcher {
         if (matches.size() == 1) return isUnwantedSplitSeasonMatch(matches.get(0), keyword, vod) ? null : matches.get(0);
         TmdbItem detailChoice = chooseBySplitSeasonDetails(matches, keyword, vod);
         return detailChoice == null ? matches.get(0) : detailChoice;
+    }
+
+    private TmdbItem chooseContainedYearMatch(List<TmdbItem> items, String keyword, Vod vod, int sourceYear) {
+        if (sourceYear <= 0) return null;
+        String normalized = normalize(keyword);
+        if (normalized.length() < 4) return null;
+        for (TmdbItem item : items) {
+            int itemYear = tmdbItemYear(item);
+            if (itemYear != sourceYear) continue;
+            String title = normalize(removeYearFromTitle(item.getTitle(), itemYear));
+            if (Math.min(title.length(), normalized.length()) < 4) continue;
+            if (!title.contains(normalized) && !normalized.contains(title)) continue;
+            if (isUnwantedSplitSeasonMatch(item, keyword, vod)) continue;
+            return item;
+        }
+        return null;
     }
 
     private TmdbItem chooseSmartMatch(List<TmdbItem> items, String keyword, Vod vod, int sourceYear) {
@@ -321,8 +363,8 @@ public class TmdbMatcher {
         return -1;
     }
 
-    private SplitYearQuery splitYearQuery(String keyword, Vod vod) {
-        int year = sourceYear(keyword, vod);
+    private SplitYearQuery splitYearQuery(String keyword, Vod vod, int expectedYear) {
+        int year = expectedYear > 0 ? expectedYear : sourceYear(keyword, vod);
         if (year <= 0) return null;
         String source = !TextUtils.isEmpty(keyword) && firstYear(keyword) == year ? keyword : vod == null ? "" : vod.getName();
         if (firstYear(source) != year) return null;

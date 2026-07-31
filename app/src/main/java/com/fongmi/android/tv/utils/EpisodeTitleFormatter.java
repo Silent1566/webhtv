@@ -62,6 +62,25 @@ public final class EpisodeTitleFormatter {
         return !isEmpty(extractFileSize(value));
     }
 
+    public static String removeFileSizes(String value) {
+        if (isEmpty(value)) return "";
+        Matcher matcher = FILE_SIZE.matcher(value);
+        StringBuilder result = new StringBuilder(value.length());
+        int last = 0;
+        boolean removed = false;
+        while (matcher.find()) {
+            boolean hasOpen = !isEmpty(matcher.group(1));
+            boolean hasClose = !isEmpty(matcher.group(4));
+            if (hasOpen != hasClose) continue;
+            result.append(value, last, matcher.start());
+            last = matcher.end();
+            removed = true;
+        }
+        if (!removed) return value;
+        result.append(value, last, value.length());
+        return result.toString().replaceAll("\\s+", " ").replaceAll("\\s+(?=\\.[A-Za-z0-9]{1,8}(?:$|[\\s?#]))", "").trim();
+    }
+
     private static boolean isEmpty(String value) {
         return value == null || value.isEmpty();
     }

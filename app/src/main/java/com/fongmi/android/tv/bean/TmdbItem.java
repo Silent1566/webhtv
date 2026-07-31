@@ -13,6 +13,7 @@ public class TmdbItem implements Serializable {
     private final String title;
     private final String subtitle;
     private final String overview;
+    private final String recommendationReason;
     private final String posterUrl;
     private final String backdropUrl;
     private final String credit;
@@ -21,6 +22,8 @@ public class TmdbItem implements Serializable {
     private final String originCountry;
     private final List<Integer> genreIds;
     private final String department;
+    private final double tmdbRating;
+    private final double doubanRating;
 
     public TmdbItem(int tmdbId, String mediaType, String title, String subtitle, String overview, String posterUrl, String backdropUrl) {
         this(tmdbId, mediaType, title, subtitle, overview, posterUrl, backdropUrl, "", 0.0);
@@ -43,11 +46,21 @@ public class TmdbItem implements Serializable {
     }
 
     public TmdbItem(int tmdbId, String mediaType, String title, String subtitle, String overview, String posterUrl, String backdropUrl, String credit, double rating, String originalLanguage, String originCountry, List<Integer> genreIds, String department) {
+        this(tmdbId, mediaType, title, subtitle, overview, posterUrl, backdropUrl, credit, rating, originalLanguage, originCountry, genreIds, department,
+                tmdbId > 0 ? rating : 0.0, tmdbId > 0 ? 0.0 : rating);
+    }
+
+    public TmdbItem(int tmdbId, String mediaType, String title, String subtitle, String overview, String posterUrl, String backdropUrl, String credit, double rating, String originalLanguage, String originCountry, List<Integer> genreIds, String department, double tmdbRating, double doubanRating) {
+        this(tmdbId, mediaType, title, subtitle, overview, posterUrl, backdropUrl, credit, rating, originalLanguage, originCountry, genreIds, department, tmdbRating, doubanRating, "");
+    }
+
+    public TmdbItem(int tmdbId, String mediaType, String title, String subtitle, String overview, String posterUrl, String backdropUrl, String credit, double rating, String originalLanguage, String originCountry, List<Integer> genreIds, String department, double tmdbRating, double doubanRating, String recommendationReason) {
         this.tmdbId = tmdbId;
         this.mediaType = mediaType;
         this.title = title;
         this.subtitle = subtitle;
         this.overview = overview;
+        this.recommendationReason = recommendationReason;
         this.posterUrl = posterUrl;
         this.backdropUrl = backdropUrl;
         this.credit = credit;
@@ -56,6 +69,8 @@ public class TmdbItem implements Serializable {
         this.originCountry = originCountry;
         this.genreIds = genreIds == null ? new ArrayList<>() : new ArrayList<>(genreIds);
         this.department = department;
+        this.tmdbRating = tmdbRating;
+        this.doubanRating = doubanRating;
     }
 
     public int getTmdbId() {
@@ -78,6 +93,10 @@ public class TmdbItem implements Serializable {
         return isEmpty(overview) ? "" : overview;
     }
 
+    public String getRecommendationReason() {
+        return isEmpty(recommendationReason) ? "" : recommendationReason;
+    }
+
     public String getPosterUrl() {
         return isEmpty(posterUrl) ? "" : posterUrl;
     }
@@ -92,6 +111,14 @@ public class TmdbItem implements Serializable {
 
     public double getRating() {
         return rating;
+    }
+
+    public double getTmdbRating() {
+        return tmdbRating;
+    }
+
+    public double getDoubanRating() {
+        return doubanRating;
     }
 
     public String getOriginalLanguage() {

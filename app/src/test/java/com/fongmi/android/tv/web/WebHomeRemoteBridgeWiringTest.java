@@ -19,7 +19,7 @@ public class WebHomeRemoteBridgeWiringTest {
         assertTrue(controller.contains("WebViewCompat.addWebMessageListener(webView, \"fongmiRemote\", Collections.singleton(allowedOrigin)"));
         assertTrue(controller.contains("WebHomeThemePolicy.allowsMessage(allowedOrigin, actualOrigin, isMainFrame)"));
         assertTrue(controller.contains("resolved.isRemoteGlobal() ? null : WebHomeRawAdapter.create(url, pageHeaders)"));
-        assertTrue(controller.contains("String sdk = target != null && target.isRemoteGlobal() ? getRemoteSdk() : getSdk();"));
+        assertTrue(controller.contains("String sdk = currentTarget.isRemoteGlobal() ? getRemoteSdk() : getSdk();"));
         assertTrue(controller.contains("if (!remote) {\n            webView.addJavascriptInterface(bridge, BRIDGE);"));
         assertFalse(bridge.contains("@JavascriptInterface"));
         assertFalse(bridge.contains("WebCall.request"));

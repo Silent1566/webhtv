@@ -133,9 +133,28 @@ public class EpisodeAdapter extends RecyclerView.Adapter<BaseEpisodeHolder> {
         return item.getDesc().concat(title);
     }
 
+    public static String getNativeDisplayTitle(Episode item) {
+        return getNativeDisplayTitle(item, Setting.isTmdbEpisodeFileSize());
+    }
+
+    static String getNativeDisplayTitle(Episode item, boolean separateFileSize) {
+        String title = getNativeTitle(item);
+        if (!separateFileSize) return title;
+        return EpisodeTitleFormatter.removeFileSizes(title);
+    }
+
+    public static String getNativeFileSize(Episode item) {
+        return getNativeFileSize(item, Setting.isTmdbEpisodeFileSize());
+    }
+
+    static String getNativeFileSize(Episode item, boolean includeFileSize) {
+        if (item == null || !includeFileSize) return "";
+        return EpisodeTitleFormatter.extractFileSize(item.getRawDisplayName());
+    }
+
     private static String getTmdbTitle(Episode item, TmdbEpisode tmdbEpisode) {
         String title = getCardTitle(item);
-        return EpisodeTitleFormatter.withSourceFileSize(item.getName(), title, Setting.isTmdbEpisodeFileSize());
+        return EpisodeTitleFormatter.withSourceFileSize(item.getRawDisplayName(), title, Setting.isTmdbEpisodeFileSize());
     }
 
     public static String getCardTitle(Episode item) {
@@ -158,7 +177,7 @@ public class EpisodeAdapter extends RecyclerView.Adapter<BaseEpisodeHolder> {
 
     static String getCardFileSize(Episode item, String title, boolean includeFileSize) {
         if (item == null || !includeFileSize) return "";
-        String fileSize = EpisodeTitleFormatter.extractFileSize(item.getName());
+        String fileSize = EpisodeTitleFormatter.extractFileSize(item.getRawDisplayName());
         if (TextUtils.isEmpty(fileSize) || EpisodeTitleFormatter.containsFileSize(title)) return "";
         return fileSize;
     }

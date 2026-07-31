@@ -1,5 +1,6 @@
 package com.fongmi.android.tv.utils;
 
+import com.fongmi.android.tv.bean.TmdbItem;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -54,6 +55,11 @@ public class TmdbImageSelector {
             if (!isEmpty(candidate.url)) return candidate.url;
         }
         return originalUrl(fallback);
+    }
+
+    public static String cardImage(TmdbItem item, boolean landscape) {
+        if (item == null) return "";
+        return landscape ? item.getBackdropUrl() : item.getPosterUrl();
     }
 
     public static String originalUrl(String url) {

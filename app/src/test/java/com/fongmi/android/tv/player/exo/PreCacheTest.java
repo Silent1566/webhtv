@@ -27,4 +27,17 @@ public class PreCacheTest {
         assertFalse(PreCache.canPreCache("file", "file:///sdcard/movie.mkv"));
         assertFalse(PreCache.canPreCache("https", "https://a.test/1.mp4|||1000***https://b.test/2.mp4|||1000"));
     }
+
+    @Test
+    public void workerUsabilityRejectsFailedAndStoppedThreads() throws Exception {
+        Thread running = Thread.currentThread();
+        Thread stopped = new Thread(() -> {});
+        stopped.start();
+        stopped.join();
+
+        assertTrue(PreCache.isWorkerUsable(running, null));
+        assertFalse(PreCache.isWorkerUsable(running, running));
+        assertFalse(PreCache.isWorkerUsable(stopped, null));
+        assertFalse(PreCache.isWorkerUsable(null, null));
+    }
 }

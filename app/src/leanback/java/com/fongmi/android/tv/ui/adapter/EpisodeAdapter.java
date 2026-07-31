@@ -208,9 +208,35 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
     public static String getTitle(Episode item) {
         if (item.getTmdbEpisode() != null && Setting.getTmdbEpisodeShowScrapedName()) {
             String title = EpisodeTitleFormatter.formatTmdbTitle(item.getTmdbEpisode().getNumber(), item.getTmdbEpisode().getTitle());
-            if (!title.isEmpty()) return item.getDesc().concat(EpisodeTitleFormatter.withSourceFileSize(item.getName(), title, Setting.isTmdbEpisodeFileSize()));
+            if (!title.isEmpty()) return EpisodeTitleFormatter.withSourceFileSize(item.getRawDisplayName(), title, Setting.isTmdbEpisodeFileSize());
         }
-        return item.getDesc().concat(item.getDisplayName());
+        return getNativeTitle(item);
+    }
+
+    public static String getNativeTitle(Episode item) {
+        if (item == null) return "";
+        String title = item.getDisplayName();
+        if (TextUtils.isEmpty(item.getDesc()) || title.startsWith(item.getDesc())) return title;
+        return item.getDesc().concat(title);
+    }
+
+    public static String getNativeDisplayTitle(Episode item) {
+        return getNativeDisplayTitle(item, Setting.isTmdbEpisodeFileSize());
+    }
+
+    static String getNativeDisplayTitle(Episode item, boolean separateFileSize) {
+        String title = getNativeTitle(item);
+        if (!separateFileSize) return title;
+        return EpisodeTitleFormatter.removeFileSizes(title);
+    }
+
+    public static String getNativeFileSize(Episode item) {
+        return getNativeFileSize(item, Setting.isTmdbEpisodeFileSize());
+    }
+
+    static String getNativeFileSize(Episode item, boolean includeFileSize) {
+        if (item == null || !includeFileSize) return "";
+        return EpisodeTitleFormatter.extractFileSize(item.getRawDisplayName());
     }
 
     private int getWidth() {
@@ -266,8 +292,16 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
         TextView textView = holder.textView;
         if (textView == null) return;
 
+        String fileSize = getNativeFileSize(item);
+        boolean showFileSize = !TextUtils.isEmpty(fileSize) && holder.nativeFileSizeView != null;
+        if (holder.nativeFileSizeView != null) {
+            holder.nativeFileSizeView.setText(fileSize);
+            holder.nativeFileSizeView.setVisibility(showFileSize ? View.VISIBLE : View.GONE);
+            holder.nativeFileSizeView.setSelected(item.isSelected() || textView.hasFocus());
+        }
         ViewGroup.LayoutParams params = textView.getLayoutParams();
         int width = getWidth();
+        if (showFileSize) width = Math.max(ResUtil.dp2px(120), width - ResUtil.dp2px(96));
         if (params.width != width) {
             params.width = width;
             textView.setLayoutParams(params);
@@ -278,8 +312,12 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
         textView.setNextFocusUpId(isTopEdge(position) && nextFocusUp != 0 ? nextFocusUp : View.NO_ID);
         textView.setNextFocusDownId(isBottomEdge(position) && nextFocusDown != 0 ? nextFocusDown : View.NO_ID);
         textView.setSelected(item.isSelected() || textView.hasFocus());
-        textView.setText(getTitle(item));
-        textView.setOnFocusChangeListener((view, hasFocus) -> textView.setSelected(item.isSelected() || hasFocus));
+        textView.setText(getNativeDisplayTitle(item));
+        textView.setOnFocusChangeListener((view, hasFocus) -> {
+            boolean active = item.isSelected() || hasFocus;
+            textView.setSelected(active);
+            if (holder.nativeFileSizeView != null) holder.nativeFileSizeView.setSelected(active);
+        });
         textView.setOnKeyListener(keyListener);
         textView.setOnClickListener(v -> mListener.onItemClick(item));
         if (mLongClickListener != null) {
@@ -474,7 +512,7 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
 
     static String getCardFileSize(Episode item, String title, boolean includeFileSize) {
         if (item == null || !includeFileSize) return "";
-        String fileSize = EpisodeTitleFormatter.extractFileSize(item.getName());
+        String fileSize = EpisodeTitleFormatter.extractFileSize(item.getRawDisplayName());
         if (TextUtils.isEmpty(fileSize) || EpisodeTitleFormatter.containsFileSize(title)) return "";
         return fileSize;
     }
@@ -512,12 +550,14 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
     public static class ViewHolder extends RecyclerView.ViewHolder {
 
         private TextView textView;
+        private TextView nativeFileSizeView;
         private AdapterEpisodeCardBinding cardBinding;
 
         // 简单文本模式的 ViewHolder
         ViewHolder(@NonNull AdapterEpisodeBinding binding) {
             super(binding.getRoot());
             this.textView = binding.text;
+            this.nativeFileSizeView = binding.nativeFileSize;
         }
 
         // TMDB 卡片模式的 ViewHolder

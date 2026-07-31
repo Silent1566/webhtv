@@ -53,7 +53,7 @@ public class HistoryAdapter extends BaseDiffAdapter<History, HistoryAdapter.View
     public void clear() {
         super.clear();
         setDelete(false);
-        History.delete(com.fongmi.android.tv.api.config.VodConfig.getCid());
+        History.deleteForDisplay();
     }
 
     private void setClickListener(View root, History item) {

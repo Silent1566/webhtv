@@ -404,19 +404,21 @@ public class MpvPlayerEngine implements PlayerEngine {
 
     private MpvPlayerConfig buildConfig() {
         MpvConfigStore.ensureReady();
+        boolean zeroCopyBlocked = MpvPerformanceSetting.isZeroCopyBlocked();
         surfaceDirect = surfaceDirectOverride == null
                 ? MpvPerformanceSetting.shouldUseSurfaceDirect(false, Util.isLeanback(), decode == HARD)
-                : surfaceDirectOverride && decode == HARD;
+                : surfaceDirectOverride && decode == HARD && !zeroCopyBlocked;
         boolean requestVulkan = PlayerSetting.getMpvRender() == PlayerSetting.MPV_RENDER_VULKAN;
         boolean nativeVulkan = MPVLib.isBundledVulkanEnabled(App.get());
         boolean deviceVulkan = MPVLib.isDeviceVulkan13Capable(App.get());
         boolean useVulkan = !surfaceDirect && requestVulkan && nativeVulkan && deviceVulkan;
         boolean useGpuNext = !surfaceDirect && (useVulkan || decode != HARD);
         if (requestVulkan && !surfaceDirect && !useVulkan) SpiderDebug.log("player-engine", "mpv render requested=vulkan but unavailable native=%s device=%s; fallback=opengl", nativeVulkan, deviceVulkan);
-        SpiderDebug.log("player-engine", "mpv output mode=%s direct=%s render requested=%s nativeVulkan=%s deviceVulkan=%s decode=%s actual=%s/%s", MpvPerformanceSetting.getOutputModeText(), surfaceDirect, requestVulkan ? "vulkan" : "opengl", nativeVulkan, deviceVulkan, decode == HARD ? "hard" : "soft", surfaceDirect ? "surface" : useVulkan ? "vulkan" : "opengl", surfaceDirect ? "mediacodec_embed" : useGpuNext ? "gpu-next" : "gpu");
+        String hwdec = surfaceDirect ? "mediacodec" : decode == HARD ? MpvPerformanceSetting.getHwdecOption() : "no";
+        SpiderDebug.log("player-engine", "mpv output mode=%s direct=%s zeroCopyBlocked=%s hwdec=%s render requested=%s nativeVulkan=%s deviceVulkan=%s decode=%s actual=%s/%s", MpvPerformanceSetting.getOutputModeText(), surfaceDirect, zeroCopyBlocked, hwdec, requestVulkan ? "vulkan" : "opengl", nativeVulkan, deviceVulkan, decode == HARD ? "hard" : "soft", surfaceDirect ? "surface" : useVulkan ? "vulkan" : "opengl", surfaceDirect ? "mediacodec_embed" : useGpuNext ? "gpu-next" : "gpu");
         MpvPlayerConfig.Builder builder = MpvPlayerConfig.builder(App.get())
                 .configDir(MpvConfigStore.configDir())
-                .hwdec(surfaceDirect ? "mediacodec" : decode == HARD ? MpvPerformanceSetting.getHwdecOption() : "no")
+                .hwdec(hwdec)
                 .audioSpdif(resolveAudioSpdifCodecs())
                 .logLevel(MpvPerformanceSetting.isVerboseLog() ? "all=v" : "all=warn")
                 .demuxerMaxBytes(getDemuxerMaxBytes())

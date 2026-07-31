@@ -73,6 +73,37 @@ public class HomeWebMediaLifecycleTest {
         assertEquals(0, gate.inFlight());
     }
 
+    @Test
+    public void remoteActionGateThrottlesSideEffectsWithoutBlockingReadsAndResetsPerSession() {
+        HomeWebController.RemoteActionGate gate = new HomeWebController.RemoteActionGate(400);
+
+        assertTrue(gate.tryAcquire("vod.home", 1_000));
+        assertTrue(gate.tryAcquire("theme.info", 1_001));
+        assertTrue(gate.tryAcquire("favorite.set", 1_000));
+        assertFalse(gate.tryAcquire("navigation.reload", 1_399));
+        assertTrue(gate.tryAcquire("player.playVod", 1_400));
+        gate.reset();
+        assertTrue(gate.tryAcquire("navigation.openDetail", 1_400));
+    }
+
+    @Test
+    public void diagnosticUrlsRemoveCredentialsQueriesAndFragments() {
+        assertEquals("https://example.com:8443/path/file",
+                HomeWebController.safeLogUrl("https://user:password@example.com:8443/path/file?token=secret#part"));
+        assertEquals("https://[2001:db8::1]/page",
+                HomeWebController.safeLogUrl("https://[2001:db8::1]/page?token=secret"));
+        assertEquals("custom:<redacted>", HomeWebController.safeLogUrl("custom:secret-payload?token=value"));
+    }
+
+    @Test
+    public void bridgeDiagnosticsDoNotPrintRawPayloadsOrPlaybackUrls() throws Exception {
+        String bridge = readMainSource("HomeWebBridge.java");
+
+        assertFalse(bridge.contains("invoke method=%s payload=%s"));
+        assertFalse(bridge.contains("player.playUrl title=%s url=%s\", playTitle, playUrl"));
+        assertTrue(bridge.contains("HomeWebController.safeLogUrl(playUrl)"));
+    }
+
     private static void assertNativeRoutePausesMedia(String source, String start, String end) {
         String body = methodBody(source, start, end);
         assertTrue(start + " must pause WebHome media before VideoActivity launch",

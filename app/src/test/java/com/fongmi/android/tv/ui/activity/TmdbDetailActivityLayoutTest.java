@@ -694,6 +694,24 @@ public class TmdbDetailActivityLayoutTest {
     }
 
     @Test
+    public void earlyPersonalAiCacheRendersBeforeAsynchronousRatingEnrichment() throws Exception {
+        Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int method = source.indexOf("private void loadTmdbPersonalAiCache(TmdbBundle bundle");
+        int nextMethod = source.indexOf("private void loadTmdbPersonalAi(TmdbBundle bundle", method);
+        String body = source.substring(method, nextMethod);
+        int cachedApply = body.indexOf("applyTmdbPersonalAi(bundle, cachedAi, generation, false);");
+        int enrich = body.indexOf("service.enrichTmdbPageRatingsAsync(cached.getPage(), enrichedPage -> {");
+        int enrichedItems = body.indexOf("TmdbRecommendationRows.personalAi(enrichedPage.getItems()", enrich);
+        int enrichedApply = body.indexOf("applyTmdbRatingEnrichment(bundle, personalAiItems, enrichedAi, generation);", enrichedItems);
+
+        assertTrue(sourcePath + " is missing early personal AI cache loading", method >= 0 && nextMethod > method);
+        assertTrue("cached AI cards must render immediately before rating enrichment",
+                cachedApply >= 0 && enrich > cachedApply);
+        assertTrue("cached AI rating enrichment must merge into the visible row without restoring hidden cards",
+                enrichedItems > enrich && enrichedApply > enrichedItems);
+    }
+    @Test
     public void standaloneDetailAppliesInitialTmdbResultInSinglePass() throws Exception {
         Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
@@ -943,13 +961,29 @@ public class TmdbDetailActivityLayoutTest {
 
         int aiList = layout.indexOf("android:id=\"@+id/personalAiList\"");
         int aiReason = layout.indexOf("android:id=\"@+id/personalAiReason\"");
+        int externalLinksTitle = layout.indexOf("android:id=\"@+id/externalLinksTitle\"");
         int tmdbStatus = layout.indexOf("android:id=\"@+id/tmdbStatus\"");
         assertTrue("TMDB detail must keep the AI reason directly below the smart recommendation row",
-                aiList >= 0 && aiReason > aiList && tmdbStatus > aiReason);
+                aiList >= 0 && aiReason > aiList && externalLinksTitle > aiReason && tmdbStatus > externalLinksTitle);
+        int aiReasonEnd = layout.indexOf("/>", aiReason);
+        String aiReasonTag = layout.substring(aiReason, aiReasonEnd);
+        assertTrue("The recommendation reason needs bottom spacing before the external-links heading",
+                aiReasonTag.contains("android:layout_marginBottom=\"16dp\"")
+                        && aiReasonTag.contains("android:includeFontPadding=\"false\""));
+        int externalLinksTitleEnd = layout.indexOf("/>", externalLinksTitle);
+        String externalLinksTitleTag = layout.substring(externalLinksTitle, externalLinksTitleEnd);
+        assertTrue("The external-links heading needs its own top spacing after the recommendation reason",
+                externalLinksTitleTag.contains("android:layout_marginTop=\"20dp\""));
         assertTrue("TMDB detail must listen for smart recommendation card focus",
                 activity.contains("personalAiAdapter.setOnItemFocusListener(this::showAiRecommendationReason);"));
-        assertTrue("TMDB detail must render the focused card overview as the recommendation reason",
-                activity.contains("binding.personalAiReason.setText(getString(R.string.ai_recommendation_reason_preview, reason));"));
+        int reasonMethod = activity.indexOf("private void showAiRecommendationReason(TmdbItem item, boolean focused)");
+        int reasonMethodEnd = activity.indexOf("private void scrollAiRecommendationReasonIntoView()", reasonMethod);
+        String reasonBody = activity.substring(reasonMethod, reasonMethodEnd);
+        assertTrue("TMDB detail must prefer the dedicated recommendation reason and keep legacy overview fallback",
+                reasonBody.contains("item.getRecommendationReason()")
+                        && reasonBody.contains("item.getOverview()")
+                        && reasonBody.indexOf("item.getRecommendationReason()") < reasonBody.indexOf("item.getOverview()")
+                        && reasonBody.contains("binding.personalAiReason.setText(getString(R.string.ai_recommendation_reason_preview, reason));"));
         assertTrue("TMDB detail must hide stale recommendation reasons when the smart row is absent",
                 activity.contains("showAiRecommendationReason(null, false);"));
         assertTrue("TMDB detail must scroll the reason into view when the focused card sits near the bottom of the wide layout",

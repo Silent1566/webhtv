@@ -57,18 +57,25 @@ public final class TmdbRecommendationRows {
 
     private static boolean containsRecommendation(List<TmdbItem> items, TmdbItem target) {
         if (items == null || target == null) return false;
-        for (TmdbItem item : items) if (sameRecommendation(item, target)) return true;
+        for (TmdbItem item : items) if (sameIdentity(item, target)) return true;
         return false;
     }
 
-    private static boolean sameRecommendation(TmdbItem first, TmdbItem second) {
+    public static boolean sameIdentity(@Nullable TmdbItem first, @Nullable TmdbItem second) {
+        if (first == second) return first != null;
         if (first == null || second == null) return false;
         if (first.getTmdbId() > 0 && second.getTmdbId() > 0) {
-            return first.getTmdbId() == second.getTmdbId() && Objects.equals(first.getMediaType(), second.getMediaType());
+            return first.getTmdbId() == second.getTmdbId() && compatibleMediaType(first, second);
         }
         String firstTitle = normalizeTitle(first.getTitle());
         String secondTitle = normalizeTitle(second.getTitle());
-        return !firstTitle.isEmpty() && firstTitle.equals(secondTitle);
+        return !firstTitle.isEmpty() && firstTitle.equals(secondTitle) && compatibleMediaType(first, second);
+    }
+
+    private static boolean compatibleMediaType(TmdbItem first, TmdbItem second) {
+        String firstType = normalizeMediaType(first.getMediaType());
+        String secondType = normalizeMediaType(second.getMediaType());
+        return firstType.isEmpty() || secondType.isEmpty() || firstType.equals(secondType);
     }
 
     private static boolean sameDisplayItem(TmdbItem first, TmdbItem second) {
@@ -79,6 +86,7 @@ public final class TmdbRecommendationRows {
                 && Objects.equals(first.getTitle(), second.getTitle())
                 && Objects.equals(first.getSubtitle(), second.getSubtitle())
                 && Objects.equals(first.getOverview(), second.getOverview())
+                && Objects.equals(first.getRecommendationReason(), second.getRecommendationReason())
                 && Objects.equals(first.getPosterUrl(), second.getPosterUrl())
                 && Objects.equals(first.getBackdropUrl(), second.getBackdropUrl())
                 && Objects.equals(first.getCredit(), second.getCredit())
@@ -86,10 +94,16 @@ public final class TmdbRecommendationRows {
                 && Objects.equals(first.getOriginalLanguage(), second.getOriginalLanguage())
                 && Objects.equals(first.getOriginCountry(), second.getOriginCountry())
                 && Objects.equals(first.getGenreIds(), second.getGenreIds())
-                && Objects.equals(first.getDepartment(), second.getDepartment());
+                && Objects.equals(first.getDepartment(), second.getDepartment())
+                && Math.abs(first.getTmdbRating() - second.getTmdbRating()) < 0.001
+                && Math.abs(first.getDoubanRating() - second.getDoubanRating()) < 0.001;
     }
 
     private static String normalizeTitle(String text) {
         return text == null || text.isEmpty() ? "" : text.replaceAll("[\\s·•・._\\-/\\\\|()（）\\[\\]【】《》<>:：,，.。]+", "").trim().toLowerCase(Locale.ROOT);
+    }
+
+    private static String normalizeMediaType(String text) {
+        return Objects.toString(text, "").trim().toLowerCase(Locale.ROOT);
     }
 }

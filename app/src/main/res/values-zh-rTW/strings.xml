@@ -1675,6 +1675,12 @@
         <item>智能 + 彈窗</item>
     </string-array>
 
+    <string-array name="select_global_history_mode">
+        <item>關閉</item>
+        <item>自動配對播放源</item>
+        <item>搜尋後選擇播放源</item>
+    </string-array>
+
     <string-array name="select_auto_skip_intro_outro">
         <item>關閉</item>
         <item>自動跳過</item>
@@ -2075,6 +2081,16 @@
     <string name="setting_episode_history">記錄分集進度</string>
     <string name="setting_history_aggregation">歷史記錄跨源聚合</string>
     <string name="setting_history_aggregation_hint">基於 TMDB 匹配統一不同源的歷史記錄</string>
+    <string name="setting_global_history">全域歷史續播</string>
+    <string name="history_other_config">其他介面</string>
+    <string name="history_source_searching">正在配對可續播播放源…</string>
+    <string name="history_source_not_found">未找到可可靠續播的播放源</string>
+    <string name="history_source_open_search">開啟全域搜尋</string>
+    <string name="history_source_episode_missing">該播放源與歷史記錄不匹配或缺少對應集數</string>
+    <string name="history_source_load_failed">播放源載入失敗</string>
+    <string name="history_record_missing">歷史記錄已不存在</string>
+    <string name="history_config_changed">點播設定已切換，請重新操作</string>
+    <string name="dialog_delete_global_history">確定刪除所有點播設定的歷史記錄嗎？</string>
     <string name="setting_home_history">首頁最近觀看</string>
     <string name="site_health_report_ad_blocked">廣告攔截 · %1$d 次</string>
     <string name="setting_custom_csp_sort">排序</string>

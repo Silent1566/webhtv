@@ -73,7 +73,8 @@ public class EpisodeGridHolder extends BaseEpisodeHolder {
         setCardMarquee(false);
         binding.text.setActivated(item.isSelected());
         binding.text.setHorizontallyScrolling(true);
-        binding.text.setText(EpisodeAdapter.getNativeTitle(item));
+        binding.text.setText(EpisodeAdapter.getNativeDisplayTitle(item));
+        bindNativeFileSize(EpisodeAdapter.getNativeFileSize(item));
         setMarquee(binding.text.hasFocus() || item.isSelected());
         binding.text.setOnFocusChangeListener((view, hasFocus) -> setMarquee(hasFocus || binding.text.isActivated()));
         binding.text.setOnClickListener(v -> listener.onItemClick(item));
@@ -84,6 +85,7 @@ public class EpisodeGridHolder extends BaseEpisodeHolder {
 
     private void bindCard(Episode item, TmdbEpisode episode) {
         binding.text.setVisibility(View.GONE);
+        binding.nativeFileSize.setVisibility(View.GONE);
         binding.card.setVisibility(View.VISIBLE);
         binding.text.setActivated(false);
         setMarquee(false);
@@ -136,6 +138,14 @@ public class EpisodeGridHolder extends BaseEpisodeHolder {
         return TextUtils.join(" / ", values);
     }
 
+    private void bindNativeFileSize(String fileSize) {
+        boolean visible = !TextUtils.isEmpty(fileSize);
+        binding.nativeFileSize.setText(fileSize);
+        binding.nativeFileSize.setVisibility(visible ? View.VISIBLE : View.GONE);
+        binding.nativeFileSize.setSelected(binding.text.isActivated() || binding.text.hasFocus());
+        binding.text.setPadding(visible ? ResUtil.dp2px(96) : horizontalPadding, 0, horizontalPadding, 0);
+    }
+
     private void bindFileSize(String fileSize, boolean belowMeta) {
         binding.fileSize.setText(fileSize);
         binding.fileSize.setVisibility(TextUtils.isEmpty(fileSize) ? View.GONE : View.VISIBLE);
@@ -171,6 +181,7 @@ public class EpisodeGridHolder extends BaseEpisodeHolder {
     private void setMarquee(boolean focused) {
         binding.text.setEllipsize(focused ? TextUtils.TruncateAt.MARQUEE : TextUtils.TruncateAt.START);
         binding.text.setSelected(focused);
+        binding.nativeFileSize.setSelected(focused);
     }
 
     private void setCardMarquee(boolean active) {

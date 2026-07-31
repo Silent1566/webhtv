@@ -84,6 +84,18 @@ public class TmdbImageSelectorTest {
         assertEquals("https://image.tmdb.org/t/p/original/abc.jpg", TmdbImageSelector.originalUrl("https://image.tmdb.org/t/p/original/abc.jpg"));
     }
 
+    @Test
+    public void cardImage_usesRequestedOrientationWithOppositeFallback() {
+        com.fongmi.android.tv.bean.TmdbItem item = new com.fongmi.android.tv.bean.TmdbItem(
+                1, "movie", "测试影片", "2024", "", "poster.jpg", "backdrop.jpg");
+
+        assertEquals("poster.jpg", TmdbImageSelector.cardImage(item, false));
+        assertEquals("backdrop.jpg", TmdbImageSelector.cardImage(item, true));
+        assertEquals("backdrop.jpg", TmdbImageSelector.cardImage(item, !false));
+        assertEquals("poster.jpg", TmdbImageSelector.cardImage(item, !true));
+    }
+
+
     private JsonObject detail(String json) {
         return JsonParser.parseString(json).getAsJsonObject();
     }

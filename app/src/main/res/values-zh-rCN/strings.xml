@@ -232,8 +232,21 @@
     <string name="setting_episode_history">记录分集进度</string>
     <string name="setting_history_aggregation">历史记录跨源聚合</string>
     <string name="setting_history_aggregation_hint">基于 TMDB 匹配统一不同源的历史记录</string>
+    <string name="setting_global_history">全局历史续播</string>
+    <string name="history_other_config">其他接口</string>
+    <string name="history_source_searching">正在匹配可续播播放源…</string>
+    <string name="history_source_not_found">未找到可可靠续播的播放源</string>
+    <string name="history_source_open_search">打开全局搜索</string>
+    <string name="history_source_episode_missing">该播放源与历史记录不匹配或缺少对应集数</string>
+    <string name="history_source_load_failed">播放源加载失败</string>
+    <string name="history_record_missing">历史记录已不存在</string>
+    <string name="history_config_changed">点播配置已切换，请重新操作</string>
+    <string name="dialog_delete_global_history">确定删除所有点播配置的历史记录吗？</string>
     <string name="setting_home_history">首页最近观看</string>
     <string name="setting_personal_recommendation">个性推荐</string>
+    <string name="setting_recommendation_feedback">不感兴趣管理</string>
+    <string name="setting_recommendation_feedback_count">%1$d 项 · 90 天后自动恢复</string>
+    <string name="setting_recommendation_feedback_empty">暂无 · 90 天后自动恢复</string>
     <string name="setting_tmdb_episode_file_size">TMDB 剧集保留文件大小</string>
     <string name="setting_auto_skip_intro_outro">自动跳过片头片尾</string>
     <string name="intro_skip_confirm_title">跳过片头/片尾？</string>
@@ -1465,6 +1478,12 @@
         <item>智能 + 弹窗</item>
     </string-array>
 
+    <string-array name="select_global_history_mode">
+        <item>关闭</item>
+        <item>自动匹配播放源</item>
+        <item>搜索后选择播放源</item>
+    </string-array>
+
     <string-array name="select_auto_skip_intro_outro">
         <item>关闭</item>
         <item>自动跳过</item>
@@ -1682,8 +1701,30 @@
     <string name="dialog_ai_test_running">正在测试 AI 配置...</string>
     <string name="dialog_ai_test_success">AI 测试通过：%1$s（耗时 %2$s）</string>
     <string name="dialog_ai_test_failed">AI 测试失败：%1$s（耗时 %2$s）</string>
-    <string name="ai_recommendation_info_title">智能推荐详情</string>
+    <string name="ai_recommendation_info_title">推荐详情</string>
     <string name="ai_recommendation_reason_label">推荐理由</string>
+    <string name="recommendation_not_interested">不感兴趣</string>
+    <string name="recommendation_feedback_title">不感兴趣管理</string>
+    <string name="recommendation_feedback_summary">这些作品暂不参与个性推荐，并会在 90 天后自动恢复。选择作品可立即恢复推荐。</string>
+    <string name="recommendation_feedback_empty">暂无不感兴趣记录</string>
+    <string name="recommendation_feedback_remaining_days">剩余约 %1$d 天</string>
+    <string name="recommendation_feedback_restore_hint">选择后恢复</string>
+    <string name="recommendation_feedback_restore_all">全部恢复</string>
+    <string name="recommendation_feedback_restored">已恢复推荐</string>
+    <string name="recommendation_feedback_restored_all">已全部恢复推荐</string>
+    <string name="recommendation_not_interested_recorded">已暂时隐藏 90 天，可在个性设置中恢复</string>
+    <string name="recommendation_overview_label">内容简介</string>
+    <string name="recommendation_overview_unavailable">当前缓存暂无内容简介</string>
+    <string name="recommendation_source_ai">智能推荐</string>
+    <string name="recommendation_source_tmdb">个性推荐 · TMDB</string>
+    <string name="recommendation_source_douban">个性推荐 · 豆瓣</string>
+    <string name="recommendation_source_related">猜你喜欢</string>
+    <string name="recommendation_data_tmdb">TMDB 条目 #%1$d</string>
+    <string name="recommendation_data_douban_matched">豆瓣评分已匹配</string>
+    <string name="recommendation_data_douban_unavailable">未匹配到豆瓣评分</string>
+    <string name="recommendation_data_douban_only">豆瓣条目已匹配</string>
+    <string name="recommendation_data_metadata_only">仅有推荐基础信息</string>
+    <string name="recommendation_data_no_poster">暂无可用海报</string>
     <string name="ai_recommendation_reason_preview">推荐理由：%1$s</string>
     <string name="detail_work_searching">正在当前站源搜索 %1$s...</string>
     <string name="detail_work_global_searching">当前站源无结果，正在全局搜索 %1$s...</string>

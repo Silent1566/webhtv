@@ -85,4 +85,12 @@ public class Migrations {
             database.execSQL("UPDATE History SET legacyKey = `key`");
         }
     };
+
+    public static final Migration MIGRATION_39_40 = new Migration(39, 40) {
+        @Override
+        public void migrate(@NonNull SupportSQLiteDatabase database) {
+            database.execSQL("ALTER TABLE History ADD COLUMN tmdbSeasonNumber INTEGER NOT NULL DEFAULT 0");
+            database.execSQL("ALTER TABLE History ADD COLUMN tmdbEpisodeNumber INTEGER NOT NULL DEFAULT 0");
+        }
+    };
 }

@@ -1274,7 +1274,7 @@ public void resetTrack(int type) {
         boolean externalSubtitleActive = spec != null && spec.getSubs() != null && !spec.getSubs().isEmpty();
         boolean leaveForSubtitle = MpvAutoOutputPolicy.shouldLeaveSurfaceDirectForSubtitle(
                 automaticOutput, mpv.isSurfaceDirect(), externalSubtitleActive, mpvExplicitSubtitlePreference);
-        if (automaticOutput && mpv.isSurfaceDirect() && !leaveForSubtitle) {
+        if (automaticOutput && MpvPerformanceSetting.isAutoSurfaceDirectEnabled() && mpv.isSurfaceDirect() && !leaveForSubtitle) {
             if (SpiderDebug.isEnabled()) SpiderDebug.log("mpv-output", "preserve direct output for new item reason=auto-sticky");
             return;
         }
@@ -1334,8 +1334,9 @@ public void resetTrack(int type) {
         MpvAutoOutputPolicy.Decision decision = MpvAutoOutputPolicy.evaluate(width, height, engine.isHard(), Util.isLeanback(), subtitleActive, lutOrFilterActive, customGpuProcessing);
         mpvAutoOutputEvaluated = true;
         boolean currentlyDirect = isMpvSurfaceDirect();
-        MpvAutoOutputPolicy.Transition transition = MpvAutoOutputPolicy.transition(decision.eligible(), currentlyDirect);
-        if (SpiderDebug.isEnabled()) SpiderDebug.log("mpv-output", "auto decision eligible=%s transition=%s reason=%s size=%dx%d tracksReady=%s early=%s subtitle=%s lutOrFilter=%s customGpu=%s direct=%s attempts=%d", decision.eligible(), transition, decision.reason(), width, height, tracksReady, earlyEvaluation, subtitleActive, lutOrFilterActive, customGpuProcessing, currentlyDirect, mpvAutoOutputProbeAttempts);
+        boolean effectiveEligible = MpvPerformanceSetting.isAutoSurfaceDirectEnabled() && decision.eligible();
+        MpvAutoOutputPolicy.Transition transition = MpvAutoOutputPolicy.transition(effectiveEligible, currentlyDirect);
+        if (SpiderDebug.isEnabled()) SpiderDebug.log("mpv-output", "auto decision eligible=%s effectiveEligible=%s transition=%s reason=%s size=%dx%d tracksReady=%s early=%s subtitle=%s lutOrFilter=%s customGpu=%s direct=%s attempts=%d", decision.eligible(), effectiveEligible, transition, decision.reason(), width, height, tracksReady, earlyEvaluation, subtitleActive, lutOrFilterActive, customGpuProcessing, currentlyDirect, mpvAutoOutputProbeAttempts);
         if (transition == MpvAutoOutputPolicy.Transition.ENTER_SURFACE_DIRECT) rebuildAndRestartMpv(true, "auto-" + decision.reason());
         else if (transition == MpvAutoOutputPolicy.Transition.LEAVE_SURFACE_DIRECT) rebuildAndRestartMpv(false, "auto-" + decision.reason());
         return true;

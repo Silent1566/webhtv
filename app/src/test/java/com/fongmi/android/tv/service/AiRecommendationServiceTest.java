@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.LinkedHashMap;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -208,6 +209,47 @@ public class AiRecommendationServiceTest {
 
         history.setDirector("张开宙,另一导演");
         assertFalse(initial.equals(AiRecommendationService.historyMetadataFingerprint(histories)));
+    }
+
+    @Test
+    public void selectHistoryContext_ordersByRecencyBeforeApplyingLimit() {
+        List<History> histories = new ArrayList<>();
+        for (int index = 1; index <= 25; index++) {
+            History history = new History();
+            history.setVodName("历史作品" + index);
+            history.setPosition((26L - index) * 60_000L);
+            history.setCreateTime(index);
+            histories.add(history);
+        }
+
+        List<History> selected = AiRecommendationService.selectHistoryContext(histories, "");
+
+        assertEquals(24, selected.size());
+        assertEquals("历史作品25", selected.get(0).getVodName());
+        assertEquals("历史作品2", selected.get(23).getVodName());
+    }
+
+    @Test
+    public void recommendationFingerprint_includesNormalizedSeedsAndFeedbackState() {
+        List<String> seeds = List.of(" 想见你 ", "想见你", "大明王朝1566");
+
+        assertEquals(
+                "想见你|大明王朝1566|feedback:blocked-v1",
+                PersonalRecommendationService.recommendationFingerprint(seeds, "blocked-v1"));
+    }
+
+    @Test
+    public void buildPrompt_includesNotInterestedContextAndHardConstraint() {
+        JsonObject disliked = new JsonObject();
+        disliked.addProperty("title", "不喜欢的作品");
+        disliked.addProperty("mediaType", "tv");
+
+        String prompt = AiRecommendationService.buildPrompt(
+                AiConfig.objectFrom("{}"), new JsonObject(), new ArrayList<>(), new ArrayList<>(), List.of(disliked));
+
+        assertTrue(prompt.contains("\"notInterested\""));
+        assertTrue(prompt.contains("不喜欢的作品"));
+        assertTrue(prompt.contains("明确标记为不感兴趣"));
     }
 
     @Test
@@ -415,8 +457,11 @@ public class AiRecommendationServiceTest {
     }
 
     @Test
-    public void resolvedItemCache_roundTripsPosterReasonAndRating() {
-        TmdbItem item = new TmdbItem(123, "tv", "大明王朝1566", "剧集 · 2007", "推荐理由", "poster.jpg", "backdrop.jpg", "", 9.7);
+    public void resolvedItemCache_roundTripsOverviewReasonPosterAndRatings() {
+        TmdbItem item = new TmdbItem(
+                123, "tv", "大明王朝1566", "剧集 · 2007", "历史正剧内容简介",
+                "poster.jpg", "backdrop.jpg", "主演", 9.7, "zh", "CN",
+                Collections.singletonList(18), "导演", 9.7, 9.6, "推荐理由");
 
         List<TmdbItem> items = AiRecommendationService.parseResolvedItems("{\"items\":[" + AiRecommendationService.tmdbItemToJson(item) + "]}");
 
@@ -424,9 +469,41 @@ public class AiRecommendationServiceTest {
         assertEquals(123, items.get(0).getTmdbId());
         assertEquals("tv", items.get(0).getMediaType());
         assertEquals("大明王朝1566", items.get(0).getTitle());
-        assertEquals("推荐理由", items.get(0).getOverview());
+        assertEquals("历史正剧内容简介", items.get(0).getOverview());
+        assertEquals("推荐理由", items.get(0).getRecommendationReason());
         assertEquals("poster.jpg", items.get(0).getPosterUrl());
-        assertEquals(9.7, items.get(0).getRating(), 0.001);
+        assertEquals(9.7, items.get(0).getTmdbRating(), 0.001);
+        assertEquals(9.6, items.get(0).getDoubanRating(), 0.001);
+    }
+
+    @Test
+    public void withReasonPreservesMatchedOverviewAndStoresReasonSeparately() {
+        TmdbItem matched = new TmdbItem(123, "movie", "指环王3", "电影 · 2003", "魔戒终章的内容简介", "poster.jpg", "backdrop.jpg", "主演", 8.5);
+
+        TmdbItem enriched = AiRecommendationService.withReason(matched, "11项奥斯卡加持");
+
+        assertEquals("魔戒终章的内容简介", enriched.getOverview());
+        assertEquals("11项奥斯卡加持", enriched.getRecommendationReason());
+    }
+
+    @Test
+    public void resolvedItemCache_recoversLegacyTmdbRatingWhenDoubanAlreadyStored() {
+        List<TmdbItem> items = AiRecommendationService.parseResolvedItems(
+                "{\"items\":[{\"tmdbId\":123,\"mediaType\":\"movie\",\"title\":\"旧缓存\",\"rating\":8.1,\"tmdbRating\":0,\"doubanRating\":8.7}]}");
+
+        assertEquals(1, items.size());
+        assertEquals(8.1, items.get(0).getTmdbRating(), 0.001);
+        assertEquals(8.7, items.get(0).getDoubanRating(), 0.001);
+    }
+
+    @Test
+    public void resolvedItemCache_treatsLegacyNegativeIdRatingAsDouban() {
+        List<TmdbItem> items = AiRecommendationService.parseResolvedItems(
+                "{\"items\":[{\"tmdbId\":-123,\"mediaType\":\"movie\",\"title\":\"霸王别姬\",\"rating\":9.6}]}");
+
+        assertEquals(1, items.size());
+        assertEquals(0.0, items.get(0).getTmdbRating(), 0.001);
+        assertEquals(9.6, items.get(0).getDoubanRating(), 0.001);
     }
 
     @Test
@@ -459,13 +536,16 @@ public class AiRecommendationServiceTest {
         File dir = Files.createTempDirectory("ai-rec-cache").toFile();
         File oldRaw = new File(dir, "old.json");
         File newRaw = new File(dir, "display_new.json");
-        File resolved = new File(dir, "latest_items.items.json");
+        File legacyResolved = new File(dir, "latest_legacy.items.json");
+        File resolved = new File(dir, "latest_items.items.v2.json");
         Files.write(oldRaw.toPath(), "{}".getBytes(StandardCharsets.UTF_8));
         Files.write(newRaw.toPath(), "{}".getBytes(StandardCharsets.UTF_8));
+        Files.write(legacyResolved.toPath(), "{}".getBytes(StandardCharsets.UTF_8));
         Files.write(resolved.toPath(), "{}".getBytes(StandardCharsets.UTF_8));
         oldRaw.setLastModified(1000);
         resolved.setLastModified(2000);
         newRaw.setLastModified(3000);
+        legacyResolved.setLastModified(4000);
 
         assertEquals(newRaw, AiRecommendationService.newestCacheFile(dir, false));
         assertEquals(resolved, AiRecommendationService.newestCacheFile(dir, true));
@@ -479,7 +559,7 @@ public class AiRecommendationServiceTest {
         List<String> systemKeys = AiRecommendationService.latestCacheKeysForRead("长安的荔枝", system);
         List<String> customKeys = AiRecommendationService.latestCacheKeysForRead("长安的荔枝", custom);
 
-        assertEquals(2, systemKeys.size());
+        assertEquals(3, systemKeys.size());
         assertEquals(1, customKeys.size());
     }
 

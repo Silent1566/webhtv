@@ -33,6 +33,7 @@ import com.fongmi.android.tv.R;
 import com.github.catvod.crawler.SpiderDebug;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Site;
+import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.utils.KeyUtil;
@@ -45,13 +46,16 @@ import com.fongmi.android.tv.web.ext.WebHomeExtension;
 import com.fongmi.android.tv.web.ext.WebHomeExtensionRegistry;
 import com.google.common.net.HttpHeaders;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonArray;
 
 import java.io.ByteArrayInputStream;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Locale;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -68,6 +72,7 @@ public class HomeWebController {
     private static final int MAX_REMOTE_MESSAGE_BYTES = 64 * 1024;
     private static final int MAX_REMOTE_RESPONSE_BYTES = 1024 * 1024;
     private static final int MAX_REMOTE_IN_FLIGHT = 2;
+    private static final long REMOTE_ACTION_INTERVAL_MS = 400;
     private static final String PAUSE_PAGE_MEDIA_SCRIPT = """
             (function() {
               const pause = function(root) {
@@ -93,6 +98,9 @@ public class HomeWebController {
     private final Set<String> injectedExtensions;
     private final Set<PendingNativePlayback> pendingNativePlaybacks;
     private final RemoteRequestGate remoteRequestGate;
+    private final RemoteActionGate remoteActionGate;
+    private volatile WebThemePlaySession playSession;
+    private volatile WebThemeAccessSession accessSession;
     private final Runnable extensionReloadRunnable;
     private final boolean debugTools;
     private WebView webView;
@@ -105,8 +113,11 @@ public class HomeWebController {
     private volatile String remoteBridgeOrigin = "";
     private volatile String remoteBridgeNonce = "";
     private volatile int remoteBridgeGeneration;
-    private Site site;
-    private WebHomeTarget target;
+    private volatile Site site;
+    private volatile WebHomeTarget target;
+    private volatile WebThemeRoute themeRoute = WebThemeRoute.EMPTY;
+    private volatile Vod detailVod;
+    private volatile WebThemeDetailMetadata detailMetadata = WebThemeDetailMetadata.EMPTY;
     private Map<String, String> pageHeaders = Collections.emptyMap();
     private String documentStartKey;
     private String defaultUserAgent;
@@ -122,9 +133,12 @@ public class HomeWebController {
     private int inlineEvaluationCount;
     private int loadToken;
     private int loadTimeoutRecoveries;
-    private boolean sdkReady;
-    private boolean paused;
-    private boolean destroyed;
+    private int manifestLoadToken;
+    private volatile int themeSessionGeneration;
+    private volatile boolean bridgeReady;
+    private volatile boolean sdkReady;
+    private volatile boolean paused;
+    private volatile boolean destroyed;
 
     public HomeWebController(Activity activity, WebView webView, Listener listener) {
         this(activity, webView, listener, false);
@@ -139,6 +153,9 @@ public class HomeWebController {
         this.injectedExtensions = new HashSet<>();
         this.pendingNativePlaybacks = new HashSet<>();
         this.remoteRequestGate = new RemoteRequestGate(MAX_REMOTE_IN_FLIGHT);
+        this.remoteActionGate = new RemoteActionGate(REMOTE_ACTION_INTERVAL_MS);
+        this.playSession = new WebThemePlaySession();
+        this.accessSession = new WebThemeAccessSession();
         this.extensionReloadRunnable = this::consumeExtensionReload;
         active = this;
         init();
@@ -159,10 +176,10 @@ public class HomeWebController {
         webView.setBackgroundColor(Color.TRANSPARENT);
         CookieManager.getInstance().setAcceptCookie(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true);
-        webView.setOnFocusChangeListener((v, hasFocus) -> SpiderDebug.log("webhome-focus", "webview focus=%s visible=%s url=%s", hasFocus, isVisible(), webView.getUrl()));
+        webView.setOnFocusChangeListener((v, hasFocus) -> SpiderDebug.log("webhome-focus", "webview focus=%s visible=%s url=%s", hasFocus, isVisible(), safeLogUrl(webView.getUrl())));
         webView.addOnLayoutChangeListener((v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> injectViewport());
-        bridge = new HomeWebBridge(this, activity, webView);
         themeBridge = new WebHomeThemeBridge(this, activity);
+        bridge = new HomeWebBridge(this, activity, webView, themeBridge);
         bridgeKey = "";
         remoteMessageListener = false;
         webView.setWebViewClient(client());
@@ -251,6 +268,9 @@ public class HomeWebController {
             response.addProperty("id", id);
             try {
                 if (!isRemoteSession(expectedOrigin, generation, requestNonce)) throw new IllegalStateException("SOURCE_CHANGED");
+                if (!remoteActionGate.tryAcquire(method, System.nanoTime() / 1_000_000L)) {
+                    throw new IllegalStateException("RATE_LIMITED");
+                }
                 String nonce = requestNonce;
                 String result = bridge.invoke(method, payload, () -> isRemoteSession(expectedOrigin, generation, nonce));
                 if (!isRemoteSession(expectedOrigin, generation, requestNonce)) throw new IllegalStateException("SOURCE_CHANGED");
@@ -279,7 +299,8 @@ public class HomeWebController {
     }
 
     private boolean isRemoteSession(String expectedOrigin, int generation) {
-        return !destroyed && generation == remoteBridgeGeneration && expectedOrigin.equals(remoteBridgeOrigin);
+        return !destroyed && !paused && bridgeReady && generation == remoteBridgeGeneration
+                && expectedOrigin.equals(remoteBridgeOrigin);
     }
 
     private boolean isRemoteSession(String expectedOrigin, int generation, String expectedNonce) {
@@ -297,6 +318,7 @@ public class HomeWebController {
         if (error instanceof IllegalArgumentException) return "INVALID_ARGUMENT";
         if (error instanceof IllegalStateException && "SOURCE_CHANGED".equals(error.getMessage())) return "SOURCE_CHANGED";
         if (error instanceof IllegalStateException && "RESPONSE_TOO_LARGE".equals(error.getMessage())) return "RESPONSE_TOO_LARGE";
+        if (error instanceof IllegalStateException && "RATE_LIMITED".equals(error.getMessage())) return "BUSY";
         if (error instanceof IllegalStateException) return "UNAVAILABLE";
         return "REQUEST_FAILED";
     }
@@ -319,6 +341,7 @@ public class HomeWebController {
         remoteBridgeGeneration++;
         remoteBridgeOrigin = "";
         remoteBridgeNonce = "";
+        remoteActionGate.reset();
         removeRemoteMessageListener();
     }
 
@@ -346,11 +369,87 @@ public class HomeWebController {
     }
 
     public Site getContentSite() {
-        return site == null ? VodConfig.get().getHome() : site;
+        Site current = site;
+        return current == null ? VodConfig.get().getHome() : current;
     }
 
     public boolean isGlobalTheme() {
-        return target != null && target.isGlobal();
+        WebHomeTarget current = target;
+        return current != null && current.isGlobal();
+    }
+
+    public boolean isV2Theme() {
+        WebHomeTarget current = target;
+        return current != null && current.isV2();
+    }
+
+    WebThemePage getThemePage() {
+        WebHomeTarget current = target;
+        return current != null && current.isV2() ? current.getPage() : null;
+    }
+
+    WebThemeRoute getThemeRoute() {
+        return themeRoute;
+    }
+
+    WebThemePlaySession getPlaySession() {
+        return playSession;
+    }
+
+    WebThemeAccessSession getAccessSession() {
+        return accessSession;
+    }
+
+    Vod getDetailVod() {
+        return detailVod;
+    }
+
+    void setDetailVod(Vod detailVod, WebThemePlaySession playSession) {
+        this.playSession = playSession == null ? new WebThemePlaySession() : playSession;
+        this.detailVod = detailVod;
+        listener.onDetailVodLoaded(detailVod);
+    }
+
+    WebThemeDetailMetadata getDetailMetadata() {
+        return detailMetadata;
+    }
+
+    public void setDetailMetadata(WebThemeDetailMetadata detailMetadata) {
+        this.detailMetadata = detailMetadata == null ? WebThemeDetailMetadata.EMPTY : detailMetadata;
+    }
+
+    public void dispatchDetailChanged() {
+        if (destroyed || webView == null || getThemePage() != WebThemePage.DETAIL) return;
+        String script = "(function(){try{window.dispatchEvent(new CustomEvent('fmdetailchange',{detail:{}}));}catch(e){}})();";
+        WebView current = webView;
+        current.post(() -> {
+            if (destroyed || current != webView || getThemePage() != WebThemePage.DETAIL) return;
+            current.evaluateJavascript(script, null);
+        });
+    }
+
+    WebHomeTarget getThemeTarget() {
+        return target;
+    }
+
+    int getThemeSessionGeneration() {
+        return themeSessionGeneration;
+    }
+
+    boolean isThemeSessionActive(int generation) {
+        WebHomeTarget current = target;
+        return generation == themeSessionGeneration && !destroyed && !paused && bridgeReady
+                && current != null && current.isV2();
+    }
+
+    boolean isLegacyThemeSessionActive(int generation) {
+        WebHomeTarget current = target;
+        return generation == themeSessionGeneration && !destroyed && !paused && bridgeReady
+                && current != null && !current.isManifest() && !current.isV2();
+    }
+
+    boolean isBridgeSessionActive(boolean v2Theme, int generation) {
+        return v2Theme ? isThemeSessionActive(generation) : isLegacyThemeSessionActive(generation);
     }
 
     boolean isRemoteTheme() {
@@ -360,6 +459,73 @@ public class HomeWebController {
     public boolean load(Site site, boolean force) {
         WebHomeTarget resolved = WebHomeTarget.resolve(site);
         if (site == null || resolved == null) return false;
+        if (resolved.isManifest()) return loadManifestPage(site, resolved, WebThemePage.HOME, WebThemeRoute.EMPTY, force);
+        return loadResolved(site, resolved, WebThemeRoute.EMPTY, force);
+    }
+
+    public boolean loadThemePage(Site site, String manifestUrl, WebThemePage page, WebThemeRoute route) {
+        WebHomeTarget configured = WebHomeTarget.resolve("", true, manifestUrl, manifestUrl);
+        if (site == null || configured == null || !configured.isManifest() || page == null) return false;
+        return loadManifestPage(site, configured, page, route == null ? WebThemeRoute.EMPTY : route, false);
+    }
+
+    private boolean loadManifestPage(Site site, WebHomeTarget configured, WebThemePage page,
+            WebThemeRoute route, boolean force) {
+        if (page == WebThemePage.DETAIL && (route == null || TextUtils.isEmpty(route.getVodId()))) return false;
+        bridgeReady = false;
+        sdkReady = false;
+        invalidateRemoteSession();
+        webView.removeJavascriptInterface(BRIDGE);
+        bridgeKey = "";
+        if (Setting.isWebHomeFullscreen()) listener.applyDefaultChrome(site);
+        else listener.setChrome(normalChrome());
+        Server.get().start();
+        int token = ++manifestLoadToken;
+        themeSessionGeneration++;
+        this.site = site;
+        this.target = configured;
+        this.themeRoute = route == null ? WebThemeRoute.EMPTY : route;
+        this.detailVod = null;
+        this.detailMetadata = WebThemeDetailMetadata.EMPTY;
+        resetThemeSessions();
+        listener.onWebLoading();
+        show();
+        String sourceKey = site.getKey();
+        String manifestUrl = configured.getUrl();
+        Task.execute(() -> {
+            try {
+                WebThemeManifest manifest = WebThemeManifestLoader.load(activity, manifestUrl,
+                        com.fongmi.android.tv.BuildConfig.FLAVOR_mode, force);
+                WebHomeTarget resolved = WebHomeTarget.forManifestPage(configured, manifest, page);
+                App.post(() -> {
+                    if (!isManifestLoadActive(token, sourceKey, manifestUrl)) return;
+                    if (!loadResolved(site, resolved, route, force)) listener.onWebError();
+                });
+            } catch (Exception e) {
+                SpiderDebug.log("webhome-theme", "manifest/page load failed url=%s page=%s error=%s",
+                        safeLogUrl(manifestUrl), page.getKey(), e.getMessage());
+                App.post(() -> {
+                    if (!isManifestLoadActive(token, sourceKey, manifestUrl)) return;
+                    target = null;
+                    themeRoute = WebThemeRoute.EMPTY;
+                    detailVod = null;
+                    detailMetadata = WebThemeDetailMetadata.EMPTY;
+                    resetThemeSessions();
+                    listener.onWebError();
+                });
+            }
+        });
+        return true;
+    }
+
+    private boolean isManifestLoadActive(int token, String sourceKey, String manifestUrl) {
+        return !destroyed && token == manifestLoadToken && site != null && target != null
+                && sourceKey.equals(site.getKey()) && manifestUrl.equals(target.getUrl());
+    }
+
+    private boolean loadResolved(Site site, WebHomeTarget resolved, WebThemeRoute route, boolean force) {
+        if (site == null || resolved == null) return false;
+        themeSessionGeneration++;
         if (Setting.isWebHomeFullscreen()) listener.applyDefaultChrome(site);
         else listener.setChrome(normalChrome());
         Server.get().start();
@@ -368,6 +534,14 @@ public class HomeWebController {
         boolean reload = force || !url.equals(homePage) || !identity.equals(homeIdentity);
         this.site = site;
         this.target = resolved;
+        this.themeRoute = route == null ? WebThemeRoute.EMPTY : route;
+        if (reload) {
+            bridgeReady = false;
+            sdkReady = false;
+            detailVod = null;
+            detailMetadata = WebThemeDetailMetadata.EMPTY;
+            resetThemeSessions();
+        }
         if (!configureBridge(resolved, reload)) {
             this.target = null;
             return false;
@@ -393,6 +567,12 @@ public class HomeWebController {
     }
 
     public void reload() {
+        bridgeReady = false;
+        sdkReady = false;
+        themeSessionGeneration++;
+        resetThemeSessions();
+        detailVod = null;
+        detailMetadata = WebThemeDetailMetadata.EMPTY;
         if (target != null && target.isRemoteGlobal() && !configureBridge(target, true)) {
             handleMainFrameFailure("Remote theme bridge unavailable");
             return;
@@ -418,7 +598,7 @@ public class HomeWebController {
         Map<String, String> requestHeaders = requestHeaders(url, headers);
         lastPageUrl = url;
         int token = ++loadToken;
-        SpiderDebug.log("webhome-webview", "load url=%s ua=%s headers=%s", url, !TextUtils.isEmpty(userAgent), requestHeaders.keySet());
+        SpiderDebug.log("webhome-webview", "load url=%s ua=%s headers=%s", safeLogUrl(url), !TextUtils.isEmpty(userAgent), requestHeaders.keySet());
         if (requestHeaders.isEmpty()) webView.loadUrl(url);
         else webView.loadUrl(url, requestHeaders);
         webView.postDelayed(() -> handleLoadTimeout(token, url), LOAD_TIMEOUT_MS);
@@ -426,7 +606,7 @@ public class HomeWebController {
 
     private void handleLoadTimeout(int token, String url) {
         if (token != loadToken || !isVisible() || activity.isFinishing() || activity.isDestroyed()) return;
-        SpiderDebug.log("webhome-webview", "load timeout url=%s current=%s title=%s recoveries=%s", url, webView.getUrl(), webView.getTitle(), loadTimeoutRecoveries);
+        SpiderDebug.log("webhome-webview", "load timeout url=%s current=%s title=%s recoveries=%s", safeLogUrl(url), safeLogUrl(webView.getUrl()), webView.getTitle(), loadTimeoutRecoveries);
         if (TextUtils.isEmpty(homePage) || loadTimeoutRecoveries++ > 0) {
             listener.onWebError();
             return;
@@ -500,12 +680,12 @@ public class HomeWebController {
         if (!webView.canGoBack()) return false;
         String current = webView.getUrl();
         if (samePage(current, homePage)) {
-            SpiderDebug.log("webhome-webview", "back home boundary current=%s", current);
+            SpiderDebug.log("webhome-webview", "back home boundary current=%s", safeLogUrl(current));
             return false;
         }
         String previous = previousHistoryUrl();
         if (!sameSite(current, previous)) {
-            SpiderDebug.log("webhome-webview", "back boundary current=%s previous=%s", current, previous);
+            SpiderDebug.log("webhome-webview", "back boundary current=%s previous=%s", safeLogUrl(current), safeLogUrl(previous));
             return false;
         }
         webView.goBack();
@@ -612,6 +792,59 @@ public class HomeWebController {
         return viewport.json(density, webView.getWidth(), webView.getHeight());
     }
 
+    String getThemeInfoJson() {
+        WebHomeTarget currentTarget = target;
+        WebThemeRoute currentRoute = themeRoute;
+        WebThemeAccessSession currentAccessSession = accessSession;
+        if (currentTarget == null || !currentTarget.isV2()) {
+            throw new IllegalStateException("Theme V2 is not active");
+        }
+        JsonObject root = new JsonObject();
+        root.addProperty("hostApiVersion", WebThemeManifest.HOST_API_VERSION);
+        root.addProperty("page", currentTarget.getPage().getKey());
+
+        JsonObject theme = new JsonObject();
+        theme.addProperty("id", currentTarget.getManifest().getId());
+        theme.addProperty("name", currentTarget.getManifest().getName());
+        theme.addProperty("version", currentTarget.getManifest().getVersion());
+        root.add("theme", theme);
+
+        JsonObject client = new JsonObject();
+        client.addProperty("isLeanback", Util.isLeanback());
+        client.addProperty("isLandscape", activity.getResources().getConfiguration().orientation
+                == android.content.res.Configuration.ORIENTATION_LANDSCAPE);
+        client.addProperty("width", webView.getWidth());
+        client.addProperty("height", webView.getHeight());
+        client.addProperty("density", density);
+        root.add("client", client);
+
+        Site contentSite = getContentSite();
+        JsonObject source = new JsonObject();
+        source.addProperty("key", contentSite == null ? "" : contentSite.getKey());
+        source.addProperty("name", contentSite == null ? "" : contentSite.getName());
+        root.add("source", source);
+        root.add("route", currentRoute.json(currentAccessSession.issueRoute(currentRoute.getVodId())));
+
+        JsonArray capabilities = new JsonArray();
+        Set<String> declared = new LinkedHashSet<>();
+        declared.add("theme.info@1");
+        declared.add("ui.getViewport@1");
+        declared.add("navigation.back@1");
+        declared.add("navigation.reload@1");
+        if (currentTarget.getPage() == WebThemePage.DETAIL) {
+            declared.add("navigation.openNativeDetail@1");
+        }
+        declared.add(currentTarget.getPage().getContract());
+        for (String permission : currentTarget.getPermissions()) {
+            if (WebHomeThemePolicy.allowsPermission(currentTarget.getPage(), permission)) {
+                declared.add(permission + "@1");
+            }
+        }
+        for (String capability : declared) capabilities.add(capability);
+        root.add("capabilities", capabilities);
+        return root.toString();
+    }
+
     public void setViewport(WebHomeViewport viewport) {
         this.viewport = viewport == null ? WebHomeViewport.EMPTY : viewport;
         injectViewport();
@@ -627,6 +860,7 @@ public class HomeWebController {
 
     public void onResume() {
         paused = false;
+        if (isVisible()) active = this;
         synchronized (this) {
             inlineEvaluationCount = 0;
         }
@@ -642,6 +876,7 @@ public class HomeWebController {
         dispatchLifecycle("fmpause", "{time:" + pauseAt + "}");
         pausePageMedia();
         webView.onPause();
+        webView.pauseTimers();
     }
 
     public boolean beginInlineEvaluation() {
@@ -652,7 +887,7 @@ public class HomeWebController {
         }
         App.post(() -> {
             if (!paused) return;
-            SpiderDebug.log("webhome-inline", "resume WebView for inline evaluation url=%s", webView.getUrl());
+            SpiderDebug.log("webhome-inline", "resume WebView for inline evaluation url=%s", safeLogUrl(webView.getUrl()));
             webView.onResume();
             webView.resumeTimers();
         });
@@ -669,9 +904,10 @@ public class HomeWebController {
         if (!pause) return;
         App.post(() -> {
             if (!paused) return;
-            SpiderDebug.log("webhome-inline", "pause WebView after inline evaluation url=%s", webView.getUrl());
+            SpiderDebug.log("webhome-inline", "pause WebView after inline evaluation url=%s", safeLogUrl(webView.getUrl()));
             pausePageMedia();
             webView.onPause();
+            webView.pauseTimers();
         });
     }
 
@@ -708,6 +944,13 @@ public class HomeWebController {
     public void destroy() {
         if (destroyed) return;
         destroyed = true;
+        bridgeReady = false;
+        sdkReady = false;
+        manifestLoadToken++;
+        themeSessionGeneration++;
+        resetThemeSessions();
+        detailVod = null;
+        detailMetadata = WebThemeDetailMetadata.EMPTY;
         invalidateRemoteSession();
         cancelPendingNativePlaybacks();
         removeDocumentStartScripts();
@@ -792,6 +1035,37 @@ public class HomeWebController {
         }
     }
 
+    static final class RemoteActionGate {
+
+        private final long intervalMs;
+        private long lastActionAt = Long.MIN_VALUE;
+
+        RemoteActionGate(long intervalMs) {
+            this.intervalMs = Math.max(0, intervalMs);
+        }
+
+        synchronized boolean tryAcquire(String method, long now) {
+            if (!isSideEffect(method)) return true;
+            if (lastActionAt != Long.MIN_VALUE && now >= lastActionAt
+                    && now - lastActionAt < intervalMs) return false;
+            lastActionAt = now;
+            return true;
+        }
+
+        synchronized void reset() {
+            lastActionAt = Long.MIN_VALUE;
+        }
+
+        private static boolean isSideEffect(String method) {
+            return switch (method == null ? "" : method) {
+                case "favorite.set", "player.playVod", "navigation.openDetail",
+                        "navigation.openNativeDetail", "app.search", "app.openVod",
+                        "app.openSetting", "navigation.back", "navigation.reload" -> true;
+                default -> false;
+            };
+        }
+    }
+
     private void consumeExtensionReload() {
         if (!usesSiteExtensions() || !extensionReloadRequested || paused || !isVisible() || site == null || TextUtils.isEmpty(homePage)) return;
         long now = System.currentTimeMillis();
@@ -854,7 +1128,7 @@ public class HomeWebController {
         String current = webView.getUrl();
         if (!isEmptyDocumentUrl(current) || TextUtils.isEmpty(homePage)) return false;
         String target = !TextUtils.isEmpty(lastPageUrl) && !isEmptyDocumentUrl(lastPageUrl) ? lastPageUrl : homePage;
-        SpiderDebug.log("webhome-webview", "restore reload reason=empty-url current=%s target=%s", current, target);
+        SpiderDebug.log("webhome-webview", "restore reload reason=empty-url current=%s target=%s", safeLogUrl(current), safeLogUrl(target));
         listener.onWebLoading();
         sdkReady = false;
         lastViewportKey = "";
@@ -895,7 +1169,7 @@ public class HomeWebController {
         long cost = System.currentTimeMillis() - start;
         if (cost >= SLOW_KEY_MS || (KeyUtil.isActionDown(event) && event.getRepeatCount() > 0 && cost >= 12)) {
             SpiderDebug.log("webhome-key", "slow action=%s key=%s repeat=%s handled=%s cost=%sms gap=%sms focus=%s url=%s",
-                    event.getAction(), event.getKeyCode(), event.getRepeatCount(), handled, cost, gap, webView.hasFocus(), webView.getUrl());
+                    event.getAction(), event.getKeyCode(), event.getRepeatCount(), handled, cost, gap, webView.hasFocus(), safeLogUrl(webView.getUrl()));
         }
         return handled;
     }
@@ -915,13 +1189,17 @@ public class HomeWebController {
     private boolean focusWebView(String reason) {
         if (webView.hasFocus()) return true;
         boolean ok = webView.requestFocus();
-        SpiderDebug.log("webhome-focus", "request reason=%s ok=%s visible=%s width=%s height=%s url=%s", reason, ok, isVisible(), webView.getWidth(), webView.getHeight(), webView.getUrl());
+        SpiderDebug.log("webhome-focus", "request reason=%s ok=%s visible=%s width=%s height=%s url=%s", reason, ok, isVisible(), webView.getWidth(), webView.getHeight(), safeLogUrl(webView.getUrl()));
         return ok;
     }
 
     private void dispatchLifecycle(String event, String detail) {
         String script = "(function(){try{window.dispatchEvent(new CustomEvent('" + event + "',{detail:" + detail + "}));}catch(e){}})();";
-        webView.post(() -> webView.evaluateJavascript(script, null));
+        WebView current = webView;
+        current.post(() -> {
+            if (destroyed || current != webView) return;
+            current.evaluateJavascript(script, null);
+        });
     }
 
     private WebViewClient client() {
@@ -930,14 +1208,15 @@ public class HomeWebController {
             public void onPageStarted(WebView view, String url, Bitmap favicon) {
                 super.onPageStarted(view, url, favicon);
                 if (target != null && target.isRemoteGlobal() && !target.allowsMainFrameUrl(url)) {
-                    SpiderDebug.log("webhome-security", "blocked remote theme navigation url=%s origin=%s", url, target.getOriginRule());
+                    SpiderDebug.log("webhome-security", "blocked remote theme navigation url=%s origin=%s", safeLogUrl(url), target.getOriginRule());
                     view.stopLoading();
                     return;
                 }
                 rotateRemoteDocumentNonce();
-                SpiderDebug.log("webhome-webview", "page started url=%s", url);
-                listener.onWebRequest("PAGE", url, true);
+                SpiderDebug.log("webhome-webview", "page started url=%s", safeLogUrl(url));
+                listener.onWebRequest("PAGE", safeLogUrl(url), true);
                 lastPageUrl = url;
+                bridgeReady = false;
                 sdkReady = false;
                 lastViewportKey = "";
                 injectedExtensions.clear();
@@ -948,10 +1227,12 @@ public class HomeWebController {
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
-                if (target == null) return;
-                if (target != null && target.isRemoteGlobal() && !target.allowsMainFrameUrl(url)) return;
-                SpiderDebug.log("webhome-webview", "page finished url=%s title=%s", url, view.getTitle());
+                WebHomeTarget currentTarget = target;
+                if (currentTarget == null) return;
+                if (currentTarget.isRemoteGlobal() && !currentTarget.allowsMainFrameUrl(url)) return;
+                SpiderDebug.log("webhome-webview", "page finished url=%s title=%s", safeLogUrl(url), view.getTitle());
                 loadToken++;
+                if (currentTarget.isV2()) themeSessionGeneration++;
                 loadTimeoutRecoveries = 0;
                 lastPageUrl = url;
                 injectSdk();
@@ -962,8 +1243,8 @@ public class HomeWebController {
             @Override
             public void onReceivedError(WebView view, WebResourceRequest request, android.webkit.WebResourceError error) {
                 super.onReceivedError(view, request, error);
-                SpiderDebug.log("webhome-webview", "resource error main=%s code=%s desc=%s url=%s", request.isForMainFrame(), error.getErrorCode(), error.getDescription(), request.getUrl());
-                listener.onWebConsole("ERROR " + error.getErrorCode() + " " + error.getDescription() + " " + request.getUrl());
+                SpiderDebug.log("webhome-webview", "resource error main=%s code=%s desc=%s url=%s", request.isForMainFrame(), error.getErrorCode(), error.getDescription(), safeLogUrl(request.getUrl()));
+                listener.onWebConsole("ERROR " + error.getErrorCode() + " " + error.getDescription() + " " + safeLogUrl(request.getUrl()));
                 if (request.isForMainFrame()) {
                     handleMainFrameFailure(error.getDescription());
                 }
@@ -974,15 +1255,15 @@ public class HomeWebController {
                 super.onReceivedHttpError(view, request, errorResponse);
                 int status = errorResponse.getStatusCode();
                 String reason = errorResponse.getReasonPhrase();
-                SpiderDebug.log("webhome-webview", "http error main=%s code=%s reason=%s url=%s", request.isForMainFrame(), status, reason, request.getUrl());
-                listener.onWebConsole("HTTP " + status + " " + reason + " " + request.getUrl());
+                SpiderDebug.log("webhome-webview", "http error main=%s code=%s reason=%s url=%s", request.isForMainFrame(), status, reason, safeLogUrl(request.getUrl()));
+                listener.onWebConsole("HTTP " + status + " " + reason + " " + safeLogUrl(request.getUrl()));
                 if (request.isForMainFrame()) handleMainFrameFailure("HTTP " + status + " " + reason);
             }
 
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 boolean blocked = target != null && target.isRemoteGlobal() && !target.allowsMainFrameUrl(request.getUrl().toString());
-                if (blocked) SpiderDebug.log("webhome-security", "blocked remote theme navigation url=%s origin=%s", request.getUrl(), target.getOriginRule());
+                if (blocked) SpiderDebug.log("webhome-security", "blocked remote theme navigation url=%s origin=%s", safeLogUrl(request.getUrl()), target.getOriginRule());
                 return blocked;
             }
 
@@ -1011,11 +1292,19 @@ public class HomeWebController {
 
     private void handleMainFrameFailure(CharSequence message) {
         loadToken++;
+        manifestLoadToken++;
+        themeSessionGeneration++;
+        bridgeReady = false;
+        sdkReady = false;
         invalidateRemoteSession();
         bridgeKey = "";
         homePage = null;
         homeIdentity = null;
         target = null;
+        themeRoute = WebThemeRoute.EMPTY;
+        detailVod = null;
+        detailMetadata = WebThemeDetailMetadata.EMPTY;
+        resetThemeSessions();
         pageHeaders = Collections.emptyMap();
         rawAdapter = null;
         if (!TextUtils.isEmpty(message)) Notify.show(message.toString());
@@ -1027,7 +1316,7 @@ public class HomeWebController {
             @Override
             public boolean onConsoleMessage(ConsoleMessage message) {
                 if (message != null) {
-                    String line = String.format(Locale.ROOT, "%s %s:%s %s", message.messageLevel(), message.sourceId(), message.lineNumber(), message.message());
+                    String line = String.format(Locale.ROOT, "%s %s:%s %s", message.messageLevel(), safeLogUrl(message.sourceId()), message.lineNumber(), message.message());
                     SpiderDebug.log("webhome-console", line);
                     listener.onWebConsole(line);
                 }
@@ -1037,13 +1326,67 @@ public class HomeWebController {
     }
 
     private void injectSdk() {
+        WebView current = webView;
+        WebHomeTarget currentTarget = target;
+        int generation = themeSessionGeneration;
+        if (destroyed || current == null || currentTarget == null) return;
         injectViewport();
-        String sdk = target != null && target.isRemoteGlobal() ? getRemoteSdk() : getSdk();
-        webView.evaluateJavascript(sdk, value -> {
+        String sdk = currentTarget.isRemoteGlobal() ? getRemoteSdk() : getSdk();
+        bridgeReady = true;
+        current.evaluateJavascript(sdk, value -> {
+            if (destroyed || current != webView || currentTarget != target
+                    || generation != themeSessionGeneration) return;
             sdkReady = true;
             injectExtensions(WebHomeExtension.RUN_AT_END);
-            webView.postDelayed(() -> injectExtensions(WebHomeExtension.RUN_AT_IDLE), 600);
+            current.postDelayed(() -> {
+                if (destroyed || current != webView || currentTarget != target
+                        || generation != themeSessionGeneration) return;
+                injectExtensions(WebHomeExtension.RUN_AT_IDLE);
+            }, 600);
         });
+    }
+
+    private void resetThemeSessions() {
+        playSession = new WebThemePlaySession();
+        accessSession = new WebThemeAccessSession();
+    }
+
+    static String safeLogUrl(Object value) {
+        return safeLogUrl(value == null ? "" : value.toString());
+    }
+
+    static String safeLogUrl(String value) {
+        String raw = value == null ? "" : value.replace('\r', ' ').replace('\n', ' ').replace('\t', ' ');
+        if (raw.isEmpty()) return "";
+        try {
+            URI uri = URI.create(raw);
+            String scheme = uri.getScheme();
+            if (scheme != null && uri.isOpaque()) return limitedRemoteValue(scheme, 32) + ":<redacted>";
+            String authority = uri.getRawAuthority();
+            if (authority != null) {
+                int userInfo = authority.lastIndexOf('@');
+                if (userInfo >= 0) authority = authority.substring(userInfo + 1);
+            }
+            StringBuilder safe = new StringBuilder();
+            if (scheme != null) safe.append(scheme).append(':');
+            if (authority != null) safe.append("//").append(authority);
+            if (uri.getRawPath() != null) safe.append(uri.getRawPath());
+            return limitedRemoteValue(safe.toString(), 2048);
+        } catch (RuntimeException ignored) {
+            int query = raw.indexOf('?');
+            int fragment = raw.indexOf('#');
+            int end = query < 0 ? fragment : fragment < 0 ? query : Math.min(query, fragment);
+            String safe = end < 0 ? raw : raw.substring(0, end);
+            int authority = safe.indexOf("://");
+            if (authority >= 0) {
+                int path = safe.indexOf('/', authority + 3);
+                int userInfo = safe.lastIndexOf('@', path < 0 ? safe.length() - 1 : path);
+                if (userInfo >= authority + 3) {
+                    safe = safe.substring(0, authority + 3) + safe.substring(userInfo + 1);
+                }
+            }
+            return limitedRemoteValue(safe, 2048);
+        }
     }
 
     private WebResourceResponse blockedNavigation() {
@@ -1082,13 +1425,16 @@ public class HomeWebController {
                   window.fongmi={
                     __remote:true,
                     __session:session,
-                    vod:{home:function(options){return invoke('vod.home',options);},category:function(typeId,page,options){return invoke('vod.category',Object.assign({},options||{},{typeId:typeId,page:page||1}));}},
+                    theme:{info:function(){return invoke('theme.info',{});}},
+                    vod:{home:function(options){return invoke('vod.home',options);},category:function(typeId,page,options){return invoke('vod.category',Object.assign({},options||{},{typeId:typeId,page:page||1}));},detail:function(options){return invoke('vod.detail',options||{});}},
+                    favorite:{status:function(options){return invoke('favorite.status',options||{});},set:function(favorite,options){return invoke('favorite.set',Object.assign({},options||{},{favorite:favorite}));}},
+                    history:{item:function(options){return invoke('history.item',options||{});}},
                     app:{search:function(keyword,options){return invoke('app.search',Object.assign({},options||{},{keyword:keyword}));},openVod:function(){return invoke('app.openVod',{});},openSetting:function(){return invoke('app.openSetting',{});}},
                     player:{playVod:function(siteKey,vodId,title,pic,options){return invoke('player.playVod',Object.assign({},options||{},{siteKey:siteKey,vodId:vodId,title:title,pic:pic}));}},
                     ui:{getViewport:function(){return invoke('ui.getViewport',{});}},
-                    navigation:{back:function(){return invoke('navigation.back',{});},reload:function(){return invoke('navigation.reload',{});}}
+                    navigation:{back:function(){return invoke('navigation.back',{});},reload:function(){return invoke('navigation.reload',{});},openDetail:function(options){return invoke('navigation.openDetail',options||{});},openNativeDetail:function(options){return invoke('navigation.openNativeDetail',options||{});}}
                   };
-                  window.fm={vodHome:window.fongmi.vod.home,vodCategory:window.fongmi.vod.category,vod:window.fongmi.player.playVod,search:window.fongmi.app.search,openVod:window.fongmi.app.openVod,openSetting:window.fongmi.app.openSetting};
+                  window.fm={vodHome:window.fongmi.vod.home,vodCategory:window.fongmi.vod.category,vodDetail:window.fongmi.vod.detail,vod:window.fongmi.player.playVod,themeInfo:window.fongmi.theme.info,openDetail:window.fongmi.navigation.openDetail,openNativeDetail:window.fongmi.navigation.openNativeDetail,favoriteStatus:window.fongmi.favorite.status,favoriteSet:window.fongmi.favorite.set,detailHistory:window.fongmi.history.item,back:window.fongmi.navigation.back,reload:window.fongmi.navigation.reload,search:window.fongmi.app.search,openVod:window.fongmi.app.openVod,openSetting:window.fongmi.app.openSetting};
                   window.dispatchEvent(new CustomEvent('fmsdk'));
                 })();
                 """.formatted(session);
@@ -1256,8 +1602,14 @@ public class HomeWebController {
                   };
                   const vod={
                     home:(options)=>invoke('vod.home',options||{}),
-                    category:(typeId,page,options)=>invoke('vod.category',Object.assign({},options||{},{typeId,page:page||1}))
+                    category:(typeId,page,options)=>invoke('vod.category',Object.assign({},options||{},{typeId,page:page||1})),
+                    detail:(options)=>invoke('vod.detail',options||{})
                   };
+                  const favorite={
+                    status:(options)=>invoke('favorite.status',options||{}),
+                    set:(value,options)=>invoke('favorite.set',Object.assign({},options||{},{favorite:value}))
+                  };
+                  const detailHistory={item:(options)=>invoke('history.item',options||{})};
                   const cache={
                     get:(key,rule)=>invoke('cache.get',{key,rule}),
                     set:(key,value,rule)=>invoke('cache.set',{key,value,rule}),
@@ -1279,6 +1631,9 @@ public class HomeWebController {
                     getViewport:()=>invoke('ui.getViewport',{})
                   };
                   window.fongmi={invoke,player,net,vod,cache,
+                    theme:{info:()=>invoke('theme.info',{})},
+                    favorite,
+                    history:detailHistory,
                     app:{
                       search:(keyword,options)=>invoke('app.search',Object.assign({},options||{},{keyword})),
                       openVod:()=>invoke('app.openVod',{}),
@@ -1295,7 +1650,9 @@ public class HomeWebController {
                     ui,
                     navigation:{
                       back:()=>invoke('navigation.back',{}),
-                      reload:()=>invoke('navigation.reload',{})
+                      reload:()=>invoke('navigation.reload',{}),
+                      openDetail:(options)=>invoke('navigation.openDetail',options||{}),
+                      openNativeDetail:(options)=>invoke('navigation.openNativeDetail',options||{})
                     }
                   };
                   window.fm={
@@ -1305,6 +1662,7 @@ public class HomeWebController {
                     vod:player.playVod,
                     vodHome:vod.home,
                     vodCategory:vod.category,
+                    vodDetail:vod.detail,
                     vodInline:player.playVodInline,
                     preloadArtwork:player.preloadArtwork,
                     ctrl:player.control,
@@ -1315,6 +1673,12 @@ public class HomeWebController {
                     openKeep:window.fongmi.app.openKeep,
                     openSetting:window.fongmi.app.openSetting,
                     history:window.fongmi.app.history,
+                    themeInfo:window.fongmi.theme.info,
+                    openDetail:window.fongmi.navigation.openDetail,
+                    openNativeDetail:window.fongmi.navigation.openNativeDetail,
+                    favoriteStatus:favorite.status,
+                    favoriteSet:favorite.set,
+                    detailHistory:detailHistory.item,
                     pan,
                     check:window.fongmi.pan.check,
                     cache,
@@ -1443,6 +1807,9 @@ public class HomeWebController {
         }
 
         default void onWebConsole(String line) {
+        }
+
+        default void onDetailVodLoaded(Vod vod) {
         }
 
         default void onWebRequest(String method, String url, boolean mainFrame) {

@@ -67,6 +67,43 @@ public class TmdbUIAdapterTest {
     }
 
     @Test
+    public void removeRecommendationFrom_removesThePersistedModelItem() {
+        TmdbItem selected = new TmdbItem(1, "movie", "隐藏作品", "2024", "", "", "");
+        List<TmdbItem> recommendations = new ArrayList<>(List.of(
+                selected,
+                new TmdbItem(2, "movie", "保留作品", "2024", "", "", "")));
+
+        assertTrue(TmdbUIAdapter.removeRecommendationFrom(recommendations,
+                new TmdbItem(1, "movie", "隐藏作品", "2024", "", "", "")));
+        assertEquals(1, recommendations.size());
+        assertEquals("保留作品", recommendations.get(0).getTitle());
+    }
+
+    @Test
+    public void removeRecommendationFrom_withoutTmdbIdKeepsSameTitleOtherMediaType() {
+        TmdbItem movie = new TmdbItem(0, "movie", "同名作品", "电影 · 2024", "", "", "");
+        TmdbItem tv = new TmdbItem(0, "tv", "同名作品", "剧集 · 2024", "", "", "");
+        List<TmdbItem> recommendations = new ArrayList<>(List.of(movie, tv));
+
+        assertTrue(TmdbUIAdapter.removeRecommendationFrom(recommendations, movie));
+        assertEquals(1, recommendations.size());
+        assertEquals("tv", recommendations.get(0).getMediaType());
+    }
+
+    @Test
+    public void mergeRecommendationRatings_updatesExistingItemsWithoutRestoringRemovedItems() {
+        TmdbItem kept = new TmdbItem(2, "movie", "保留作品", "2024", "", "", "");
+        List<TmdbItem> current = new ArrayList<>(List.of(kept));
+        TmdbItem removedWithRating = new TmdbItem(1, "movie", "隐藏作品", "2024", "", "", "", "", 0.0, "", "", List.of(), "", 0.0, 8.1);
+        TmdbItem keptWithRating = new TmdbItem(2, "movie", "保留作品", "2024", "", "", "", "", 0.0, "", "", List.of(), "", 0.0, 8.8);
+
+        assertTrue(TmdbUIAdapter.mergeRecommendationRatings(current, List.of(removedWithRating, keptWithRating)));
+        assertEquals(1, current.size());
+        assertEquals("保留作品", current.get(0).getTitle());
+        assertEquals(8.8, current.get(0).getDoubanRating(), 0.01);
+    }
+
+    @Test
     public void autoMatchSkipsCachedSplitSeasonVariantBeforeSearching() throws Exception {
         Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "helper", "TmdbUIAdapter.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);

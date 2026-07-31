@@ -142,6 +142,13 @@
             android:supportsPictureInPicture="true" />
 
         <activity
+            android:name=".ui.activity.WebThemeDetailActivity"
+            android:configChanges="screenSize|smallestScreenSize|screenLayout|uiMode|orientation"
+            android:exported="false"
+            android:parentActivityName=".ui.activity.HomeActivity"
+            android:screenOrientation="fullUser" />
+
+        <activity
             android:name=".ui.activity.TmdbPersonActivity"
             android:configChanges="screenSize|smallestScreenSize|screenLayout|uiMode|orientation"
             android:parentActivityName=".ui.activity.HomeActivity"

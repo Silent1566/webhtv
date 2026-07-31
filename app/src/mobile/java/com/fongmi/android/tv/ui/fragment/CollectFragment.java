@@ -44,6 +44,7 @@ import com.fongmi.android.tv.model.SiteViewModel;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.setting.SiteHealthStore;
 import com.fongmi.android.tv.ui.activity.FolderActivity;
+import com.fongmi.android.tv.ui.activity.HistoryResumeCoordinator;
 import com.fongmi.android.tv.ui.activity.VideoActivity;
 import com.fongmi.android.tv.ui.adapter.CollectAdapter;
 import com.fongmi.android.tv.ui.adapter.SearchAdapter;
@@ -110,15 +111,38 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
     }
 
     public static CollectFragment newInstance(String keyword, String siteKey, String group, String pic, String wallPic) {
+        return newInstance(keyword, siteKey, group, pic, wallPic, -1, null, -1);
+    }
+
+    public static CollectFragment newInstance(String keyword, String siteKey, String group, String pic, String wallPic, int historyResumeCid, String historyResumeKey, int historyResumeTargetCid) {
         Bundle args = new Bundle();
         args.putString("keyword", keyword);
         args.putString("siteKey", siteKey);
         args.putString("group", group);
         args.putString("pic", pic);
         args.putString("wallPic", wallPic);
+        args.putInt("historyResumeCid", historyResumeCid);
+        args.putString("historyResumeKey", historyResumeKey);
+        args.putInt("historyResumeTargetCid", historyResumeTargetCid);
         CollectFragment fragment = new CollectFragment();
         fragment.setArguments(args);
         return fragment;
+    }
+
+    private int getHistoryResumeCid() {
+        return getArguments().getInt("historyResumeCid", -1);
+    }
+
+    private String getHistoryResumeKey() {
+        return getArguments().getString("historyResumeKey");
+    }
+
+    private int getHistoryResumeTargetCid() {
+        return getArguments().getInt("historyResumeTargetCid", -1);
+    }
+
+    private boolean isHistoryResume() {
+        return getHistoryResumeCid() >= 0 && getHistoryResumeTargetCid() >= 0 && !TextUtils.isEmpty(getHistoryResumeKey());
     }
 
     private String getKeyword() {
@@ -444,11 +468,14 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
 
     @Override
     public void onItemClick(Vod item) {
-        if (item.isFolder()) FolderActivity.start(requireActivity(), item.getSiteKey(), Result.folder(item));
-        else {
-            String pic = item.getPic().isEmpty() ? getPic() : item.getPic();
-            VideoActivity.collect(requireActivity(), item.getSiteKey(), item.getId(), item.getName(), pic, getWallPic());
+        if (item.isFolder()) {
+            if (isHistoryResume()) FolderActivity.start(requireActivity(), item.getSiteKey(), Result.folder(item), getHistoryResumeCid(), getHistoryResumeKey(), getHistoryResumeTargetCid());
+            else FolderActivity.start(requireActivity(), item.getSiteKey(), Result.folder(item));
+            return;
         }
+        String pic = item.getPic().isEmpty() ? getPic() : item.getPic();
+        if (isHistoryResume()) HistoryResumeCoordinator.openSelected(requireActivity(), getHistoryResumeCid(), getHistoryResumeKey(), getHistoryResumeTargetCid(), item);
+        else VideoActivity.collect(requireActivity(), item.getSiteKey(), item.getId(), item.getName(), pic, getWallPic());
     }
 
     @Override

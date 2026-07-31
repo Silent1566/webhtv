@@ -412,30 +412,45 @@ public class TmdbHeaderView {
         RecyclerView personalTmdbRecommendationsRv = headerRoot.findViewById(R.id.tmdbPersonalTmdbRecommendations);
         personalTmdbRecommendationAdapter = new com.fongmi.android.tv.ui.adapter.TmdbRecommendationAdapter();
         personalTmdbRecommendationAdapter.setOnItemClickListener(this::onRecommendationClick);
+        personalTmdbRecommendationAdapter.setOnItemLongClickListener(item -> onRecommendationLongClick(item, "tmdb"));
         personalTmdbRecommendationsRv.setAdapter(personalTmdbRecommendationAdapter);
         attachLazyLoader(personalTmdbRecommendationsRv, RecommendationRow.PERSONAL_TMDB);
 
         RecyclerView personalDoubanRecommendationsRv = headerRoot.findViewById(R.id.tmdbPersonalDoubanRecommendations);
         personalDoubanRecommendationAdapter = new com.fongmi.android.tv.ui.adapter.TmdbRecommendationAdapter();
         personalDoubanRecommendationAdapter.setOnItemClickListener(this::onRecommendationClick);
+        personalDoubanRecommendationAdapter.setOnItemLongClickListener(item -> onRecommendationLongClick(item, "douban"));
         personalDoubanRecommendationsRv.setAdapter(personalDoubanRecommendationAdapter);
         attachLazyLoader(personalDoubanRecommendationsRv, RecommendationRow.PERSONAL_DOUBAN);
 
         RecyclerView personalAiRecommendationsRv = headerRoot.findViewById(R.id.tmdbPersonalAiRecommendations);
         personalAiRecommendationAdapter = new com.fongmi.android.tv.ui.adapter.TmdbRecommendationAdapter();
         personalAiRecommendationAdapter.setOnItemClickListener(this::onRecommendationClick);
-        personalAiRecommendationAdapter.setOnItemLongClickListener(item -> {
-            com.fongmi.android.tv.ui.dialog.AiRecommendationInfoDialog.show(activity, item);
-            return true;
-        });
+        personalAiRecommendationAdapter.setOnItemLongClickListener(item -> onRecommendationLongClick(item, "ai"));
         personalAiRecommendationAdapter.setOnItemFocusListener(this::showAiRecommendationReason);
         personalAiRecommendationsRv.setAdapter(personalAiRecommendationAdapter);
 
         RecyclerView recommendationsRv = headerRoot.findViewById(R.id.tmdbRecommendations);
         recommendationAdapter = new com.fongmi.android.tv.ui.adapter.TmdbRecommendationAdapter();
         recommendationAdapter.setOnItemClickListener(this::onRecommendationClick);
+        recommendationAdapter.setOnItemLongClickListener(item -> onRecommendationLongClick(item, "related"));
         recommendationsRv.setAdapter(recommendationAdapter);
         attachLazyLoader(recommendationsRv, RecommendationRow.RECOMMENDATIONS);
+    }
+
+    private boolean onRecommendationLongClick(TmdbItem item, String source) {
+        com.fongmi.android.tv.ui.dialog.AiRecommendationInfoDialog.show(activity, item, source, this::onRecommendationNotInterested);
+        return true;
+    }
+
+    private void onRecommendationNotInterested(TmdbItem item) {
+        if (boundAdapter != null) boundAdapter.removeRecommendation(item);
+        recommendationAdapter.removeItem(item);
+        personalTmdbRecommendationAdapter.removeItem(item);
+        personalDoubanRecommendationAdapter.removeItem(item);
+        personalAiRecommendationAdapter.removeItem(item);
+        showAiRecommendationReason(item, false);
+        refreshPersonalRecommendations();
     }
 
     private void bindRecommendationRow(int labelId, int recyclerId, com.fongmi.android.tv.ui.adapter.TmdbRecommendationAdapter adapter, List<TmdbItem> items) {
@@ -460,7 +475,8 @@ public class TmdbHeaderView {
         if (headerRoot == null) return;
         TextView reason = headerRoot.findViewById(R.id.tmdbPersonalAiReason);
         if (reason == null) return;
-        String text = item == null ? "" : item.getOverview();
+        String text = item == null ? "" : item.getRecommendationReason();
+        if (TextUtils.isEmpty(text) && item != null) text = item.getOverview();
         if (!focused || TextUtils.isEmpty(text)) {
             reason.setText("");
             reason.setVisibility(View.GONE);

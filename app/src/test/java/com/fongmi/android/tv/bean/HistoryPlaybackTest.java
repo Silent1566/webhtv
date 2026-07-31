@@ -97,11 +97,146 @@ public class HistoryPlaybackTest {
     }
 
     @Test
+    public void playbackEpisodeMatchRejectsSameTmdbNumberFromDifferentSeasons() {
+        Episode firstSeason = Episode.create("第2集", "old-url");
+        firstSeason.setTmdbEpisode(new TmdbEpisode(2, "", "", "", "", 0, 0, 101, 1));
+        Episode secondSeason = Episode.create("第2集", "new-url");
+        secondSeason.setTmdbEpisode(new TmdbEpisode(2, "", "", "", "", 0, 0, 202, 2));
+
+        assertFalse(secondSeason.matches(firstSeason));
+        assertFalse(secondSeason.matchesPlayback(firstSeason));
+    }
+
+    @Test
+    public void playbackEpisodeMatchRejectsSpecialAndRegularSeasonWithSameNumber() {
+        Episode special = Episode.create("特别篇第2集", "special-url");
+        special.setTmdbEpisode(new TmdbEpisode(2, "", "", "", "", 0, 0, 100, 0));
+        Episode regular = Episode.create("第2集", "regular-url");
+        regular.setTmdbEpisode(new TmdbEpisode(2, "", "", "", "", 0, 0, 200, 1));
+
+        assertFalse(regular.matches(special));
+        assertFalse(regular.matchesPlayback(special));
+    }
+
+    @Test
+    public void playbackEpisodeMatchAllowsUnknownSeasonWhenTmdbEpisodeNumberMatches() {
+        Episode unknownSeason = Episode.create("源站第2集", "old-url");
+        unknownSeason.setTmdbEpisode(new TmdbEpisode(2, "", "", "", "", 0, 0, 0, -1));
+        Episode knownSeason = Episode.create("第2集", "new-url");
+        knownSeason.setTmdbEpisode(new TmdbEpisode(2, "", "", "", "", 0, 0, 202, 2));
+
+        assertTrue(knownSeason.matchesPlayback(unknownSeason));
+    }
+
+    @Test
     public void playbackEpisodeMatchRejectsDifferentEpisode() {
         Episode saved = Episode.create("第9集", "old-url");
         Episode different = Episode.create("第10集", "new-url");
 
         assertFalse(different.matchesPlayback(saved));
+    }
+
+    @Test
+    public void findPlaybackCandidatePrefersBoundTmdbEpisodeNumber() {
+        History wrong = history("site-a@@vod@@1", "武神主宰", "第19集", "old-url-19", 90_000, 300_000);
+        History expected = history("site-b@@vod@@1", "武神主宰", "第20集", "old-url-20", 120_000, 300_000);
+        Episode current = Episode.create("源站编号203", "new-url-20");
+        current.setTmdbEpisode(new TmdbEpisode(20, "众人在燕歌坊遇刺客", "", "", "", 0, 0));
+
+        History result = History.findPlaybackCandidate("site-c@@vod@@1", List.of(wrong, expected), List.of(flag(current)));
+
+        assertEquals("第20集", result.getVodRemarks());
+        assertEquals(120_000, result.getPosition());
+    }
+
+    @Test
+    public void findPlaybackCandidateRejectsMatchingLabelFromDifferentTmdbSeason() {
+        History wrongSeason = history("site-a@@vod@@1", "示例剧", "第2集", "old-url", 90_000, 300_000);
+        wrongSeason.setTmdbSeasonNumber(1);
+        wrongSeason.setTmdbEpisodeNumber(2);
+        History expected = history("site-b@@vod@@1", "示例剧", "第2集", "new-url", 120_000, 300_000);
+        expected.setTmdbSeasonNumber(2);
+        expected.setTmdbEpisodeNumber(2);
+        Episode current = Episode.create("第2集", "target-url");
+        current.setTmdbEpisode(new TmdbEpisode(2, "", "", "", "", 0, 0, 202, 2));
+
+        History result = History.findPlaybackCandidate("site-c@@vod@@1", List.of(wrongSeason, expected), List.of(flag(current)));
+
+        assertEquals(120_000, result.getPosition());
+    }
+
+    @Test
+    public void flagFindPrefersTmdbPositionOverConflictingUrl() {
+        Episode wrongSeason = Episode.create("第2集", "shared-url");
+        wrongSeason.setTmdbEpisode(new TmdbEpisode(2, "", "", "", "", 0, 0, 101, 1));
+        Episode expected = Episode.create("第2集", "expected-url");
+        expected.setTmdbEpisode(new TmdbEpisode(2, "", "", "", "", 0, 0, 202, 2));
+        Episode target = Episode.create("第2集", "shared-url");
+        target.setTmdbEpisode(new TmdbEpisode(2, "", "", "", "", 0, 0, 202, 2));
+
+        assertEquals(expected, flag(wrongSeason, expected).find(target, true));
+    }
+
+    @Test
+    public void flagFindRejectsSingleBoundEpisodeFromDifferentTmdbSeason() {
+        Episode wrongSeason = Episode.create("第2集", "shared-url");
+        wrongSeason.setTmdbEpisode(new TmdbEpisode(2, "", "", "", "", 0, 0, 101, 1));
+        Episode target = Episode.create("第2集", "shared-url");
+        target.setTmdbEpisode(new TmdbEpisode(2, "", "", "", "", 0, 0, 202, 2));
+
+        assertEquals(null, flag(wrongSeason).find(target, true));
+    }
+
+    @Test
+    public void flagFindUsesExactUnboundUrlBeforeExtractedCandidateNumber() {
+        Episode extractedNumber = Episode.create("第2集", "other-url");
+        Episode exactUrl = Episode.create("特别篇", "shared-url");
+        Episode target = Episode.create("第2集", "shared-url");
+        target.setTmdbEpisode(new TmdbEpisode(2, "", "", "", "", 0, 0, 202, 2));
+
+        assertEquals(exactUrl, flag(extractedNumber, exactUrl).find(target, true));
+    }
+
+    @Test
+    public void canonicalTmdbPositionCanBeStoredWithoutBindingSourceEpisodeMetadata() {
+        History history = history("site@@vod@@1", "示例剧", "源站编号203", "url-20", 120_000, 300_000);
+        Episode sourceEpisode = Episode.create("源站编号203", "url-20");
+
+        assertTrue(history.setTmdbEpisodePosition(2, 20));
+
+        assertEquals(2, history.getTmdbSeasonNumber());
+        assertEquals(20, history.getTmdbEpisodeNumber());
+        assertEquals(null, sourceEpisode.getTmdbEpisode());
+    }
+
+    @Test
+    public void tmdbEpisodePositionSurvivesCopyAndClearsWhenEpisodeChanges() {
+        History history = history("site@@vod@@1", "示例剧", "源站编号203", "url-20", 120_000, 300_000);
+        Episode episode = Episode.create("源站编号203", "url-20");
+        episode.setTmdbEpisode(new TmdbEpisode(20, "标准标题", "", "", "", 0, 0, 200, 2));
+
+        assertTrue(history.setTmdbEpisodePosition(episode));
+
+        History copy = history.copy();
+        assertEquals(2, copy.getTmdbSeasonNumber());
+        assertEquals(20, copy.getTmdbEpisodeNumber());
+        assertEquals(20, copy.getEpisode().getTmdbEpisode().getNumber());
+
+        copy.setTmdbEpisodePosition(Episode.create("下一集", "url-21"));
+        assertEquals(0, copy.getTmdbSeasonNumber());
+        assertEquals(0, copy.getTmdbEpisodeNumber());
+    }
+
+    @Test
+    public void tmdbEpisodePositionPreservesUnknownSeason() {
+        History history = history("site@@vod@@1", "示例剧", "第2集", "url-2", 120_000, 300_000);
+        Episode episode = Episode.create("第2集", "url-2");
+        episode.setTmdbEpisode(new TmdbEpisode(2, "", "", "", "", 0, 0, 200, -1));
+
+        history.setTmdbEpisodePosition(episode);
+
+        assertEquals(-1, history.getTmdbSeasonNumber());
+        assertEquals(-1, history.getEpisode().getTmdbEpisode().getSeasonNumber());
     }
 
     @Test

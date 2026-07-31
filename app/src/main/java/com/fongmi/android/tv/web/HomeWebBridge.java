@@ -51,20 +51,26 @@ public class HomeWebBridge {
     private final HomeWebController controller;
     private final Activity activity;
     private final WebView webView;
+    private final WebHomeThemeBridge themeBridge;
     private final Map<String, String> results;
     private final Map<String, CompletableFuture<String>> inlineResults;
 
-    public HomeWebBridge(HomeWebController controller, Activity activity, WebView webView) {
+    public HomeWebBridge(HomeWebController controller, Activity activity, WebView webView,
+            WebHomeThemeBridge themeBridge) {
         this.controller = controller;
         this.activity = activity;
         this.webView = webView;
+        this.themeBridge = themeBridge;
         this.results = new ConcurrentHashMap<>();
         this.inlineResults = new ConcurrentHashMap<>();
     }
 
     @JavascriptInterface
     public void invoke(String requestId, String method, String payload) {
-        Task.execute(() -> handle(requestId, method, WebCall.object(payload)));
+        WebHomeTarget themeTarget = controller.getThemeTarget();
+        boolean v2Theme = themeTarget != null && themeTarget.isV2();
+        int themeGeneration = controller.getThemeSessionGeneration();
+        Task.execute(() -> handle(requestId, method, WebCall.object(payload), v2Theme, themeGeneration));
     }
 
     @JavascriptInterface
@@ -110,16 +116,26 @@ public class HomeWebBridge {
         if (future != null) future.complete(payload);
     }
 
-    private void handle(String requestId, String method, JsonObject payload) {
+    private void handle(String requestId, String method, JsonObject payload, boolean v2Theme, int themeGeneration) {
         try {
-            SpiderDebug.log("webhome", "invoke method=%s payload=%s", method, payload);
-            resolve(requestId, execute(method, payload));
+            SpiderDebug.log("webhome", "invoke method=%s payloadBytes=%s", method,
+                    payload.toString().getBytes(StandardCharsets.UTF_8).length);
+            resolve(requestId, execute(method, payload, v2Theme, themeGeneration), v2Theme, themeGeneration);
         } catch (Throwable e) {
-            reject(requestId, e.getMessage());
+            reject(requestId, e.getMessage(), v2Theme, themeGeneration);
         }
     }
 
-    private String execute(String method, JsonObject payload) throws Exception {
+    private String execute(String method, JsonObject payload, boolean v2Theme, int themeGeneration) throws Exception {
+        if (v2Theme) {
+            return themeBridge.invoke(method, payload,
+                    () -> controller.isThemeSessionActive(themeGeneration));
+        }
+        WebHomeTarget themeTarget = controller.getThemeTarget();
+        if (!controller.isLegacyThemeSessionActive(themeGeneration) || themeTarget == null
+                || themeTarget.isManifest() || themeTarget.isV2()) {
+            throw new IllegalStateException("SOURCE_CHANGED");
+        }
         return switch (method) {
                 case "net.request" -> WebCall.request(payload, controller);
                 case "net.resourceUrl" -> quote(resourceUrl(Json.safeString(payload, "url"), payload.toString()));
@@ -242,7 +258,8 @@ public class HomeWebBridge {
         final String playPic = pic;
         final String playWall = wall;
         final String playContent = content;
-        SpiderDebug.log("webhome", "player.playUrl title=%s url=%s", playTitle, playUrl);
+        SpiderDebug.log("webhome", "player.playUrl title=%s url=%s", playTitle,
+                HomeWebController.safeLogUrl(playUrl));
         App.post(() -> controller.prepareNativePlayback(() -> VideoActivity.start(activity, SiteApi.PUSH, playUrl, playTitle, playPic, null, playWall, playContent)));
         return "{}";
     }
@@ -335,13 +352,16 @@ public class HomeWebBridge {
         long start = System.currentTimeMillis();
         boolean lease = controller.beginInlineEvaluation();
         try {
-            SpiderDebug.log("webhome-inline", "resolve start id=%s page=%s lease=%s", id, Json.safeString(payload, "pageUrl"), lease);
+            SpiderDebug.log("webhome-inline", "resolve start id=%s page=%s lease=%s", id,
+                    HomeWebController.safeLogUrl(Json.safeString(payload, "pageUrl")), lease);
             eval(script);
             String result = future.get(INLINE_RESOLVE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
             JsonObject object = WebCall.object(result);
             String error = Json.safeString(object, "error");
             if (!TextUtils.isEmpty(error)) throw new IllegalStateException(error);
-            SpiderDebug.log("webhome-inline", "resolve ok id=%s cost=%sms url=%s", id, System.currentTimeMillis() - start, Json.safeString(object, "url"));
+            SpiderDebug.log("webhome-inline", "resolve ok id=%s cost=%sms url=%s", id,
+                    System.currentTimeMillis() - start,
+                    HomeWebController.safeLogUrl(Json.safeString(object, "url")));
             return object;
         } catch (Throwable e) {
             SpiderDebug.log("webhome-inline", "resolve failed id=%s cost=%sms error=%s", id, System.currentTimeMillis() - start, e.getMessage());
@@ -434,7 +454,8 @@ public class HomeWebBridge {
         final String playPic = pic;
         final String playWall = wall;
         final String playContent = content;
-        SpiderDebug.log("webhome", "pan.play route=%s type=%s title=%s url=%s", SiteApi.PUSH, type, playTitle, playUrl);
+        SpiderDebug.log("webhome", "pan.play route=%s type=%s title=%s url=%s", SiteApi.PUSH,
+                type, playTitle, HomeWebController.safeLogUrl(playUrl));
         App.post(() -> controller.prepareNativePlayback(() -> VideoActivity.start(activity, SiteApi.PUSH, playUrl, playTitle, playPic, null, playWall, playContent)));
         return "{}";
     }
@@ -542,18 +563,33 @@ public class HomeWebBridge {
         return "{}";
     }
 
-    private void resolve(String requestId, String data) {
+    private void resolve(String requestId, String data, boolean v2Theme, int themeGeneration) {
+        if (!controller.isBridgeSessionActive(v2Theme, themeGeneration)) return;
         String payload = TextUtils.isEmpty(data) ? "null" : data;
+        String storedResultId = null;
         if (payload.length() > INLINE_LIMIT) {
             String resultId = requestId + "_" + System.nanoTime();
             results.put(resultId, payload);
             payload = "{\"__fmResultId\":" + quote(resultId) + "}";
+            storedResultId = resultId;
         }
-        eval("window.fongmiNative&&window.fongmiNative.resolve(" + quote(requestId) + "," + payload + ")");
+        eval("window.fongmiNative&&window.fongmiNative.resolve(" + quote(requestId) + "," + payload + ")",
+                v2Theme, themeGeneration, storedResultId);
     }
 
-    private void reject(String requestId, String error) {
-        eval("window.fongmiNative&&window.fongmiNative.reject(" + quote(requestId) + "," + quote(error) + ")");
+    private void reject(String requestId, String error, boolean v2Theme, int themeGeneration) {
+        eval("window.fongmiNative&&window.fongmiNative.reject(" + quote(requestId) + "," + quote(error) + ")",
+                v2Theme, themeGeneration, null);
+    }
+
+    private void eval(String script, boolean v2Theme, int themeGeneration, String storedResultId) {
+        App.post(() -> {
+            if (!controller.isBridgeSessionActive(v2Theme, themeGeneration)) {
+                if (storedResultId != null) results.remove(storedResultId);
+                return;
+            }
+            webView.evaluateJavascript(script, null);
+        });
     }
 
     private void eval(String script) {

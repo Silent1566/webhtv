@@ -36,25 +36,56 @@
             android:layout_gravity="bottom"
             android:background="@drawable/shape_episode_card_overlay" />
 
-        <com.google.android.material.textview.MaterialTextView
-            android:id="@+id/rating"
+        <LinearLayout
+            android:id="@+id/ratingGroup"
             android:layout_width="wrap_content"
-            android:layout_height="24dp"
+            android:layout_height="wrap_content"
             android:layout_gravity="top|end"
             android:layout_margin="8dp"
-            android:background="@drawable/shape_episode_card_badge"
-            android:gravity="center"
-            android:includeFontPadding="false"
-            android:maxLines="1"
-            android:minWidth="42dp"
-            android:paddingStart="8dp"
-            android:paddingEnd="8dp"
-            android:textColor="@android:color/white"
-            android:textSize="11sp"
-            android:textStyle="bold"
+            android:divider="@drawable/divider_rating_chip_horizontal"
+            android:gravity="end"
+            android:orientation="horizontal"
+            android:showDividers="middle"
             android:visibility="gone"
-            tools:text="★ 8.0"
-            tools:visibility="visible" />
+            tools:visibility="visible">
+
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/tmdbRating"
+                android:layout_width="wrap_content"
+                android:layout_height="22dp"
+                android:background="@drawable/shape_episode_card_badge"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:minWidth="52dp"
+                android:paddingStart="7dp"
+                android:paddingEnd="7dp"
+                android:textColor="#FFD35C"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:visibility="gone"
+                tools:text="TMDB 8.3"
+                tools:visibility="visible" />
+
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/doubanRating"
+                android:layout_width="wrap_content"
+                android:layout_height="22dp"
+                android:background="@drawable/shape_episode_card_badge"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:minWidth="48dp"
+                android:paddingStart="7dp"
+                android:paddingEnd="7dp"
+                android:textColor="#78E08F"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:visibility="gone"
+                tools:text="豆瓣 8.7"
+                tools:visibility="visible" />
+
+        </LinearLayout>
 
         <LinearLayout
             android:layout_width="match_parent"

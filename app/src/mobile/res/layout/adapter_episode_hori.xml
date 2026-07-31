@@ -22,6 +22,27 @@
         android:textSize="14sp"
         tools:text="20" />
 
+
+    <com.google.android.material.textview.MaterialTextView
+        android:id="@+id/nativeFileSize"
+        android:layout_width="wrap_content"
+        android:layout_height="22dp"
+        android:layout_gravity="start|center_vertical"
+        android:layout_marginStart="8dp"
+        android:background="@drawable/shape_episode_card_badge"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:maxWidth="84dp"
+        android:paddingStart="7dp"
+        android:paddingEnd="7dp"
+        android:singleLine="true"
+        android:textColor="@android:color/white"
+        android:textSize="10sp"
+        android:textStyle="bold"
+        android:visibility="gone"
+        tools:text="[44.01GB]"
+        tools:visibility="visible" />
+
     <!-- TMDB 卡片模式：旧版光影剧幕覆盖式剧照卡 -->
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/card"

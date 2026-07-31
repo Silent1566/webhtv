@@ -234,8 +234,21 @@
     <string name="setting_episode_history">Remember episode progress</string>
     <string name="setting_history_aggregation">Aggregate history by TMDB</string>
     <string name="setting_history_aggregation_hint">Unify history across sources based on TMDB match</string>
+    <string name="setting_global_history">Global history resume</string>
+    <string name="history_other_config">Other config</string>
+    <string name="history_source_searching">Matching a playable source…</string>
+    <string name="history_source_not_found">No reliable playback source found</string>
+    <string name="history_source_open_search">Open global search</string>
+    <string name="history_source_episode_missing">The selected source does not match the history or lacks the saved episode</string>
+    <string name="history_source_load_failed">Unable to load the selected source</string>
+    <string name="history_record_missing">The history record no longer exists</string>
+    <string name="history_config_changed">VOD configuration changed. Please try again.</string>
+    <string name="dialog_delete_global_history">Delete history from all VOD configurations?</string>
     <string name="setting_home_history">Home recent history</string>
     <string name="setting_personal_recommendation">Personal recommendations</string>
+    <string name="setting_recommendation_feedback">Not interested management</string>
+    <string name="setting_recommendation_feedback_count">%1$d items · auto-restore after 90 days</string>
+    <string name="setting_recommendation_feedback_empty">None · auto-restore after 90 days</string>
     <string name="setting_tmdb_episode_file_size">Keep file size in TMDB episodes</string>
     <string name="setting_auto_skip_intro_outro">Auto skip intro/outro</string>
     <string name="intro_skip_confirm_title">Skip intro/outro?</string>
@@ -1483,6 +1496,12 @@
         <item>Smart + dialog</item>
     </string-array>
 
+    <string-array name="select_global_history_mode">
+        <item>Off</item>
+        <item>Auto-match source</item>
+        <item>Choose source from search</item>
+    </string-array>
+
     <string-array name="select_auto_skip_intro_outro">
         <item>Off</item>
         <item>Auto skip</item>
@@ -1700,8 +1719,30 @@
     <string name="dialog_ai_test_running">Testing AI configuration...</string>
     <string name="dialog_ai_test_success">AI test passed: %1$s (time %2$s)</string>
     <string name="dialog_ai_test_failed">AI test failed: %1$s (time %2$s)</string>
-    <string name="ai_recommendation_info_title">Smart recommendation</string>
+    <string name="ai_recommendation_info_title">Recommendation details</string>
     <string name="ai_recommendation_reason_label">Recommendation reason</string>
+    <string name="recommendation_not_interested">Not interested</string>
+    <string name="recommendation_feedback_title">Not interested management</string>
+    <string name="recommendation_feedback_summary">These titles are temporarily excluded from personal recommendations and automatically restored after 90 days. Select a title to restore it now.</string>
+    <string name="recommendation_feedback_empty">No hidden titles</string>
+    <string name="recommendation_feedback_remaining_days">About %1$d days remaining</string>
+    <string name="recommendation_feedback_restore_hint">Select to restore</string>
+    <string name="recommendation_feedback_restore_all">Restore all</string>
+    <string name="recommendation_feedback_restored">Restored to recommendations</string>
+    <string name="recommendation_feedback_restored_all">All titles restored</string>
+    <string name="recommendation_not_interested_recorded">Hidden for 90 days; restore anytime in Personal settings</string>
+    <string name="recommendation_overview_label">Overview</string>
+    <string name="recommendation_overview_unavailable">No synopsis is available in the current cache.</string>
+    <string name="recommendation_source_ai">Smart recommendation</string>
+    <string name="recommendation_source_tmdb">Personalized · TMDB</string>
+    <string name="recommendation_source_douban">Personalized · Douban</string>
+    <string name="recommendation_source_related">You may also like</string>
+    <string name="recommendation_data_tmdb">TMDB #%1$d</string>
+    <string name="recommendation_data_douban_matched">Douban rating matched</string>
+    <string name="recommendation_data_douban_unavailable">No Douban rating match</string>
+    <string name="recommendation_data_douban_only">Douban item matched</string>
+    <string name="recommendation_data_metadata_only">Basic recommendation metadata only</string>
+    <string name="recommendation_data_no_poster">No usable poster</string>
     <string name="ai_recommendation_reason_preview">Reason: %1$s</string>
     <string name="detail_work_searching">Searching current source for %1$s...</string>
     <string name="detail_work_global_searching">No current-source result. Searching all sites for %1$s...</string>
@@ -2231,4 +2272,5 @@
 
 <string name="player_audio_repeat">Repeat</string>
 
+    <string name="web_theme_detail_loading">正在加载详情页…</string>
 </resources>

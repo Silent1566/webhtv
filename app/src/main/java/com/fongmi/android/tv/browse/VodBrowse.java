@@ -262,8 +262,10 @@ class VodBrowse {
 
     private static void updateHistory(@NonNull Episode episode) {
         if (browseHistory == null) return;
+        boolean sameEpisode = episode.matchesPlayback(browseHistory.getEpisode());
         browseHistory.setVodRemarks(episode.getName());
         browseHistory.setEpisodeUrl(episode.getUrl());
+        if (episode.getTmdbEpisode() != null || !sameEpisode) browseHistory.setTmdbEpisodePosition(episode);
         PlaybackEventCollector.get().updateHistory(browseHistory);
     }
 
