@@ -30,6 +30,7 @@ import com.fongmi.android.tv.ui.dialog.PlayerOsdDialog;
 import com.fongmi.android.tv.ui.dialog.PlayerButtonConfigDialog;
 import com.fongmi.android.tv.ui.dialog.SpeedDialog;
 import com.fongmi.android.tv.ui.dialog.UaDialog;
+import com.fongmi.android.tv.ui.dialog.VideoAspectModeDialog;
 import com.fongmi.android.tv.utils.FileUtil;
 import com.fongmi.android.tv.utils.ResUtil;
 
@@ -178,9 +179,10 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
     }
 
     private void setScale(View view) {
-        int index = (PlayerSetting.getScale() + 1) % scale.length;
-        mBinding.scaleText.setText(scale[index]);
-        PlayerSetting.putScale(index);
+        VideoAspectModeDialog.show(this, PlayerSetting.getScale(), mode -> {
+            mBinding.scaleText.setText(scale[mode]);
+            PlayerSetting.putScale(mode);
+        });
     }
 
     private void onLut(View view) {

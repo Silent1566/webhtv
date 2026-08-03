@@ -40,6 +40,14 @@ public final class WebHomeThemePolicy {
                 case "history.item" -> has(permissions, "history.read");
                 case "player.playVod" -> has(permissions, "player.playVod");
                 case "app.search" -> has(permissions, "app.search");
+                case "person.open" -> has(permissions, "person.open");
+                case "image.preview" -> has(permissions, "image.preview");
+                case "image.save" -> has(permissions, "image.save");
+                case "recommendation.open" -> has(permissions, "recommendation.open");
+                case "recommendation.info" -> has(permissions, "recommendation.info");
+                case "recommendation.feedback" -> has(permissions, "recommendation.feedback");
+                case "external.open" -> has(permissions, "external.open");
+                case "episode.info" -> has(permissions, "episode.info");
                 case "navigation.openNativeDetail" -> true;
                 default -> false;
             };
@@ -57,7 +65,9 @@ public final class WebHomeThemePolicy {
             };
             case DETAIL -> switch (permission) {
                 case "vod.detail", "favorite.read", "favorite.write", "history.read",
-                        "player.playVod", "app.search" -> true;
+                        "player.playVod", "app.search", "person.open", "image.preview", "image.save",
+                        "recommendation.open", "recommendation.info", "recommendation.feedback",
+                        "external.open", "episode.info" -> true;
                 default -> false;
             };
         };

@@ -891,6 +891,91 @@ public class TmdbDetailActivityLayoutTest {
     }
 
     @Test
+    public void seasonNavigationUsesOnlyCurrentFlagAvailableSeasons() throws Exception {
+        Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int resolver = source.indexOf("private List<Integer> availableSeasonNumbers(List<Episode> episodes)");
+        int render = source.indexOf("private void renderSeasonSelection()", resolver);
+        int update = source.indexOf("private void updateSeasonButtonStates()", render);
+        int compute = source.indexOf("private List<Episode> computeVisibleEpisodes(List<Episode> episodes)", update);
+        int seasonForEpisode = source.indexOf("private int seasonForEpisode(Episode episode, List<Episode> episodes)", compute);
+        int next = source.indexOf("private boolean onRecommendationLongClick", seasonForEpisode);
+        int episodePosition = source.indexOf("private EpisodePosition episodePosition(Episode episode, List<Episode> episodes, int index)", next);
+        int positionEnd = source.indexOf("private int linearEpisodeNumber", episodePosition);
+
+        assertTrue(sourcePath + " is missing current-line season availability integration",
+                resolver >= 0 && render > resolver && update > render && compute > update && seasonForEpisode > compute && next > seasonForEpisode
+                        && episodePosition > next && positionEnd > episodePosition);
+        String resolverBody = source.substring(resolver, render);
+        String renderBody = source.substring(render, update);
+        String computeBody = source.substring(compute, seasonForEpisode);
+        String seasonBody = source.substring(seasonForEpisode, next);
+        String positionBody = source.substring(episodePosition, positionEnd);
+        assertTrue("available seasons must be resolved from each current-line episode plus TMDB metadata",
+                resolverBody.contains("sourceSeasonNumbers(episodes)")
+                        && resolverBody.contains("EpisodeSeasonPolicy.resolveAvailableSeasons("));
+        assertTrue("current-line labels must participate in season resolution before generic detail titles",
+                source.contains("selectedFlag == null ? -1 : sourceSeasonNumber(selectedFlag.getShow())")
+                        && source.contains("int titleSeason = sourceSeasonNumber(initialFlag.getShow());"));
+        assertTrue("season chips must iterate only the current line's available seasons",
+                renderBody.contains("List<Integer> availableSeasons = availableSeasonNumbers(episodes);")
+                        && renderBody.contains("for (Integer season : availableSeasons)")
+                        && !renderBody.contains("for (Integer season : seasonNumbers)"));
+        assertTrue("unknown or single-season lines must keep all source episodes instead of exposing empty TMDB seasons",
+                computeBody.contains("List<Integer> availableSeasons = availableSeasonNumbers(episodes);")
+                        && computeBody.contains("if (availableSeasons.size() <= 1 || selectedSeasonNumber < 0) return episodes;"));
+        assertTrue("initial season selection must use available seasons instead of unrelated TMDB seasons",
+                seasonBody.contains("List<Integer> availableSeasons = availableSeasonNumbers(episodes);")
+                        && seasonBody.contains("if (availableSeasons.isEmpty()) return -1;")
+                        && !seasonBody.contains("if (seasonNumbers.isEmpty()) return -1;"));
+        assertTrue("TMDB episode metadata positions must use the same current-line availability result",
+                positionBody.contains("List<Integer> availableSeasons = availableSeasonNumbers(episodes);")
+                        && positionBody.contains("if (availableSeasons.isEmpty()) return new EpisodePosition(-1")
+                        && !positionBody.contains("if (seasonNumbers.size() <= 1"));
+    }
+
+    @Test
+    public void singleAvailableSeasonKeepsReadOnlySeasonContext() throws Exception {
+        Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int render = source.indexOf("private void renderEpisodes()");
+        int renderEnd = source.indexOf("private List<EpisodeRangePolicy.Range> buildCardEpisodeRanges", render);
+        int bindMeta = source.indexOf("private void bindMeta()");
+        int bindRatings = source.indexOf("private void bindRatings()", bindMeta);
+        int contextNumber = source.indexOf("private int currentSeasonContextNumber()", bindMeta);
+        int refreshContext = source.indexOf("private void refreshSeasonContext()", contextNumber);
+
+        assertTrue(sourcePath + " is missing read-only season context integration",
+                render >= 0 && renderEnd > render && bindMeta >= 0 && bindRatings > bindMeta
+                        && contextNumber > bindMeta && refreshContext > contextNumber && bindRatings > refreshContext);
+        String renderBody = source.substring(render, renderEnd);
+        String metaBody = source.substring(bindMeta, contextNumber);
+        String contextBody = source.substring(contextNumber, bindRatings);
+        int emptyBranch = renderBody.indexOf("if (!hasEpisodes)");
+        int emptyRefresh = renderBody.indexOf("refreshSeasonContext();", emptyBranch);
+        int selectedRefresh = renderBody.lastIndexOf("refreshSeasonContext();");
+        assertTrue("single-season context must be refreshed for empty and playable episode states",
+                emptyBranch >= 0 && emptyRefresh > emptyBranch && selectedRefresh > emptyRefresh);
+        assertTrue("the hero metadata row must keep the current season visible without duplicating season-scoped episode metadata",
+                metaBody.contains("TmdbEpisodeInfo episodeInfo = tmdbEpisodeInfo();")
+                        && metaBody.contains("addMetaChip(episodeInfo.detailText(this));")
+                        && metaBody.contains("if (!episodeInfo.isSeasonScoped())")
+                        && metaBody.contains("addMetaChip(currentSeasonContextLabel());"));
+        assertTrue("the episode heading must render a localized current-season label",
+                contextBody.contains("availableSeasonNumbers(episodes)")
+                        && contextBody.contains("R.string.detail_episode_season_context")
+                        && contextBody.contains("binding.episodeTitle.setText")
+                        && contextBody.contains("bindMeta();"));
+
+        String defaults = new String(Files.readAllBytes(findMainResPath().resolve(Path.of("values", "strings.xml"))), StandardCharsets.UTF_8);
+        String simplified = new String(Files.readAllBytes(findMainResPath().resolve(Path.of("values-zh-rCN", "strings.xml"))), StandardCharsets.UTF_8);
+        String traditional = new String(Files.readAllBytes(findMainResPath().resolve(Path.of("values-zh-rTW", "strings.xml"))), StandardCharsets.UTF_8);
+        assertTrue(defaults.contains("<string name=\"detail_episode_season_context\">Episode · Season %1$d</string>"));
+        assertTrue(simplified.contains("<string name=\"detail_episode_season_context\">选集 · 第 %1$d 季</string>"));
+        assertTrue(traditional.contains("<string name=\"detail_episode_season_context\">選集 · 第 %1$d 季</string>"));
+    }
+
+    @Test
     public void switchingLongStandaloneEpisodeFlagsReusesEpisodeRenderCaches() throws Exception {
         Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
@@ -1922,7 +2007,7 @@ public class TmdbDetailActivityLayoutTest {
                         && activity.contains("fetchSeasonIfNeeded(firstSeason, true);")
                         && activity.contains("seasonEpisodeCounts.put(seasonNumber, episodes.size());")
                         && service.contains("season(@NonNull TmdbItem item, int seasonNumber, @NonNull TmdbConfig config, JsonObject detail, boolean refresh)")
-                        && service.contains("refresh ? null : readFirstCache(lookupFiles, ttl)")
+                        && service.contains("refresh ? null : readFirstCache(lookupFiles, ttl, \"detail\".equals(type))")
                         && service.contains("readFirstCache(lookupFiles, Long.MAX_VALUE)"));
     }
 

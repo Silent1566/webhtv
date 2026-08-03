@@ -27,6 +27,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.function.BooleanSupplier;
 
 public class AiRecommendationInfoDialog {
 
@@ -42,6 +43,11 @@ public class AiRecommendationInfoDialog {
     }
 
     public static void show(Activity activity, TmdbItem item, String source, OnNotInterestedListener listener) {
+        show(activity, item, source, listener, null);
+    }
+
+    public static void show(Activity activity, TmdbItem item, String source, OnNotInterestedListener listener,
+            BooleanSupplier active) {
         if (activity == null || item == null) return;
         View view = LayoutInflater.from(activity).inflate(R.layout.dialog_ai_recommendation_info, null);
         ImageView poster = view.findViewById(R.id.poster);
@@ -98,6 +104,10 @@ public class AiRecommendationInfoDialog {
                 620,
                 dialogHeightPx);
         notInterested.setOnClickListener(v -> {
+            if (active != null && !active.getAsBoolean()) {
+                dialog.dismiss();
+                return;
+            }
             RecommendationFeedbackStore.add(item, source);
             if (listener != null) listener.onNotInterested(item);
             Toast.makeText(activity, R.string.recommendation_not_interested_recorded, Toast.LENGTH_SHORT).show();

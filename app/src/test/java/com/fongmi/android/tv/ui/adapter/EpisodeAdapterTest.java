@@ -96,6 +96,14 @@ public class EpisodeAdapterTest {
                 nativeLayout.contains("android:id=\"@+id/nativeFileSize\"")
                         && adapter.contains("getNativeFileSize(item)")
                         && adapter.contains("getNativeDisplayTitle(item)"));
+        assertTrue("TV native file-size badge must stay inside the episode card",
+                nativeLayout.contains("<FrameLayout")
+                        && nativeLayout.indexOf("android:id=\"@+id/text\"") < nativeLayout.indexOf("android:id=\"@+id/nativeFileSize\"")
+                        && nativeLayout.contains("android:layout_gravity=\"start|center_vertical\"")
+                        && adapter.contains("int titleStartPadding = showFileSize ? ResUtil.dp2px(104) : horizontalPadding;")
+                        && adapter.contains("if (showFileSize && !verticalGridMode) width += ResUtil.dp2px(104);")
+                        && adapter.contains("textView.setPaddingRelative(titleStartPadding")
+                        && !adapter.contains("width - ResUtil.dp2px(96)"));
         assertTrue("TV TMDB episode cards must expose a fileSize badge",
                 layout.contains("android:id=\"@+id/fileSize\"")
                         && adapter.contains("String cardTitle = getCardTitle(item, tmdbEpisode);")

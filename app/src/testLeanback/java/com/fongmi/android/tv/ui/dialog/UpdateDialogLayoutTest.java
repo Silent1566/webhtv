@@ -27,6 +27,20 @@ public class UpdateDialogLayoutTest {
     }
 
     @Test
+    public void scrollHeightLeavesRoomForDialogChromeAndBottomAction() {
+        int height = UpdateDialogLayout.fitScrollHeight(742, 1080, 325, 324);
+
+        assertEquals(431, height);
+    }
+
+    @Test
+    public void scrollHeightKeepsPreferredSizeWhenThereIsEnoughRoom() {
+        int height = UpdateDialogLayout.fitScrollHeight(320, 1080, 300, 96);
+
+        assertEquals(320, height);
+    }
+
+    @Test
     public void downloadStateReservesProgressPanelHeight() {
         int height = UpdateDialogLayout.calculateScrollHeight(
                 SCREEN_HEIGHT,

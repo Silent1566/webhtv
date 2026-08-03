@@ -17,6 +17,7 @@ import com.fongmi.android.tv.utils.Task;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.BooleanSupplier;
 
 public final class TmdbNavigation {
 
@@ -32,9 +33,15 @@ public final class TmdbNavigation {
     }
 
     public static void open(Activity activity, TmdbItem item, Site currentSite, Opener opener, Runnable afterStart) {
-        if (activity == null || item == null || TextUtils.isEmpty(item.getTitle())) return;
+        open(activity, item, currentSite, opener, afterStart, () -> true);
+    }
+
+    public static void open(Activity activity, TmdbItem item, Site currentSite, Opener opener, Runnable afterStart,
+            BooleanSupplier active) {
+        if (activity == null || item == null || TextUtils.isEmpty(item.getTitle()) || !allowed(active)) return;
         Site site = searchable(currentSite) ? currentSite : null;
         if (site == null) {
+            if (!allowed(active)) return;
             openGlobal(activity, item);
             run(afterStart);
             return;
@@ -43,7 +50,7 @@ public final class TmdbNavigation {
         Task.execute(() -> {
             Vod match = searchCurrentSite(item.getTitle(), site);
             activity.runOnUiThread(() -> {
-                if (activity.isFinishing()) return;
+                if (activity.isFinishing() || !allowed(active)) return;
                 if (match == null) {
                     Notify.show(activity.getString(R.string.detail_work_global_searching, item.getTitle()));
                     openGlobal(activity, item);
@@ -103,6 +110,10 @@ public final class TmdbNavigation {
 
     private static void openGlobal(Activity activity, TmdbItem item) {
         SearchActivity.direct(activity, item.getTitle(), null, item.getPosterUrl(), item.getBackdropUrl());
+    }
+
+    private static boolean allowed(BooleanSupplier active) {
+        return active == null || active.getAsBoolean();
     }
 
     private static void run(Runnable runnable) {

@@ -16,6 +16,8 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
+import java.net.URI;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -88,18 +90,46 @@ public final class WebHomeVodContract {
             boolean canFavorite, boolean canPlay, boolean canSearchRecommendations,
             WebThemeDetailMetadata metadata) {
         return detail(site, vod, session, favorite, history, true, true, canFavorite, canPlay,
-                canSearchRecommendations, metadata);
+                canSearchRecommendations, metadata, null, Set.of());
+    }
+
+    public static JsonObject detail(Site site, Vod vod, WebThemePlaySession session, boolean favorite, History history,
+            boolean canFavorite, boolean canPlay, boolean canSearchRecommendations,
+            WebThemeDetailMetadata metadata, WebThemeDetailActionSession actionSession, Set<String> permissions) {
+        return detail(site, vod, session, favorite, history, true, true, canFavorite, canPlay,
+                canSearchRecommendations, metadata, actionSession, permissions);
     }
 
     public static JsonObject detail(Site site, Vod vod, WebThemePlaySession session, boolean favorite, History history,
             boolean canReadFavorite, boolean canReadHistory, boolean canFavorite, boolean canPlay,
             boolean canSearchRecommendations, WebThemeDetailMetadata metadata) {
+        return detail(site, vod, session, favorite, history, canReadFavorite, canReadHistory, canFavorite, canPlay,
+                canSearchRecommendations, metadata, null, Set.of());
+    }
+
+    public static JsonObject detail(Site site, Vod vod, WebThemePlaySession session, boolean favorite, History history,
+            boolean canReadFavorite, boolean canReadHistory, boolean canFavorite, boolean canPlay,
+            boolean canSearchRecommendations, WebThemeDetailMetadata metadata,
+            WebThemeDetailActionSession actionSession, Set<String> permissions) {
         Vod safeVod = vod == null ? new Vod() : vod;
         WebThemePlaySession safeSession = session == null ? new WebThemePlaySession() : session;
         WebThemeDetailMetadata safeMetadata = metadata == null ? WebThemeDetailMetadata.EMPTY : metadata;
+        Set<String> safePermissions = permissions == null ? Set.of() : permissions;
         History visibleHistory = canReadHistory ? history : null;
         MappingBudget budget = new MappingBudget();
         safeSession.begin(site == null ? "" : site.getKey(), safeVod.getId());
+
+        boolean canOpenPeople = actionSession != null && safePermissions.contains("person.open");
+        boolean canPreviewImages = actionSession != null && safePermissions.contains("image.preview");
+        boolean canSaveImages = actionSession != null && safePermissions.contains("image.save");
+        boolean canOpenRecommendations = actionSession != null && safePermissions.contains("recommendation.open");
+        boolean canInspectRecommendations = actionSession != null && safePermissions.contains("recommendation.info");
+        boolean canSendRecommendationFeedback = actionSession != null
+                && safePermissions.contains("recommendation.feedback");
+        boolean canOpenExternalLinks = actionSession != null && safePermissions.contains("external.open");
+        boolean canInspectEpisodes = actionSession != null && safePermissions.contains("episode.info");
+        boolean canReferenceRecommendations = canOpenRecommendations || canInspectRecommendations
+                || canSendRecommendationFeedback;
 
         JsonObject root = new JsonObject();
         root.addProperty("version", VERSION);
@@ -110,6 +140,7 @@ public final class WebHomeVodContract {
         JsonArray sources = new JsonArray();
         boolean truncated = false;
         boolean hasEpisodeMetadata = false;
+        boolean hasEpisodeReferences = false;
         int referenceCount = 0;
         String historyFlag = visibleHistory == null ? "" : value(visibleHistory.getVodFlag());
         String historyUrl = visibleHistory == null ? "" : value(visibleHistory.getEpisodeUrl());
@@ -160,6 +191,10 @@ public final class WebHomeVodContract {
                 item.addProperty("name", limited(episode.getName(), 512));
                 item.addProperty("number", episode.getNumber());
                 item.addProperty("playRef", playRef);
+                if (canInspectEpisodes) {
+                    String episodeRef = actionSession.issueEpisode(episode);
+                    if (!episodeRef.isEmpty()) item.addProperty("episodeRef", episodeRef);
+                }
                 item.addProperty("selected", selectedEpisode);
                 TmdbEpisode tmdbEpisode = episode.getTmdbEpisode();
                 boolean episodeHasMetadata = tmdbEpisode != null;
@@ -178,6 +213,7 @@ public final class WebHomeVodContract {
                     break;
                 }
                 if (episodeHasMetadata) hasEpisodeMetadata = true;
+                if (item.has("episodeRef")) hasEpisodeReferences = true;
                 referenceCount++;
                 if (selectedEpisode) {
                     historySourceId = sourceId;
@@ -193,13 +229,21 @@ public final class WebHomeVodContract {
         }
         if (budget.isTruncated()) truncated = true;
         if (safeVod.getFlags().size() > 64) truncated = true;
-        JsonArray people = detailPeople(safeMetadata, budget);
+        JsonArray people = detailPeople(safeMetadata, budget, actionSession, canOpenPeople);
         JsonArray gallery = detailGallery(safeMetadata, budget);
-        JsonArray recommendations = detailRecommendations(safeMetadata, budget);
+        JsonArray galleryItems = detailGalleryItems(safeMetadata, budget, actionSession,
+                canPreviewImages || canSaveImages);
+        JsonArray recommendations = detailRecommendations(safeMetadata.getRecommendations(), "related", budget,
+                actionSession, canReferenceRecommendations);
+        JsonArray recommendationGroups = detailRecommendationGroups(safeMetadata, budget, actionSession,
+                canReferenceRecommendations);
+        JsonArray externalLinks = detailExternalLinks(safeVod, safeMetadata, budget, actionSession,
+                canOpenExternalLinks);
         if (budget.isTruncated()) truncated = true;
         root.add("media", media);
         root.add("people", people);
         root.add("gallery", gallery);
+        root.add("galleryItems", galleryItems);
         root.add("sources", sources);
         root.addProperty("truncated", truncated);
 
@@ -216,20 +260,38 @@ public final class WebHomeVodContract {
         }
         root.add("state", state);
         root.add("recommendations", recommendations);
+        root.add("recommendationGroups", recommendationGroups);
+        root.add("externalLinks", externalLinks);
 
+        boolean hasPersonReferences = hasStringProperty(people, "personRef");
+        boolean hasImageReferences = hasStringProperty(galleryItems, "imageRef");
+        boolean hasRecommendationReferences = hasRecommendationReference(recommendationGroups);
+        boolean hasExternalReferences = hasStringProperty(externalLinks, "linkRef");
         JsonObject capabilities = new JsonObject();
         capabilities.addProperty("canFavorite", canReadFavorite && canFavorite);
         capabilities.addProperty("canPlay", canPlay && referenceCount > 0);
         capabilities.addProperty("canSearchRecommendations", canSearchRecommendations);
+        capabilities.addProperty("canOpenPeople", canOpenPeople && hasPersonReferences);
+        capabilities.addProperty("canPreviewImages", canPreviewImages && hasImageReferences);
+        capabilities.addProperty("canSaveImages", canSaveImages && hasImageReferences);
+        capabilities.addProperty("canOpenRecommendations", canOpenRecommendations && hasRecommendationReferences);
+        capabilities.addProperty("canInspectRecommendations", canInspectRecommendations && hasRecommendationReferences);
+        capabilities.addProperty("canSendRecommendationFeedback",
+                canSendRecommendationFeedback && hasRecommendationReferences);
+        capabilities.addProperty("canOpenExternalLinks", canOpenExternalLinks && hasExternalReferences);
+        capabilities.addProperty("canInspectEpisodes", canInspectEpisodes && hasEpisodeReferences);
         capabilities.addProperty("hasPeople", people.size() > 0);
         capabilities.addProperty("hasGallery", gallery.size() > 0);
         capabilities.addProperty("hasRecommendations", recommendations.size() > 0);
+        capabilities.addProperty("hasPersonalTmdbRecommendations", hasGroup(recommendationGroups, "personal.tmdb"));
+        capabilities.addProperty("hasPersonalDoubanRecommendations", hasGroup(recommendationGroups, "personal.douban"));
+        capabilities.addProperty("hasPersonalAiRecommendations", hasGroup(recommendationGroups, "personal.ai"));
+        capabilities.addProperty("hasExternalLinks", externalLinks.size() > 0);
         capabilities.addProperty("hasEpisodeMetadata", hasEpisodeMetadata);
         capabilities.addProperty("tmdbEnriched", !safeMetadata.isEmpty());
         root.add("capabilities", capabilities);
         return root;
     }
-
     private static JsonObject detailMedia(WebThemeDetailMetadata metadata) {
         JsonObject media = new JsonObject();
         TmdbItem item = metadata.getItem();
@@ -265,16 +327,17 @@ public final class WebHomeVodContract {
         return media;
     }
 
-    private static JsonArray detailPeople(WebThemeDetailMetadata metadata, MappingBudget budget) {
+    private static JsonArray detailPeople(WebThemeDetailMetadata metadata, MappingBudget budget,
+            WebThemeDetailActionSession actions, boolean issueReferences) {
         JsonArray people = new JsonArray();
         Set<String> seen = new HashSet<>();
-        addPeople(people, seen, metadata.getCast(), "cast", budget);
-        addPeople(people, seen, metadata.getCrew(), "crew", budget);
+        addPeople(people, seen, metadata.getCast(), "cast", budget, actions, issueReferences);
+        addPeople(people, seen, metadata.getCrew(), "crew", budget, actions, issueReferences);
         return people;
     }
 
     private static void addPeople(JsonArray output, Set<String> seen, List<TmdbPerson> values, String kind,
-            MappingBudget budget) {
+            MappingBudget budget, WebThemeDetailActionSession actions, boolean issueReferences) {
         int inspected = 0;
         for (TmdbPerson person : values) {
             if (inspected++ >= MAX_DETAIL_PEOPLE * 4) {
@@ -289,6 +352,10 @@ public final class WebHomeVodContract {
                     ? person.getPersonId() : limited(name, 256).toLowerCase(Locale.ROOT));
             if (!seen.add(identity)) continue;
             JsonObject item = new JsonObject();
+            if (issueReferences && actions != null) {
+                String ref = actions.issuePerson(person);
+                if (!ref.isEmpty()) item.addProperty("personRef", ref);
+            }
             item.addProperty("personId", Math.max(0, person.getPersonId()));
             item.addProperty("kind", kind);
             item.addProperty("name", limited(name, 256));
@@ -316,34 +383,186 @@ public final class WebHomeVodContract {
         return gallery;
     }
 
-    private static JsonArray detailRecommendations(WebThemeDetailMetadata metadata, MappingBudget budget) {
+    private static JsonArray detailGalleryItems(WebThemeDetailMetadata metadata, MappingBudget budget,
+            WebThemeDetailActionSession actions, boolean issueReferences) {
+        JsonArray gallery = new JsonArray();
+        Set<String> seen = new LinkedHashSet<>();
+        int inspected = 0;
+        for (String value : metadata.getGallery()) {
+            if (inspected++ >= MAX_DETAIL_GALLERY * 4) {
+                budget.truncate();
+                break;
+            }
+            String image = limited(value, 4_096);
+            if (image.isEmpty() || !seen.add(image)) continue;
+            JsonObject item = new JsonObject();
+            if (issueReferences && actions != null) {
+                String ref = actions.issueImage(image);
+                if (!ref.isEmpty()) item.addProperty("imageRef", ref);
+            }
+            item.addProperty("preview", image);
+            item.addProperty("width", 0);
+            item.addProperty("height", 0);
+            if (!budget.add(gallery, item)) break;
+            if (gallery.size() >= MAX_DETAIL_GALLERY) break;
+        }
+        return gallery;
+    }
+
+    private static JsonArray detailRecommendationGroups(WebThemeDetailMetadata metadata, MappingBudget budget,
+            WebThemeDetailActionSession actions, boolean issueReferences) {
+        JsonArray groups = new JsonArray();
+        addRecommendationGroup(groups, "related", "相关推荐", "related", metadata.getRecommendations(), budget,
+                actions, issueReferences);
+        addRecommendationGroup(groups, "personal.tmdb", "TMDB 个性推荐", "tmdb",
+                metadata.getPersonalTmdbRecommendations(), budget, actions, issueReferences);
+        addRecommendationGroup(groups, "personal.douban", "豆瓣个性推荐", "douban",
+                metadata.getPersonalDoubanRecommendations(), budget, actions, issueReferences);
+        addRecommendationGroup(groups, "personal.ai", "AI 为你推荐", "ai",
+                metadata.getPersonalAiRecommendations(), budget, actions, issueReferences);
+        return groups;
+    }
+
+    private static void addRecommendationGroup(JsonArray groups, String id, String title, String source,
+            List<TmdbItem> values, MappingBudget budget, WebThemeDetailActionSession actions,
+            boolean issueReferences) {
+        if (values == null || values.isEmpty()) return;
+        JsonObject group = new JsonObject();
+        group.addProperty("id", id);
+        group.addProperty("title", title);
+        group.addProperty("source", source);
+        group.add("items", new JsonArray());
+        if (!budget.take(group)) return;
+        JsonArray items = detailRecommendations(values, source, budget, actions, issueReferences);
+        if (items.isEmpty()) return;
+        group.add("items", items);
+        groups.add(group);
+    }
+
+    private static JsonArray detailRecommendations(List<TmdbItem> values, String source, MappingBudget budget,
+            WebThemeDetailActionSession actions, boolean issueReferences) {
         JsonArray recommendations = new JsonArray();
         Set<String> seen = new HashSet<>();
         int inspected = 0;
-        for (TmdbItem value : metadata.getRecommendations()) {
+        for (TmdbItem value : values) {
             if (inspected++ >= MAX_DETAIL_RECOMMENDATIONS * 4) {
                 budget.truncate();
                 break;
             }
             if (recommendations.size() >= MAX_DETAIL_RECOMMENDATIONS) break;
-            if (value == null) continue;
+            if (value == null || (actions != null && actions.isRecommendationHidden(value, source))) continue;
             String name = value(value.getTitle());
             if (name.isEmpty()) continue;
             String identity = value.getMediaType() + ':'
                     + (value.getTmdbId() > 0 ? value.getTmdbId() : limited(name, 512));
             if (!seen.add(identity)) continue;
             JsonObject item = new JsonObject();
+            if (issueReferences && actions != null) {
+                String ref = actions.issueRecommendation(value, source);
+                if (!ref.isEmpty()) item.addProperty("recommendationRef", ref);
+            }
+            item.addProperty("source", source);
             item.addProperty("tmdbId", Math.max(0, value.getTmdbId()));
             item.addProperty("mediaType", limited(value.getMediaType(), 32));
             item.addProperty("name", limited(name, 512));
             item.addProperty("subtitle", limited(value.getSubtitle(), 1_024));
             item.addProperty("overview", limited(value.getOverview(), 4_000));
+            item.addProperty("reason", limited(value.getRecommendationReason(), 4_000));
             item.addProperty("pic", limited(value.getPosterUrl(), 4_096));
             item.addProperty("backdrop", limited(value.getBackdropUrl(), 4_096));
             item.addProperty("rating", boundedRating(value.getRating()));
+            item.addProperty("tmdbRating", boundedRating(value.getTmdbRating()));
+            item.addProperty("doubanRating", boundedRating(value.getDoubanRating()));
             if (!budget.add(recommendations, item)) break;
         }
         return recommendations;
+    }
+
+    private static boolean hasStringProperty(JsonArray values, String key) {
+        for (JsonElement element : values) {
+            if (element.isJsonObject() && !string(element.getAsJsonObject(), key).isEmpty()) return true;
+        }
+        return false;
+    }
+
+    private static boolean hasRecommendationReference(JsonArray groups) {
+        for (JsonElement group : groups) {
+            if (!group.isJsonObject()) continue;
+            JsonArray items = group.getAsJsonObject().getAsJsonArray("items");
+            if (items != null && hasStringProperty(items, "recommendationRef")) return true;
+        }
+        return false;
+    }
+
+    private static boolean hasGroup(JsonArray groups, String id) {
+        for (JsonElement element : groups) {
+            if (element.isJsonObject() && id.equals(string(element.getAsJsonObject(), "id"))) return true;
+        }
+        return false;
+    }
+
+    private static JsonArray detailExternalLinks(Vod vod, WebThemeDetailMetadata metadata, MappingBudget budget,
+            WebThemeDetailActionSession actions, boolean issueReferences) {
+        JsonArray links = new JsonArray();
+        TmdbItem item = metadata.getItem();
+        JsonObject detail = metadata.getDetail();
+        String mediaType = item != null && "tv".equalsIgnoreCase(item.getMediaType()) ? "tv" : "movie";
+        int tmdbId = item == null ? 0 : Math.max(0, item.getTmdbId());
+        if (tmdbId > 0) addExternalLink(links, "TMDB",
+                "https://www.themoviedb.org/" + mediaType + "/" + tmdbId, budget, actions, issueReferences);
+
+        String imdb = string(detail == null ? null : object(detail, "external_ids"), "imdb_id");
+        if (imdb.matches("[A-Za-z0-9]{3,32}")) {
+            addExternalLink(links, "IMDb", "https://www.imdb.com/title/" + imdb, budget, actions, issueReferences);
+        }
+
+        String title = item == null ? "" : value(item.getTitle());
+        if (title.isEmpty()) title = value(vod.getName());
+        if (!title.isEmpty()) {
+            addExternalLink(links, "豆瓣",
+                    "https://search.douban.com/movie/subject_search?search_text=" + encoded(title),
+                    budget, actions, issueReferences);
+            String query = title;
+            String year = releaseYear(detail);
+            if (!year.isEmpty() && !query.contains(year)) query += " " + year;
+            addExternalLink(links, "烂番茄",
+                    "https://www.rottentomatoes.com/search?search=" + encoded(query),
+                    budget, actions, issueReferences);
+            addExternalLink(links, "Metacritic",
+                    "https://www.metacritic.com/search/" + encoded(query) + "/",
+                    budget, actions, issueReferences);
+        }
+        return links;
+    }
+
+    private static void addExternalLink(JsonArray output, String label, String url, MappingBudget budget,
+            WebThemeDetailActionSession actions, boolean issueReferences) {
+        if (output.size() >= 8 || value(label).isEmpty() || value(url).isEmpty()) return;
+        String host;
+        try {
+            host = value(URI.create(url).getHost()).toLowerCase(Locale.ROOT);
+            if (host.startsWith("www.")) host = host.substring(4);
+        } catch (IllegalArgumentException ignored) {
+            return;
+        }
+        if (host.isEmpty()) return;
+        JsonObject item = new JsonObject();
+        if (issueReferences && actions != null) {
+            String ref = actions.issueExternal(label, url);
+            if (!ref.isEmpty()) item.addProperty("linkRef", ref);
+        }
+        item.addProperty("label", limited(label, 64));
+        item.addProperty("host", limited(host, 256));
+        budget.add(output, item);
+    }
+
+    private static String releaseYear(JsonObject detail) {
+        String date = string(detail, "first_air_date", "release_date");
+        return date.matches("\\d{4}.*") ? date.substring(0, 4) : "";
+    }
+
+    private static String encoded(String value) {
+        return URLEncoder.encode(value(value), StandardCharsets.UTF_8).replace("+", "%20");
     }
 
     private static JsonArray genres(JsonObject detail) {
@@ -395,6 +614,10 @@ public final class WebHomeVodContract {
         return Double.isFinite(value) ? Math.max(0, Math.min(10, value)) : 0;
     }
 
+    private static JsonObject object(JsonObject object, String key) {
+        return object != null && object.has(key) && object.get(key).isJsonObject()
+                ? object.getAsJsonObject(key) : null;
+    }
     private static String string(JsonObject object, String... keys) {
         if (object == null) return "";
         for (String key : keys) {

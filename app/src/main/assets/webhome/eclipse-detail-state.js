@@ -73,6 +73,26 @@
     return { items: items.slice(start, start + state.pageSize), page, pageCount, total: items.length };
   }
 
+  function episodeRanges(state) {
+    const items = episodes(currentSource(state));
+    const size = Math.max(1, Number(state && state.pageSize) || 20);
+    const pageCount = Math.max(1, Math.ceil(items.length / size));
+    const selectedPage = Math.max(1, Math.min(pageCount, Number(state && state.page) || 1));
+    const ranges = [];
+    for (let page = 1; page <= pageCount; page += 1) {
+      const start = (page - 1) * size;
+      const end = Math.min(items.length, start + size);
+      if (end <= start) continue;
+      ranges.push({
+        label: String(start + 1) + (end > start + 1 ? '-' + String(end) : ''),
+        start,
+        end,
+        selected: page === selectedPage
+      });
+    }
+    return ranges;
+  }
+
   function selectSource(state, sourceId) {
     const source = state.sources.find(item => String(item.sourceId || '') === String(sourceId || ''));
     if (!source) return false;
@@ -125,5 +145,5 @@
     return candidates.length ? candidates[0].index : -1;
   }
 
-  return { create, refresh, currentSource, selectedEpisode, visibleEpisodes, selectSource, safeImageUrl, nextFocusIndex };
+  return { create, refresh, currentSource, selectedEpisode, visibleEpisodes, episodeRanges, selectSource, safeImageUrl, nextFocusIndex };
 });

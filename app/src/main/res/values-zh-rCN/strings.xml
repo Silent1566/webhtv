@@ -21,6 +21,7 @@
     <string name="detail_content">简介：<xliff:g name="name">%s</xliff:g></string>
     <string name="detail_desc">简介</string>
     <string name="detail_episode">选集</string>
+    <string name="detail_episode_season_context">选集 · 第 %1$d 季</string>
     <string name="detail_episode_reverse">倒序</string>
     <string name="detail_episode_forward">正序</string>
     <string name="detail_episode_view_grid">网格</string>
@@ -36,9 +37,11 @@
     <string name="keep">收藏</string>
     <string name="keep_add">已收藏</string>
     <string name="keep_del">已取消收藏</string>
-    <string name="exit_confirm_title">确定退出应用？</string>
-    <string name="exit_confirm_message">当前页面将关闭；如果正在播放，会继续留在后台。</string>
-    <string name="exit_confirm_positive">确认退出</string>
+    <string name="exit_confirm_title">退出应用</string>
+    <string name="exit_confirm_message">应用将关闭，播放和后台服务也会停止。</string>
+    <string name="exit_confirm_playing_message">当前正在播放；后台播放会继续播放，完全退出会停止播放和后台服务。</string>
+    <string name="exit_confirm_background">后台播放</string>
+    <string name="exit_confirm_positive">完全退出</string>
 
     <!-- Play -->
     <string name="play">播放</string>
@@ -1331,6 +1334,7 @@
     <string name="crash_restart">重新启动</string>
     <string name="crash_details">错误信息</string>
     <string name="crash_details_title">错误信息</string>
+    <string name="crash_details_message">应用版本：%1$s\n\n%2$s</string>
     <string name="crash_details_close">关闭</string>
 
     <!-- Hint -->
@@ -1515,12 +1519,20 @@
         <item>繁体中文</item>
     </string-array>
 
+    <string name="aspect_ratio_title">自定义画面比例</string>
+    <string name="aspect_ratio_width">宽</string>
+    <string name="aspect_ratio_height">高</string>
+    <string name="aspect_ratio_hint">可输入 2560:1080 或 64:27</string>
+    <string name="aspect_ratio_invalid">请输入有效的画面比例</string>
     <string-array name="select_scale">
         <item>原始</item>
         <item>16:9</item>
         <item>4:3</item>
         <item>填充</item>
         <item>裁剪</item>
+        <item>21:9</item>
+        <item>自适应</item>
+        <item>自定义</item>
     </string-array>
 
     <string-array name="select_reset">
@@ -1732,6 +1744,7 @@
     <string name="detail_image_saving">正在保存图片...</string>
     <string name="detail_image_save_success">已保存至：%1$s</string>
     <string name="detail_image_save_failed">图片保存失败</string>
+    <string name="detail_external_open_failed">无法打开外部链接</string>
     <string name="detail_image_permission_denied">存储权限被拒绝</string>
 
     <string name="detail_tmdb_photos">剧照</string>
@@ -1761,6 +1774,27 @@
     <string name="detail_media_movie">电影</string>
     <string name="detail_media_tv">剧集</string>
     <string name="detail_media_unknown">详情</string>
+    <string name="tmdb_episode_complete">全 %1$d 集</string>
+    <string name="tmdb_episode_total">共 %1$d 集</string>
+    <string name="tmdb_episode_ongoing">更新至 %1$d 集</string>
+    <string name="tmdb_episode_ongoing_total">更新至 %1$d / 共 %2$d 集</string>
+    <string name="tmdb_episode_series_ongoing">更新至 S%1$dE%2$d</string>
+    <string name="tmdb_episode_series_ongoing_total">更新至 S%1$dE%2$d · 全剧 %3$d 集</string>
+    <string name="tmdb_episode_season_complete">第 %1$d 季 · 全 %2$d 集</string>
+    <string name="tmdb_episode_season_total">第 %1$d 季 · 共 %2$d 集</string>
+    <string name="tmdb_episode_season_ongoing">第 %1$d 季 · 更新至 %2$d 集</string>
+    <string name="tmdb_episode_season_ongoing_total">第 %1$d 季 · 更新至 %2$d / 共 %3$d 集</string>
+    <string name="tmdb_episode_planned">待播</string>
+    <string name="tmdb_episode_planned_total">待播 · 计划 %1$d 集</string>
+    <string name="tmdb_episode_canceled">已取消 · 共 %1$d 集</string>
+    <string name="tmdb_episode_compact_total">TMDB %1$d 集</string>
+    <string name="tmdb_episode_compact_progress">TMDB %1$d/%2$d 集</string>
+    <string name="tmdb_episode_compact_episode">TMDB 第 %1$d 集</string>
+    <string name="tmdb_episode_compact_series">TMDB S%1$dE%2$d</string>
+    <string name="tmdb_episode_compact_series_total">TMDB S%1$dE%2$d · %3$d 集</string>
+    <string name="tmdb_episode_compact_season">TMDB S%1$d · %2$d 集</string>
+    <string name="tmdb_episode_compact_season_progress">TMDB S%1$d %2$d/%3$d 集</string>
+    <string name="tmdb_episode_compact_planned">TMDB 待播</string>
     <string name="detail_source_current">站源：%1$s</string>
     <string name="detail_source_empty">暂无可用站源</string>
     <string name="detail_source_episode_empty">暂无可用选集或站源</string>

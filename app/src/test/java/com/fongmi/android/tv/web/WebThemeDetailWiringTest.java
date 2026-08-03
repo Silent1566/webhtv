@@ -177,6 +177,60 @@ public class WebThemeDetailWiringTest {
     }
 
     @Test
+    public void detailTmdbActionsResolveOpaqueReferencesBeforeNativeSideEffects() throws Exception {
+        String bridge = read("src/main/java/com/fongmi/android/tv/web/WebHomeThemeBridge.java");
+        String recommendationInfo = section(bridge, "private String recommendationInfo", "private String recommendationFeedback");
+        String recommendationFeedback = section(bridge, "private String recommendationFeedback", "private String openExternal");
+        String controller = read("src/main/java/com/fongmi/android/tv/web/HomeWebController.java");
+        String activity = read("src/main/java/com/fongmi/android/tv/ui/activity/WebThemeDetailActivity.java");
+        String viewer = read("src/main/java/com/fongmi/android/tv/ui/dialog/WebThemeImageViewer.java");
+        String recommendationDialog = read("src/main/java/com/fongmi/android/tv/ui/dialog/AiRecommendationInfoDialog.java");
+        String detailPage = read("src/main/assets/webhome/eclipse-detail.html");
+
+        assertTrue(bridge.contains("case \"person.open\""));
+        assertTrue(bridge.contains("case \"episode.info\""));
+        assertTrue(bridge.contains("resolvePerson(requiredRef(payload, \"personRef\"))"));
+        assertTrue(bridge.contains("resolveImage(requiredRef(payload, \"imageRef\"))"));
+        assertTrue(bridge.contains("resolveRecommendation(requiredRef(payload, \"recommendationRef\"))"));
+        assertTrue(bridge.contains("resolveExternal(requiredRef(payload, \"linkRef\"))"));
+        assertTrue(bridge.contains("resolveEpisode(requiredRef(payload, \"episodeRef\"))"));
+        assertTrue(bridge.contains("TmdbNavigation.open"));
+        assertTrue(recommendationInfo.contains("if (!active.getAsBoolean()) return;"));
+        assertTrue(recommendationInfo.contains("}, active));"));
+        assertTrue(recommendationFeedback.indexOf("postIfActive(active")
+                < recommendationFeedback.indexOf("markNotInterested"));
+        assertTrue(recommendationDialog.contains("if (active != null && !active.getAsBoolean())"));
+        assertFalse(bridge.contains("Json.safeString(payload, \"url\")"));
+        assertFalse(bridge.contains("catch (Throwable ignored)"));
+        assertTrue(controller.contains("detailActionSession = new WebThemeDetailActionSession()"));
+        assertTrue(controller.contains("person:{open:"));
+        assertTrue(controller.contains("const recommendation={"));
+        assertTrue(controller.contains("episode:{info:"));
+        assertTrue(activity.contains("getPersonalTmdbRecommendations()"));
+        assertTrue(activity.contains("getPersonalDoubanRecommendations()"));
+        assertTrue(activity.contains("getPersonalAiRecommendations()"));
+        assertTrue(activity.contains("RefreshEvent.Type.VOD_PERSONAL"));
+        assertTrue(activity.contains("dispatchKeyEvent"));
+        assertTrue(activity.contains("event.isLongPress() || event.getRepeatCount() > 0"));
+        assertTrue(activity.contains("controller.dispatchFocusedLongPress()"));
+        assertTrue(activity.contains("controller.dispatchFocusedClick()"));
+        assertTrue(activity.contains("postDelayed(confirmLongPressRunnable"));
+        assertTrue(controller.contains("new MouseEvent('contextmenu'"));
+        assertTrue(controller.contains("node.click()"));
+        assertTrue(viewer.contains("TmdbImageSelector.originalUrl"));
+        assertTrue(viewer.contains("TmdbImageSaver.save"));
+        assertTrue(viewer.contains("setNextFocusDownId"));
+        assertTrue(viewer.contains("setOnFocusChangeListener"));
+        assertTrue(viewer.contains("view.performClick()"));
+        assertTrue(viewer.contains("public boolean performClick()"));
+        assertTrue(viewer.contains("setStrokeColor"));
+        assertTrue(detailPage.contains("api.episode.info"));
+        assertTrue(detailPage.contains("bindLongPress"));
+        assertTrue(detailPage.contains("episodeRanges"));
+        assertTrue(detailPage.contains("episode-marquee-track"));
+    }
+
+    @Test
     public void freshDetailAndReloadInvalidatePreviouslyIssuedPlayReferences() throws Exception {
         String bridge = read("src/main/java/com/fongmi/android/tv/web/WebHomeThemeBridge.java");
         String controller = read("src/main/java/com/fongmi/android/tv/web/HomeWebController.java");
@@ -203,9 +257,11 @@ public class WebThemeDetailWiringTest {
 
         assertTrue(detail.contains("card.setAttribute('data-focus-row', 'people')"));
         assertTrue(detail.contains("frame.setAttribute('data-focus-row', 'gallery')"));
-        assertTrue(detail.contains("card.tabIndex = 0"));
-        assertTrue(detail.contains("frame.tabIndex = 0"));
-        assertTrue(detail.contains("best.scrollIntoView({ block: 'nearest', inline: 'nearest' })"));
+        assertTrue(detail.contains("card.tabIndex = interactive ? 0 : -1"));
+        assertTrue(detail.contains("frame.tabIndex = interactive ? 0 : -1"));
+        assertTrue(detail.contains("function ensureRailItemVisible(node)"));
+        assertTrue(detail.contains("ensureFocusVisible(best)"));
+        assertTrue(detail.contains("scroll-padding-inline: 12px"));
     }
 
     @Test

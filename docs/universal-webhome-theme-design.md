@@ -548,6 +548,13 @@ ThemeBridge
 | `navigation.openNativeDetail` | 强制使用原生详情兜底 | 详情 |
 | `player.playVod` 扩展参数 | 指定线路/集数/恢复进度 | 详情 |
 | `app.search` | 按标题打开原生片源搜索 | 首页、详情推荐 |
+| `person.open` | 使用人物引用打开原生人物详情 | 详情 |
+| `image.preview` | 使用图片引用打开原生全屏预览 | 详情 |
+| `image.save` | 使用图片引用保存原图 | 详情 |
+| `recommendation.open` | 当前源匹配成功后打开详情，失败时进入全局搜索 | 详情 |
+| `recommendation.info` | 打开推荐说明、评分和 AI 理由 | 详情 |
+| `recommendation.feedback` | 提交“不感兴趣”等受控反馈 | 详情 |
+| `external.open` | 使用宿主生成的链接引用打开外部页面 | 详情 |
 | `settings.schema` | 获取允许展示的设置定义 | 设置 |
 | `settings.get` | 获取允许读取的设置值 | 设置 |
 | `settings.set` | 校验并写入安全设置 | 设置 |
@@ -1248,3 +1255,228 @@ V1 兼容接口可以保留，但 V2 多页面主题应使用更严格的默认�
 - 内置 Eclipse 详情页已覆盖加载、错误、空态、海报降级、收藏、历史进度、线路、选集分页、播放、触控布局和 TV 几何焦点恢复。
 - Java 契约测试、JavaScript 状态测试、mobile/leanback 编译和桌面/窄屏 Chromium 视觉检查已纳入本轮验收。真实设备上的旋转、遥控全路径、播放返回和远程主题故障注入仍属于发布前集成验收。
 - 本轮暂不抽取宿主统一注入的 focus runtime，也不扩展播放器控制层、设置 Schema、ZIP 安装或跨域资源；这些继续按 M3 之后的里程碑增量推进。
+
+
+---
+
+## 19. Host API 3：TMDB 详情效果开放设计（2026-07-30）
+
+本阶段把现有原生 TMDB 详情模式中已经成熟的数据与交互能力开放给 WebTheme。目标不是让远程页面重新实现 TMDB、文件保存、外部 Intent 或跨源匹配，而是让主题自行决定布局、文案、显示时机和触发入口，再通过受控语义接口调用原生实现。
+
+### 19.1 当前差距与本阶段目标
+
+当前 `vod.detail@1` 已能渐进返回背景、人物、剧照、单集资料和一组相关推荐，但仍存在以下差距：
+
+- 只公开普通相关推荐，没有区分原生详情已有的 TMDB 个性推荐、豆瓣个性推荐和 AI 个性推荐。
+- 人物卡片、剧照和外部链接缺少受控动作接口，官方示例只能展示，不能进入人物详情、预览原图、保存图片或打开外部页面。
+- 推荐卡片只能调用 `app.search(title)`，没有复用原生的“当前源匹配，失败后全局搜索”链路。
+- AI 推荐理由、推荐详情和“不感兴趣”反馈没有进入 WebTheme 能力模型。
+- 页面未消费宿主注入的安全区变量；横向轨道末端、焦点放大光环和系统状态栏附近可能出现内容或焦点目标显示不全。
+
+本阶段完成后，用户主题应能自行组合上述区域，并通过独立函数调用原生效果；官方 Eclipse 详情页必须作为完整参考实现。
+
+### 19.2 兼容策略
+
+- Manifest `schemaVersion` 保持 `2`，页面结构与权限声明格式不变。
+- 宿主能力版本提升为 `hostApiVersion: 3`；依赖本节接口的主题可声明 `minHostApi: 3`。
+- `vod.detail@1` 保持 major version 不变，新增字段全部为可选字段；旧主题继续读取现有 `people`、`gallery` 和 `recommendations`。
+- 主题必须以 `theme.info.capabilities` 和 DTO 中的布尔能力为准，不能仅依据宿主版本假定某个动作一定存在。
+- 宿主 API 2 的页面仍可加载；缺少 API 3 时只隐藏新增动作，不得影响基础详情、收藏和播放。
+
+### 19.3 详情 DTO 的增量字段
+
+`vod.detail@1` 增加以下可选结构：
+
+```jsonc
+{
+  "people": [
+    {
+      "personRef": "opaque-person-reference",
+      "personId": 1,
+      "kind": "cast",
+      "name": "演员名",
+      "role": "角色名",
+      "department": "Acting",
+      "profile": "https://..."
+    }
+  ],
+  "galleryItems": [
+    {
+      "imageRef": "opaque-image-reference",
+      "preview": "https://...",
+      "width": 0,
+      "height": 0
+    }
+  ],
+  "recommendationGroups": [
+    {
+      "id": "personal.ai",
+      "title": "AI 为你推荐",
+      "source": "ai",
+      "items": [
+        {
+          "recommendationRef": "opaque-recommendation-reference",
+          "tmdbId": 456,
+          "mediaType": "movie",
+          "name": "推荐影片",
+          "subtitle": "2025 · 电影",
+          "overview": "简介",
+          "reason": "因为你最近观看了……",
+          "pic": "https://...",
+          "backdrop": "https://...",
+          "rating": 8.1,
+          "tmdbRating": 8.1,
+          "doubanRating": 7.9
+        }
+      ]
+    }
+  ],
+  "externalLinks": [
+    {
+      "linkRef": "opaque-external-link-reference",
+      "label": "TMDB",
+      "host": "themoviedb.org"
+    }
+  ],
+  "capabilities": {
+    "canOpenPeople": true,
+    "canPreviewImages": true,
+    "canSaveImages": true,
+    "canOpenRecommendations": true,
+    "canInspectRecommendations": true,
+    "canSendRecommendationFeedback": true,
+    "canOpenExternalLinks": true,
+    "hasPersonalTmdbRecommendations": true,
+    "hasPersonalDoubanRecommendations": true,
+    "hasPersonalAiRecommendations": true,
+    "hasExternalLinks": true
+  }
+}
+```
+
+兼容和数量规则：
+
+- 现有 `gallery: string[]` 与 `recommendations: item[]` 保留；分别作为无动作主题的简化剧照列表和 `related` 推荐组兼容视图。
+- `recommendationGroups` 的固定组 ID 为 `related`、`personal.tmdb`、`personal.douban`、`personal.ai`。空组可省略，主题不得依赖固定顺序。
+- 单组最多输出 18 条，总推荐最多输出 72 条；人物仍最多 24 个，剧照仍最多 12 张，外部链接最多 8 条。
+- `reason` 只用于解释推荐，不作为 HTML；主题必须使用文本节点渲染。
+- 图片预览地址可展示，但预览、保存、人物、推荐和外部链接动作都必须回传 opaque reference，不能以 URL、`tmdbId` 或 `personId` 代替引用。
+
+### 19.4 新增语义动作接口
+
+| 方法 | Manifest 权限 | 输入 | 原生行为 |
+| --- | --- | --- | --- |
+| `person.open` | `person.open` | `{personRef}` | 打开 `TmdbPersonActivity`，人物作品继续使用原生匹配与导航 |
+| `image.preview` | `image.preview` | `{imageRef}` | 打开当前详情会话的原生全屏图片查看器，并定位到所选图片 |
+| `image.save` | `image.save` | `{imageRef}` | 下载宿主登记的原图并保存到系统图片目录 |
+| `recommendation.open` | `recommendation.open` | `{recommendationRef}` | 当前源匹配成功后打开同一全局主题详情；无匹配时进入原生全局搜索 |
+| `recommendation.info` | `recommendation.info` | `{recommendationRef}` | 打开原生推荐详情，显示来源、评分、简介和 AI 理由 |
+| `recommendation.feedback` | `recommendation.feedback` | `{recommendationRef, action:"notInterested"}` | 写入受控反馈；主题自行立即移除或弱化该卡片 |
+| `external.open` | `external.open` | `{linkRef}` | 仅打开宿主预先生成且通过校验的 HTTP/HTTPS 链接 |
+
+官方 JavaScript 包装：
+
+```js
+await fongmi.person.open(person.personRef)
+await fongmi.image.preview(image.imageRef)
+await fongmi.image.save(image.imageRef)
+await fongmi.recommendation.open(item.recommendationRef)
+await fongmi.recommendation.info(item.recommendationRef)
+await fongmi.recommendation.feedback(item.recommendationRef, 'notInterested')
+await fongmi.external.open(link.linkRef)
+```
+
+所有方法先返回“请求已接受”或结构化错误。导航、下载和系统选择器属于原生异步副作用，主题不能假定 Promise 完成等于目标 Activity 已完成或文件已经落盘；保存结果继续由原生 Toast/通知反馈。
+
+### 19.5 “当前源匹配 → 全局搜索”语义
+
+`recommendation.open` 固定复用原生 `TmdbNavigation` 语义：
+
+```text
+recommendationRef
+    → 解析为当前详情会话登记的 TmdbItem
+    → 当前内容源可搜索时先执行当前源标题匹配
+        → 匹配成功：使用当前全局主题打开匹配到的 VOD 详情
+        → 无匹配/当前源不可搜索：打开原生全局搜索并携带标题与图片提示
+```
+
+该能力是导航动作，不是跨源数据读取接口：
+
+- 远程主题看不到其他内容源列表、原始源站 ID、搜索响应或评分过程。
+- 页面不能指定任意 `siteKey`、搜索范围或匹配结果。
+- `tmdbId` 只用于展示和宿主内部识别，不能当作导航参数。
+- 当前主题详情不可用时，匹配结果仍按原生详情回退规则打开。
+
+### 19.6 引用、权限与安全边界
+
+- 新增人物、图片、推荐和外链引用由独立的详情动作会话签发；同一详情增量刷新应复用稳定引用。
+- 切换来源、切换 `vodId`、重新加载主题、WebView 重建、宿主销毁或安全代际变化后，旧引用立即失效并返回 `SOURCE_CHANGED` 或 `INVALID_ARGUMENT`。
+- `image.save` 只接受当前 DTO 已登记的图片引用，不接受任意 URL、文件名、目录或 MIME 类型。
+- `external.open` 只接受宿主生成的链接引用；链接必须是普通 HTTP/HTTPS，禁止 `intent:`、`file:`、`content:`、自定义 Scheme、Header/Cookie 拼接和本地地址。
+- `person.open` 只允许当前 TMDB 元数据中 `personId > 0` 的人物。
+- `recommendation.feedback` 初期只允许 `notInterested`，不开放任意标签、评分或用户画像写入。
+- 每个动作仍需同时通过页面硬编码白名单和 Manifest 权限；未声明能力必须返回 `PERMISSION_DENIED`。
+
+### 19.7 官方 Eclipse 示例要求
+
+内置 `theme.json` 申请并演示本节全部权限。详情页至少包含：
+
+1. 普通相关推荐、TMDB 个性推荐、豆瓣个性推荐、AI 个性推荐四个独立横向轨道。
+2. AI 卡片聚焦时显示 `reason`；长按、菜单键或辅助按钮可打开推荐说明并提交“不感兴趣”。
+3. 人物卡片点击调用 `person.open`，人物图片缺失时保留文字降级。
+4. 剧照点击调用 `image.preview`；查看器可前后切换并保存原图，触控与遥控均可操作。
+5. 外部链接区域显示宿主提供的 `label`/`host`，点击调用 `external.open`，页面不自行拼接 URL。
+6. 推荐卡片点击调用 `recommendation.open`，不再直接把标题交给 `app.search`。
+7. 所有新增区域在 DTO 缺失、权限不足或 TMDB 未就绪时独立隐藏，基础详情与播放不受影响。
+
+### 19.8 安全区、横向轨道与完整显示规范
+
+为解决状态栏覆盖、末端卡片被截断和焦点光环裁切，官方示例及后续主题应遵循：
+
+- 页面根容器消费 `--fm-safe-top/right/bottom/left`，并在宿主触发 `fmviewport` 后重新计算布局。
+- 横向轨道必须保留左右 `scroll-padding` 和可容纳焦点光环的上下内边距；禁止用负右边距把末端内容推出安全区。
+- 卡片获得焦点时，脚本必须把**整张卡片加焦点光环**滚入轨道可视区域，而不只调用页面级 `scrollIntoView`。
+- 第一项和最后一项均应有与内容区一致的端部留白；允许屏幕右侧展示“还有内容”的局部预告，但当前焦点项不得局部裁切。
+- 电视方向键保持同轨道左右移动；跨轨道上下移动使用几何中心匹配，并在移动完成后同时校正纵向页面和横向轨道。
+- 移动端支持触控横向滚动、点击和长按；文字使用省略/行数限制，不得撑破卡片或覆盖相邻区域。
+
+### 19.9 测试与验收
+
+契约与安全：
+
+- DTO 测试覆盖四个推荐组、AI 理由、外链、人物/图片/推荐引用、数量限制和兼容字段。
+- 权限测试证明每个方法均需对应 Manifest 权限，首页无法调用详情动作。
+- 引用测试证明伪造、跨详情、重载后和过期引用均被拒绝；任意 URL 不能通过图片保存或外链接口进入系统。
+- 全局匹配测试覆盖当前源成功、当前源无结果后全局搜索和当前源不可搜索三条路径。
+
+页面与交互：
+
+- JavaScript 测试覆盖四类推荐渲染、能力降级、人物/剧照/外链动作绑定、反馈后的本地移除和焦点恢复。
+- 电视宽屏逐一聚焦人物、剧照、四个推荐轨道的首项/中间项/末项，当前项及光环必须完整可见。
+- 手机状态栏显示和隐藏、横竖屏、手势导航下，首屏内容不得进入系统栏；图片查看、保存和返回必须正常。
+- 完成 Java 单元测试、JavaScript 状态测试、mobile/leanback Debug 构建，并在模拟器上检查日志无 FATAL、应用 ANR 或主题桥接权限异常。
+
+
+### 19.10 选集详情与电视端交互补充（2026-07-31）
+
+为使 WebTheme 能完整复用原生 TMDB 详情的选集体验，本版本在 Host API 3 内增加以下可选能力：
+
+- 详情 episode DTO 可带宿主签发的 `episodeRef`；主题通过 `episode.info(episodeRef)` 打开原生 `EpisodeDetailDialog`。引用只对应当前详情、当前线路中的实际 `Episode` 对象，不能由页面自行构造。
+- `episode.info` 受详情页 Manifest 权限控制；缺少权限或引用时，选集仍可播放，但不显示长按详情入口。
+- 电视端主题必须为图片查看器建立显式焦点链：图片获得焦点时按下方向进入底部按钮，底部按钮按上方向回到图片；左右方向在按钮组内移动，返回键关闭查看器。
+- 推荐和选集的长按不能只依赖浏览器 `contextmenu`；主题应同时支持触摸/指针长按和遥控器确认键长按，并抑制长按结束后产生的误点击。
+- AI 推荐卡片展示图片时按 `pic` → `backdrop` 顺序回退；宿主异步补全 TMDB 图片后必须触发详情增量刷新，主题不能永久停留在缓存的文字降级状态。
+
+### 19.11 选集分组、完整简介与走马灯规范
+
+- 选集数量较多时应按范围分组，范围标签使用绝对集号（例如 `1-20`、`21-40`），切换范围不改变当前线路和详情上下文；官方示例默认以 20 集为电视端一组，避免用户选中末行时看不到简介。
+- 当前选集的简介必须完整渲染，不能用固定三行 `line-clamp` 截断；超长文本应允许正常换行，并限制单词/长 URL 造成的横向撑破。
+- 选集名称和集标题在未获得焦点时可以省略；获得焦点或处于当前选中状态且确实溢出时，应启用连续走马灯。走马灯只作用于文本轨道，不得改变卡片尺寸或焦点几何。
+- 选集范围按钮、选集卡片、播放线路和详情动作必须分别声明焦点行，电视方向键在同一行内移动，跨行时保持与目标几何中心最近。
+
+### 19.12 本轮新增验收项
+
+- 电视模拟器中打开剧照查看器，图片焦点按下方向可进入“上一张/旋转/保存/下一张/关闭”，按钮左右移动和返回均正常。
+- AI 推荐卡片使用遥控器确认键长按能打开推荐详情，且短按仍只执行打开推荐。
+- AI 推荐存在 `backdrop` 而无 `pic` 时仍显示图片；异步解析补全后页面能刷新图片。
+- 36、100 和 500 集详情分别验证范围分组、简介可见、选中卡片走马灯及长按 `episode.info`。

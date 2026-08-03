@@ -2,6 +2,7 @@ package com.fongmi.android.tv.ui.dialog;
 
 import android.app.Dialog;
 import android.os.Bundle;
+import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -49,7 +50,6 @@ public class ControlDialog extends BaseBottomSheetDialog implements ParseAdapter
     private DialogControlBinding binding;
     private Controls controls;
     private Listener listener;
-    private List<TextView> scales;
     private List<TextView> speeds;
     private List<TextView> displays;
     private PlayerManager player;
@@ -264,7 +264,6 @@ public class ControlDialog extends BaseBottomSheetDialog implements ParseAdapter
     @Override
     protected ViewBinding getBinding(@NonNull LayoutInflater inflater, @Nullable ViewGroup container) {
         binding = DialogControlBinding.inflate(inflater, container, false);
-        scales = Arrays.asList(binding.scale0, binding.scale1, binding.scale2, binding.scale3, binding.scale4);
         speeds = Arrays.asList(binding.speed05, binding.speed075, binding.speed10, binding.speed125, binding.speed15, binding.speed175, binding.speed20, binding.speed25, binding.speed30, binding.speed50);
         displays = Arrays.asList(binding.displayTime, binding.displayTraffic, binding.displaySize, binding.displayProgress, binding.displayMini, binding.displayTitle, binding.displayParams);
         return binding;
@@ -310,7 +309,7 @@ binding.ending.setText(controls.ending.getText());
         binding.immersiveAudio.setOnClickListener(v -> setImmersiveAudio());
         binding.speed.addOnChangeListener(this::setSpeed);
         for (TextView view : speeds) view.setOnClickListener(this::setSpeedPreset);
-        for (TextView view : scales) view.setOnClickListener(this::setScale);
+        binding.scale.setOnClickListener(view -> VideoAspectModeDialog.show(requireActivity(), getScale(), this::setScale));
         for (int i = 0; i < displays.size(); i++) {
             int index = i;
             displays.get(i).setOnClickListener(v -> toggleDisplaySetting(index));
@@ -405,10 +404,15 @@ binding.ending.setText(controls.ending.getText());
     }
 
     private void setScaleText() {
-        for (int i = 0; i < scales.size(); i++) {
-            scales.get(i).setText(scale[i]);
-            scales.get(i).setSelected(scales.get(i).getText().equals(controls.scale.getText()));
-        }
+        int mode = getScale();
+        binding.scale.setText(scale[mode]);
+        binding.scale.setSelected(false);
+    }
+
+    private int getScale() {
+        CharSequence current = controls.scale.getText();
+        for (int mode = 0; mode < scale.length; mode++) if (TextUtils.equals(scale[mode], current)) return mode;
+        return history != null && history.getScale() != -1 ? history.getScale() : PlayerSetting.getScale();
     }
 
     private void setParse() {
@@ -419,10 +423,9 @@ binding.ending.setText(controls.ending.getText());
         binding.parse.setAdapter(new ParseAdapter(this, ViewType.DARK));
     }
 
-    private void setScale(View view) {
-        for (TextView textView : scales) textView.setSelected(false);
-        listener().onScale(Integer.parseInt(view.getTag().toString()));
-        view.setSelected(true);
+    private void setScale(int mode) {
+        listener().onScale(mode);
+        setScaleText();
     }
 
     private void setEpisodeColumn(int column) {

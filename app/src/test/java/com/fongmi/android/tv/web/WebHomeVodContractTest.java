@@ -32,6 +32,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class WebHomeVodContractTest {
@@ -407,6 +408,147 @@ public class WebHomeVodContractTest {
         assertTrue(json.getAsJsonObject("capabilities").get("hasEpisodeMetadata").getAsBoolean());
         assertTrue(json.getAsJsonObject("capabilities").get("canSearchRecommendations").getAsBoolean());
         assertFalse(json.toString().contains("media.example"));
+    }
+
+    @Test
+    public void detail_exposesTmdbActionReferencesPersonalRailsAndExternalLinks() {
+        Site site = Site.get("current", "Current Source");
+        Vod vod = TestVod.vod("vod-1", "Eclipse Detail")
+                .details("https://img.example/poster.jpg", "更新至 1 集", "2026", "剧情", "安全简介");
+        vod.setFlags(List.of(Flag.create("line-a", "第 1 集$https://media.example/a1.m3u8")));
+        vod.getFlags().get(0).getEpisodes().get(0).setTmdbEpisode(new TmdbEpisode(
+                1, "相遇", "2026-01-02", "第一集简介", "https://img.example/still.jpg", 8.4, 46, 100, 1));
+
+        TmdbItem rootItem = new TmdbItem(100, "tv", "Eclipse Detail", "2026 · 剧情", "TMDB 简介",
+                "https://img.example/root.jpg", "https://img.example/root-backdrop.jpg", "", 8.6);
+        JsonObject detail = new Gson().fromJson("""
+                {
+                  "first_air_date":"2026-01-02",
+                  "external_ids":{"imdb_id":"tt1234567"}
+                }
+                """, JsonObject.class);
+        TmdbPerson person = new TmdbPerson(7, "演员甲", "角色甲", "https://img.example/person.jpg", "Acting", "人物简介");
+        TmdbItem related = recommendation(201, "普通推荐", "");
+        TmdbItem personalTmdb = recommendation(202, "TMDB 个性推荐", "");
+        TmdbItem personalDouban = recommendation(203, "豆瓣个性推荐", "");
+        TmdbItem personalAi = recommendation(204, "AI 个性推荐", "因为你最近观看了相似作品");
+        WebThemeDetailMetadata metadata = WebThemeDetailMetadata.fromTmdb(
+                rootItem, detail, List.of(person), List.of(),
+                List.of("https://img.example/photo-1.jpg", "https://img.example/photo-2.jpg"),
+                List.of(related), List.of(personalTmdb), List.of(personalDouban), List.of(personalAi));
+        WebThemeDetailActionSession actions = new WebThemeDetailActionSession();
+        Set<String> permissions = Set.of("person.open", "image.preview", "image.save",
+                "recommendation.open", "recommendation.info", "recommendation.feedback", "external.open",
+                "episode.info");
+
+        JsonObject json = WebHomeVodContract.detail(site, vod, new WebThemePlaySession(), false, null,
+                true, true, true, metadata, actions, permissions);
+
+        JsonObject mappedPerson = json.getAsJsonArray("people").get(0).getAsJsonObject();
+        String personRef = mappedPerson.get("personRef").getAsString();
+        assertEquals(7, actions.resolvePerson(personRef).getPersonId());
+
+        JsonObject image = json.getAsJsonArray("galleryItems").get(0).getAsJsonObject();
+        String imageRef = image.get("imageRef").getAsString();
+        assertEquals("https://img.example/photo-1.jpg", actions.resolveImage(imageRef).url());
+        assertEquals(2, actions.resolveImage(imageRef).gallery().size());
+
+        JsonObject mappedEpisode = json.getAsJsonArray("sources").get(0).getAsJsonObject()
+                .getAsJsonArray("episodes").get(0).getAsJsonObject();
+        String episodeRef = mappedEpisode.get("episodeRef").getAsString();
+        assertEquals("第 1 集", actions.resolveEpisode(episodeRef).getName());
+
+        JsonArray groups = json.getAsJsonArray("recommendationGroups");
+        assertEquals(4, groups.size());
+        assertEquals("related", groups.get(0).getAsJsonObject().get("id").getAsString());
+        assertEquals("personal.tmdb", groups.get(1).getAsJsonObject().get("id").getAsString());
+        assertEquals("personal.douban", groups.get(2).getAsJsonObject().get("id").getAsString());
+        JsonObject aiGroup = groups.get(3).getAsJsonObject();
+        assertEquals("personal.ai", aiGroup.get("id").getAsString());
+        JsonObject aiItem = aiGroup.getAsJsonArray("items").get(0).getAsJsonObject();
+        assertEquals("因为你最近观看了相似作品", aiItem.get("reason").getAsString());
+        assertEquals("ai", actions.resolveRecommendation(aiItem.get("recommendationRef").getAsString()).source());
+
+        JsonArray externalLinks = json.getAsJsonArray("externalLinks");
+        assertTrue(externalLinks.size() >= 3);
+        JsonObject tmdbLink = externalLinks.get(0).getAsJsonObject();
+        assertEquals("TMDB", tmdbLink.get("label").getAsString());
+        assertEquals("themoviedb.org", tmdbLink.get("host").getAsString());
+        assertTrue(actions.resolveExternal(tmdbLink.get("linkRef").getAsString()).url().startsWith("https://"));
+
+        JsonObject capabilities = json.getAsJsonObject("capabilities");
+        assertTrue(capabilities.get("canOpenPeople").getAsBoolean());
+        assertTrue(capabilities.get("canPreviewImages").getAsBoolean());
+        assertTrue(capabilities.get("canSaveImages").getAsBoolean());
+        assertTrue(capabilities.get("canOpenRecommendations").getAsBoolean());
+        assertTrue(capabilities.get("canInspectRecommendations").getAsBoolean());
+        assertTrue(capabilities.get("canSendRecommendationFeedback").getAsBoolean());
+        assertTrue(capabilities.get("canOpenExternalLinks").getAsBoolean());
+        assertTrue(capabilities.get("canInspectEpisodes").getAsBoolean());
+        assertTrue(capabilities.get("hasPersonalTmdbRecommendations").getAsBoolean());
+        assertTrue(capabilities.get("hasPersonalDoubanRecommendations").getAsBoolean());
+        assertTrue(capabilities.get("hasPersonalAiRecommendations").getAsBoolean());
+        assertTrue(capabilities.get("hasExternalLinks").getAsBoolean());
+    }
+
+    @Test
+    public void detail_actionCapabilitiesRequireIssuedReferences() {
+        WebThemeDetailMetadata metadata = WebThemeDetailMetadata.fromTmdb(
+                null, null,
+                List.of(new TmdbPerson(0, "无编号人物", "角色", "", "Acting", "")),
+                List.of(), List.of("file:///sdcard/private.jpg"), List.of());
+        WebThemeDetailActionSession actions = new WebThemeDetailActionSession();
+        Set<String> permissions = Set.of("person.open", "image.preview", "image.save", "episode.info");
+
+        JsonObject json = WebHomeVodContract.detail(Site.get("current", "Current Source"),
+                TestVod.vod("vod-1", "Detail"), new WebThemePlaySession(), false, null,
+                true, true, true, metadata, actions, permissions);
+
+        assertFalse(json.getAsJsonArray("people").get(0).getAsJsonObject().has("personRef"));
+        assertFalse(json.getAsJsonArray("galleryItems").get(0).getAsJsonObject().has("imageRef"));
+        JsonObject capabilities = json.getAsJsonObject("capabilities");
+        assertFalse(capabilities.get("canOpenPeople").getAsBoolean());
+        assertFalse(capabilities.get("canPreviewImages").getAsBoolean());
+        assertFalse(capabilities.get("canSaveImages").getAsBoolean());
+        assertFalse(capabilities.get("canInspectEpisodes").getAsBoolean());
+    }
+
+    @Test
+    public void detail_countsRecommendationGroupPayloadOnlyOnce() {
+        String overview = "介".repeat(400);
+        String reason = "因".repeat(400);
+        WebThemeDetailMetadata metadata = WebThemeDetailMetadata.fromTmdb(
+                null, null, List.of(), List.of(), List.of(),
+                recommendationPage(1000, overview, reason),
+                recommendationPage(2000, overview, reason),
+                recommendationPage(3000, overview, reason),
+                recommendationPage(4000, overview, reason));
+
+        JsonObject json = WebHomeVodContract.detail(Site.get("current", "Current Source"),
+                TestVod.vod("vod-1", "Detail"), new WebThemePlaySession(), false, null,
+                true, true, true, metadata);
+
+        assertEquals(4, json.getAsJsonArray("recommendationGroups").size());
+        assertFalse(json.get("truncated").getAsBoolean());
+        assertTrue(json.toString().getBytes(StandardCharsets.UTF_8).length
+                <= WebHomeVodContract.MAX_CONTRACT_BYTES);
+    }
+
+    private static List<TmdbItem> recommendationPage(int startId, String overview, String reason) {
+        List<TmdbItem> values = new ArrayList<>();
+        for (int index = 0; index < WebHomeVodContract.MAX_DETAIL_RECOMMENDATIONS; index++) {
+            int id = startId + index;
+            values.add(new TmdbItem(id, "movie", "推荐" + id, "2026 · 电影", overview,
+                    "https://img.example/" + id + ".jpg", "https://img.example/" + id + "-backdrop.jpg",
+                    "主演", 8.2, "zh", "CN", List.of(18), "", 8.2, 7.9, reason));
+        }
+        return values;
+    }
+
+    private static TmdbItem recommendation(int id, String title, String reason) {
+        return new TmdbItem(id, "movie", title, "2026 · 电影", title + "简介",
+                "https://img.example/" + id + ".jpg", "https://img.example/" + id + "-backdrop.jpg",
+                "主演", 8.2, "zh", "CN", List.of(18), "", 8.2, 7.9, reason);
     }
 
     @Test

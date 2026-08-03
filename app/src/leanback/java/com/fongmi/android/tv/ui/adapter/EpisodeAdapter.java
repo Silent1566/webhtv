@@ -301,7 +301,10 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
         }
         ViewGroup.LayoutParams params = textView.getLayoutParams();
         int width = getWidth();
-        if (showFileSize) width = Math.max(ResUtil.dp2px(120), width - ResUtil.dp2px(96));
+        if (showFileSize && !verticalGridMode) width += ResUtil.dp2px(104);
+        int horizontalPadding = ResUtil.dp2px(12);
+        int titleStartPadding = showFileSize ? ResUtil.dp2px(104) : horizontalPadding;
+        textView.setPaddingRelative(titleStartPadding, textView.getPaddingTop(), horizontalPadding, textView.getPaddingBottom());
         if (params.width != width) {
             params.width = width;
             textView.setLayoutParams(params);

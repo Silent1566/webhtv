@@ -144,7 +144,24 @@ binding.detailActions.setVisibility(isFusionMode() ? GONE : VISIBLE);    // 其�
 - **`app/src/main/res/layout/activity_tmdb_detail.xml`** — TMDB 独立详情页主布局（共用，通过 `fusionActions`/`detailActions` 等切换子区域可见性）
   - 按钮组：`changeSource`/`changeSourceDetail`/`playerChangeSource`（换源，已改为搜索文本）/ `themeMode`/`themeModeTop`/`themeModeDetail`(主题) / `rematch`/`rematchTop`/`rematchFusion`(重匹配)
 
-## 六、关键经验与陷阱
+## 六、TMDB 模式选集数据边界
+
+原生增强、沉浸融合、炫彩详情和详情直放统一遵循以下规则：
+
+- 当前线路的 `Flag.getEpisodes()` 是可播放内容的唯一事实源；
+- TMDB 完整季度只用于补充标题、剧照、日期和季集位置，不生成播放项；
+- 季度导航只显示能够从当前线路可靠确认的季度；
+- 当前线路只有一个可播放季度时，隐藏切换导航，但必须在顶部元信息和选集标题保留该季度上下文；
+- 无法可靠分季时隐藏季度导航，并保留线路原始集数列表；
+- 不显示可点击但没有播放 URL 的 TMDB 季度或集数。
+
+- 原生增强必须在 TMDB 标准标题覆盖线路原名之前保存来源季度，并在“选集 · 第 X 季”及移动端融合元信息中展示；
+- 明确来源季度时，TMDB 剧集标题只允许绑定该季，失败时不得回退套用第 1 季；
+- 聚合续播与单集位置缓存都以季号隔离：不同季度的同集号不得共享进度，季号未知的旧记录只在同一来源 key 内兼容恢复。
+
+详细解析优先级、状态切换、测试矩阵见：[`docs/tmdb-playable-episode-availability-design.md`](docs/tmdb-playable-episode-availability-design.md)。
+
+## 七、关键经验与陷阱
 
 ### 1. ViewBinding ID 冲突（重要）
 **问题**：`activity_video.xml` 和 `view_control_vod_action.xml`（通过 include 嵌套）中曾同时存在 `android:id="@+id/search"`，导致 `mBinding.search` 绑定到错误视图，点击事件失效。
@@ -195,7 +212,7 @@ adb install -r app/build/outputs/apk/leanbackArm64_v8a/debug/app-leanback-arm64_
 
 任务名规则：`app:assembleLeanback{Arm64_v8a|Armeabi_v7a}Debug`（注意 flavor 与 ABI 连写，没有单独的 `assembleLeanbackDebug`）。
 
-## 七、设置相关方法速查（Setting.java）
+## 八、设置相关方法速查（Setting.java）
 
 | 方法 | 判断内容 |
 |---|---|
@@ -211,7 +228,7 @@ adb install -r app/build/outputs/apk/leanbackArm64_v8a/debug/app-leanback-arm64_
 | `getDetailThemeMode()` | 详情页主题（PROFILE/CINEMA/NATIVE） |
 | `getTmdbModel()` | TMDB 模型（默认 NATIVE=0） |
 
-## 八、字符串资源速查
+## 九、字符串资源速查
 
 详情页模式相关字符串（`values-zh-rCN/strings.xml`）：
 

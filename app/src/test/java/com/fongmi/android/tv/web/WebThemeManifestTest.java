@@ -60,8 +60,9 @@ public class WebThemeManifestTest {
 
     @Test
     public void parse_rejectsUnsupportedSchemaHostTargetAndOversizedInput() {
+        assertEquals(3, WebThemeManifest.HOST_API_VERSION);
         assertInvalid("{\"schemaVersion\":1,\"id\":\"x\",\"version\":\"1\",\"minHostApi\":2}", "mobile");
-        assertInvalid("{\"schemaVersion\":2,\"id\":\"x\",\"version\":\"1\",\"minHostApi\":3}", "mobile");
+        assertInvalid("{\"schemaVersion\":2,\"id\":\"x\",\"version\":\"1\",\"minHostApi\":4}", "mobile");
         assertInvalid("{\"schemaVersion\":\"2\",\"id\":\"x\",\"version\":\"1\",\"minHostApi\":2}", "mobile");
         assertInvalid("{\"schemaVersion\":2,\"id\":\"x\",\"version\":\"1\",\"minHostApi\":2.5}", "mobile");
         assertInvalid("{\"schemaVersion\":2,\"id\":\"x\",\"version\":\"1\",\"minHostApi\":\"2\"}", "mobile");
@@ -105,6 +106,23 @@ public class WebThemeManifestTest {
         assertTrue(manifest.getPage(WebThemePage.HOME).getPermissions().contains("app.search"));
         assertTrue(manifest.getPage(WebThemePage.HOME).getPermissions().contains("app.openVod"));
         assertTrue(manifest.getPage(WebThemePage.HOME).getPermissions().contains("app.openSetting"));
+    }
+
+    @Test
+    public void bundledDetailDeclaresEveryTmdbActionCapabilityItUses() throws Exception {
+        Path root = Files.exists(Path.of("src")) ? Path.of("") : Path.of("app");
+        String json = Files.readString(root.resolve("src/main/assets/webhome/theme.json"), StandardCharsets.UTF_8);
+        WebThemeManifest manifest = WebThemeManifest.parse(WebHomeTarget.ECLIPSE_URL, json, "mobile");
+
+        assertEquals(3, manifest.getMinHostApi());
+        assertTrue(manifest.getPage(WebThemePage.DETAIL).getPermissions().contains("person.open"));
+        assertTrue(manifest.getPage(WebThemePage.DETAIL).getPermissions().contains("image.preview"));
+        assertTrue(manifest.getPage(WebThemePage.DETAIL).getPermissions().contains("image.save"));
+        assertTrue(manifest.getPage(WebThemePage.DETAIL).getPermissions().contains("recommendation.open"));
+        assertTrue(manifest.getPage(WebThemePage.DETAIL).getPermissions().contains("recommendation.info"));
+        assertTrue(manifest.getPage(WebThemePage.DETAIL).getPermissions().contains("recommendation.feedback"));
+        assertTrue(manifest.getPage(WebThemePage.DETAIL).getPermissions().contains("external.open"));
+        assertTrue(manifest.getPage(WebThemePage.DETAIL).getPermissions().contains("episode.info"));
     }
 
     private static void assertInvalid(String json, String target) {

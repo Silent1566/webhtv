@@ -65,6 +65,7 @@ import com.fongmi.android.tv.model.LiveViewModel;
 import com.fongmi.android.tv.player.PlayerHelper;
 import com.fongmi.android.tv.player.PlayerManager;
 import com.fongmi.android.tv.player.Source;
+import com.fongmi.android.tv.player.VideoAspectMode;
 import com.fongmi.android.tv.playback.PlaybackOrientation;
 import com.fongmi.android.tv.service.PlaybackService;
 import com.fongmi.android.tv.setting.LiveEpgSetting;
@@ -270,6 +271,7 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
         setNavigation();
         setViewModel();
         applyPadLiveMode();
+        mBinding.exo.post(() -> applyLiveResizeMode(LiveSetting.getScale()));
     }
 
     @Override
@@ -407,8 +409,9 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
         int parentHeight = mBinding.video.getHeight();
         if (parentWidth <= 0 || parentHeight <= 0) return;
         FrameLayout.LayoutParams params = getPlayerLayoutParams();
-        if (scale == 1 || scale == 2) {
-            float ratio = scale == 1 ? 16f / 9f : 4f / 3f;
+        float viewportRatio = (float) parentWidth / parentHeight;
+        float ratio = VideoAspectMode.resolve(scale, viewportRatio, PlayerSetting.getCustomAspectRatio()).targetAspectRatio();
+        if (ratio > 0f) {
             int width = parentWidth;
             int height = Math.round(width / ratio);
             if (height > parentHeight) {
@@ -746,10 +749,8 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
     }
 
     private void onScale() {
-        int index = LiveSetting.getScale();
-        String[] array = ResUtil.getStringArray(R.array.select_scale);
         if (mKeyDown.getScale() != 1.0f) mKeyDown.resetScale();
-        else setScale(index == array.length - 1 ? 0 : ++index);
+        else showResizeModeDialog(LiveSetting.getScale(), this::setScale);
         setR1Callback();
     }
 
@@ -1933,6 +1934,7 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
         Log.i(ORIENTATION_TAG, "configuration changed new=" + newConfig.orientation + " " + orientationState());
         updateSystemUI();
         applyPadLiveMode();
+        mBinding.exo.post(() -> applyLiveResizeMode(LiveSetting.getScale()));
     }
 
     @Override

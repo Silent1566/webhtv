@@ -483,6 +483,10 @@ public class PlayerManager implements ParseCallback {
         if (engine != null) engine.setSubtitleStyle(textSize, position);
     }
 
+    public void setVideoAspect(float aspectRatio, boolean stretch) {
+        if (engine != null) engine.setVideoAspect(aspectRatio, stretch);
+    }
+
     public String getSpeedText() {
         return SPEED_FORMAT.format(getSpeed());
     }

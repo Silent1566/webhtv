@@ -37,6 +37,8 @@ public class App extends Application implements Application.ActivityLifecycleCal
     private final Gson gson;
     private final long time;
 
+    private final Runnable backgroundServicesStarter = this::startBackgroundServicesNow;
+
     private Activity activity;
     private Hook hook;
 
@@ -102,23 +104,36 @@ public class App extends Application implements Application.ActivityLifecycleCal
         if (DebugLogStore.isEnabled()) Setting.logDebugEnvironment("restore");
         Notify.createChannel();
         ProxySetting.apply();
-        DanmakuSearchListFocusFixer.start();
         registerActivityLifecycleCallbacks(this);
         registerContentHandlers();
-        post(this::startBackgroundServices, 1200);
+        resumeBackgroundServices();
     }
 
     private void registerContentHandlers() {
         com.fongmi.android.tv.content.ContentDispatcher.registerHandler(new com.fongmi.android.tv.content.AudioContentHandler());
     }
 
-    private void startBackgroundServices() {
+    private void startBackgroundServicesNow() {
         SpiderDebug.log("startup", "background services start cost=%sms", System.currentTimeMillis() - time);
         Server.get().start();
         PlaybackRemoteSyncer.start();
         RemoteAgent.get().start();
         NsdDeviceDiscovery.register();
         SpiderDebug.log("startup", "background services ready cost=%sms", System.currentTimeMillis() - time);
+    }
+
+    public static void resumeBackgroundServices() {
+        removeCallbacks(get().backgroundServicesStarter);
+        DanmakuSearchListFocusFixer.start();
+        post(get().backgroundServicesStarter, 1200);
+    }
+
+    public static void stopBackgroundServices() {
+        removeCallbacks(get().backgroundServicesStarter);
+        DanmakuSearchListFocusFixer.stop();
+        PlaybackRemoteSyncer.stop();
+        RemoteAgent.get().stop();
+        NsdDeviceDiscovery.unregister();
     }
 
     @Override

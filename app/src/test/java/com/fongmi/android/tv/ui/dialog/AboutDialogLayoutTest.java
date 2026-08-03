@@ -40,6 +40,24 @@ public class AboutDialogLayoutTest {
     }
 
     @Test
+    public void aboutDialogConstrainsScrollableContentBeforeFinalWindowSizing() throws Exception {
+        String source = read(findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "dialog", "AboutDialog.java")));
+
+        int constrainScroll = source.indexOf("binding.contentScroll.setMaxHeight(maxScrollHeight);");
+        int remeasureRoot = source.indexOf("binding.getRoot().measure(widthSpec, heightSpec);", constrainScroll);
+        int finalWindowLayout = source.lastIndexOf("window.setLayout(params.width, dialogHeight);");
+
+        assertTrue("The disclaimer must be constrained before the complete dialog is measured again",
+                constrainScroll >= 0 && remeasureRoot > constrainScroll);
+        assertTrue("The final window height must use the post-constraint root measurement so action buttons stay visible",
+                finalWindowLayout > remeasureRoot);
+        assertTrue("When fixed dialog chrome is tall, the dialog should sacrifice outer margin instead of clipping actions",
+                source.contains("Math.min(availableHeight, Math.max(chromeHeight + 1, availableHeight - ResUtil.dp2px(DIALOG_VERTICAL_MARGIN_DP)))"));
+        assertFalse("A 200dp scroll minimum can exceed the remaining TV height and push all action buttons outside the window",
+                source.contains("Math.max(ResUtil.dp2px(200), availableHeight - chromeHeight"));
+    }
+
+    @Test
     public void githubProxyRemoveActionUsesIconButtonOnNarrowScreens() throws Exception {
         String layout = read(findMainResPath().resolve(Path.of("layout", "adapter_github_proxy.xml")));
         String remove = layout.substring(layout.indexOf("android:id=\"@+id/remove\""));

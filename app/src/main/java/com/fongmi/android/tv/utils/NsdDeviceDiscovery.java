@@ -35,12 +35,12 @@ public class NsdDeviceDiscovery {
 
             @Override
             public void onRegistrationFailed(NsdServiceInfo serviceInfo, int errorCode) {
-                registration = null;
+                if (registration == this) registration = null;
             }
 
             @Override
             public void onServiceUnregistered(NsdServiceInfo serviceInfo) {
-                registration = null;
+                if (registration == this) registration = null;
             }
 
             @Override
@@ -48,6 +48,16 @@ public class NsdDeviceDiscovery {
             }
         };
         getManager().registerService(service, NsdManager.PROTOCOL_DNS_SD, registration);
+    }
+
+    public static synchronized void unregister() {
+        NsdManager.RegistrationListener listener = registration;
+        if (listener == null) return;
+        registration = null;
+        try {
+            getManager().unregisterService(listener);
+        } catch (Exception ignored) {
+        }
     }
 
     public void start() {

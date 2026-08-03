@@ -5,6 +5,7 @@ import android.provider.Settings;
 
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
+import com.fongmi.android.tv.player.VideoAspectMode;
 import com.github.catvod.utils.Prefers;
 
 public class PlayerSetting {
@@ -54,6 +55,8 @@ public class PlayerSetting {
     private static final String KEY_IMMERSIVE_AUDIO_PLAYBACK = "immersive_audio_playback";
     private static final String KEY_FAILURE_FALLBACK = "player_failure_fallback";
     private static final String KEY_FFMPEG_MODE = "ffmpeg_mode";
+    private static final String KEY_CUSTOM_ASPECT_WIDTH = "custom_aspect_width";
+    private static final String KEY_CUSTOM_ASPECT_HEIGHT = "custom_aspect_height";
     private static final String KEY_DISPLAY_TIME = "display_time";
     private static final String KEY_DISPLAY_TRAFFIC = "display_traffic";
     private static final String KEY_DISPLAY_SIZE = "display_size";
@@ -221,11 +224,33 @@ public class PlayerSetting {
     }
 
     public static int getScale() {
-        return Prefers.getInt("scale");
+        return VideoAspectMode.sanitize(Prefers.getInt("scale"));
     }
 
     public static void putScale(int scale) {
-        Prefers.put("scale", scale);
+        Prefers.put("scale", VideoAspectMode.sanitize(scale));
+    }
+
+    public static float getCustomAspectWidth() {
+        float width = Prefers.getFloat(KEY_CUSTOM_ASPECT_WIDTH, VideoAspectMode.DEFAULT_CUSTOM_WIDTH);
+        return Float.isFinite(width) && width > 0f ? width : VideoAspectMode.DEFAULT_CUSTOM_WIDTH;
+    }
+
+    public static float getCustomAspectHeight() {
+        float height = Prefers.getFloat(KEY_CUSTOM_ASPECT_HEIGHT, VideoAspectMode.DEFAULT_CUSTOM_HEIGHT);
+        return Float.isFinite(height) && height > 0f ? height : VideoAspectMode.DEFAULT_CUSTOM_HEIGHT;
+    }
+
+    public static float getCustomAspectRatio() {
+        float width = getCustomAspectWidth();
+        float height = getCustomAspectHeight();
+        return VideoAspectMode.isValidDimensions(width, height) ? width / height : VideoAspectMode.DEFAULT_CUSTOM_RATIO;
+    }
+
+    public static void putCustomAspectRatio(float width, float height) {
+        if (!VideoAspectMode.isValidDimensions(width, height)) return;
+        Prefers.put(KEY_CUSTOM_ASPECT_WIDTH, width);
+        Prefers.put(KEY_CUSTOM_ASPECT_HEIGHT, height);
     }
 
     public static int getEpisodeColumn() {

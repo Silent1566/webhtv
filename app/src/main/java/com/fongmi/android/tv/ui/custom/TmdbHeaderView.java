@@ -261,15 +261,22 @@ public class TmdbHeaderView {
 
         // 元数据（类型 · 年份），移除左边距因为评分已隐藏
         TextView meta = headerRoot.findViewById(R.id.tmdbMeta);
-        String mediaType = "tv".equals(item.getMediaType()) ? "剧集" : "电影";
+        String mediaType = "tv".equals(item.getMediaType())
+                ? activity.getString(R.string.detail_media_tv)
+                : activity.getString(R.string.detail_media_movie);
         String year = extractYear(detail);
-        meta.setText(TextUtils.isEmpty(year) ? mediaType : mediaType + " · " + year);
+        String episodeInfo = adapter.getEpisodeDetailText();
+        List<String> metaParts = new ArrayList<>();
+        metaParts.add(mediaType);
+        if (!TextUtils.isEmpty(year)) metaParts.add(year);
+        if (!TextUtils.isEmpty(episodeInfo)) metaParts.add(episodeInfo);
+        meta.setText(TextUtils.join(" · ", metaParts));
         // 评分徽章已隐藏，移除元数据左边距使其左对齐
         ViewGroup.MarginLayoutParams metaParams = (ViewGroup.MarginLayoutParams) meta.getLayoutParams();
         metaParams.setMarginStart(0);
         meta.setLayoutParams(metaParams);
         TextView fusionSubtitle = headerRoot.findViewById(R.id.tmdbFusionSubtitle);
-        if (fusionSubtitle != null) fusionSubtitle.setText(buildFusionSubtitle(detail, adapter.getRatingText()));
+        if (fusionSubtitle != null) fusionSubtitle.setText(buildFusionSubtitle(detail, adapter.getRatingText(), episodeInfo));
 
         // 类型标签
         TextView genres = headerRoot.findViewById(R.id.tmdbGenres);
@@ -606,10 +613,13 @@ public class TmdbHeaderView {
         return detail.get(dateField).getAsString();
     }
 
-    private String buildFusionSubtitle(JsonObject detail, String rating) {
+    private String buildFusionSubtitle(JsonObject detail, String rating, String episodeInfo) {
+        List<String> parts = new ArrayList<>();
         String date = extractDate(detail);
-        if (TextUtils.isEmpty(rating)) return date;
-        return TextUtils.isEmpty(date) ? "评分 " + rating : date + " · 评分 " + rating;
+        if (!TextUtils.isEmpty(date)) parts.add(date);
+        if (!TextUtils.isEmpty(rating)) parts.add("评分 " + rating);
+        if (!TextUtils.isEmpty(episodeInfo)) parts.add(episodeInfo);
+        return TextUtils.join(" · ", parts);
     }
 
     private void bindFusionPanel(TmdbUIAdapter adapter, TmdbItem item, JsonObject detail, String overviewText) {
@@ -629,7 +639,10 @@ public class TmdbHeaderView {
         FlexboxLayout meta = headerRoot.findViewById(R.id.tmdbFusionMeta);
         if (meta != null) {
             meta.removeAllViews();
-            addFusionChip(meta, "tv".equals(item.getMediaType()) ? "剧集" : "电影");
+            boolean tv = "tv".equals(item.getMediaType());
+            addFusionChip(meta, tv ? "剧集" : "电影");
+            int sourceSeason = adapter.getSourceSeasonNumber();
+            if (tv && sourceSeason >= 0 && !adapter.getEpisodeInfo().isSeasonScoped()) addFusionChip(meta, activity.getString(R.string.detail_season_format, sourceSeason));
             addFusionChip(meta, extractYear(detail));
             addFusionChips(meta, adapter.getGenresText(), 3);
             addFusionChip(meta, firstCountry(detail));

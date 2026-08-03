@@ -19,7 +19,11 @@
     button { color: inherit; font: inherit; }
     button:focus { outline: 0; }
     .hidden { display: none !important; }
-    .shell { width: 100%; max-width: 1540px; margin: 0 auto; padding: 22px 42px 64px; }
+    .shell {
+      width: 100%; max-width: 1540px; margin: 0 auto;
+      padding: calc(22px + var(--fm-safe-top, 0px)) calc(42px + var(--fm-safe-right, 0px))
+        calc(64px + var(--fm-safe-bottom, 0px)) calc(42px + var(--fm-safe-left, 0px));
+    }
     .topbar { display: flex; align-items: center; min-height: 48px; margin-bottom: 28px; }
     .back {
       width: 44px; height: 44px; margin-right: 14px; border: 1px solid #3b3f4c; border-radius: 8px;
@@ -87,10 +91,12 @@
     .section-head h2 { margin: 0; font-size: 22px; }
     .section-head p { margin: 0 0 2px 12px; color: #7f8bab; font-size: 12px; }
     .people-grid, .gallery-strip, .recommendation-grid {
-      display: flex; gap: 14px; padding: 3px 3px 12px; overflow-x: auto; overflow-y: hidden;
-      overscroll-behavior-inline: contain; scrollbar-width: thin;
+      display: flex; gap: 14px; margin: -8px -10px -6px; padding: 11px 12px 18px; overflow-x: auto; overflow-y: hidden;
+      overscroll-behavior-inline: contain; scrollbar-width: thin; scroll-padding-inline: 12px;
+      -webkit-overflow-scrolling: touch;
     }
-    .person-card { flex: 0 0 126px; min-width: 0; overflow: hidden; border: 1px solid #343946; border-radius: 8px; background: #151820; }
+    .horizontal-rail > * { scroll-snap-align: start; }
+    .person-card { flex: 0 0 126px; min-width: 0; padding: 0; overflow: hidden; color: inherit; text-align: left; border: 1px solid #343946; border-radius: 8px; background: #151820; }
     .person-photo { position: relative; width: 100%; aspect-ratio: 3 / 4; overflow: hidden; background: #242630; }
     .person-photo img { width: 100%; height: 100%; object-fit: cover; }
     .person-fallback { position: absolute; inset: 0; display: grid; place-items: center; color: #d9bd83; background: #292732; font-size: 28px; font-weight: bold; }
@@ -98,7 +104,7 @@
     .person-name, .person-role { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .person-name { color: #eef1fa; font-size: 13px; font-weight: bold; }
     .person-role { margin-top: 4px; color: #969ead; font-size: 11px; }
-    .gallery-item { flex: 0 0 300px; aspect-ratio: 16 / 9; margin: 0; overflow: hidden; border: 1px solid #343946; border-radius: 8px; background: #151820; }
+    .gallery-item { flex: 0 0 300px; aspect-ratio: 16 / 9; margin: 0; padding: 0; overflow: hidden; color: inherit; border: 1px solid #343946; border-radius: 8px; background: #151820; }
     .gallery-item img { width: 100%; height: 100%; object-fit: cover; }
     .recommendation-card {
       flex: 0 0 154px; min-width: 0; padding: 0; overflow: hidden; color: inherit; text-align: left;
@@ -112,12 +118,28 @@
     .recommendation-name { color: #eef1fa; font-size: 13px; font-weight: bold; }
     .recommendation-subtitle { margin-top: 4px; color: #969ead; font-size: 11px; }
     .recommendation-rating { display: block; margin-top: 5px; color: #e8bd69; font-size: 11px; }
+    .recommendation-groups { display: grid; min-width: 0; gap: 24px; }
+    .recommendation-group { min-width: 0; }
+    .recommendation-group-head { display: flex; align-items: baseline; margin-bottom: 7px; }
+    .recommendation-group-head h3 { margin: 0; font-size: 16px; }
+    .recommendation-group-head span { margin-left: 10px; color: #7f8bab; font-size: 11px; }
+    .recommendation-reason { min-height: 20px; margin: 6px 2px 0; color: #8fe9f6; font-size: 12px; }
+    .external-links { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+    .external-link { min-height: 48px; padding: 9px 13px; overflow: hidden; border: 1px solid #383d49; border-radius: 8px; background: #151820; cursor: pointer; text-align: left; }
+    .external-link strong, .external-link span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .external-link span { margin-top: 2px; color: #8f99b2; font-size: 11px; }
     .line-tabs { display: flex; padding: 2px 2px 9px; overflow-x: auto; overflow-y: hidden; }
     .line-tab {
       flex: 0 0 auto; min-width: 92px; height: 40px; margin: 0 9px 7px 0; padding: 0 16px;
       border: 1px solid #3a3f4c; border-radius: 8px; color: #aab3cd; background: #171a22; cursor: pointer;
     }
     .line-tab.active { color: #07131b; border-color: #55e2f8; background: #55e2f8; box-shadow: 0 0 20px rgba(72, 220, 246, .2); }
+    .episode-ranges { display: flex; padding: 2px 2px 9px; overflow-x: auto; overflow-y: hidden; }
+    .episode-range {
+      flex: 0 0 auto; min-width: 86px; height: 38px; margin: 0 9px 7px 0; padding: 0 15px;
+      border: 1px solid #353b49; border-radius: 8px; color: #9da8c3; background: #14171f; cursor: pointer;
+    }
+    .episode-range.active { color: #e9fcff; border-color: #45a8bd; background: #12313d; }
     .episode-toolbar { display: flex; align-items: center; min-height: 38px; margin: 7px 0 13px; color: #818dac; font-size: 12px; }
     .episode-toolbar .warning { color: #d9af76; }
     .pager { display: flex; align-items: center; margin-left: auto; }
@@ -131,9 +153,24 @@
       text-align: left;
     }
     .episode.selected { color: #dffbff; border-color: #3e91a6; background: #14303c; }
-    .episode-name, .episode-title { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .episode-name, .episode-title { display: block; overflow: hidden; white-space: nowrap; }
     .episode-name { color: inherit; }
     .episode-title { margin-top: 3px; color: #7f8a9f; font-size: 10px; }
+    .episode-marquee-track { display: block; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .episode:focus .episode-marquee-track.overflowing,
+    .episode.selected .episode-marquee-track.overflowing {
+      width: max-content; min-width: 100%; overflow: visible; text-overflow: clip;
+      animation-name: episode-marquee;
+      animation-duration: var(--episode-marquee-duration, 7s);
+      animation-timing-function: linear;
+      animation-delay: 650ms;
+      animation-iteration-count: infinite;
+      animation-direction: alternate;
+    }
+    @keyframes episode-marquee {
+      from { transform: translateX(0); }
+      to { transform: translateX(calc(0px - var(--episode-marquee-distance, 0px))); }
+    }
     .episode-feature {
       display: grid; grid-template-columns: minmax(220px, 34%) minmax(0, 1fr); gap: 22px; margin: 8px 0 18px;
       padding: 18px 0; border-top: 1px solid #2d323c; border-bottom: 1px solid #2d323c;
@@ -145,7 +182,10 @@
     .episode-kicker { margin: 0 0 5px; color: #56dbe8; font-size: 11px; font-weight: bold; }
     .episode-feature h3 { margin: 0; font-size: 19px; }
     .episode-facts { margin-top: 7px; color: #d2ae68; font-size: 11px; }
-    .episode-overview { display: -webkit-box; max-width: 820px; margin: 10px 0 0; overflow: hidden; color: #9da5b7; font-size: 12px; line-height: 1.7; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+    .episode-overview {
+      max-width: 920px; margin: 10px 0 0; color: #9da5b7; font-size: 12px; line-height: 1.7;
+      white-space: pre-wrap; overflow-wrap: anywhere;
+    }
     .empty { width: 100%; padding: 34px 14px; color: #7e89a9; text-align: center; }
     .toast {
       position: fixed; z-index: 20; left: 50%; bottom: 34px; max-width: 80vw; padding: 11px 17px;
@@ -158,7 +198,7 @@
       box-shadow: 0 0 0 3px #705cff, 0 0 24px rgba(94, 223, 255, .42) !important; transform: scale(1.035);
     }
     @media (max-width: 920px) {
-      .shell { padding: 18px 24px 48px; }
+      .shell { padding: calc(18px + var(--fm-safe-top, 0px)) calc(24px + var(--fm-safe-right, 0px)) calc(48px + var(--fm-safe-bottom, 0px)) calc(24px + var(--fm-safe-left, 0px)); }
       .hero { padding: 28px; }
       .poster-wrap { flex-basis: 190px; }
       .poster { width: 190px; height: 270px; }
@@ -170,7 +210,7 @@
       .recommendation-card { flex-basis: 142px; }
     }
     @media (max-width: 640px) {
-      .shell { padding: 14px 14px 38px; }
+      .shell { padding: calc(14px + var(--fm-safe-top, 0px)) calc(14px + var(--fm-safe-right, 0px)) calc(38px + var(--fm-safe-bottom, 0px)) calc(14px + var(--fm-safe-left, 0px)); }
       .topbar { margin-bottom: 16px; }
       .source-pill { display: none; }
       .hero { display: block; min-height: 0; padding: 20px; border-radius: 8px; }
@@ -191,7 +231,7 @@
       .episode-feature { display: block; }
       .episode-feature-copy { margin-top: 13px; }
       .episode-overview { -webkit-line-clamp: 4; }
-      .people-grid, .gallery-strip, .recommendation-grid { margin-right: -14px; padding-right: 14px; }
+      .people-grid, .gallery-strip, .recommendation-grid { margin-left: -8px; margin-right: -8px; padding-left: 10px; padding-right: 10px; scroll-padding-inline: 10px; }
       .person-card { flex-basis: 108px; }
       .gallery-item { flex-basis: 238px; }
       .recommendation-card { flex-basis: 132px; }
@@ -263,7 +303,7 @@
             <h2 id="peopleHeading">演员与主创</h2>
             <p id="peopleStatus"></p>
           </div>
-          <div id="people" class="people-grid"></div>
+          <div id="people" class="people-grid horizontal-rail"></div>
         </section>
 
         <section class="section" aria-labelledby="episodeHeading">
@@ -284,12 +324,13 @@
               <p id="episodeFeatureOverview" class="episode-overview"></p>
             </div>
           </article>
+          <div id="episodeRanges" class="episode-ranges horizontal-rail hidden" role="tablist" aria-label="选集范围"></div>
           <div class="episode-toolbar">
             <span id="episodeStatus">请选择集数</span>
             <div id="pager" class="pager hidden">
-              <button id="prevPage" type="button" aria-label="上一组选集">‹</button>
+              <button id="prevPage" type="button" data-focus-row="episode-pager" aria-label="上一组选集">‹</button>
               <span id="pageText">1 / 1</span>
-              <button id="nextPage" type="button" aria-label="下一组选集">›</button>
+              <button id="nextPage" type="button" data-focus-row="episode-pager" aria-label="下一组选集">›</button>
             </div>
           </div>
           <div id="episodes" class="episodes" role="tabpanel"></div>
@@ -300,15 +341,23 @@
             <h2 id="galleryHeading">剧照</h2>
             <p id="galleryStatus"></p>
           </div>
-          <div id="gallery" class="gallery-strip"></div>
+          <div id="gallery" class="gallery-strip horizontal-rail"></div>
         </section>
 
         <section id="recommendationSection" class="section hidden" aria-labelledby="recommendationHeading">
           <div class="section-head">
-            <h2 id="recommendationHeading">相关推荐</h2>
+            <h2 id="recommendationHeading">推荐</h2>
             <p id="recommendationStatus"></p>
           </div>
-          <div id="recommendations" class="recommendation-grid"></div>
+          <div id="recommendationGroups" class="recommendation-groups"></div>
+        </section>
+
+        <section id="externalSection" class="section hidden" aria-labelledby="externalHeading">
+          <div class="section-head">
+            <h2 id="externalHeading">外部链接</h2>
+            <p id="externalStatus"></p>
+          </div>
+          <div id="externalLinks" class="external-links"></div>
         </section>
       </div>
     </main>
@@ -319,6 +368,7 @@
   <script>
     (function (w, d) {
       'use strict';
+      var EPISODE_GROUP_SIZE = 20;
       var app = { booted: false, info: null, data: null, state: null, toastTimer: 0, fallbackTimer: 0, pending: false, refreshing: false, refreshQueued: false };
 
       function byId(id) { return d.getElementById(id); }
@@ -327,7 +377,7 @@
       function setText(id, value) { var node = byId(id); if (node) node.textContent = text(value); }
       function clear(node) { while (node && node.firstChild) node.removeChild(node.firstChild); }
       function show(node, visible) { if (node) node.className = node.className.replace(/\s*hidden\b/g, '') + (visible ? '' : ' hidden'); }
-      function nativeApi() { return w.fm || null; }
+      function nativeApi() { return w.fm || w.fongmi || null; }
 
       function toast(message) {
         var node = byId('toast');
@@ -450,14 +500,80 @@
         return image;
       }
 
+      function actionFailure(result, fallback) {
+        if (!result || typeof result.catch !== 'function') return;
+        result.catch(function (error) { toast(error && error.message ? error.message : fallback); });
+      }
+
+      function bindLongPress(node, handler) {
+        var timer = 0;
+        var fired = false;
+        var resetTimer = 0;
+        function clearTimer() {
+          if (!timer) return;
+          w.clearTimeout(timer);
+          timer = 0;
+        }
+        function markFired(event) {
+          if (event && typeof event.preventDefault === 'function') event.preventDefault();
+          if (fired) return;
+          clearTimer();
+          fired = true;
+          w.clearTimeout(resetTimer);
+          resetTimer = w.setTimeout(function () { fired = false; }, 1200);
+          handler();
+        }
+        function schedule(event) {
+          if (timer || fired) return;
+          timer = w.setTimeout(function () { timer = 0; markFired(event); }, 650);
+        }
+        node.addEventListener('pointerdown', function (event) {
+          if (typeof event.button === 'number' && event.button !== 0) return;
+          schedule(event);
+        });
+        ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (name) {
+          node.addEventListener(name, clearTimer);
+        });
+        node.addEventListener('contextmenu', markFired);
+        node.addEventListener('keydown', function (event) {
+          if (event.key === 'ContextMenu' || event.key === 'F2') {
+            markFired(event);
+            return;
+          }
+          if (event.key !== 'Enter' && event.key !== ' ' && event.key !== 'Select') return;
+          if (event.repeat) markFired(event);
+          else schedule(event);
+        });
+        node.addEventListener('keyup', function (event) {
+          if (event.key === 'Enter' || event.key === ' ' || event.key === 'Select') clearTimer();
+        });
+        node.addEventListener('click', function (event) {
+          if (!fired) return;
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          fired = false;
+          w.clearTimeout(resetTimer);
+        }, true);
+      }
+
+      function openPerson(person) {
+        var api = nativeApi();
+        if (!api || !api.person || typeof api.person.open !== 'function' || !text(person && person.personRef)) return;
+        actionFailure(api.person.open(person.personRef), '无法打开人物详情');
+      }
+
       function renderPeople() {
         var root = byId('people');
         var values = array(app.data.people);
+        var capabilities = app.data.capabilities || {};
+        var api = nativeApi();
+        var canOpen = Boolean(capabilities.canOpenPeople && api && api.person && typeof api.person.open === 'function');
         var castCount = 0;
         var crewCount = 0;
         clear(root);
         values.forEach(function (person) {
-          var card = d.createElement('article');
+          var interactive = Boolean(canOpen && text(person.personRef));
+          var card = d.createElement(interactive ? 'button' : 'article');
           var photo = d.createElement('div');
           var fallback = d.createElement('span');
           var copy = d.createElement('div');
@@ -465,9 +581,13 @@
           var role = d.createElement('span');
           var image;
           card.className = 'person-card';
-          card.tabIndex = 0;
-          card.setAttribute('data-focus-row', 'people');
-          card.setAttribute('data-person-id', text(person.kind) + '-' + text(person.personId || person.name));
+          card.tabIndex = interactive ? 0 : -1;
+          if (interactive) {
+            card.type = 'button';
+            card.setAttribute('data-focus-row', 'people');
+            card.addEventListener('click', function () { openPerson(person); });
+          }
+          card.setAttribute('data-person-id', text(person.personRef || (person.kind + '-' + (person.personId || person.name))));
           photo.className = 'person-photo';
           fallback.className = 'person-fallback';
           fallback.textContent = text(person.name).slice(0, 1) || '影';
@@ -492,80 +612,286 @@
         show(byId('peopleSection'), values.length > 0);
       }
 
+      function previewImage(item) {
+        var api = nativeApi();
+        if (!api || !api.image || typeof api.image.preview !== 'function' || !text(item && item.imageRef)) return;
+        actionFailure(api.image.preview(item.imageRef), '无法预览原图');
+      }
+
+      function saveImage(item) {
+        var api = nativeApi();
+        if (!api || !api.image || typeof api.image.save !== 'function' || !text(item && item.imageRef)) return;
+        actionFailure(api.image.save(item.imageRef), '无法保存原图');
+      }
+
       function renderGallery() {
         var root = byId('gallery');
         var item = app.data.item || {};
-        var values = array(app.data.gallery).filter(function (value) {
-          return !!w.EclipseDetailState.safeImageUrl(value);
-        });
+        var capabilities = app.data.capabilities || {};
+        var api = nativeApi();
+        var values = array(app.data.galleryItems).map(function (value) {
+          return { imageRef: text(value && value.imageRef), preview: w.EclipseDetailState.safeImageUrl(value && value.preview) };
+        }).filter(function (value) { return !!value.preview; });
+        var canPreview = Boolean(capabilities.canPreviewImages && api && api.image && typeof api.image.preview === 'function');
+        var canSave = Boolean(capabilities.canSaveImages && api && api.image && typeof api.image.save === 'function');
+        if (!values.length) {
+          values = array(app.data.gallery).map(function (value) {
+            return { imageRef: '', preview: w.EclipseDetailState.safeImageUrl(value) };
+          }).filter(function (value) { return !!value.preview; });
+        }
         clear(root);
         values.forEach(function (value, index) {
-          var frame = d.createElement('figure');
-          var image = cardImage(value, (item.name || '影片') + ' 剧照 ' + (index + 1), '');
+          var interactive = Boolean((canPreview || canSave) && value.imageRef);
+          var frame = d.createElement(interactive ? 'button' : 'figure');
+          var image = cardImage(value.preview, (item.name || '影片') + ' 剧照 ' + (index + 1), '');
           frame.className = 'gallery-item';
-          frame.tabIndex = 0;
-          frame.setAttribute('data-focus-row', 'gallery');
-          frame.setAttribute('data-gallery-id', text(index));
+          frame.tabIndex = interactive ? 0 : -1;
+          if (interactive) {
+            frame.type = 'button';
+            frame.setAttribute('data-focus-row', 'gallery');
+            frame.addEventListener('click', function () {
+              if (canPreview) previewImage(value);
+              else saveImage(value);
+            });
+          }
+          frame.setAttribute('data-gallery-id', text(value.imageRef || index));
+          if (canSave && value.imageRef) {
+            frame.addEventListener('contextmenu', function (event) { event.preventDefault(); saveImage(value); });
+            frame.addEventListener('keydown', function (event) {
+              if (event.key === 'ContextMenu' || event.key === 's' || event.key === 'S') {
+                event.preventDefault();
+                saveImage(value);
+              }
+            });
+          }
           if (image) frame.appendChild(image);
           root.appendChild(frame);
         });
-        setText('galleryStatus', values.length + ' 张');
+        setText('galleryStatus', values.length + ' 张' + (canPreview ? ' · 点击查看原图' : (canSave ? ' · 点击保存原图' : '')));
         show(byId('gallerySection'), values.length > 0);
       }
 
-      function searchRecommendation(item) {
-        var api = nativeApi();
-        if (!api || typeof api.search !== 'function' || !text(item && item.name)) return;
-        api.search(item.name).catch(function (error) {
-          toast(error && error.message ? error.message : '无法搜索该影片');
+      function normalizedRecommendationGroups() {
+        var groups = array(app.data.recommendationGroups).filter(function (group) {
+          return group && array(group.items).length > 0;
         });
+        if (!groups.length && array(app.data.recommendations).length) {
+          groups = [{ id: 'related', title: '相关推荐', source: 'related', items: app.data.recommendations }];
+        }
+        return groups;
       }
 
-      function renderRecommendations() {
-        var root = byId('recommendations');
-        var values = array(app.data.recommendations);
-        var canSearch = Boolean(app.data.capabilities && app.data.capabilities.canSearchRecommendations);
+      function openRecommendation(item) {
+        var api = nativeApi();
+        if (api && api.recommendation && typeof api.recommendation.open === 'function' && text(item && item.recommendationRef)) {
+          actionFailure(api.recommendation.open(item.recommendationRef), '无法打开该推荐');
+          return;
+        }
+        if (api && api.app && typeof api.app.search === 'function' && text(item && item.name)) {
+          actionFailure(api.app.search(item.name), '无法搜索该影片');
+        } else if (api && typeof api.search === 'function' && text(item && item.name)) {
+          actionFailure(api.search(item.name), '无法搜索该影片');
+        }
+      }
+
+      function openRecommendationInfo(item) {
+        var api = nativeApi();
+        if (!api || !api.recommendation || typeof api.recommendation.info !== 'function'
+          || !text(item && item.recommendationRef)) return;
+        actionFailure(api.recommendation.info(item.recommendationRef), '无法打开推荐说明');
+      }
+
+      function updateRecommendationSummary() {
+        var root = byId('recommendationGroups');
+        var groups = root ? root.querySelectorAll('.recommendation-group') : [];
+        var total = root ? root.querySelectorAll('.recommendation-card').length : 0;
+        setText('recommendationStatus', groups.length + ' 组 · ' + total + ' 部');
+        show(byId('recommendationSection'), total > 0);
+      }
+
+      function focusAfterRecommendationRemoval(rail, fallbackGroup, removedIndex) {
+        var cards = rail ? rail.querySelectorAll('.recommendation-card') : [];
+        var target = cards.length ? cards[Math.min(removedIndex, cards.length - 1)] : null;
+        if (!target && fallbackGroup) target = fallbackGroup.querySelector('.recommendation-card');
+        if (!target) target = byId('playButton');
+        w.setTimeout(function () {
+          if (!target || target.disabled) return;
+          target.focus();
+          ensureFocusVisible(target);
+        }, 0);
+      }
+
+      function dismissRecommendation(item, card) {
+        var api = nativeApi();
+        if (!api || !api.recommendation || typeof api.recommendation.feedback !== 'function'
+          || !text(item && item.recommendationRef)) return;
+        var result = api.recommendation.feedback(item.recommendationRef, 'notInterested');
+        if (!result || typeof result.then !== 'function') return;
+        result.then(function () {
+          var rail = card && card.parentNode;
+          var group = rail && rail.parentNode;
+          var cards = rail ? Array.prototype.slice.call(rail.querySelectorAll('.recommendation-card')) : [];
+          var removedIndex = Math.max(0, cards.indexOf(card));
+          var fallbackGroup = group && (group.nextElementSibling || group.previousElementSibling);
+          if (rail && card.parentNode === rail) rail.removeChild(card);
+          if (group) {
+            var count = rail.querySelectorAll('.recommendation-card').length;
+            var label = group.querySelector('.recommendation-group-head span');
+            if (label) label.textContent = count + ' 部';
+            if (!count && group.parentNode) group.parentNode.removeChild(group);
+          }
+          updateRecommendationSummary();
+          focusAfterRecommendationRemoval(rail, fallbackGroup, removedIndex);
+        }).catch(function (error) { toast(error && error.message ? error.message : '反馈失败'); });
+      }
+
+      function renderRecommendationGroups() {
+        var root = byId('recommendationGroups');
+        var groups = normalizedRecommendationGroups();
+        var capabilities = app.data.capabilities || {};
+        var api = nativeApi();
+        var total = 0;
+        clear(root);
+        groups.forEach(function (group, groupIndex) {
+          var values = array(group.items).filter(function (item) { return !!text(item && item.name); });
+          var section;
+          var head;
+          var heading;
+          var status;
+          var rail;
+          var reason;
+          var rowId;
+          if (!values.length) return;
+          total += values.length;
+          section = d.createElement('section');
+          section.className = 'recommendation-group';
+          head = d.createElement('div');
+          head.className = 'recommendation-group-head';
+          heading = d.createElement('h3');
+          heading.textContent = group.title || '推荐';
+          status = d.createElement('span');
+          status.textContent = values.length + ' 部';
+          head.appendChild(heading);
+          head.appendChild(status);
+          section.appendChild(head);
+          rail = d.createElement('div');
+          rail.className = 'recommendation-grid horizontal-rail';
+          rowId = 'recommendations-' + text(group.id || groupIndex).replace(/[^A-Za-z0-9_-]/g, '-');
+          reason = d.createElement('p');
+          reason.className = 'recommendation-reason hidden';
+
+          values.forEach(function (item, index) {
+            var canOpen = Boolean((capabilities.canOpenRecommendations && api && api.recommendation
+              && typeof api.recommendation.open === 'function' && text(item.recommendationRef))
+              || (api && api.app && typeof api.app.search === 'function')
+              || (api && typeof api.search === 'function'));
+            var canInspect = Boolean(capabilities.canInspectRecommendations && api && api.recommendation
+              && typeof api.recommendation.info === 'function' && text(item.recommendationRef));
+            var canFeedback = Boolean(capabilities.canSendRecommendationFeedback && api && api.recommendation
+              && typeof api.recommendation.feedback === 'function' && text(item.recommendationRef));
+            var interactive = canOpen || canInspect || canFeedback;
+            var card = d.createElement(interactive ? 'button' : 'article');
+            var poster = d.createElement('div');
+            var fallback = d.createElement('span');
+            var copy = d.createElement('div');
+            var name = d.createElement('span');
+            var subtitle = d.createElement('span');
+            var rating = d.createElement('span');
+            var image;
+            card.className = 'recommendation-card';
+            if (interactive) {
+              card.type = 'button';
+              card.setAttribute('data-focus-row', rowId);
+              if (canOpen) card.addEventListener('click', function () { openRecommendation(item); });
+              else if (canInspect) card.addEventListener('click', function () { openRecommendationInfo(item); });
+            }
+            card.setAttribute('data-recommendation-id', text(group.source || item.source || 'related') + '-'
+              + text(item.recommendationRef || item.tmdbId || index));
+            card.addEventListener('focus', function () {
+              var explanation = text(item.reason || item.overview);
+              if (text(group.source || item.source) === 'ai' && explanation) {
+                reason.textContent = '推荐理由：' + explanation;
+                show(reason, true);
+              }
+            });
+            card.addEventListener('blur', function () {
+              w.setTimeout(function () {
+                if (!section.contains(d.activeElement)) show(reason, false);
+              }, 0);
+            });
+            if (canInspect) {
+              bindLongPress(card, function () {
+                card.focus();
+                ensureFocusVisible(card);
+                openRecommendationInfo(item);
+              });
+            }
+            card.addEventListener('keydown', function (event) {
+              if ((event.key === 'Delete' || event.key === 'Backspace')
+                && canFeedback) {
+                event.preventDefault();
+                dismissRecommendation(item, card);
+              }
+            });
+            poster.className = 'recommendation-poster';
+            fallback.className = 'person-fallback';
+            fallback.textContent = text(item.name).slice(0, 1) || '影';
+            poster.appendChild(fallback);
+            image = cardImage(item.pic || item.backdrop, text(item.name) + ' 海报', 'hidden', fallback);
+            if (image) poster.appendChild(image);
+            copy.className = 'recommendation-copy';
+            name.className = 'recommendation-name';
+            name.textContent = item.name || '未命名';
+            subtitle.className = 'recommendation-subtitle';
+            subtitle.textContent = item.subtitle || (item.mediaType === 'tv' ? '剧集' : '电影');
+            rating.className = 'recommendation-rating';
+            rating.textContent = Number(item.rating) > 0 ? '★ ' + Number(item.rating).toFixed(1) : '';
+            copy.appendChild(name);
+            copy.appendChild(subtitle);
+            copy.appendChild(rating);
+            card.appendChild(poster);
+            card.appendChild(copy);
+            rail.appendChild(card);
+          });
+          section.appendChild(rail);
+          section.appendChild(reason);
+          root.appendChild(section);
+        });
+        updateRecommendationSummary();
+
+      }
+
+      function renderExternalLinks() {
+        var root = byId('externalLinks');
+        var values = array(app.data.externalLinks);
+        var capabilities = app.data.capabilities || {};
+        var api = nativeApi();
+        var canOpen = Boolean(capabilities.canOpenExternalLinks && api && api.external
+          && typeof api.external.open === 'function');
         clear(root);
         values.forEach(function (item, index) {
-          var card = d.createElement(canSearch ? 'button' : 'article');
-          var poster = d.createElement('div');
-          var fallback = d.createElement('span');
-          var copy = d.createElement('div');
-          var name = d.createElement('span');
-          var subtitle = d.createElement('span');
-          var rating = d.createElement('span');
-          var image;
-          card.className = 'recommendation-card';
-          if (canSearch) {
+          var interactive = Boolean(canOpen && text(item.linkRef));
+          var card = d.createElement(interactive ? 'button' : 'article');
+          var label = d.createElement('strong');
+          var host = d.createElement('span');
+          card.className = 'external-link';
+          if (interactive) {
             card.type = 'button';
-            card.setAttribute('data-focus-row', 'recommendations');
-            card.setAttribute('data-recommendation-id', text(item.mediaType) + '-' + text(item.tmdbId || index));
-            card.addEventListener('click', function () { searchRecommendation(item); });
+            card.setAttribute('data-focus-row', 'external-links');
+            card.addEventListener('click', function () {
+              actionFailure(api.external.open(item.linkRef), '无法打开外部链接');
+            });
           }
-          poster.className = 'recommendation-poster';
-          fallback.className = 'person-fallback';
-          fallback.textContent = text(item.name).slice(0, 1) || '影';
-          poster.appendChild(fallback);
-          image = cardImage(item.pic, text(item.name) + ' 海报', 'hidden', fallback);
-          if (image) poster.appendChild(image);
-          copy.className = 'recommendation-copy';
-          name.className = 'recommendation-name';
-          name.textContent = item.name || '未命名';
-          subtitle.className = 'recommendation-subtitle';
-          subtitle.textContent = item.subtitle || (item.mediaType === 'tv' ? '剧集' : '电影');
-          rating.className = 'recommendation-rating';
-          rating.textContent = Number(item.rating) > 0 ? '★ ' + Number(item.rating).toFixed(1) : '';
-          copy.appendChild(name);
-          copy.appendChild(subtitle);
-          copy.appendChild(rating);
-          card.appendChild(poster);
-          card.appendChild(copy);
+          card.setAttribute('data-external-id', text(item.linkRef || index));
+          label.textContent = item.label || '外部链接';
+          host.textContent = item.host || '';
+          card.appendChild(label);
+          card.appendChild(host);
           root.appendChild(card);
         });
-        setText('recommendationStatus', values.length + ' 部');
-        show(byId('recommendationSection'), values.length > 0);
+        setText('externalStatus', values.length + ' 个');
+        show(byId('externalSection'), values.length > 0);
       }
-
       function selectSource(sourceId) {
         if (app.pending) return;
         if (!w.EclipseDetailState.selectSource(app.state, sourceId)) return;
@@ -574,12 +900,59 @@
         focusByData('data-source-id', app.state.sourceId);
       }
 
+      function ensureRailItemVisible(node) {
+        var rail = node && node.parentElement;
+        var railRect;
+        var itemRect;
+        var padding = 10;
+        var delta = 0;
+        if (!rail || !rail.classList || !rail.classList.contains('horizontal-rail')) return;
+        railRect = rail.getBoundingClientRect();
+        itemRect = node.getBoundingClientRect();
+        if (itemRect.left < railRect.left + padding) delta = itemRect.left - railRect.left - padding;
+        else if (itemRect.right > railRect.right - padding) delta = itemRect.right - railRect.right + padding;
+        if (Math.abs(delta) > 0.5) rail.scrollLeft += delta;
+      }
+
+      function safeInset(name) {
+        var value = w.getComputedStyle(d.documentElement).getPropertyValue(name);
+        return Math.max(0, Number.parseFloat(value) || 0);
+      }
+
+      function ensureEpisodeContextVisible(node) {
+        var feature = byId('episodeFeature');
+        if (!node.classList || !node.classList.contains('episode') || w.innerWidth < 900
+          || !feature || feature.classList.contains('hidden')) return false;
+        w.requestAnimationFrame(function () {
+          var featureRect = feature.getBoundingClientRect();
+          var nodeRect = node.getBoundingClientRect();
+          var top = safeInset('--fm-safe-top') + 12;
+          var bottom = w.innerHeight - safeInset('--fm-safe-bottom') - 18;
+          if (nodeRect.bottom - featureRect.top <= bottom - top) {
+            w.scrollBy(0, featureRect.top - top);
+          } else {
+            try { node.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }
+            catch (ignore) { node.scrollIntoView(false); }
+          }
+          ensureRailItemVisible(node);
+        });
+        return true;
+      }
+
+      function ensureFocusVisible(node) {
+        if (!node || node === d.body) return;
+        if (ensureEpisodeContextVisible(node)) return;
+        try { node.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }
+        catch (ignore) { node.scrollIntoView(false); }
+        w.requestAnimationFrame(function () { ensureRailItemVisible(node); });
+      }
       function focusByData(attribute, value) {
         var nodes = d.querySelectorAll('[' + attribute + ']');
         var index;
         for (index = 0; index < nodes.length; index += 1) {
           if (nodes[index].getAttribute(attribute) === text(value)) {
             nodes[index].focus();
+            ensureFocusVisible(nodes[index]);
             return true;
           }
         }
@@ -607,6 +980,54 @@
 
       function selectedEpisode() {
         return w.EclipseDetailState.selectedEpisode(app.state);
+      }
+
+      function openEpisodeInfo(episode) {
+        var api = nativeApi();
+        if (!api || !api.episode || typeof api.episode.info !== 'function'
+          || !text(episode && episode.episodeRef)) return;
+        actionFailure(api.episode.info(episode.episodeRef), '无法打开选集详情');
+      }
+
+      function updateEpisodeMarquee(track) {
+        w.requestAnimationFrame(function () {
+          var viewport = track && track.parentNode;
+          if (!viewport || !track.isConnected) return;
+          track.classList.remove('overflowing');
+          track.style.removeProperty('--episode-marquee-distance');
+          track.style.removeProperty('--episode-marquee-duration');
+          var distance = Math.max(0, track.scrollWidth - viewport.clientWidth);
+          if (distance <= 2) return;
+          track.classList.add('overflowing');
+          track.style.setProperty('--episode-marquee-distance', distance + 'px');
+          track.style.setProperty('--episode-marquee-duration', Math.max(5, Math.min(13, 4 + distance / 28)) + 's');
+        });
+      }
+
+      function renderEpisodeRanges() {
+        var root = byId('episodeRanges');
+        var ranges = w.EclipseDetailState.episodeRanges(app.state);
+        clear(root);
+        ranges.forEach(function (range, index) {
+          var page = index + 1;
+          var button = d.createElement('button');
+          button.type = 'button';
+          button.className = 'episode-range' + (range.selected ? ' active' : '');
+          button.textContent = range.label;
+          button.setAttribute('role', 'tab');
+          button.setAttribute('aria-selected', range.selected ? 'true' : 'false');
+          button.setAttribute('data-focus-row', 'episode-ranges');
+          button.setAttribute('data-episode-page', text(page));
+          button.disabled = app.pending;
+          button.addEventListener('click', function () {
+            app.state.page = page;
+            renderEpisodes();
+            w.setTimeout(function () { focusByData('data-episode-page', text(page)); }, 0);
+          });
+          root.appendChild(button);
+        });
+        show(root, ranges.length > 1);
+        return ranges;
       }
 
       function renderEpisodeFeature(episode) {
@@ -641,6 +1062,10 @@
       function renderEpisodes() {
         var root = byId('episodes');
         var page = w.EclipseDetailState.visibleEpisodes(app.state);
+        var capabilities = app.data.capabilities || {};
+        var api = nativeApi();
+        var canInspect = Boolean(capabilities.canInspectEpisodes && api && api.episode
+          && typeof api.episode.info === 'function');
         clear(root);
         if (!page.items.length) {
           var empty = d.createElement('div');
@@ -652,19 +1077,28 @@
           var cell = d.createElement('div');
           var button = d.createElement('button');
           var name = d.createElement('span');
+          var nameTrack = d.createElement('span');
           var title = d.createElement('span');
+          var titleTrack = d.createElement('span');
           var selected = text(episode.episodeId) === app.state.episodeId;
+          var inspectable = canInspect && text(episode.episodeRef);
+          var nameText = episode.name || ('第 ' + text(episode.number) + ' 集');
           cell.className = 'episode-cell';
           button.type = 'button';
           button.className = 'episode' + (selected ? ' selected' : '');
           name.className = 'episode-name';
-          name.textContent = episode.name || ('第 ' + text(episode.number) + ' 集');
+          nameTrack.className = 'episode-marquee-track';
+          nameTrack.textContent = nameText;
+          name.appendChild(nameTrack);
           title.className = 'episode-title';
-          title.textContent = episode.title || '';
-          button.title = episode.title ? name.textContent + ' · ' + episode.title : name.textContent;
+          titleTrack.className = 'episode-marquee-track';
+          titleTrack.textContent = episode.title || '';
+          title.appendChild(titleTrack);
+          button.title = episode.title ? nameText + ' · ' + episode.title : nameText;
           button.setAttribute('data-focus-row', 'episodes');
           button.setAttribute('data-episode-id', text(episode.episodeId));
           button.setAttribute('aria-pressed', selected ? 'true' : 'false');
+          if (inspectable) button.setAttribute('aria-description', '长按查看本集详情');
           button.disabled = app.pending;
           button.addEventListener('focus', function () { renderEpisodeFeature(episode); });
           button.addEventListener('click', function () {
@@ -673,13 +1107,30 @@
             focusByData('data-episode-id', app.state.episodeId);
             playEpisode(episode);
           });
+          if (inspectable) {
+            bindLongPress(button, function () {
+              button.focus();
+              ensureFocusVisible(button);
+              openEpisodeInfo(episode);
+            });
+          }
           button.appendChild(name);
           if (episode.title) button.appendChild(title);
           cell.appendChild(button);
           root.appendChild(cell);
+          updateEpisodeMarquee(nameTrack);
+          if (episode.title) updateEpisodeMarquee(titleTrack);
         });
-        renderEpisodeFeature(selectedEpisode());
-        setText('episodeStatus', page.total + ' 个选集' + (app.state.truncated ? ' · 内容过长，已由宿主安全截断' : ''));
+        var selected = selectedEpisode();
+        var featured = page.items.find(function (episode) {
+          return selected && text(episode.episodeId) === text(selected.episodeId);
+        }) || page.items[0] || selected;
+        renderEpisodeFeature(featured);
+        var ranges = renderEpisodeRanges();
+        var activeRange = ranges.find(function (range) { return range.selected; });
+        setText('episodeStatus', page.total + ' 个选集'
+          + (activeRange && ranges.length > 1 ? ' · 当前 ' + activeRange.label : '')
+          + (app.state.truncated ? ' · 内容过长，已由宿主安全截断' : ''));
         byId('episodeStatus').className = app.state.truncated ? 'warning' : '';
         var media = app.data.media || {};
         var overview = [];
@@ -687,7 +1138,8 @@
         if (Number(media.episodeCount) > 0) overview.push(Number(media.episodeCount) + ' 集');
         setText('episodeOverview', overview.join(' · '));
         show(byId('pager'), page.pageCount > 1);
-        setText('pageText', page.page + ' / ' + page.pageCount);
+        setText('pageText', activeRange ? activeRange.label + ' · ' + page.page + ' / ' + page.pageCount
+          : page.page + ' / ' + page.pageCount);
         byId('prevPage').disabled = app.pending || page.page <= 1;
         byId('nextPage').disabled = app.pending || page.page >= page.pageCount;
       }
@@ -697,7 +1149,7 @@
         app.pending = pending;
         byId('playButton').disabled = pending || capabilities.canPlay === false;
         byId('favoriteButton').disabled = pending || capabilities.canFavorite === false;
-        Array.prototype.forEach.call(d.querySelectorAll('[data-source-id],[data-episode-id]'), function (node) {
+        Array.prototype.forEach.call(d.querySelectorAll('[data-source-id],[data-episode-id],[data-episode-page]'), function (node) {
           node.disabled = pending;
         });
         var page = app.state ? w.EclipseDetailState.visibleEpisodes(app.state) : { page: 1, pageCount: 1 };
@@ -789,18 +1241,52 @@
         }, 700);
       }
 
+      function focusByRow(row, rowIndex) {
+        var nodes = d.querySelectorAll('[data-focus-row]');
+        var matches = [];
+        var index;
+        var node;
+        for (index = 0; index < nodes.length; index += 1) {
+          node = nodes[index];
+          if (node.getAttribute('data-focus-row') !== text(row) || node.disabled) continue;
+          if (node.getBoundingClientRect().width > 0 && node.getBoundingClientRect().height > 0) matches.push(node);
+        }
+        if (!matches.length) return false;
+        node = matches[Math.min(Math.max(0, Number(rowIndex) || 0), matches.length - 1)];
+        node.focus();
+        ensureFocusVisible(node);
+        return true;
+      }
+
       function focusMarker() {
         var node = d.activeElement;
-        var attributes = ['data-source-id', 'data-episode-id', 'data-person-id', 'data-gallery-id', 'data-recommendation-id'];
+        var attributes = ['data-source-id', 'data-episode-id', 'data-episode-page', 'data-person-id', 'data-gallery-id', 'data-recommendation-id', 'data-external-id'];
+        var marker = {};
+        var rowNodes;
+        var row;
         var index;
+        var rowIndex = 0;
         if (!node || node === d.body) return null;
-        if (node.id) return { id: node.id };
+        if (node.id) marker.id = node.id;
         for (index = 0; index < attributes.length; index += 1) {
           if (node.hasAttribute && node.hasAttribute(attributes[index])) {
-            return { attribute: attributes[index], value: node.getAttribute(attributes[index]) };
+            marker.attribute = attributes[index];
+            marker.value = node.getAttribute(attributes[index]);
+            break;
           }
         }
-        return null;
+        row = node.getAttribute && node.getAttribute('data-focus-row');
+        if (row) {
+          rowNodes = d.querySelectorAll('[data-focus-row]');
+          for (index = 0; index < rowNodes.length; index += 1) {
+            if (rowNodes[index].getAttribute('data-focus-row') !== row) continue;
+            if (rowNodes[index] === node) break;
+            rowIndex += 1;
+          }
+          marker.row = row;
+          marker.rowIndex = rowIndex;
+        }
+        return marker.id || marker.attribute || marker.row ? marker : null;
       }
 
       function restoreFocus(marker) {
@@ -809,25 +1295,27 @@
           byId(marker.id).focus();
           return true;
         }
-        return marker.attribute ? focusByData(marker.attribute, marker.value) : false;
+        if (marker.attribute && focusByData(marker.attribute, marker.value)) return true;
+        return marker.row ? focusByRow(marker.row, marker.rowIndex) : false;
       }
 
       function render(preserveState, marker) {
         app.state = preserveState
-          ? w.EclipseDetailState.refresh(app.state, app.data, 120)
-          : w.EclipseDetailState.create(app.data, 120);
+          ? w.EclipseDetailState.refresh(app.state, app.data, EPISODE_GROUP_SIZE)
+          : w.EclipseDetailState.create(app.data, EPISODE_GROUP_SIZE);
         renderHero();
         renderPeople();
         renderLines();
         renderEpisodes();
         renderGallery();
-        renderRecommendations();
+        renderRecommendationGroups();
+        renderExternalLinks();
         setPending(false);
         clearNativeFallback();
         show(byId('loadingPanel'), false);
         show(byId('errorPanel'), false);
         show(byId('content'), true);
-        if (preserveState) w.setTimeout(function () { restoreFocus(marker); }, 20);
+        if (preserveState) w.setTimeout(function () { if (!restoreFocus(marker)) byId('playButton').focus(); }, 20);
         else if (app.info && app.info.client && app.info.client.isLeanback) w.setTimeout(function () { byId('playButton').focus(); }, 30);
       }
 
@@ -901,7 +1389,7 @@
         var best = targetIndex >= 0 ? nodes[targetIndex] : null;
         if (best) {
           best.focus();
-          try { best.scrollIntoView({ block: 'nearest', inline: 'nearest' }); } catch (ignore) { best.scrollIntoView(false); }
+          ensureFocusVisible(best);
         }
       }
 
@@ -914,6 +1402,7 @@
         byId('favoriteButton').addEventListener('click', toggleFavorite);
         byId('prevPage').addEventListener('click', function () { app.state.page -= 1; renderEpisodes(); });
         byId('nextPage').addEventListener('click', function () { app.state.page += 1; renderEpisodes(); });
+        d.addEventListener('focusin', function (event) { ensureFocusVisible(event.target); });
         d.addEventListener('keydown', function (event) {
           var direction = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down' }[event.key];
           if (direction) { event.preventDefault(); moveFocus(direction); }
@@ -935,6 +1424,7 @@
           app.paused = true;
           clearNativeFallback();
         });
+        w.addEventListener('fmviewport', function () { ensureFocusVisible(d.activeElement); });
         w.addEventListener('fmdetailchange', refreshDetail);
       }
 

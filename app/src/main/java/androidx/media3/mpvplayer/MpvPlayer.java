@@ -187,6 +187,8 @@ public final class MpvPlayer extends SimpleBasePlayer implements MPVLib.EventObs
     private long audioOffsetMs;
     private float subtitleTextSize;
     private float subtitlePosition;
+    private float videoAspectRatio;
+    private boolean stretchVideo;
     private boolean playWhenReady;
     private boolean loading;
     private boolean repeatOne;
@@ -519,6 +521,14 @@ public final class MpvPlayer extends SimpleBasePlayer implements MPVLib.EventObs
         invalidateState();
     }
 
+    public void setVideoAspect(float aspectRatio, boolean stretch) {
+        float normalized = Float.isFinite(aspectRatio) && aspectRatio > 0f ? aspectRatio : 0f;
+        if (Float.compare(videoAspectRatio, normalized) == 0 && stretchVideo == stretch) return;
+        videoAspectRatio = normalized;
+        stretchVideo = stretch;
+        applyVideoAspect();
+    }
+
     public String getAudioSpdifCodecs() {
         return config.audioSpdif();
     }
@@ -693,6 +703,7 @@ public final class MpvPlayer extends SimpleBasePlayer implements MPVLib.EventObs
             applyTextOffset();
             applyAudioOffset();
             applySubtitleStyle();
+            applyVideoAspect();
             currentPlayableUri = playableUri(mediaItem);
             logSourceDiagnostics(mediaItem, currentPlayableUri, headers);
             boolean declaredIso = isLikelyIso(mediaItem, currentPlayableUri);
@@ -780,6 +791,7 @@ public final class MpvPlayer extends SimpleBasePlayer implements MPVLib.EventObs
             MPVLib.addObserver(this);
             MPVLib.addLogObserver(this);
             applyPostInitOptions();
+            applyVideoAspect();
             applyShaderPipeline(true);
             observeProperties();
         }
@@ -1186,6 +1198,7 @@ public final class MpvPlayer extends SimpleBasePlayer implements MPVLib.EventObs
                 loading = true;
                 cachedDurationMs = durationMs();
                 updateVideoSize("event=file-loaded");
+                applyVideoAspect();
                 refreshTracks();
                 refreshChapters();
                 if (shouldCollectDebugDetails()) PlaybackTrace.log("mpv", playbackTraceId, "event=file-loaded duration=%d size=%dx%d path=%s", cachedDurationMs, videoSize.width, videoSize.height, MpvDiagnosticsPolicy.sourceSummary(firstNonEmpty(stringProperty("path", ""), currentPlayableUri)));
@@ -3058,6 +3071,12 @@ public final class MpvPlayer extends SimpleBasePlayer implements MPVLib.EventObs
 
     private void applyAudioOffset() {
         if (initialized) safeSetPropertyDouble("audio-delay", audioOffsetMs / SECONDS_TO_MS);
+    }
+
+    private void applyVideoAspect() {
+        if (!initialized) return;
+        safeSetPropertyString("video-aspect-override", videoAspectRatio > 0f && !stretchVideo ? String.format(Locale.US, "%.6f", videoAspectRatio) : "no");
+        safeSetPropertyString("keepaspect", stretchVideo ? "no" : "yes");
     }
 
     private void applySubtitleStyle() {

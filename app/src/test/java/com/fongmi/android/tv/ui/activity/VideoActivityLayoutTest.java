@@ -24,6 +24,7 @@ public class VideoActivityLayoutTest {
 
     private static final List<String> REQUIRED_EPISODE_IDS = Arrays.asList(
             "episodeTitleBar",
+            "episodeTitle",
             "episodeViewMode"
     );
     private static final List<String> REQUIRED_TMDB_MOVABLE_IDS = Arrays.asList(
@@ -2514,7 +2515,7 @@ public class VideoActivityLayoutTest {
             assertTrue(sourcePath + " must preserve progress when a history source refresh changes only the episode URL",
                     selection.contains("historyEpisode.matchesPlayback(mHistory.getEpisode())"));
             assertTrue(sourcePath + " must use the same tolerant episode identity when playback updates history",
-                    update.contains("item.matchesPlayback(mHistory.getEpisode())"));
+                    update.contains("historyEpisode.matchesPlayback(mHistory.getEpisode())"));
             if (source.contains("private void updateFastTmdbPlaybackHistory(Flag flag, Episode episode)")) {
                 String fast = methodBody(source, "private void updateFastTmdbPlaybackHistory(Flag flag, Episode episode)", "private void resetDetailForNewIntent()");
                 assertTrue(sourcePath + " fast TMDB playback must honor the aggregation progress-sharing switch",

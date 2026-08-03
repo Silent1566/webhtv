@@ -34,7 +34,6 @@ public class LiveControlDialog extends BaseBottomSheetDialog {
     private final String[] scale;
     private DialogLiveControlBinding binding;
     private ActivityLiveBinding parent;
-    private List<TextView> scales;
     private List<TextView> displays;
 
     public LiveControlDialog() {
@@ -73,7 +72,6 @@ public class LiveControlDialog extends BaseBottomSheetDialog {
     @Override
     protected ViewBinding getBinding(@NonNull LayoutInflater inflater, @Nullable ViewGroup container) {
         binding = DialogLiveControlBinding.inflate(inflater, container, false);
-        scales = Arrays.asList(binding.scale0, binding.scale1, binding.scale2, binding.scale3, binding.scale4);
         displays = Arrays.asList(binding.displayTime, binding.displayTraffic, binding.displaySize, binding.displayTitle, binding.displayParams);
         return binding;
     }
@@ -124,7 +122,7 @@ public class LiveControlDialog extends BaseBottomSheetDialog {
         binding.text.setOnClickListener(v -> onTrack(binding.text));
         binding.audio.setOnClickListener(v -> onTrack(binding.audio));
         binding.video.setOnClickListener(v -> onTrack(binding.video));
-        for (TextView view : scales) view.setOnClickListener(this::setScale);
+        binding.scale.setOnClickListener(view -> VideoAspectModeDialog.show(requireActivity(), LiveSetting.getScale(), this::setScale));
         for (int i = 0; i < displays.size(); i++) {
             int index = i;
             displays.get(i).setOnClickListener(v -> toggleDisplaySetting(index));
@@ -149,10 +147,8 @@ public class LiveControlDialog extends BaseBottomSheetDialog {
     }
 
     private void setScaleText() {
-        for (int i = 0; i < scales.size() && i < scale.length; i++) {
-            scales.get(i).setText(scale[i]);
-            scales.get(i).setSelected(i == LiveSetting.getScale());
-        }
+        binding.scale.setText(scale[LiveSetting.getScale()]);
+        binding.scale.setSelected(false);
     }
 
     private void setListStyleSelected() {
@@ -187,10 +183,9 @@ public class LiveControlDialog extends BaseBottomSheetDialog {
         setTrackVisible();
     }
 
-    private void setScale(View view) {
-        for (TextView textView : scales) textView.setSelected(false);
-        listener().onLiveScalePanel(Integer.parseInt(view.getTag().toString()));
-        view.setSelected(true);
+    private void setScale(int mode) {
+        listener().onLiveScalePanel(mode);
+        setScaleText();
     }
 
     private void active(TextView view, TextView target) {

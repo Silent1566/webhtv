@@ -3,6 +3,7 @@ package com.fongmi.android.tv.ui.activity;
 import android.app.Activity;
 import android.content.Intent;
 import android.os.Bundle;
+import android.view.KeyEvent;
 import android.view.View;
 
 import androidx.viewbinding.ViewBinding;
@@ -32,6 +33,7 @@ public class WebThemeDetailActivity extends BaseActivity implements HomeWebContr
     private static final String EXTRA_PIC = "pic";
     private static final String EXTRA_REMARKS = "remarks";
     private static final String EXTRA_CONTENT = "content";
+    private static final long CONFIRM_LONG_PRESS_MS = 550;
 
     private ActivityWebThemeDetailBinding mBinding;
     private HomeWebController controller;
@@ -44,6 +46,9 @@ public class WebThemeDetailActivity extends BaseActivity implements HomeWebContr
     private String remarks;
     private String content;
     private boolean fallbackStarted;
+    private boolean confirmKeyDown;
+    private boolean confirmLongPress;
+    private final Runnable confirmLongPressRunnable = this::triggerFocusedLongPress;
 
     public static void start(Activity activity, String manifestUrl, String siteKey, String vodId,
             String title, String pic, String remarks) {
@@ -89,6 +94,7 @@ public class WebThemeDetailActivity extends BaseActivity implements HomeWebContr
             return;
         }
         tmdbAdapter = new TmdbUIAdapter(this);
+        tmdbAdapter.setPersonalAiUpdateListener(this::publishTmdbMetadata);
         controller = new HomeWebController(this, mBinding.web, this);
         controller.setViewport(getViewport());
         boolean accepted;
@@ -132,15 +138,22 @@ public class WebThemeDetailActivity extends BaseActivity implements HomeWebContr
         if (event == null || controller == null || tmdbAdapter == null || event.getVod() != tmdbVod) return;
         RefreshEvent.Type type = event.getType();
         if (type != RefreshEvent.Type.VOD_CORE && type != RefreshEvent.Type.VOD_RECOMMENDATIONS
-                && type != RefreshEvent.Type.VOD_EPISODE_TITLES) return;
-        Vod vod = event.getVod();
+                && type != RefreshEvent.Type.VOD_PERSONAL && type != RefreshEvent.Type.VOD_EPISODE_TITLES) return;
+        publishTmdbMetadata();
+    }
+
+    private void publishTmdbMetadata() {
+        if (controller == null || tmdbAdapter == null || tmdbVod == null || isFinishing() || isDestroyed()) return;
         controller.setDetailMetadata(WebThemeDetailMetadata.fromTmdb(
                 tmdbAdapter.getTmdbItem(),
                 tmdbAdapter.getTmdbDetail(),
                 tmdbAdapter.getCast(),
                 tmdbAdapter.getCreators(),
                 tmdbAdapter.getPhotos(),
-                tmdbAdapter.getRecommendations()));
+                tmdbAdapter.getRecommendations(),
+                tmdbAdapter.getPersonalTmdbRecommendations(),
+                tmdbAdapter.getPersonalDoubanRecommendations(),
+                tmdbAdapter.getPersonalAiRecommendations()));
         controller.dispatchDetailChanged();
     }
 
@@ -149,6 +162,46 @@ public class WebThemeDetailActivity extends BaseActivity implements HomeWebContr
         fallbackStarted = true;
         TmdbDetailActivity.start(this, site.getKey(), vodId, title, pic, remarks);
         finish();
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        if (event == null || !isConfirmKey(event.getKeyCode())) return super.dispatchKeyEvent(event);
+        if (event.getAction() == KeyEvent.ACTION_DOWN) {
+            if (!confirmKeyDown) {
+                confirmKeyDown = true;
+                confirmLongPress = false;
+                mBinding.web.postDelayed(confirmLongPressRunnable, CONFIRM_LONG_PRESS_MS);
+            }
+            if (event.isLongPress() || event.getRepeatCount() > 0) triggerFocusedLongPress();
+            return true;
+        }
+        if (event.getAction() == KeyEvent.ACTION_UP) {
+            mBinding.web.removeCallbacks(confirmLongPressRunnable);
+            boolean click = confirmKeyDown && !confirmLongPress && !event.isCanceled();
+            confirmKeyDown = false;
+            confirmLongPress = false;
+            if (click && controller != null) controller.dispatchFocusedClick();
+            return true;
+        }
+        return true;
+    }
+
+    private void triggerFocusedLongPress() {
+        if (!confirmKeyDown || confirmLongPress || controller == null) return;
+        mBinding.web.removeCallbacks(confirmLongPressRunnable);
+        confirmLongPress = controller.dispatchFocusedLongPress();
+    }
+
+    private void cancelConfirmKey() {
+        if (mBinding != null) mBinding.web.removeCallbacks(confirmLongPressRunnable);
+        confirmKeyDown = false;
+        confirmLongPress = false;
+    }
+
+    private static boolean isConfirmKey(int keyCode) {
+        return keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER
+                || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER || keyCode == KeyEvent.KEYCODE_BUTTON_A;
     }
 
     @Override
@@ -167,6 +220,7 @@ public class WebThemeDetailActivity extends BaseActivity implements HomeWebContr
 
     @Override
     protected void onPause() {
+        cancelConfirmKey();
         if (controller != null) controller.onPause();
         super.onPause();
     }

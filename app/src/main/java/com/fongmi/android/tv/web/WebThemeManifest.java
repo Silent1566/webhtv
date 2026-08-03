@@ -16,7 +16,7 @@ import java.util.Set;
 public final class WebThemeManifest {
 
     public static final int SCHEMA_VERSION = 2;
-    public static final int HOST_API_VERSION = 2;
+    public static final int HOST_API_VERSION = 3;
     public static final int MAX_MANIFEST_BYTES = 128 * 1024;
 
     private static final int MAX_ID_LENGTH = 96;

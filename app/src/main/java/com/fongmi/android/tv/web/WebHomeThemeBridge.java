@@ -1,22 +1,37 @@
 package com.fongmi.android.tv.web;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.content.res.Configuration;
+import android.net.Uri;
 import android.text.TextUtils;
 
+import androidx.fragment.app.FragmentActivity;
+
 import com.fongmi.android.tv.App;
+import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.api.SiteApi;
 import com.fongmi.android.tv.api.config.VodConfig;
+import com.fongmi.android.tv.bean.Episode;
 import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.bean.Keep;
 import com.fongmi.android.tv.bean.Result;
 import com.fongmi.android.tv.bean.Site;
+import com.fongmi.android.tv.bean.TmdbItem;
+import com.fongmi.android.tv.bean.TmdbPerson;
 import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.db.AppDatabase;
+import com.fongmi.android.tv.service.RecommendationFeedbackStore;
 import com.fongmi.android.tv.ui.activity.SearchActivity;
 import com.fongmi.android.tv.ui.activity.TmdbDetailActivity;
+import com.fongmi.android.tv.ui.activity.TmdbPersonActivity;
 import com.fongmi.android.tv.ui.activity.VideoActivity;
 import com.fongmi.android.tv.ui.activity.WebThemeDetailActivity;
+import com.fongmi.android.tv.ui.dialog.AiRecommendationInfoDialog;
+import com.fongmi.android.tv.ui.dialog.EpisodeDetailDialog;
+import com.fongmi.android.tv.ui.dialog.WebThemeImageViewer;
+import com.fongmi.android.tv.ui.helper.TmdbNavigation;
+import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.Util;
 import com.github.catvod.utils.Json;
 import com.google.gson.JsonElement;
@@ -45,7 +60,7 @@ final class WebHomeThemeBridge {
         requireActive(active);
         CallContext context = new CallContext(controller.getThemeTarget(), controller.getContentSite(),
                 controller.getThemeRoute(), controller.getDetailVod(), controller.getDetailMetadata(),
-                controller.getPlaySession(), controller.getAccessSession());
+                controller.getPlaySession(), controller.getAccessSession(), controller.getDetailActionSession());
         requireActive(active);
         WebHomeTarget themeTarget = context.target;
         boolean allowed = themeTarget != null && themeTarget.isV2()
@@ -64,6 +79,14 @@ final class WebHomeThemeBridge {
             case "player.playVod" -> playVod(safe, context, active);
             case "navigation.openDetail" -> openDetail(safe, context, active);
             case "navigation.openNativeDetail" -> openNativeDetail(safe, context, active);
+            case "person.open" -> openPerson(safe, context, active);
+            case "image.preview" -> previewImage(safe, context, active);
+            case "image.save" -> saveImage(safe, context, active);
+            case "recommendation.open" -> openRecommendation(safe, context, active);
+            case "recommendation.info" -> recommendationInfo(safe, context, active);
+            case "recommendation.feedback" -> recommendationFeedback(safe, context, active);
+            case "external.open" -> openExternal(safe, context, active);
+            case "episode.info" -> episodeInfo(safe, context, active);
             case "app.search" -> search(safe, active);
             case "app.openVod" -> openVod(active);
             case "app.openSetting" -> openSetting(active);
@@ -174,7 +197,8 @@ final class WebHomeThemeBridge {
         WebThemePlaySession playSession = loaded ? new WebThemePlaySession() : context.playSession;
         JsonObject response = WebHomeVodContract.detail(site, vod, playSession, keep != null, history,
                 canReadFavorite, canReadHistory, permissions.contains("favorite.write"),
-                permissions.contains("player.playVod"), permissions.contains("app.search"), context.detailMetadata);
+                permissions.contains("player.playVod"), permissions.contains("app.search"), context.detailMetadata,
+                context.detailActionSession, permissions);
         if (context.isV2()) context.accessSession.protectDetail(response);
         String result = response.toString();
         if (loaded) {
@@ -290,6 +314,116 @@ final class WebHomeThemeBridge {
         return object.toString();
     }
 
+    private String openPerson(JsonObject payload, CallContext context, BooleanSupplier active) {
+        activeDetailRoute(payload, context);
+        Site site = activeSite(payload, context);
+        TmdbPerson person = context.detailActionSession.resolvePerson(requiredRef(payload, "personRef"));
+        if (person == null) throw new IllegalArgumentException("Unknown person reference");
+        postIfActive(active, () -> TmdbPersonActivity.start(activity, person, site.getKey()));
+        return acceptedJson();
+    }
+
+    private String previewImage(JsonObject payload, CallContext context, BooleanSupplier active) {
+        activeDetailRoute(payload, context);
+        WebThemeDetailActionSession.ImageSelection image = context.detailActionSession
+                .resolveImage(requiredRef(payload, "imageRef"));
+        if (image == null) throw new IllegalArgumentException("Unknown image reference");
+        postIfActive(active, () -> WebThemeImageViewer.show(activity, image.gallery(), image.index()));
+        return acceptedJson();
+    }
+
+    private String saveImage(JsonObject payload, CallContext context, BooleanSupplier active) {
+        activeDetailRoute(payload, context);
+        WebThemeDetailActionSession.ImageSelection image = context.detailActionSession
+                .resolveImage(requiredRef(payload, "imageRef"));
+        if (image == null) throw new IllegalArgumentException("Unknown image reference");
+        postIfActive(active, () -> WebThemeImageViewer.save(activity, image.url()));
+        return acceptedJson();
+    }
+
+    private String openRecommendation(JsonObject payload, CallContext context, BooleanSupplier active) {
+        activeDetailRoute(payload, context);
+        Site site = activeSite(payload, context);
+        WebThemeDetailActionSession.Recommendation recommendation = context.detailActionSession
+                .resolveRecommendation(requiredRef(payload, "recommendationRef"));
+        if (recommendation == null) throw new IllegalArgumentException("Unknown recommendation reference");
+        WebHomeTarget target = context.target;
+        String manifestUrl = target.getManifest().getManifestUrl();
+        postIfActive(active, () -> TmdbNavigation.open(activity, recommendation.item(), site, (matchedSite, match) -> {
+            if (!active.getAsBoolean()) return;
+            WebThemeDetailActivity.start(activity, manifestUrl, matchedSite.getKey(), match.getId(), match.getName(),
+                    match.getPic(), match.getRemarks(), match.getContent());
+        }, null, active));
+        return acceptedJson();
+    }
+
+    private String recommendationInfo(JsonObject payload, CallContext context, BooleanSupplier active) {
+        activeDetailRoute(payload, context);
+        String ref = requiredRef(payload, "recommendationRef");
+        WebThemeDetailActionSession.Recommendation recommendation = context.detailActionSession
+                .resolveRecommendation(ref);
+        if (recommendation == null) throw new IllegalArgumentException("Unknown recommendation reference");
+        postIfActive(active, () -> AiRecommendationInfoDialog.show(activity, recommendation.item(),
+                recommendation.source(), ignored -> {
+                    if (!active.getAsBoolean()) return;
+                    context.detailActionSession.markNotInterested(ref);
+                    controller.dispatchDetailChanged();
+                }, active));
+        return acceptedJson();
+    }
+
+    private String recommendationFeedback(JsonObject payload, CallContext context, BooleanSupplier active) {
+        activeDetailRoute(payload, context);
+        String action = limited(Json.safeString(payload, "action"), 32);
+        if (!"notInterested".equals(action)) throw new IllegalArgumentException("Unsupported feedback action");
+        String ref = requiredRef(payload, "recommendationRef");
+        WebThemeDetailActionSession.Recommendation recommendation = context.detailActionSession
+                .resolveRecommendation(ref);
+        if (recommendation == null) throw new IllegalArgumentException("Unknown recommendation reference");
+        postIfActive(active, () -> {
+            if (context.detailActionSession.markNotInterested(ref) == null) return;
+            RecommendationFeedbackStore.add(recommendation.item(), recommendation.source());
+            controller.dispatchDetailChanged();
+        });
+        return acceptedJson();
+    }
+
+    private String openExternal(JsonObject payload, CallContext context, BooleanSupplier active) {
+        activeDetailRoute(payload, context);
+        WebThemeDetailActionSession.ExternalLink link = context.detailActionSession
+                .resolveExternal(requiredRef(payload, "linkRef"));
+        if (link == null) throw new IllegalArgumentException("Unknown external link reference");
+        postIfActive(active, () -> {
+            try {
+                activity.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(link.url())));
+            } catch (RuntimeException ignored) {
+                Notify.show(R.string.detail_external_open_failed);
+            }
+        });
+        return acceptedJson();
+    }
+
+    private String episodeInfo(JsonObject payload, CallContext context, BooleanSupplier active) {
+        activeDetailRoute(payload, context);
+        Episode episode = context.detailActionSession.resolveEpisode(requiredRef(payload, "episodeRef"));
+        if (episode == null) throw new IllegalArgumentException("Unknown episode reference");
+        if (!(activity instanceof FragmentActivity host)) {
+            throw new IllegalStateException("Episode detail is unavailable");
+        }
+        postIfActive(active, () -> EpisodeDetailDialog.show(host, episode));
+        return acceptedJson();
+    }
+
+    private static String requiredRef(JsonObject payload, String key) {
+        String ref = limited(Json.safeString(payload, key), 128);
+        if (TextUtils.isEmpty(ref)) throw new IllegalArgumentException(key + " is required");
+        return ref;
+    }
+
+    private static String acceptedJson() {
+        return "{\"accepted\":true}";
+    }
+
     private String search(JsonObject payload, BooleanSupplier active) {
         String keyword = limited(Json.safeString(payload, "keyword"), 256);
         if (TextUtils.isEmpty(keyword)) throw new IllegalArgumentException("keyword is required");
@@ -362,10 +496,11 @@ final class WebHomeThemeBridge {
         private final WebThemeDetailMetadata detailMetadata;
         private final WebThemePlaySession playSession;
         private final WebThemeAccessSession accessSession;
+        private final WebThemeDetailActionSession detailActionSession;
 
         private CallContext(WebHomeTarget target, Site site, WebThemeRoute route, Vod detailVod,
                 WebThemeDetailMetadata detailMetadata, WebThemePlaySession playSession,
-                WebThemeAccessSession accessSession) {
+                WebThemeAccessSession accessSession, WebThemeDetailActionSession detailActionSession) {
             this.target = target;
             this.site = site;
             this.route = route == null ? WebThemeRoute.EMPTY : route;
@@ -373,6 +508,8 @@ final class WebHomeThemeBridge {
             this.detailMetadata = detailMetadata == null ? WebThemeDetailMetadata.EMPTY : detailMetadata;
             this.playSession = playSession == null ? new WebThemePlaySession() : playSession;
             this.accessSession = accessSession == null ? new WebThemeAccessSession() : accessSession;
+            this.detailActionSession = detailActionSession == null
+                    ? new WebThemeDetailActionSession() : detailActionSession;
         }
 
         private boolean isV2() {

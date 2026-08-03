@@ -28,6 +28,7 @@ import androidx.media3.ui.PlayerView;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.bean.Result;
 import com.fongmi.android.tv.player.PlayerManager;
+import com.fongmi.android.tv.player.VideoAspectMode;
 import com.fongmi.android.tv.player.engine.PlaySpec;
 import com.fongmi.android.tv.player.exo.ExoUtil;
 import com.fongmi.android.tv.service.PlaybackService;
@@ -35,10 +36,13 @@ import com.fongmi.android.tv.setting.PlaybackPerformanceSetting;
 import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.subtitle.RealtimeSubtitleController;
 import com.fongmi.android.tv.ui.base.BaseActivity;
+import com.fongmi.android.tv.ui.dialog.VideoAspectModeDialog;
 import com.fongmi.android.tv.ui.custom.CustomSeekView;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.github.catvod.crawler.SpiderDebug;
 import com.google.common.util.concurrent.ListenableFuture;
+
+import java.util.function.IntConsumer;
 
 public abstract class PlaybackActivity extends BaseActivity implements MediaController.Listener, Player.Listener, ServiceConnection {
 
@@ -55,7 +59,7 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
     private boolean stop;
     private boolean lock;
     private int render = -1;
-    private int requestedResizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT;
+    private int requestedAspectMode = VideoAspectMode.ORIGINAL;
 
     protected MediaController controller() {
         return mController;
@@ -232,16 +236,53 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
     protected void onSeekStarted() {
     }
 
+    protected void showResizeModeDialog(int currentMode, IntConsumer action) {
+        if (action == null) return;
+        VideoAspectModeDialog.show(this, currentMode, action);
+    }
+
     protected void applyResizeMode(int resizeMode) {
-        requestedResizeMode = resizeMode;
-        int effectiveResizeMode = effectiveResizeMode(resizeMode);
-        logSurfaceState("applyResizeMode before mode=" + resizeMode + " effective=" + effectiveResizeMode);
+        int mode = VideoAspectMode.sanitize(resizeMode);
+        requestedAspectMode = mode;
+        applyResizeModeNow(mode);
         PlayerView view = getExoView();
+        view.post(() -> {
+            if (requestedAspectMode == mode && !isFinishing() && !isDestroyed()) applyResizeModeNow(mode);
+        });
+    }
+
+    private void applyResizeModeNow(int resizeMode) {
+        PlayerView view = getExoView();
+        VideoAspectMode.Spec spec = VideoAspectMode.resolve(resizeMode, viewportAspectRatio(view), PlayerSetting.getCustomAspectRatio());
+        int effectiveResizeMode = effectiveResizeMode(spec.resizeMode());
+        logSurfaceState("applyResizeMode before mode=" + resizeMode + " effective=" + effectiveResizeMode + " aspect=" + spec.targetAspectRatio());
+        if (mService != null) player().setVideoAspect(spec.targetAspectRatio(), spec.stretch());
         view.setResizeMode(effectiveResizeMode);
+        AspectRatioFrameLayout content = view.findViewById(androidx.media3.ui.R.id.exo_content_frame);
+        float contentAspectRatio = spec.hasTargetAspectRatio() ? spec.targetAspectRatio() : sourceAspectRatio();
+        if (!VideoAspectMode.isValidRatio(contentAspectRatio)) contentAspectRatio = 0f;
+        if (content != null) content.setAspectRatio(contentAspectRatio);
         view.requestLayout();
         View surface = view.getVideoSurfaceView();
         if (surface != null) surface.requestLayout();
-        logSurfaceState("applyResizeMode after mode=" + resizeMode + " effective=" + effectiveResizeMode);
+        logSurfaceState("applyResizeMode after mode=" + resizeMode + " effective=" + effectiveResizeMode + " aspect=" + contentAspectRatio);
+    }
+
+    private float viewportAspectRatio(PlayerView view) {
+        View container = view.getParent() instanceof View parent ? parent : view;
+        int width = container.getWidth();
+        int height = container.getHeight();
+        if (width <= 0 || height <= 0) {
+            width = getResources().getDisplayMetrics().widthPixels;
+            height = getResources().getDisplayMetrics().heightPixels;
+        }
+        return width > 0 && height > 0 ? (float) width / height : 0f;
+    }
+
+    private float sourceAspectRatio() {
+        if (mService == null || player() == null || player().getPlayer() == null) return 0f;
+        VideoSize size = player().getPlayer().getVideoSize();
+        return size.width > 0 && size.height > 0 ? size.width * size.pixelWidthHeightRatio / size.height : 0f;
     }
 
     private int effectiveResizeMode(int resizeMode) {
@@ -644,7 +685,7 @@ getSeekView().setSeekListener(this::onSeekStarted);
             if (isOwner()) {
                 if (resetVideoSurface) resetVideoSurfaceForDecoderSwitch();
                 setRender();
-                applyResizeMode(requestedResizeMode);
+                applyResizeMode(requestedAspectMode);
                 PlaybackActivity.this.onPlayerRebuilt();
             }
         }

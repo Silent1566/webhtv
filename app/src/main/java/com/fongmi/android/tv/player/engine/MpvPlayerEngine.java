@@ -200,6 +200,11 @@ public class MpvPlayerEngine implements PlayerEngine {
     }
 
     @Override
+    public void setVideoAspect(float aspectRatio, boolean stretch) {
+        player.setVideoAspect(aspectRatio, stretch);
+    }
+
+    @Override
     public boolean supportsNativeLut() {
         return !surfaceDirect;
     }

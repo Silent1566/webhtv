@@ -101,6 +101,7 @@ public class HomeWebController {
     private final RemoteActionGate remoteActionGate;
     private volatile WebThemePlaySession playSession;
     private volatile WebThemeAccessSession accessSession;
+    private volatile WebThemeDetailActionSession detailActionSession;
     private final Runnable extensionReloadRunnable;
     private final boolean debugTools;
     private WebView webView;
@@ -156,6 +157,7 @@ public class HomeWebController {
         this.remoteActionGate = new RemoteActionGate(REMOTE_ACTION_INTERVAL_MS);
         this.playSession = new WebThemePlaySession();
         this.accessSession = new WebThemeAccessSession();
+        this.detailActionSession = new WebThemeDetailActionSession();
         this.extensionReloadRunnable = this::consumeExtensionReload;
         active = this;
         init();
@@ -398,6 +400,10 @@ public class HomeWebController {
 
     WebThemeAccessSession getAccessSession() {
         return accessSession;
+    }
+
+    WebThemeDetailActionSession getDetailActionSession() {
+        return detailActionSession;
     }
 
     Vod getDetailVod() {
@@ -673,6 +679,47 @@ public class HomeWebController {
 
     public boolean isVisible() {
         return webView.getVisibility() == View.VISIBLE;
+    }
+
+    public boolean dispatchFocusedClick() {
+        WebView current = webView;
+        if (destroyed || paused || !bridgeReady || current == null || !isVisible()) return false;
+        current.evaluateJavascript("""
+                (function() {
+                  var node=document.activeElement;
+                  if(!node||node===document.body||node===document.documentElement)return false;
+                  if(typeof node.click==='function'){
+                    node.click();
+                    return true;
+                  }
+                  var event=new MouseEvent('click',{bubbles:true,cancelable:true,view:window,button:0});
+                  node.dispatchEvent(event);
+                  return true;
+                })();
+                """, null);
+        return true;
+    }
+
+    public boolean dispatchFocusedLongPress() {
+        WebView current = webView;
+        if (destroyed || paused || !bridgeReady || current == null || !isVisible()) return false;
+        current.evaluateJavascript("""
+                (function() {
+                  var node=document.activeElement;
+                  if(!node||node===document.body||node===document.documentElement)return false;
+                  try{
+                    var event=new MouseEvent('contextmenu',{bubbles:true,cancelable:true,view:window,button:2});
+                    node.dispatchEvent(event);
+                    return event.defaultPrevented;
+                  }catch(error){
+                    var fallback=document.createEvent('Event');
+                    fallback.initEvent('contextmenu',true,true);
+                    node.dispatchEvent(fallback);
+                    return fallback.defaultPrevented;
+                  }
+                })();
+                """, null);
+        return true;
     }
 
     public boolean handleBack() {
@@ -1060,7 +1107,9 @@ public class HomeWebController {
             return switch (method == null ? "" : method) {
                 case "favorite.set", "player.playVod", "navigation.openDetail",
                         "navigation.openNativeDetail", "app.search", "app.openVod",
-                        "app.openSetting", "navigation.back", "navigation.reload" -> true;
+                        "app.openSetting", "person.open", "image.preview", "image.save",
+                        "recommendation.open", "recommendation.info", "recommendation.feedback",
+                        "external.open", "episode.info", "navigation.back", "navigation.reload" -> true;
                 default -> false;
             };
         }
@@ -1349,6 +1398,7 @@ public class HomeWebController {
     private void resetThemeSessions() {
         playSession = new WebThemePlaySession();
         accessSession = new WebThemeAccessSession();
+        detailActionSession = new WebThemeDetailActionSession();
     }
 
     static String safeLogUrl(Object value) {
@@ -1429,12 +1479,17 @@ public class HomeWebController {
                     vod:{home:function(options){return invoke('vod.home',options);},category:function(typeId,page,options){return invoke('vod.category',Object.assign({},options||{},{typeId:typeId,page:page||1}));},detail:function(options){return invoke('vod.detail',options||{});}},
                     favorite:{status:function(options){return invoke('favorite.status',options||{});},set:function(favorite,options){return invoke('favorite.set',Object.assign({},options||{},{favorite:favorite}));}},
                     history:{item:function(options){return invoke('history.item',options||{});}},
+                    person:{open:function(personRef){return invoke('person.open',{personRef:personRef});}},
+                    image:{preview:function(imageRef){return invoke('image.preview',{imageRef:imageRef});},save:function(imageRef){return invoke('image.save',{imageRef:imageRef});}},
+                    recommendation:{open:function(recommendationRef){return invoke('recommendation.open',{recommendationRef:recommendationRef});},info:function(recommendationRef){return invoke('recommendation.info',{recommendationRef:recommendationRef});},feedback:function(recommendationRef,action){return invoke('recommendation.feedback',{recommendationRef:recommendationRef,action:action});}},
+                    external:{open:function(linkRef){return invoke('external.open',{linkRef:linkRef});}},
+                    episode:{info:function(episodeRef){return invoke('episode.info',{episodeRef:episodeRef});}},
                     app:{search:function(keyword,options){return invoke('app.search',Object.assign({},options||{},{keyword:keyword}));},openVod:function(){return invoke('app.openVod',{});},openSetting:function(){return invoke('app.openSetting',{});}},
                     player:{playVod:function(siteKey,vodId,title,pic,options){return invoke('player.playVod',Object.assign({},options||{},{siteKey:siteKey,vodId:vodId,title:title,pic:pic}));}},
                     ui:{getViewport:function(){return invoke('ui.getViewport',{});}},
                     navigation:{back:function(){return invoke('navigation.back',{});},reload:function(){return invoke('navigation.reload',{});},openDetail:function(options){return invoke('navigation.openDetail',options||{});},openNativeDetail:function(options){return invoke('navigation.openNativeDetail',options||{});}}
                   };
-                  window.fm={vodHome:window.fongmi.vod.home,vodCategory:window.fongmi.vod.category,vodDetail:window.fongmi.vod.detail,vod:window.fongmi.player.playVod,themeInfo:window.fongmi.theme.info,openDetail:window.fongmi.navigation.openDetail,openNativeDetail:window.fongmi.navigation.openNativeDetail,favoriteStatus:window.fongmi.favorite.status,favoriteSet:window.fongmi.favorite.set,detailHistory:window.fongmi.history.item,back:window.fongmi.navigation.back,reload:window.fongmi.navigation.reload,search:window.fongmi.app.search,openVod:window.fongmi.app.openVod,openSetting:window.fongmi.app.openSetting};
+                  window.fm={vodHome:window.fongmi.vod.home,vodCategory:window.fongmi.vod.category,vodDetail:window.fongmi.vod.detail,vod:window.fongmi.player.playVod,themeInfo:window.fongmi.theme.info,openDetail:window.fongmi.navigation.openDetail,openNativeDetail:window.fongmi.navigation.openNativeDetail,favoriteStatus:window.fongmi.favorite.status,favoriteSet:window.fongmi.favorite.set,detailHistory:window.fongmi.history.item,person:window.fongmi.person,image:window.fongmi.image,recommendation:window.fongmi.recommendation,external:window.fongmi.external,episode:window.fongmi.episode,back:window.fongmi.navigation.back,reload:window.fongmi.navigation.reload,search:window.fongmi.app.search,openVod:window.fongmi.app.openVod,openSetting:window.fongmi.app.openSetting};
                   window.dispatchEvent(new CustomEvent('fmsdk'));
                 })();
                 """.formatted(session);
@@ -1610,6 +1665,18 @@ public class HomeWebController {
                     set:(value,options)=>invoke('favorite.set',Object.assign({},options||{},{favorite:value}))
                   };
                   const detailHistory={item:(options)=>invoke('history.item',options||{})};
+                  const person={open:(personRef)=>invoke('person.open',{personRef})};
+                  const image={
+                    preview:(imageRef)=>invoke('image.preview',{imageRef}),
+                    save:(imageRef)=>invoke('image.save',{imageRef})
+                  };
+                  const recommendation={
+                    open:(recommendationRef)=>invoke('recommendation.open',{recommendationRef}),
+                    info:(recommendationRef)=>invoke('recommendation.info',{recommendationRef}),
+                    feedback:(recommendationRef,action)=>invoke('recommendation.feedback',{recommendationRef,action})
+                  };
+                  const external={open:(linkRef)=>invoke('external.open',{linkRef})};
+                  const episode={info:(episodeRef)=>invoke('episode.info',{episodeRef})};
                   const cache={
                     get:(key,rule)=>invoke('cache.get',{key,rule}),
                     set:(key,value,rule)=>invoke('cache.set',{key,value,rule}),
@@ -1634,6 +1701,11 @@ public class HomeWebController {
                     theme:{info:()=>invoke('theme.info',{})},
                     favorite,
                     history:detailHistory,
+                    person,
+                    image,
+                    recommendation,
+                    external,
+                    episode,
                     app:{
                       search:(keyword,options)=>invoke('app.search',Object.assign({},options||{},{keyword})),
                       openVod:()=>invoke('app.openVod',{}),
@@ -1679,6 +1751,11 @@ public class HomeWebController {
                     favoriteStatus:favorite.status,
                     favoriteSet:favorite.set,
                     detailHistory:detailHistory.item,
+                    person,
+                    image,
+                    recommendation,
+                    external,
+                    episode,
                     pan,
                     check:window.fongmi.pan.check,
                     cache,

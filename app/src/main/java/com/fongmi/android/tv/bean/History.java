@@ -18,6 +18,7 @@ import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.impl.Diffable;
 import com.fongmi.android.tv.history.HistoryDisplayPolicy;
+import com.fongmi.android.tv.player.VideoAspectMode;
 import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.utils.ResUtil;
@@ -196,7 +197,7 @@ public class History implements Diffable<History> {
     }
 
     public static History findPlayback(String key, List<String> vodNames, List<Flag> flags) {
-        return findPlayback(key, vodNames, flags, 0, "");
+        return findPlayback(key, vodNames, flags, 0, "", -1);
     }
 
     /**
@@ -204,21 +205,29 @@ public class History implements Diffable<History> {
      *                         避免依赖尚未完成的异步匹配缓存，也避免电影与剧集数字 ID 相同时串记录。
      */
     public static History findPlayback(String key, List<String> vodNames, List<Flag> flags, TmdbItem explicitTmdbItem) {
-        int tmdbId = explicitTmdbItem == null ? 0 : explicitTmdbItem.getTmdbId();
-        String mediaType = explicitTmdbItem == null ? "" : explicitTmdbItem.getMediaType();
-        return findPlayback(key, vodNames, flags, tmdbId, mediaType);
+        return findPlayback(key, vodNames, flags, explicitTmdbItem, -1);
     }
 
-    private static History findPlayback(String key, List<String> vodNames, List<Flag> flags, int explicitTmdbId, String explicitMediaType) {
+    /**
+     * Season-aware playback lookup. A non-negative expectedSeason prevents a progress record from another
+     * season (or an unknown-season legacy record from another source key) from being reused.
+     */
+    public static History findPlayback(String key, List<String> vodNames, List<Flag> flags, TmdbItem explicitTmdbItem, int expectedSeason) {
+        int tmdbId = explicitTmdbItem == null ? 0 : explicitTmdbItem.getTmdbId();
+        String mediaType = explicitTmdbItem == null ? "" : explicitTmdbItem.getMediaType();
+        return findPlayback(key, vodNames, flags, tmdbId, mediaType, expectedSeason);
+    }
+
+    private static History findPlayback(String key, List<String> vodNames, List<Flag> flags, int explicitTmdbId, String explicitMediaType, int expectedSeason) {
         // 聚合模式：优先按完整 TMDB 身份跨源查找最新历史，命中则复用该记录并切换到当前 key。
-        History aggregated = findPlaybackByTmdb(key, vodNames, flags, explicitTmdbId, explicitMediaType);
+        History aggregated = findPlaybackByTmdb(key, vodNames, flags, explicitTmdbId, explicitMediaType, expectedSeason);
         if (aggregated != null) return aggregated;
         History history = find(key);
-        if (history != null) return history;
+        if (isSeasonEligible(history, key, expectedSeason)) return history;
         if (vodNames != null) {
             for (String vodName : vodNames) {
                 if (vodName == null || vodName.isEmpty()) continue;
-                history = findPlaybackCandidate(key, findByName(vodName), flags);
+                history = findPlaybackCandidate(key, findByName(vodName), flags, expectedSeason);
                 if (history != null) return history.cid(VodConfig.getCid());
             }
         }
@@ -231,7 +240,7 @@ public class History implements Diffable<History> {
      * 命中当前 key 自身记录时直接返回；否则走 findPlaybackCandidate 做跨源剧集匹配
      * （按剧集名/URL 对齐源 B 的线路与集数），仅复用可续播的进度。
      */
-    private static History findPlaybackByTmdb(String key, List<String> vodNames, List<Flag> flags, int explicitTmdbId, String explicitMediaType) {
+    private static History findPlaybackByTmdb(String key, List<String> vodNames, List<Flag> flags, int explicitTmdbId, String explicitMediaType, int expectedSeason) {
         if (!Setting.isHistoryAggregationEffective()) return null;
         TmdbIdentity identity = explicitTmdbId > 0 && !normalizeMediaType(explicitMediaType).isEmpty()
                 ? new TmdbIdentity(explicitTmdbId, normalizeMediaType(explicitMediaType))
@@ -242,7 +251,7 @@ public class History implements Diffable<History> {
         // 整剧级统一进度：不再因当前 key 命中自身记录就直接返回该源旧进度，
         // 统一交给 findPlaybackCandidate 在全部同剧记录中选「最近可续播」的那条
         // （list 已按 createTime DESC 排序），使回到任一源都续到全剧最新进度。
-        return findPlaybackCandidate(key, list, flags);
+        return findPlaybackCandidate(key, list, flags, expectedSeason);
     }
 
     /**
@@ -326,10 +335,32 @@ public class History implements Diffable<History> {
     }
 
     static History findPlaybackCandidate(String key, List<History> items, List<Flag> flags) {
+        return findPlaybackCandidate(key, items, flags, -1);
+    }
+
+    static History findPlaybackCandidate(String key, List<History> items, List<Flag> flags, int expectedSeason) {
         if (items == null || items.isEmpty()) return null;
-        for (History item : items) if (canResume(item) && matchesAnyEpisode(item, flags)) return copyForPlaybackKey(item, key);
-        for (History item : items) if (canResume(item)) return copyForPlaybackKey(item, key);
-        return copyForPlaybackKey(items.get(0), key);
+        for (History item : items) {
+            if (isSeasonEligible(item, key, expectedSeason) && canResume(item) && matchesAnyEpisode(item, flags)) {
+                return copyForPlaybackKey(item, key);
+            }
+        }
+        for (History item : items) {
+            if (isSeasonEligible(item, key, expectedSeason) && canResume(item)) return copyForPlaybackKey(item, key);
+        }
+        for (History item : items) {
+            if (isSeasonEligible(item, key, expectedSeason)) return copyForPlaybackKey(item, key);
+        }
+        return null;
+    }
+
+    private static boolean isSeasonEligible(History item, String requestedKey, int expectedSeason) {
+        if (item == null) return false;
+        if (expectedSeason < 0) return true;
+        int savedSeason = item.getTmdbSeasonNumber();
+        boolean hasKnownSeason = savedSeason > 0 || (savedSeason == 0 && item.getTmdbEpisodeNumber() > 0);
+        if (hasKnownSeason) return savedSeason == expectedSeason;
+        return TextUtils.equals(requestedKey, item.getKey());
     }
 
     private static boolean canResume(History item) {
@@ -520,11 +551,11 @@ public class History implements Diffable<History> {
     }
 
     public int getScale() {
-        return scale;
+        return scale == -1 ? -1 : VideoAspectMode.sanitize(scale);
     }
 
     public void setScale(int scale) {
-        this.scale = scale;
+        this.scale = VideoAspectMode.sanitize(scale);
     }
 
     public int getPlayer() {

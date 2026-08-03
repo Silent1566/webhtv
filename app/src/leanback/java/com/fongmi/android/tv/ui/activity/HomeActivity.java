@@ -97,7 +97,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 
-public class HomeActivity extends BaseActivity implements CustomTitleView.Listener, VodPresenter.OnClickListener, FuncPresenter.OnClickListener, HistoryPresenter.OnClickListener, TypeAdapter.OnClickListener, HomeWebController.Listener, ConfigListener, FolderFragment.FilterHost {
+public class HomeActivity extends BaseActivity implements ExitConfirmDialog.Listener, CustomTitleView.Listener, VodPresenter.OnClickListener, FuncPresenter.OnClickListener, HistoryPresenter.OnClickListener, TypeAdapter.OnClickListener, HomeWebController.Listener, ConfigListener, FolderFragment.FilterHost {
 
     private static final String TV_NORMAL = "tv-normal";
     private static final String TV_TOOLBAR_HIDDEN = "tv-toolbar-hidden";
@@ -128,6 +128,13 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     private boolean loadingHomeCategory;
     private boolean pendingOpenVod; // 手动点击"点播"后等待数据加载完成再进分类页
     private final Runnable mTypeSwitch = this::switchType;
+    private final Runnable mDelayedInitConfig = this::initConfig;
+    private final Runnable mDelayedPermissionRequest = () -> {
+        if (!isFinishing() && !isDestroyed()) PermissionUtil.requestFile(this, allGranted -> PermissionUtil.requestNotify(this));
+    };
+    private final Runnable mDelayedDlnaStart = () -> {
+        if (!isFinishing() && !isDestroyed()) DLNARendererService.start(this);
+    };
 
     private Site getHome() {
         return VodConfig.get().getHome();
@@ -151,6 +158,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         setTheme(R.style.Theme_App);
+        App.resumeBackgroundServices();
         super.onCreate(savedInstanceState);
     }
 
@@ -170,9 +178,9 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
 
     private void initAfterFirstFrame() {
         SpiderDebug.log("startup", "home first frame cost=%sms", System.currentTimeMillis() - App.time());
-        App.post(this::initConfig, 80);
-        App.post(() -> PermissionUtil.requestFile(this, allGranted -> PermissionUtil.requestNotify(this)), 1800);
-        App.post(() -> DLNARendererService.start(this), 2500);
+        App.post(mDelayedInitConfig, 80);
+        App.post(mDelayedPermissionRequest, 1800);
+        App.post(mDelayedDlnaStart, 2500);
     }
 
     private void runAfterFirstFrame(Runnable runnable) {
@@ -1092,17 +1100,26 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     }
 
     private void exitHome() {
-        ExitConfirmDialog.create(this::confirmExitHome).show(this);
+        ExitConfirmDialog.create(PlaybackService.canContinueInBackground()).show(this);
     }
 
-    private void confirmExitHome() {
-        if (PlaybackService.isRunning()) moveTaskToBack(true);
-        else super.onBackInvoked();
+    private void continueInBackground() {
+        moveTaskToBack(true);
+    }
+
+    private void exitCompletely() {
+        cancelPendingStartupTasks();
+        AppExitCoordinator.exit(this);
+    }
+
+    private void cancelPendingStartupTasks() {
+        App.removeCallbacks(mDelayedInitConfig, mDelayedPermissionRequest, mDelayedDlnaStart);
     }
 
     @Override
     protected void onDestroy() {
         mBinding.typeRecycler.removeCallbacks(mTypeSwitch);
+        cancelPendingStartupTasks();
         if (mWeb != null) mWeb.destroy();
         DLNARendererService.stop(this);
         LiveConfig.get().clear();
@@ -1118,6 +1135,16 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         Source.get().exit();
         Server.get().stop();
         super.onDestroy();
+    }
+
+    @Override
+    public void onBackgroundPlayback() {
+        continueInBackground();
+    }
+
+    @Override
+    public void onFullExit() {
+        exitCompletely();
     }
 
     @Override

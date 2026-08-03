@@ -325,9 +325,9 @@ adb install -r app/build/outputs/apk/mobileArm64_v8a/debug/app-mobile-arm64_v8a-
 
 ### GitHub 手动发布
 
-仓库内置 `.github/workflows/android-release.yml`,只支持在 GitHub Actions 页面手动触发,不会在每次 push 代码时自动打包。默认 tag 会从 `app/build.gradle` 读取当前 `versionName`:稳定版生成 `v<versionName>-yyyyMMddHHmm`;在 `fongmi-sync` 分支选择 `auto` 通道时生成测试版 `v<versionName>-beta-yyyyMMddHHmm`,APK/JSON 文件名同步追加 `-beta`。
+仓库内置 `.github/workflows/android-release.yml`,只支持在 GitHub Actions 页面手动触发,不会在每次 push 代码时自动打包。默认 tag 会从 `app/build.gradle` 读取当前 `versionName`,并使用当前提交的提交时间生成可重入 tag:稳定版生成 `v<versionName>-yyyyMMddHHmm`;在 `fongmi-sync` 分支选择 `auto` 通道时生成测试版 `v<versionName>-beta-yyyyMMddHHmm`,APK/JSON 文件名同步追加 `-beta`。
 
-工作流会构建 4 个 release APK,生成同名更新清单 JSON 并发布到 GitHub Release。JSON 默认使用 GitHub Release 固定版本直链，不依赖 CNB 可用性。CNB 同步默认关闭，仅在确认内容权利、平台政策和流量用途后作为可选镜像手动开启。正式发布前建议在 GitHub Secrets 配置:
+工作流会构建 4 个 release APK,生成同名更新清单 JSON 并发布到 GitHub Release。JSON 默认使用 GitHub Release 固定版本直链，不依赖 CNB 可用性。每次发布还会把当前通道的 4 个 JSON 与最近一次另一通道的 JSON 汇总后覆盖上传到固定的 `update-channel` 预发布 Release；手机版和电视版的稳定版、测试版清单都优先从该 GitHub Release 下载路径获取并使用同一套加速源，GitHub Releases API 仅作为最终兜底。CNB 同步默认关闭，仅在确认内容权利、平台政策和流量用途后作为可选镜像手动开启。正式发布前建议在 GitHub Secrets 配置:
 
 ```text
 RELEASE_KEYSTORE_BASE64  # release keystore 的 base64 内容

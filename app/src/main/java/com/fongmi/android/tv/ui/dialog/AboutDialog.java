@@ -139,7 +139,6 @@ public final class AboutDialog {
         window.getDecorView().setPadding(0, 0, 0, 0);
         window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
         window.setAttributes(params);
-        window.setLayout(params.width, params.height);
 
         int availableHeight = activity.findViewById(android.R.id.content).getHeight();
         if (availableHeight == 0) {
@@ -158,8 +157,12 @@ public final class AboutDialog {
         int chromeHeight = binding.getRoot().getMeasuredHeight() - 1;
         binding.contentScroll.getLayoutParams().height = ViewGroup.LayoutParams.WRAP_CONTENT;
 
-        int maxScrollHeight = Math.max(ResUtil.dp2px(200), availableHeight - chromeHeight - ResUtil.dp2px(DIALOG_VERTICAL_MARGIN_DP));
+        int maxDialogHeight = Math.min(availableHeight, Math.max(chromeHeight + 1, availableHeight - ResUtil.dp2px(DIALOG_VERTICAL_MARGIN_DP)));
+        int maxScrollHeight = Math.max(1, maxDialogHeight - chromeHeight);
         binding.contentScroll.setMaxHeight(maxScrollHeight);
+        binding.getRoot().measure(widthSpec, heightSpec);
+        int dialogHeight = Math.min(binding.getRoot().getMeasuredHeight(), maxDialogHeight);
+        window.setLayout(params.width, dialogHeight);
         return true;
     }
 }

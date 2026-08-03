@@ -120,11 +120,42 @@ test('detail sample renders optional cast, gallery, episode metadata and recomme
   assert.match(html, /id="gallerySection"/);
   assert.match(html, /id="episodeFeature"/);
   assert.match(html, /id="recommendationSection"/);
-  assert.match(html, /data-focus-row', 'recommendations'/);
+  assert.match(html, /data-focus-row', rowId/);
   assert.match(html, /addEventListener\('fmdetailchange'/);
   assert.match(html, /vodDetail\(\{[\s\S]*cached:\s*true/);
+  assert.match(html, /recommendationGroups/);
+  assert.match(html, /api\.person\.open/);
+  assert.match(html, /api\.image\.preview/);
+  assert.match(html, /\(canPreview \|\| canSave\) && value\.imageRef/);
+  assert.match(html, /api\.recommendation\.open/);
+  assert.match(html, /api\.external\.open/);
+  assert.match(html, /--fm-safe-top/);
+  assert.match(html, /scroll-padding-inline/);
+  assert.match(html, /function ensureRailItemVisible\(/);
+  assert.match(html, /function bindLongPress\(/);
+  assert.match(html, /event\.repeat[\s\S]*markFired\(event\)/);
+  assert.match(html, /api\.episode\.info/);
+  assert.match(html, /EclipseDetailState\.episodeRanges/);
+  assert.match(html, /episode-marquee-track/);
+  assert.match(html, /item\.pic \|\| item\.backdrop/);
+  assert.doesNotMatch(html, /-webkit-line-clamp:\s*3/);
 });
 
+test('recommendation rails stay viewport-bounded and feedback restores focus', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../../main/assets/webhome/eclipse-detail.html'), 'utf8');
+
+  assert.match(html, /\.recommendation-group\s*\{[^}]*min-width:\s*0/);
+  assert.match(html, /function focusAfterRecommendationRemoval\(/);
+  assert.match(html, /function focusByRow\(/);
+  assert.match(html, /rowIndex/);
+  assert.match(html, /focusByRow\(marker\.row, marker\.rowIndex\)/);
+  assert.match(html, /bindLongPress\(card,[\s\S]*card\.focus\(\)[\s\S]*openRecommendationInfo/);
+  assert.match(html, /function updateRecommendationSummary\(/);
+  const summary = html.slice(html.indexOf('function updateRecommendationSummary'), html.indexOf('function focusAfterRecommendationRemoval'));
+  assert.match(summary, /setText\('recommendationStatus'/);
+  assert.doesNotMatch(summary, /updateRecommendationSummary\(\);/);
+  assert.match(html, /api && typeof api\.search === 'function'/);
+});
 test('favorite updates restore D-pad focus after the pending state', () => {
   const html = fs.readFileSync(path.join(__dirname, '../../main/assets/webhome/eclipse-detail.html'), 'utf8');
   const restores = html.match(/finishPendingFocus\('favoriteButton'\)/g) || [];
@@ -139,4 +170,27 @@ test('retry cancels the pending automatic native fallback', () => {
   assert.match(html, /function clearNativeFallback\(\)/);
   assert.match(html, /function loadDetail\(\) \{[\s\S]*?clearNativeFallback\(\)/);
   assert.match(html, /function scheduleNativeFallback\(\)/);
+});
+
+
+test('episode ranges keep large selections quick to browse', () => {
+  const state = detailState.create(dto(100), 20);
+  assert.deepEqual(detailState.episodeRanges(state), [
+    { label: '1-20', start: 0, end: 20, selected: true },
+    { label: '21-40', start: 20, end: 40, selected: false },
+    { label: '41-60', start: 40, end: 60, selected: false },
+    { label: '61-80', start: 60, end: 80, selected: false },
+    { label: '81-100', start: 80, end: 100, selected: false }
+  ]);
+});
+
+test('episode state exposes a compact selected group after refresh', () => {
+  const state = detailState.create(dto(36), 20);
+  state.episodeId = 'episode-35';
+  state.page = 2;
+  const refreshed = detailState.refresh(state, dto(36), 20);
+  const page = detailState.visibleEpisodes(refreshed);
+  assert.equal(page.page, 2);
+  assert.equal(page.items.length, 16);
+  assert.equal(detailState.selectedEpisode(refreshed).episodeId, 'episode-35');
 });

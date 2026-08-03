@@ -22,6 +22,7 @@
     <string name="detail_content">Summary: <xliff:g name="name">%s</xliff:g></string>
     <string name="detail_desc">Summary</string>
     <string name="detail_episode">Episode</string>
+    <string name="detail_episode_season_context">Episode · Season %1$d</string>
     <string name="detail_episode_reverse">Reverse</string>
     <string name="detail_episode_forward">Forward</string>
     <string name="detail_episode_view_grid">Grid</string>
@@ -37,9 +38,11 @@
     <string name="keep">Keep</string>
     <string name="keep_add">Added</string>
     <string name="keep_del">Removed</string>
-    <string name="exit_confirm_title">Exit app?</string>
-    <string name="exit_confirm_message">The current page will close. Background playback will continue if it is running.</string>
-    <string name="exit_confirm_positive">Exit</string>
+    <string name="exit_confirm_title">Exit app</string>
+    <string name="exit_confirm_message">The app, playback, and background services will stop.</string>
+    <string name="exit_confirm_playing_message">Playback is active. Background playback keeps it playing; Exit completely stops playback and background services.</string>
+    <string name="exit_confirm_background">Background playback</string>
+    <string name="exit_confirm_positive">Exit completely</string>
 
     <!-- Play -->
     <string name="play">Play</string>
@@ -1344,6 +1347,7 @@
     <string name="crash_restart">Restart app</string>
     <string name="crash_details">Error details</string>
     <string name="crash_details_title">Error details</string>
+    <string name="crash_details_message">App version: %1$s\n\n%2$s</string>
     <string name="crash_details_close">Close</string>
 
     <!-- Hint -->
@@ -1533,12 +1537,20 @@
         <item>Traditional Chinese</item>
     </string-array>
 
+    <string name="aspect_ratio_title">Custom aspect ratio</string>
+    <string name="aspect_ratio_width">Width</string>
+    <string name="aspect_ratio_height">Height</string>
+    <string name="aspect_ratio_hint">Enter a ratio such as 2560:1080 or 64:27</string>
+    <string name="aspect_ratio_invalid">Enter a valid ratio</string>
     <string-array name="select_scale">
         <item>Default</item>
         <item>16:9</item>
         <item>4:3</item>
         <item>Fill</item>
         <item>Zoom</item>
+        <item>21:9</item>
+        <item>Adaptive</item>
+        <item>Custom</item>
     </string-array>
 
     <string-array name="select_reset">
@@ -1750,6 +1762,7 @@
     <string name="detail_image_saving">Saving image...</string>
     <string name="detail_image_save_success">Saved to: %1$s</string>
     <string name="detail_image_save_failed">Image save failed</string>
+    <string name="detail_external_open_failed">Unable to open external link</string>
     <string name="detail_image_permission_denied">Storage permission denied</string>
 
     <string name="detail_tmdb_photos">剧照</string>
@@ -1779,6 +1792,27 @@
     <string name="detail_media_movie">Movie</string>
     <string name="detail_media_tv">Series</string>
     <string name="detail_media_unknown">Detail</string>
+    <string name="tmdb_episode_complete">All %1$d episodes</string>
+    <string name="tmdb_episode_total">%1$d episodes</string>
+    <string name="tmdb_episode_ongoing">Aired through episode %1$d</string>
+    <string name="tmdb_episode_ongoing_total">Aired %1$d of %2$d episodes</string>
+    <string name="tmdb_episode_series_ongoing">Aired through S%1$dE%2$d</string>
+    <string name="tmdb_episode_series_ongoing_total">Aired through S%1$dE%2$d · %3$d episodes</string>
+    <string name="tmdb_episode_season_complete">Season %1$d · all %2$d episodes</string>
+    <string name="tmdb_episode_season_total">Season %1$d · %2$d episodes</string>
+    <string name="tmdb_episode_season_ongoing">Season %1$d · episode %2$d</string>
+    <string name="tmdb_episode_season_ongoing_total">Season %1$d · %2$d of %3$d episodes</string>
+    <string name="tmdb_episode_planned">Upcoming</string>
+    <string name="tmdb_episode_planned_total">Upcoming · %1$d episodes planned</string>
+    <string name="tmdb_episode_canceled">Canceled · %1$d episodes</string>
+    <string name="tmdb_episode_compact_total">TMDB %1$d eps</string>
+    <string name="tmdb_episode_compact_progress">TMDB %1$d/%2$d eps</string>
+    <string name="tmdb_episode_compact_episode">TMDB E%1$d</string>
+    <string name="tmdb_episode_compact_series">TMDB S%1$dE%2$d</string>
+    <string name="tmdb_episode_compact_series_total">TMDB S%1$dE%2$d · %3$d eps</string>
+    <string name="tmdb_episode_compact_season">TMDB S%1$d · %2$d eps</string>
+    <string name="tmdb_episode_compact_season_progress">TMDB S%1$d %2$d/%3$d eps</string>
+    <string name="tmdb_episode_compact_planned">TMDB upcoming</string>
     <string name="detail_source_current">Current source: %1$s</string>
     <string name="detail_source_empty">No available source</string>
     <string name="detail_source_episode_empty">No available episodes or source</string>

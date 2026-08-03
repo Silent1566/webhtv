@@ -84,6 +84,9 @@ default void resetTrack(int type) {
     default void setVideoEffects(List<Effect> effects) {
     }
 
+    default void setVideoAspect(float aspectRatio, boolean stretch) {
+    }
+
     default boolean supportsNativeLut() {
         return false;
     }
