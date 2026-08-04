@@ -93,6 +93,7 @@
     .brand small { display: block; margin-top: 5px; color: #8c97b7; font-size: 10px; letter-spacing: 1.6px; }
     .source-pill {
       max-width: 230px;
+      height: 34px;
       margin-right: auto;
       padding: 7px 12px;
       overflow: hidden;
@@ -100,6 +101,7 @@
       border: 1px solid #252c45;
       border-radius: 18px;
       background: rgba(17, 22, 39, .85);
+      cursor: pointer;
       font-size: 12px;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -194,7 +196,7 @@
     }
     .toast.show { opacity: 1; transform: translate(-50%, 0); }
     button:focus, input:focus { outline: 0; }
-    .card-button:focus .poster, .tab:focus, .filter-chip:focus, .top-action:focus, .search button:focus {
+    .card-button:focus .poster, .tab:focus, .filter-chip:focus, .source-pill:focus, .top-action:focus, .search button:focus {
       border-color: #fff; box-shadow: 0 0 0 3px #785fff, 0 0 26px rgba(85, 225, 255, .5);
     }
     .card-button:focus .poster { transform: scale(1.055); }
@@ -260,7 +262,7 @@
         <span class="brand-mark"></span>
         <span><strong>ECLIPSE</strong><small>UNIVERSAL WEBHOME</small></span>
       </div>
-      <div class="source-pill" id="sourceName">正在连接内容源</div>
+      <button class="source-pill" data-focus="source" id="sourceName" type="button" aria-label="切换内容源">正在连接内容源</button>
       <form class="search" id="searchForm">
         <input id="searchInput" data-focus="search" type="search" autocomplete="off" placeholder="搜索当前内容源" aria-label="搜索">
         <button data-focus="search-submit" type="submit" aria-label="提交搜索">⌕</button>
@@ -980,6 +982,7 @@
         state.domReady = true;
         w.__eclipseBoot.dom = true;
         listen(byId('searchForm'), 'submit', submitSearch);
+        listen(byId('sourceName'), 'click', function () { callApp('openSite', '此操作需要在应用内使用'); });
         listen(byId('libraryButton'), 'click', function () { callApp('openVod', '此操作需要在应用内使用'); });
         listen(byId('settingsButton'), 'click', function () { callApp('openSetting', '此操作需要在应用内使用'); });
         listen(d, 'focusin', handleFocusIn);

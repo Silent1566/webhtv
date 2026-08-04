@@ -529,6 +529,11 @@ public class HomeWebController {
                 && sourceKey.equals(site.getKey()) && manifestUrl.equals(target.getUrl());
     }
 
+    static boolean requiresPageReload(boolean force, boolean bridgeReady, String url, String loadedUrl,
+            String identity, String loadedIdentity) {
+        return force || !bridgeReady || !url.equals(loadedUrl) || !identity.equals(loadedIdentity);
+    }
+
     private boolean loadResolved(Site site, WebHomeTarget resolved, WebThemeRoute route, boolean force) {
         if (site == null || resolved == null) return false;
         themeSessionGeneration++;
@@ -537,7 +542,7 @@ public class HomeWebController {
         Server.get().start();
         String url = resolved.isGlobal() ? resolved.getUrl() : getHomePage(site);
         String identity = resolved.identity(site.getKey());
-        boolean reload = force || !url.equals(homePage) || !identity.equals(homeIdentity);
+        boolean reload = requiresPageReload(force, bridgeReady, url, homePage, identity, homeIdentity);
         this.site = site;
         this.target = resolved;
         this.themeRoute = route == null ? WebThemeRoute.EMPTY : route;
@@ -679,6 +684,10 @@ public class HomeWebController {
 
     public boolean isVisible() {
         return webView.getVisibility() == View.VISIBLE;
+    }
+
+    public boolean isReady() {
+        return bridgeReady && !destroyed;
     }
 
     public boolean dispatchFocusedClick() {
@@ -901,6 +910,10 @@ public class HomeWebController {
         listener.openVod();
     }
 
+    public void openSite() {
+        listener.openSite();
+    }
+
     public void openSetting() {
         listener.openSetting();
     }
@@ -1106,7 +1119,7 @@ public class HomeWebController {
         private static boolean isSideEffect(String method) {
             return switch (method == null ? "" : method) {
                 case "favorite.set", "player.playVod", "navigation.openDetail",
-                        "navigation.openNativeDetail", "app.search", "app.openVod",
+                        "navigation.openNativeDetail", "app.search", "app.openVod", "app.openSite",
                         "app.openSetting", "person.open", "image.preview", "image.save",
                         "recommendation.open", "recommendation.info", "recommendation.feedback",
                         "external.open", "episode.info", "navigation.back", "navigation.reload" -> true;
@@ -1484,12 +1497,12 @@ public class HomeWebController {
                     recommendation:{open:function(recommendationRef){return invoke('recommendation.open',{recommendationRef:recommendationRef});},info:function(recommendationRef){return invoke('recommendation.info',{recommendationRef:recommendationRef});},feedback:function(recommendationRef,action){return invoke('recommendation.feedback',{recommendationRef:recommendationRef,action:action});}},
                     external:{open:function(linkRef){return invoke('external.open',{linkRef:linkRef});}},
                     episode:{info:function(episodeRef){return invoke('episode.info',{episodeRef:episodeRef});}},
-                    app:{search:function(keyword,options){return invoke('app.search',Object.assign({},options||{},{keyword:keyword}));},openVod:function(){return invoke('app.openVod',{});},openSetting:function(){return invoke('app.openSetting',{});}},
+                    app:{search:function(keyword,options){return invoke('app.search',Object.assign({},options||{},{keyword:keyword}));},openVod:function(){return invoke('app.openVod',{});},openSite:function(){return invoke('app.openSite',{});},openSetting:function(){return invoke('app.openSetting',{});}},
                     player:{playVod:function(siteKey,vodId,title,pic,options){return invoke('player.playVod',Object.assign({},options||{},{siteKey:siteKey,vodId:vodId,title:title,pic:pic}));}},
                     ui:{getViewport:function(){return invoke('ui.getViewport',{});}},
                     navigation:{back:function(){return invoke('navigation.back',{});},reload:function(){return invoke('navigation.reload',{});},openDetail:function(options){return invoke('navigation.openDetail',options||{});},openNativeDetail:function(options){return invoke('navigation.openNativeDetail',options||{});}}
                   };
-                  window.fm={vodHome:window.fongmi.vod.home,vodCategory:window.fongmi.vod.category,vodDetail:window.fongmi.vod.detail,vod:window.fongmi.player.playVod,themeInfo:window.fongmi.theme.info,openDetail:window.fongmi.navigation.openDetail,openNativeDetail:window.fongmi.navigation.openNativeDetail,favoriteStatus:window.fongmi.favorite.status,favoriteSet:window.fongmi.favorite.set,detailHistory:window.fongmi.history.item,person:window.fongmi.person,image:window.fongmi.image,recommendation:window.fongmi.recommendation,external:window.fongmi.external,episode:window.fongmi.episode,back:window.fongmi.navigation.back,reload:window.fongmi.navigation.reload,search:window.fongmi.app.search,openVod:window.fongmi.app.openVod,openSetting:window.fongmi.app.openSetting};
+                  window.fm={vodHome:window.fongmi.vod.home,vodCategory:window.fongmi.vod.category,vodDetail:window.fongmi.vod.detail,vod:window.fongmi.player.playVod,themeInfo:window.fongmi.theme.info,openDetail:window.fongmi.navigation.openDetail,openNativeDetail:window.fongmi.navigation.openNativeDetail,favoriteStatus:window.fongmi.favorite.status,favoriteSet:window.fongmi.favorite.set,detailHistory:window.fongmi.history.item,person:window.fongmi.person,image:window.fongmi.image,recommendation:window.fongmi.recommendation,external:window.fongmi.external,episode:window.fongmi.episode,back:window.fongmi.navigation.back,reload:window.fongmi.navigation.reload,search:window.fongmi.app.search,openVod:window.fongmi.app.openVod,openSite:window.fongmi.app.openSite,openSetting:window.fongmi.app.openSetting};
                   window.dispatchEvent(new CustomEvent('fmsdk'));
                 })();
                 """.formatted(session);
@@ -1709,6 +1722,7 @@ public class HomeWebController {
                     app:{
                       search:(keyword,options)=>invoke('app.search',Object.assign({},options||{},{keyword})),
                       openVod:()=>invoke('app.openVod',{}),
+                      openSite:()=>invoke('app.openSite',{}),
                       openLive:()=>invoke('app.openLive',{}),
                       openKeep:()=>invoke('app.openKeep',{}),
                       openSetting:()=>invoke('app.openSetting',{}),
@@ -1741,6 +1755,7 @@ public class HomeWebController {
                     stat:player.status,
                     search:window.fongmi.app.search,
                     openVod:window.fongmi.app.openVod,
+                    openSite:window.fongmi.app.openSite,
                     openLive:window.fongmi.app.openLive,
                     openKeep:window.fongmi.app.openKeep,
                     openSetting:window.fongmi.app.openSetting,
@@ -1878,6 +1893,9 @@ public class HomeWebController {
         }
 
         default void openVod() {
+        }
+
+        default void openSite() {
         }
 
         default void openSetting() {

@@ -18,7 +18,7 @@
     }
   },
   "permissions": {
-    "home": ["vod.home", "vod.category", "navigation.openDetail", "app.search", "app.openVod", "app.openSetting"],
+    "home": ["vod.home", "vod.category", "navigation.openDetail", "app.search", "app.openVod", "app.openSite", "app.openSetting"],
     "detail": [
       "vod.detail",
       "favorite.read",

@@ -105,6 +105,7 @@ public class WebThemeManifestTest {
 
         assertTrue(manifest.getPage(WebThemePage.HOME).getPermissions().contains("app.search"));
         assertTrue(manifest.getPage(WebThemePage.HOME).getPermissions().contains("app.openVod"));
+        assertTrue(manifest.getPage(WebThemePage.HOME).getPermissions().contains("app.openSite"));
         assertTrue(manifest.getPage(WebThemePage.HOME).getPermissions().contains("app.openSetting"));
     }
 

@@ -122,6 +122,8 @@ public class HomeWebBridge {
                     payload.toString().getBytes(StandardCharsets.UTF_8).length);
             resolve(requestId, execute(method, payload, v2Theme, themeGeneration), v2Theme, themeGeneration);
         } catch (Throwable e) {
+            SpiderDebug.log("webhome", "invoke failed method=%s error=%s session=%s current=%s", method,
+                    e.toString(), themeGeneration, controller.getThemeSessionGeneration());
             reject(requestId, e.getMessage(), v2Theme, themeGeneration);
         }
     }
@@ -149,6 +151,7 @@ public class HomeWebBridge {
                 case "player.status" -> WebCall.request(statusPayload());
                 case "app.search" -> search(payload);
                 case "app.openVod" -> openVod();
+                case "app.openSite" -> openSite();
                 case "app.openLive" -> openLive();
                 case "app.openKeep" -> openKeep();
                 case "app.openSetting" -> openSetting();
@@ -416,6 +419,11 @@ public class HomeWebBridge {
 
     private String openVod() {
         App.post(controller::openVod);
+        return "{}";
+    }
+
+    private String openSite() {
+        App.post(controller::openSite);
         return "{}";
     }
 

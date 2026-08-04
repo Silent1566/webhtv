@@ -104,6 +104,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     private static final String TV_OVERLAY = "tv-overlay";
     private static final String TV_FULL = "tv-full";
     private static final long TYPE_SWITCH_DELAY_MS = 100;
+    private static final long CONFIRM_LONG_PRESS_MS = 550;
 
     private ActivityHomeBinding mBinding;
     private ArrayObjectAdapter mHistoryAdapter;
@@ -127,7 +128,10 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     private boolean webToolbarVisible = true;
     private boolean loadingHomeCategory;
     private boolean pendingOpenVod; // 手动点击"点播"后等待数据加载完成再进分类页
+    private boolean webConfirmKeyDown;
+    private boolean webConfirmLongPress;
     private final Runnable mTypeSwitch = this::switchType;
+    private final Runnable mWebConfirmLongPress = this::triggerWebFocusedLongPress;
     private final Runnable mDelayedInitConfig = this::initConfig;
     private final Runnable mDelayedPermissionRequest = () -> {
         if (!isFinishing() && !isDestroyed()) PermissionUtil.requestFile(this, allGranted -> PermissionUtil.requestNotify(this));
@@ -556,8 +560,13 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
         if (!forceNative && mWeb != null && mWeb.load(getHome())) {
             mBinding.typeRecycler.setVisibility(View.GONE);
             mBinding.recycler.setVisibility(View.GONE);
-            mBinding.progressLayout.showContent();
-            showWebOverlay();
+            if (mWeb.isReady()) {
+                mBinding.progressLayout.showContent();
+                showWebOverlay();
+            } else {
+                hideWebOverlay();
+                mBinding.progressLayout.showProgress();
+            }
             return;
         }
         if (mWeb != null) mWeb.hide();
@@ -765,6 +774,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
                 getHistory();
                 break;
             case SIZE:
+                if (mWeb != null && mWeb.isVisible()) return;
                 getVideo();
                 getHistory(true);
                 break;
@@ -997,7 +1007,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
             else onHomeMenuKey();
             return true;
         }
-        if (mWeb != null && mWeb.isVisible()) {
+        if (mWeb != null && mWeb.isVisible() && mBinding.webOverlay.getVisibility() == View.VISIBLE) {
             if (KeyUtil.isBackKey(event)) {
                 if (KeyUtil.isActionUp(event)) onBackInvoked();
                 return true;
@@ -1006,6 +1016,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
                 if (KeyUtil.isActionDown(event) && KeyUtil.isDownKey(event)) return requestWebFocus();
                 return super.dispatchKeyEvent(event);
             }
+            if (KeyUtil.isEnterKey(event)) return dispatchWebConfirmKey(event);
             if (KeyUtil.isUpKey(event) && isToolbarVisible()) return super.dispatchKeyEvent(event);
             if (mWeb.dispatchKeyEvent(event)) return true;
             return super.dispatchKeyEvent(event);
@@ -1015,6 +1026,39 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
         if (KeyUtil.isActionDown(event) & KeyUtil.isUpKey(event) && mBinding.recycler.hasFocus() && mBinding.typeRecycler.getVisibility() == View.VISIBLE) updateToolbarVisibility(true);
         if (KeyUtil.isActionDown(event) & KeyUtil.isDownKey(event) && getCurrentFocus() == mBinding.title) return requestHomeFocus();
         return super.dispatchKeyEvent(event);
+    }
+
+    private boolean dispatchWebConfirmKey(KeyEvent event) {
+        if (event.getAction() == KeyEvent.ACTION_DOWN) {
+            if (!webConfirmKeyDown) {
+                webConfirmKeyDown = true;
+                webConfirmLongPress = false;
+                mBinding.webOverlay.postDelayed(mWebConfirmLongPress, CONFIRM_LONG_PRESS_MS);
+            }
+            if (event.isLongPress() || event.getRepeatCount() > 0) triggerWebFocusedLongPress();
+            return true;
+        }
+        if (event.getAction() == KeyEvent.ACTION_UP) {
+            mBinding.webOverlay.removeCallbacks(mWebConfirmLongPress);
+            boolean click = webConfirmKeyDown && !webConfirmLongPress && !event.isCanceled();
+            webConfirmKeyDown = false;
+            webConfirmLongPress = false;
+            if (click && mWeb != null) mWeb.dispatchFocusedClick();
+            return true;
+        }
+        return true;
+    }
+
+    private void triggerWebFocusedLongPress() {
+        if (!webConfirmKeyDown || webConfirmLongPress || mWeb == null) return;
+        mBinding.webOverlay.removeCallbacks(mWebConfirmLongPress);
+        webConfirmLongPress = mWeb.dispatchFocusedLongPress();
+    }
+
+    private void cancelWebConfirmKey() {
+        if (mBinding != null) mBinding.webOverlay.removeCallbacks(mWebConfirmLongPress);
+        webConfirmKeyDown = false;
+        webConfirmLongPress = false;
     }
 
     private boolean requestTitleFocus() {
@@ -1053,6 +1097,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     @Override
     protected void onPause() {
         mBinding.typeRecycler.removeCallbacks(mTypeSwitch);
+        cancelWebConfirmKey();
         if (mWeb != null) mWeb.onPause();
         super.onPause();
         mClock.stop();
@@ -1149,7 +1194,8 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
 
     @Override
     public void onWebLoading() {
-        showWebOverlay();
+        cancelWebConfirmKey();
+        hideWebOverlay();
         mBinding.progressLayout.showProgress();
     }
 
@@ -1219,6 +1265,11 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
         if (mWeb != null) mWeb.hide();
         hideWebOverlay();
         getVideo(true);
+    }
+
+    @Override
+    public void openSite() {
+        showDialog();
     }
 
     @Override

@@ -456,6 +456,7 @@ await fm.cache.del("key", "rule");
 | 接口 | 说明 |
 | --- | --- |
 | `fm.search(keyword, { direct, pic, wallPic })` | 打开原生搜索；`direct: true` 直达结果列表，`pic`/`wallPic` 会带入后续搜索结果播放链路 |
+| `fm.openVod()` / `fm.openSite()` | 返回原生点播首页 / 打开内容源选择器 |
 | `fm.openLive()` / `fm.openKeep()` / `fm.openSetting()` | 打开直播 / 收藏 / 设置 |
 | `fm.history()` | 观看记录数组（字段见主文档 19.3），可用于"从播放页返回后补偿进度" |
 

@@ -89,6 +89,7 @@ final class WebHomeThemeBridge {
             case "episode.info" -> episodeInfo(safe, context, active);
             case "app.search" -> search(safe, active);
             case "app.openVod" -> openVod(active);
+            case "app.openSite" -> openSite(active);
             case "app.openSetting" -> openSetting(active);
             case "ui.getViewport" -> controller.getViewportJson();
             case "navigation.back" -> back(active);
@@ -528,6 +529,11 @@ final class WebHomeThemeBridge {
 
     private String openVod(BooleanSupplier active) {
         postIfActive(active, controller::openVod);
+        return "{}";
+    }
+
+    private String openSite(BooleanSupplier active) {
+        postIfActive(active, controller::openSite);
         return "{}";
     }
 

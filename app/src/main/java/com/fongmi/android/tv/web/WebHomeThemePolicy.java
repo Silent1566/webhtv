@@ -11,7 +11,7 @@ public final class WebHomeThemePolicy {
 
     public static boolean allowsMethod(String method) {
         return switch (method == null ? "" : method) {
-            case "vod.home", "vod.category", "player.playVod", "app.search", "app.openVod", "app.openSetting",
+            case "vod.home", "vod.category", "player.playVod", "app.search", "app.openVod", "app.openSite", "app.openSetting",
                     "ui.getViewport", "navigation.back", "navigation.reload" -> true;
             default -> false;
         };
@@ -28,6 +28,7 @@ public final class WebHomeThemePolicy {
                 case "navigation.openDetail" -> has(permissions, "navigation.openDetail");
                 case "app.search" -> has(permissions, "app.search");
                 case "app.openVod" -> has(permissions, "app.openVod");
+                case "app.openSite" -> has(permissions, "app.openSite");
                 case "app.openSetting" -> has(permissions, "app.openSetting");
                 default -> false;
             };
@@ -60,7 +61,7 @@ public final class WebHomeThemePolicy {
         return switch (page) {
             case HOME -> switch (permission) {
                 case "vod.home", "vod.category", "navigation.openDetail",
-                        "app.search", "app.openVod", "app.openSetting" -> true;
+                        "app.search", "app.openVod", "app.openSite", "app.openSetting" -> true;
                 default -> false;
             };
             case DETAIL -> switch (permission) {

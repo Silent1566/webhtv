@@ -836,6 +836,86 @@ public class TmdbDetailActivityLayoutTest {
     }
 
     @Test
+    public void episodeSeasonResolutionIsCachedAcrossViewportOnlyRerenders() throws Exception {
+        Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int applyLoaded = source.indexOf("private void applyLoaded(Vod loadedVod, TmdbBundle bundle, List<TmdbItem> searchItems, String error, boolean allowMatchDialog)");
+        int applyLoadedEnd = source.indexOf("private TmdbLoadResult loadTmdbResult()", applyLoaded);
+        int applyBundle = source.indexOf("private void applyTmdbBundle(TmdbBundle bundle)");
+        int applyBundleEnd = source.indexOf("private void showTmdbMatchDialog", applyBundle);
+        int clearRenderCaches = source.indexOf("private void clearEpisodeRenderCaches()");
+        int clearSeasonCache = source.indexOf("private void clearSeasonResolutionCache()", clearRenderCaches);
+        int sourceResolver = source.indexOf("private List<Integer> sourceSeasonNumbers(List<Episode> episodes)", clearSeasonCache);
+        int availableResolver = source.indexOf("private List<Integer> availableSeasonNumbers(List<Episode> episodes)", sourceResolver);
+        int seasonRender = source.indexOf("private void renderSeasonSelection()", availableResolver);
+        int bindSeason = source.indexOf("private void bindSeasonEpisodes(List<Episode> sourceEpisodes)", seasonRender);
+        int bindTmdb = source.indexOf("private void bindTmdbEpisodes(List<Episode> sourceEpisodes, int tmdbSeason)", bindSeason);
+        int fetchSeason = source.indexOf("private void fetchSeasonIfNeeded(int seasonNumber, boolean refresh)", bindTmdb);
+        int fetchSeasonEnd = source.indexOf("private void refreshFirstSeasonIfStaleSplit", fetchSeason);
+        int sourceEpisodeResolver = source.indexOf("private int sourceSeasonNumber(Episode episode)", fetchSeasonEnd);
+        int sourceEpisodeResolverEnd = source.indexOf("private int sourceSeasonNumber(String text)", sourceEpisodeResolver);
+
+        assertTrue(sourcePath + " is missing cached episode-season resolution",
+                applyLoaded >= 0 && applyLoadedEnd > applyLoaded
+                        && applyBundle >= 0 && applyBundleEnd > applyBundle
+                        && clearRenderCaches >= 0 && clearSeasonCache > clearRenderCaches && sourceResolver > clearSeasonCache
+                        && availableResolver > sourceResolver && seasonRender > availableResolver
+                        && bindSeason > seasonRender && bindTmdb > bindSeason && fetchSeason > bindTmdb && fetchSeasonEnd > fetchSeason
+                        && sourceEpisodeResolver > fetchSeasonEnd && sourceEpisodeResolverEnd > sourceEpisodeResolver);
+        String applyLoadedBody = source.substring(applyLoaded, applyLoadedEnd);
+        String applyBundleBody = source.substring(applyBundle, applyBundleEnd);
+        String clearRenderBody = source.substring(clearRenderCaches, clearSeasonCache);
+        String clearSeasonBody = source.substring(clearSeasonCache, sourceResolver);
+        String sourceResolverBody = source.substring(sourceResolver, availableResolver);
+        String availableResolverBody = source.substring(availableResolver, seasonRender);
+        String bindSeasonBody = source.substring(bindSeason, bindTmdb);
+        String fetchSeasonBody = source.substring(fetchSeason, fetchSeasonEnd);
+        String sourceEpisodeResolverBody = source.substring(sourceEpisodeResolver, sourceEpisodeResolverEnd);
+
+        assertTrue("source season parsing must be cached by episode-list identity instead of reparsing every episode for every card",
+                source.contains("private List<Episode> sourceSeasonCacheSource;")
+                        && source.contains("private List<Integer> sourceSeasonCache = List.of();")
+                        && sourceResolverBody.contains("if (episodes == sourceSeasonCacheSource) return sourceSeasonCache;")
+                        && sourceResolverBody.contains("sourceSeasonCache = List.copyOf(sourceSeasonNumbers);"));
+        assertTrue("episode-name season parsing must survive render-cache invalidation and refresh when an episode name changes",
+                source.contains("private record SourceEpisodeSeason(String name, int season)")
+                        && source.contains("private final Map<Episode, SourceEpisodeSeason> sourceEpisodeSeasonCache = new IdentityHashMap<>();")
+                        && clearRenderBody.contains("clearSeasonResolutionCache();")
+                        && !clearRenderBody.contains("sourceEpisodeSeasonCache.clear();")
+                        && sourceEpisodeResolverBody.contains("SourceEpisodeSeason cached = sourceEpisodeSeasonCache.get(episode);")
+                        && sourceEpisodeResolverBody.contains("TextUtils.equals(cached.name(), name)")
+                        && sourceEpisodeResolverBody.contains("sourceEpisodeSeasonCache.put(episode, new SourceEpisodeSeason(name, sourceSeason));"));
+        assertTrue("replacing the source must clear parsed episode-season entries separately from viewport caches",
+                source.contains("private void clearSourceEpisodeSeasonCache()")
+                        && source.contains("clearSourceEpisodeSeasonCache();")
+                        && source.indexOf("clearSourceEpisodeSeasonCache();") < clearRenderCaches
+                        && !applyLoadedBody.contains("clearSourceEpisodeSeasonCache();")
+                        && applyLoadedBody.contains("clearEpisodeRenderCaches();"));
+        assertTrue("full-list position and visibility calculations must reuse the cached season vector",
+                source.contains("List<Integer> sourceSeasons = sourceSeasonNumbers(flag.getEpisodes());")
+                        && source.contains("private int sourceSeasonNumberAt(List<Episode> episodes, int index, Episode episode)")
+                        && source.contains("sourceSeasonNumberAt(episodes, index, episode)")
+                        && source.contains("for (int i = 0; i < episodes.size(); i++) if (sourceSeasons.get(i) == selectedSeasonNumber)"));
+        assertTrue("available-season filtering must be cached across grid/list viewport-only rerenders",
+                source.contains("private List<Episode> availableSeasonCacheSource;")
+                        && source.contains("private Flag availableSeasonCacheFlag;")
+                        && source.contains("private List<Integer> availableSeasonCache = List.of();")
+                        && availableResolverBody.contains("if (episodes == availableSeasonCacheSource && selectedFlag == availableSeasonCacheFlag) return availableSeasonCache;")
+                        && availableResolverBody.contains("availableSeasonCache = EpisodeSeasonPolicy.resolveAvailableSeasons("));
+        assertTrue("episode and TMDB-season mutations must invalidate both availability and visible-episode caches",
+                applyBundleBody.contains("seasonEpisodeCounts.putAll(bundle.seasonCounts());")
+                        && applyBundleBody.contains("clearSeasonResolutionCache();")
+                        && clearRenderBody.contains("clearSeasonResolutionCache();")
+                        && clearSeasonBody.contains("sourceSeasonCacheSource = null;")
+                        && clearSeasonBody.contains("availableSeasonCacheSource = null;")
+                        && clearSeasonBody.contains("clearVisibleEpisodeCache();")
+                        && bindSeasonBody.contains("bindTmdbEpisodes(sourceEpisodes, tmdbSeason);")
+                        && bindSeasonBody.contains("clearSeasonResolutionCache();")
+                        && fetchSeasonBody.contains("seasonEpisodeCounts.put(seasonNumber, episodes.size());")
+                        && fetchSeasonBody.contains("clearSeasonResolutionCache();"));
+    }
+
+    @Test
     public void standaloneEpisodeReverseUsesViewportOnlyRefreshForLargeLists() throws Exception {
         Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
@@ -1008,10 +1088,10 @@ public class TmdbDetailActivityLayoutTest {
                         && source.indexOf("clearEpisodeRenderCaches();", source.indexOf("TmdbEpisodeSorter.sort(vod);")) > 0
                         && source.indexOf("clearEpisodeRenderCaches();", source.indexOf("enrichVod();")) > 0);
         int seasonCountUpdate = source.indexOf("seasonEpisodeCounts.put(seasonNumber, episodes.size());");
-        int visibleCacheClear = source.indexOf("clearVisibleEpisodeCache();", seasonCountUpdate);
-        int seasonRender = source.indexOf("if (seasonNumber == tmdbEpisodeDataSeason", visibleCacheClear);
-        assertTrue("season count updates must invalidate cached visible episode slices before rerendering",
-                seasonCountUpdate >= 0 && visibleCacheClear > seasonCountUpdate && seasonRender > visibleCacheClear);
+        int seasonCacheClear = source.indexOf("clearSeasonResolutionCache();", seasonCountUpdate);
+        int seasonRender = source.indexOf("if (seasonNumber == tmdbEpisodeDataSeason", seasonCacheClear);
+        assertTrue("season count updates must invalidate cached season resolution and visible episode slices before rerendering",
+                seasonCountUpdate >= 0 && seasonCacheClear > seasonCountUpdate && seasonRender > seasonCacheClear);
     }
 
     @Test

@@ -17,6 +17,7 @@ public class WebHomeThemePolicyTest {
         assertTrue(WebHomeThemePolicy.allowsMethod("player.playVod"));
         assertTrue(WebHomeThemePolicy.allowsMethod("app.search"));
         assertTrue(WebHomeThemePolicy.allowsMethod("app.openVod"));
+        assertTrue(WebHomeThemePolicy.allowsMethod("app.openSite"));
         assertTrue(WebHomeThemePolicy.allowsMethod("app.openSetting"));
         assertTrue(WebHomeThemePolicy.allowsMethod("ui.getViewport"));
         assertTrue(WebHomeThemePolicy.allowsMethod("navigation.back"));
@@ -87,6 +88,7 @@ public class WebHomeThemePolicyTest {
         assertTrue(WebHomeThemePolicy.allowsMethod(WebThemePage.HOME, permissions, "navigation.openDetail"));
         assertFalse(WebHomeThemePolicy.allowsMethod(WebThemePage.HOME, permissions, "app.search"));
         assertFalse(WebHomeThemePolicy.allowsMethod(WebThemePage.HOME, permissions, "app.openVod"));
+        assertFalse(WebHomeThemePolicy.allowsMethod(WebThemePage.HOME, permissions, "app.openSite"));
         assertFalse(WebHomeThemePolicy.allowsMethod(WebThemePage.HOME, permissions, "app.openSetting"));
         assertFalse(WebHomeThemePolicy.allowsMethod(WebThemePage.HOME, permissions, "vod.detail"));
         assertFalse(WebHomeThemePolicy.allowsMethod(WebThemePage.HOME, permissions, "player.playVod"));
@@ -97,15 +99,18 @@ public class WebHomeThemePolicyTest {
 
         permissions.add("app.search");
         permissions.add("app.openVod");
+        permissions.add("app.openSite");
         permissions.add("app.openSetting");
         assertTrue(WebHomeThemePolicy.allowsMethod(WebThemePage.HOME, permissions, "app.search"));
         assertTrue(WebHomeThemePolicy.allowsMethod(WebThemePage.HOME, permissions, "app.openVod"));
+        assertTrue(WebHomeThemePolicy.allowsMethod(WebThemePage.HOME, permissions, "app.openSite"));
         assertTrue(WebHomeThemePolicy.allowsMethod(WebThemePage.HOME, permissions, "app.openSetting"));
     }
 
     @Test
     public void v2CapabilitiesExposeOnlyPermissionsSupportedByTheCurrentPage() {
         assertTrue(WebHomeThemePolicy.allowsPermission(WebThemePage.HOME, "vod.home"));
+        assertTrue(WebHomeThemePolicy.allowsPermission(WebThemePage.HOME, "app.openSite"));
         assertTrue(WebHomeThemePolicy.allowsPermission(WebThemePage.HOME, "app.openSetting"));
         assertFalse(WebHomeThemePolicy.allowsPermission(WebThemePage.HOME, "vod.detail"));
         assertFalse(WebHomeThemePolicy.allowsPermission(WebThemePage.HOME, "person.open"));
