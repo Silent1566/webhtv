@@ -8,6 +8,7 @@ import android.text.TextUtils;
 import android.util.TypedValue;
 import android.os.Bundle;
 import android.view.Gravity;
+import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -180,6 +181,64 @@ public final class ChoiceDialog extends DialogFragment {
         window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
         window.setAttributes(params);
         window.setLayout(params.width, params.height);
+        if (Util.isLeanback()) window.getDecorView().post(() -> {
+            adaptListHeight(window);
+            window.getDecorView().post(this::focusSelectedItem);
+        });
+    }
+
+    private void focusSelectedItem() {
+        View root = viewRoot();
+        View listView = root == null ? null : root.findViewWithTag("choice_list");
+        if (!(listView instanceof ViewGroup list) || list.getChildCount() == 0) return;
+        int start = selected >= 0 && selected < list.getChildCount() ? selected : 0;
+        for (int offset = 0; offset < list.getChildCount(); offset++) {
+            View child = list.getChildAt((start + offset) % list.getChildCount());
+            if (child.isEnabled() && child.isFocusable()) {
+                child.requestFocus();
+                return;
+            }
+        }
+    }
+
+    private void adaptListHeight(Window window) {
+        View root = viewRoot();
+        View listView = root == null ? null : root.findViewWithTag("choice_list");
+        if (!(listView instanceof ViewGroup list) || !(list.getParent() instanceof ScrollView scroll)) return;
+        int height = adaptiveListHeight(window.getDecorView().getHeight(), scroll.getHeight());
+        ViewGroup.LayoutParams params = scroll.getLayoutParams();
+        if (params.height == height) return;
+        params.height = height;
+        scroll.setLayoutParams(params);
+        window.setLayout(window.getAttributes().width, WindowManager.LayoutParams.WRAP_CONTENT);
+    }
+
+    private int adaptiveListHeight(int dialogHeight, int currentListHeight) {
+        int desired = Math.max(dp(56), items.length * dp(54));
+        int chrome = Math.max(0, dialogHeight - currentListHeight);
+        int available = ResUtil.getScreenHeight(requireContext()) - dp(32) - chrome;
+        return Math.min(desired, Math.max(dp(56), available));
+    }
+
+    private boolean focusAdjacentItem(int position, int direction) {
+        View root = viewRoot();
+        View listView = root == null ? null : root.findViewWithTag("choice_list");
+        if (!(listView instanceof ViewGroup list)) return false;
+        for (int index = position + direction; index >= 0 && index < list.getChildCount(); index += direction) {
+            View child = list.getChildAt(index);
+            if (child.isEnabled() && child.isFocusable() && child.requestFocus()) return true;
+        }
+        return direction > 0 ? focusFirstAction(root) : true;
+    }
+
+    private boolean focusFirstAction(View root) {
+        View actionView = root.findViewWithTag("choice_actions");
+        if (!(actionView instanceof ViewGroup actions)) return true;
+        for (int index = 0; index < actions.getChildCount(); index++) {
+            View child = actions.getChildAt(index);
+            if (child.isEnabled() && child.isFocusable() && child.requestFocus()) return true;
+        }
+        return true;
     }
 
     private View createView(LayoutInflater inflater) {
@@ -227,8 +286,8 @@ public final class ChoiceDialog extends DialogFragment {
         for (int i = 0; i < items.length; i++) list.addView(createItem(i));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         params.topMargin = dp(16);
-        int maxHeight = positive != null || negative != null || neutral != null ? dp(300) : dp(360);
-        params.height = Math.min(maxHeight, Math.max(dp(56), items.length * dp(54)));
+        int initialMaxHeight = dp(actionCount() > 0 ? 300 : 360);
+        params.height = Math.min(initialMaxHeight, Math.max(dp(56), items.length * dp(54)));
         root.addView(scroll, params);
     }
 
@@ -247,6 +306,12 @@ public final class ChoiceDialog extends DialogFragment {
         styleItem(button, position);
         button.setOnFocusChangeListener((view, hasFocus) -> styleItem(button, position));
         button.setOnClickListener(view -> onItemClick(position));
+        button.setOnKeyListener((view, keyCode, event) -> {
+            if (!Util.isLeanback() || event == null || event.getAction() != KeyEvent.ACTION_DOWN) return false;
+            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) return focusAdjacentItem(position, 1);
+            if (keyCode == KeyEvent.KEYCODE_DPAD_UP) return focusAdjacentItem(position, -1);
+            return false;
+        });
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(46));
         params.bottomMargin = dp(8);
         button.setLayoutParams(params);
@@ -326,6 +391,7 @@ public final class ChoiceDialog extends DialogFragment {
 
     private void addActions(LinearLayout root) {
         LinearLayout actions = new LinearLayout(requireContext());
+        actions.setTag("choice_actions");
         actions.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
         actions.setOrientation(LinearLayout.HORIZONTAL);
         boolean compact = actionCount() >= 3;

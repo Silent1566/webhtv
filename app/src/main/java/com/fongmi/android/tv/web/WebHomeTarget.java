@@ -6,11 +6,15 @@ import com.fongmi.android.tv.setting.Setting;
 import java.net.URI;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.util.Collections;
 import java.util.Locale;
+import java.util.Set;
 
 public final class WebHomeTarget {
 
-    public static final String ECLIPSE_URL = "file:///android_asset/webhome/eclipse.html";
+    public static final String ECLIPSE_URL = "file:///android_asset/webhome/theme.json";
+    public static final String ECLIPSE_HOME_URL = "file:///android_asset/webhome/eclipse.html";
+    public static final String ECLIPSE_DETAIL_URL = "file:///android_asset/webhome/eclipse-detail.html";
 
     public enum Mode {
         SITE,
@@ -19,10 +23,26 @@ public final class WebHomeTarget {
 
     private final Mode mode;
     private final String url;
+    private final WebThemeManifest manifest;
+    private final WebThemePage page;
 
     private WebHomeTarget(Mode mode, String url) {
+        this(mode, url, null, null);
+    }
+
+    private WebHomeTarget(Mode mode, String url, WebThemeManifest manifest, WebThemePage page) {
         this.mode = mode;
         this.url = url;
+        this.manifest = manifest;
+        this.page = page;
+    }
+
+    static WebHomeTarget forManifestPage(WebHomeTarget configured, WebThemeManifest manifest, WebThemePage page) {
+        if (configured == null || !configured.isGlobal() || !configured.isManifest() || manifest == null || page == null
+                || !configured.getUrl().equals(manifest.getManifestUrl()) || manifest.getPage(page) == null) {
+            throw new IllegalArgumentException("Theme page is unavailable");
+        }
+        return new WebHomeTarget(Mode.GLOBAL, manifest.getPage(page).getEntryUrl(), manifest, page);
     }
 
     public static WebHomeTarget resolve(Site site) {
@@ -40,6 +60,7 @@ public final class WebHomeTarget {
         if (!globalEnabled) return null;
         String themeUrl = trim(globalUrl);
         if (themeUrl.isEmpty()) themeUrl = ECLIPSE_URL;
+        if (ECLIPSE_HOME_URL.equals(themeUrl)) themeUrl = ECLIPSE_URL;
         if (!isSafeThemeUrl(themeUrl)) return null;
         if (isRemoteUrl(themeUrl) && !themeUrl.equals(trim(trustedRemoteUrl))) return null;
         return new WebHomeTarget(Mode.GLOBAL, themeUrl);
@@ -61,6 +82,26 @@ public final class WebHomeTarget {
         return mode == Mode.GLOBAL;
     }
 
+    public boolean isManifest() {
+        return isGlobal() && manifest == null && isManifestUrl(url);
+    }
+
+    public boolean isV2() {
+        return manifest != null && page != null;
+    }
+
+    public WebThemeManifest getManifest() {
+        return manifest;
+    }
+
+    public WebThemePage getPage() {
+        return page;
+    }
+
+    public Set<String> getPermissions() {
+        return isV2() ? manifest.getPage(page).getPermissions() : Collections.emptySet();
+    }
+
     public boolean isRemoteGlobal() {
         return isGlobal() && isRemoteUrl(url);
     }
@@ -71,6 +112,8 @@ public final class WebHomeTarget {
 
     public String identity(String sourceKey) {
         if (mode == Mode.SITE) return "site:" + url;
+        if (isV2()) return "global:" + trim(sourceKey) + ":" + manifest.getId() + ":"
+                + manifest.getVersion() + ":" + page.getKey();
         return "global:" + trim(sourceKey);
     }
 
@@ -79,7 +122,9 @@ public final class WebHomeTarget {
         try {
             URI uri = URI.create(url);
             int port = effectivePort(uri);
-            return uri.getScheme().toLowerCase(Locale.ROOT) + "://" + uri.getHost().toLowerCase(Locale.ROOT)
+            String host = uri.getHost().toLowerCase(Locale.ROOT);
+            if (host.indexOf(':') >= 0 && !host.startsWith("[")) host = "[" + host + "]";
+            return uri.getScheme().toLowerCase(Locale.ROOT) + "://" + host
                     + (port == 443 ? "" : ":" + port);
         } catch (IllegalArgumentException ignored) {
             return "";
@@ -114,7 +159,7 @@ public final class WebHomeTarget {
         String url = trim(value);
         String lower = url.toLowerCase(Locale.ROOT);
         String assetPrefix = "file:///android_asset/";
-        if (lower.startsWith(assetPrefix)) return ECLIPSE_URL.equals(url);
+        if (lower.startsWith(assetPrefix)) return isSafeThemeAsset(url);
         try {
             URI uri = URI.create(url);
             String scheme = uri.getScheme();
@@ -123,6 +168,35 @@ public final class WebHomeTarget {
             return !trim(uri.getHost()).isEmpty();
         } catch (IllegalArgumentException ignored) {
             return false;
+        }
+    }
+
+    static boolean isManifestUrl(String value) {
+        try {
+            String path = URI.create(trim(value)).getPath();
+            return path != null && path.toLowerCase(Locale.ROOT).endsWith(".json");
+        } catch (IllegalArgumentException ignored) {
+            return false;
+        }
+    }
+
+    static boolean isSafeThemeAsset(String value) {
+        return !canonicalThemeAsset(value).isEmpty();
+    }
+
+    static String canonicalThemeAsset(String value) {
+        try {
+            URI uri = URI.create(trim(value));
+            if (!"file".equalsIgnoreCase(uri.getScheme()) || uri.getRawAuthority() != null
+                    || uri.getQuery() != null || uri.getFragment() != null) return "";
+            return switch (uri.getPath() == null ? "" : uri.getPath()) {
+                case "/android_asset/webhome/theme.json" -> ECLIPSE_URL;
+                case "/android_asset/webhome/eclipse.html" -> ECLIPSE_HOME_URL;
+                case "/android_asset/webhome/eclipse-detail.html" -> ECLIPSE_DETAIL_URL;
+                default -> "";
+            };
+        } catch (IllegalArgumentException ignored) {
+            return "";
         }
     }
 
@@ -135,14 +209,18 @@ public final class WebHomeTarget {
         if (!isIpLiteral(normalized)) return isAmbiguousNumericAddress(normalized);
         try {
             for (InetAddress address : InetAddress.getAllByName(stripIpv6Brackets(normalized))) {
-                if (address.isAnyLocalAddress() || address.isLoopbackAddress() || address.isLinkLocalAddress()
-                        || address.isSiteLocalAddress() || address.isMulticastAddress() || isUniqueLocal(address)
-                        || isReservedIpv4(address)) return true;
+                if (isBlockedAddress(address)) return true;
             }
         } catch (UnknownHostException ignored) {
             return true;
         }
         return false;
+    }
+
+    static boolean isBlockedAddress(InetAddress address) {
+        return address == null || address.isAnyLocalAddress() || address.isLoopbackAddress()
+                || address.isLinkLocalAddress() || address.isSiteLocalAddress() || address.isMulticastAddress()
+                || isUniqueLocal(address) || isReservedIpv4(address);
     }
 
     private static String normalizeHost(String host) {

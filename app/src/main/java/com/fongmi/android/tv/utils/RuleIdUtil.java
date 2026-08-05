@@ -28,7 +28,10 @@ public class RuleIdUtil {
 
     private static void appendSorted(StringBuilder sb, List<String> list) {
         if (list == null || list.isEmpty()) return;
-        List<String> copy = new ArrayList<>(list);
+        List<String> copy = new ArrayList<>();
+        for (String value : list) {
+            if (value != null) copy.add(value);
+        }
         Collections.sort(copy);
         for (int i = 0; i < copy.size(); i++) {
             if (i > 0) sb.append(',');

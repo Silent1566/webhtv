@@ -144,6 +144,7 @@ import com.fongmi.android.tv.ui.dialog.TrackDialog;
 import com.fongmi.android.tv.ui.dialog.VideoContentDialog;
 import com.fongmi.android.tv.ui.helper.DetailThemeVisibility;
 import com.fongmi.android.tv.ui.helper.EpisodeDisplayPolicy;
+import com.fongmi.android.tv.ui.helper.EpisodeSeasonPolicy;
 import com.fongmi.android.tv.ui.helper.EpisodeRangePolicy;
 import com.fongmi.android.tv.ui.helper.PipExitDecision;
 import com.fongmi.android.tv.ui.helper.PlayerControlFocusHelper;
@@ -318,7 +319,11 @@ private int mAudioBackgroundRandomNonce;
     private static final String EXTRA_TMDB_PLAY_FLAG = "tmdb_play_flag";
     private static final String EXTRA_TMDB_PLAY_EPISODE_NAME = "tmdb_play_episode_name";
     private static final String EXTRA_TMDB_PLAY_EPISODE_URL = "tmdb_play_episode_url";
+    private static final String EXTRA_TMDB_PLAY_SEASON_NUMBER = "tmdb_play_season_number";
+    private static final String EXTRA_TMDB_PLAY_EPISODE_NUMBER = "tmdb_play_episode_number";
     private static final String EXTRA_RESUME_FROM_HISTORY = "resume_from_history";
+    private static final String EXTRA_RESUME_HISTORY_CID = "resume_history_cid";
+    private static final String EXTRA_RESUME_HISTORY_KEY = "resume_history_key";
     private static final String EXTRA_TMDB_VOD_CACHE_KEY = "tmdb_vod_cache_key";
     private static final String EXTRA_TMDB_DETAIL_THEME = "tmdb_detail_theme";
     private static final String EXTRA_IMMERSIVE_AUDIO_CACHE_KEY = "immersive_audio_cache_key";
@@ -406,6 +411,7 @@ private int mAudioBackgroundRandomNonce;
     private com.fongmi.android.tv.ui.helper.TmdbUIAdapter mTmdbUIAdapter;
     private com.fongmi.android.tv.ui.custom.TmdbHeaderView mTmdbHeaderView;
     private Vod mVod;
+    private String mSourceVodName = "";
     private boolean mTmdbContentLoaded = false;
     private boolean mTmdbFallbackToNative = false;
     private boolean mTmdbControlsMoved = false;
@@ -613,13 +619,31 @@ private int mAudioBackgroundRandomNonce;
         start(activity, key, id, name, pic, mark, false, tmdbItem);
     }
 
-    static void startFromHistory(Activity activity, History item) {
+    public static void startFromHistory(Activity activity, History item) {
         if (shouldOpenLegacyTmdbDetail(item.getSiteKey(), item.getVodId())) {
             start(activity, item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic(), item.getVodRemarks());
             return;
         }
         startDirect(activity, item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic(), item.getVodRemarks(),
                 item.getVodFlag(), item.getVodRemarks(), item.getEpisodeUrl(), true);
+    }
+
+    public static void startFromResolvedHistory(Activity activity, History source, Vod target, Flag flag, Episode episode) {
+        if (source == null || target == null || flag == null || episode == null) return;
+        Intent intent = new Intent(activity, VideoActivity.class);
+        intent.putExtra("collect", false);
+        intent.putExtra("mark", episode.getName());
+        intent.putExtra("name", target.getName());
+        intent.putExtra("pic", target.getPic());
+        intent.putExtra("wallPic", source.getWallPic());
+        intent.putExtra("key", target.getSiteKey());
+        intent.putExtra("id", target.getId());
+        intent.putExtra(EXTRA_RESUME_FROM_HISTORY, true);
+        intent.putExtra(EXTRA_RESUME_HISTORY_CID, source.getCid());
+        intent.putExtra(EXTRA_RESUME_HISTORY_KEY, source.getKey());
+        putIntentPlaybackSelection(intent, flag.getFlag(), episode.getName(), episode.getUrl());
+        putDetailVodCache(intent, target);
+        activity.startActivity(intent);
     }
 
     public static void startDirect(Activity activity, String key, String id, String name, String pic) {
@@ -671,7 +695,7 @@ private int mAudioBackgroundRandomNonce;
         startDirect(activity, key, id, name, pic, mark, playFlag, playEpisodeName, playEpisodeUrl, false);
     }
 
-    private static void startDirect(Activity activity, String key, String id, String name, String pic, String mark,
+    public static void startDirect(Activity activity, String key, String id, String name, String pic, String mark,
             String playFlag, String playEpisodeName, String playEpisodeUrl, boolean resumeFromHistory) {
         if (AudioActivity.startSite(activity, key, id, name, pic, mark)) return;
         Intent intent = new Intent(activity, VideoActivity.class);
@@ -695,10 +719,14 @@ private int mAudioBackgroundRandomNonce;
     }
 
     public static void startDirectTmdb(Activity activity, String key, String id, String name, String pic, String mark, ArrayList<String> episodeTitles, TmdbItem item, Vod tmdbVod, Vod detailVod, String playFlag, String playEpisodeName, String playEpisodeUrl) {
-        startDirectTmdb(activity, key, id, name, pic, mark, episodeTitles, item, tmdbVod, detailVod, "", playFlag, playEpisodeName, playEpisodeUrl);
+        startDirectTmdb(activity, key, id, name, pic, mark, episodeTitles, item, tmdbVod, detailVod, "", playFlag, playEpisodeName, playEpisodeUrl, -1, -1);
     }
 
     public static void startDirectTmdb(Activity activity, String key, String id, String name, String pic, String mark, ArrayList<String> episodeTitles, TmdbItem item, Vod tmdbVod, Vod detailVod, String tmdbDetailCacheKey, String playFlag, String playEpisodeName, String playEpisodeUrl) {
+        startDirectTmdb(activity, key, id, name, pic, mark, episodeTitles, item, tmdbVod, detailVod, tmdbDetailCacheKey, playFlag, playEpisodeName, playEpisodeUrl, -1, -1);
+    }
+
+    public static void startDirectTmdb(Activity activity, String key, String id, String name, String pic, String mark, ArrayList<String> episodeTitles, TmdbItem item, Vod tmdbVod, Vod detailVod, String tmdbDetailCacheKey, String playFlag, String playEpisodeName, String playEpisodeUrl, int playSeasonNumber, int playEpisodeNumber) {
         if (AudioActivity.startSite(activity, key, id, name, pic, mark)) return;
         Intent intent = new Intent(activity, VideoActivity.class);
         intent.putExtra("tmdbMode", item != null);
@@ -712,6 +740,10 @@ private int mAudioBackgroundRandomNonce;
         intent.putExtra("id", id);
         intent.putStringArrayListExtra("tmdb_episode_titles", episodeTitles);
         putIntentPlaybackSelection(intent, playFlag, playEpisodeName, playEpisodeUrl);
+        if (playEpisodeNumber > 0) {
+            intent.putExtra(EXTRA_TMDB_PLAY_SEASON_NUMBER, Math.max(-1, playSeasonNumber));
+            intent.putExtra(EXTRA_TMDB_PLAY_EPISODE_NUMBER, playEpisodeNumber);
+        }
         putTmdbVod(intent, tmdbVod);
         putDetailVodCache(intent, detailVod);
         if (!TextUtils.isEmpty(tmdbDetailCacheKey)) intent.putExtra(TmdbDetailCache.EXTRA_KEY, tmdbDetailCacheKey);
@@ -782,6 +814,17 @@ private int mAudioBackgroundRandomNonce;
         return Objects.toString(getIntent().getStringExtra("tmdb_vod_actor"), "");
     }
 
+    private String getTmdbVodRemark() {
+        return Objects.toString(getIntent().getStringExtra("tmdb_vod_remark"), "");
+    }
+
+    private void applyIntentTmdbVodRemark(Vod item) {
+        if (item == null || !isIntentTmdbPlayback()) return;
+        String remark = getTmdbVodRemark();
+        getIntent().removeExtra("tmdb_vod_remark");
+        if (!TextUtils.isEmpty(remark)) item.setRemarks(remark);
+    }
+
     private String getWallPic() {
         return Objects.toString(getIntent().getStringExtra("wallPic"), "");
     }
@@ -806,8 +849,98 @@ private int mAudioBackgroundRandomNonce;
         return Objects.toString(getIntent().getStringExtra(EXTRA_TMDB_PLAY_EPISODE_URL), "");
     }
 
+    private Episode withIntentTmdbEpisodeIdentity(Episode episode) {
+        if (episode == null) return null;
+        int number = getIntent().getIntExtra(EXTRA_TMDB_PLAY_EPISODE_NUMBER, 0);
+        if (number <= 0) return episode;
+        int season = getIntent().getIntExtra(EXTRA_TMDB_PLAY_SEASON_NUMBER, -1);
+        TmdbEpisode current = episode.getTmdbEpisode();
+        if (current != null && current.getNumber() == number && current.getSeasonNumber() == season) return episode;
+        // 使用副本参与历史匹配，避免仅为续播身份而改变剧集列表的卡片/标题展示。
+        Episode identity = Episode.create(episode.getName(), episode.getDesc(), episode.getUrl());
+        identity.setTmdbEpisode(new TmdbEpisode(number, getEpisodeTitles().get(number), "", "", "", 0, 0, 0, season));
+        return identity;
+    }
+    private int currentSourceSeasonNumber() {
+        return currentSourceSeasonNumber(mVod);
+    }
+
+    private int currentSourceSeasonNumber(Vod item) {
+        int season = getIntent().getIntExtra(EXTRA_TMDB_PLAY_SEASON_NUMBER, -1);
+        if (season >= 0) return season;
+        Flag sourceFlag = getFlag();
+        season = EpisodeSeasonPolicy.resolveSourceSeason(sourceFlag == null ? "" : sourceFlag.getShow());
+        if (season >= 0) return season;
+        season = resolveSourceEpisodeSeason(sourceFlag);
+        if (season >= 0) return season;
+        season = EpisodeSeasonPolicy.resolveSourceSeason(getName(), mSourceVodName,
+                item == null ? "" : item.getName(), item == null ? "" : item.getRemarks());
+        if (season >= 0) return season;
+        season = resolveSourceEpisodeSeason(item);
+        if (season >= 0) return season;
+        return mTmdbUIAdapter == null ? -1 : mTmdbUIAdapter.getSourceSeasonNumber();
+    }
+
+    private int resolveSourceEpisodeSeason(Flag flag) {
+        if (flag == null || flag.getEpisodes() == null) return -1;
+        Integer season = null;
+        for (Episode episode : flag.getEpisodes()) {
+            int candidate = EpisodeSeasonPolicy.resolveSourceSeason(episode == null ? "" : episode.getName());
+            if (candidate < 0) {
+                TmdbEpisode tmdbEpisode = episode == null ? null : episode.getTmdbEpisode();
+                candidate = tmdbEpisode != null && tmdbEpisode.getNumber() > 0 ? tmdbEpisode.getSeasonNumber() : -1;
+            }
+            if (candidate < 0) continue;
+            if (season != null && season != candidate) return -1;
+            season = candidate;
+        }
+        return season == null ? -1 : season;
+    }
+
+    private int resolveSourceEpisodeSeason(Vod item) {
+        if (item == null || item.getFlags() == null) return -1;
+        Integer season = null;
+        for (Flag flag : item.getFlags()) {
+            int candidate = resolveSourceEpisodeSeason(flag);
+            if (candidate < 0) continue;
+            if (season != null && season != candidate) return -1;
+            season = candidate;
+        }
+        return season == null ? -1 : season;
+    }
+    private Episode withSourceSeasonEpisodeIdentity(Episode episode) {
+        if (episode == null) return null;
+        int season = currentSourceSeasonNumber();
+        if (season < 0) return episode;
+        TmdbEpisode current = episode.getTmdbEpisode();
+        int number = current != null && current.getNumber() > 0 ? current.getNumber() : episode.getNumber();
+        if (number <= 0) return episode;
+        if (current != null && current.getNumber() == number && current.getSeasonNumber() == season) return episode;
+        String title = current == null ? getEpisodeTitles().get(number) : current.getTitle();
+        Episode identity = Episode.create(episode.getName(), episode.getDesc(), episode.getUrl());
+        identity.setTmdbEpisode(new TmdbEpisode(number, title, "", "", "", 0, 0, 0, season));
+        return identity;
+    }
+
+    private void updateEpisodeSeasonContext() {
+        int season = currentSourceSeasonNumber();
+        mBinding.episodeTitle.setText(isTmdbSourceEnabled() && season >= 0
+                ? getString(R.string.detail_episode_season_context, season)
+                : getString(R.string.detail_episode));
+    }
+
     private boolean isResumeFromHistory() {
         return getIntent().getBooleanExtra(EXTRA_RESUME_FROM_HISTORY, false);
+    }
+
+    private History getIntentResumeHistory() {
+        String key = Objects.toString(getIntent().getStringExtra(EXTRA_RESUME_HISTORY_KEY), "");
+        if (key.isEmpty()) return null;
+        return History.find(getIntent().getIntExtra(EXTRA_RESUME_HISTORY_CID, VodConfig.getCid()), key);
+    }
+
+    private boolean hasIntentResumeHistory() {
+        return !TextUtils.isEmpty(getIntent().getStringExtra(EXTRA_RESUME_HISTORY_KEY));
     }
 
     private String getTmdbVodCacheKey() {
@@ -885,14 +1018,13 @@ private int mAudioBackgroundRandomNonce;
     }
 
     /**
-     * 跨源聚合：取当前已知的 TMDB ID（优先适配器匹配结果，其次 intent 携带的 tmdbItem）。
-     * 从 TMDB 详情进入播放时 intent 已带 tmdbItem，checkHistory 阶段即可拿到，用于首次进入就跨源续播。
+     * 跨源聚合必须携带完整 TMDB 身份（mediaType + tmdbId），避免电影与剧集数字 ID 相同时串进度。
      */
-    private int getMatchedTmdbId() {
-        if (!Setting.isHistoryAggregationEffective()) return 0;
-        com.fongmi.android.tv.bean.TmdbItem item = mTmdbUIAdapter == null ? null : mTmdbUIAdapter.getTmdbItem();
+    private TmdbItem getHistoryTmdbItem() {
+        if (!Setting.isHistoryAggregationEffective()) return null;
+        TmdbItem item = mTmdbUIAdapter == null ? null : mTmdbUIAdapter.getTmdbItem();
         if (item == null) item = getTmdbItem();
-        return item == null ? 0 : item.getTmdbId();
+        return item;
     }
 
     /**
@@ -902,17 +1034,19 @@ private int mAudioBackgroundRandomNonce;
      */
     private boolean stampHistoryTmdbId() {
         if (mHistory == null || !Setting.isHistoryAggregationEffective()) return false;
-        com.fongmi.android.tv.bean.TmdbItem item = mTmdbUIAdapter == null ? null : mTmdbUIAdapter.getTmdbItem();
+        TmdbItem item = mTmdbUIAdapter == null ? null : mTmdbUIAdapter.getTmdbItem();
         if (item == null) item = getTmdbItem();
         if (item == null || item.getTmdbId() <= 0) return false;
-        if (mHistory.getTmdbId() == item.getTmdbId()) return false;
+        if (mHistory.getTmdbId() == item.getTmdbId() && TextUtils.equals(mHistory.getMediaType(), item.getMediaType())) return false;
         mHistory.setTmdbId(item.getTmdbId());
         mHistory.setMediaType(item.getMediaType());
         return true;
     }
 
     private String getOsdTitle() {
-        return EpisodeTitleFormatter.buildPlaybackTitle(getPlaybackName(), getCurrentEpisodeTitle());
+        String title = EpisodeTitleFormatter.buildPlaybackTitle(getPlaybackName(), getCurrentEpisodeTitle());
+        String episodeInfo = tmdbEpisodeCompactText();
+        return TextUtils.isEmpty(episodeInfo) ? title : title + " · " + episodeInfo;
     }
 
     private String getPlaybackName() {
@@ -1022,9 +1156,14 @@ private int mAudioBackgroundRandomNonce;
         getIntent().removeExtra(EXTRA_TMDB_PLAY_FLAG);
         getIntent().removeExtra(EXTRA_TMDB_PLAY_EPISODE_NAME);
         getIntent().removeExtra(EXTRA_TMDB_PLAY_EPISODE_URL);
+        getIntent().removeExtra(EXTRA_TMDB_PLAY_SEASON_NUMBER);
+        getIntent().removeExtra(EXTRA_TMDB_PLAY_EPISODE_NUMBER);
         getIntent().removeExtra(EXTRA_RESUME_FROM_HISTORY);
+        getIntent().removeExtra(EXTRA_RESUME_HISTORY_CID);
+        getIntent().removeExtra(EXTRA_RESUME_HISTORY_KEY);
         getIntent().putExtras(intent);
         if (mTmdbUIAdapter != null) mTmdbUIAdapter.beginDetailRequest();
+        mSourceVodName = "";
         setOrient();
         checkId();
     }
@@ -1238,6 +1377,7 @@ private int mAudioBackgroundRandomNonce;
             mBinding.tmdbPersonalTmdbRecommendations.addItemDecoration(new SpaceItemDecoration(8));
             mBinding.tmdbPersonalTmdbRecommendations.setAdapter(mPersonalTmdbRecommendationAdapter = new TmdbRecommendationAdapter());
             mPersonalTmdbRecommendationAdapter.setOnItemClickListener(this::onPersonalRecommendationClick);
+            mPersonalTmdbRecommendationAdapter.setOnItemLongClickListener(item -> onPersonalRecommendationLongClick(item, "tmdb"));
             mBinding.tmdbPersonalTmdbRecommendations.addOnScrollListener(new RecyclerView.OnScrollListener() {
                 @Override
                 public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {
@@ -1251,6 +1391,7 @@ private int mAudioBackgroundRandomNonce;
             mBinding.tmdbPersonalDoubanRecommendations.addItemDecoration(new SpaceItemDecoration(8));
             mBinding.tmdbPersonalDoubanRecommendations.setAdapter(mPersonalDoubanRecommendationAdapter = new TmdbRecommendationAdapter());
             mPersonalDoubanRecommendationAdapter.setOnItemClickListener(this::onPersonalRecommendationClick);
+            mPersonalDoubanRecommendationAdapter.setOnItemLongClickListener(item -> onPersonalRecommendationLongClick(item, "douban"));
             mBinding.tmdbPersonalDoubanRecommendations.addOnScrollListener(new RecyclerView.OnScrollListener() {
                 @Override
                 public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {
@@ -1264,10 +1405,7 @@ private int mAudioBackgroundRandomNonce;
             mBinding.tmdbPersonalAiRecommendations.addItemDecoration(new SpaceItemDecoration(8));
             mBinding.tmdbPersonalAiRecommendations.setAdapter(mPersonalAiRecommendationAdapter = new TmdbRecommendationAdapter());
             mPersonalAiRecommendationAdapter.setOnItemClickListener(this::onPersonalRecommendationClick);
-            mPersonalAiRecommendationAdapter.setOnItemLongClickListener(item -> {
-                com.fongmi.android.tv.ui.dialog.AiRecommendationInfoDialog.show(this, item);
-                return true;
-            });
+            mPersonalAiRecommendationAdapter.setOnItemLongClickListener(item -> onPersonalRecommendationLongClick(item, "ai"));
         }
         mBinding.episodeGroup.setHasFixedSize(true);
         mBinding.episodeGroup.setItemAnimator(null);
@@ -1676,11 +1814,13 @@ private int mAudioBackgroundRandomNonce;
             mPendingDetailVod = item;
             return;
         }
+        mSourceVodName = item.getName();
         mVod = item;
         item.checkPic(getPic());
         item.checkName(getName());
         item.checkContent(getTmdbVodContent());
         item.checkContent(getContent());
+        applyIntentTmdbVodRemark(item);
         boolean tmdbMode = shouldLoadTmdbDetail();
         mTmdbFallbackToNative = false;
         mTmdbContentLoaded = false;
@@ -1723,7 +1863,7 @@ private int mAudioBackgroundRandomNonce;
         }
         mFlagAdapter.addAll(item.getFlags());
         App.removeCallbacks(mR4);
-        checkHistory(item);
+        if (!checkHistory(item)) return;
         checkFlag(item);
         checkKeepImg();
         updateTmdbKeepState();
@@ -2101,13 +2241,14 @@ private int mAudioBackgroundRandomNonce;
     }
 
     private void setEpisodeAdapter(List<Episode> items) {
+        updateEpisodeSeasonContext();
         int size = items.size();
         boolean useTmdbCard = shouldUseTmdbEpisodeCards(items);
         mBinding.control.action.episodes.setVisibility(size < 2 ? View.GONE : View.VISIBLE);
         mBinding.control.action.next.setVisibility(size < 2 ? View.GONE : View.VISIBLE);
         mBinding.control.action.prev.setVisibility(size < 2 ? View.GONE : View.VISIBLE);
         applyActionButtonVisibility();
-        // 中间悬浮的上集/下集按钮：只根据集数显示，不受 PlayerButtonSetting 影响
+        // 中间悬浮的上集/下集按钮只根据集数显示，不受底部动作栏设置影响。
         mBinding.control.next.setVisibility(size < 2 ? View.GONE : View.VISIBLE);
         mBinding.control.prev.setVisibility(size < 2 ? View.GONE : View.VISIBLE);
         mBinding.reverse.setVisibility(size < 2 ? View.GONE : View.VISIBLE);
@@ -2593,7 +2734,7 @@ private int mAudioBackgroundRandomNonce;
     private void onRotate() {
         setR1Callback();
         setRotate(!isRotate());
-        setRequestedOrientation(PlaybackOrientation.getRotateOrientation(isPort()));
+        setRequestedOrientation(PlaybackOrientation.getRotateOrientation(isRotate()));
     }
 
     private void onFullscreen() {
@@ -2697,10 +2838,8 @@ private int mAudioBackgroundRandomNonce;
     }
 
     private void onScale() {
-        int index = getScale();
-        String[] array = ResUtil.getStringArray(R.array.select_scale);
         if (mKeyDown.getScale() != 1.0f) mKeyDown.resetScale();
-        else setScale(index == array.length - 1 ? 0 : ++index);
+        else showResizeModeDialog(getScale(), this::setScale);
         setR1Callback();
     }
 
@@ -3183,7 +3322,7 @@ private int mAudioBackgroundRandomNonce;
         mBinding.control.action.danmaku.setVisibility(DanmakuSetting.isLoad() ? View.VISIBLE : View.GONE);
         mBinding.control.action.adFeedback.setVisibility(isAdFeedbackEnabled() ? View.VISIBLE : View.GONE);
         applyActionButtonVisibility();
-        // 顶部的弹幕图标按钮：只根据功能可用性显示，不受 PlayerButtonSetting 影响
+        // 顶部弹幕图标只根据锁定状态和弹幕可用性显示。
         if (mBinding.control.getRoot().getVisibility() == View.VISIBLE) mBinding.control.danmaku.setVisibility(isLock() || !player().haveDanmaku() ? View.GONE : View.VISIBLE);
     }
 
@@ -3193,13 +3332,13 @@ private int mAudioBackgroundRandomNonce;
         boolean shortDrama = isShortDramaSource();
         boolean showPiP = canShowPiP(shortDrama);
         hideWidgetOverlay();
-        // 顶部的弹幕图标按钮：只根据功能可用性显示，不受 PlayerButtonSetting 影响
+        // 顶部弹幕图标只根据锁定状态和弹幕可用性显示。
         mBinding.control.danmaku.setVisibility(isLock() || !player().haveDanmaku() ? View.GONE : View.VISIBLE);
         mBinding.control.setting.setVisibility(mHistory == null || (isFullscreen() && !shortDrama) ? View.GONE : View.VISIBLE);
         mBinding.control.right.getRoot().setVisibility(isFullscreen() || showPiP ? View.VISIBLE : View.GONE);
         mBinding.control.right.rotate.setVisibility(isFullscreen() && !isLock() ? View.VISIBLE : View.GONE);
         mBinding.control.right.pip.setVisibility(showPiP ? View.VISIBLE : View.GONE);
-        // 进度条旁的全屏按钮：只根据锁定状态和短剧判断，不受 PlayerButtonSetting 影响
+        // 进度条旁的全屏按钮只根据锁定状态和短剧模式显示。
         mBinding.control.fullscreen.setVisibility(isLock() || shortDrama ? View.GONE : View.VISIBLE);
         mBinding.control.keep.setVisibility(mHistory == null ? View.GONE : View.VISIBLE);
         mBinding.control.nightMode.setVisibility(mHistory == null ? View.GONE : View.VISIBLE);
@@ -3214,7 +3353,7 @@ private int mAudioBackgroundRandomNonce;
         mBinding.control.action.getRoot().setVisibility(isLandscapeFullscreen || isFusionPlayerActionsDocked() ? View.VISIBLE : View.GONE);
         mBinding.control.right.lock.setVisibility(isFullscreen() ? View.VISIBLE : View.GONE);
         mBinding.control.info.setVisibility(player().isEmpty() ? View.GONE : View.VISIBLE);
-        // 顶部的投屏图标按钮：只根据全屏状态和播放状态显示，不受 PlayerButtonSetting 影响
+        // 顶部投屏图标只根据全屏和播放状态显示。
         mBinding.control.cast.setVisibility(isFullscreen() && mHistory != null && !player().isEmpty() ? View.VISIBLE : View.GONE);
         mBinding.control.center.setVisibility(isLock() ? View.GONE : View.VISIBLE);
         mBinding.control.bottom.setVisibility(isLock() ? View.GONE : View.VISIBLE);
@@ -3453,24 +3592,34 @@ private int mAudioBackgroundRandomNonce;
         mRestoringConfigurationPlayback = false;
     }
 
-    private void checkHistory(Vod item) {
-        int tmdbId = getMatchedTmdbId();
-        mHistory = History.findPlayback(getHistoryKey(), List.of(item.getName(), getName()), item.getFlags(), tmdbId);
+    private boolean checkHistory(Vod item) {
+        TmdbItem tmdbItem = getHistoryTmdbItem();
+        History resumeHistory = getIntentResumeHistory();
+        if (hasIntentResumeHistory() && resumeHistory == null) {
+            Notify.show(R.string.history_record_missing);
+            finish();
+            return false;
+        }
+        mHistory = resumeHistory == null
+                ? History.findPlayback(getHistoryKey(), List.of(item.getName(), getName()), item.getFlags(), tmdbItem, currentSourceSeasonNumber(item))
+                : resumeHistory.forPlaybackKey(getHistoryKey(), VodConfig.getCid());
         mHistory = mHistory == null ? createHistory(item) : mHistory;
         if (!TextUtils.isEmpty(getWallPic())) mHistory.setWallPic(getWallPic());
         if (!TextUtils.isEmpty(getMark())) mHistory.setVodRemarks(getMark());
         applyIntentPlaybackSelection(item);
-        if (Setting.isIncognito() && mHistory.getKey().equals(getHistoryKey())) mHistory.delete();
+        if (resumeHistory == null && Setting.isIncognito() && mHistory.getKey().equals(getHistoryKey())) mHistory.delete();
         mBinding.control.action.opening.setText(mHistory.getOpening() <= 0 ? getString(R.string.play_op) : Util.timeMs(mHistory.getOpening()));
         mBinding.control.action.ending.setText(mHistory.getEnding() <= 0 ? getString(R.string.play_ed) : Util.timeMs(mHistory.getEnding()));
         // 如果历史记录中已有有效倍速，使用历史倍速；否则使用默认播放倍速
         float speed = getPlaybackSpeed();
         mBinding.control.action.speed.setText(player().setSpeed(speed));
         mHistory.setVodName(item.getName());
+        mHistory.setVodPic(getInitialArtwork(item));
         enrichHistoryMeta(item);
         PlaybackEventCollector.get().updateHistory(mHistory);
         setArtwork(getInitialArtwork(item));
         setScale(getScale());
+        return true;
     }
 
     /**
@@ -3553,21 +3702,23 @@ private int mAudioBackgroundRandomNonce;
         Flag flag = findIntentPlaybackFlag(item.getFlags(), playFlag, playUrl);
         if (flag == null) return;
         Episode episode = findIntentPlaybackEpisode(flag, playName, playUrl);
-        // 仅历史入口和跨源续播允许 URL 刷新后按集名/集号恢复；普通显式选集仍按 URL 严格匹配。
+        Episode historyEpisode = withSourceSeasonEpisodeIdentity(withIntentTmdbEpisodeIdentity(episode));
+        // 历史续播、跨源复制或 TMDB 聚合开启时共享标准剧集进度；否则普通显式选集保持原始剧集身份。
         boolean crossSource = mHistory.isCrossSourcePlayback();
-        boolean tolerantResume = crossSource || isResumeFromHistory();
-        boolean sameFlag = crossSource || TextUtils.equals(mHistory.getVodFlag(), flag.getFlag());
-        boolean sameEpisode = episode != null && (tolerantResume
-                ? episode.matchesPlayback(mHistory.getEpisode())
+        boolean shareEpisodeProgress = crossSource || isResumeFromHistory() || Setting.isHistoryAggregationEffective();
+        boolean compatibleFlag = shareEpisodeProgress || TextUtils.equals(mHistory.getVodFlag(), flag.getFlag());
+        boolean sameEpisode = episode != null && (shareEpisodeProgress
+                ? historyEpisode.matchesPlayback(mHistory.getEpisode())
                 : episode.matches(mHistory.getEpisode()));
-        if (!sameFlag || (episode != null && !sameEpisode)) {
+        if (!compatibleFlag || (episode != null && !sameEpisode)) {
             mHistory.setPosition(C.TIME_UNSET);
             mHistory.setDuration(C.TIME_UNSET);
         }
         mHistory.setVodFlag(flag.getFlag());
         if (episode == null) return;
-        mHistory.setVodRemarks(getHistoryEpisodeName(episode));
+        mHistory.setVodRemarks(getHistoryEpisodeName(historyEpisode));
         mHistory.setEpisodeUrl(episode.getUrl());
+        if (historyEpisode.getTmdbEpisode() != null || !sameEpisode) mHistory.setTmdbEpisodePosition(historyEpisode);
     }
 
     private Flag findIntentPlaybackFlag(List<Flag> flags, String playFlag, String playUrl) {
@@ -3629,7 +3780,8 @@ private int mAudioBackgroundRandomNonce;
 
     private void updateHistory(Episode item) {
         // 换线路或源站刷新时同一集的 URL、集名格式可能变化，统一按播放恢复规则识别。
-        boolean sameEpisode = item.matchesPlayback(mHistory.getEpisode());
+        Episode historyEpisode = withSourceSeasonEpisodeIdentity(item);
+        boolean sameEpisode = historyEpisode.matchesPlayback(mHistory.getEpisode());
         boolean sameFlag = TextUtils.equals(mHistory.getVodFlag(), getFlag().getFlag());
         if (!sameEpisode || !sameFlag) mIntroSkipPlayback.reset();
         if ((!sameEpisode || !sameFlag) && service() != null) {
@@ -3655,7 +3807,7 @@ private int mAudioBackgroundRandomNonce;
                 getKey(),
                 getId(),
                 getFlag().getFlag(),
-                item.getName()
+                episodePositionCacheName(item, currentSourceSeasonNumber())
             );
 
             if (cached != null) {
@@ -3670,6 +3822,7 @@ private int mAudioBackgroundRandomNonce;
         mHistory.setVodFlag(getFlag().getFlag());
         mHistory.setVodRemarks(getHistoryEpisodeName(item));
         mHistory.setEpisodeUrl(item.getUrl());
+        if (historyEpisode.getTmdbEpisode() != null || !sameEpisode) mHistory.setTmdbEpisodePosition(historyEpisode);
         PlaybackEventCollector.get().updateHistory(mHistory);
     }
 
@@ -3762,6 +3915,11 @@ private int mAudioBackgroundRandomNonce;
         }
     }
 
+    private String tmdbEpisodeCompactText() {
+        return mTmdbUIAdapter == null || !mTmdbUIAdapter.isLoaded()
+                ? "" : mTmdbUIAdapter.getEpisodeCompactText();
+    }
+
     private void bindLoadedTmdbDetail() {
         if (mTmdbHeaderView == null || mTmdbUIAdapter == null || !mTmdbUIAdapter.isLoaded()) return;
         mTmdbFallbackToNative = false;
@@ -3790,18 +3948,28 @@ private int mAudioBackgroundRandomNonce;
         for (Flag flag : mFlagAdapter.getItems()) {
             if (!TextUtils.equals(flag.getFlag(), mHistory.getVodFlag())) continue;
             Episode episode = flag.find(historyEpisode, true);
-            if (episode != null) return episode.getName();
+            if (episode != null) return episodePositionCacheName(episode, mHistory.getTmdbEpisodeNumber() > 0 ? mHistory.getTmdbSeasonNumber() : -1);
         }
         if (!TextUtils.isEmpty(historyEpisode.getUrl())) {
             for (Flag flag : mFlagAdapter.getItems()) {
                 for (Episode episode : flag.getEpisodes()) {
-                    if (TextUtils.equals(episode.getUrl(), historyEpisode.getUrl())) return episode.getName();
+                    if (TextUtils.equals(episode.getUrl(), historyEpisode.getUrl())) return episodePositionCacheName(episode, mHistory.getTmdbEpisodeNumber() > 0 ? mHistory.getTmdbSeasonNumber() : -1);
                 }
             }
         }
         return "";
     }
 
+    private String episodePositionCacheName(Episode episode, int preferredSeason) {
+        if (episode == null) return "";
+        int season = preferredSeason;
+        TmdbEpisode tmdbEpisode = episode.getTmdbEpisode();
+        if (season < 0 && tmdbEpisode != null && tmdbEpisode.getNumber() > 0 && tmdbEpisode.getSeasonNumber() >= 0) {
+            season = tmdbEpisode.getSeasonNumber();
+        }
+        if (season < 0) season = currentSourceSeasonNumber();
+        return EpisodeSeasonPolicy.episodePositionCacheKey(season, episode.getName());
+    }
     private boolean refreshCurrentHistoryEpisodeTitle() {
         if (mHistory == null || mFlagAdapter == null || mFlagAdapter.isEmpty()) return false;
         Flag flag = getFlag();
@@ -3809,10 +3977,17 @@ private int mAudioBackgroundRandomNonce;
         Episode episode = flag.find(mHistory.getEpisode(), true);
         if (episode == null) return false;
         String title = getHistoryEpisodeName(episode);
-        if (TextUtils.isEmpty(title) || TextUtils.equals(title, mHistory.getVodRemarks())) return false;
-        mHistory.setVodRemarks(title);
-        mHistory.setEpisodeUrl(episode.getUrl());
-        return true;
+        Episode historyEpisode = withSourceSeasonEpisodeIdentity(episode);
+        boolean changed = historyEpisode.getTmdbEpisode() != null && mHistory.setTmdbEpisodePosition(historyEpisode);
+        if (!TextUtils.isEmpty(title) && !TextUtils.equals(title, mHistory.getVodRemarks())) {
+            mHistory.setVodRemarks(title);
+            changed = true;
+        }
+        if (!TextUtils.equals(episode.getUrl(), mHistory.getEpisodeUrl())) {
+            mHistory.setEpisodeUrl(episode.getUrl());
+            changed = true;
+        }
+        return changed;
     }
 
     private void updateFlag(Flag activated, List<Flag> items) {
@@ -4099,7 +4274,7 @@ private int mAudioBackgroundRandomNonce;
             TmdbEpisode tmdbEpisode = episode == null ? null : episode.getTmdbEpisode();
             season = tmdbEpisode == null ? 1 : tmdbEpisode.getSeasonNumber();
             number = tmdbEpisode == null ? (episode == null ? 0 : episode.getNumber()) : tmdbEpisode.getNumber();
-            if (season <= 0 || number <= 0) return null;
+            if (season < 0 || number <= 0) return null;
         }
         long duration = player() == null ? 0 : Math.max(0, player().getDuration());
         return new IntroSkipService.Query(item.getTmdbId(), getIntroSkipImdbId(), item.getMediaType(), season, number, duration);
@@ -4763,8 +4938,9 @@ private int mAudioBackgroundRandomNonce;
         clearNativePersonalRecommendations();
         Task.execute(() -> {
             PersonalRecommendationService.RecommendationPages recommendations = PersonalRecommendationService.RecommendationPages.empty();
+            PersonalRecommendationService service = new PersonalRecommendationService();
             try {
-                recommendations = new PersonalRecommendationService().loadPage(item, null, null, 0, PersonalRecommendationService.DEFAULT_PAGE_SIZE);
+                recommendations = service.loadPage(item, null, null, 0, PersonalRecommendationService.DEFAULT_PAGE_SIZE);
             } catch (Throwable e) {
                 SpiderDebug.log("personal-rec", "mobile native core failed error=%s", e.getMessage());
             }
@@ -4773,6 +4949,7 @@ private int mAudioBackgroundRandomNonce;
                 if (isFinishing() || isDestroyed() || generation != mPersonalRecommendationGeneration) return;
                 bindNativePersonalRecommendations(loaded);
             });
+            service.enrichTmdbPageRatingsAsync(loaded.getTmdb(), enriched -> applyNativePersonalTmdbRatings(enriched, generation));
         });
         Task.execute(() -> {
             PersonalRecommendationService.RecommendationPage page;
@@ -4800,6 +4977,19 @@ private int mAudioBackgroundRandomNonce;
     private void bindNativePersonalAiRecommendation(PersonalRecommendationService.RecommendationPage page) {
         mNativePersonalAiPage = page == null ? PersonalRecommendationService.RecommendationPage.empty("") : page;
         bindNativePersonalRecommendationRow(mBinding.tmdbPersonalAiRecommendationsLabel, mBinding.tmdbPersonalAiRecommendations, mPersonalAiRecommendationAdapter, mNativePersonalAiPage.getItems());
+    }
+
+    private void applyNativePersonalTmdbRatings(PersonalRecommendationService.RecommendationPage page, int generation) {
+        runOnUiThread(() -> {
+            if (isFinishing() || isDestroyed() || generation != mPersonalRecommendationGeneration || page == null) return;
+            List<TmdbItem> current = mPersonalTmdbRecommendationAdapter == null
+                    ? new ArrayList<>()
+                    : mPersonalTmdbRecommendationAdapter.getItems();
+            if (mPersonalTmdbRecommendationAdapter == null) return;
+            boolean changed = com.fongmi.android.tv.ui.helper.TmdbUIAdapter.mergeRecommendationRatings(current, page.getItems());
+            mNativePersonalTmdbPage = page.withItems(current);
+            if (changed && mPersonalTmdbRecommendationAdapter != null) mPersonalTmdbRecommendationAdapter.setItems(current);
+        });
     }
 
     private void bindNativePersonalRecommendationRow(View label, View recycler, TmdbRecommendationAdapter adapter, List<TmdbItem> items) {
@@ -4841,6 +5031,18 @@ private int mAudioBackgroundRandomNonce;
         TmdbNavigation.open(this, item, getSite());
     }
 
+    private boolean onPersonalRecommendationLongClick(TmdbItem item, String source) {
+        com.fongmi.android.tv.ui.dialog.AiRecommendationInfoDialog.show(this, item, source, this::onRecommendationNotInterested);
+        return true;
+    }
+
+    private void onRecommendationNotInterested(TmdbItem item) {
+        if (mPersonalTmdbRecommendationAdapter != null) mPersonalTmdbRecommendationAdapter.removeItem(item);
+        if (mPersonalDoubanRecommendationAdapter != null) mPersonalDoubanRecommendationAdapter.removeItem(item);
+        if (mPersonalAiRecommendationAdapter != null) mPersonalAiRecommendationAdapter.removeItem(item);
+        refreshPersonalRecommendationsForHistory();
+    }
+
     private void refreshPersonalRecommendationsForHistory() {
         if (!Setting.isPersonalRecommendation() || mVod == null) return;
         if (mTmdbHeaderView != null && mTmdbUIAdapter != null && mTmdbUIAdapter.isLoaded() && !mTmdbFallbackToNative) {
@@ -4866,10 +5068,11 @@ private int mAudioBackgroundRandomNonce;
         else mNativePersonalDoubanLoading = true;
         Task.execute(() -> {
             PersonalRecommendationService.RecommendationPage nextPage;
+            PersonalRecommendationService service = new PersonalRecommendationService();
             try {
                 nextPage = tmdb
-                        ? new PersonalRecommendationService().loadTmdbPage(mVod, null, null, page.getNextOffset(), PersonalRecommendationService.DEFAULT_PAGE_SIZE)
-                        : new PersonalRecommendationService().loadDoubanPage(mVod, page.getNextOffset(), PersonalRecommendationService.DEFAULT_PAGE_SIZE);
+                        ? service.loadTmdbPage(mVod, null, null, page.getNextOffset(), PersonalRecommendationService.DEFAULT_PAGE_SIZE)
+                        : service.loadDoubanPage(mVod, page.getNextOffset(), PersonalRecommendationService.DEFAULT_PAGE_SIZE);
             } catch (Throwable e) {
                 SpiderDebug.log("personal-rec", "native load more failed tmdb=%s error=%s", tmdb, e.getMessage());
                 nextPage = page;
@@ -4887,6 +5090,7 @@ private int mAudioBackgroundRandomNonce;
                     if (mPersonalDoubanRecommendationAdapter != null) mPersonalDoubanRecommendationAdapter.appendItems(loadedPage.getItems());
                 }
             });
+            if (tmdb) service.enrichTmdbPageRatingsAsync(loadedPage, enriched -> applyNativePersonalTmdbRatings(enriched, generation));
         });
     }
 
@@ -5129,7 +5333,7 @@ private int mAudioBackgroundRandomNonce;
 
     private void setShortDramaScale() {
         int scale = (mHistory != null && mHistory.getScale() != -1) ? getScale() : SHORT_DRAMA_SCALE;
-        mBinding.exo.setResizeMode(scale);
+        applyResizeMode(scale);
         mBinding.control.action.scale.setText(ResUtil.getStringArray(R.array.select_scale)[scale]);
     }
 
@@ -5278,6 +5482,7 @@ private int mAudioBackgroundRandomNonce;
     }
 
     private void refreshEpisodeTitles() {
+        updateEpisodeSeasonContext();
         if (mEpisodeAdapter == null) return;
         if ((mFlagAdapter == null || mFlagAdapter.isEmpty()) && !shouldUseEpisodeRangePaging(getCurrentEpisodeItems())) {
             updateEpisodeLayout(mEpisodeAdapter.getItems());
@@ -5479,6 +5684,7 @@ private int mAudioBackgroundRandomNonce;
             Util.hideSystemUI(this);
             if (isVisible(mBinding.control.getRoot())) showControl();
         }
+        applyResizeMode(getScale());
     }
 
     @Override

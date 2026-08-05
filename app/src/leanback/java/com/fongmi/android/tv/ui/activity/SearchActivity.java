@@ -24,6 +24,7 @@ import androidx.viewbinding.ViewBinding;
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.api.config.VodConfig;
+import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.bean.Word;
 import com.fongmi.android.tv.databinding.ActivitySearchBinding;
@@ -95,6 +96,18 @@ public class SearchActivity extends BaseActivity implements WordAdapter.OnClickL
         intent.putExtra("pic", pic);
         intent.putExtra("wallPic", wallPic);
         activity.startActivity(intent);
+    }
+
+    public static void directFromHistory(Activity activity, History history) {
+        directFromHistory(activity, history, history.getVodName(), VodConfig.getCid());
+    }
+
+    public static void directFromHistory(Activity activity, History history, String keyword) {
+        directFromHistory(activity, history, keyword, VodConfig.getCid());
+    }
+
+    public static void directFromHistory(Activity activity, History history, String keyword, int targetCid) {
+        CollectActivity.startFromHistory(activity, history, keyword, targetCid);
     }
 
     public static void direct(Activity activity, String keyword) {

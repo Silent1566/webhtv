@@ -1730,6 +1730,7 @@ window.fm = {
   stat,
   search,
   openVod,
+  openSite,
   openLive,
   openKeep,
   openSetting,
@@ -1761,6 +1762,7 @@ window.fm = {
 | `fm.stat` | `fongmi.player.status` |
 | `fm.search` | `fongmi.app.search` |
 | `fm.openVod` | `fongmi.app.openVod` |
+| `fm.openSite` | `fongmi.app.openSite` |
 | `fm.openLive` | `fongmi.app.openLive` |
 | `fm.openKeep` | `fongmi.app.openKeep` |
 | `fm.openSetting` | `fongmi.app.openSetting` |
@@ -2193,10 +2195,11 @@ await fm.search("仙逆", {
 
 返回值为 `{}`。搜索页是否有结果由当前配置站点决定。WebHome 详情页的“搜索播放”如果希望用户从原生搜索结果进入播放器后仍看到同一张横屏背景，应传 `wallPic`；如果没有 `wallPic`，播放页不会用搜索结果海报作为背景兜底。
 
-### 19.2 点播、收藏、直播和设置入口
+### 19.2 点播、内容源、收藏、直播和设置入口
 
 ```js
 await fm.openVod();
+await fm.openSite();
 await fm.openKeep();
 await fm.openLive();
 await fm.openSetting();
@@ -2207,6 +2210,7 @@ await fm.openSetting();
 | 接口 | 行为 |
 | --- | --- |
 | `fm.openVod()` | 退出 WebHome chrome，回到原生点播首页 |
+| `fm.openSite()` | 打开原生内容源选择器；选择后刷新当前 WebHome |
 | `fm.openKeep()` | 打开原生收藏页 |
 | `fm.openLive()` | 打开原生直播页 |
 | `fm.openSetting()` | 打开原生设置页；手机端切到设置页，TV 端打开设置 Activity |

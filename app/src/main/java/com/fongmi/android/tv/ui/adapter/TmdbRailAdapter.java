@@ -13,12 +13,16 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.bean.TmdbItem;
 import com.fongmi.android.tv.ui.helper.TmdbCinemaTheme;
+import com.fongmi.android.tv.ui.helper.TmdbRatingFormatter;
+import com.fongmi.android.tv.ui.helper.TmdbRecommendationRows;
 import com.fongmi.android.tv.utils.ImgUtil;
+import com.fongmi.android.tv.utils.TmdbImageSelector;
 import com.google.android.material.card.MaterialCardView;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 
 public class TmdbRailAdapter extends RecyclerView.Adapter<TmdbRailAdapter.ViewHolder> {
 
@@ -58,6 +62,14 @@ public class TmdbRailAdapter extends RecyclerView.Adapter<TmdbRailAdapter.ViewHo
         items.clear();
         if (values != null) items.addAll(values);
         notifyDataSetChanged();
+    }
+
+    public void removeItem(TmdbItem target) {
+        for (int index = items.size() - 1; index >= 0; index--) {
+            if (!sameIdentity(items.get(index), target)) continue;
+            items.remove(index);
+            notifyItemRemoved(index);
+        }
     }
 
     /**
@@ -104,17 +116,25 @@ public class TmdbRailAdapter extends RecyclerView.Adapter<TmdbRailAdapter.ViewHo
         holder.title.setText(item.getTitle());
         holder.subtitle.setText(meta.subtitle);
         holder.subtitle.setVisibility(TextUtils.isEmpty(meta.subtitle) ? View.GONE : View.VISIBLE);
-        holder.rating.setText(meta.rating);
-        holder.rating.setVisibility(TextUtils.isEmpty(meta.rating) ? View.GONE : View.VISIBLE);
+        TmdbRatingFormatter.Ratings ratings = TmdbRatingFormatter.completeRatings(item, meta.rating);
+        holder.tmdbRating.setText(ratings.getTmdb());
+        holder.tmdbRating.setVisibility(View.VISIBLE);
+        holder.tmdbRating.setAlpha(ratings.hasTmdbRating() ? 1.0f : 0.55f);
+        holder.doubanRating.setText(ratings.getDouban());
+        holder.doubanRating.setVisibility(View.VISIBLE);
+        holder.doubanRating.setAlpha(ratings.hasDoubanRating() ? 1.0f : 0.55f);
+        holder.ratingGroup.setVisibility(View.VISIBLE);
         TmdbCinemaTheme.Palette palette = TmdbCinemaTheme.palette(light);
         holder.title.setTextColor(0xFFFFFFFF);
         holder.subtitle.setTextColor(cinema ? 0xB3FFFFFF : 0x99FFFFFF);
-        holder.rating.setTextColor(0xFFFFFFFF);
+        holder.tmdbRating.setTextColor(0xFFFFD35C);
+        holder.doubanRating.setTextColor(0xFF78E08F);
         TmdbCardFocusHelper.bind(holder.root, cinema ? 0xB314202A : 0xFF16202A, cinema ? palette.cardStroke() : 0x33FFFFFF, 1, focused -> {
             if (focusListener != null) focusListener.onItemFocus(item, focused);
         });
-        String image = cinema && !TextUtils.isEmpty(item.getBackdropUrl()) ? item.getBackdropUrl() : item.getPosterUrl();
-        ImgUtil.load(item.getTitle(), image, holder.poster);
+        String image = TmdbImageSelector.cardImage(item, cinema);
+        String fallbackImage = TmdbImageSelector.cardImage(item, !cinema);
+        ImgUtil.load(item.getTitle(), image, fallbackImage, holder.poster, true, cinema ? 552 : 300, cinema ? 312 : 450);
         holder.root.setOnClickListener(view -> listener.onItemClick(item));
         holder.root.setOnLongClickListener(view -> longClickListener != null && longClickListener.onItemLongClick(item));
         if (holder.root.hasFocus() && focusListener != null) focusListener.onItemFocus(item, true);
@@ -129,21 +149,34 @@ public class TmdbRailAdapter extends RecyclerView.Adapter<TmdbRailAdapter.ViewHo
         if (values == null) return items.isEmpty();
         if (items.size() != values.size()) return false;
         for (int i = 0; i < items.size(); i++) {
-            if (!sameItem(items.get(i), values.get(i))) return false;
+            if (!sameContent(items.get(i), values.get(i))) return false;
         }
         return true;
     }
 
-    private boolean sameItem(TmdbItem first, TmdbItem second) {
+    static boolean sameContent(TmdbItem first, TmdbItem second) {
         if (first == second) return true;
-        if (first == null || second == null) return false;
-        if (first.getTmdbId() > 0 && second.getTmdbId() > 0) {
-            return first.getTmdbId() == second.getTmdbId() && first.getMediaType().equals(second.getMediaType());
-        }
-        return first.getTitle().equals(second.getTitle())
-                && first.getSubtitle().equals(second.getSubtitle())
-                && first.getPosterUrl().equals(second.getPosterUrl())
-                && first.getBackdropUrl().equals(second.getBackdropUrl());
+        if (!sameIdentity(first, second)) return false;
+        return first.getTmdbId() == second.getTmdbId()
+                && Objects.equals(first.getMediaType(), second.getMediaType())
+                && Objects.equals(first.getTitle(), second.getTitle())
+                && Objects.equals(first.getSubtitle(), second.getSubtitle())
+                && Objects.equals(first.getOverview(), second.getOverview())
+                && Objects.equals(first.getRecommendationReason(), second.getRecommendationReason())
+                && Objects.equals(first.getPosterUrl(), second.getPosterUrl())
+                && Objects.equals(first.getBackdropUrl(), second.getBackdropUrl())
+                && Objects.equals(first.getCredit(), second.getCredit())
+                && Double.compare(first.getRating(), second.getRating()) == 0
+                && Double.compare(first.getTmdbRating(), second.getTmdbRating()) == 0
+                && Double.compare(first.getDoubanRating(), second.getDoubanRating()) == 0
+                && Objects.equals(first.getOriginalLanguage(), second.getOriginalLanguage())
+                && Objects.equals(first.getOriginCountry(), second.getOriginCountry())
+                && Objects.equals(first.getGenreIds(), second.getGenreIds())
+                && Objects.equals(first.getDepartment(), second.getDepartment());
+    }
+
+    private static boolean sameIdentity(TmdbItem first, TmdbItem second) {
+        return TmdbRecommendationRows.sameIdentity(first, second);
     }
 
     static class ViewHolder extends RecyclerView.ViewHolder {
@@ -152,7 +185,9 @@ public class TmdbRailAdapter extends RecyclerView.Adapter<TmdbRailAdapter.ViewHo
         private final AppCompatImageView poster;
         private final TextView title;
         private final TextView subtitle;
-        private final TextView rating;
+        private final View ratingGroup;
+        private final TextView tmdbRating;
+        private final TextView doubanRating;
 
         ViewHolder(@NonNull View itemView) {
             super(itemView);
@@ -160,7 +195,9 @@ public class TmdbRailAdapter extends RecyclerView.Adapter<TmdbRailAdapter.ViewHo
             poster = itemView.findViewById(R.id.poster);
             title = itemView.findViewById(R.id.title);
             subtitle = itemView.findViewById(R.id.subtitle);
-            rating = itemView.findViewById(R.id.rating);
+            ratingGroup = itemView.findViewById(R.id.ratingGroup);
+            tmdbRating = itemView.findViewById(R.id.tmdbRating);
+            doubanRating = itemView.findViewById(R.id.doubanRating);
         }
     }
 
@@ -180,7 +217,6 @@ public class TmdbRailAdapter extends RecyclerView.Adapter<TmdbRailAdapter.ViewHo
                     meta.add(part);
                 }
             }
-            if (!TextUtils.isEmpty(rating)) rating = "★ " + rating;
             return new CardMeta(TextUtils.join(" · ", meta), rating);
         }
     }

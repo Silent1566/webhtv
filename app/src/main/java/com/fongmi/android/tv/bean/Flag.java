@@ -186,10 +186,35 @@ public class Flag implements Parcelable, Diffable<Flag> {
 
     public Episode find(Episode target, boolean strict) {
         if (getEpisodes().isEmpty()) return null;
-        if (getEpisodes().size() == 1) return getEpisodes().get(0);
+        if (getEpisodes().size() == 1) {
+            Episode episode = getEpisodes().get(0);
+            if (hasTmdbEpisodeNumber(target) && hasTmdbEpisodeNumber(episode) && !episode.matchesNumber(target)) return null;
+            return episode;
+        }
+        if (hasTmdbEpisodeNumber(target)) {
+            for (Episode episode : getEpisodes()) {
+                if (hasTmdbEpisodeNumber(episode) && episode.matchesNumber(target)) return episode;
+            }
+            int index = indexOf(target);
+            if (index != -1) {
+                Episode episode = getEpisodes().get(index);
+                if (!hasTmdbEpisodeNumber(episode)) return episode;
+            }
+            for (Episode episode : getEpisodes()) {
+                if (!hasTmdbEpisodeNumber(episode) && episode.matchesNumber(target)) return episode;
+            }
+            for (Episode episode : getEpisodes()) {
+                if (!hasTmdbEpisodeNumber(episode) && episode.matchesName(target)) return episode;
+            }
+            return null;
+        }
         int index = indexOf(target);
         if (index != -1) return getEpisodes().get(index);
         return find(target == null ? "" : target.getName(), strict);
+    }
+
+    private static boolean hasTmdbEpisodeNumber(Episode episode) {
+        return episode != null && episode.getTmdbEpisode() != null && episode.getTmdbEpisode().getNumber() > 0;
     }
 
     public void mergeEpisodes(List<Episode> items, boolean rev) {

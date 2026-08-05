@@ -1,6 +1,7 @@
 <resources xmlns:xliff="http://schemas.android.com/apk/res-auto">
 
     <!-- Home -->
+    <string name="home">Home</string>
     <string name="home_vod">Vod</string>
     <string name="home_live">Live</string>
     <string name="home_search">Search</string>

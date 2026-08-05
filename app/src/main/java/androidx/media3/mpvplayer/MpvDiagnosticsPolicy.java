@@ -20,6 +20,10 @@ final class MpvDiagnosticsPolicy {
     }
 
     static boolean allowsSynchronousProperties(Request request, boolean debugLogEnabled) {
+        return false;
+    }
+
+    static boolean allowsDetailedDiagnostics(Request request, boolean debugLogEnabled) {
         if (request == null) return false;
         return switch (request) {
             case PANEL -> true;

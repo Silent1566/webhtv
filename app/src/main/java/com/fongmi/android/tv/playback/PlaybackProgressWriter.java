@@ -3,6 +3,7 @@ package com.fongmi.android.tv.playback;
 import android.text.TextUtils;
 
 import com.fongmi.android.tv.api.config.VodConfig;
+import com.fongmi.android.tv.bean.Episode;
 import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.db.dao.HistoryDao;
@@ -89,6 +90,7 @@ public final class PlaybackProgressWriter {
             return PlaybackProgressApplyResult.skipped(input, local.getKey(), "远端记录不新于本地", local.getCreateTime());
         }
         History history = local == null ? new History() : local.copy();
+        boolean sameEpisode = isSameEpisode(local, input);
         history.setKey(key);
         history.setCid(cid);
         history.setVodName(input.vodName);
@@ -96,6 +98,7 @@ public final class PlaybackProgressWriter {
         history.setVodFlag(input.flag);
         history.setVodRemarks(input.episodeName);
         history.setEpisodeUrl(input.episodeUrl);
+        if (!sameEpisode) history.setTmdbEpisodePosition(null);
         history.setPosition(input.positionMs);
         history.setDuration(input.durationMs);
         applySpeed(history, input.speed, input.speedOverride);
@@ -108,6 +111,11 @@ public final class PlaybackProgressWriter {
         AppDatabase.get().getHistoryDao().insertOrUpdate(history);
         RefreshEvent.history();
         return PlaybackProgressApplyResult.updated(input, history.getKey());
+    }
+
+    static boolean isSameEpisode(History local, PlaybackProgressInput input) {
+        if (local == null || input == null) return false;
+        return Episode.create(input.episodeName, input.episodeUrl).matchesPlayback(local.getEpisode());
     }
 
     static void applySpeed(History history, float speed, Boolean speedOverride) {

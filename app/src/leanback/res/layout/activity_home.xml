@@ -29,27 +29,40 @@
             app:focusOutFront="false"
             tools:visibility="visible" />
 
-        <com.fongmi.android.tv.ui.custom.ProgressLayout
-            android:id="@+id/progressLayout"
+        <FrameLayout
+            android:id="@+id/contentContainer"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1">
 
-            <androidx.leanback.widget.VerticalGridView
-                android:id="@+id/recycler"
+            <com.fongmi.android.tv.ui.custom.ProgressLayout
+                android:id="@+id/progressLayout"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent">
+
+                <androidx.leanback.widget.VerticalGridView
+                    android:id="@+id/recycler"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:clipChildren="false"
+                    android:clipToPadding="false"
+                    android:nextFocusUp="@id/typeRecycler"
+                    android:paddingStart="24dp"
+                    android:paddingTop="8dp"
+                    android:paddingEnd="24dp"
+                    android:paddingBottom="24dp"
+                    app:focusOutEnd="true"
+                    app:focusOutFront="true" />
+
+            </com.fongmi.android.tv.ui.custom.ProgressLayout>
+
+            <androidx.fragment.app.FragmentContainerView
+                android:id="@+id/categoryContainer"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:clipChildren="false"
-                android:clipToPadding="false"
-                android:nextFocusUp="@id/typeRecycler"
-                android:paddingStart="24dp"
-                android:paddingTop="8dp"
-                android:paddingEnd="24dp"
-                android:paddingBottom="24dp"
-                app:focusOutEnd="true"
-                app:focusOutFront="true" />
+                android:visibility="gone" />
 
-        </com.fongmi.android.tv.ui.custom.ProgressLayout>
+        </FrameLayout>
     </androidx.appcompat.widget.LinearLayoutCompat>
 
     <FrameLayout

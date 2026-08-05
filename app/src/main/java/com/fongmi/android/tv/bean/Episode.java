@@ -128,18 +128,30 @@ public class Episode implements Parcelable, Diffable<Episode> {
 
     /**
      * 按集号匹配：不同线路/不同源对同一集的命名格式往往不同（如“第9集”与“[277.1MB] 9. xxx”），
-     * URL 与集名严格比对都会失败。与 Flag.find 的打分找集逻辑同源，用 Util.getEpisodeNumber
-     * 提取两侧集号，双方都能解析出有效集号且相等时视为同一集。
+     * URL 与集名严格比对都会失败。已绑定 TMDB 时优先比较标准季集位置；否则沿用
+     * Flag.find/Episode.getNumber 的现有集号提取结果。
      */
     public boolean matchesNumber(Episode other) {
         if (other == null) return false;
-        int mine = getNumber();
-        int theirs = other.getNumber() > 0 ? other.getNumber() : com.fongmi.android.tv.utils.Util.getEpisodeNumber(other.getName());
+        TmdbEpisode mineTmdb = getTmdbEpisode();
+        TmdbEpisode theirsTmdb = other.getTmdbEpisode();
+        if (mineTmdb != null && theirsTmdb != null
+                && mineTmdb.getNumber() > 0 && theirsTmdb.getNumber() > 0
+                && mineTmdb.getSeasonNumber() >= 0 && theirsTmdb.getSeasonNumber() >= 0
+                && mineTmdb.getSeasonNumber() != theirsTmdb.getSeasonNumber()) return false;
+        int mine = getMatchNumber();
+        int theirs = other.getMatchNumber();
         return mine > 0 && theirs > 0 && mine == theirs;
+    }
+
+    private int getMatchNumber() {
+        if (getTmdbEpisode() != null && getTmdbEpisode().getNumber() > 0) return getTmdbEpisode().getNumber();
+        return getNumber() > 0 ? getNumber() : Util.getEpisodeNumber(getName());
     }
 
     public boolean matches(Episode other) {
         if (other == null) return false;
+        if (hasTmdbEpisodeNumber() && other.hasTmdbEpisodeNumber()) return matchesNumber(other);
         if (!isEmpty(getUrl()) && !isEmpty(other.getUrl())) return getUrl().equals(other.getUrl());
         return matchesName(other);
     }
@@ -150,9 +162,14 @@ public class Episode implements Parcelable, Diffable<Episode> {
      */
     public boolean matchesPlayback(Episode other) {
         if (other == null) return false;
+        if (hasTmdbEpisodeNumber() && other.hasTmdbEpisodeNumber()) return matchesNumber(other);
         if (!isEmpty(getUrl()) && !isEmpty(other.getUrl()) && getUrl().equals(other.getUrl())) return true;
         if (!isEmpty(getName()) && !isEmpty(other.getName()) && matchesName(other)) return true;
         return matchesNumber(other);
+    }
+
+    private boolean hasTmdbEpisodeNumber() {
+        return getTmdbEpisode() != null && getTmdbEpisode().getNumber() > 0;
     }
 
     private boolean isEmpty(String value) {

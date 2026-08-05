@@ -80,6 +80,8 @@ public class TmdbUIAdapter {
     private PersonalRecommendationService.RecommendationPage personalDoubanPage;
     private PersonalRecommendationService.RecommendationPage personalAiPage;
     private Vod vod;
+    private volatile int sourceSeasonNumber = -1;
+    private TmdbEpisodeInfo episodeInfo;
     private int recommendationPage;
     private boolean recommendationHasMore;
     private boolean recommendationLoading;
@@ -89,6 +91,7 @@ public class TmdbUIAdapter {
     private boolean personalAiLoading;
     private boolean loaded;
     private volatile boolean episodeMetadataLoaded;
+
     private volatile int loadGeneration;
     private volatile int pendingVodRefreshGeneration;
     private volatile Vod pendingVodRefreshVod;
@@ -136,6 +139,10 @@ public class TmdbUIAdapter {
         return tmdbDetail;
     }
 
+    public int getSourceSeasonNumber() {
+        return sourceSeasonNumber;
+    }
+
     public String getPosterUrl() {
         return TmdbImageSelector.poster(tmdbDetail, tmdbConfig.getImageBase(), tmdbItem == null ? "" : tmdbItem.getPosterUrl());
     }
@@ -146,6 +153,13 @@ public class TmdbUIAdapter {
 
     public List<TmdbItem> getPersonalTmdbRecommendations() {
         return getPersonalRecommendations(personalTmdbRecommendations);
+    }
+
+    public void removeRecommendation(TmdbItem item) {
+        removeRecommendationFrom(recommendations, item);
+        removeRecommendationFrom(personalTmdbRecommendations, item);
+        removeRecommendationFrom(personalDoubanRecommendations, item);
+        removeRecommendationFrom(personalAiRecommendations, item);
     }
 
     public List<TmdbItem> getPersonalDoubanRecommendations() {
@@ -226,6 +240,7 @@ public class TmdbUIAdapter {
     public void load(TmdbItem item, Vod vod) {
         if (item == null) return;
         int generation = resetLoadState();
+        captureSourceSeason(vod, null);
         cancelActivePrefetch();
         this.tmdbItem = item;
         saveMatch(vod, item);
@@ -290,6 +305,7 @@ public class TmdbUIAdapter {
             return;
         }
         int generation = resetLoadState();
+        captureSourceSeason(vod, null);
         cancelActivePrefetch();
         detailPrefetch.cancel();
         this.tmdbItem = item;
@@ -309,6 +325,7 @@ public class TmdbUIAdapter {
      */
     public void autoMatch(String videoName, Vod vod) {
         int generation = resetLoadState();
+        captureSourceSeason(vod, videoName);
         cancelActivePrefetch();
         detailPrefetch.cancel();
         if (!isReady()) {
@@ -442,6 +459,8 @@ public class TmdbUIAdapter {
         personalDoubanPage = null;
         personalAiPage = null;
         vod = null;
+        sourceSeasonNumber = -1;
+        episodeInfo = null;
         recommendationPage = 1;
         recommendationHasMore = false;
         recommendationLoading = false;
@@ -459,6 +478,66 @@ public class TmdbUIAdapter {
         return generation;
     }
 
+    private void captureSourceSeason(Vod sourceVod, String sourceTitle) {
+        int season = activity == null || activity.getIntent() == null ? -1 : activity.getIntent().getIntExtra("tmdb_play_season_number", -1);
+        if (season < 0) season = EpisodeSeasonPolicy.resolveSourceSeason(sourceTitle, activityIntentTitle(), sourceVod == null ? "" : sourceVod.getName(), sourceVod == null ? "" : sourceVod.getRemarks());
+        if (season < 0 && sourceVod != null && sourceVod.getFlags() != null) {
+            Integer candidate = null;
+            boolean consistent = true;
+            for (Flag flag : sourceVod.getFlags()) {
+                int flagSeason = EpisodeSeasonPolicy.resolveSourceSeason(flag == null ? "" : flag.getShow());
+                if (flagSeason < 0) continue;
+                if (candidate != null && candidate != flagSeason) {
+                    consistent = false;
+                    break;
+                }
+                candidate = flagSeason;
+            }
+            if (consistent && candidate != null) season = candidate;
+        }
+        if (season < 0 && sourceVod != null && sourceVod.getFlags() != null) {
+            Integer candidate = null;
+            boolean consistent = true;
+            for (Flag flag : sourceVod.getFlags()) {
+                if (flag == null || flag.getEpisodes() == null) continue;
+                for (Episode episode : flag.getEpisodes()) {
+                    int episodeSeason = EpisodeSeasonPolicy.resolveSourceSeason(episode == null ? "" : episode.getName());
+                    if (episodeSeason < 0) continue;
+                    if (candidate != null && candidate != episodeSeason) {
+                        consistent = false;
+                        break;
+                    }
+                    candidate = episodeSeason;
+                }
+                if (!consistent) break;
+            }
+            if (consistent && candidate != null) season = candidate;
+        }
+        if (season < 0 && sourceVod != null && sourceVod.getFlags() != null) {
+            Integer candidate = null;
+            boolean consistent = true;
+            for (Flag flag : sourceVod.getFlags()) {
+                if (flag == null || flag.getEpisodes() == null) continue;
+                for (Episode episode : flag.getEpisodes()) {
+                    TmdbEpisode tmdbEpisode = episode == null ? null : episode.getTmdbEpisode();
+                    int episodeSeason = tmdbEpisode == null || tmdbEpisode.getNumber() <= 0 ? -1 : tmdbEpisode.getSeasonNumber();
+                    if (episodeSeason < 0) continue;
+                    if (candidate != null && candidate != episodeSeason) {
+                        consistent = false;
+                        break;
+                    }
+                    candidate = episodeSeason;
+                }
+                if (!consistent) break;
+            }
+            if (consistent && candidate != null) season = candidate;
+        }
+        sourceSeasonNumber = season;
+    }
+
+    private String activityIntentTitle() {
+        return activity == null || activity.getIntent() == null ? "" : activity.getIntent().getStringExtra("name");
+    }
     private boolean isCurrentGeneration(int generation) {
         return generation == loadGeneration;
     }
@@ -482,8 +561,12 @@ public class TmdbUIAdapter {
             SpiderDebug.log("tmdb", "detail core castParse source=%s cost=%dms count=%d title=%s", cachedCast == null || cachedCast.isEmpty() ? "service" : "memory-cache", System.currentTimeMillis() - castStart, cast.size(), item.getTitle());
             if (!isCurrentGeneration(generation)) return;
             this.vod = vod;
+            if (sourceSeasonNumber < 0 && vod != null) {
+                sourceSeasonNumber = EpisodeSeasonPolicy.resolveSourceSeason(vod.getName());
+            }
             tmdbItem = item;
             tmdbDetail = detail;
+            episodeInfo = TmdbEpisodeInfo.from(item.getMediaType(), detail, sourceSeasonNumber);
             tmdbCast = cast;
             recommendations = new ArrayList<>();
             recommendationPage = 1;
@@ -531,7 +614,10 @@ public class TmdbUIAdapter {
                 item.getOriginalLanguage(),
                 item.getOriginCountry(),
                 item.getGenreIds(),
-                item.getDepartment());
+                item.getDepartment(),
+                item.getTmdbRating(),
+                item.getDoubanRating(),
+                item.getRecommendationReason());
     }
 
     private String detailTitle(TmdbItem item, JsonObject detail) {
@@ -621,6 +707,7 @@ public class TmdbUIAdapter {
             boolean more = false;
             int recommendationCount = 0;
             int similarCount = 0;
+            PersonalRecommendationService service = new PersonalRecommendationService(tmdbService, tmdbConfig);
             try {
                 long recommendationsStart = System.currentTimeMillis();
                 List<TmdbItem> pageRecommendations = tmdbService.recommendations(item, tmdbConfig, 1);
@@ -646,6 +733,7 @@ public class TmdbUIAdapter {
                 recommendationHasMore = hasMore;
                 if (vod != null && !loadedItems.isEmpty()) notifyVodChanged(vod, generation, RefreshEvent.Type.VOD_RECOMMENDATIONS);
             });
+            service.enrichTmdbRatingsAsync(loadedItems, enriched -> applyRelatedRatingEnrichment(enriched, generation, vod));
         });
     }
 
@@ -655,8 +743,8 @@ public class TmdbUIAdapter {
         Task.execute(() -> {
             long start = System.currentTimeMillis();
             PersonalRecommendationService.RecommendationPages pages = PersonalRecommendationService.RecommendationPages.empty();
+            PersonalRecommendationService service = new PersonalRecommendationService(tmdbService, tmdbConfig);
             try {
-                PersonalRecommendationService service = new PersonalRecommendationService(tmdbService, tmdbConfig);
                 pages = service.loadPage(vod, item, detail, 0, PersonalRecommendationService.DEFAULT_PAGE_SIZE);
             } catch (Throwable e) {
                 SpiderDebug.log("tmdb", "initial personal recommendations failed error=%s", e.getMessage());
@@ -672,6 +760,7 @@ public class TmdbUIAdapter {
                 personalDoubanRecommendations = personalDoubanPage.getItems();
                 if (vod != null && (!personalTmdbRecommendations.isEmpty() || !personalDoubanRecommendations.isEmpty())) notifyVodChanged(vod, generation, RefreshEvent.Type.VOD_PERSONAL);
             });
+            service.enrichTmdbPageRatingsAsync(loadedPages.getTmdb(), enriched -> applyPersonalTmdbRatingEnrichment(enriched, generation, vod));
         });
         loadPersonalAiRecommendationsAsync(vod, item, generation);
     }
@@ -703,6 +792,15 @@ public class TmdbUIAdapter {
             PersonalRecommendationService.RecommendationPage loadedPage = page;
             SpiderDebug.log("tmdb", "personal ai recommendations async mode=%s cost=%dms count=%d title=%s", mode, System.currentTimeMillis() - start, loadedPage.getItems().size(), item == null ? "" : item.getTitle());
             applyPersonalAiPage(loadedPage, generation, !cached.hasItems(), true);
+            service.enrichTmdbPageRatingsAsync(loadedPage, enriched -> applyPersonalAiRatingEnrichment(enriched, generation));
+        });
+    }
+
+    private void applyPersonalAiRatingEnrichment(PersonalRecommendationService.RecommendationPage enriched, int generation) {
+        activity.runOnUiThread(() -> {
+            if (!isCurrentGeneration(generation) || enriched == null || !mergeRecommendationRatings(personalAiRecommendations, enriched.getItems())) return;
+            if (personalAiPage != null) personalAiPage = personalAiPage.withItems(personalAiRecommendations);
+            notifyPersonalAiRecommendationsUpdated();
         });
     }
 
@@ -883,23 +981,19 @@ public class TmdbUIAdapter {
     private boolean applyEpisodeTitles(Vod vod, TmdbItem item) {
         if (vod == null || item == null || vod.getFlags() == null) return false;
         try {
-            // 尝试获取第1季
             JsonObject season = null;
-            int seasonNumber = 1;
-            try {
-                season = tmdbService.season(item, 1, tmdbConfig);
-            } catch (Exception ignored) {
-            }
-
-            // 第1季失败，尝试第0季（特别篇）
-            if (season == null) {
+            int seasonNumber = -1;
+            for (Integer candidate : EpisodeSeasonPolicy.episodeMetadataSeasonCandidates(sourceSeasonNumber)) {
                 try {
-                    seasonNumber = 0;
-                    season = tmdbService.season(item, 0, tmdbConfig);
+                    season = tmdbService.season(item, candidate, tmdbConfig);
                 } catch (Exception ignored) {
+                    season = null;
+                }
+                if (season != null) {
+                    seasonNumber = candidate;
+                    break;
                 }
             }
-
             if (season == null) return false;
 
             List<TmdbEpisode> episodes = tmdbService.episodes(season, tmdbConfig, item.getTmdbId(), seasonNumber);
@@ -982,6 +1076,24 @@ public class TmdbUIAdapter {
         if (!tmdbDetail.has("vote_average") || tmdbDetail.get("vote_average").isJsonNull()) return "";
         double vote = tmdbDetail.get("vote_average").getAsDouble();
         return vote <= 0 ? "" : String.format(Locale.US, "%.1f", vote);
+    }
+
+    /**
+     * 当前 TMDB 剧集的规范化集数信息。
+     */
+    public TmdbEpisodeInfo getEpisodeInfo() {
+        if (episodeInfo == null) {
+            episodeInfo = TmdbEpisodeInfo.from(tmdbItem == null ? "" : tmdbItem.getMediaType(), tmdbDetail, sourceSeasonNumber);
+        }
+        return episodeInfo;
+    }
+
+    public String getEpisodeDetailText() {
+        return getEpisodeInfo().detailText(activity);
+    }
+
+    public String getEpisodeCompactText() {
+        return getEpisodeInfo().compactText(activity);
     }
 
     /**
@@ -1100,6 +1212,7 @@ public class TmdbUIAdapter {
         Task.execute(() -> {
             List<TmdbItem> next = new ArrayList<>();
             boolean more = false;
+            PersonalRecommendationService service = new PersonalRecommendationService(tmdbService, tmdbConfig);
             try {
                 List<TmdbItem> pageRecommendations = tmdbService.recommendations(tmdbItem, tmdbConfig, nextPage);
                 List<TmdbItem> pageSimilar = tmdbService.similar(tmdbItem, tmdbConfig, nextPage);
@@ -1118,6 +1231,7 @@ public class TmdbUIAdapter {
                 boolean changed = appendUnique(recommendations, loadedItems);
                 if (callback != null) callback.onLoaded(changed);
             });
+            service.enrichTmdbRatingsAsync(loadedItems, enriched -> applyRelatedRatingEnrichment(enriched, generation, vod));
         });
     }
 
@@ -1144,8 +1258,8 @@ public class TmdbUIAdapter {
             boolean changed = false;
             PersonalRecommendationService.RecommendationPages pages = PersonalRecommendationService.RecommendationPages.empty();
             boolean aiChanged = false;
+            PersonalRecommendationService service = new PersonalRecommendationService(tmdbService, tmdbConfig);
             try {
-                PersonalRecommendationService service = new PersonalRecommendationService(tmdbService, tmdbConfig);
                 String tmdbFingerprint = service.historyFingerprint(vod, true);
                 String doubanFingerprint = service.historyFingerprint(vod, false);
                 String aiFingerprint = service.aiFingerprint(vod, tmdbItem);
@@ -1175,6 +1289,7 @@ public class TmdbUIAdapter {
                 if (callback != null) callback.onLoaded(hasChanged);
                 if (hasAiChanged) loadPersonalAiRecommendationsAsync(vod, tmdbItem, generation);
             });
+            if (hasChanged) service.enrichTmdbPageRatingsAsync(loadedPages.getTmdb(), enriched -> applyPersonalTmdbRatingEnrichment(enriched, generation, vod));
         });
     }
 
@@ -1189,8 +1304,8 @@ public class TmdbUIAdapter {
         else personalDoubanLoading = true;
         Task.execute(() -> {
             PersonalRecommendationService.RecommendationPage nextPage;
+            PersonalRecommendationService service = new PersonalRecommendationService(tmdbService, tmdbConfig);
             try {
-                PersonalRecommendationService service = new PersonalRecommendationService(tmdbService, tmdbConfig);
                 nextPage = tmdb
                         ? service.loadTmdbPage(vod, tmdbItem, tmdbDetail, page.getNextOffset(), PersonalRecommendationService.DEFAULT_PAGE_SIZE)
                         : service.loadDoubanPage(vod, page.getNextOffset(), PersonalRecommendationService.DEFAULT_PAGE_SIZE);
@@ -1213,6 +1328,22 @@ public class TmdbUIAdapter {
                     if (callback != null) callback.onLoaded(changed);
                 }
             });
+            if (tmdb) service.enrichTmdbPageRatingsAsync(loadedPage, enriched -> applyPersonalTmdbRatingEnrichment(enriched, generation, vod));
+        });
+    }
+
+    private void applyRelatedRatingEnrichment(List<TmdbItem> enriched, int generation, Vod eventVod) {
+        activity.runOnUiThread(() -> {
+            if (!isCurrentGeneration(generation) || !mergeRecommendationRatings(recommendations, enriched)) return;
+            if (eventVod != null) notifyVodChanged(eventVod, generation, RefreshEvent.Type.VOD_RECOMMENDATIONS);
+        });
+    }
+
+    private void applyPersonalTmdbRatingEnrichment(PersonalRecommendationService.RecommendationPage enriched, int generation, Vod eventVod) {
+        activity.runOnUiThread(() -> {
+            if (!isCurrentGeneration(generation) || enriched == null || !mergeRecommendationRatings(personalTmdbRecommendations, enriched.getItems())) return;
+            if (personalTmdbPage != null) personalTmdbPage = personalTmdbPage.withItems(personalTmdbRecommendations);
+            if (eventVod != null) notifyVodChanged(eventVod, generation, RefreshEvent.Type.VOD_PERSONAL);
         });
     }
 
@@ -1239,21 +1370,30 @@ public class TmdbUIAdapter {
 
     private boolean containsRecommendation(List<TmdbItem> items, TmdbItem target) {
         if (items == null || target == null) return false;
-        for (TmdbItem item : items) if (sameRecommendation(item, target)) return true;
+        for (TmdbItem item : items) if (TmdbRecommendationRows.sameIdentity(item, target)) return true;
         return false;
     }
 
-    private boolean sameRecommendation(TmdbItem first, TmdbItem second) {
-        if (first == null || second == null) return false;
-        if (first.getTmdbId() > 0 && second.getTmdbId() > 0) {
-            return first.getTmdbId() == second.getTmdbId() && TextUtils.equals(first.getMediaType(), second.getMediaType());
-        }
-        String firstTitle = normalizeRecommendationTitle(first.getTitle());
-        String secondTitle = normalizeRecommendationTitle(second.getTitle());
-        return !TextUtils.isEmpty(firstTitle) && firstTitle.equals(secondTitle);
+    static boolean removeRecommendationFrom(List<TmdbItem> items, TmdbItem target) {
+        return items != null && target != null && items.removeIf(item -> TmdbRecommendationRows.sameIdentity(item, target));
     }
 
-    private String normalizeRecommendationTitle(String text) {
-        return TextUtils.isEmpty(text) ? "" : text.replaceAll("[\\s·•・._\\-/\\\\|()（）\\[\\]【】《》<>:：,，.。]+", "").trim().toLowerCase(Locale.ROOT);
+    public static boolean mergeRecommendationRatings(List<TmdbItem> current, List<TmdbItem> enriched) {
+        if (current == null || enriched == null || current.isEmpty() || enriched.isEmpty()) return false;
+        boolean changed = false;
+        for (TmdbItem candidate : enriched) {
+            if (candidate == null || candidate.getDoubanRating() <= 0) continue;
+            for (int index = 0; index < current.size(); index++) {
+                TmdbItem existing = current.get(index);
+                if (!TmdbRecommendationRows.sameIdentity(existing, candidate)) continue;
+                if (Double.compare(existing.getDoubanRating(), candidate.getDoubanRating()) != 0) {
+                    current.set(index, candidate);
+                    changed = true;
+                }
+                break;
+            }
+        }
+        return changed;
     }
+
 }

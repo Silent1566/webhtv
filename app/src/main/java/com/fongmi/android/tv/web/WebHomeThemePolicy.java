@@ -1,6 +1,7 @@
 package com.fongmi.android.tv.web;
 
 import java.net.URI;
+import java.util.Set;
 
 /** Minimal, origin-bound capability policy for untrusted global themes. */
 public final class WebHomeThemePolicy {
@@ -9,11 +10,15 @@ public final class WebHomeThemePolicy {
     }
 
     public static boolean allowsMethod(String method) {
-        return switch (method == null ? "" : method) {
-            case "vod.home", "vod.category", "player.playVod", "app.search", "app.openVod", "app.openSetting",
-                    "ui.getViewport", "navigation.back", "navigation.reload" -> true;
-            default -> false;
-        };
+        return WebThemeCapabilityRegistry.allowsLegacyMethod(method);
+    }
+
+    public static boolean allowsMethod(WebThemePage page, Set<String> permissions, String method) {
+        return WebThemeCapabilityRegistry.allowsMethod(page, permissions, method);
+    }
+
+    static boolean allowsPermission(WebThemePage page, String permission) {
+        return WebThemeCapabilityRegistry.allowsPermission(page, permission);
     }
 
     public static boolean allowsMessage(String expectedOrigin, String sourceOrigin, boolean isMainFrame) {

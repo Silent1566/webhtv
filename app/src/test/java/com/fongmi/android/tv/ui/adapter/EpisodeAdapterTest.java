@@ -35,12 +35,32 @@ public class EpisodeAdapterTest {
     }
 
     @Test
-    public void mobileTmdbEpisodeCardsBindFileSizeBadge() throws Exception {
+    public void nativeFallbackSeparatesFileSizeWhenTmdbEpisodeScrapingFails() {
+        Episode episode = Episode.create(
+                "[我不是药神 2018 Dying to survive][原盘国语简体字幕花絮][44.01G].iso",
+                "[44.01GB] ",
+                "https://example.test/movie");
+
+        assertEquals("[44.01GB]", EpisodeAdapter.getNativeFileSize(episode, true));
+        assertEquals("[我不是药神 2018 Dying to survive][原盘国语简体字幕花絮].iso", EpisodeAdapter.getNativeDisplayTitle(episode, true));
+        assertEquals("[44.01GB] [我不是药神 2018 Dying to survive][原盘国语简体字幕花絮][44.01G].iso", EpisodeAdapter.getNativeDisplayTitle(episode, false));
+    }
+
+    @Test
+    public void mobileEpisodeCardsAndNativeFallbackBindFileSizeBadges() throws Exception {
         String gridHolder = read(findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "holder", "EpisodeGridHolder.java")));
         String horiHolder = read(findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "holder", "EpisodeHoriHolder.java")));
         String gridLayout = read(findMobileResPath().resolve(Path.of("layout", "adapter_episode_grid.xml")));
         String horiLayout = read(findMobileResPath().resolve(Path.of("layout", "adapter_episode_hori.xml")));
 
+        assertTrue("mobile grid native fallback must expose a stable file-size badge",
+                gridLayout.contains("android:id=\"@+id/nativeFileSize\"")
+                        && gridHolder.contains("bindNativeFileSize(EpisodeAdapter.getNativeFileSize(item));")
+                        && gridHolder.contains("EpisodeAdapter.getNativeDisplayTitle(item)"));
+        assertTrue("mobile horizontal native fallback must expose a stable file-size badge",
+                horiLayout.contains("android:id=\"@+id/nativeFileSize\"")
+                        && horiHolder.contains("bindNativeFileSize(EpisodeAdapter.getNativeFileSize(item));")
+                        && horiHolder.contains("EpisodeAdapter.getNativeDisplayTitle(item)"));
         assertTrue("mobile grid TMDB cards must expose a fileSize badge",
                 gridLayout.contains("android:id=\"@+id/fileSize\"")
                         && gridHolder.contains("binding.cardTitle.setText(cardTitle);")
@@ -67,10 +87,23 @@ public class EpisodeAdapterTest {
     }
 
     @Test
-    public void leanbackTmdbEpisodeCardsBindFileSizeBadge() throws Exception {
+    public void leanbackEpisodeCardsAndNativeFallbackBindFileSizeBadges() throws Exception {
         String adapter = read(findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "adapter", "EpisodeAdapter.java")));
         String layout = read(findLeanbackResPath().resolve(Path.of("layout", "adapter_episode_card.xml")));
+        String nativeLayout = read(findLeanbackResPath().resolve(Path.of("layout", "adapter_episode.xml")));
 
+        assertTrue("TV native fallback must expose a stable file-size badge",
+                nativeLayout.contains("android:id=\"@+id/nativeFileSize\"")
+                        && adapter.contains("getNativeFileSize(item)")
+                        && adapter.contains("getNativeDisplayTitle(item)"));
+        assertTrue("TV native file-size badge must stay inside the episode card",
+                nativeLayout.contains("<FrameLayout")
+                        && nativeLayout.indexOf("android:id=\"@+id/text\"") < nativeLayout.indexOf("android:id=\"@+id/nativeFileSize\"")
+                        && nativeLayout.contains("android:layout_gravity=\"start|center_vertical\"")
+                        && adapter.contains("int titleStartPadding = showFileSize ? ResUtil.dp2px(104) : horizontalPadding;")
+                        && adapter.contains("if (showFileSize && !verticalGridMode) width += ResUtil.dp2px(104);")
+                        && adapter.contains("textView.setPaddingRelative(titleStartPadding")
+                        && !adapter.contains("width - ResUtil.dp2px(96)"));
         assertTrue("TV TMDB episode cards must expose a fileSize badge",
                 layout.contains("android:id=\"@+id/fileSize\"")
                         && adapter.contains("String cardTitle = getCardTitle(item, tmdbEpisode);")

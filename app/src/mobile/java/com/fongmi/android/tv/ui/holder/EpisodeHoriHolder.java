@@ -60,6 +60,7 @@ public class EpisodeHoriHolder extends BaseEpisodeHolder {
 
     private void bindCard(Episode item, TmdbEpisode tmdbEpisode) {
         binding.text.setVisibility(View.GONE);
+        binding.nativeFileSize.setVisibility(View.GONE);
         binding.card.setVisibility(View.VISIBLE);
         binding.text.setActivated(false);
         setTextMarquee(false);
@@ -106,7 +107,8 @@ public class EpisodeHoriHolder extends BaseEpisodeHolder {
         binding.text.setMaxWidth(maxWidth);
         binding.text.setActivated(item.isSelected());
         setTextMarquee(binding.text.isActivated() || binding.text.hasFocus());
-        binding.text.setText(EpisodeAdapter.getNativeTitle(item));
+        binding.text.setText(EpisodeAdapter.getNativeDisplayTitle(item));
+        bindNativeFileSize(EpisodeAdapter.getNativeFileSize(item));
         binding.text.setOnFocusChangeListener((view, hasFocus) -> setTextMarquee(binding.text.isActivated() || hasFocus));
         binding.text.setOnClickListener(v -> listener.onItemClick(item));
         binding.text.post(() -> setTextMarquee(binding.text.isActivated() || binding.text.hasFocus()));
@@ -117,11 +119,20 @@ public class EpisodeHoriHolder extends BaseEpisodeHolder {
     private void setTextMarquee(boolean active) {
         binding.text.setHorizontallyScrolling(true);
         binding.text.setSelected(active);
+        binding.nativeFileSize.setSelected(active);
     }
 
     private void setCardMarquee(boolean active) {
         binding.cardTitle.setSelected(active);
         binding.fileSize.setSelected(active);
+    }
+
+    private void bindNativeFileSize(String fileSize) {
+        boolean visible = !TextUtils.isEmpty(fileSize);
+        binding.nativeFileSize.setText(fileSize);
+        binding.nativeFileSize.setVisibility(visible ? View.VISIBLE : View.GONE);
+        binding.nativeFileSize.setSelected(binding.text.isActivated() || binding.text.hasFocus());
+        binding.text.setPadding(visible ? ResUtil.dp2px(92) : 0, binding.text.getPaddingTop(), binding.text.getPaddingEnd(), binding.text.getPaddingBottom());
     }
 
     private void bindFileSize(String fileSize) {

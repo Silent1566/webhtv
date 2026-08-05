@@ -1,6 +1,7 @@
 package com.fongmi.android.tv.service;
 
 import android.app.PendingIntent;
+import android.content.Context;
 import android.content.Intent;
 import android.os.Binder;
 import android.os.Bundle;
@@ -86,6 +87,18 @@ private AudioHistory.Record audioHistoryRecord;
 
     public static boolean isRunning() {
         return running;
+    }
+
+    public static boolean canContinueInBackground() {
+        PlaybackService service = Server.get().getService();
+        PlayerManager manager = service == null ? null : service.player;
+        return PlaybackExitPolicy.canContinueInBackground(running, manager != null && !manager.isReleased(), manager != null && !manager.isEmpty());
+    }
+
+    public static void shutdown(Context context) {
+        PlaybackService service = Server.get().getService();
+        if (service != null) service.shutdown();
+        context.stopService(new Intent(context, PlaybackService.class));
     }
 
     public void replaceBinding(Runnable callback) {
@@ -227,7 +240,7 @@ private AudioHistory.Record audioHistoryRecord;
         player.stop();
         player.release();
         removeForeground();
-        Server.get().setService(null);
+        Server.get().clearService(this);
         EventBus.getDefault().unregister(this);
         super.onDestroy();
         if (SpiderDebug.isEnabled()) SpiderDebug.log("playback-lifecycle", "service destroy after running=%s", running);

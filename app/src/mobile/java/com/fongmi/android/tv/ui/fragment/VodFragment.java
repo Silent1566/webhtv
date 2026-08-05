@@ -589,6 +589,11 @@ public class VodFragment extends BaseFragment implements ConfigListener, SiteLis
     }
 
     @Override
+    public void openSite() {
+        SiteDialog.create().change().show(this);
+    }
+
+    @Override
     public void openSetting() {
         if (getActivity() instanceof HomeActivity) ((HomeActivity) getActivity()).change(1);
     }

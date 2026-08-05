@@ -43,7 +43,7 @@ public class AiRecommendationService {
     private static final int READ_TIMEOUT_SECONDS = 60;
     private static final int CALL_TIMEOUT_SECONDS = 75;
     private static final int MAX_RECOMMENDATION_ATTEMPTS = 2;
-    private static final String RESOLVED_CACHE_SUFFIX = ".items.json";
+    private static final String RESOLVED_CACHE_SUFFIX = ".items.v2.json";
     private static final String LATEST_CACHE_PREFIX = "latest_";
     private static final String DISPLAY_CACHE_PREFIX = "display_";
     private static final Pattern HISTORY_EPISODE_LABEL = Pattern.compile("(?:第\\s*\\d+\\s*[集期话]|\\b(?:ep(?:isode)?|e)\\s*\\.?\\s*\\d+\\b|\\bs\\d+e\\d+\\b)", Pattern.CASE_INSENSITIVE);
@@ -239,10 +239,13 @@ public class AiRecommendationService {
         object.addProperty("title", item.getTitle());
         object.addProperty("subtitle", item.getSubtitle());
         object.addProperty("overview", item.getOverview());
+        object.addProperty("recommendationReason", item.getRecommendationReason());
         object.addProperty("posterUrl", item.getPosterUrl());
         object.addProperty("backdropUrl", item.getBackdropUrl());
         object.addProperty("credit", item.getCredit());
         object.addProperty("rating", item.getRating());
+        object.addProperty("tmdbRating", item.getTmdbRating());
+        object.addProperty("doubanRating", item.getDoubanRating());
         object.addProperty("originalLanguage", item.getOriginalLanguage());
         object.addProperty("originCountry", item.getOriginCountry());
         object.addProperty("department", item.getDepartment());
@@ -265,20 +268,39 @@ public class AiRecommendationService {
             } catch (Throwable ignored) {
             }
         }
+        double rating = doubleValue(object, "rating", "voteAverage", "vote_average");
+        double tmdbRating = doubleValue(object, "tmdbRating", "tmdb_rating");
+        double doubanRating = doubleValue(object, "doubanRating", "douban_rating");
+        int tmdbId = intValue(object, "tmdbId", "id");
+        if (rating > 0) {
+            if (tmdbRating <= 0 && tmdbId > 0) tmdbRating = rating;
+            if (doubanRating <= 0 && tmdbId <= 0) doubanRating = rating;
+        }
+        String overview = firstString(object, "overview");
+        String recommendationReason = firstString(object, "recommendationReason", "recommendation_reason", "reason", "desc");
+        boolean hasSeparatedReason = object.has("recommendationReason") || object.has("recommendation_reason") || object.has("reason") || object.has("desc");
+        if (!hasSeparatedReason && !isBlank(overview)) {
+            // Older resolved-AI caches stored the recommendation reason in overview and lost the synopsis.
+            recommendationReason = overview;
+            overview = "";
+        }
         return new TmdbItem(
-                intValue(object, "tmdbId", "id"),
+                tmdbId,
                 mediaType,
                 title,
                 firstString(object, "subtitle", "subTitle"),
-                firstString(object, "overview", "reason", "desc"),
+                overview,
                 firstString(object, "posterUrl", "poster", "pic", "img"),
                 firstString(object, "backdropUrl", "backdrop", "background"),
                 firstString(object, "credit"),
-                doubleValue(object, "rating", "voteAverage", "vote_average"),
+                rating,
                 firstString(object, "originalLanguage", "original_language"),
                 firstString(object, "originCountry", "origin_country"),
                 genreIds,
-                firstString(object, "department")
+                firstString(object, "department"),
+                tmdbRating,
+                doubanRating,
+                recommendationReason
         );
     }
 
@@ -342,10 +364,14 @@ public class AiRecommendationService {
     }
 
     private String buildPrompt(Vod currentVod, String currentTitle) {
-        return buildPrompt(config, currentContextItem(currentVod, currentTitle), historyItems(currentVod, currentTitle), searchKeywords());
+        return buildPrompt(config, currentContextItem(currentVod, currentTitle), historyItems(currentVod, currentTitle), searchKeywords(), notInterestedItems());
     }
 
     static String buildPrompt(AiConfig config, @Nullable JsonObject currentItem, List<JsonObject> playHistory, List<String> searchKeywords) {
+        return buildPrompt(config, currentItem, playHistory, searchKeywords, new ArrayList<>());
+    }
+
+    static String buildPrompt(AiConfig config, @Nullable JsonObject currentItem, List<JsonObject> playHistory, List<String> searchKeywords, List<JsonObject> notInterested) {
         AiConfig safe = config == null ? new AiConfig().sanitize() : config.sanitize();
         JsonObject context = new JsonObject();
         JsonObject policy = new JsonObject();
@@ -353,18 +379,22 @@ public class AiRecommendationService {
         policy.addProperty("defaultItems", DEFAULT_RECOMMENDATION_COUNT);
         policy.addProperty("maxItems", MAX_RECOMMENDATION_COUNT);
         policy.addProperty("avoidCurrentAndHistory", true);
+        policy.addProperty("avoidNotInterested", true);
         policy.addProperty("outputMediaType", "movie 或 tv");
         context.add("recommendationPolicy", policy);
         context.add("currentItem", currentItem == null ? new JsonObject() : currentItem);
         context.add("playHistory", objectArray(playHistory));
         context.add("searchHistory", searchArray(searchKeywords));
+        context.add("notInterested", objectArray(notInterested));
 
         StringBuilder builder = new StringBuilder();
         builder.append(safe.getRecommendPrompt()).append("\n\n");
         builder.append("推荐硬性要求:\n");
         builder.append("- items 数量必须在 ").append(MIN_RECOMMENDATION_COUNT).append('-').append(MAX_RECOMMENDATION_COUNT).append(" 部之间，默认 ").append(DEFAULT_RECOMMENDATION_COUNT).append(" 部。\n");
         builder.append("- 不要推荐 currentItem 或 playHistory 中已经出现的作品、别名或明显同名混淆项。\n");
+        builder.append("- 不要推荐 notInterested 中用户明确标记为不感兴趣的作品、别名、翻拍版或明显同名混淆项。\n");
         builder.append("- searchHistory 只代表兴趣意向，不等同于已观看；重复或靠前搜索词权重更高。\n");
+        builder.append("- notInterested 是明确负反馈，优先级高于相似题材、演员、导演和搜索兴趣。\n");
         builder.append("- 如果 playHistory 中包含异常标题、合集或非影视内容，请降低权重。\n");
         builder.append("- currentItem 代表即时兴趣，playHistory 代表长期偏好；不要只围绕当前作品推荐。\n");
         builder.append("- 同一题材、演员、导演、地区或年代重复出现在多条高完成率历史时，视为更强偏好。\n");
@@ -384,6 +414,7 @@ public class AiRecommendationService {
         builder.append("- currentItem: 用户当前正在查看或播放的作品，代表即时兴趣。\n");
         builder.append("- playHistory: 用户最近播放过的作品，越靠前越近，观看深度越高权重越高。\n");
         builder.append("- searchHistory: 用户搜索词，代表潜在兴趣，不等同于已观看。\n");
+        builder.append("- notInterested: 用户明确标记为不感兴趣的作品，必须作为负向约束排除。\n");
         builder.append("- title/year/mediaType/country/language: 作品基础信息，用于判断题材、地区、语言和年代偏好。\n");
         builder.append("- genres/tags/statusOrRemarks/description: 类型、标签、更新状态或简介，用于判断内容气质。\n");
         builder.append("- actors/director: 演员与导演/主创；在多条高兴趣历史中重复出现时代表稳定人员偏好。\n");
@@ -432,9 +463,23 @@ public class AiRecommendationService {
         List<JsonObject> items = new ArrayList<>();
         String current = !isBlank(currentTitle) ? currentTitle : currentVod == null ? "" : currentVod.getName();
         try {
-            for (History history : selectHistoryContext(History.get(), current)) items.add(historyContextItem(history));
+            for (History history : selectHistoryContext(History.getAll(), current)) items.add(historyContextItem(history));
         } catch (Throwable e) {
             SpiderDebug.log("ai-rec", "history read failed: %s", e.getMessage());
+        }
+        return items;
+    }
+
+    private List<JsonObject> notInterestedItems() {
+        List<JsonObject> items = new ArrayList<>();
+        for (RecommendationFeedbackStore.Entry entry : RecommendationFeedbackStore.get()) {
+            JsonObject item = new JsonObject();
+            addString(item, "title", entry.getTitle());
+            addString(item, "mediaType", entry.getMediaType());
+            addPositiveInt(item, "year", entry.getYear());
+            addString(item, "source", entry.getSource());
+            items.add(item);
+            if (items.size() >= MAX_CONTEXT_ITEMS) break;
         }
         return items;
     }
@@ -486,7 +531,7 @@ public class AiRecommendationService {
         List<String> titles = new ArrayList<>();
         String normalizedCurrent = PersonalRecommendationService.normalizeTitle(currentTitle);
         if (histories == null) return selected;
-        for (History history : histories) {
+        for (History history : PersonalRecommendationService.historyByWatchTime(histories)) {
             if (history == null || isBlank(history.getVodName())) continue;
             String normalizedTitle = PersonalRecommendationService.normalizeTitle(history.getVodName());
             if (normalizedTitle.equals(normalizedCurrent)) continue;
@@ -674,16 +719,29 @@ public class AiRecommendationService {
     private TmdbItem resolveItem(AiRecommendation recommendation) {
         if (recommendation == null || isBlank(recommendation.title)) return null;
         String mediaType = "tv".equals(recommendation.mediaType) ? "tv" : "movie";
+        PersonalRecommendationService personalService = new PersonalRecommendationService(tmdbService, tmdbConfig);
         if (tmdbConfig.isReady()) {
             try {
-                TmdbItem item = tmdbMatcher.searchAndMatch(recommendation.title);
-                if (item != null) return withReason(item, recommendation.reason);
+                TmdbItem item = tmdbMatcher.searchAndMatch(recommendation.title, mediaType, recommendation.year);
+                if (item != null) {
+                    try {
+                        PersonalRecommendationService.DoubanRating rating = personalService.loadDoubanRating(recommendation.title, mediaType, recommendation.year);
+                        item = PersonalRecommendationService.withRating(item, rating.getRating());
+                    } catch (Throwable e) {
+                        SpiderDebug.log("ai-rec", "douban rating resolve failed title=%s error=%s", recommendation.title, e.getMessage());
+                    }
+                    return withReason(item, recommendation.reason);
+                }
             } catch (Throwable e) {
                 SpiderDebug.log("ai-rec", "tmdb resolve failed title=%s error=%s", recommendation.title, e.getMessage());
             }
         }
         try {
-            TmdbItem item = new PersonalRecommendationService(tmdbService, tmdbConfig).matchDoubanItem(recommendation.title, mediaType, recommendation.year);
+            TmdbItem item = personalService.matchDoubanItem(recommendation.title, mediaType, recommendation.year);
+            if (item != null && item.getDoubanRating() <= 0) {
+                PersonalRecommendationService.DoubanRating rating = personalService.loadDoubanRating(recommendation.title, mediaType, recommendation.year);
+                item = PersonalRecommendationService.withRating(item, rating.getRating());
+            }
             if (item != null) return withReason(item, recommendation.reason);
         } catch (Throwable e) {
             SpiderDebug.log("ai-rec", "douban resolve failed title=%s error=%s", recommendation.title, e.getMessage());
@@ -692,17 +750,23 @@ public class AiRecommendationService {
     }
 
     static PersonalRecommendationService.RecommendationPage pageAllCandidates(List<PersonalRecommendationService.RecommendationCandidate> candidates, String fingerprint) {
-        List<PersonalRecommendationService.RecommendationCandidate> ranked = PersonalRecommendationService.rankCandidates(candidates, Integer.MAX_VALUE);
+        List<PersonalRecommendationService.RecommendationCandidate> allowed = new ArrayList<>();
+        List<RecommendationFeedbackStore.Entry> feedback = PersonalRecommendationService.feedbackEntries();
+        for (PersonalRecommendationService.RecommendationCandidate candidate : candidates == null ? new ArrayList<PersonalRecommendationService.RecommendationCandidate>() : candidates) {
+            if (candidate == null || PersonalRecommendationService.isFeedbackBlocked(feedback, candidate.item)) continue;
+            allowed.add(candidate);
+        }
+        List<PersonalRecommendationService.RecommendationCandidate> ranked = PersonalRecommendationService.rankCandidates(allowed, Integer.MAX_VALUE);
         return PersonalRecommendationService.pageItems(ranked, 0, Math.max(1, ranked.size()), fingerprint, false);
     }
 
     private PersonalRecommendationService.RecommendationPage resolveAndCache(List<AiRecommendation> recommendations, String fingerprint, @Nullable String currentTitle) {
         long start = System.currentTimeMillis();
+        List<TmdbItem> resolvedItems = RecommendationEnrichmentExecutor.map(recommendations, this::resolveItem, AiRecommendationService::fallbackItem);
         List<PersonalRecommendationService.RecommendationCandidate> candidates = new ArrayList<>();
         int fallbackCount = 0;
         int order = 0;
-        for (AiRecommendation recommendation : recommendations) {
-            TmdbItem item = resolveItem(recommendation);
+        for (TmdbItem item : resolvedItems) {
             if (item == null || isBlank(item.getTitle())) continue;
             if (item.getTmdbId() <= 0 && isBlank(item.getPosterUrl()) && isBlank(item.getBackdropUrl())) fallbackCount++;
             String normalized = PersonalRecommendationService.normalizeTitle(item.getTitle());
@@ -747,17 +811,33 @@ public class AiRecommendationService {
         if (recommendation == null || isBlank(recommendation.title)) return null;
         String mediaType = "tv".equals(recommendation.mediaType) ? "tv" : "movie";
         String subtitle = recommendation.subtitle();
-        return new TmdbItem(-Math.abs((recommendation.title + recommendation.year + mediaType).hashCode()), mediaType, recommendation.title, subtitle, recommendation.reason, "", "", "", 0.0);
+        return new TmdbItem(
+                -Math.abs((recommendation.title + recommendation.year + mediaType).hashCode()),
+                mediaType,
+                recommendation.title,
+                subtitle,
+                "",
+                "",
+                "",
+                "",
+                0.0,
+                "",
+                "",
+                new ArrayList<>(),
+                "",
+                0.0,
+                0.0,
+                recommendation.reason);
     }
 
-    private TmdbItem withReason(TmdbItem item, String reason) {
+    static TmdbItem withReason(TmdbItem item, String reason) {
         if (item == null || isBlank(reason)) return item;
         return new TmdbItem(
                 item.getTmdbId(),
                 item.getMediaType(),
                 item.getTitle(),
                 item.getSubtitle(),
-                reason,
+                item.getOverview(),
                 item.getPosterUrl(),
                 item.getBackdropUrl(),
                 item.getCredit(),
@@ -765,7 +845,10 @@ public class AiRecommendationService {
                 item.getOriginalLanguage(),
                 item.getOriginCountry(),
                 item.getGenreIds(),
-                item.getDepartment()
+                item.getDepartment(),
+                item.getTmdbRating(),
+                item.getDoubanRating(),
+                reason
         );
     }
 
@@ -929,7 +1012,7 @@ public class AiRecommendationService {
     private static boolean isCacheFileName(String name, boolean resolved) {
         if (isBlank(name)) return false;
         if (resolved) return name.endsWith(RESOLVED_CACHE_SUFFIX);
-        return name.endsWith(".json") && !name.endsWith(RESOLVED_CACHE_SUFFIX);
+        return name.endsWith(".json") && !name.contains(".items");
     }
 
     private static String normalizeSearchRecords(String searchRecords) {
@@ -1123,7 +1206,6 @@ public class AiRecommendationService {
             List<String> parts = new ArrayList<>();
             parts.add("tv".equals(mediaType) ? "剧集" : "电影");
             if (year > 0) parts.add(String.valueOf(year));
-            if (!isBlank(reason)) parts.add(reason);
             return String.join(" · ", parts);
         }
 

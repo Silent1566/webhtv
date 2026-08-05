@@ -16,9 +16,9 @@ public class AiConfig {
     public static final String DEFAULT_ANTHROPIC_ENDPOINT = "https://api.anthropic.com/v1/messages";
     public static final String DEFAULT_GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta";
     public static final String DEFAULT_MODEL = "gpt-4.1-mini";
-    public static final int DEFAULT_RECOMMEND_PROMPT_VERSION = 2;
+    public static final int DEFAULT_RECOMMEND_PROMPT_VERSION = 3;
     public static final String LEGACY_RECOMMEND_PROMPT_V1 = "你是一位专业的影视剧推荐专家，熟悉全球影视内容，包括电视剧、电影、动漫、纪录片等。你的任务是根据用户提供的观影历史和搜索记录，分析用户的偏好，并输出个性化的影视推荐列表。只返回可解析 JSON，不要解释，建议格式为 {\"items\":[{\"title\":\"片名\",\"year\":2024,\"mediaType\":\"movie 或 tv\",\"reason\":\"一句推荐理由\"}]}。优先推荐不同于历史记录和当前影片的作品，推荐数量由提示词自行决定。";
-    public static final String DEFAULT_RECOMMEND_PROMPT = "你是一位专业的影视推荐专家，熟悉全球电影、电视剧、动漫、纪录片、综艺及短剧内容。"
+    public static final String LEGACY_RECOMMEND_PROMPT_V2 = "你是一位专业的影视推荐专家，熟悉全球电影、电视剧、动漫、纪录片、综艺及短剧内容。"
             + "你的任务是根据用户的当前影片、播放历史、搜索记录、观看进度和内容元数据，分析用户偏好，并输出个性化影视推荐。"
             + "请重点分析用户偏好的题材、类型、国家/地区、语言、年代、叙事风格、节奏和受众倾向；"
             + "播放历史中的观看深度、已看集数、观看时长、完播率和最近观看时间权重更高；"
@@ -28,6 +28,8 @@ public class AiConfig {
             + "推荐数量为 12-24 部，默认推荐 16 部；若用户历史较少则推荐 12 部，历史丰富则推荐 18-24 部。"
             + "只返回可解析 JSON，不要解释、Markdown 或多余文本，格式为 {\"items\":[{\"title\":\"片名\",\"year\":2024,\"mediaType\":\"movie 或 tv\",\"reason\":\"一句推荐理由\"}]}。"
             + "mediaType 只能使用 movie 或 tv，reason 控制在 20-45 个中文字符，并说明它为什么适合这个用户。";
+    public static final String DEFAULT_RECOMMEND_PROMPT = LEGACY_RECOMMEND_PROMPT_V2
+            + "用户明确标记为不感兴趣的作品属于强负反馈，必须排除其片名、别名、翻拍版和明显同名混淆项，不能因题材、演员、导演或搜索记录相似而重新推荐。";
     public static final int DEFAULT_TITLE_EXTRACTION_PROMPT_VERSION = 2;
     public static final String LEGACY_TITLE_EXTRACTION_PROMPT_V1 = "你是影视资源标题解析器。你的任务是从网盘/资源站标题中提取真实影视作品名。\n"
             + "要求：只返回严格 JSON，不要 Markdown，不要解释；不要保留清晰度、编码、字幕、语言版本、更新状态、集数、合集、资源组、平台名；"
@@ -476,7 +478,7 @@ public class AiConfig {
         if (prompt == null) return false;
         String value = prompt.trim();
         if (DEFAULT_RECOMMEND_PROMPT.equals(value)) return true;
-        return LEGACY_RECOMMEND_PROMPT_V1.equals(value);
+        return LEGACY_RECOMMEND_PROMPT_V2.equals(value) || LEGACY_RECOMMEND_PROMPT_V1.equals(value);
     }
 
     public static boolean isBuiltInTitleExtractionPrompt(String prompt) {
@@ -508,7 +510,7 @@ public class AiConfig {
     }
 
     public static String[] systemRecommendPromptsForCache() {
-        return new String[]{DEFAULT_RECOMMEND_PROMPT, LEGACY_RECOMMEND_PROMPT_V1};
+        return new String[]{DEFAULT_RECOMMEND_PROMPT, LEGACY_RECOMMEND_PROMPT_V2, LEGACY_RECOMMEND_PROMPT_V1};
     }
 
     public static String[] systemTitleExtractionPromptsForCache() {

@@ -21,6 +21,7 @@
     <string name="detail_content">簡介：<xliff:g name="name">%s</xliff:g></string>
     <string name="detail_desc">簡介</string>
     <string name="detail_episode">選集</string>
+    <string name="detail_episode_season_context">選集 · 第 %1$d 季</string>
     <string name="detail_episode_reverse">倒序</string>
     <string name="detail_episode_forward">正序</string>
     <string name="detail_episode_view_grid">網格</string>
@@ -36,9 +37,11 @@
     <string name="keep">收藏</string>
     <string name="keep_add">已收藏</string>
     <string name="keep_del">已取消收藏</string>
-    <string name="exit_confirm_title">確定退出應用？</string>
-    <string name="exit_confirm_message">目前頁面將關閉；如果正在播放，會繼續留在後台。</string>
-    <string name="exit_confirm_positive">確認退出</string>
+    <string name="exit_confirm_title">退出應用</string>
+    <string name="exit_confirm_message">應用將關閉，播放和後台服務也會停止。</string>
+    <string name="exit_confirm_playing_message">目前正在播放；後台播放會繼續播放，完全退出會停止播放和後台服務。</string>
+    <string name="exit_confirm_background">後台播放</string>
+    <string name="exit_confirm_positive">完全退出</string>
 
     <!-- Play -->
     <string name="play">播放</string>
@@ -1292,6 +1295,7 @@
     <string name="crash_restart">重新啟動</string>
     <string name="crash_details">錯誤訊息</string>
     <string name="crash_details_title">錯誤訊息</string>
+    <string name="crash_details_message">應用版本：%1$s\n\n%2$s</string>
     <string name="crash_details_close">關閉</string>
 
     <!-- Hint -->
@@ -1400,12 +1404,20 @@
         <item>繁體中文</item>
     </string-array>
 
+    <string name="aspect_ratio_title">自訂畫面比例</string>
+    <string name="aspect_ratio_width">寬</string>
+    <string name="aspect_ratio_height">高</string>
+    <string name="aspect_ratio_hint">可輸入 2560:1080 或 64:27</string>
+    <string name="aspect_ratio_invalid">請輸入有效的畫面比例</string>
     <string-array name="select_scale">
         <item>原始</item>
         <item>16:9</item>
         <item>4:3</item>
         <item>填充</item>
         <item>裁剪</item>
+        <item>21:9</item>
+        <item>自適應</item>
+        <item>自訂</item>
     </string-array>
 
     <string-array name="select_reset">
@@ -1595,6 +1607,7 @@
     <string name="detail_image_saving">正在儲存圖片...</string>
     <string name="detail_image_save_success">已儲存至：%1$s</string>
     <string name="detail_image_save_failed">圖片儲存失敗</string>
+    <string name="detail_external_open_failed">無法開啟外部連結</string>
     <string name="detail_image_permission_denied">儲存權限被拒絕</string>
 
     <string name="detail_tmdb_photos">劇照</string>
@@ -1624,6 +1637,27 @@
     <string name="detail_media_movie">電影</string>
     <string name="detail_media_tv">劇集</string>
     <string name="detail_media_unknown">詳情</string>
+    <string name="tmdb_episode_complete">全 %1$d 集</string>
+    <string name="tmdb_episode_total">共 %1$d 集</string>
+    <string name="tmdb_episode_ongoing">更新至 %1$d 集</string>
+    <string name="tmdb_episode_ongoing_total">更新至 %1$d / 共 %2$d 集</string>
+    <string name="tmdb_episode_series_ongoing">更新至 S%1$dE%2$d</string>
+    <string name="tmdb_episode_series_ongoing_total">更新至 S%1$dE%2$d · 全劇 %3$d 集</string>
+    <string name="tmdb_episode_season_complete">第 %1$d 季 · 全 %2$d 集</string>
+    <string name="tmdb_episode_season_total">第 %1$d 季 · 共 %2$d 集</string>
+    <string name="tmdb_episode_season_ongoing">第 %1$d 季 · 更新至 %2$d 集</string>
+    <string name="tmdb_episode_season_ongoing_total">第 %1$d 季 · 更新至 %2$d / 共 %3$d 集</string>
+    <string name="tmdb_episode_planned">待播</string>
+    <string name="tmdb_episode_planned_total">待播 · 計劃 %1$d 集</string>
+    <string name="tmdb_episode_canceled">已取消 · 共 %1$d 集</string>
+    <string name="tmdb_episode_compact_total">TMDB %1$d 集</string>
+    <string name="tmdb_episode_compact_progress">TMDB %1$d/%2$d 集</string>
+    <string name="tmdb_episode_compact_episode">TMDB 第 %1$d 集</string>
+    <string name="tmdb_episode_compact_series">TMDB S%1$dE%2$d</string>
+    <string name="tmdb_episode_compact_series_total">TMDB S%1$dE%2$d · %3$d 集</string>
+    <string name="tmdb_episode_compact_season">TMDB S%1$d · %2$d 集</string>
+    <string name="tmdb_episode_compact_season_progress">TMDB S%1$d %2$d/%3$d 集</string>
+    <string name="tmdb_episode_compact_planned">TMDB 待播</string>
     <string name="detail_source_current">目前站源：%1$s</string>
     <string name="detail_source_empty">暫無可用站源</string>
     <string name="detail_source_episode_empty">暫無可用選集或站源</string>
@@ -1673,6 +1707,12 @@
         <item>智能</item>
         <item>嚴格 + 彈窗</item>
         <item>智能 + 彈窗</item>
+    </string-array>
+
+    <string-array name="select_global_history_mode">
+        <item>關閉</item>
+        <item>自動配對播放源</item>
+        <item>搜尋後選擇播放源</item>
     </string-array>
 
     <string-array name="select_auto_skip_intro_outro">
@@ -2075,6 +2115,16 @@
     <string name="setting_episode_history">記錄分集進度</string>
     <string name="setting_history_aggregation">歷史記錄跨源聚合</string>
     <string name="setting_history_aggregation_hint">基於 TMDB 匹配統一不同源的歷史記錄</string>
+    <string name="setting_global_history">全域歷史續播</string>
+    <string name="history_other_config">其他介面</string>
+    <string name="history_source_searching">正在配對可續播播放源…</string>
+    <string name="history_source_not_found">未找到可可靠續播的播放源</string>
+    <string name="history_source_open_search">開啟全域搜尋</string>
+    <string name="history_source_episode_missing">該播放源與歷史記錄不匹配或缺少對應集數</string>
+    <string name="history_source_load_failed">播放源載入失敗</string>
+    <string name="history_record_missing">歷史記錄已不存在</string>
+    <string name="history_config_changed">點播設定已切換，請重新操作</string>
+    <string name="dialog_delete_global_history">確定刪除所有點播設定的歷史記錄嗎？</string>
     <string name="setting_home_history">首頁最近觀看</string>
     <string name="site_health_report_ad_blocked">廣告攔截 · %1$d 次</string>
     <string name="setting_custom_csp_sort">排序</string>

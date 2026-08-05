@@ -12,6 +12,7 @@ import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.databinding.ActivityHistoryBinding;
 import com.fongmi.android.tv.event.RefreshEvent;
+import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.adapter.HistoryAdapter;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.custom.SpaceItemDecoration;
@@ -52,7 +53,7 @@ public class HistoryActivity extends BaseActivity implements HistoryAdapter.OnCl
         if (mAdapter.isDelete()) {
             new androidx.appcompat.app.AlertDialog.Builder(this)
                 .setTitle(R.string.dialog_delete_record)
-                .setMessage(R.string.dialog_delete_history)
+                .setMessage(Setting.isGlobalHistoryEnabled() ? R.string.dialog_delete_global_history : R.string.dialog_delete_history)
                 .setNegativeButton(R.string.dialog_negative, null)
                 .setPositiveButton(R.string.dialog_positive, (dialog, which) -> mAdapter.clear())
                 .show();
@@ -70,7 +71,7 @@ public class HistoryActivity extends BaseActivity implements HistoryAdapter.OnCl
     }
 
     private void getHistory() {
-        mAdapter.setItems(History.get(), () -> mBinding.progressLayout.showContent(true, mAdapter.getItemCount()));
+        mAdapter.setItems(History.getForDisplay(), () -> mBinding.progressLayout.showContent(true, mAdapter.getItemCount()));
     }
 
     @Subscribe(threadMode = ThreadMode.MAIN)
@@ -80,12 +81,12 @@ public class HistoryActivity extends BaseActivity implements HistoryAdapter.OnCl
 
     @Override
     public void onItemClick(History item) {
-        VideoActivity.startFromHistory(this, item);
+        HistoryResumeCoordinator.open(this, item);
     }
 
     @Override
     public void onItemDelete(History item) {
-        mAdapter.remove(item.delete(), () -> {
+        mAdapter.remove(item.deleteDisplayItem(), () -> {
             mBinding.progressLayout.showContent(true, mAdapter.getItemCount());
             if (mAdapter.getItemCount() == 0) mAdapter.setDelete(false);
         });

@@ -2,6 +2,7 @@ package com.fongmi.android.tv.service;
 
 import com.fongmi.android.tv.bean.TmdbConfig;
 import com.fongmi.android.tv.bean.TmdbItem;
+import com.google.gson.JsonParser;
 
 import org.junit.Test;
 
@@ -63,6 +64,29 @@ public class TmdbServiceCacheKeyTest {
         assertNotEquals(service.searchCacheKey("庆余年", first), service.searchCacheKey("庆余年", english));
     }
 
+    @Test
+    public void onAirTvDetailsUseOneDayCache() {
+        TmdbService service = new TmdbService();
+
+        assertEquals(24L * 60L * 60L * 1000L, service.detailCacheTtl(JsonParser.parseString(
+                "{\"status\":\"Returning Series\",\"next_episode_to_air\":{\"season_number\":1,\"episode_number\":2}}")
+                .getAsJsonObject()));
+        assertEquals(24L * 60L * 60L * 1000L, service.detailCacheTtl(JsonParser.parseString(
+                "{\"in_production\":true}")
+                .getAsJsonObject()));
+    }
+
+    @Test
+    public void completedAndMovieDetailsKeepSevenDayCache() {
+        TmdbService service = new TmdbService();
+
+        assertEquals(7L * 24L * 60L * 60L * 1000L, service.detailCacheTtl(JsonParser.parseString(
+                "{\"status\":\"Ended\",\"number_of_episodes\":36}")
+                .getAsJsonObject()));
+        assertEquals(7L * 24L * 60L * 60L * 1000L, service.detailCacheTtl(JsonParser.parseString(
+                "{\"status\":\"Released\",\"runtime\":120}")
+                .getAsJsonObject()));
+    }
     private static TmdbConfig config(String apiBase, String apiKey, String language) {
         try {
             TmdbConfig config = new TmdbConfig();

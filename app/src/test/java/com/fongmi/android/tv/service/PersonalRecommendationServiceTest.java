@@ -1,6 +1,7 @@
 package com.fongmi.android.tv.service;
 
 import com.fongmi.android.tv.bean.TmdbItem;
+import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -8,12 +9,73 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 public class PersonalRecommendationServiceTest {
+
+    @Test
+    public void enrichTmdbRatings_addsDoubanRatingWithoutDroppingTmdbMetadata() {
+        PersonalRecommendationService service = new PersonalRecommendationService(null, null) {
+            @Override
+            public DoubanRating loadDoubanRating(String title, String mediaType, int year) {
+                return parseDoubanSubjectAbstract("{\"r\":0,\"subject\":{\"id\":\"100\",\"title\":\"测试影片 (2024)\",\"is_tv\":false,\"release_year\":\"2024\",\"rate\":\"8.8\"}}");
+            }
+        };
+        TmdbItem original = new TmdbItem(
+                1, "movie", "测试影片", "2024", "已有简介", "poster.jpg", "backdrop.jpg",
+                "主演", 8.1, "zh", "CN", List.of(18), "Acting");
+
+        List<TmdbItem> enriched = service.enrichTmdbRatings(List.of(original));
+
+        assertEquals(1, enriched.size());
+        assertEquals(8.1, enriched.get(0).getTmdbRating(), 0.01);
+        assertEquals(8.8, enriched.get(0).getDoubanRating(), 0.01);
+        assertEquals("已有简介", enriched.get(0).getOverview());
+        assertEquals("poster.jpg", enriched.get(0).getPosterUrl());
+        assertEquals("backdrop.jpg", enriched.get(0).getBackdropUrl());
+        assertEquals(List.of(18), enriched.get(0).getGenreIds());
+    }
+
+    @Test
+    public void enrichTmdbRatingsAsync_limitsColdLookupsToVisiblePageAndReturnsFullList() throws Exception {
+        AtomicInteger lookups = new AtomicInteger();
+        PersonalRecommendationService service = new PersonalRecommendationService(null, null) {
+            @Override
+            public DoubanRating loadDoubanRating(String title, String mediaType, int year) {
+                lookups.incrementAndGet();
+                return parseDoubanSubjectAbstract("{\"subject\":{\"id\":\"100\",\"title\":\"" + title + "\",\"is_tv\":false,\"release_year\":\"2024\",\"rate\":\"8.8\"}}");
+            }
+        };
+        List<TmdbItem> items = new ArrayList<>();
+        for (int index = 0; index < PersonalRecommendationService.DEFAULT_PAGE_SIZE + 3; index++) {
+            items.add(new TmdbItem(index + 1, "movie", "影片" + index, "2024", "", "", ""));
+        }
+        CountDownLatch completed = new CountDownLatch(1);
+        AtomicReference<List<TmdbItem>> result = new AtomicReference<>();
+
+        service.enrichTmdbRatingsAsync(items, enriched -> {
+            result.set(enriched);
+            completed.countDown();
+        });
+
+        assertTrue(completed.await(5, TimeUnit.SECONDS));
+        assertEquals(PersonalRecommendationService.DEFAULT_PAGE_SIZE, lookups.get());
+        assertEquals(items.size(), result.get().size());
+        assertEquals(8.8, result.get().get(PersonalRecommendationService.DEFAULT_PAGE_SIZE - 1).getDoubanRating(), 0.01);
+        assertEquals(0.0, result.get().get(PersonalRecommendationService.DEFAULT_PAGE_SIZE).getDoubanRating(), 0.01);
+    }
 
     @Test
     public void parseDoubanSubjects_readsStructuredSuggestItems() {
@@ -30,6 +92,120 @@ public class PersonalRecommendationServiceTest {
         assertTrue(subject.posterUrl.contains("m_ratio_poster"));
     }
 
+    @Test
+    public void parseDoubanSubjects_readsRexxarSearchSubjects() {
+        String body = "{"
+                + "\"smart_box\":[{\"layout\":\"subject\",\"target_type\":\"tv\",\"target\":{"
+                + "\"id\":\"3016187\",\"title\":\"权力的游戏 第一季\",\"year\":\"2011\","
+                + "\"cover_url\":\"https://img.example/poster.jpg\",\"rating\":{\"value\":9.5}}}],"
+                + "\"subjects\":{\"items\":[{\"layout\":\"subject\",\"target_type\":\"movie\",\"target\":{"
+                + "\"id\":\"1291843\",\"title\":\"黑客帝国\",\"year\":\"1999\",\"rating\":{\"value\":9.1}}},"
+                + "{\"layout\":\"chart\",\"target_type\":\"chart\",\"target\":{\"id\":\"list\",\"title\":\"片单\"}}]}}";
+
+        List<PersonalRecommendationService.DoubanSubject> subjects = PersonalRecommendationService.parseDoubanSubjects(body);
+
+        assertEquals(2, subjects.size());
+        assertEquals("3016187", subjects.get(0).id);
+        assertEquals("tv", subjects.get(0).mediaType);
+        assertEquals(2011, subjects.get(0).year);
+        assertEquals(9.5, subjects.get(0).rating, 0.01);
+        assertEquals("1291843", subjects.get(1).id);
+        assertEquals("movie", subjects.get(1).mediaType);
+        assertEquals(9.1, subjects.get(1).rating, 0.01);
+    }
+
+    @Test
+    public void parseDoubanSearchPage_readsWindowDataRatingsAndTvMetadata() {
+        String body = "<html><script>window.__DATA__ = {\"items\":[{"
+                + "\"id\":\"36156235\","
+                + "\"title\":\"重启人生 ブラッシュアップライフ‎ (2023)\","
+                + "\"cover_url\":\"https://img.example/reboot.jpg\","
+                + "\"labels\":[{\"text\":\"剧集\"}],"
+                + "\"rating\":{\"value\":9.4}"
+                + "}]}; window.__USER__ = {\"name\":\"tester\"};</script></html>";
+
+        List<PersonalRecommendationService.DoubanSubject> subjects =
+                PersonalRecommendationService.parseDoubanSearchPage(body);
+
+        assertEquals(1, subjects.size());
+        PersonalRecommendationService.DoubanSubject subject = subjects.get(0);
+        assertEquals("36156235", subject.id);
+        assertEquals("tv", subject.mediaType);
+        assertEquals(2023, subject.year);
+        assertEquals(9.4, subject.rating, 0.01);
+        assertEquals("https://img.example/reboot.jpg", subject.posterUrl);
+    }
+
+    @Test
+    public void isCacheableDoubanResponse_rejectsSearchRateLimitPages() {
+        String blocked = "<script>window.__DATA__ = {\"error_info\":\"搜索访问太频繁。\",\"items\":[]};</script>";
+        String valid = "<script>window.__DATA__ = {\"items\":[{\"id\":\"1\",\"title\":\"测试\"}]};</script>";
+
+        assertFalse(PersonalRecommendationService.isCacheableDoubanResponse(blocked));
+        assertTrue(PersonalRecommendationService.isCacheableDoubanResponse(valid));
+    }
+
+    @Test
+    public void isCacheableDoubanResponse_rejectsApiErrorPayloads() {
+        String blocked = "{\"request\":\"GET /v2/search\",\"msg\":\"need_login\",\"code\":103}";
+        String valid = "[{\"id\":\"1\",\"title\":\"测试\"}]";
+
+        assertFalse(PersonalRecommendationService.isCacheableDoubanResponse(blocked));
+        assertTrue(PersonalRecommendationService.isCacheableDoubanResponse(valid));
+    }
+
+    @Test
+    public void shouldCoolDownDoubanRequests_onlyForPrimaryRateLimits() {
+        assertTrue(PersonalRecommendationService.shouldCoolDownDoubanRequests("suggest", 403));
+        assertTrue(PersonalRecommendationService.shouldCoolDownDoubanRequests("search_page", 429));
+        assertFalse(PersonalRecommendationService.shouldCoolDownDoubanRequests("search_api", 403));
+        assertFalse(PersonalRecommendationService.shouldCoolDownDoubanRequests("suggest", 500));
+    }
+
+    @Test
+    public void doubanRequestDelay_spacesNetworkRequestStarts() {
+        assertEquals(0L, PersonalRecommendationService.doubanRequestDelay(2_000L, 0L, 750L));
+        assertEquals(250L, PersonalRecommendationService.doubanRequestDelay(1_500L, 1_000L, 750L));
+        assertEquals(0L, PersonalRecommendationService.doubanRequestDelay(1_750L, 1_000L, 750L));
+    }
+
+    @Test
+    public void serializeDoubanRequest_allowsOnlyOneColdRequestAtATime() throws Exception {
+        ExecutorService executor = Executors.newFixedThreadPool(4);
+        CountDownLatch start = new CountDownLatch(1);
+        AtomicInteger active = new AtomicInteger();
+        AtomicInteger maxActive = new AtomicInteger();
+        List<Future<Integer>> futures = new ArrayList<>();
+        try {
+            for (int index = 0; index < 4; index++) {
+                final int value = index;
+                futures.add(executor.submit(() -> {
+                    assertTrue(start.await(1, TimeUnit.SECONDS));
+                    return PersonalRecommendationService.serializeDoubanRequest(() -> {
+                        int current = active.incrementAndGet();
+                        maxActive.updateAndGet(previous -> Math.max(previous, current));
+                        try {
+                            Thread.sleep(30L);
+                            return value;
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                            return -1;
+                        } finally {
+                            active.decrementAndGet();
+                        }
+                    });
+                }));
+            }
+
+            start.countDown();
+            for (int index = 0; index < futures.size(); index++) {
+                assertEquals(index, futures.get(index).get(2, TimeUnit.SECONDS).intValue());
+            }
+            assertEquals(1, maxActive.get());
+        } finally {
+            executor.shutdownNow();
+        }
+    }
     @Test
     public void parseDoubanRelatedSubjects_readsRexxarRelatedItems() {
         String body = "{"
@@ -94,6 +270,19 @@ public class PersonalRecommendationServiceTest {
     }
 
     @Test
+    public void doubanRatingMemoryCache_reusesFreshRatingAndExpiresIt() {
+        PersonalRecommendationService.DoubanRatingMemoryCache cache =
+                new PersonalRecommendationService.DoubanRatingMemoryCache(2, 1_000L);
+        PersonalRecommendationService.DoubanRating rating = PersonalRecommendationService.parseDoubanSubjectAbstract(
+                "{\"subject\":{\"id\":\"1295644\",\"title\":\"这个杀手不太冷\",\"type\":\"movie\",\"release_year\":\"1994\",\"rate\":\"9.4\"}}");
+
+        cache.put("movie|这个杀手不太冷|1994", rating, 100L);
+
+        assertSame(rating, cache.get("movie|这个杀手不太冷|1994", 1_099L));
+        assertNull(cache.get("movie|这个杀手不太冷|1994", 1_101L));
+    }
+
+    @Test
     public void bestDoubanRating_prefersCurrentTitleYearAndType() {
         String body = "[{"
                 + "\"id\":\"1292720\","
@@ -130,6 +319,30 @@ public class PersonalRecommendationServiceTest {
         assertEquals("剧集 · 2025", rated.getSubtitle());
         assertEquals("poster", rated.getPosterUrl());
         assertEquals(6.7, rated.getRating(), 0.01);
+    }
+
+    @Test
+    public void withRating_preservesTmdbRatingAndAddsDoubanRating() {
+        TmdbItem item = new TmdbItem(123, "movie", "测试电影", "电影 · 2025", "", "poster", "", "", 8.1);
+
+        TmdbItem rated = PersonalRecommendationService.withRating(item, 8.7);
+
+        assertEquals(8.1, rated.getRating(), 0.01);
+        assertEquals(8.1, rated.getTmdbRating(), 0.01);
+        assertEquals(8.7, rated.getDoubanRating(), 0.01);
+    }
+
+    @Test
+    public void withRating_preservesLegacyCachedTmdbRatingWhenAddingDouban() {
+        TmdbItem legacy = new Gson().fromJson(
+                "{\"tmdbId\":123,\"mediaType\":\"movie\",\"title\":\"旧缓存\",\"rating\":8.1,\"genreIds\":[]}",
+                TmdbItem.class);
+
+        TmdbItem rated = PersonalRecommendationService.withRating(legacy, 8.7);
+
+        assertEquals(8.1, rated.getRating(), 0.01);
+        assertEquals(8.1, rated.getTmdbRating(), 0.01);
+        assertEquals(8.7, rated.getDoubanRating(), 0.01);
     }
 
     @Test

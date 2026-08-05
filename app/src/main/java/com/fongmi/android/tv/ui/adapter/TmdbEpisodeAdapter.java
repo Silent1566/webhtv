@@ -562,12 +562,12 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
     }
 
     private static String titleWithFileSize(Episode episode, String title) {
-        return EpisodeTitleFormatter.withSourceFileSize(episode.getName(), title, Setting.isTmdbEpisodeFileSize());
+        return EpisodeTitleFormatter.withSourceFileSize(episode.getRawDisplayName(), title, Setting.isTmdbEpisodeFileSize());
     }
 
     private String episodeFileSize(Episode episode) {
         if (!Setting.isTmdbEpisodeFileSize()) return "";
-        return EpisodeTitleFormatter.extractFileSize(episode.getName());
+        return EpisodeTitleFormatter.extractFileSize(episode.getRawDisplayName());
     }
 
     private String nativeEnhancedMeta(TmdbEpisode episode) {

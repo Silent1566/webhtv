@@ -1,11 +1,11 @@
 # 全局可配置主题（Universal Web Theme / WebHome V2）设计文档
 
-> 状态：🟡 V1 首页能力已实现，V2 多页面能力处于设计阶段<br>
+> 状态：🟡 V1 首页兼容层与 V2 `HOME`/`DETAIL` 已实现，后续页面处于规划阶段<br>
 > 首次设计：2026-07-27<br>
-> 本次更新：2026-07-28<br>
+> 本次更新：2026-08-03<br>
 > 适用端：mobile / leanback（Android TV）<br>
-> 当前落地范围：全局 WebHome 首页、当前内容源取数、分类筛选、自动分页、遥控焦点和原生页面/播放器入口<br>
-> 后续规划范围：详情页、搜索页、收藏/历史页、播放器控制层、设置页及全局设计变量<br>
+> 当前落地范围：全局 WebHome 首页、WebTheme V2 Manifest、当前内容源取数、分类筛选、详情页、TMDB 渐进增强、遥控焦点和原生播放器入口<br>
+> 后续规划范围：搜索结果页、收藏/历史页、播放器控制层、设置页及全局设计变量<br>
 > 关联文档：`docs/universal-webhome-theme-development.md`<br>
 > 说明：羊壳 `.rfwtxt` 仅作为效果和架构参考，不支持其格式/语法，也不规划直接兼容
 
@@ -304,8 +304,8 @@ theme/
   },
 
   "permissions": {
-    "home": ["vod.home", "vod.category", "navigation.openDetail"],
-    "detail": ["vod.detail", "favorite.read", "favorite.write", "history.read", "player.playVod"],
+    "home": ["vod.home", "vod.category", "navigation.openDetail", "app.search", "app.openVod", "app.openSetting"],
+    "detail": ["vod.detail", "favorite.read", "favorite.write", "history.read", "player.playVod", "app.search"],
     "search": ["vod.search", "navigation.openDetail"],
     "history": ["history.read", "history.write", "navigation.openDetail"],
     "favorite": ["favorite.read", "favorite.write", "navigation.openDetail"],
@@ -389,7 +389,7 @@ Manifest 中声明的权限只是“申请”，最终权限由宿主按页面�
 
 ```jsonc
 {
-  "hostApiVersion": 2,
+  "hostApiVersion": 3,
   "page": "detail",
   "theme": {
     "id": "maple.eclipse",
@@ -411,6 +411,11 @@ Manifest 中声明的权限只是“申请”，最终权限由宿主按页面�
     "vodId": "opaque-vod-id"
   },
   "capabilities": [
+    "theme.info@1",
+    "ui.getViewport@1",
+    "navigation.back@1",
+    "navigation.reload@1",
+    "navigation.openNativeDetail@1",
     "vod.detail@1",
     "favorite.read@1",
     "favorite.write@1",
@@ -420,6 +425,8 @@ Manifest 中声明的权限只是“申请”，最终权限由宿主按页面�
 ```
 
 路由参数由原生注入，主题不应从 URL 查询串猜测内部 Activity 参数。
+
+`theme.info`、`ui.getViewport`、`navigation.back`、`navigation.reload` 是 V2 页面固定基础能力；详情页另有固定的原生详情逃生能力。其余业务能力必须同时位于宿主页面白名单和 Manifest 对应页面的 `permissions` 中，`capabilities` 返回的是最终交集而不是 Manifest 原始声明。
 
 ### 6.3 生命周期
 
@@ -468,17 +475,17 @@ CREATED
 3. 输入输出必须有长度、数量和类型限制。
 4. DTO 字段默认可选；主题必须容忍空值和未知字段。
 5. 新增字段保持向后兼容；删除、改名或改变语义必须提升 contract major version。
-6. Promise rejection 返回结构化错误：
+6. Host API 3 的 Promise rejection 使用标准 `Error`：`Error.code` 返回稳定规范码，`Error.message` 为兼容既有主题保留旧线码。
 
-```json
-{
-  "code": "SOURCE_CHANGED",
-  "message": "Active VOD source changed",
-  "retryable": true
+```javascript
+try {
+  await window.fongmi.vod.detail({});
+} catch (error) {
+  if (error.code === "SOURCE_CHANGED") await reloadPageContext();
 }
 ```
 
-建议错误码：`INVALID_ARGUMENT`、`NOT_SUPPORTED`、`PERMISSION_DENIED`、`SOURCE_CHANGED`、`BUSY`、`RESPONSE_TOO_LARGE`、`NETWORK_ERROR`、`TIMEOUT`、`NATIVE_FAILURE`。
+稳定规范码为：`PERMISSION_DENIED`、`INVALID_ARGUMENT`、`SOURCE_CHANGED`、`STALE_REFERENCE`、`PAGE_UNAVAILABLE`、`NATIVE_FALLBACK`、`RATE_LIMITED`、`RESPONSE_TOO_LARGE`、`INVALID_REQUEST`、`REQUEST_FAILED`。兼容别名为：`STALE_REFERENCE → INVALID_ARGUMENT`、`PAGE_UNAVAILABLE/NATIVE_FALLBACK → UNAVAILABLE`、`RATE_LIMITED → BUSY`。主题的新逻辑应判断 `Error.code`。
 
 ### 7.2 建议桥接模块
 
@@ -540,11 +547,19 @@ ThemeBridge
 | `navigation.openDetail` | 打开 Web 或原生详情 | 列表 |
 | `navigation.openNativeDetail` | 强制使用原生详情兜底 | 详情 |
 | `player.playVod` 扩展参数 | 指定线路/集数/恢复进度 | 详情 |
+| `app.search` | 按标题打开原生片源搜索 | 首页、详情推荐 |
+| `person.open` | 使用人物引用打开原生人物详情 | 详情 |
+| `image.preview` | 使用图片引用打开原生全屏预览 | 详情 |
+| `image.save` | 使用图片引用保存原图 | 详情 |
+| `recommendation.open` | 当前源匹配成功后打开详情，失败时进入全局搜索 | 详情 |
+| `recommendation.info` | 打开推荐说明、评分和 AI 理由 | 详情 |
+| `recommendation.feedback` | 提交“不感兴趣”等受控反馈 | 详情 |
+| `external.open` | 使用宿主生成的链接引用打开外部页面 | 详情 |
 | `settings.schema` | 获取允许展示的设置定义 | 设置 |
 | `settings.get` | 获取允许读取的设置值 | 设置 |
 | `settings.set` | 校验并写入安全设置 | 设置 |
 
-### 7.5 详情 DTO 草案
+### 7.5 当前详情 DTO（`vod.detail@1`）
 
 ```jsonc
 {
@@ -555,20 +570,46 @@ ThemeBridge
   },
   "item": {
     "vodId": "opaque-id",
+    "siteKey": "source-key",
     "name": "影片名",
     "pic": "https://...",
-    "wallPic": "https://...",
     "remarks": "更新至 10 集",
     "year": "2026",
     "area": "内地",
     "typeName": "剧情",
     "actor": "演员",
     "director": "导演",
-    "score": "8.6",
-    "duration": "45 分钟",
-    "content": "简介",
-    "tags": ["剧情", "悬疑"]
+    "content": "简介"
   },
+  "media": {
+    "tmdbId": 123,
+    "mediaType": "tv",
+    "originalName": "Original title",
+    "tagline": "宣传语",
+    "releaseDate": "2026-01-02",
+    "lastAirDate": "2026-02-20",
+    "status": "Returning Series",
+    "backdrop": "https://...",
+    "rating": 8.6,
+    "voteCount": 321,
+    "runtimeMinutes": 45,
+    "seasonCount": 2,
+    "episodeCount": 18,
+    "originalLanguage": "zh",
+    "originCountry": "CN",
+    "genres": ["剧情", "悬疑"]
+  },
+  "people": [
+    {
+      "personId": 1,
+      "kind": "cast",
+      "name": "演员名",
+      "role": "角色名",
+      "department": "Acting",
+      "profile": "https://..."
+    }
+  ],
+  "gallery": ["https://..."],
   "sources": [
     {
       "sourceId": "line-0",
@@ -580,7 +621,14 @@ ThemeBridge
           "name": "第 1 集",
           "number": 1,
           "playRef": "opaque-play-reference",
-          "selected": false
+          "selected": false,
+          "title": "本集标题",
+          "date": "2026-01-02",
+          "overview": "本集简介",
+          "still": "https://...",
+          "rating": 8.4,
+          "runtimeMinutes": 45,
+          "seasonNumber": 1
         }
       ]
     }
@@ -595,22 +643,46 @@ ThemeBridge
       "updatedAt": 0
     }
   },
-  "recommendations": [],
+  "recommendations": [
+    {
+      "tmdbId": 456,
+      "mediaType": "movie",
+      "name": "推荐影片",
+      "subtitle": "2025 · 电影",
+      "overview": "推荐简介",
+      "pic": "https://...",
+      "backdrop": "https://...",
+      "rating": 7.9
+    }
+  ],
   "capabilities": {
     "canFavorite": true,
     "canPlay": true,
-    "hasRecommendations": false
+    "canSearchRecommendations": true,
+    "hasPeople": true,
+    "hasGallery": true,
+    "hasRecommendations": true,
+    "hasEpisodeMetadata": true,
+    "tmdbEnriched": true
   }
 }
 ```
 
 设计要求：
 
-- `vodId`、`sourceId`、`episodeId` 和 `playRef` 对主题来说都是不透明值。
+- `vodId`、`typeId`、筛选 key/value、`sourceId`、`episodeId` 和 `playRef` 对主题来说都是不透明值；主题只能回传当前响应给出的引用，不能构造供应商 ID。
+- 首页、分类和详情共用当前页面的短期访问会话；切源、重载、页面错误或 WebView 重建后，旧的影片、分类和筛选引用全部失效。
+- V2 不输出供应商 `action` 字符串；此类入口只能显示为不可执行项或交由原生兼容页面处理。
 - 不直接把内部 `vod_play_url` 或解析器对象暴露给主题。
 - 主题选择集数后，把 `playRef` 交回原生；原生验证其与当前详情会话匹配。
+- 同一详情的增量刷新会复用稳定 `playRef`；切换来源或 `vodId` 时全部失效。
 - 超长选集需要分页、分组或虚拟化，不能一次创建数千个 DOM 节点。
-- 缺失演员、导演、评分等字段时，主题应直接隐藏对应区域。
+- `media`、`people`、`gallery`、推荐和单集扩展字段均为可选；缺失时主题直接隐藏对应区域。
+- 宿主最多输出 24 个人物、12 张剧照和 18 条推荐，所有公开字符串仍执行长度限制。
+- `state.favorite` 仅在页面声明 `favorite.read` 时返回；`state.history` 与由历史推导的线路/选集选中态仅在声明 `history.read` 时返回。`capabilities.canFavorite` 只有同时具备 `favorite.read` 和 `favorite.write` 才为 `true`。
+- TMDB 增强异步完成后，宿主触发 `fmdetailchange`；主题可调用 `vod.detail({vodId, cached:true})` 获取当前路由的最新快照，不会重新请求内容源。
+- TMDB 推荐没有当前内容源的 `vodId`，不得把 `tmdbId` 传给 `navigation.openDetail`；有 `app.search` 权限时按标题搜索片源，否则只展示。
+- 图片地址由主题再次限制为普通 `http` / `https` URL；不接受 `data:`、`file:` 或脚本协议。
 
 ### 7.6 播放接口扩展
 
@@ -704,16 +776,18 @@ ThemeBridge
 
 1. 保留当前 `TmdbDetailActivity` 作为完整兜底。
 2. 新建平行的 Web 详情宿主，不直接把现有大型 Activity 改成半原生半 Web。
-3. 第一版只做海报、简介、线路、选集、收藏和播放。
-4. 演员、剧照、预告、推荐、跨源搜索等作为后续可选能力。
+3. 基础响应提供海报、简介、线路、选集、收藏和播放，内容源详情可先显示。
+4. 复用 `TmdbUIAdapter` 渐进补齐背景、演员与主创、评分、季集数、单集剧照和相关推荐。
 5. Web 详情加载失败时原地切换到原生详情，而不是返回首页。
-6. 返回详情页时恢复线路、集数、滚动位置和焦点。
+6. TMDB 增量更新和返回详情页时保留线路、集数、分页、滚动位置和焦点。
+7. 推荐项通过受控 `app.search` 查找当前可用片源，不把 TMDB ID 当成源站 VOD ID。
 
 详情页 MVP 验收：
 
 - JAR、JS、Python 源各至少一个详情可正常展示。
 - 能选择线路和集数并进入正确原生播放。
 - 收藏状态和历史进度正确。
+- TMDB 可用时人物图片、剧照、单集资料和推荐渐进出现；不可用时基础详情不受影响。
 - 空详情、无线路、超长选集和接口错误有明确状态。
 - 手机触控和电视遥控均可完整操作。
 - 主题缺少详情页或加载失败时原生详情可用。
@@ -859,6 +933,8 @@ IDLE → LOADING → APPEND_SUCCESS → IDLE
 - 远程主题通过 `WebViewCompat.addWebMessageListener` 通信，宿主同时校验来源 Origin 和 `isMainFrame`，iframe 无法调用原生能力。
 - 监听器固定远程会话 generation，主文档导航轮换不可猜 nonce；切源、重载、WebView 重建和主文档错误都会让旧会话失效。
 - 远程请求设置消息长度、在途数量、页码、返回条数和响应字节上限，避免占满共享执行器或向 WebView 传输超大消息。
+- 写入、播放和导航类远程调用共享 400 ms 的最小间隔，读取类调用不受影响；会话轮换时节流状态清空。
+- 诊断日志不记录完整桥接 payload，URL 日志移除用户信息、查询参数和片段。
 - 远程协议不暴露 `net.*`、`cache.*`、`ext.*`、设备/站点完整配置、任意 URL 播放或 raw 资源代理，也不携带 Cookie、Authorization 和站点请求头。
 
 ### 10.2 页面级能力白名单
@@ -1145,3 +1221,492 @@ V1 兼容接口可以保留，但 V2 多页面主题应使用更严格的默认�
 最终架构目标可以概括为：
 
 > **视觉上尽可能全局可定制，业务上保持原生可信；页面可替换，核心不失控；每页可失败，整机仍可用。**
+
+---
+
+## 18. V2 详情页落地基线（2026-07-29）
+
+本轮已按 M1 + M2 的最小闭环实现 WebTheme V2 首页/详情页链路。以下约束视为当前宿主 API 2 的实现基线，后续扩展搜索、历史和收藏列表页时应保持兼容。
+
+### 18.1 已冻结的兼容与安全边界
+
+- V2 入口为 `theme.json`，必须声明 `schemaVersion: 2`、主题标识、最低宿主 API 和 `pages`；`HOME`、`DETAIL` 独立解析，单页无效不拖垮其他页面。
+- 旧的 V1 单 HTML 远程主题继续按原协议加载；已保存的内置 `eclipse.html` 地址自动迁移到内置 V2 Manifest，避免用户手动重选主题。
+- 内置页面只允许加载精确映射的 `android_asset/webhome` 资源；远程 Manifest 只接受 HTTPS，页面入口必须与 Manifest 同源。
+- 远程 Manifest 限制为 128 KiB，不跟随重定向，不携带 Cookie 或认证信息，不使用系统代理，并拒绝解析到本机、私网及保留地址的主机。
+- 页面最终业务调用能力为“宿主按页面硬编码白名单”与“Manifest 显式声明权限”的交集。`HOME` 和 `DETAIL` 不共享业务权限；内置 V2 页面的 `invoke` 调用也经过同一策略。
+- `theme.info`、视口、返回和重载属于固定基础能力，详情页固定提供原生详情逃生能力；这些能力与 Manifest 申请的业务权限分别计算并统一通过 `capabilities` 公布。
+- 宿主 API 2 当前支持 `theme.info`、`vod.home`、`vod.category`、`vod.detail`、`favorite.status/set`、`history.item`、`navigation.openDetail/openNativeDetail`、`player.playVod` 以及基础 UI/返回能力。
+- 首页、分类和详情 DTO 在进入 V2 页面前把影片、分类和筛选参数转换为当前页面会话内的不透明引用；供应商原始 ID 和 `action` 字符串不进入远程主题。
+- DTO 映射总响应预算为 768 KiB，并分别限制项目、分类、筛选、选集和 TMDB 扩展集合的扫描/输出规模；远程桥最终仍执行 1 MiB 硬上限。
+
+### 18.2 详情数据与播放边界
+
+- `vod.detail@1` 只返回主题渲染所需的独立 DTO，不暴露内部 Bean 或原始播放地址。
+- 每个详情会话最多登记 64 条线路、500 个可播放条目；超出部分通过 `truncated` 告知主题，官方 Eclipse 详情页每次只渲染 120 集。
+- 页面指定选集时只能把宿主生成的短生命周期 opaque `playRef` 交回 `player.playVod`；省略引用只会进入当前影片的原生默认播放流程。引用与当前 `siteKey`、影片和线路绑定，详情会话重建后立即失效。
+- 收藏通过现有原生存储读写；历史由主题读取、由原生播放器在实际播放链路中继续写入，主题不能伪造播放历史。
+- 播放仍由原生 `VideoActivity` 完成，Web 页面不接触解析器、嗅探器、播放内核或媒体 URL。
+
+### 18.3 宿主、回退与当前完成度
+
+- 手机和电视共用非导出的 `WebThemeDetailActivity`。主题声明有效 `DETAIL` 页面时优先进入该宿主，否则直接进入 `TmdbDetailActivity`。
+- Manifest、详情页或桥接初始化失败时，详情宿主只回退一次到原生详情并结束自身，避免返回死循环；页面同时保留显式“原生详情”逃生入口。
+- 内置 Eclipse 详情页已覆盖加载、错误、空态、海报降级、收藏、历史进度、线路、选集分页、播放、触控布局和 TV 几何焦点恢复。
+- Java 契约测试、JavaScript 状态测试、mobile/leanback 编译和桌面/窄屏 Chromium 视觉检查已纳入本轮验收。真实设备上的旋转、遥控全路径、播放返回和远程主题故障注入仍属于发布前集成验收。
+- 本轮暂不抽取宿主统一注入的 focus runtime，也不扩展播放器控制层、设置 Schema、ZIP 安装或跨域资源；这些继续按 M3 之后的里程碑增量推进。
+
+
+---
+
+## 19. Host API 3：TMDB 详情效果开放设计（2026-07-30）
+
+本阶段把现有原生 TMDB 详情模式中已经成熟的数据与交互能力开放给 WebTheme。目标不是让远程页面重新实现 TMDB、文件保存、外部 Intent 或跨源匹配，而是让主题自行决定布局、文案、显示时机和触发入口，再通过受控语义接口调用原生实现。
+
+### 19.1 当前差距与本阶段目标
+
+当前 `vod.detail@1` 已能渐进返回背景、人物、剧照、单集资料和一组相关推荐，但仍存在以下差距：
+
+- 只公开普通相关推荐，没有区分原生详情已有的 TMDB 个性推荐、豆瓣个性推荐和 AI 个性推荐。
+- 人物卡片、剧照和外部链接缺少受控动作接口，官方示例只能展示，不能进入人物详情、预览原图、保存图片或打开外部页面。
+- 推荐卡片只能调用 `app.search(title)`，没有复用原生的“当前源匹配，失败后全局搜索”链路。
+- AI 推荐理由、推荐详情和“不感兴趣”反馈没有进入 WebTheme 能力模型。
+- 页面未消费宿主注入的安全区变量；横向轨道末端、焦点放大光环和系统状态栏附近可能出现内容或焦点目标显示不全。
+
+本阶段完成后，用户主题应能自行组合上述区域，并通过独立函数调用原生效果；官方 Eclipse 详情页必须作为完整参考实现。
+
+### 19.2 兼容策略
+
+- Manifest `schemaVersion` 保持 `2`，页面结构与权限声明格式不变。
+- 宿主能力版本提升为 `hostApiVersion: 3`；依赖本节接口的主题可声明 `minHostApi: 3`。
+- `vod.detail@1` 保持 major version 不变，新增字段全部为可选字段；旧主题继续读取现有 `people`、`gallery` 和 `recommendations`。
+- 主题必须以 `theme.info.capabilities` 和 DTO 中的布尔能力为准，不能仅依据宿主版本假定某个动作一定存在。
+- 宿主 API 2 的页面仍可加载；缺少 API 3 时只隐藏新增动作，不得影响基础详情、收藏和播放。
+
+### 19.3 详情 DTO 的增量字段
+
+`vod.detail@1` 增加以下可选结构：
+
+```jsonc
+{
+  "people": [
+    {
+      "personRef": "opaque-person-reference",
+      "personId": 1,
+      "kind": "cast",
+      "name": "演员名",
+      "role": "角色名",
+      "department": "Acting",
+      "profile": "https://..."
+    }
+  ],
+  "galleryItems": [
+    {
+      "imageRef": "opaque-image-reference",
+      "preview": "https://...",
+      "width": 0,
+      "height": 0
+    }
+  ],
+  "recommendationGroups": [
+    {
+      "id": "personal.ai",
+      "title": "AI 为你推荐",
+      "source": "ai",
+      "items": [
+        {
+          "recommendationRef": "opaque-recommendation-reference",
+          "tmdbId": 456,
+          "mediaType": "movie",
+          "name": "推荐影片",
+          "subtitle": "2025 · 电影",
+          "overview": "简介",
+          "reason": "因为你最近观看了……",
+          "pic": "https://...",
+          "backdrop": "https://...",
+          "rating": 8.1,
+          "tmdbRating": 8.1,
+          "doubanRating": 7.9
+        }
+      ]
+    }
+  ],
+  "externalLinks": [
+    {
+      "linkRef": "opaque-external-link-reference",
+      "label": "TMDB",
+      "host": "themoviedb.org"
+    }
+  ],
+  "capabilities": {
+    "canOpenPeople": true,
+    "canPreviewImages": true,
+    "canSaveImages": true,
+    "canOpenRecommendations": true,
+    "canInspectRecommendations": true,
+    "canSendRecommendationFeedback": true,
+    "canOpenExternalLinks": true,
+    "hasPersonalTmdbRecommendations": true,
+    "hasPersonalDoubanRecommendations": true,
+    "hasPersonalAiRecommendations": true,
+    "hasExternalLinks": true
+  }
+}
+```
+
+兼容和数量规则：
+
+- 现有 `gallery: string[]` 与 `recommendations: item[]` 保留；分别作为无动作主题的简化剧照列表和 `related` 推荐组兼容视图。
+- `recommendationGroups` 的固定组 ID 为 `related`、`personal.tmdb`、`personal.douban`、`personal.ai`。空组可省略，主题不得依赖固定顺序。
+- 单组最多输出 18 条，总推荐最多输出 72 条；人物仍最多 24 个，剧照仍最多 12 张，外部链接最多 8 条。
+- `reason` 只用于解释推荐，不作为 HTML；主题必须使用文本节点渲染。
+- 图片预览地址可展示，但预览、保存、人物、推荐和外部链接动作都必须回传 opaque reference，不能以 URL、`tmdbId` 或 `personId` 代替引用。
+
+### 19.4 新增语义动作接口
+
+| 方法 | Manifest 权限 | 输入 | 原生行为 |
+| --- | --- | --- | --- |
+| `person.open` | `person.open` | `{personRef}` | 打开 `TmdbPersonActivity`，人物作品继续使用原生匹配与导航 |
+| `image.preview` | `image.preview` | `{imageRef}` | 打开当前详情会话的原生全屏图片查看器，并定位到所选图片 |
+| `image.save` | `image.save` | `{imageRef}` | 下载宿主登记的原图并保存到系统图片目录 |
+| `recommendation.open` | `recommendation.open` | `{recommendationRef}` | 当前源匹配成功后打开同一全局主题详情；无匹配时进入原生全局搜索 |
+| `recommendation.info` | `recommendation.info` | `{recommendationRef}` | 打开原生推荐详情，显示来源、评分、简介和 AI 理由 |
+| `recommendation.feedback` | `recommendation.feedback` | `{recommendationRef, action:"notInterested"}` | 写入受控反馈；主题自行立即移除或弱化该卡片 |
+| `external.open` | `external.open` | `{linkRef}` | 仅打开宿主预先生成且通过校验的 HTTP/HTTPS 链接 |
+
+官方 JavaScript 包装：
+
+```js
+await fongmi.person.open(person.personRef)
+await fongmi.image.preview(image.imageRef)
+await fongmi.image.save(image.imageRef)
+await fongmi.recommendation.open(item.recommendationRef)
+await fongmi.recommendation.info(item.recommendationRef)
+await fongmi.recommendation.feedback(item.recommendationRef, 'notInterested')
+await fongmi.external.open(link.linkRef)
+```
+
+所有方法先返回“请求已接受”或结构化错误。导航、下载和系统选择器属于原生异步副作用，主题不能假定 Promise 完成等于目标 Activity 已完成或文件已经落盘；保存结果继续由原生 Toast/通知反馈。
+
+### 19.5 “当前源匹配 → 全局搜索”语义
+
+`recommendation.open` 固定复用原生 `TmdbNavigation` 语义：
+
+```text
+recommendationRef
+    → 解析为当前详情会话登记的 TmdbItem
+    → 当前内容源可搜索时先执行当前源标题匹配
+        → 匹配成功：使用当前全局主题打开匹配到的 VOD 详情
+        → 无匹配/当前源不可搜索：打开原生全局搜索并携带标题与图片提示
+```
+
+该能力是导航动作，不是跨源数据读取接口：
+
+- 远程主题看不到其他内容源列表、原始源站 ID、搜索响应或评分过程。
+- 页面不能指定任意 `siteKey`、搜索范围或匹配结果。
+- `tmdbId` 只用于展示和宿主内部识别，不能当作导航参数。
+- 当前主题详情不可用时，匹配结果仍按原生详情回退规则打开。
+
+### 19.6 引用、权限与安全边界
+
+- 新增人物、图片、推荐和外链引用由独立的详情动作会话签发；同一详情增量刷新应复用稳定引用。
+- 切换来源、切换 `vodId`、重新加载主题、WebView 重建、宿主销毁或安全代际变化后，旧引用立即失效并返回 `SOURCE_CHANGED` 或 `INVALID_ARGUMENT`。
+- `image.save` 只接受当前 DTO 已登记的图片引用，不接受任意 URL、文件名、目录或 MIME 类型。
+- `external.open` 只接受宿主生成的链接引用；链接必须是普通 HTTP/HTTPS，禁止 `intent:`、`file:`、`content:`、自定义 Scheme、Header/Cookie 拼接和本地地址。
+- `person.open` 只允许当前 TMDB 元数据中 `personId > 0` 的人物。
+- `recommendation.feedback` 初期只允许 `notInterested`，不开放任意标签、评分或用户画像写入。
+- 每个动作仍需同时通过页面硬编码白名单和 Manifest 权限；未声明能力必须返回 `PERMISSION_DENIED`。
+
+### 19.7 官方 Eclipse 示例要求
+
+内置 `theme.json` 申请并演示本节全部权限。详情页至少包含：
+
+1. 普通相关推荐、TMDB 个性推荐、豆瓣个性推荐、AI 个性推荐四个独立横向轨道。
+2. AI 卡片聚焦时显示 `reason`；长按、菜单键或辅助按钮可打开推荐说明并提交“不感兴趣”。
+3. 人物卡片点击调用 `person.open`，人物图片缺失时保留文字降级。
+4. 剧照点击调用 `image.preview`；查看器可前后切换并保存原图，触控与遥控均可操作。
+5. 外部链接区域显示宿主提供的 `label`/`host`，点击调用 `external.open`，页面不自行拼接 URL。
+6. 推荐卡片点击调用 `recommendation.open`，不再直接把标题交给 `app.search`。
+7. 所有新增区域在 DTO 缺失、权限不足或 TMDB 未就绪时独立隐藏，基础详情与播放不受影响。
+
+### 19.8 安全区、横向轨道与完整显示规范
+
+为解决状态栏覆盖、末端卡片被截断和焦点光环裁切，官方示例及后续主题应遵循：
+
+- 页面根容器消费 `--fm-safe-top/right/bottom/left`，并在宿主触发 `fmviewport` 后重新计算布局。
+- 横向轨道必须保留左右 `scroll-padding` 和可容纳焦点光环的上下内边距；禁止用负右边距把末端内容推出安全区。
+- 卡片获得焦点时，脚本必须把**整张卡片加焦点光环**滚入轨道可视区域，而不只调用页面级 `scrollIntoView`。
+- 第一项和最后一项均应有与内容区一致的端部留白；允许屏幕右侧展示“还有内容”的局部预告，但当前焦点项不得局部裁切。
+- 电视方向键保持同轨道左右移动；跨轨道上下移动使用几何中心匹配，并在移动完成后同时校正纵向页面和横向轨道。
+- 移动端支持触控横向滚动、点击和长按；文字使用省略/行数限制，不得撑破卡片或覆盖相邻区域。
+
+### 19.9 测试与验收
+
+契约与安全：
+
+- DTO 测试覆盖四个推荐组、AI 理由、外链、人物/图片/推荐引用、数量限制和兼容字段。
+- 权限测试证明每个方法均需对应 Manifest 权限，首页无法调用详情动作。
+- 引用测试证明伪造、跨详情、重载后和过期引用均被拒绝；任意 URL 不能通过图片保存或外链接口进入系统。
+- 全局匹配测试覆盖当前源成功、当前源无结果后全局搜索和当前源不可搜索三条路径。
+
+页面与交互：
+
+- JavaScript 测试覆盖四类推荐渲染、能力降级、人物/剧照/外链动作绑定、反馈后的本地移除和焦点恢复。
+- 电视宽屏逐一聚焦人物、剧照、四个推荐轨道的首项/中间项/末项，当前项及光环必须完整可见。
+- 手机状态栏显示和隐藏、横竖屏、手势导航下，首屏内容不得进入系统栏；图片查看、保存和返回必须正常。
+- 完成 Java 单元测试、JavaScript 状态测试、mobile/leanback Debug 构建，并在模拟器上检查日志无 FATAL、应用 ANR 或主题桥接权限异常。
+
+
+### 19.10 选集详情与电视端交互补充（2026-07-31）
+
+为使 WebTheme 能完整复用原生 TMDB 详情的选集体验，本版本在 Host API 3 内增加以下可选能力：
+
+- 详情 episode DTO 可带宿主签发的 `episodeRef`；主题通过 `episode.info(episodeRef)` 打开原生 `EpisodeDetailDialog`。引用只对应当前详情、当前线路中的实际 `Episode` 对象，不能由页面自行构造。
+- `episode.info` 受详情页 Manifest 权限控制；缺少权限或引用时，选集仍可播放，但不显示长按详情入口。
+- 电视端主题必须为图片查看器建立显式焦点链：图片获得焦点时按下方向进入底部按钮，底部按钮按上方向回到图片；左右方向在按钮组内移动，返回键关闭查看器。
+- 推荐和选集的长按不能只依赖浏览器 `contextmenu`；主题应同时支持触摸/指针长按和遥控器确认键长按，并抑制长按结束后产生的误点击。
+- AI 推荐卡片展示图片时按 `pic` → `backdrop` 顺序回退；宿主异步补全 TMDB 图片后必须触发详情增量刷新，主题不能永久停留在缓存的文字降级状态。
+
+### 19.11 选集分组、完整简介与走马灯规范
+
+- 选集数量较多时应按范围分组，范围标签使用绝对集号（例如 `1-20`、`21-40`），切换范围不改变当前线路和详情上下文；官方示例默认以 20 集为电视端一组，避免用户选中末行时看不到简介。
+- 当前选集的简介必须完整渲染，不能用固定三行 `line-clamp` 截断；超长文本应允许正常换行，并限制单词/长 URL 造成的横向撑破。
+- 选集名称和集标题在未获得焦点时可以省略；获得焦点或处于当前选中状态且确实溢出时，应启用连续走马灯。走马灯只作用于文本轨道，不得改变卡片尺寸或焦点几何。
+- 选集范围按钮、选集卡片、播放线路和详情动作必须分别声明焦点行，电视方向键在同一行内移动，跨行时保持与目标几何中心最近。
+
+### 19.12 本轮新增验收项
+
+- 电视模拟器中打开剧照查看器，图片焦点按下方向可进入“上一张/旋转/保存/下一张/关闭”，按钮左右移动和返回均正常。
+- AI 推荐卡片使用遥控器确认键长按能打开推荐详情，且短按仍只执行打开推荐。
+- AI 推荐存在 `backdrop` 而无 `pic` 时仍显示图片；异步解析补全后页面能刷新图片。
+- 36、100 和 500 集详情分别验证范围分组、简介可见、选中卡片走马灯及长按 `episode.info`。
+---
+
+## 20. 下一阶段架构评估与实施计划（2026-08-03）
+
+本节记录 Host API 3 首页/详情页闭环完成后的下一阶段建议，作为后续实现、评审和拆分任务的当前基线。它补充 §13～§17 的早期路线，不改变 §18～§19 已冻结的兼容与安全边界。
+
+### 20.1 当前定位与结论
+
+当前能力应准确描述为 **WebHome V2 可插拔页面主题**，而不是已经覆盖整个 App 的任意全局换肤：
+
+- `WebThemePage` 当前只包含 `HOME` 和 `DETAIL`；搜索、历史、收藏、设置和播放器尚未成为独立主题页面。
+- 站点自己的 `homePage` 仍优先于全局主题；全局主题主要作为无站点首页时的统一页面渲染层。
+- 播放器内核、解析、DRM、字幕、音轨、画中画和生命周期继续由原生实现负责。
+- 设置值定义、校验、权限和持久化继续由原生负责。
+- 远程 V2 页面通过精确 origin 的 WebMessage 通道调用页面白名单能力，不直接暴露完整的站点页 `HomeWebBridge`。
+- 首页、分类、详情、播放和详情动作继续使用当前页面会话内的不透明引用，切源、重载和宿主销毁后旧引用失效。
+
+这一边界继续保持：**视觉和页面布局可替换，数据、业务、播放与恢复能力保持原生可信；每个页面可独立失败并回退。**
+
+### 20.2 需要先收口的具体问题
+
+#### 20.2.1 Manifest 字段与实际运行时能力必须一致
+
+内置 `theme.json` 已声明：
+
+```json
+"player": {
+  "engine": "native",
+  "chrome": "tokens"
+}
+```
+
+截至 2026-08-03，运行时已采用第一种方案：`WebThemeManifest` 只确认 `player`/`tokens` 为对象并记录其存在，Schema 以 `x-webhtv-status: reserved` 标记，Devkit 校验器输出警告；Host API 3 不解释、执行或通过 `theme.info` 暴露其中配置。因此这些字段仅用于向前兼容，不属于稳定公共能力。
+
+正式支持前仍需增加类型化的 `PlayerPresentation`/设计变量模型、能力协商和契约测试；在此之前不得依据这些字段改变原生播放器或布局行为。
+
+#### 20.2.2 能力定义需要单一事实来源
+
+在本轮 P0 之前，页面方法、Manifest 权限、宿主白名单和 `theme.info.capabilities` 分别维护，容易出现文档、Manifest 和运行时不一致。当前已由 `WebThemeCapabilityRegistry` 统一维护；继续增加页面时仍必须在注册表中扩展同一条目，并同步 Schema 漂移测试和兼容文档。注册表至少包含：
+
+```text
+method
+permission
+page
+contractVersion
+legacyAllowed
+manifestRequired
+```
+
+运行时由注册表直接驱动：
+
+- Manifest 权限过滤；
+- Bridge 方法授权；
+- `theme.info.capabilities`。
+
+创作 Schema 与 Devkit 校验器读取同一份 Schema；Java 漂移测试会把 Schema 的页面权限枚举与注册表逐页比较，避免两份跨语言定义静默分叉。文档兼容矩阵也应随注册表和 Schema 同步更新。
+
+#### 20.2.3 Runtime 与 Bridge 在扩页前需要拆分
+
+`HomeWebController` 同时承担 WebView 生命周期、Manifest 加载、Bridge 会话、扩展注入、焦点、原生播放前媒体暂停和错误恢复；`WebHomeThemeBridge` 同时承担首页、详情、收藏、历史、播放、TMDB 动作和导航。后续不应继续把搜索、历史列表和设置接口直接堆入这两个类。
+
+推荐的目标拆分为：
+
+```text
+WebThemeRuntime
+├── WebThemeManifestResolver
+├── WebThemeSession
+│   ├── generation / cancellation
+│   ├── access references
+│   ├── play references
+│   └── detail action references
+├── WebThemeCallRouter
+└── WebThemePageHost
+
+WebThemeCallRouter
+├── HomeApi
+├── DetailApi
+├── ListApi
+├── NavigationApi
+├── PlayerApi
+└── UiApi
+```
+
+第一阶段只做行为不变的抽取，`HomeWebController` 可继续作为兼容 façade，避免在重构同时改变协议。
+
+#### 20.2.4 电视焦点能力需要成为公共 Runtime
+
+当前官方首页和详情页分别维护焦点、横向轨道滚动和恢复逻辑。增加更多主题页面前，应抽取宿主注入的公共 focus runtime，统一处理：
+
+- `fmviewport` 与安全区；
+- 同焦点行左右移动；
+- 跨焦点行的几何中心匹配；
+- 横向轨道首尾留白和完整滚入；
+- 动态追加内容后的焦点恢复；
+- 页面返回后的焦点恢复；
+- 遥控确认键短按/长按分离；
+- 自动分页的去重和过期响应隔离。
+
+主题仍负责声明焦点元素和焦点行，宿主 Runtime 负责算法版本、兼容和修复。
+
+### 20.3 分阶段实施顺序
+
+#### P0：契约与运行时收口
+
+优先完成且不改变现有首页/详情视觉行为：
+
+1. 增加正式的 `theme-v2` JSON Schema 和 Devkit 校验入口；
+2. 建立统一能力注册表；
+3. 明确 `player`、后续 `tokens` 等未实现字段的保留策略；
+4. 统一稳定错误码：
+
+```text
+PERMISSION_DENIED
+INVALID_ARGUMENT
+SOURCE_CHANGED
+STALE_REFERENCE
+PAGE_UNAVAILABLE
+NATIVE_FALLBACK
+RATE_LIMITED
+RESPONSE_TOO_LARGE
+```
+
+5. 记录 Manifest 加载、页面解析和回退原因，但日志不输出敏感 payload、Cookie 或完整令牌 URL；
+6. 维护 Host API、页面契约和权限的生成式兼容矩阵；
+7. 增加 Manifest 更新、缓存、非法字段、错误码和能力漂移测试。
+
+验收：V1 首页行为不变，V2 首页/详情现有测试全部通过，Manifest 校验、Bridge 授权和 `theme.info` 使用同一份能力定义。
+
+**2026-08-03 实施状态：** 本轮已完成 P0 的契约核心：正式 JSON Schema 与 Devkit 校验入口、统一能力注册表、保留字段策略、规范错误码/旧错误别名，以及对应的 Java/Python 契约测试。Manifest 运行时、Bridge 授权和 `theme.info.capabilities` 已统一依赖能力注册表；Schema 权限枚举由漂移测试约束。受信和远程 V2 Bridge 均通过 `Error.code` 暴露规范码，同时保持 `Error.message` 的旧别名；过期不透明引用返回 `STALE_REFERENCE`，Android 与 Devkit 均拒绝非法 UTF-8 Manifest。第 5～7 项中的运行日志、更新/缓存矩阵和更完整的生成式兼容矩阵仍作为后续运维与发布加固工作，不在本轮宣称完成。
+
+#### P1：公共 WebTheme Runtime 与焦点层
+
+1. 抽取 Manifest resolver、页面 host、会话 generation/cancellation 和 Bridge router；
+2. 保持旧的公开调用签名和回退行为不变；
+3. 引入公共 focus runtime，并先迁移内置 Eclipse 首页和详情页；
+4. 统一切源、重载、暂停、恢复、销毁和原生播放返回后的会话失效规则。
+
+验收：旧请求不能在切源或销毁后更新页面；首页和详情独立回退；不会产生重复 Bridge、返回死循环或丢失遥控焦点。
+
+#### P2：通用列表页面
+
+新页面按以下顺序增量交付：
+
+```text
+搜索 → 历史 → 收藏
+```
+
+建议契约：
+
+```text
+vod.search@1
+history.list@1
+history.remove@1
+favorite.list@1
+favorite.status@1
+favorite.set@1
+```
+
+三类页面共用列表 DTO 和 Runtime，统一包含分页、空态、错误态、`truncated`、图片、当前源约束、不透明引用和焦点恢复。搜索默认只搜索当前源；多源搜索继续作为单独高权限原生动作。
+
+每增加一页都必须保留原生 fallback，不复制一套新的 WebView 生命周期或分页实现。
+
+#### P3：原生全局设计变量
+
+真正覆盖原生页面的“全局视觉皮肤”应通过受控设计变量实现，而不是允许远程 CSS 操作 Android View。第一批建议字段包括：
+
+```text
+canvas
+surface
+surfaceElevated
+text
+textMuted
+accent
+focus
+divider
+radius.small / medium / large
+spacing.small / medium / large
+```
+
+约束：
+
+- 只接受预定义语义字段；
+- 对颜色、尺寸、圆角和间距做类型与范围校验；
+- 不接受 Android resource ID、类名或任意原生样式表达式；
+- 不允许设计变量改变业务可见性、权限或安全行为；
+- 对电视焦点色、文字与背景做最低可读性检查；
+- 应用启动时使用已验证缓存，避免切换主题产生明显闪白或布局重建。
+
+首批原生消费面建议限制为 WebHome 外壳、详情动作/弹窗和播放器控制层。播放器仍保持原生 engine，仅允许控制层视觉消费 tokens。
+
+#### P4：分发、更新与高级页面
+
+在公共远程主题生态开放前再增加：
+
+- ETag / TTL 缓存；
+- last-known-good 版本；
+- 手动回滚；
+- Manifest 与静态资源哈希；
+- 签名主题包；
+- 本地目录或 ZIP 安装；
+- 设置 Schema；
+- 声明式原生 Player Chrome；
+- 主题预览、来源和权限管理 UI。
+
+没有签名、完整性校验和回滚机制前，不建设公开主题市场。
+
+### 20.4 安全和发布门槛
+
+当前远程 V2 的 deny-by-default、精确 origin、页面权限交集、私网地址拦截、无重定向 Manifest 和短生命周期引用继续保留。后续至少补充：
+
+- 远程主题独立的数据/Cookie 策略，避免与受信站点页共享不必要状态；
+- `external.open` 首次域名或非 HTTPS 链接的用户可见确认；
+- 引用预算耗尽时返回可区分的错误或 `truncated`，而不是不可诊断的通用失败；
+- 远程 Manifest 更新失败时使用 last-known-good 或原生 fallback；
+- 恶意 Manifest、IDN/IPv6/私网地址、超长消息、能力绕过和旧 generation 回调的安全测试；
+- 500 集详情、多推荐轨道、频繁切源和低配电视 WebView 的内存与响应时间测试。
+
+真实设备上的旋转、遥控全路径、播放返回、后台恢复和远程主题故障注入仍是发布门槛，不能只由 Java 单元测试替代。
+
+### 20.5 明确非目标与下一项工作
+
+下一阶段不做：
+
+- 不把 `VideoActivity` 或播放器内核迁入 WebView；
+- 不向主题暴露原始 `Vod`、`Site`、播放地址、解析器或内部 Bean；
+- 不同时实现搜索、历史、收藏、设置和播放器；
+- 不在缺少签名/回滚时先做 ZIP 或主题市场；
+- 不允许任意 CSS 或脚本反向控制原生 Android 布局。
+
+推荐的下一个独立变更是 **P1 公共 WebTheme Runtime 与焦点层**：抽取 Manifest resolver、页面 host、会话生命周期和 Bridge router，并保持现有首页、详情、播放器和设置行为不变。P0 尚未完成的日志、更新/缓存矩阵和生成式兼容矩阵应作为独立的运维与发布加固任务继续推进。

@@ -11,12 +11,14 @@ import androidx.viewbinding.ViewBinding;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.databinding.FragmentSettingPersonalBinding;
 import com.fongmi.android.tv.event.RefreshEvent;
+import com.fongmi.android.tv.service.RecommendationFeedbackStore;
 import com.fongmi.android.tv.setting.AutoBackupPolicy;
 import com.fongmi.android.tv.setting.GroupRuleConfig;
 import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.base.BaseFragment;
 import com.fongmi.android.tv.ui.dialog.GroupRuleDialog;
+import com.fongmi.android.tv.ui.dialog.RecommendationFeedbackDialog;
 import com.fongmi.android.tv.ui.dialog.SpeedSettingDialog;
 import com.fongmi.android.tv.ui.dialog.SliderNumberDialog;
 import com.fongmi.android.tv.utils.Notify;
@@ -32,6 +34,7 @@ public class SettingPersonalFragment extends BaseFragment {
     private String[] searchColumn;
     private String[] siteColumn;
     private String[] tmdbMatchMode;
+    private String[] globalHistoryMode;
     private String[] searchResultSort;
 
     public static SettingPersonalFragment newInstance() {
@@ -58,10 +61,12 @@ public class SettingPersonalFragment extends BaseFragment {
         mBinding.autoBackup.setOnClickListener(this::setAutoBackup);
         mBinding.playBackToDetail.setOnClickListener(this::setPlayBackToDetail);
         mBinding.episodeHistory.setOnClickListener(this::setEpisodeHistory);
+        mBinding.globalHistory.setOnClickListener(this::setGlobalHistory);
         mBinding.historyAggregation.setOnClickListener(this::setHistoryAggregation);
         mBinding.playSpeed.setOnClickListener(this::setPlaySpeed);
         mBinding.tmdbMatchMode.setOnClickListener(this::setTmdbMatchMode);
         mBinding.personalRecommendation.setOnClickListener(this::setPersonalRecommendation);
+        mBinding.recommendationFeedback.setOnClickListener(this::manageRecommendationFeedback);
         mBinding.groupRule.setOnClickListener(this::setGroupRule);
         mBinding.tmdbEpisodeFileSize.setOnClickListener(this::setTmdbEpisodeFileSize);
         mBinding.searchUi.setOnClickListener(this::setSearchUi);
@@ -75,11 +80,16 @@ public class SettingPersonalFragment extends BaseFragment {
         mBinding.autoBackupText.setText(getSwitch(isAutoBackupEnabled()));
         mBinding.playBackToDetailText.setText(getSwitch(Setting.isPlayBackToDetail()));
         mBinding.episodeHistoryText.setText(getSwitch(Setting.isEpisodeHistory()));
+        mBinding.globalHistoryText.setText((globalHistoryMode = getResources().getStringArray(R.array.select_global_history_mode))[Setting.getGlobalHistoryMode()]);
         mBinding.historyAggregation.setVisibility(Setting.isTmdbReady() ? View.VISIBLE : View.GONE);
         mBinding.historyAggregationText.setText(getSwitch(Setting.isHistoryAggregationByTmdb()));
         mBinding.playSpeedText.setText(getSpeedText(PlayerSetting.getDefaultSpeed()));
         mBinding.tmdbMatchModeText.setText((tmdbMatchMode = getResources().getStringArray(R.array.select_tmdb_match_mode))[Setting.getTmdbMatchMode()]);
         mBinding.personalRecommendationText.setText(getSwitch(Setting.isPersonalRecommendation()));
+        int feedbackCount = RecommendationFeedbackStore.size();
+        mBinding.recommendationFeedbackText.setText(feedbackCount == 0
+                ? getString(R.string.setting_recommendation_feedback_empty)
+                : getString(R.string.setting_recommendation_feedback_count, feedbackCount));
         mBinding.groupRuleText.setText(getString(R.string.setting_group_rule_summary, GroupRuleConfig.enabledCount(), GroupRuleConfig.totalCount()));
         mBinding.tmdbEpisodeFileSizeText.setText(getSwitch(Setting.isTmdbEpisodeFileSize()));
         mBinding.searchUiText.setText((searchUi = getResources().getStringArray(R.array.select_search_ui))[Setting.getSearchUi()]);
@@ -138,6 +148,12 @@ public class SettingPersonalFragment extends BaseFragment {
         setText();
     }
 
+    private void setGlobalHistory(View view) {
+        Setting.putGlobalHistoryMode((Setting.getGlobalHistoryMode() + 1) % globalHistoryMode.length);
+        RefreshEvent.history();
+        setText();
+    }
+
     private void setHistoryAggregation(View view) {
         Setting.putHistoryAggregationByTmdb(!Setting.isHistoryAggregationByTmdb());
         RefreshEvent.history();
@@ -171,6 +187,10 @@ public class SettingPersonalFragment extends BaseFragment {
                     setText();
                 })
                 .show();
+    }
+
+    private void manageRecommendationFeedback(View view) {
+        RecommendationFeedbackDialog.create(requireActivity()).onChanged(this::setText).show();
     }
 
     private void setGroupRule(View view) {

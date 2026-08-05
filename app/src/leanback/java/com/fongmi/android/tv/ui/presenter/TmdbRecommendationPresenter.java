@@ -9,9 +9,9 @@ import androidx.leanback.widget.Presenter;
 
 import com.fongmi.android.tv.bean.TmdbItem;
 import com.fongmi.android.tv.databinding.AdapterTmdbRecommendationBinding;
+import com.fongmi.android.tv.ui.helper.TmdbRatingFormatter;
 import com.fongmi.android.tv.utils.ImgUtil;
-
-import java.util.Locale;
+import com.fongmi.android.tv.utils.TmdbImageSelector;
 
 public class TmdbRecommendationPresenter extends Presenter {
 
@@ -52,14 +52,17 @@ public class TmdbRecommendationPresenter extends Presenter {
         ViewHolder holder = (ViewHolder) viewHolder;
         holder.item = tmdbItem;
         holder.binding.title.setText(tmdbItem.getTitle());
-        double rating = tmdbItem.getRating();
-        if (rating > 0) {
-            holder.binding.rating.setText(String.format(Locale.US, "★ %.1f", rating));
-            holder.binding.rating.setVisibility(View.VISIBLE);
-        } else {
-            holder.binding.rating.setVisibility(View.GONE);
-        }
-        ImgUtil.load(tmdbItem.getTitle(), tmdbItem.getPosterUrl(), holder.binding.poster);
+        TmdbRatingFormatter.Ratings ratings = TmdbRatingFormatter.completeRatings(tmdbItem);
+        holder.binding.tmdbRating.setText(ratings.getTmdb());
+        holder.binding.tmdbRating.setVisibility(View.VISIBLE);
+        holder.binding.tmdbRating.setAlpha(ratings.hasTmdbRating() ? 1.0f : 0.55f);
+        holder.binding.doubanRating.setText(ratings.getDouban());
+        holder.binding.doubanRating.setVisibility(View.VISIBLE);
+        holder.binding.doubanRating.setAlpha(ratings.hasDoubanRating() ? 1.0f : 0.55f);
+        holder.binding.ratingGroup.setVisibility(View.VISIBLE);
+        String image = TmdbImageSelector.cardImage(tmdbItem, false);
+        String fallbackImage = TmdbImageSelector.cardImage(tmdbItem, true);
+        ImgUtil.load(tmdbItem.getTitle(), image, fallbackImage, holder.binding.poster, true, 300, 450);
         setOnClickListener(holder, view -> {
             if (mListener != null) mListener.onItemClick(tmdbItem);
         });

@@ -25,6 +25,8 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 public class UpdateDialog extends BaseAlertDialog {
 
+    private static final int DIALOG_VERTICAL_MARGIN_DP = 96;
+
     private DialogUpdateBinding binding;
     private UpdateListener listener;
     private Update stable;
@@ -51,8 +53,9 @@ public class UpdateDialog extends BaseAlertDialog {
 
     public UpdateDialog selected(String selected) {
         this.selected = selected;
-        this.stableExpanded = !Update.CHANNEL_BETA.equals(selected);
-        this.betaExpanded = Update.CHANNEL_BETA.equals(selected);
+        boolean betaAvailable = hasBeta();
+        this.stableExpanded = !betaAvailable && !Update.CHANNEL_BETA.equals(selected);
+        this.betaExpanded = betaAvailable && Update.CHANNEL_BETA.equals(selected);
         return this;
     }
 
@@ -280,7 +283,23 @@ public class UpdateDialog extends BaseAlertDialog {
         params.width = width;
         params.height = WindowManager.LayoutParams.WRAP_CONTENT;
         window.setAttributes(params);
-        window.setLayout(width, WindowManager.LayoutParams.WRAP_CONTENT);
+
+        int availableHeight = requireActivity().findViewById(android.R.id.content).getHeight();
+        if (availableHeight <= 0) availableHeight = ResUtil.getScreenHeight(requireContext());
+        int preferredHeight = binding.listScroll.getLayoutParams().height;
+        int widthSpec = View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY);
+        int heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
+        binding.listScroll.getLayoutParams().height = 1;
+        binding.getRoot().measure(widthSpec, heightSpec);
+        int chromeHeight = binding.getRoot().getMeasuredHeight() - 1;
+        binding.listScroll.getLayoutParams().height = UpdateDialogLayout.fitScrollHeight(
+                preferredHeight,
+                availableHeight,
+                chromeHeight,
+                ResUtil.dp2px(DIALOG_VERTICAL_MARGIN_DP));
+        binding.getRoot().measure(widthSpec, heightSpec);
+        int dialogHeight = Math.min(binding.getRoot().getMeasuredHeight(), availableHeight);
+        window.setLayout(width, dialogHeight);
     }
 
     private void configureScrollHeight(int progressPanelHeight) {

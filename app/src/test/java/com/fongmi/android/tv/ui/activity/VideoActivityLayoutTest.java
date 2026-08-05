@@ -24,6 +24,7 @@ public class VideoActivityLayoutTest {
 
     private static final List<String> REQUIRED_EPISODE_IDS = Arrays.asList(
             "episodeTitleBar",
+            "episodeTitle",
             "episodeViewMode"
     );
     private static final List<String> REQUIRED_TMDB_MOVABLE_IDS = Arrays.asList(
@@ -173,7 +174,6 @@ public class VideoActivityLayoutTest {
         assertTrue("top danmaku button must depend only on lock and danmaku availability",
                 source.contains("mBinding.control.danmaku.setVisibility(isLock() || !player().haveDanmaku() ? View.GONE : View.VISIBLE);"));
 
-        // 逐个提取每个悬浮按钮的可见性语句，确认其中不含 PlayerButtonSetting（防止把偏好判断加回来）。
         for (String id : List.of("next", "prev", "fullscreen", "cast", "danmaku")) {
             int line = source.indexOf("mBinding.control." + id + ".setVisibility(");
             assertTrue("missing overlay visibility line for mBinding.control." + id, line >= 0);
@@ -668,7 +668,7 @@ public class VideoActivityLayoutTest {
         Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
         String init = methodBody(source, "protected void initView(Bundle savedInstanceState)", "private void setupIntroSkipConfirmListener()");
-        String checkFlag = methodBody(source, "private void checkFlag(Vod item)", "private void checkHistory(Vod item)");
+        String checkFlag = methodBody(source, "private void checkFlag(Vod item)", "private boolean checkHistory(Vod item)");
         String episodeClick = methodBody(source, "public void onItemClick(Episode item)", "public void onItemClick(EpisodeGroupAdapter.Group item)");
 
         assertTrue("mobile recreation must remember that an existing service playback should be preserved",
@@ -712,7 +712,7 @@ public class VideoActivityLayoutTest {
         String mobileControl = new String(Files.readAllBytes(findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "dialog", "ControlDialog.java"))), StandardCharsets.UTF_8);
         String leanbackControl = new String(Files.readAllBytes(findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "dialog", "ControlDialog.java"))), StandardCharsets.UTF_8);
         String playerManager = new String(Files.readAllBytes(findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "player", "PlayerManager.java"))), StandardCharsets.UTF_8);
-        String mobileCheckHistory = methodBody(mobile, "private void checkHistory(Vod item)", "private void enrichHistoryMeta(Vod item)");
+        String mobileCheckHistory = methodBody(mobile, "private boolean checkHistory(Vod item)", "private void enrichHistoryMeta(Vod item)");
         String mobileSetSpeed = methodBody(mobile, "private void setSpeed()", "private void checkOrientation()");
         String mobilePlaybackSpeed = methodBody(mobile, "private float getPlaybackSpeed()", "private void checkOrientation()");
         String mobileSaveUserSpeed = methodBody(mobile, "private void saveUserSpeed()", "private void onReset()");
@@ -720,7 +720,7 @@ public class VideoActivityLayoutTest {
         String mobileSpeedEnd = methodBody(mobile, "public void onSpeedEnd()", "public void onBright(int progress)");
         String mobileApplySpeed = methodBody(mobileControl, "private void applySpeed(float speed)", "private void setSpeedPreset(View view)");
         String leanbackFastHistory = methodBody(leanback, "private void prepareFastTmdbPlaybackHistory(Vod item, Flag flag, Episode episode)", "private void selectFastTmdbPlaybackEpisode(Vod item, Flag selectedFlag, Episode selectedEpisode)");
-        String leanbackCheckHistory = methodBody(leanback, "private void checkHistory(Vod item)", "private void enrichHistoryMeta(Vod item)");
+        String leanbackCheckHistory = methodBody(leanback, "private boolean checkHistory(Vod item)", "private void enrichHistoryMeta(Vod item)");
         String leanbackSetSpeed = methodBody(leanback, "private void setSpeed()", "private void checkEnded(boolean notify)");
         String leanbackPlaybackSpeed = methodBody(leanback, "private float getPlaybackSpeed()", "private void checkEnded(boolean notify)");
         String leanbackSaveUserSpeed = methodBody(leanback, "private void saveUserSpeed()", "private void onReset()");
@@ -2064,7 +2064,7 @@ public class VideoActivityLayoutTest {
                             && body.contains("if (keyChanged) mHistory.replace(nextKey)"));
             assertFalse(sourcePath + " must not unconditionally replace history on every id update",
                     body.contains("if (id) mHistory.replace(getHistoryKey())"));
-            assertTrue(sourcePath + " must sync history after key migration or an async metadata refresh",
+            assertTrue(sourcePath + " must sync history after key migration, an async metadata refresh, or TMDB identity stamping",
                     body.contains("if (keyChanged || pic || name || episodeTitleChanged || tmdbIdStamped) syncHistory()"));
         }
     }
@@ -2454,7 +2454,7 @@ public class VideoActivityLayoutTest {
         String historyStartBody = historyStart >= 0 && historyStartEnd > historyStart ? video.substring(historyStart, historyStartEnd).replaceAll("\\s+", " ") : "";
 
         assertTrue("history clicks must use the history-aware playback entry point",
-                compactHistory.contains("VideoActivity.startFromHistory(this, item)"));
+                compactHistory.contains("HistoryResumeCoordinator.open(this, item)"));
         assertTrue("history playback must respect the configured standalone detail mode",
                 historyStartBody.contains("if (shouldOpenLegacyTmdbDetail(item.getSiteKey(), item.getVodId()))"));
         assertTrue("standalone detail mode must use the normal detail-aware start path",
@@ -2477,7 +2477,7 @@ public class VideoActivityLayoutTest {
         String historyStartBody = historyStart >= 0 && historyStartEnd > historyStart ? video.substring(historyStart, historyStartEnd).replaceAll("\\s+", " ") : "";
 
         assertTrue("TV history clicks must use the history-aware playback entry point",
-                compactHistory.contains("VideoActivity.startFromHistory(this, item)"));
+                compactHistory.contains("HistoryResumeCoordinator.open(this, item)"));
         assertTrue("TV history playback must respect the configured standalone detail mode",
                 historyStartBody.contains("if (shouldOpenLegacyTmdbDetail(item.getSiteKey(), item.getVodId(), false))"));
         assertTrue("TV standalone detail mode must use the normal detail-aware start path",
@@ -2489,7 +2489,7 @@ public class VideoActivityLayoutTest {
     }
 
     @Test
-    public void bothPlaybackModesUseTolerantEpisodeIdentityOnlyForHistoryResume() throws Exception {
+    public void bothPlaybackModesShareCanonicalEpisodeProgressWhenTmdbAggregationIsEnabled() throws Exception {
         for (Path root : List.of(findLeanbackJavaPath(), findMobileJavaPath())) {
             Path sourcePath = root.resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
             String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
@@ -2503,15 +2503,26 @@ public class VideoActivityLayoutTest {
             assertTrue(sourcePath + " must clear stale explicit playback selection before merging another launch",
                     source.contains("getIntent().removeExtra(EXTRA_TMDB_PLAY_FLAG);")
                             && source.contains("getIntent().removeExtra(EXTRA_TMDB_PLAY_EPISODE_NAME);")
-                            && source.contains("getIntent().removeExtra(EXTRA_TMDB_PLAY_EPISODE_URL);"));
-            assertTrue(sourcePath + " must read the history-resume marker before matching episodes",
-                    selection.contains("boolean tolerantResume = crossSource || isResumeFromHistory();"));
-            assertTrue(sourcePath + " must keep URL-strict matching for ordinary explicit episode launches",
-                    selection.replaceAll("\\s+", " ").contains("tolerantResume ? episode.matchesPlayback(mHistory.getEpisode()) : episode.matches(mHistory.getEpisode())"));
+                            && source.contains("getIntent().removeExtra(EXTRA_TMDB_PLAY_EPISODE_URL);")
+                            && source.contains("getIntent().removeExtra(EXTRA_TMDB_PLAY_SEASON_NUMBER);")
+                            && source.contains("getIntent().removeExtra(EXTRA_TMDB_PLAY_EPISODE_NUMBER);"));
+            assertTrue(sourcePath + " must share canonical episode progress when TMDB history aggregation is enabled",
+                    selection.replaceAll("\\s+", " ").contains("boolean shareEpisodeProgress = crossSource || isResumeFromHistory() || Setting.isHistoryAggregationEffective();"));
+            assertTrue(sourcePath + " must keep the original episode identity when aggregation and history resume are disabled",
+                    selection.replaceAll("\\s+", " ").contains("shareEpisodeProgress ? historyEpisode.matchesPlayback(mHistory.getEpisode()) : episode.matches(mHistory.getEpisode())"));
+            assertTrue(sourcePath + " must ignore source-line differences when shared progress is enabled",
+                    selection.contains("boolean compatibleFlag = shareEpisodeProgress || TextUtils.equals(mHistory.getVodFlag(), flag.getFlag());"));
             assertTrue(sourcePath + " must preserve progress when a history source refresh changes only the episode URL",
-                    selection.contains("episode.matchesPlayback(mHistory.getEpisode())"));
+                    selection.contains("historyEpisode.matchesPlayback(mHistory.getEpisode())"));
             assertTrue(sourcePath + " must use the same tolerant episode identity when playback updates history",
-                    update.contains("item.matchesPlayback(mHistory.getEpisode())"));
+                    update.contains("historyEpisode.matchesPlayback(mHistory.getEpisode())"));
+            if (source.contains("private void updateFastTmdbPlaybackHistory(Flag flag, Episode episode)")) {
+                String fast = methodBody(source, "private void updateFastTmdbPlaybackHistory(Flag flag, Episode episode)", "private void resetDetailForNewIntent()");
+                assertTrue(sourcePath + " fast TMDB playback must honor the aggregation progress-sharing switch",
+                        fast.replaceAll("\\s+", " ").contains("boolean shareEpisodeProgress = crossSource || isResumeFromHistory() || Setting.isHistoryAggregationEffective();"));
+                assertTrue(sourcePath + " fast TMDB playback must share progress across source lines when enabled",
+                        fast.contains("boolean compatibleFlag = shareEpisodeProgress || TextUtils.equals(mHistory.getVodFlag(), flag.getFlag());"));
+            }
         }
     }
 

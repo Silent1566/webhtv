@@ -67,4 +67,118 @@ public class EpisodeSeasonPolicyTest {
     public void linearEpisodeNumber_keepsAbsoluteSourceNumberForPagedRanges() {
         assertEquals(41, EpisodeSeasonPolicy.linearEpisodeNumber(41, 0));
     }
+
+    @Test
+    public void resolveAvailableSeasons_singleTmdbSeasonUsesOnlyThatSeason() {
+        assertEquals(List.of(4), EpisodeSeasonPolicy.resolveAvailableSeasons(
+                List.of(-1, -1), -1, 4, List.of(4), Map.of(4, 8)));
+    }
+
+    @Test
+    public void resolveAvailableSeasons_explicitSingleSeasonHidesUnrelatedTmdbSeasons() {
+        assertEquals(List.of(3), EpisodeSeasonPolicy.resolveAvailableSeasons(
+                List.of(3), -1, 1, List.of(1, 2, 3), Map.of(1, 8, 2, 8, 3, 8)));
+    }
+
+    @Test
+    public void resolveAvailableSeasons_explicitMultipleSeasonsReturnsOnlySourceSeasons() {
+        assertEquals(List.of(1, 3), EpisodeSeasonPolicy.resolveAvailableSeasons(
+                List.of(3, 1, 3, 1), -1, 1, List.of(1, 2, 3), Map.of(1, 2, 2, 2, 3, 2)));
+    }
+
+    @Test
+    public void resolveAvailableSeasons_explicitSpecialSeasonStaysOnSeasonZero() {
+        assertEquals(List.of(0), EpisodeSeasonPolicy.resolveAvailableSeasons(
+                List.of(0, 0), -1, 1, List.of(0, 1), Map.of(0, 2, 1, 2)));
+    }
+
+    @Test
+    public void resolveAvailableSeasons_partialExplicitMappingFallsBackToUngrouped() {
+        assertEquals(List.of(), EpisodeSeasonPolicy.resolveAvailableSeasons(
+                List.of(2, -1), -1, 1, List.of(1, 2, 3), Map.of(1, 2, 2, 2, 3, 2)));
+    }
+
+    @Test
+    public void resolveAvailableSeasons_partialExplicitMappingDoesNotLetTitleDropUnknownEpisodes() {
+        assertEquals(List.of(), EpisodeSeasonPolicy.resolveAvailableSeasons(
+                List.of(2, -1), 2, 1, List.of(1, 2, 3), Map.of(1, 2, 2, 2, 3, 2)));
+    }
+
+    @Test
+    public void resolveAvailableSeasons_unknownTmdbSeasonFallsBackToUngrouped() {
+        assertEquals(List.of(), EpisodeSeasonPolicy.resolveAvailableSeasons(
+                List.of(4, 4), -1, 1, List.of(1, 2, 3), Map.of(1, 2, 2, 2, 3, 2)));
+    }
+
+    @Test
+    public void resolveAvailableSeasons_explicitSeasonMismatchBeatsSingleTmdbSeasonFallback() {
+        assertEquals(List.of(), EpisodeSeasonPolicy.resolveAvailableSeasons(
+                List.of(3), -1, 1, List.of(1), Map.of(1, 8)));
+    }
+
+    @Test
+    public void resolveAvailableSeasons_titleSeasonMismatchBeatsSingleTmdbSeasonFallback() {
+        assertEquals(List.of(), EpisodeSeasonPolicy.resolveAvailableSeasons(
+                List.of(-1), 3, 1, List.of(1), Map.of(1, 8)));
+    }
+
+    @Test
+    public void resolveAvailableSeasons_titleSeasonMapsWholeSourceToThatSeason() {
+        assertEquals(List.of(2), EpisodeSeasonPolicy.resolveAvailableSeasons(
+                List.of(-1, -1, -1), 2, 1, List.of(1, 2, 3), Map.of(1, 3, 2, 3, 3, 3)));
+    }
+
+    @Test
+    public void resolveAvailableSeasons_exactFullSeriesCountAllowsAllSeasons() {
+        assertEquals(List.of(1, 2), EpisodeSeasonPolicy.resolveAvailableSeasons(
+                List.of(-1, -1, -1, -1, -1, -1), -1, 1, List.of(1, 2), Map.of(1, 3, 2, 3)));
+    }
+
+    @Test
+    public void resolveAvailableSeasons_ambiguousPartialLineDoesNotExposeAllTmdbSeasons() {
+        assertEquals(List.of(), EpisodeSeasonPolicy.resolveAvailableSeasons(
+                List.of(-1, -1, -1, -1, -1), -1, 1, List.of(1, 2), Map.of(1, 3, 2, 3)));
+    }
+
+    @Test
+    public void resolveAvailableSeasons_keepsExistingSingleSeasonCompatibilityFallback() {
+        assertEquals(List.of(1), EpisodeSeasonPolicy.resolveAvailableSeasons(
+                java.util.Collections.nCopies(161, -1), -1, 1, List.of(1, 2, 3), Map.of(1, 190, 2, 8, 3, 8)));
+    }
+
+    @Test
+    public void resolveSourceSeason_readsExplicitAndTrailingSeasonBeforeScrapedTitleReplacement() {
+        assertEquals(2, EpisodeSeasonPolicy.resolveSourceSeason("克拉克森的农场 第2季"));
+        assertEquals(3, EpisodeSeasonPolicy.resolveSourceSeason("Clarkson's Farm S03"));
+        assertEquals(2, EpisodeSeasonPolicy.resolveSourceSeason("Clarksons.Farm.S02E05.2160p"));
+        assertEquals(4, EpisodeSeasonPolicy.resolveSourceSeason("克拉克森的农场4"));
+        assertEquals(0, EpisodeSeasonPolicy.resolveSourceSeason("示例剧 S00E05"));
+        assertEquals(0, EpisodeSeasonPolicy.resolveSourceSeason("示例剧 Season 0"));
+        assertEquals(0, EpisodeSeasonPolicy.resolveSourceSeason("示例剧 特别篇"));
+        assertEquals(-1, EpisodeSeasonPolicy.resolveSourceSeason("克拉克森的农场"));
+    }
+
+    @Test
+    public void episodeMetadataSeasonCandidates_neverFallsBackToSeasonOneWhenSourceSeasonIsKnown() {
+        assertEquals(List.of(2), EpisodeSeasonPolicy.episodeMetadataSeasonCandidates(2));
+        assertEquals(List.of(0), EpisodeSeasonPolicy.episodeMetadataSeasonCandidates(0));
+        assertEquals(List.of(1, 0), EpisodeSeasonPolicy.episodeMetadataSeasonCandidates(-1));
+    }
+
+    @Test
+    public void episodePositionCacheKey_isolatesSameEpisodeLabelAcrossSeasons() {
+        assertEquals("S2|第5集", EpisodeSeasonPolicy.episodePositionCacheKey(2, "第5集"));
+        assertEquals("S2|第5集", EpisodeSeasonPolicy.episodePositionCacheKey(2, "S2|第5集"));
+        assertEquals("S0|特别篇第5集", EpisodeSeasonPolicy.episodePositionCacheKey(0, "特别篇第5集"));
+        assertEquals("第5集", EpisodeSeasonPolicy.episodePositionCacheKey(-1, "第5集"));
+    }
+
+
+    @Test
+    public void hasCompleteExplicitSeasonMapping_requiresEveryEpisodeToMatchTmdb() {
+        assertTrue(EpisodeSeasonPolicy.hasCompleteExplicitSeasonMapping(List.of(1, 3, 1), List.of(1, 2, 3)));
+        assertTrue(EpisodeSeasonPolicy.hasCompleteExplicitSeasonMapping(List.of(0, 0), List.of(0, 1)));
+        assertFalse(EpisodeSeasonPolicy.hasCompleteExplicitSeasonMapping(List.of(1, -1), List.of(1, 2, 3)));
+        assertFalse(EpisodeSeasonPolicy.hasCompleteExplicitSeasonMapping(List.of(4), List.of(1, 2, 3)));
+    }
 }

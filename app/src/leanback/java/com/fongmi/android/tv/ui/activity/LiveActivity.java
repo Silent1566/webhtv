@@ -408,9 +408,7 @@ public class LiveActivity extends PlaybackActivity implements GroupAdapter.OnCli
     }
 
     private void onScale() {
-        int index = LiveSetting.getScale();
-        String[] array = ResUtil.getStringArray(R.array.select_scale);
-        setScale(index == array.length - 1 ? 0 : ++index);
+        showResizeModeDialog(LiveSetting.getScale(), this::setScale);
     }
 
     private void onSpeed() {

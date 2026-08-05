@@ -7,7 +7,6 @@ import android.view.ViewGroup;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.databinding.AdapterVodBinding;
 import com.fongmi.android.tv.utils.ImgUtil;
@@ -73,7 +72,7 @@ public class HistoryAdapter extends BaseDiffAdapter<History, HistoryAdapter.View
     public void clear() {
         super.clear();
         setDelete(false);
-        History.delete(VodConfig.getCid());
+        History.deleteForDisplay();
     }
 
     @NonNull

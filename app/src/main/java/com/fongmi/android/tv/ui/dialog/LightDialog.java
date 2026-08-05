@@ -44,7 +44,11 @@ public final class LightDialog {
     }
 
     public static Dialog create(Context context, CharSequence title, View content, float landFactor, float portFactor, int maxDp) {
-        return createInternal(context, title, content, null, null, null, null, null, null, landFactor, portFactor, maxDp);
+        return createInternal(context, title, content, null, null, null, null, null, null, landFactor, portFactor, maxDp, WindowManager.LayoutParams.WRAP_CONTENT);
+    }
+
+    public static Dialog create(Context context, CharSequence title, View content, float landFactor, float portFactor, int maxDp, int heightPx) {
+        return createInternal(context, title, content, null, null, null, null, null, null, landFactor, portFactor, maxDp, heightPx);
     }
 
     public static Dialog create(Context context, CharSequence title, View content, String positive, View.OnClickListener onPositive, String negative, View.OnClickListener onNegative) {
@@ -52,15 +56,15 @@ public final class LightDialog {
     }
 
     public static Dialog create(Context context, CharSequence title, View content, String positive, View.OnClickListener onPositive, String negative, View.OnClickListener onNegative, String neutral, View.OnClickListener onNeutral) {
-        return createInternal(context, title, content, positive, onPositive, negative, onNegative, neutral, onNeutral, 0.52f, 0.9f, 560);
+        return createInternal(context, title, content, positive, onPositive, negative, onNegative, neutral, onNeutral, 0.52f, 0.9f, 560, WindowManager.LayoutParams.WRAP_CONTENT);
     }
 
-    private static Dialog createInternal(Context context, CharSequence title, View content, String positive, View.OnClickListener onPositive, String negative, View.OnClickListener onNegative, String neutral, View.OnClickListener onNeutral, float landFactor, float portFactor, int maxDp) {
+    private static Dialog createInternal(Context context, CharSequence title, View content, String positive, View.OnClickListener onPositive, String negative, View.OnClickListener onNegative, String neutral, View.OnClickListener onNeutral, float landFactor, float portFactor, int maxDp, int heightPx) {
         Dialog dialog = new Dialog(context);
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
-        dialog.setContentView(root(context, title, content, positive, listener(dialog, onPositive), negative, listener(dialog, onNegative), neutral, listener(dialog, onNeutral)));
+        dialog.setContentView(root(context, title, content, positive, listener(dialog, onPositive), negative, listener(dialog, onNegative), neutral, listener(dialog, onNeutral), heightPx > 0));
         dialog.setCanceledOnTouchOutside(true);
-        dialog.setOnShowListener(d -> applyWindow(dialog, context, landFactor, portFactor, maxDp));
+        dialog.setOnShowListener(d -> applyWindow(dialog, context, landFactor, portFactor, maxDp, heightPx));
         return dialog;
     }
 
@@ -71,7 +75,7 @@ public final class LightDialog {
         };
     }
 
-    private static View root(Context context, CharSequence title, View content, String positive, View.OnClickListener onPositive, String negative, View.OnClickListener onNegative, String neutral, View.OnClickListener onNeutral) {
+    private static View root(Context context, CharSequence title, View content, String positive, View.OnClickListener onPositive, String negative, View.OnClickListener onNegative, String neutral, View.OnClickListener onNeutral, boolean fillHeight) {
         LinearLayout root = new LinearLayout(context);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundResource(R.drawable.shape_shell_proxy_dialog);
@@ -90,7 +94,8 @@ public final class LightDialog {
         }
 
         if (content != null) {
-            LinearLayout.LayoutParams contentParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            LinearLayout.LayoutParams contentParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, fillHeight ? 0 : ViewGroup.LayoutParams.WRAP_CONTENT);
+            if (fillHeight) contentParams.weight = 1.0f;
             contentParams.topMargin = title == null ? 0 : ResUtil.dp2px(16);
             root.addView(content, contentParams);
         }
@@ -149,13 +154,13 @@ public final class LightDialog {
         return button;
     }
 
-    private static void applyWindow(Dialog dialog, Context context, float landFactor, float portFactor, int maxDp) {
+    private static void applyWindow(Dialog dialog, Context context, float landFactor, float portFactor, int maxDp, int heightPx) {
         Window window = dialog.getWindow();
         if (window == null) return;
         WindowManager.LayoutParams params = window.getAttributes();
         boolean land = ResUtil.isLand(context);
         params.width = Math.min(Math.round(ResUtil.getScreenWidth(context) * (land ? landFactor : portFactor)), ResUtil.dp2px(maxDp));
-        params.height = WindowManager.LayoutParams.WRAP_CONTENT;
+        params.height = heightPx > 0 ? heightPx : WindowManager.LayoutParams.WRAP_CONTENT;
         params.dimAmount = 0.58f;
         window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         window.getDecorView().setPadding(0, 0, 0, 0);

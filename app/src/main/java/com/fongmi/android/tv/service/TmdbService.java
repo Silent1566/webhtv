@@ -513,7 +513,7 @@ public class TmdbService {
         long start = System.currentTimeMillis();
         File file = cacheFile(type, cacheKey);
         List<File> lookupFiles = cacheFiles(type, cacheKey, fallbackCacheKeys, url);
-        JsonObject cached = refresh ? null : readFirstCache(lookupFiles, ttl);
+        JsonObject cached = refresh ? null : readFirstCache(lookupFiles, ttl, "detail".equals(type));
         if (cached != null) {
             SpiderDebug.log("tmdb", "requestJson type=%s source=cache cost=%dms", type, System.currentTimeMillis() - start);
             return cached;
@@ -559,9 +559,14 @@ public class TmdbService {
     }
 
     private JsonObject readFirstCache(List<File> files, long ttl) {
+        return readFirstCache(files, ttl, false);
+    }
+
+    private JsonObject readFirstCache(List<File> files, long ttl, boolean detail) {
         for (File file : files) {
             JsonObject cached = readCache(file, ttl);
-            if (cached != null) return cached;
+            if (cached == null) continue;
+            if (!detail || System.currentTimeMillis() - file.lastModified() <= detailCacheTtl(cached)) return cached;
         }
         return null;
     }
@@ -593,6 +598,10 @@ public class TmdbService {
     private void writeCache(File file, String body) {
         if (file == null || TextUtils.isEmpty(body)) return;
         Path.write(file, body.getBytes(StandardCharsets.UTF_8));
+    }
+
+    long detailCacheTtl(JsonObject detail) {
+        return isOnAir(detail) ? DAY : DETAIL_CACHE_TTL;
     }
 
     private long seasonCacheTtl(JsonObject detail) {
@@ -647,8 +656,13 @@ public class TmdbService {
     private boolean isOnAir(JsonObject detail) {
         if (detail == null) return false;
         if (object(detail, "next_episode_to_air") != null) return true;
+        try {
+            if (detail.has("in_production") && !detail.get("in_production").isJsonNull() && detail.get("in_production").getAsBoolean()) return true;
+        } catch (Throwable ignored) {
+            // Ignore malformed optional flags and fall back to status.
+        }
         String status = string(detail, "status").toLowerCase(Locale.ROOT);
-        return status.contains("returning") || status.contains("production") || status.contains("planned");
+        return status.contains("returning") || status.contains("production") || status.contains("planned") || status.contains("pilot");
     }
 
     private boolean isMainlandChina(JsonObject detail) {

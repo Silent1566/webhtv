@@ -179,14 +179,13 @@ public class CastActivity extends PlaybackActivity implements CustomKeyDownVod.L
     }
 
     private void setScale(int scale) {
+        this.scale = scale;
         applyResizeMode(scale);
         mBinding.control.action.scale.setText(ResUtil.getStringArray(R.array.select_scale)[scale]);
     }
 
     private void onScale() {
-        String[] array = ResUtil.getStringArray(R.array.select_scale);
-        scale = scale == array.length - 1 ? 0 : ++scale;
-        setScale(scale);
+        showResizeModeDialog(scale, this::setScale);
     }
 
     private void onSpeed() {

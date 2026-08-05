@@ -12,13 +12,17 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.bean.TmdbItem;
 import com.fongmi.android.tv.ui.helper.TmdbCinemaTheme;
+import com.fongmi.android.tv.ui.helper.TmdbRatingFormatter;
+import com.fongmi.android.tv.ui.helper.TmdbRecommendationRows;
 import com.fongmi.android.tv.utils.ImgUtil;
+import com.fongmi.android.tv.utils.TmdbImageSelector;
 import com.fongmi.android.tv.utils.Util;
 import com.google.android.material.card.MaterialCardView;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 
 /**
  * TMDB 推荐影片横向滚动适配器。
@@ -89,9 +93,17 @@ public class TmdbRecommendationAdapter extends RecyclerView.Adapter<TmdbRecommen
         return new ArrayList<>(items);
     }
 
+    public void removeItem(TmdbItem target) {
+        for (int index = items.size() - 1; index >= 0; index--) {
+            if (!sameIdentity(items.get(index), target)) continue;
+            items.remove(index);
+            notifyItemRemoved(index);
+        }
+    }
+
     private boolean contains(TmdbItem target) {
         for (TmdbItem item : items) {
-            if (sameItem(item, target)) return true;
+            if (sameIdentity(item, target)) return true;
         }
         return false;
     }
@@ -100,22 +112,34 @@ public class TmdbRecommendationAdapter extends RecyclerView.Adapter<TmdbRecommen
         if (recommendations == null) return items.isEmpty();
         if (items.size() != recommendations.size()) return false;
         for (int i = 0; i < items.size(); i++) {
-            if (!sameItem(items.get(i), recommendations.get(i))) return false;
+            if (!sameContent(items.get(i), recommendations.get(i))) return false;
         }
         return true;
     }
 
-    private boolean sameItem(TmdbItem first, TmdbItem second) {
-        if (first == null || second == null) return false;
-        if (first.getTmdbId() > 0 && second.getTmdbId() > 0) {
-            return first.getTmdbId() == second.getTmdbId() && first.getMediaType().equals(second.getMediaType());
-        }
-        return normalizedTitle(first).equals(normalizedTitle(second));
+    static boolean sameContent(TmdbItem first, TmdbItem second) {
+        if (first == second) return true;
+        if (!sameIdentity(first, second)) return false;
+        return first.getTmdbId() == second.getTmdbId()
+                && Objects.equals(first.getMediaType(), second.getMediaType())
+                && Objects.equals(first.getTitle(), second.getTitle())
+                && Objects.equals(first.getSubtitle(), second.getSubtitle())
+                && Objects.equals(first.getOverview(), second.getOverview())
+                && Objects.equals(first.getRecommendationReason(), second.getRecommendationReason())
+                && Objects.equals(first.getPosterUrl(), second.getPosterUrl())
+                && Objects.equals(first.getBackdropUrl(), second.getBackdropUrl())
+                && Objects.equals(first.getCredit(), second.getCredit())
+                && Double.compare(first.getRating(), second.getRating()) == 0
+                && Double.compare(first.getTmdbRating(), second.getTmdbRating()) == 0
+                && Double.compare(first.getDoubanRating(), second.getDoubanRating()) == 0
+                && Objects.equals(first.getOriginalLanguage(), second.getOriginalLanguage())
+                && Objects.equals(first.getOriginCountry(), second.getOriginCountry())
+                && Objects.equals(first.getGenreIds(), second.getGenreIds())
+                && Objects.equals(first.getDepartment(), second.getDepartment());
     }
 
-    private String normalizedTitle(TmdbItem item) {
-        String title = item == null ? "" : item.getTitle();
-        return title.replaceAll("[\\s·•・._\\-/\\\\|()（）\\[\\]【】《》<>:：,，.。]+", "").trim().toLowerCase(Locale.ROOT);
+    private static boolean sameIdentity(TmdbItem first, TmdbItem second) {
+        return TmdbRecommendationRows.sameIdentity(first, second);
     }
 
     @NonNull
@@ -145,7 +169,9 @@ public class TmdbRecommendationAdapter extends RecyclerView.Adapter<TmdbRecommen
         private final ImageView poster;
         private final TextView title;
         private final TextView subtitle;
-        private final TextView rating;
+        private final View ratingGroup;
+        private final TextView tmdbRating;
+        private final TextView doubanRating;
 
         public ViewHolder(@NonNull View itemView) {
             super(itemView);
@@ -156,7 +182,9 @@ public class TmdbRecommendationAdapter extends RecyclerView.Adapter<TmdbRecommen
             poster = itemView.findViewById(R.id.poster);
             title = itemView.findViewById(R.id.title);
             subtitle = itemView.findViewById(R.id.subtitle);
-            rating = itemView.findViewById(R.id.rating);
+            ratingGroup = itemView.findViewById(R.id.ratingGroup);
+            tmdbRating = itemView.findViewById(R.id.tmdbRating);
+            doubanRating = itemView.findViewById(R.id.doubanRating);
         }
 
         void bind(TmdbItem item, OnItemClickListener listener, OnItemLongClickListener longClickListener, OnItemFocusListener focusListener, boolean cinema, boolean light) {
@@ -169,17 +197,18 @@ public class TmdbRecommendationAdapter extends RecyclerView.Adapter<TmdbRecommen
             }
             styleTextSurface(cinema, light);
 
-            String image = cinema && item.getBackdropUrl() != null && !item.getBackdropUrl().isEmpty() ? item.getBackdropUrl() : item.getPosterUrl();
-            ImgUtil.load(item.getTitle(), image, poster, true, cinema ? 552 : 300, cinema ? 312 : 450);
+            String image = TmdbImageSelector.cardImage(item, cinema);
+            String fallbackImage = TmdbImageSelector.cardImage(item, !cinema);
+            ImgUtil.load(item.getTitle(), image, fallbackImage, poster, true, cinema ? 552 : 300, cinema ? 312 : 450);
 
-            double vote = item.getRating();
-            if (vote > 0) {
-                rating.setText(String.format(Locale.US, "★ %.1f", vote));
-                rating.setTextColor(cinema ? 0xFFFFFFFF : 0xFFFFD35C);
-                rating.setVisibility(View.VISIBLE);
-            } else {
-                rating.setVisibility(View.GONE);
-            }
+            TmdbRatingFormatter.Ratings ratings = TmdbRatingFormatter.completeRatings(item);
+            tmdbRating.setText(ratings.getTmdb());
+            tmdbRating.setVisibility(View.VISIBLE);
+            tmdbRating.setAlpha(ratings.hasTmdbRating() ? 1.0f : 0.55f);
+            doubanRating.setText(ratings.getDouban());
+            doubanRating.setVisibility(View.VISIBLE);
+            doubanRating.setAlpha(ratings.hasDoubanRating() ? 1.0f : 0.55f);
+            ratingGroup.setVisibility(View.VISIBLE);
 
             if (itemView instanceof MaterialCardView card) {
                 TmdbCardFocusHelper.bind(card, 0xB314202A, cinema ? palette.cardStroke() : 0x33FFFFFF, 1, focused -> {
@@ -218,7 +247,8 @@ public class TmdbRecommendationAdapter extends RecyclerView.Adapter<TmdbRecommen
 
             title.setTextColor(0xFFFFFFFF);
             title.setShadowLayer(2f, 0, 1f, 0xB0000000);
-            if (rating != null) rating.setShadowLayer(2f, 0, 1f, 0xB0000000);
+            tmdbRating.setShadowLayer(2f, 0, 1f, 0xB0000000);
+            doubanRating.setShadowLayer(2f, 0, 1f, 0xB0000000);
         }
 
         private void clearShadow(TextView view) {

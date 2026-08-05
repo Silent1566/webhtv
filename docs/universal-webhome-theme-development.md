@@ -1,8 +1,11 @@
 # 全局 WebHome 皮肤开发指南
 
-> 实现状态：已实现（2026-07-28）<br>
+> 实现状态：V1 首页兼容层已实现（2026-07-28）<br>
 > 内置示例：`Eclipse`<br>
-> 协议版本：WebHome VOD Contract V1
+> 本文协议范围：WebHome VOD Contract V1
+
+> **文档范围说明（2026-08-03）**：本文主要记录旧的 V1 单 HTML 首页协议和兼容开发方式。当前应用已经实现基于 `theme.json` 的 WebTheme V2、Host API 3、`HOME`/`DETAIL` 页面、页面级权限和安全远程桥接。V2 已落地边界见 [`universal-webhome-theme-design.md`](universal-webhome-theme-design.md) §18～§19；契约收口的实施状态以及公共 Runtime、列表页、原生设计变量与分发计划见同文档 §20。新增远程主题应优先采用 V2，V1 仅作为现有首页兼容层继续维护。
+> **V2 校验入口（2026-08-03）**：新增或修改 `theme.json` 时，先参考 [`webhome-devkit/schemas/webtheme-v2.schema.json`](../webhome-devkit/schemas/webtheme-v2.schema.json)，并运行 [`webhome-devkit/scripts/validate_webtheme.py`](../webhome-devkit/scripts/validate_webtheme.py)；命令示例见 [`webhome-devkit/README.md`](../webhome-devkit/README.md) 的“WebTheme V2 Manifest 校验”章节。
 
 本文说明如何为 WebHTV 开发一套可同时运行在手机版和电视版的全局 WebHome 皮肤，以及应用侧的选择优先级、桥接接口、数据结构、兼容性和调试方法。
 
@@ -225,7 +228,7 @@ fm.openSetting()             // 打开设置
 fm.ui.getViewport()          // 获取 WebHome 可用视口
 ```
 
-这些函数均返回 Promise。调用方应处理 rejection。当前 V1 rejection 的 `Error.message` 是稳定错误码：`INVALID_ARGUMENT`、`PERMISSION_DENIED`、`SOURCE_CHANGED`、`BUSY`、`RESPONSE_TOO_LARGE`、`UNAVAILABLE` 或 `REQUEST_FAILED`。`BUSY` 可在短暂退避后重试；`SOURCE_CHANGED` 表示必须丢弃旧请求并重新读取当前页面状态。完整 Bridge 中的 `net.*`、`cache.*`、`ext.*`、`device.info`、任意 URL 播放和 UI chrome 修改不会暴露给远程主题。
+这些函数均返回 Promise，调用方应处理 rejection。V1 兼容层继续把原始失败文本放在 `Error.message`。V2 的受信页面与远程页面都会额外设置稳定的 `Error.code`：`PERMISSION_DENIED`、`INVALID_ARGUMENT`、`SOURCE_CHANGED`、`STALE_REFERENCE`、`PAGE_UNAVAILABLE`、`NATIVE_FALLBACK`、`RATE_LIMITED`、`RESPONSE_TOO_LARGE`、`INVALID_REQUEST` 或 `REQUEST_FAILED`；为兼容旧主题，`Error.message` 仍可能是 `INVALID_ARGUMENT`、`BUSY` 或 `UNAVAILABLE` 等旧别名。新主题应优先判断 `Error.code`：`RATE_LIMITED` 可在短暂退避后重试，`SOURCE_CHANGED` 表示必须丢弃旧请求并重新读取当前页面状态，`STALE_REFERENCE` 表示重新从最新 DTO 获取不透明引用。完整 Bridge 中的 `net.*`、`cache.*`、`ext.*`、`device.info`、任意 URL 播放和 UI chrome 修改不会暴露给远程主题。
 
 远程边界还会限制请求和响应资源：请求体最多 64 KiB，同时只有少量原生取数任务可在途，单次响应最多 1 MiB（UTF-8），`items` 最多返回 500 条。超过条数时根对象的 `truncated` 为 `true`；主题应提示用户缩小筛选范围，而不是假设数据完整。
 

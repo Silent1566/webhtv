@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="132dp"
     android:layout_height="wrap_content"
     android:layout_marginEnd="12dp"
@@ -30,21 +31,56 @@
                 android:layout_height="match_parent"
                 android:scaleType="centerCrop" />
 
-            <com.google.android.material.textview.MaterialTextView
-                android:id="@+id/rating"
+            <LinearLayout
+                android:id="@+id/ratingGroup"
                 android:layout_width="wrap_content"
-                android:layout_height="24dp"
+                android:layout_height="wrap_content"
                 android:layout_gravity="top|end"
                 android:layout_margin="7dp"
-                android:background="@drawable/shape_tmdb_rating"
-                android:gravity="center"
-                android:minWidth="42dp"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp"
-                android:textColor="@android:color/white"
-                android:textSize="11sp"
-                android:textStyle="bold"
-                android:visibility="gone" />
+                android:divider="@drawable/divider_rating_chip_vertical"
+                android:gravity="end"
+                android:orientation="vertical"
+                android:showDividers="middle"
+                android:visibility="gone"
+                tools:visibility="visible">
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/tmdbRating"
+                    android:layout_width="wrap_content"
+                    android:layout_height="20dp"
+                    android:background="@drawable/shape_tmdb_rating"
+                    android:gravity="center"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:minWidth="48dp"
+                    android:paddingStart="6dp"
+                    android:paddingEnd="6dp"
+                    android:textColor="#FFD35C"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:visibility="gone"
+                    tools:text="TMDB 8.3"
+                    tools:visibility="visible" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/doubanRating"
+                    android:layout_width="wrap_content"
+                    android:layout_height="20dp"
+                    android:background="@drawable/shape_tmdb_rating"
+                    android:gravity="center"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:minWidth="48dp"
+                    android:paddingStart="6dp"
+                    android:paddingEnd="6dp"
+                    android:textColor="#78E08F"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:visibility="gone"
+                    tools:text="豆瓣 8.7"
+                    tools:visibility="visible" />
+
+            </LinearLayout>
         </FrameLayout>
 
         <LinearLayout

@@ -19,7 +19,7 @@ public class WebHomeRemoteBridgeWiringTest {
         assertTrue(controller.contains("WebViewCompat.addWebMessageListener(webView, \"fongmiRemote\", Collections.singleton(allowedOrigin)"));
         assertTrue(controller.contains("WebHomeThemePolicy.allowsMessage(allowedOrigin, actualOrigin, isMainFrame)"));
         assertTrue(controller.contains("resolved.isRemoteGlobal() ? null : WebHomeRawAdapter.create(url, pageHeaders)"));
-        assertTrue(controller.contains("String sdk = target != null && target.isRemoteGlobal() ? getRemoteSdk() : getSdk();"));
+        assertTrue(controller.contains("String sdk = currentTarget.isRemoteGlobal() ? getRemoteSdk() : getSdk();"));
         assertTrue(controller.contains("if (!remote) {\n            webView.addJavascriptInterface(bridge, BRIDGE);"));
         assertFalse(bridge.contains("@JavascriptInterface"));
         assertFalse(bridge.contains("WebCall.request"));
@@ -52,6 +52,30 @@ public class WebHomeRemoteBridgeWiringTest {
         assertTrue(ordered(recreate, "invalidateRemoteSession();", "if (parent == null) return false;"));
         assertTrue(controller.contains("public void onReceivedHttpError("));
         assertTrue(controller.contains("handleMainFrameFailure("));
+    }
+
+    @Test
+    public void themeInfoCapabilitiesComeFromTheSharedRegistry() throws Exception {
+        String controller = readMain("HomeWebController.java");
+
+        assertTrue(controller.contains("WebThemeCapabilityRegistry.capabilities("));
+        assertFalse(controller.contains("declared.add(\"theme.info@1\")"));
+        assertFalse(controller.contains("permission + \"@1\""));
+    }
+
+    @Test
+    public void webThemeErrorsExposeCanonicalCodesWithoutChangingLegacyMessages() throws Exception {
+        String controller = readMain("HomeWebController.java");
+        String bridge = readMain("HomeWebBridge.java");
+
+        assertTrue(controller.contains("response.addProperty(\"errorCode\", error.getCode())"));
+        assertTrue(controller.contains("new Error(data.error)"));
+        assertTrue(controller.contains("error.code=data.errorCode||data.error"));
+        assertTrue(controller.contains("if(code)error.code=code"));
+        assertTrue(controller.contains("WebThemeErrorCode.RATE_LIMITED"));
+        assertTrue(controller.contains("WebThemeErrorCode.PAGE_UNAVAILABLE"));
+        assertTrue(bridge.contains("WebThemeErrorCode.from(error)"));
+        assertTrue(bridge.contains("mapped.getCode()"));
     }
 
     private static boolean ordered(String source, String first, String second) {

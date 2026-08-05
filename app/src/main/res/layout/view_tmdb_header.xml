@@ -193,7 +193,7 @@
                     tools:text="仙逆" />
 
                 <androidx.appcompat.widget.LinearLayoutCompat
-                    android:layout_width="wrap_content"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
                     android:gravity="center_vertical"
@@ -218,9 +218,12 @@
 
                     <com.google.android.material.textview.MaterialTextView
                         android:id="@+id/tmdbMeta"
-                        android:layout_width="wrap_content"
+                        android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_marginStart="10dp"
+                        android:layout_weight="1"
+                        android:ellipsize="end"
+                        android:maxLines="2"
                         android:textColor="#C8D2DC"
                         android:textSize="13sp"
                         tools:text="剧集 · 2023" />

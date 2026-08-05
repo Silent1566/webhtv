@@ -7,6 +7,7 @@ import androidx.media3.common.C;
 
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.api.config.VodConfig;
+import com.fongmi.android.tv.bean.Episode;
 import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.event.RefreshEvent;
@@ -87,18 +88,24 @@ public final class AudioHistory {
             refresh = true;
         }
         boolean changedTrack = !TextUtils.equals(record.episodeUrl, history.getEpisodeUrl()) || !TextUtils.equals(record.vodRemarks, history.getVodRemarks());
-        boolean same = TextUtils.equals(record.episodeUrl, history.getEpisodeUrl()) || TextUtils.equals(record.vodRemarks, history.getVodRemarks());
+        boolean same = isSameEpisode(history, record.vodRemarks, record.episodeUrl);
         history.setCid(VodConfig.getCid());
         history.setVodName(record.vodName);
         history.setVodPic(record.vodPic);
         history.setVodFlag(record.vodFlag);
         history.setVodRemarks(record.vodRemarks);
         history.setEpisodeUrl(record.episodeUrl);
+        if (!same) history.setTmdbEpisodePosition(null);
         history.setPosition(same && history.getPosition() > 0 ? history.getPosition() : position);
         history.setDuration(same && history.getDuration() > 0 ? history.getDuration() : duration);
         history.setCreateTime(System.currentTimeMillis());
         history.save();
         if (refresh || changedTrack) App.post(RefreshEvent::history);
+    }
+
+    static boolean isSameEpisode(History history, String episodeName, String episodeUrl) {
+        if (history == null) return false;
+        return Episode.create(episodeName, episodeUrl).matchesPlayback(history.getEpisode());
     }
 
     private static long normalizeTime(long value) {
