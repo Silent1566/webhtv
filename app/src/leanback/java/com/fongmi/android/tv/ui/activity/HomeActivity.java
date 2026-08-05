@@ -97,7 +97,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 
-public class HomeActivity extends BaseActivity implements ExitConfirmDialog.Listener, CustomTitleView.Listener, VodPresenter.OnClickListener, FuncPresenter.OnClickListener, HistoryPresenter.OnClickListener, TypeAdapter.OnClickListener, HomeWebController.Listener, ConfigListener, FolderFragment.FilterHost {
+public class HomeActivity extends BaseActivity implements ExitConfirmDialog.Listener, CustomTitleView.Listener, VodPresenter.OnClickListener, FuncPresenter.OnClickListener, HistoryPresenter.OnClickListener, TypeAdapter.OnClickListener, HomeWebController.Listener, ConfigListener, FolderFragment.FilterHost, FolderFragment.ScrollHeaderHost {
 
     private static final String TV_NORMAL = "tv-normal";
     private static final String TV_TOOLBAR_HIDDEN = "tv-toolbar-hidden";
@@ -868,6 +868,16 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     @Override
     public void closeFilter() {
         if (isFilterVisible()) updateFilter(mCurrentType);
+    }
+
+    @Override
+    public int[] getScrollHeaderIds() {
+        return new int[]{R.id.typeRecycler, R.id.toolbar};
+    }
+
+    @Override
+    public void onScrollHeaderVisibilityChanged(boolean visible) {
+        updateToolbarVisibility(visible);
     }
 
     private void openCategory(Class item) {

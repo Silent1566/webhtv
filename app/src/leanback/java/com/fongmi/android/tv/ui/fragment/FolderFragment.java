@@ -26,6 +26,13 @@ public class FolderFragment extends BaseFragment {
         void closeFilter();
     }
 
+    public interface ScrollHeaderHost {
+
+        int[] getScrollHeaderIds();
+
+        void onScrollHeaderVisibilityChanged(boolean visible);
+    }
+
     private FragmentFolderBinding mBinding;
     private Boolean pendingFilterVisible;
     private Class mType;
@@ -114,6 +121,14 @@ public class FolderFragment extends BaseFragment {
         if (child == null) return;
         child.toggleFilter(pendingFilterVisible);
         pendingFilterVisible = null;
+    }
+
+    public int[] getScrollHeaderIds() {
+        return getActivity() instanceof ScrollHeaderHost host ? host.getScrollHeaderIds() : new int[]{R.id.recycler};
+    }
+
+    public void onScrollHeaderVisibilityChanged(boolean visible) {
+        if (getActivity() instanceof ScrollHeaderHost host) host.onScrollHeaderVisibilityChanged(visible);
     }
 
     public boolean requestContentFocus() {

@@ -1,8 +1,8 @@
 # 全局可配置主题（Universal Web Theme / WebHome V2）设计文档
 
-> 状态：🟡 V1 首页能力已实现，V2 多页面能力处于设计阶段<br>
+> 状态：🟡 V1 首页兼容层与 V2 `HOME`/`DETAIL` 已实现，后续页面处于规划阶段<br>
 > 首次设计：2026-07-27<br>
-> 本次更新：2026-07-29<br>
+> 本次更新：2026-08-03<br>
 > 适用端：mobile / leanback（Android TV）<br>
 > 当前落地范围：全局 WebHome 首页、WebTheme V2 Manifest、当前内容源取数、分类筛选、详情页、TMDB 渐进增强、遥控焦点和原生播放器入口<br>
 > 后续规划范围：搜索结果页、收藏/历史页、播放器控制层、设置页及全局设计变量<br>
@@ -389,7 +389,7 @@ Manifest 中声明的权限只是“申请”，最终权限由宿主按页面�
 
 ```jsonc
 {
-  "hostApiVersion": 2,
+  "hostApiVersion": 3,
   "page": "detail",
   "theme": {
     "id": "maple.eclipse",
@@ -475,17 +475,17 @@ CREATED
 3. 输入输出必须有长度、数量和类型限制。
 4. DTO 字段默认可选；主题必须容忍空值和未知字段。
 5. 新增字段保持向后兼容；删除、改名或改变语义必须提升 contract major version。
-6. Promise rejection 返回结构化错误：
+6. Host API 3 的 Promise rejection 使用标准 `Error`：`Error.code` 返回稳定规范码，`Error.message` 为兼容既有主题保留旧线码。
 
-```json
-{
-  "code": "SOURCE_CHANGED",
-  "message": "Active VOD source changed",
-  "retryable": true
+```javascript
+try {
+  await window.fongmi.vod.detail({});
+} catch (error) {
+  if (error.code === "SOURCE_CHANGED") await reloadPageContext();
 }
 ```
 
-建议错误码：`INVALID_ARGUMENT`、`NOT_SUPPORTED`、`PERMISSION_DENIED`、`SOURCE_CHANGED`、`BUSY`、`RESPONSE_TOO_LARGE`、`NETWORK_ERROR`、`TIMEOUT`、`NATIVE_FAILURE`。
+稳定规范码为：`PERMISSION_DENIED`、`INVALID_ARGUMENT`、`SOURCE_CHANGED`、`STALE_REFERENCE`、`PAGE_UNAVAILABLE`、`NATIVE_FALLBACK`、`RATE_LIMITED`、`RESPONSE_TOO_LARGE`、`INVALID_REQUEST`、`REQUEST_FAILED`。兼容别名为：`STALE_REFERENCE → INVALID_ARGUMENT`、`PAGE_UNAVAILABLE/NATIVE_FALLBACK → UNAVAILABLE`、`RATE_LIMITED → BUSY`。主题的新逻辑应判断 `Error.code`。
 
 ### 7.2 建议桥接模块
 
@@ -1480,3 +1480,233 @@ recommendationRef
 - AI 推荐卡片使用遥控器确认键长按能打开推荐详情，且短按仍只执行打开推荐。
 - AI 推荐存在 `backdrop` 而无 `pic` 时仍显示图片；异步解析补全后页面能刷新图片。
 - 36、100 和 500 集详情分别验证范围分组、简介可见、选中卡片走马灯及长按 `episode.info`。
+---
+
+## 20. 下一阶段架构评估与实施计划（2026-08-03）
+
+本节记录 Host API 3 首页/详情页闭环完成后的下一阶段建议，作为后续实现、评审和拆分任务的当前基线。它补充 §13～§17 的早期路线，不改变 §18～§19 已冻结的兼容与安全边界。
+
+### 20.1 当前定位与结论
+
+当前能力应准确描述为 **WebHome V2 可插拔页面主题**，而不是已经覆盖整个 App 的任意全局换肤：
+
+- `WebThemePage` 当前只包含 `HOME` 和 `DETAIL`；搜索、历史、收藏、设置和播放器尚未成为独立主题页面。
+- 站点自己的 `homePage` 仍优先于全局主题；全局主题主要作为无站点首页时的统一页面渲染层。
+- 播放器内核、解析、DRM、字幕、音轨、画中画和生命周期继续由原生实现负责。
+- 设置值定义、校验、权限和持久化继续由原生负责。
+- 远程 V2 页面通过精确 origin 的 WebMessage 通道调用页面白名单能力，不直接暴露完整的站点页 `HomeWebBridge`。
+- 首页、分类、详情、播放和详情动作继续使用当前页面会话内的不透明引用，切源、重载和宿主销毁后旧引用失效。
+
+这一边界继续保持：**视觉和页面布局可替换，数据、业务、播放与恢复能力保持原生可信；每个页面可独立失败并回退。**
+
+### 20.2 需要先收口的具体问题
+
+#### 20.2.1 Manifest 字段与实际运行时能力必须一致
+
+内置 `theme.json` 已声明：
+
+```json
+"player": {
+  "engine": "native",
+  "chrome": "tokens"
+}
+```
+
+截至 2026-08-03，运行时已采用第一种方案：`WebThemeManifest` 只确认 `player`/`tokens` 为对象并记录其存在，Schema 以 `x-webhtv-status: reserved` 标记，Devkit 校验器输出警告；Host API 3 不解释、执行或通过 `theme.info` 暴露其中配置。因此这些字段仅用于向前兼容，不属于稳定公共能力。
+
+正式支持前仍需增加类型化的 `PlayerPresentation`/设计变量模型、能力协商和契约测试；在此之前不得依据这些字段改变原生播放器或布局行为。
+
+#### 20.2.2 能力定义需要单一事实来源
+
+在本轮 P0 之前，页面方法、Manifest 权限、宿主白名单和 `theme.info.capabilities` 分别维护，容易出现文档、Manifest 和运行时不一致。当前已由 `WebThemeCapabilityRegistry` 统一维护；继续增加页面时仍必须在注册表中扩展同一条目，并同步 Schema 漂移测试和兼容文档。注册表至少包含：
+
+```text
+method
+permission
+page
+contractVersion
+legacyAllowed
+manifestRequired
+```
+
+运行时由注册表直接驱动：
+
+- Manifest 权限过滤；
+- Bridge 方法授权；
+- `theme.info.capabilities`。
+
+创作 Schema 与 Devkit 校验器读取同一份 Schema；Java 漂移测试会把 Schema 的页面权限枚举与注册表逐页比较，避免两份跨语言定义静默分叉。文档兼容矩阵也应随注册表和 Schema 同步更新。
+
+#### 20.2.3 Runtime 与 Bridge 在扩页前需要拆分
+
+`HomeWebController` 同时承担 WebView 生命周期、Manifest 加载、Bridge 会话、扩展注入、焦点、原生播放前媒体暂停和错误恢复；`WebHomeThemeBridge` 同时承担首页、详情、收藏、历史、播放、TMDB 动作和导航。后续不应继续把搜索、历史列表和设置接口直接堆入这两个类。
+
+推荐的目标拆分为：
+
+```text
+WebThemeRuntime
+├── WebThemeManifestResolver
+├── WebThemeSession
+│   ├── generation / cancellation
+│   ├── access references
+│   ├── play references
+│   └── detail action references
+├── WebThemeCallRouter
+└── WebThemePageHost
+
+WebThemeCallRouter
+├── HomeApi
+├── DetailApi
+├── ListApi
+├── NavigationApi
+├── PlayerApi
+└── UiApi
+```
+
+第一阶段只做行为不变的抽取，`HomeWebController` 可继续作为兼容 façade，避免在重构同时改变协议。
+
+#### 20.2.4 电视焦点能力需要成为公共 Runtime
+
+当前官方首页和详情页分别维护焦点、横向轨道滚动和恢复逻辑。增加更多主题页面前，应抽取宿主注入的公共 focus runtime，统一处理：
+
+- `fmviewport` 与安全区；
+- 同焦点行左右移动；
+- 跨焦点行的几何中心匹配；
+- 横向轨道首尾留白和完整滚入；
+- 动态追加内容后的焦点恢复；
+- 页面返回后的焦点恢复；
+- 遥控确认键短按/长按分离；
+- 自动分页的去重和过期响应隔离。
+
+主题仍负责声明焦点元素和焦点行，宿主 Runtime 负责算法版本、兼容和修复。
+
+### 20.3 分阶段实施顺序
+
+#### P0：契约与运行时收口
+
+优先完成且不改变现有首页/详情视觉行为：
+
+1. 增加正式的 `theme-v2` JSON Schema 和 Devkit 校验入口；
+2. 建立统一能力注册表；
+3. 明确 `player`、后续 `tokens` 等未实现字段的保留策略；
+4. 统一稳定错误码：
+
+```text
+PERMISSION_DENIED
+INVALID_ARGUMENT
+SOURCE_CHANGED
+STALE_REFERENCE
+PAGE_UNAVAILABLE
+NATIVE_FALLBACK
+RATE_LIMITED
+RESPONSE_TOO_LARGE
+```
+
+5. 记录 Manifest 加载、页面解析和回退原因，但日志不输出敏感 payload、Cookie 或完整令牌 URL；
+6. 维护 Host API、页面契约和权限的生成式兼容矩阵；
+7. 增加 Manifest 更新、缓存、非法字段、错误码和能力漂移测试。
+
+验收：V1 首页行为不变，V2 首页/详情现有测试全部通过，Manifest 校验、Bridge 授权和 `theme.info` 使用同一份能力定义。
+
+**2026-08-03 实施状态：** 本轮已完成 P0 的契约核心：正式 JSON Schema 与 Devkit 校验入口、统一能力注册表、保留字段策略、规范错误码/旧错误别名，以及对应的 Java/Python 契约测试。Manifest 运行时、Bridge 授权和 `theme.info.capabilities` 已统一依赖能力注册表；Schema 权限枚举由漂移测试约束。受信和远程 V2 Bridge 均通过 `Error.code` 暴露规范码，同时保持 `Error.message` 的旧别名；过期不透明引用返回 `STALE_REFERENCE`，Android 与 Devkit 均拒绝非法 UTF-8 Manifest。第 5～7 项中的运行日志、更新/缓存矩阵和更完整的生成式兼容矩阵仍作为后续运维与发布加固工作，不在本轮宣称完成。
+
+#### P1：公共 WebTheme Runtime 与焦点层
+
+1. 抽取 Manifest resolver、页面 host、会话 generation/cancellation 和 Bridge router；
+2. 保持旧的公开调用签名和回退行为不变；
+3. 引入公共 focus runtime，并先迁移内置 Eclipse 首页和详情页；
+4. 统一切源、重载、暂停、恢复、销毁和原生播放返回后的会话失效规则。
+
+验收：旧请求不能在切源或销毁后更新页面；首页和详情独立回退；不会产生重复 Bridge、返回死循环或丢失遥控焦点。
+
+#### P2：通用列表页面
+
+新页面按以下顺序增量交付：
+
+```text
+搜索 → 历史 → 收藏
+```
+
+建议契约：
+
+```text
+vod.search@1
+history.list@1
+history.remove@1
+favorite.list@1
+favorite.status@1
+favorite.set@1
+```
+
+三类页面共用列表 DTO 和 Runtime，统一包含分页、空态、错误态、`truncated`、图片、当前源约束、不透明引用和焦点恢复。搜索默认只搜索当前源；多源搜索继续作为单独高权限原生动作。
+
+每增加一页都必须保留原生 fallback，不复制一套新的 WebView 生命周期或分页实现。
+
+#### P3：原生全局设计变量
+
+真正覆盖原生页面的“全局视觉皮肤”应通过受控设计变量实现，而不是允许远程 CSS 操作 Android View。第一批建议字段包括：
+
+```text
+canvas
+surface
+surfaceElevated
+text
+textMuted
+accent
+focus
+divider
+radius.small / medium / large
+spacing.small / medium / large
+```
+
+约束：
+
+- 只接受预定义语义字段；
+- 对颜色、尺寸、圆角和间距做类型与范围校验；
+- 不接受 Android resource ID、类名或任意原生样式表达式；
+- 不允许设计变量改变业务可见性、权限或安全行为；
+- 对电视焦点色、文字与背景做最低可读性检查；
+- 应用启动时使用已验证缓存，避免切换主题产生明显闪白或布局重建。
+
+首批原生消费面建议限制为 WebHome 外壳、详情动作/弹窗和播放器控制层。播放器仍保持原生 engine，仅允许控制层视觉消费 tokens。
+
+#### P4：分发、更新与高级页面
+
+在公共远程主题生态开放前再增加：
+
+- ETag / TTL 缓存；
+- last-known-good 版本；
+- 手动回滚；
+- Manifest 与静态资源哈希；
+- 签名主题包；
+- 本地目录或 ZIP 安装；
+- 设置 Schema；
+- 声明式原生 Player Chrome；
+- 主题预览、来源和权限管理 UI。
+
+没有签名、完整性校验和回滚机制前，不建设公开主题市场。
+
+### 20.4 安全和发布门槛
+
+当前远程 V2 的 deny-by-default、精确 origin、页面权限交集、私网地址拦截、无重定向 Manifest 和短生命周期引用继续保留。后续至少补充：
+
+- 远程主题独立的数据/Cookie 策略，避免与受信站点页共享不必要状态；
+- `external.open` 首次域名或非 HTTPS 链接的用户可见确认；
+- 引用预算耗尽时返回可区分的错误或 `truncated`，而不是不可诊断的通用失败；
+- 远程 Manifest 更新失败时使用 last-known-good 或原生 fallback；
+- 恶意 Manifest、IDN/IPv6/私网地址、超长消息、能力绕过和旧 generation 回调的安全测试；
+- 500 集详情、多推荐轨道、频繁切源和低配电视 WebView 的内存与响应时间测试。
+
+真实设备上的旋转、遥控全路径、播放返回、后台恢复和远程主题故障注入仍是发布门槛，不能只由 Java 单元测试替代。
+
+### 20.5 明确非目标与下一项工作
+
+下一阶段不做：
+
+- 不把 `VideoActivity` 或播放器内核迁入 WebView；
+- 不向主题暴露原始 `Vod`、`Site`、播放地址、解析器或内部 Bean；
+- 不同时实现搜索、历史、收藏、设置和播放器；
+- 不在缺少签名/回滚时先做 ZIP 或主题市场；
+- 不允许任意 CSS 或脚本反向控制原生 Android 布局。
+
+推荐的下一个独立变更是 **P1 公共 WebTheme Runtime 与焦点层**：抽取 Manifest resolver、页面 host、会话生命周期和 Bridge router，并保持现有首页、详情、播放器和设置行为不变。P0 尚未完成的日志、更新/缓存矩阵和生成式兼容矩阵应作为独立的运维与发布加固任务继续推进。

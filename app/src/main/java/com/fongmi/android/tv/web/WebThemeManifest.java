@@ -26,6 +26,7 @@ public final class WebThemeManifest {
     private static final int MAX_PERMISSIONS = 32;
     private static final int MAX_PERMISSION_LENGTH = 64;
     private static final String ASSET_ROOT = "file:///android_asset/webhome/";
+    private static final Set<String> RESERVED_FIELDS = Set.of("player", "tokens");
 
     private final String manifestUrl;
     private final String id;
@@ -33,15 +34,17 @@ public final class WebThemeManifest {
     private final String version;
     private final int minHostApi;
     private final EnumMap<WebThemePage, Page> pages;
+    private final Set<String> reservedFields;
 
     private WebThemeManifest(String manifestUrl, String id, String name, String version, int minHostApi,
-            EnumMap<WebThemePage, Page> pages) {
+            EnumMap<WebThemePage, Page> pages, Set<String> reservedFields) {
         this.manifestUrl = manifestUrl;
         this.id = id;
         this.name = name;
         this.version = version;
         this.minHostApi = minHostApi;
         this.pages = pages;
+        this.reservedFields = reservedFields;
     }
 
     public static WebThemeManifest parse(String manifestUrl, String json, String target) {
@@ -69,6 +72,7 @@ public final class WebThemeManifest {
                 throw new IllegalArgumentException("Unsupported host API");
             }
             requireTarget(root, trim(target));
+            Set<String> reservedFields = reservedFields(root);
 
             JsonObject pageObjects = object(root, "pages");
             JsonObject permissionObjects = object(root, "permissions");
@@ -77,7 +81,7 @@ public final class WebThemeManifest {
                 Page parsed = parsePage(manifestUrl, page, pageObjects, permissionObjects);
                 if (parsed != null) pages.put(page, parsed);
             }
-            return new WebThemeManifest(manifestUrl, id, name, version, minHostApi, pages);
+            return new WebThemeManifest(manifestUrl, id, name, version, minHostApi, pages, reservedFields);
         } catch (IllegalArgumentException e) {
             throw e;
         } catch (RuntimeException e) {
@@ -96,7 +100,8 @@ public final class WebThemeManifest {
             if (!"native".equals(fallback)) return null;
             String entryUrl = resolveEntry(manifestUrl, entry);
             if (entryUrl == null) return null;
-            Set<String> pagePermissions = permissions(permissions, page.getKey());
+            Set<String> pagePermissions = WebThemeCapabilityRegistry.filterPermissions(page,
+                    permissions(permissions, page.getKey()));
             String contractPermission = contract.substring(0, contract.lastIndexOf('@'));
             if (!pagePermissions.contains(contractPermission)) return null;
             return new Page(entryUrl, contract, pagePermissions);
@@ -142,6 +147,18 @@ public final class WebThemeManifest {
             String value = trim(element.getAsString());
             if (!value.isEmpty() && value.length() <= MAX_PERMISSION_LENGTH
                     && value.matches("[A-Za-z0-9._-]+")) result.add(value);
+        }
+        return Collections.unmodifiableSet(result);
+    }
+
+    private static Set<String> reservedFields(JsonObject root) {
+        Set<String> result = new HashSet<>();
+        for (String field : RESERVED_FIELDS) {
+            if (!root.has(field)) continue;
+            if (!root.get(field).isJsonObject()) {
+                throw new IllegalArgumentException("Invalid reserved theme field: " + field);
+            }
+            result.add(field);
         }
         return Collections.unmodifiableSet(result);
     }
@@ -212,6 +229,10 @@ public final class WebThemeManifest {
 
     public Page getPage(WebThemePage page) {
         return pages.get(page);
+    }
+
+    public Set<String> getReservedFields() {
+        return reservedFields;
     }
 
     public static final class Page {

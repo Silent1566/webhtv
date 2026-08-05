@@ -22,10 +22,19 @@ public class WebThemeManifestLoaderTest {
     }
 
     @Test
-    public void boundedReaderAvoidsJava10OnlyByteArrayOutputStreamApi() throws Exception {
+    public void boundedReaderRejectsMalformedUtf8() {
+        byte[] malformed = {(byte) 0xC3, (byte) 0x28};
+
+        assertThrows(IOException.class,
+                () -> WebThemeManifestLoader.read(new ByteArrayInputStream(malformed), malformed.length));
+    }
+
+    @Test
+    public void boundedReaderUsesAndroidCompatibleStrictUtf8Decoding() throws Exception {
         String source = source();
 
-        assertTrue(source.contains("new String(output.toByteArray(), StandardCharsets.UTF_8)"));
+        assertTrue(source.contains("StandardCharsets.UTF_8.newDecoder()"));
+        assertTrue(source.contains("CodingErrorAction.REPORT"));
         assertFalse(source.contains("output.toString(StandardCharsets.UTF_8)"));
     }
 

@@ -885,6 +885,9 @@ public class TmdbDetailActivityLayoutTest {
                         && sourceEpisodeResolverBody.contains("SourceEpisodeSeason cached = sourceEpisodeSeasonCache.get(episode);")
                         && sourceEpisodeResolverBody.contains("TextUtils.equals(cached.name(), name)")
                         && sourceEpisodeResolverBody.contains("sourceEpisodeSeasonCache.put(episode, new SourceEpisodeSeason(name, sourceSeason));"));
+        assertTrue("cached source-season values must be unboxed before comparison so equal values outside the Integer cache are not treated as different seasons",
+                sourceEpisodeResolverBody.contains("for (int candidate : sourceSeasons)")
+                        && !sourceEpisodeResolverBody.contains("for (Integer candidate : sourceSeasons)"));
         assertTrue("replacing the source must clear parsed episode-season entries separately from viewport caches",
                 source.contains("private void clearSourceEpisodeSeasonCache()")
                         && source.contains("clearSourceEpisodeSeasonCache();")

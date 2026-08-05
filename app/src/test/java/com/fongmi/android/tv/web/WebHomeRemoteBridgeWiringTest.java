@@ -54,6 +54,30 @@ public class WebHomeRemoteBridgeWiringTest {
         assertTrue(controller.contains("handleMainFrameFailure("));
     }
 
+    @Test
+    public void themeInfoCapabilitiesComeFromTheSharedRegistry() throws Exception {
+        String controller = readMain("HomeWebController.java");
+
+        assertTrue(controller.contains("WebThemeCapabilityRegistry.capabilities("));
+        assertFalse(controller.contains("declared.add(\"theme.info@1\")"));
+        assertFalse(controller.contains("permission + \"@1\""));
+    }
+
+    @Test
+    public void webThemeErrorsExposeCanonicalCodesWithoutChangingLegacyMessages() throws Exception {
+        String controller = readMain("HomeWebController.java");
+        String bridge = readMain("HomeWebBridge.java");
+
+        assertTrue(controller.contains("response.addProperty(\"errorCode\", error.getCode())"));
+        assertTrue(controller.contains("new Error(data.error)"));
+        assertTrue(controller.contains("error.code=data.errorCode||data.error"));
+        assertTrue(controller.contains("if(code)error.code=code"));
+        assertTrue(controller.contains("WebThemeErrorCode.RATE_LIMITED"));
+        assertTrue(controller.contains("WebThemeErrorCode.PAGE_UNAVAILABLE"));
+        assertTrue(bridge.contains("WebThemeErrorCode.from(error)"));
+        assertTrue(bridge.contains("mapped.getCode()"));
+    }
+
     private static boolean ordered(String source, String first, String second) {
         int firstIndex = source.indexOf(first);
         int secondIndex = source.indexOf(second, Math.max(0, firstIndex + first.length()));

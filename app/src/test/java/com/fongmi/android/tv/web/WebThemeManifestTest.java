@@ -126,6 +126,27 @@ public class WebThemeManifestTest {
         assertTrue(manifest.getPage(WebThemePage.DETAIL).getPermissions().contains("episode.info"));
     }
 
+    @Test
+    public void parseFiltersUnsupportedPermissionsAndMarksReservedFields() {
+        WebThemeManifest manifest = WebThemeManifest.parse(URL, "{"
+                + "\"schemaVersion\":2,\"id\":\"reserved.theme\",\"version\":\"1\",\"minHostApi\":3,"
+                + "\"pages\":{\"home\":{\"entry\":\"home.html\",\"contract\":\"vod.home@1\"}},"
+                + "\"permissions\":{\"home\":[\"vod.home\",\"vod.detail\",\"net.request\"]},"
+                + "\"player\":{\"engine\":\"native\",\"chrome\":\"tokens\"},"
+                + "\"tokens\":{\"color.background\":\"#000000\"}"
+                + "}", "mobile");
+
+        assertEquals(java.util.Set.of("vod.home"), manifest.getPage(WebThemePage.HOME).getPermissions());
+        assertEquals(java.util.Set.of("player", "tokens"), manifest.getReservedFields());
+    }
+
+    @Test
+    public void parseRejectsReservedFieldsWithNonObjectValues() {
+        assertInvalid("{\"schemaVersion\":2,\"id\":\"x\",\"version\":\"1\",\"minHostApi\":3,\"player\":\"native\"}",
+                "mobile");
+        assertInvalid("{\"schemaVersion\":2,\"id\":\"x\",\"version\":\"1\",\"minHostApi\":3,\"tokens\":[]}",
+                "mobile");
+    }
     private static void assertInvalid(String json, String target) {
         assertThrows(IllegalArgumentException.class, () -> WebThemeManifest.parse(URL, json, target));
     }

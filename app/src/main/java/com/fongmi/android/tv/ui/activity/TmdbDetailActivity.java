@@ -4657,8 +4657,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         for (Flag flag : flags) {
             if (flag == null || flag.getEpisodes() == null) continue;
             List<Integer> sourceSeasons = sourceSeasonNumbers(flag.getEpisodes());
-            for (Integer candidate : sourceSeasons) {
-                if (candidate == null || candidate < 0) continue;
+            for (int candidate : sourceSeasons) {
+                if (candidate < 0) continue;
                 if (season != null && season != candidate) return -1;
                 season = candidate;
             }

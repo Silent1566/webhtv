@@ -124,7 +124,7 @@ public class HomeWebBridge {
         } catch (Throwable e) {
             SpiderDebug.log("webhome", "invoke failed method=%s error=%s session=%s current=%s", method,
                     e.toString(), themeGeneration, controller.getThemeSessionGeneration());
-            reject(requestId, e.getMessage(), v2Theme, themeGeneration);
+            reject(requestId, e, v2Theme, themeGeneration);
         }
     }
 
@@ -585,9 +585,16 @@ public class HomeWebBridge {
                 v2Theme, themeGeneration, storedResultId);
     }
 
-    private void reject(String requestId, String error, boolean v2Theme, int themeGeneration) {
-        eval("window.fongmiNative&&window.fongmiNative.reject(" + quote(requestId) + "," + quote(error) + ")",
-                v2Theme, themeGeneration, null);
+    private void reject(String requestId, Throwable error, boolean v2Theme, int themeGeneration) {
+        String message = error == null ? "" : error.getMessage();
+        String code = "";
+        if (v2Theme) {
+            WebThemeErrorCode mapped = WebThemeErrorCode.from(error);
+            message = mapped.getLegacyCode();
+            code = mapped.getCode();
+        }
+        eval("window.fongmiNative&&window.fongmiNative.reject(" + quote(requestId) + "," + quote(message)
+                + "," + quote(code) + ")", v2Theme, themeGeneration, null);
     }
 
     private void eval(String script, boolean v2Theme, int themeGeneration, String storedResultId) {

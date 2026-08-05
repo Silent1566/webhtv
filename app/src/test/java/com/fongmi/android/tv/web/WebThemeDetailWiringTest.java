@@ -80,7 +80,8 @@ public class WebThemeDetailWiringTest {
         assertTrue(method.contains("WebHomeTarget currentTarget = target;"));
         assertTrue(method.contains("WebThemeRoute currentRoute = themeRoute;"));
         assertTrue(method.contains("currentRoute.json(currentAccessSession.issueRoute(currentRoute.getVodId()))"));
-        assertTrue(method.contains("WebHomeThemePolicy.allowsPermission"));
+        assertTrue(method.contains("WebThemeCapabilityRegistry.capabilities("));
+        assertFalse(method.contains("WebHomeThemePolicy.allowsPermission"));
         assertFalse(method.contains("target.get"));
     }
 

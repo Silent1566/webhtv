@@ -55,7 +55,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Locale;
-import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -232,7 +231,7 @@ public class HomeWebController {
                                 || data.getBytes(StandardCharsets.UTF_8).length > MAX_REMOTE_MESSAGE_BYTES) return;
                         if (!isRemoteSession(allowedOrigin, generation)) return;
                         if (!remoteRequestGate.tryAcquire()) {
-                            replyRemoteError(data, "BUSY", replyProxy);
+                            replyRemoteError(data, WebThemeErrorCode.RATE_LIMITED, replyProxy);
                             return;
                         }
                         try {
@@ -245,7 +244,7 @@ public class HomeWebController {
                             });
                         } catch (Throwable e) {
                             remoteRequestGate.release();
-                            replyRemoteError(data, "UNAVAILABLE", replyProxy);
+                            replyRemoteError(data, WebThemeErrorCode.PAGE_UNAVAILABLE, replyProxy);
                         }
                     });
             remoteMessageListener = true;
@@ -282,16 +281,17 @@ public class HomeWebController {
                 }
                 response.add("result", TextUtils.isEmpty(result) ? null : com.github.catvod.utils.Json.parse(result));
             } catch (Throwable e) {
-                response.addProperty("error", remoteError(e));
+                addRemoteError(response, WebThemeErrorCode.from(e));
             }
         } catch (Throwable e) {
-            response.addProperty("error", "SOURCE_CHANGED".equals(e.getMessage()) ? "SOURCE_CHANGED" : "INVALID_REQUEST");
+            addRemoteError(response, "SOURCE_CHANGED".equals(e.getMessage())
+                    ? WebThemeErrorCode.SOURCE_CHANGED : WebThemeErrorCode.INVALID_REQUEST);
         }
         String nonce = requestNonce;
         App.post(() -> {
             if (!isRemoteSession(expectedOrigin, generation, nonce)) {
                 response.remove("result");
-                response.addProperty("error", "SOURCE_CHANGED");
+                addRemoteError(response, WebThemeErrorCode.SOURCE_CHANGED);
             }
             try {
                 replyProxy.postMessage(response.toString());
@@ -315,24 +315,20 @@ public class HomeWebController {
         return value.length() <= maxLength ? value : value.substring(0, maxLength);
     }
 
-    private static String remoteError(Throwable error) {
-        if (error instanceof SecurityException) return "PERMISSION_DENIED";
-        if (error instanceof IllegalArgumentException) return "INVALID_ARGUMENT";
-        if (error instanceof IllegalStateException && "SOURCE_CHANGED".equals(error.getMessage())) return "SOURCE_CHANGED";
-        if (error instanceof IllegalStateException && "RESPONSE_TOO_LARGE".equals(error.getMessage())) return "RESPONSE_TOO_LARGE";
-        if (error instanceof IllegalStateException && "RATE_LIMITED".equals(error.getMessage())) return "BUSY";
-        if (error instanceof IllegalStateException) return "UNAVAILABLE";
-        return "REQUEST_FAILED";
+    private static void addRemoteError(JsonObject response, WebThemeErrorCode error) {
+        response.addProperty("error", error.getLegacyCode());
+        response.addProperty("errorCode", error.getCode());
     }
 
-    private static void replyRemoteError(String message, String error, JavaScriptReplyProxy replyProxy) {
+    private static void replyRemoteError(String message, WebThemeErrorCode error,
+            JavaScriptReplyProxy replyProxy) {
         JsonObject response = new JsonObject();
         try {
             JsonObject request = WebCall.object(message);
             response.addProperty("id", limitedRemoteValue(request.has("id") ? request.get("id").getAsString() : "", 128));
         } catch (Throwable ignored) {
         }
-        response.addProperty("error", error);
+        addRemoteError(response, error);
         try {
             replyProxy.postMessage(response.toString());
         } catch (Throwable ignored) {
@@ -882,21 +878,8 @@ public class HomeWebController {
         root.add("route", currentRoute.json(currentAccessSession.issueRoute(currentRoute.getVodId())));
 
         JsonArray capabilities = new JsonArray();
-        Set<String> declared = new LinkedHashSet<>();
-        declared.add("theme.info@1");
-        declared.add("ui.getViewport@1");
-        declared.add("navigation.back@1");
-        declared.add("navigation.reload@1");
-        if (currentTarget.getPage() == WebThemePage.DETAIL) {
-            declared.add("navigation.openNativeDetail@1");
-        }
-        declared.add(currentTarget.getPage().getContract());
-        for (String permission : currentTarget.getPermissions()) {
-            if (WebHomeThemePolicy.allowsPermission(currentTarget.getPage(), permission)) {
-                declared.add(permission + "@1");
-            }
-        }
-        for (String capability : declared) capabilities.add(capability);
+        for (String capability : WebThemeCapabilityRegistry.capabilities(currentTarget.getPage(),
+                currentTarget.getPermissions())) capabilities.add(capability);
         root.add("capabilities", capabilities);
         return root.toString();
     }
@@ -1482,7 +1465,11 @@ public class HomeWebController {
                       const callback=callbacks[data.id];
                       if(!callback)return;
                       delete callbacks[data.id];
-                      if(data.error)callback.reject(new Error(data.error));else callback.resolve(data.result);
+                      if(data.error){
+                        const error=new Error(data.error);
+                        error.code=data.errorCode||data.error;
+                        callback.reject(error);
+                      }else callback.resolve(data.result);
                     }catch(ignore){}
                   };
                   window.fongmi={
@@ -1644,7 +1631,7 @@ public class HomeWebController {
                   }
                   window.fongmiNative={
                     resolve:(id,data)=>{ if(callbacks[id]){ callbacks[id].resolve(hydrate(data)); delete callbacks[id]; } },
-                    reject:(id,error)=>{ if(callbacks[id]){ callbacks[id].reject(new Error(error||'')); delete callbacks[id]; } }
+                    reject:(id,message,code)=>{ if(callbacks[id]){ const error=new Error(message||''); if(code)error.code=code; callbacks[id].reject(error); delete callbacks[id]; } }
                   };
                   if(!window.__fmUrlHook&&window.history){
                     window.__fmUrlHook=true;

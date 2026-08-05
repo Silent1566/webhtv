@@ -97,6 +97,40 @@ public class HomeCategoryNavigationSourceTest {
     }
 
     @Test
+    public void inlineCategoryPagingCollapsesTheVisibleHomeHeader() throws Exception {
+        String home = homeActivity();
+        String folder = read(source("leanback", "java", "com", "fongmi", "android", "tv", "ui", "fragment", "FolderFragment.java"));
+        String type = read(source("leanback", "java", "com", "fongmi", "android", "tv", "ui", "fragment", "TypeFragment.java"));
+        String grid = read(source("leanback", "java", "com", "fongmi", "android", "tv", "ui", "custom", "CustomVerticalGridView.java"));
+        String headerChanged = method(home, "public void onScrollHeaderVisibilityChanged(boolean visible)", "private void openCategory(Class item)");
+        String updateToolbar = method(home, "private void updateToolbarVisibility(boolean visible)", "private void syncNativeContentInset()");
+        String folderHeaderChanged = method(folder, "public void onScrollHeaderVisibilityChanged(boolean visible)", "public boolean requestContentFocus()");
+
+        assertTrue("home must provide the visible inline chrome to the category grid", home.contains("FolderFragment.ScrollHeaderHost"));
+        assertTrue("home paging must collapse both the category row and toolbar", home.contains("return new int[]{R.id.typeRecycler, R.id.toolbar};"));
+        assertTrue("folder hosts must expose optional scroll-header ids", folder.contains("public interface ScrollHeaderHost"));
+        assertTrue("folder hosts must expose header visibility changes", folder.contains("void onScrollHeaderVisibilityChanged(boolean visible);"));
+        assertTrue("folder pages must resolve scroll-header ids through their host", folder.contains("public int[] getScrollHeaderIds()"));
+        assertTrue("folder pages must forward header visibility to capable hosts", folderHeaderChanged.contains("host.onScrollHeaderVisibilityChanged(visible);"));
+        assertTrue(
+                "non-home folder hosts must retain the legacy recycler header fallback",
+                folder.contains("new int[]{R.id.recycler}"));
+        assertTrue(
+                "the category grid must use its actual host header instead of a hard-coded activity id",
+                type.contains("mBinding.recycler.setHeader(getActivity(), getParent().getScrollHeaderIds());"));
+        assertFalse(
+                "inline category paging must not keep targeting HomeActivity's hidden home recycler",
+                type.contains("mBinding.recycler.setHeader(getActivity(), R.id.recycler);"));
+        assertTrue("the category grid must register its folder as the header visibility listener", type.contains("mBinding.recycler.setHeaderVisibilityListener(getParent()::onScrollHeaderVisibilityChanged);"));
+        assertTrue("header state must be based on the configured primary header", grid.contains("views.get(0).getVisibility() == View.VISIBLE"));
+        assertTrue("header visibility changes must notify the configured host", grid.contains("headerVisibilityListener.onHeaderVisibilityChanged(visible);"));
+        assertTrue("the home host must route header changes through the toolbar state helper", headerChanged.contains("updateToolbarVisibility(visible);"));
+        assertTrue("the toolbar helper must synchronize the native content inset", updateToolbar.contains("syncNativeContentInset();"));
+        assertTrue("the toolbar helper must also synchronize overlay constraints", updateToolbar.contains("syncWebOverlayLayout();"));
+        assertTrue("move-to-top must focus whichever configured header can accept focus", grid.contains("if (view.requestFocus()) break;"));
+    }
+
+    @Test
     public void folderFragmentDependsOnAHostContractInsteadOfVodActivity() throws Exception {
         String folder = read(source("leanback", "java", "com", "fongmi", "android", "tv", "ui", "fragment", "FolderFragment.java"));
         String home = homeActivity();
