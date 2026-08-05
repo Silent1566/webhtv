@@ -26,8 +26,8 @@ android {
         applicationId "com.fongmi.android.tv"
         minSdk libs.versions.minSdk.get().toInteger()
         targetSdk libs.versions.targetSdk.get().toInteger()
-        versionCode 604
-        versionName "6.0.4"
+        versionCode 605
+        versionName "6.0.5"
         buildConfigField "String", "BUILD_TIME", "\"${buildTime}\""
         buildConfigField "String", "BUILD_TAG", "\"${releaseTag}\""
         javaCompileOptions {
