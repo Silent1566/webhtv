@@ -40,6 +40,7 @@ import com.fongmi.android.tv.ad.audio.AdAudioDiagnostics;
 import com.fongmi.android.tv.ad.audio.AdAudioRuntimeController;
 import com.fongmi.android.tv.ad.audio.AdAudioSetting;
 import com.fongmi.android.tv.ad.audio.SpeechAdSetting;
+import com.fongmi.android.tv.ad.audio.SpeechAdSignalProvider;
 import com.fongmi.android.tv.ad.audio.AdSkipCoordinator;
 import com.fongmi.android.tv.ad.audio.AdSkipPolicyController;
 import com.fongmi.android.tv.ad.audio.PrioritizedAdAudioRuleSource;
@@ -776,6 +777,55 @@ public class PlayerManager implements ParseCallback {
 
     public AdAudioDiagnostics.Snapshot adAudioDiagnostics() {
         return adAudioRuntime.diagnostics();
+    }
+
+    /**
+     * 音频/语音通道在给定区间内命中的规则 id，供广告反馈归因。
+     *
+     * <p>音频子系统是「检测到就跳过」的实时链路，而反馈是用户事后按按钮发起的；
+     * 这里读的是 {@code AdAudioMatchLog} 保留的最近命中记录。
+     */
+    public List<String> adAudioMatchedRuleIds(long startMs, long endMs) {
+        if (isReleased()) return List.of();
+        return adAudioRuntime.matchedRuleIds(startMs, endMs);
+    }
+
+    /** 指定规则在区间内的命中次数。 */
+    public int adAudioMatchHitCount(String ruleId, long startMs, long endMs) {
+        if (isReleased()) return 0;
+        return adAudioRuntime.matchHitCount(ruleId, startMs, endMs);
+    }
+
+    /** 音频命中给出的起点，供短按反馈推断区间起点；无则返回 -1。 */
+    public long adAudioCandidateStartMs(long endMs) {
+        if (isReleased()) return -1L;
+        return adAudioRuntime.audioCandidateStartMs(endMs);
+    }
+
+    /** 音频指纹通道是否已开启。 */
+    public boolean isAdAudioEnabled() {
+        return AdAudioSetting.isEnabled();
+    }
+
+    /** 语音关键词去广是否已开启。 */
+    public boolean isSpeechAdEnabled() {
+        return SpeechAdSetting.snapshot().enabled();
+    }
+
+    /** 语音通道的规则 id，供反馈侧区分指纹与语音命中。 */
+    public static String speechAdRuleId() {
+        return SpeechAdSignalProvider.RULE_ID;
+    }
+
+    /**
+     * 本次播放是否具备音频采集条件。
+     *
+     * <p>PCM 采集挂在 media3 的音频链上，只有 Exo 内核有；直播与时长未知的流也无法
+     * 按媒体时间定位命中区间。
+     */
+    public boolean isAdAudioCaptureReady() {
+        if (isReleased()) return false;
+        return playerType == PlayerSetting.EXO && !isLive() && getDuration() > 0;
     }
 
     private void configureAdAudioRuntime() {

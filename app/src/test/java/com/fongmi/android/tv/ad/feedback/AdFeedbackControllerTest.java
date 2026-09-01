@@ -297,7 +297,10 @@ public class AdFeedbackControllerTest {
         AdFeedbackSession result = host.shownSessions.get(1);
         assertTrue(result.analysisComplete());
         assertFalse(result.hasActionablePlan());
-        assertEquals(3, controller.diagnostics()
+        // 四个通道：hls / domain / audio / existing-rule。FakeHost 不覆写
+        // audioFact/speechFact，音频通道拿到 unavailable 后弃权 —— 那是正确的：
+        // 一个不接音频子系统的宿主没资格声称「音频没认出来」。
+        assertEquals(4, controller.diagnostics()
                 .count(AdFeedbackDiagnostics.Code.CHANNEL_ABSTAINED));
     }
 

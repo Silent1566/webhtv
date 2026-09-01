@@ -69,6 +69,21 @@ public final class AdFeedbackController {
             return -1L;
         }
 
+        /**
+         * 音频指纹通道在给定区间的命中情况。
+         *
+         * <p>默认不可用：一个不接音频子系统的宿主如实报告「没有这条通道」，
+         * 而不是谎称命中为空 —— 后者会让归因把「未命中」当成证据。
+         */
+        default AudioIntervalFact audioFact(long startMs, long endMs) {
+            return AudioIntervalFact.unavailable();
+        }
+
+        /** 语音关键词通道在给定区间的命中情况。 */
+        default SpeechIntervalFact speechFact(long startMs, long endMs) {
+            return SpeechIntervalFact.unavailable();
+        }
+
         /** 短按回溯窗口。 */
         default long fallbackWindowMs() {
             return AdIntervalMapper.DEFAULT_FALLBACK_WINDOW_MS;
@@ -184,7 +199,9 @@ public final class AdFeedbackController {
         List<String> blacklist = host.blacklistedHosts();
         AdIntervalEvidence evidence = AdEvidenceCollector.collect(
                 host.context(), playlist, session.startMs(), session.endMs(),
-                session.startOrigin(), blacklist, host.legacyHeuristicActive());
+                session.startOrigin(), blacklist, host.legacyHeuristicActive(),
+                host.audioFact(session.startMs(), session.endMs()),
+                host.speechFact(session.startMs(), session.endMs()));
 
         // 已启用规则参与自检：新规则叠加上去后不得越过 cleaner 的回退闸门
         List<HlsManifestCleaner.Rule> activeRules = host.activeHlsRules();
@@ -195,6 +212,7 @@ public final class AdFeedbackController {
                 new DomainReputationClassifier.Input(blacklist, host.siteBaselineHosts(),
                         host.interfaceCandidateHosts(), host.interfaceSourceName()),
                 activeRules));
+        attributions.add(AudioChannelClassifier.classify(evidence));
         attributions.add(ExistingRuleClassifier.classify(evidence,
                 new ExistingRuleClassifier.Input(host.hlsRuleStates(),
                         host.legacyHeuristicActive(), host.protectingExcludes()),

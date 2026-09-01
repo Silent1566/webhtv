@@ -51,16 +51,31 @@ public final class AdEvidenceCollector {
     }
 
     /**
-     * 组装区间证据。
-     *
-     * @param evidence            playlist 证据，可为 null（非 HLS 或抓取失败）
-     * @param blacklistedHosts    现有广告域名黑名单，用于填充 matchedExistingHosts
-     * @param legacyHeuristicActive 旧启发式引擎当次是否生效
+     * 组装区间证据，不含音频/语音事实。仅供既有单测与不关心音频通道的调用方。
      */
     public static AdIntervalEvidence collect(Context context, M3u8Evidence evidence,
                                              long startMs, long endMs, StartOrigin origin,
                                              List<String> blacklistedHosts,
                                              boolean legacyHeuristicActive) {
+        return collect(context, evidence, startMs, endMs, origin, blacklistedHosts,
+                legacyHeuristicActive, AudioIntervalFact.unavailable(),
+                SpeechIntervalFact.unavailable());
+    }
+
+    /**
+     * 组装区间证据。
+     *
+     * @param evidence            playlist 证据，可为 null（非 HLS 或抓取失败）
+     * @param blacklistedHosts    现有广告域名黑名单，用于填充 matchedExistingHosts
+     * @param legacyHeuristicActive 旧启发式引擎当次是否生效
+     * @param audio               音频指纹通道在本区间的命中情况
+     * @param speech              语音关键词通道在本区间的命中情况
+     */
+    public static AdIntervalEvidence collect(Context context, M3u8Evidence evidence,
+                                             long startMs, long endMs, StartOrigin origin,
+                                             List<String> blacklistedHosts,
+                                             boolean legacyHeuristicActive,
+                                             AudioIntervalFact audio, SpeechIntervalFact speech) {
         if (context == null) throw new IllegalArgumentException("context is required");
         String playlistHost = hostOf(context.playUrl());
         String urlPath = pathOf(context.playUrl());
@@ -101,7 +116,7 @@ public final class AdEvidenceCollector {
                 inside, outside, bounded, crossDomain,
                 List.of(), legacyHeuristicActive,
                 matchedHosts(inside, blacklistedHosts),
-                AudioIntervalFact.unavailable(), SpeechIntervalFact.unavailable());
+                audio, speech);
     }
 
     /**

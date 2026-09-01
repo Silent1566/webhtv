@@ -5,6 +5,7 @@ import com.fongmi.android.tv.player.audio.PlaybackMediaSignalHub;
 import com.fongmi.android.tv.subtitle.SpeechRecognitionFactory;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -46,6 +47,11 @@ public final class AdAudioRuntimeController implements AutoCloseable {
     private final SpeechProviderFactory speechProviderFactory;
     private final SpeechRecognitionFactory recognitionFactory;
     private final AdAudioDiagnostics diagnostics = new AdAudioDiagnostics();
+    /**
+     * 最近命中的区间，供广告反馈事后归因。检测链路本身消费完候选就丢弃，而反馈是
+     * 用户按下按钮才发起的，没有这份记录音频通道永远无法参与归因。
+     */
+    private final AdAudioMatchLog matchLog = new AdAudioMatchLog();
 
     private AdAudioRuleSnapshot snapshot = new AdAudioRuleSnapshot(
             "local", "", AudioFingerprintRuleSet.empty(), java.util.List.of(), "");
@@ -210,6 +216,35 @@ public final class AdAudioRuntimeController implements AutoCloseable {
 
     public synchronized AdAudioRuleSnapshot snapshot() {
         return snapshot;
+    }
+
+    /**
+     * 音频/语音通道在给定区间内的命中情况，供广告反馈归因。
+     *
+     * <p>不判断功能是否启用 —— 关闭时自然没有命中记录，调用方另行读取开关。
+     */
+    public List<String> matchedRuleIds(long startMs, long endMs) {
+        return matchLog.matchedRuleIds(startMs, endMs);
+    }
+
+    /** 指定规则在区间内的命中次数，语音通道用它表达「命中几次」。 */
+    public int matchHitCount(String ruleId, long startMs, long endMs) {
+        return matchLog.hitCount(ruleId, startMs, endMs);
+    }
+
+    /**
+     * 最近一次起点早于 {@code endMs} 的音频命中起点，供起点推断使用；无则返回 -1。
+     *
+     * <p>短按反馈只有终点，此前只能按固定窗口回溯估算；有音频命中时它的起点比估算
+     * 准得多，{@code AdIntervalMapper} 会优先采用并把来源标为 AUDIO_CANDIDATE。
+     */
+    public long audioCandidateStartMs(long endMs) {
+        return matchLog.latestOverlappingStartMs(endMs);
+    }
+
+    /** 换集/换源时作废命中记录。 */
+    public void clearMatchLog() {
+        matchLog.clear();
     }
 
     /**
@@ -390,6 +425,11 @@ public final class AdAudioRuntimeController implements AutoCloseable {
                 synchronized (AdAudioRuntimeController.this) {
                     if (multiplexer != muxHolder[0] || policy != nextPolicy
                             || coordinator != currentCoordinator) return;
+                }
+                // 先记账再交给策略：策略可能立刻跳过并作废这一代，之后就取不到了。
+                if (candidate != null) {
+                    matchLog.record(candidate.sessionId(), candidate.ruleId(),
+                            candidate.startMs(), candidate.endMs());
                 }
                 nextPolicy.onCandidate(candidate);
             }

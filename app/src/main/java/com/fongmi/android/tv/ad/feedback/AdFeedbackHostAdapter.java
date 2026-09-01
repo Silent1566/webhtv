@@ -17,6 +17,14 @@ import java.util.function.Supplier;
  */
 public final class AdFeedbackHostAdapter implements AdFeedbackController.Host {
 
+    /**
+     * 与 {@code SpeechAdSignalProvider.RULE_ID} 一致。
+     *
+     * <p>写成常量而不是引用那个类：本包刻意不依赖 {@code ad.audio}，好让三个分类器
+     * 保持纯函数、可在纯 JVM 下单测。
+     */
+    private static final String SPEECH_RULE_ID = "speech-keyword";
+
     /** 播放器状态。{@code hls} 由调用方判定，避免本类依赖 media3。 */
     public interface Playback {
         long positionMs();
@@ -35,6 +43,31 @@ public final class AdFeedbackHostAdapter implements AdFeedbackController.Host {
         /** 音频/语音通道已有候选的起点，无则返回负数。 */
         default long audioCandidateStartMs() {
             return -1L;
+        }
+
+        /** 音频指纹功能是否已开启。 */
+        default boolean audioEnabled() {
+            return false;
+        }
+
+        /** 本次播放是否具备音频采集条件（Exo、非直播、时长已知）。 */
+        default boolean audioCaptureReady() {
+            return false;
+        }
+
+        /** 区间内命中的音频规则 id，含语音通道的规则。 */
+        default List<String> audioMatchedRuleIds(long startMs, long endMs) {
+            return List.of();
+        }
+
+        /** 语音关键词通道在区间内的命中次数。 */
+        default int speechHitCount(long startMs, long endMs) {
+            return 0;
+        }
+
+        /** 语音去广是否已开启。 */
+        default boolean speechEnabled() {
+            return false;
         }
     }
 
@@ -249,7 +282,39 @@ public final class AdFeedbackHostAdapter implements AdFeedbackController.Host {
 
     @Override
     public long audioCandidateStartMs() {
-        return playback.audioCandidateStartMs();
+        try {
+            return playback.audioCandidateStartMs();
+        } catch (RuntimeException e) {
+            return -1L;
+        }
+    }
+
+    /**
+     * 音频指纹通道的事实。读取失败降级为不可用 —— 归因是辅助功能，不该把异常
+     * 抛给正在播放的用户。
+     */
+    @Override
+    public AudioIntervalFact audioFact(long startMs, long endMs) {
+        try {
+            // 语音通道单独成一路，别把它的规则算进指纹通道的命中里
+            List<String> ids = playback.audioMatchedRuleIds(startMs, endMs).stream()
+                    .filter(id -> !SPEECH_RULE_ID.equals(id))
+                    .toList();
+            return new AudioIntervalFact(playback.audioEnabled(), ids,
+                    playback.audioCaptureReady());
+        } catch (RuntimeException e) {
+            return AudioIntervalFact.unavailable();
+        }
+    }
+
+    @Override
+    public SpeechIntervalFact speechFact(long startMs, long endMs) {
+        try {
+            return new SpeechIntervalFact(playback.speechEnabled(),
+                    playback.speechHitCount(startMs, endMs));
+        } catch (RuntimeException e) {
+            return SpeechIntervalFact.unavailable();
+        }
     }
 
     @Override

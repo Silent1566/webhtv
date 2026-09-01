@@ -8436,6 +8436,38 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         public boolean skipInterval(long startMs, long endMs, String feedbackId) {
             return player() != null && player().skipUserAdInterval(startMs, endMs, feedbackId);
         }
+
+        @Override
+        public long audioCandidateStartMs() {
+            return player() == null ? -1L : player().adAudioCandidateStartMs(positionMs());
+        }
+
+        @Override
+        public boolean audioEnabled() {
+            return player() != null && player().isAdAudioEnabled();
+        }
+
+        @Override
+        public boolean audioCaptureReady() {
+            return player() != null && player().isAdAudioCaptureReady();
+        }
+
+        @Override
+        public java.util.List<String> audioMatchedRuleIds(long startMs, long endMs) {
+            return player() == null ? java.util.List.of()
+                    : player().adAudioMatchedRuleIds(startMs, endMs);
+        }
+
+        @Override
+        public int speechHitCount(long startMs, long endMs) {
+            return player() == null ? 0
+                    : player().adAudioMatchHitCount(PlayerManager.speechAdRuleId(), startMs, endMs);
+        }
+
+        @Override
+        public boolean speechEnabled() {
+            return player() != null && player().isSpeechAdEnabled();
+        }
     }
 
     private final class AdFeedbackMetadata implements AdFeedbackHostAdapter.Metadata {
