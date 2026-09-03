@@ -1654,10 +1654,17 @@ public class PlayerManager implements ParseCallback {
 
     public void setTrack(List<Track> tracks) {
         mpvExplicitSubtitlePreference = hasRequestedSubtitle(tracks);
+        if (mpvExplicitSubtitlePreference && engine instanceof MpvPlayerEngine mpv) {
+            mpv.retainSubtitleSurfaceForCurrentItem();
+        }
         if (!tracks.isEmpty()) engine.setTrack(tracks);
     }
 
     public void setSecondarySubtitleTrack(Track track) {
+        if (track != null && !track.isDisabled()
+                && engine instanceof MpvPlayerEngine mpv) {
+            mpv.retainSubtitleSurfaceForCurrentItem();
+        }
         if (engine != null) engine.setSecondarySubtitleTrack(track);
     }
 
@@ -5340,16 +5347,19 @@ public void resetTrack(int type) {
 
     private void prepareMpvOutputForNewItem() {
         resetMpvOutputEvaluationState();
-        mpvExplicitSubtitlePreference = hasRequestedSubtitle(Track.find(getKey()));
+        List<Track> persistedTracks = Track.find(getKey());
+        Track persistedSubtitle = findRequestedSubtitle(persistedTracks);
+        mpvExplicitSubtitlePreference = persistedSubtitle != null;
         if (!(engine instanceof MpvPlayerEngine mpv)) return;
         boolean hwdecOverrideCleared = mpv.clearHwdecOverride();
+        mpv.prepareSubtitleForNewItem(persistedSubtitle);
         boolean dv7HandlingChanged = mpv.resetDv7HandlingForNewItem();
         boolean clearAutoVulkanRenderer = mpvAutoVulkanPinnedForItem;
         mpvAutoVulkanPinnedForItem = false;
         mpvAutoVulkanDisabledForItem = false;
         mpv.setVulkanRenderOverride(null);
         boolean automaticOutput = MpvPerformanceSetting.getOutputMode() == MpvPerformanceSetting.OUTPUT_AUTO;
-        if (automaticOutput) callback.onPlayerOutputPending();
+        if (shouldKeepVideoShutterClosed()) callback.onPlayerOutputPending();
         mpv.setSurfaceDirectOverride(null);
         boolean autoDirectEligible = MpvAutoOutputPolicy.canStartSurfaceDirect(
                 engine.isHard(),
@@ -5570,11 +5580,16 @@ public void resetTrack(int type) {
     }
 
     private boolean hasRequestedSubtitle(List<Track> tracks) {
-        if (tracks == null || tracks.isEmpty()) return false;
+        return findRequestedSubtitle(tracks) != null;
+    }
+
+    private Track findRequestedSubtitle(List<Track> tracks) {
+        if (tracks == null || tracks.isEmpty()) return null;
         for (Track track : tracks) {
-            if (track.getType() == C.TRACK_TYPE_TEXT && track.isSelected() && !track.isDisabled()) return true;
+            if (track.getType() == C.TRACK_TYPE_TEXT
+                    && track.isSelected() && !track.isDisabled()) return track;
         }
-        return false;
+        return null;
     }
 
     private void restoreTrackSelection(List<Track> tracks) {
@@ -8504,6 +8519,9 @@ public void resetTrack(int type) {
                 setTrack(savedTracks);
                 if (RealtimeSubtitleController.get().isEnabled()) disableSubtitleTrackForRealtime();
                 if (PlayerSetting.isPreferAAC(playerType) && !TrackUtil.hasTrack(player, savedTracks, C.TRACK_TYPE_AUDIO)) TrackUtil.preferAAC(player);
+                if (engine instanceof MpvPlayerEngine mpv) {
+                    mpv.completeInitialSubtitleTrackRestore();
+                }
                 callback.onTracksChanged();
                 initTrack = true;
             }
@@ -9097,7 +9115,7 @@ public void resetTrack(int type) {
             setDanmakus(target.getDanmakus());
             waitingLutBeforePlay = false;
             applySubtitleStyle();
-            engine.start(target.checkUa(), position, wasPlayWhenReady);
+            startWithProxy(target, position, wasPlayWhenReady);
             if (speed != 1f) setSpeed(speed);
             setRepeatOne(repeat);
             App.post(runnable, Constant.TIMEOUT_PLAY);

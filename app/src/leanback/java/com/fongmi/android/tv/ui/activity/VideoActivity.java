@@ -78,6 +78,7 @@ import com.fongmi.android.tv.model.SiteViewModel;
 import com.fongmi.android.tv.model.SearchProgress;
 import com.fongmi.android.tv.playback.PlaybackEventCollector;
 import com.fongmi.android.tv.playback.HistoryResumePayload;
+import com.fongmi.android.tv.player.IntroSkipKinds;
 import com.fongmi.android.tv.player.IntroSkipPlayback;
 import com.fongmi.android.tv.player.PlayerHelper;
 import com.fongmi.android.tv.player.PlayerManager;
@@ -441,6 +442,11 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     private View mDialogReturnFocus;
     private Result mPendingDetail;
     private Result mPendingPlayer;
+    private int playerContentGeneration;
+    private int playerContentRequestId;
+    private String playerContentKey = "";
+    private String playerContentFlag = "";
+    private String playerContentEpisode = "";
     private Result mAppliedPlayerResult;
     private AudioPlaybackResolver.Resolved mImmersiveAudioResolved;
     private boolean mImmersiveAudioRequested;
@@ -453,6 +459,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     private boolean tmdbHistoryResumePending;
     private boolean pendingLutImport;
     private boolean playerKernelSwitchRefreshing;
+    private int playerKernelSwitchRequestId;
     private int mPendingPlayerKernel = PlayerSetting.NONE;
 
     private final ActivityResultLauncher<Intent> mLutDir = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
@@ -1291,6 +1298,9 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         getIntent().removeExtra(EXTRA_RESUME_HISTORY_KEY);
         getIntent().putExtras(intent);
         resetPlaybackOwnership();
+        if (mViewModel != null) mViewModel.cancelPlayerContent();
+        invalidatePlayerContent();
+        playerKernelSwitchRequestId++;
         setAudioStageVisible(false);
         restoreImmersiveAudioRequest();
         resetDetailForNewIntent();
@@ -1472,17 +1482,26 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
 
     private void setupIntroSkipConfirmListener() {
         mIntroSkipPlayback.setSkipConfirmListener((segment, action) -> {
-            if (mIntroSkipConfirmDialog != null && mIntroSkipConfirmDialog.isShowing()) return;
-            int messageId = segment.isOpening()
-                ? (segment.getKind() == IntroSkipService.Segment.Kind.INTRO ? R.string.intro_skip_confirm_intro : R.string.intro_skip_confirm_recap)
-                : R.string.intro_skip_confirm_outro;
+            if (mIntroSkipConfirmDialog != null && mIntroSkipConfirmDialog.isShowing()) return false;
             mIntroSkipConfirmDialog = new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
                 .setTitle(R.string.intro_skip_confirm_title)
-                .setMessage(messageId)
+                .setMessage(IntroSkipKinds.confirmMessage(segment))
                 .setPositiveButton(android.R.string.ok, (dialog, which) -> action.run())
                 .setNegativeButton(android.R.string.cancel, null)
                 .show();
+            return true;
         });
+        mIntroSkipPlayback.setSkipNoticeListener(IntroSkipKinds::notifySkipped);
+        mIntroSkipPlayback.setSkipConfirmDismisser(this::dismissIntroSkipConfirm);
+    }
+
+    private void dismissIntroSkipConfirm() {
+        if (mIntroSkipConfirmDialog == null) return;
+        try {
+            mIntroSkipConfirmDialog.dismiss();
+        } catch (Throwable ignored) {
+        }
+        mIntroSkipConfirmDialog = null;
     }
 
     private void setActionFocusScroll() {
@@ -1730,7 +1749,6 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     private void checkCast() {
         if (isCast() && !isFullscreen()) enterFullscreen();
         else if (mAudioStageVisible) mBinding.progressLayout.showContent();
-        else if (shouldLoadTmdbDetail() && Setting.isOriginalEnhancedDetailPage()) mBinding.progressLayout.showProgress();
         else if (hasInitialPreview()) showInitialPreview();
         else mBinding.progressLayout.showProgress();
     }
@@ -1749,7 +1767,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         if (cached == null) return false;
         detailStartTime = System.currentTimeMillis();
         detailHealthRecorded = true;
-        mBinding.progressLayout.showProgress();
+        if (!shouldRevealShellWhileLoading()) mBinding.progressLayout.showProgress();
         SpiderDebug.log("video-flow", "detail cache hit queued key=%s id=%s name=%s", getKey(), getId(), cached.getName());
         if (tryStartFastTmdbPlayback(cached)) {
             return true;
@@ -1866,6 +1884,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         resetAdFeedback();
         prepareFastTmdbPlaybackHistory(item, flag, episode);
         SpiderDebug.log("video-flow", "fast tmdb playback start cost=%dms key=%s flag=%s episode=%s url=%s", System.currentTimeMillis() - start, getKey(), flag.getFlag(), episode.getName(), episode.getUrl());
+        beginPlayerContentRequest(getKey(), flag.getFlag(), episode.getUrl());
         mViewModel.playerContent(getKey(), flag.getFlag(), episode.getUrl(), applyHistoryPlayerKernel());
         mBinding.getRoot().post(() -> hydrateFastTmdbPlaybackDetail(item));
         applyFastTmdbPlaybackFullDetailNextFrame(item);
@@ -2100,8 +2119,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         enrichHistoryMeta(item);
         selectFastTmdbPlaybackEpisode(item, flag, episode);
         updateFastTmdbPlaybackHistory(flag, episode);
-        mBinding.control.action.opening.setText(mHistory.getOpening() <= 0 ? getString(R.string.play_op) : Util.timeMs(mHistory.getOpening()));
-        mBinding.control.action.ending.setText(mHistory.getEnding() <= 0 ? getString(R.string.play_ed) : Util.timeMs(mHistory.getEnding()));
+        setOpeningEndingText();
         float speed = getPlaybackSpeed();
         mBinding.control.action.speed.setText(player().setSpeed(speed));
         PlaybackEventCollector.get().updateHistory(mHistory);
@@ -2169,6 +2187,8 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         mBackdropSignature = null;
         mBackdropSlideshowActive = false;
         if (mViewModel != null) mViewModel.stopSearch();
+        if (mViewModel != null) mViewModel.cancelPlayerContent();
+        invalidatePlayerContent();
         if (mBroken != null) mBroken.clear();
         clearDetailAdapters();
         clearTmdbDetailViews();
@@ -2176,11 +2196,12 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         mBinding.name.setText(getName());
         mBinding.widget.title.setText(getName());
         mBinding.video.requestFocus();
-        updateNavigationKey();
         if (service() != null) {
             player().reset();
             player().stop();
+            player().clear();
         }
+        updateNavigationKey();
         mBinding.progressLayout.showProgress();
     }
 
@@ -2351,7 +2372,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         if (loadTmdbDetail) hideNativePersonalRecommendations();
         else loadNativePersonalRecommendations(item);
         if (loadTmdbDetail && shouldShowTmdbLoadingOverlay()) showTmdbDetailLoading();
-        else if (loadTmdbDetail) SpiderDebug.log("tmdb-tv", "detail loading overlay skipped during fast playback");
+        else if (loadTmdbDetail) revealShellWhileTmdbLoads();
 
         // TMDB 增强：自动匹配并增强 Vod
         if (mTmdbUIAdapter != null && mTmdbUIAdapter.isReady()) {
@@ -2371,7 +2392,15 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     private boolean shouldShowTmdbLoadingOverlay() {
-        return !mFastTmdbPlaybackStarted;
+        return !mFastTmdbPlaybackStarted && !shouldRevealShellWhileLoading();
+    }
+
+    /**
+     * 原生增强把详情与播放放在同一页：进入即揭开页面骨架，加载态只由播放器窗口内那一层表达，
+     * 不再先整页转圈、揭开后再转一次，避免同一次进入出现两层「加载中」。
+     */
+    private boolean shouldRevealShellWhileLoading() {
+        return Setting.isOriginalEnhancedDetailPage();
     }
 
     private void setOriginalEnhancedActionVisibility(boolean hide) {
@@ -2402,6 +2431,22 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         SpiderDebug.log("tmdb-tv", "detail loading show (full-screen progress)");
     }
 
+    /**
+     * 不遮挡整页的加载方式：站源详情到手即揭开骨架（视频窗口、选集、线路都在位），
+     * TMDB 富集在原地补齐。会被 TMDB 覆盖的站源文本先压掉，避免揭开后再跳一次文本。
+     */
+    private void revealShellWhileTmdbLoads() {
+        boolean hiddenByLoading = !mBinding.progressLayout.isContent();
+        if (!mBinding.progressLayout.isContent()) mBinding.progressLayout.showContent();
+        if (shouldUseTmdbLayout()) suppressTmdbNativeTextFields();
+        if (hiddenByLoading && !mBinding.getRoot().hasFocus()) {
+            mBinding.video.post(() -> {
+                if (!mBinding.getRoot().hasFocus()) mBinding.video.requestFocus();
+            });
+        }
+        SpiderDebug.log("tmdb-tv", "detail shell revealed while tmdb loads (single loading layer)");
+    }
+
     // TMDB 数据成功返回：揭开内容（仅一次）并应用 TMDB 字段（每次都应用）
     private void finishTmdbDetail() {
         revealTmdbDetail();
@@ -2413,12 +2458,14 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     // 揭开全屏 loading、一次性显示全部内容，幂等（超时或数据到达都会调用，只执行一次）
     private void revealTmdbDetail() {
         if (mTmdbDetailRevealed) return;
+        boolean hiddenByLoading = !mBinding.progressLayout.isContent();
         mTmdbDetailRevealed = true;
         mTmdbDetailLoading = false;
         App.removeCallbacks(mTmdbDetailTimeout);
         mBinding.progressLayout.showContent();
-        // 内容从 INVISIBLE 恢复为 VISIBLE 后，焦点需要重新回到播放器
-        mBinding.video.post(() -> mBinding.video.requestFocus());
+        // 内容从 INVISIBLE 恢复为 VISIBLE 后，焦点需要重新回到播放器。
+        // 骨架已经先揭开时不能再抢焦点，否则会把用户已经移到选集上的焦点拽回播放器。
+        if (hiddenByLoading) mBinding.video.post(() -> mBinding.video.requestFocus());
         SpiderDebug.log("tmdb-tv", "detail loading reveal (show content)");
     }
 
@@ -2640,6 +2687,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         clearLyrics();
         clearKaraokeState();
         if (shouldUseImmersiveAudio()) setAudioStageVisible(true);
+        beginPlayerContentRequest(getKey(), playFlag, episode.getUrl());
         mViewModel.playerContent(getKey(), playFlag, episode.getUrl(), applyHistoryPlayerKernel());
         mBinding.widget.title.setSelected(true);
         updateHistory(episode);
@@ -2647,7 +2695,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     private void setPlayer(Result result) {
-        if (isFinishing() || isDestroyed()) return;
+        if (result == null || isFinishing() || isDestroyed()) return;
         SpiderDebug.log("video-flow", "player finish cost=%dms useParse=%s multi=%s msg=%s", System.currentTimeMillis() - playerStartTime, result.shouldUseParse(), result.getUrl().isMulti(), result.getMsg());
         if (service() == null) {
             mPendingPlayer = result;
@@ -2712,6 +2760,61 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     private boolean canApplyPlayerResult() {
         if (mFlagAdapter != null && mFlagAdapter.getItemCount() > 0 && mEpisodeAdapter != null && mEpisodeAdapter.getItemCount() > 0) return true;
         return mFastPlaybackFlag != null && mFastPlaybackEpisode != null && mHistory != null;
+    }
+
+    private void beginPlayerContentRequest(String key, String flag, String episode) {
+        mPendingPlayer = null;
+        invalidatePlayerContent();
+        playerContentKey = key;
+        playerContentFlag = flag;
+        playerContentEpisode = episode;
+    }
+
+    private void invalidatePlayerContent() {
+        playerContentGeneration++;
+        playerContentRequestId++;
+        playerKernelSwitchRequestId++;
+        playerContentKey = "";
+        playerContentFlag = "";
+        playerContentEpisode = "";
+        playerKernelSwitchRefreshing = false;
+    }
+
+    private boolean isCurrentPlayerContentContext(String key, String flag, String episode) {
+        Flag currentFlag = getFlag();
+        Episode currentEpisode = getEpisode();
+        return TextUtils.equals(key, getKey())
+                && currentFlag != null
+                && TextUtils.equals(flag, currentFlag.getFlag())
+                && currentEpisode != null
+                && TextUtils.equals(episode, currentEpisode.getUrl());
+    }
+
+    private boolean isCurrentPlayerContentRequest(int requestId, int generation,
+                                                   String key, String flag, String episode) {
+        return !isFinishing() && !isDestroyed()
+                && requestId == playerContentRequestId
+                && generation == playerContentGeneration
+                && isCurrentPlayerContentContext(key, flag, episode);
+    }
+
+    private int beginPlayerContentSwitch(int requestId, String key, String flag, String episode) {
+        playerContentGeneration++;
+        playerContentRequestId = requestId;
+        playerContentKey = key;
+        playerContentFlag = flag;
+        playerContentEpisode = episode;
+        return playerContentGeneration;
+    }
+
+    private boolean canApplyPlayerContentRequest(int requestId, int generation,
+                                                  String key, String flag, String episode) {
+        return isCurrentPlayerContentRequest(requestId, generation, key, flag, episode)
+                && service() != null
+                && player() != null
+                && !player().isReleased()
+                && !player().isEmpty()
+                && isOwner();
     }
 
     private void recordDetailHealth(Result result, long cost) {
@@ -3694,21 +3797,34 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         else onNext(notify);
     }
 
+    /** @return 是否真的切走了。末集/倒序首集切不动，调用方据此决定要不要提示「进入下一集」。 */
+    private boolean advanceEpisode(boolean notify) {
+        return mHistory.isRevPlay() ? onPrev(notify) : onNext(notify);
+    }
+
     private void checkPrev() {
         if (mHistory.isRevPlay()) onNext(true);
         else onPrev(true);
     }
 
-    private void onNext(boolean notify) {
+    private boolean onNext(boolean notify) {
         Episode item = getAdjacentEpisode(1);
-        if (!item.isSelected()) onItemClick(item);
-        else if (notify) Notify.show(mHistory.isRevPlay() ? R.string.error_play_prev : R.string.error_play_next);
+        if (!item.isSelected()) {
+            onItemClick(item);
+            return true;
+        }
+        if (notify) Notify.show(mHistory.isRevPlay() ? R.string.error_play_prev : R.string.error_play_next);
+        return false;
     }
 
-    private void onPrev(boolean notify) {
+    private boolean onPrev(boolean notify) {
         Episode item = getAdjacentEpisode(-1);
-        if (!item.isSelected()) onItemClick(item);
-        else if (notify) Notify.show(mHistory.isRevPlay() ? R.string.error_play_next : R.string.error_play_prev);
+        if (!item.isSelected()) {
+            onItemClick(item);
+            return true;
+        }
+        if (notify) Notify.show(mHistory.isRevPlay() ? R.string.error_play_next : R.string.error_play_prev);
+        return false;
     }
 
     private Episode getAdjacentEpisode(int offset) {
@@ -3888,6 +4004,8 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
 
     private void onRefresh() {
         saveHistory();
+        if (mViewModel != null) mViewModel.cancelPlayerContent();
+        invalidatePlayerContent();
         subtitlePlaybackSession.stop(this);
         player().stop();
         player().clear();
@@ -3918,14 +4036,45 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     private boolean onOpeningReset() {
+        // 长按清空是「这里不要有值」，别紧接着又把探测值渲染上去，看起来像没清掉
+        mIntroSkipPlayback.suppressDetected(true);
         setOpening(0);
         return true;
     }
 
     private void setOpening(long opening) {
         mHistory.setOpening(opening);
-        mBinding.control.action.opening.setText(opening <= 0 ? getString(R.string.play_op) : Util.timeMs(mHistory.getOpening()));
+        setOpeningEndingText();
         syncHistory();
+    }
+
+    /**
+     * 刷新片头/片尾按钮文案。手设值优先，其次显示自动探测值（带 ~ 前缀区分，不落库）。
+     */
+    private void setOpeningEndingText() {
+        if (mBinding == null || mHistory == null) return;
+        mBinding.control.action.opening.setText(openingLabel());
+        mBinding.control.action.ending.setText(endingLabel());
+    }
+
+    private String openingLabel() {
+        if (mHistory.getOpening() > 0) return Util.timeMs(mHistory.getOpening());
+        long detected = detectedIntroSkipValue(true);
+        return detected > 0 ? getString(R.string.intro_skip_detected_value, Util.timeMs(detected)) : getString(R.string.play_op);
+    }
+
+    private String endingLabel() {
+        if (mHistory.getEnding() > 0) return Util.timeMs(mHistory.getEnding());
+        long detected = detectedIntroSkipValue(false);
+        return detected > 0 ? getString(R.string.intro_skip_detected_value, Util.timeMs(detected)) : getString(R.string.play_ed);
+    }
+
+    /** 关掉自动跳过时不显示探测值——那种情况下这个数字不会导致任何动作，显示出来是误导。 */
+    private long detectedIntroSkipValue(boolean opening) {
+        // isReleased 必查：服务已 release 但 Activity 还握着 mService 的窗口里，
+        // PlayerManager.getDuration() 会直接对空的 player 取值抛 NPE
+        if (!Setting.isIntroSkipEnabled() || player() == null || player().isReleased()) return -1;
+        return opening ? mIntroSkipPlayback.getDetectedOpeningMs() : mIntroSkipPlayback.getDetectedEndingMs(player().getDuration());
     }
 
     private void onEnding() {
@@ -3943,13 +4092,14 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     private boolean onEndingReset() {
+        mIntroSkipPlayback.suppressDetected(false);
         setEnding(0);
         return true;
     }
 
     private void setEnding(long ending) {
         mHistory.setEnding(ending);
-        mBinding.control.action.ending.setText(ending <= 0 ? getString(R.string.play_ed) : Util.timeMs(mHistory.getEnding()));
+        setOpeningEndingText();
         syncHistory();
     }
 
@@ -3991,6 +4141,8 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         String flag = currentFlag.getFlag();
         String episode = currentEpisode.getUrl();
         MediaMetadata metadata = buildMetadata();
+        int requestId = ++playerKernelSwitchRequestId;
+        int generation = beginPlayerContentSwitch(requestId, key, flag, episode);
         playerKernelSwitchRefreshing = true;
         mClock.setCallback(null);
         clearLyrics();
@@ -3998,9 +4150,10 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         Task.execute(() -> {
             try {
                 Result result = SiteApi.playerContent(key, flag, episode, nextType);
-                App.post(() -> switchPlayerKernelWithResult(nextType, result, position, speed, repeat, metadata));
+                App.post(() -> switchPlayerKernelWithResult(requestId, generation, key, flag, episode, nextType, result, position, speed, repeat, metadata));
             } catch (Throwable e) {
                 App.post(() -> {
+                    if (!isCurrentPlayerContentRequest(requestId, generation, key, flag, episode)) return;
                     playerKernelSwitchRefreshing = false;
                     setPlayerKernel();
                     setDecode();
@@ -4011,8 +4164,12 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         return true;
     }
 
-    private void switchPlayerKernelWithResult(int type, Result result, long position, float speed, boolean repeat, MediaMetadata metadata) {
+    private void switchPlayerKernelWithResult(int requestId, int generation, String key, String flag, String episode,
+                                              int type, Result result, long position, float speed, boolean repeat, MediaMetadata metadata) {
+        if (requestId != playerKernelSwitchRequestId
+                || !isCurrentPlayerContentRequest(requestId, generation, key, flag, episode)) return;
         playerKernelSwitchRefreshing = false;
+        if (!canApplyPlayerContentRequest(requestId, generation, key, flag, episode)) return;
         // 换内核会重新解析出可能不同的 URL，与换画质同理
         resetAdFeedback();
         if (result == null || result.hasMsg() || result.getRealUrl().isEmpty()) {
@@ -4504,8 +4661,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         if (!TextUtils.isEmpty(getMark())) mHistory.setVodRemarks(getMark());
         applyIntentPlaybackSelection(item);
         if (resumeHistory == null && Setting.isIncognito() && mHistory.getKey().equals(getHistoryKey())) mHistory.delete();
-        mBinding.control.action.opening.setText(mHistory.getOpening() <= 0 ? getString(R.string.play_op) : Util.timeMs(mHistory.getOpening()));
-        mBinding.control.action.ending.setText(mHistory.getEnding() <= 0 ? getString(R.string.play_ed) : Util.timeMs(mHistory.getEnding()));
+        setOpeningEndingText();
         // 如果历史记录中已有有效倍速，使用历史倍速；否则使用默认播放倍速
         float speed = getPlaybackSpeed();
         mBinding.control.action.speed.setText(player().setSpeed(speed));
@@ -5128,7 +5284,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     private void hideSeekProgressIfReady() {
-        if (service() == null || player() == null || player().getPlaybackState() != Player.STATE_READY) return;
+        if (service() == null || player() == null || player().isReleased() || player().isEmpty() || !isOwner() || player().getPlaybackState() != Player.STATE_READY) return;
         showPlaybackContent();
     }
 
@@ -5145,6 +5301,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     private void hidePlaybackProgressIfStale() {
         if (mBinding.progress.getRoot().getVisibility() != View.VISIBLE) return;
         if (service() == null || player() == null || player().isReleased() || player().isEmpty()) return;
+        if (!isOwner()) return;
         if (player().getPlaybackState() != Player.STATE_READY) return;
         showPlaybackContent();
     }
@@ -6619,16 +6776,26 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     private void requestIntroSkipPlan() {
         if (!Setting.isIntroSkipEnabled() || player() == null) {
             mIntroSkipPlayback.reset();
+            setOpeningEndingText();
             return;
         }
         IntroSkipService.Query query = buildIntroSkipQuery();
+        // 切集后 plan 已被 reset，这里先刷一次，避免 query 拿不到时残留上一集的探测值
+        setOpeningEndingText();
         if (query == null) return;
-        mIntroSkipPlayback.request(query, this::applyAutoIntroSkip);
+        mIntroSkipPlayback.request(query, this::onIntroSkipPlanLoaded);
+    }
+
+    private void onIntroSkipPlanLoaded() {
+        setOpeningEndingText();
+        applyAutoIntroSkip();
+        preloadAdjacentIntroSkipPlans();
     }
 
     private boolean applyAutoIntroSkip() {
         if (!Setting.isIntroSkipEnabled() || player() == null) return false;
-        return mIntroSkipPlayback.apply(player(), () -> checkEnded(false));
+        // notify=true：片尾无处可跳（末集/电影）时至少要有提示，不能静默无反应
+        return mIntroSkipPlayback.apply(player(), () -> advanceEpisode(true));
     }
 
     private IntroSkipService.Query buildIntroSkipQuery() {
@@ -6645,6 +6812,30 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         }
         long duration = player() == null ? 0 : Math.max(0, player().getDuration());
         return new IntroSkipService.Query(item.getTmdbId(), getIntroSkipImdbId(), item.getMediaType(), season, number, duration);
+    }
+
+    /**
+     * 预热前后各一集。查询不需要时长（IntroDB 不收，TheIntroDB 可选），所以这里传 0 即可；
+     * 缓存只按剧集身份存原始段，等那一集真开播时按其实际时长折算，不会再走网络。
+     */
+    private void preloadAdjacentIntroSkipPlans() {
+        if (!Setting.isIntroSkipEnabled()) return;
+        TmdbItem item = getIntroSkipTmdbItem();
+        if (item == null || item.getTmdbId() <= 0 || !item.isTv()) return;
+        String imdbId = getIntroSkipImdbId();
+        Episode current = getEpisode();
+        for (int offset : new int[]{1, -1}) {
+            Episode neighbour = getAdjacentEpisode(offset);
+            // getAdjacentEpisode 越界时会夹回当前集，那样预热就是给本集重发一次请求
+            if (neighbour == null || neighbour == current) continue;
+            TmdbEpisode tmdbEpisode = neighbour.getTmdbEpisode();
+            if (tmdbEpisode == null) continue;
+            int season = tmdbEpisode.getSeasonNumber();
+            int number = tmdbEpisode.getNumber();
+            if (season < 0 || number <= 0) continue;
+            IntroSkipService.Query query = new IntroSkipService.Query(item.getTmdbId(), imdbId, item.getMediaType(), season, number, 0);
+            mIntroSkipPlayback.preload(query);
+        }
     }
 
     private TmdbItem getIntroSkipTmdbItem() {

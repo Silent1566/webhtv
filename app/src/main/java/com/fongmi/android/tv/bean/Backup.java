@@ -252,7 +252,9 @@ public class Backup {
     }
 
     private static boolean isAppPref(String key) {
-        return APP_PREFS.contains(key) || key.startsWith("danmaku_") || key.startsWith("playback_performance_") || key.startsWith("perf_exo_") || key.startsWith("perf_mpv_") || key.startsWith("perf_ijk_") || key.startsWith("perf_kernel_");
+        return APP_PREFS.contains(key)
+                || Set.of("update_source", "update_github_proxy", "update_github_proxy_url", "update_github_proxy_mode", "update_oci_mirror", "update_oci_mirror_url").contains(key)
+                || key.startsWith("danmaku_") || key.startsWith("playback_performance_") || key.startsWith("perf_exo_") || key.startsWith("perf_mpv_") || key.startsWith("perf_ijk_") || key.startsWith("perf_kernel_");
     }
 
     private static void restorePrefers(Map<String, ?> values, boolean clear, boolean preserveMissingWebHomePrefs) {

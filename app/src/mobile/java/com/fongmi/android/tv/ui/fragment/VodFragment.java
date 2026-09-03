@@ -48,6 +48,8 @@ import com.fongmi.android.tv.ui.activity.SearchActivity;
 import com.fongmi.android.tv.ui.adapter.TypeAdapter;
 import com.fongmi.android.tv.ui.base.BaseFragment;
 import com.fongmi.android.tv.ui.dialog.ApkPushDialog;
+import com.fongmi.android.tv.ui.dialog.ApkPushMethodDialog;
+import com.fongmi.android.tv.ui.dialog.ApkPushUrlDialog;
 import com.fongmi.android.tv.ui.dialog.FilterDialog;
 import com.fongmi.android.tv.ui.dialog.HistoryDialog;
 import com.fongmi.android.tv.ui.dialog.LinkDialog;
@@ -305,6 +307,23 @@ public class VodFragment extends BaseFragment implements ConfigListener, SiteLis
     }
 
     private void onApkDeviceSelected(Device device) {
+        App.post(() -> {
+            if (!isAdded()) return;
+            ApkPushMethodDialog.create(device).listener(new ApkPushMethodDialog.Listener() {
+                @Override
+                public void onLocal(Device device) {
+                    selectLocalApk(device);
+                }
+
+                @Override
+                public void onLink(Device device) {
+                    ApkPushUrlDialog.create(device).show(requireActivity());
+                }
+            }).show(requireActivity());
+        });
+    }
+
+    private void selectLocalApk(Device device) {
         pendingApkDevice = device;
         App.post(() -> {
             if (isAdded()) apkLauncher.launch(new String[]{"application/vnd.android.package-archive", "application/octet-stream"});

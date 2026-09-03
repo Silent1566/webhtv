@@ -50,4 +50,25 @@ public class MpvOsdSurfacePolicyTest {
         assertTrue(MpvOsdSurfacePolicy.needsCurrentTrackQuery(
                 true, "", "no"));
     }
+
+    @Test
+    public void unusedSurfaceStaysDetached() {
+        assertFalse(MpvOsdSurfacePolicy.shouldKeepSurface(false, false));
+    }
+
+    @Test
+    public void surfaceStaysAttachedAfterFirstSubtitleUse() {
+        assertTrue(MpvOsdSurfacePolicy.shouldKeepSurface(false, true));
+        assertTrue(MpvOsdSurfacePolicy.shouldKeepSurface(true, false));
+    }
+
+    @Test
+    public void requestedOsdWaitsForVideoDetachDuringWindowLoss() {
+        assertTrue(MpvOsdSurfacePolicy.shouldDeferDestroyedSurfaceDetach(
+                true, true));
+        assertFalse(MpvOsdSurfacePolicy.shouldDeferDestroyedSurfaceDetach(
+                true, false));
+        assertFalse(MpvOsdSurfacePolicy.shouldDeferDestroyedSurfaceDetach(
+                false, true));
+    }
 }

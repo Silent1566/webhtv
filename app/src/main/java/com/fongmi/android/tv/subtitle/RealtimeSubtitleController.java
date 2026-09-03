@@ -86,6 +86,7 @@ public final class RealtimeSubtitleController {
     private volatile int modelDownloadProgress;
     private volatile String modelDownloadFile = "";
     private volatile int generation;
+    private volatile String activeModelId = "";
     private volatile long latestCapturedUs;
     private WeakReference<PlayerView> playerView = new WeakReference<>(null);
     private WeakReference<PlayerManager> playerManager = new WeakReference<>(null);
@@ -239,63 +240,107 @@ public final class RealtimeSubtitleController {
         if (enabled || preparing || player == null || player.isReleased()) return;
         playerManager = new WeakReference<>(player);
         preparing = true;
-        modelDownloadProgress = isModelReady() ? 100 : 0;
+        ModelSpec spec = selectedModel();
+        modelDownloadProgress = isModelReady(spec) ? 100 : 0;
         modelDownloadFile = "";
         int request = ++generation;
         resetTimeline(false);
-        ModelSpec spec = selectedModel();
-        notifyState(State.PREPARING, "");
-        worker.execute(() -> {
-            try {
-                ensureModel(spec, (percent, fileName) -> notifyState(State.PREPARING, String.valueOf(percent)), () -> request != generation);
-                if (request != generation) return;
-                validateMemory(spec);
-                releaseRecognizer();
-                RealtimeSubtitleRecognizer createdRecognizer = RealtimeSubtitleRecognizer.create(modelDirectory(spec), vadFile(), spec, new RealtimeSubtitleRecognizer.Listener() {
-                    @Override
-                    public void onResult(String text, long startUs, long endUs, int timelineToken) {
-                        translateFinalResult(spec.id(), text, startUs, endUs, timelineToken);
-                    }
+        notifyState(request, State.PREPARING, "");
+        worker.execute(() -> prepareModel(request, spec, false));
+    }
 
-                    @Override
-                    public void onError(Throwable error) {
-                        worker.execute(() -> failRecognizer(error));
-                    }
-                });
-                RealtimeSubtitleTranslator createdTranslator;
-                try {
-                    createdTranslator = new RealtimeSubtitleTranslator(AiConfig.objectFrom(Setting.getAiConfig()));
-                } catch (Throwable error) {
-                    createdRecognizer.release();
-                    throw error;
+    public synchronized void switchModel(PlayerManager player) {
+        if (player == null || player.isReleased() || !enabled && !preparing) return;
+        playerManager = new WeakReference<>(player);
+        enabled = false;
+        preparing = true;
+        ModelSpec spec = selectedModel();
+        modelDownloadProgress = isModelReady(spec) ? 100 : 0;
+        modelDownloadFile = "";
+        int request = ++generation;
+        timelineGeneration.incrementAndGet();
+        audioQueue.clear();
+        main.removeCallbacks(cueTicker);
+        resetTimeline(false);
+        notifyState(request, State.PREPARING, "");
+        worker.execute(() -> prepareModel(request, spec, true));
+    }
+
+    private void prepareModel(int request, ModelSpec spec, boolean replacing) {
+        RealtimeSubtitleRecognizer previousRecognizer = replacing ? recognizer : null;
+        RealtimeSubtitleTranslator previousTranslator = replacing ? translator : null;
+        try {
+            if (replacing) resetRecognizer(previousRecognizer, previousTranslator);
+            ensureModel(spec, (percent, fileName) -> notifyState(request, State.PREPARING, String.valueOf(percent)), () -> request != generation);
+            if (request != generation) return;
+            validateMemory(spec);
+            if (!replacing) releaseRecognizer();
+            RealtimeSubtitleRecognizer createdRecognizer = RealtimeSubtitleRecognizer.create(modelDirectory(spec), vadFile(), spec, new RealtimeSubtitleRecognizer.Listener() {
+                @Override
+                public void onResult(String text, long startUs, long endUs, int timelineToken) {
+                    if (request != generation) return;
+                    translateFinalResult(spec.id(), text, startUs, endUs, timelineToken);
                 }
+
+                @Override
+                public void onError(Throwable error) {
+                    if (request != generation) return;
+                    worker.execute(() -> {
+                        if (request != generation) return;
+                        failRecognizer(error, request);
+                    });
+                }
+            });
+            RealtimeSubtitleTranslator createdTranslator;
+            try {
+                createdTranslator = new RealtimeSubtitleTranslator(AiConfig.objectFrom(Setting.getAiConfig()));
+            } catch (Throwable error) {
+                createdRecognizer.release();
+                throw error;
+            }
+            synchronized (this) {
+                if (request != generation) {
+                    createdRecognizer.release();
+                    createdTranslator.release();
+                    return;
+                }
+                recognizer = createdRecognizer;
+                translator = createdTranslator;
+                activeModelId = spec.id();
+                previousChunkEndUs = C.TIME_UNSET;
+                enabled = true;
+                preparing = false;
+            }
+            releaseRecognizer(previousRecognizer, previousTranslator);
+            main.post(() -> {
+                if (request != generation || !enabled) return;
+                disableNativeSubtitle();
+                startCueTicker();
+            });
+            notifyState(request, State.ON, "");
+        } catch (Throwable e) {
+            if (request != generation || DOWNLOAD_CANCELLED.equals(e.getMessage())) return;
+            if (replacing && (previousRecognizer != null || previousTranslator != null)) {
                 synchronized (this) {
-                    if (request != generation) {
-                        createdRecognizer.release();
-                        createdTranslator.release();
-                        return;
-                    }
-                    recognizer = createdRecognizer;
-                    translator = createdTranslator;
-                    previousChunkEndUs = C.TIME_UNSET;
+                    if (request != generation) return;
                     enabled = true;
                     preparing = false;
+                    if (!TextUtils.isEmpty(activeModelId)) Setting.putRealtimeSubtitleModel(activeModelId);
                 }
                 main.post(() -> {
-                    disableNativeSubtitle();
+                    if (request != generation || !enabled) return;
                     startCueTicker();
                 });
-                notifyState(State.ON, "");
-            } catch (Throwable e) {
-                if (request != generation || DOWNLOAD_CANCELLED.equals(e.getMessage())) return;
-                enabled = false;
-                preparing = false;
-                releaseMediaSignals();
-                releaseRecognizer();
-                main.post(() -> restorePlayback(true));
-                notifyState(State.ERROR, message(e));
+                notifyState(request, State.ON, message(e));
+                return;
             }
-        });
+            enabled = false;
+            preparing = false;
+            releaseMediaSignals();
+            releaseRecognizer();
+            main.post(() -> restorePlayback(true));
+            notifyState(request, State.ERROR, message(e));
+        }
     }
 
     public synchronized void disable() {
@@ -352,6 +397,7 @@ public final class RealtimeSubtitleController {
 
     private void drainAudio() {
         if (!draining.compareAndSet(false, true)) return;
+        int drainGeneration = generation;
         worker.execute(() -> {
             try {
                 AudioChunk chunk;
@@ -359,7 +405,7 @@ public final class RealtimeSubtitleController {
                     if (chunk.generation() == generation && chunk.timelineGeneration() == timelineGeneration.get()) transcribe(chunk);
                 }
             } catch (Throwable e) {
-                failRecognizer(e);
+                failRecognizer(e, drainGeneration);
             } finally {
                 draining.set(false);
                 if (enabled && !audioQueue.isEmpty()) drainAudio();
@@ -385,8 +431,9 @@ public final class RealtimeSubtitleController {
         current.translate(sourceLanguage, text, translated -> enqueueCue(translated, startUs, endUs, timelineToken));
     }
 
-    private void failRecognizer(Throwable error) {
+    private synchronized void failRecognizer(Throwable error, int expectedGeneration) {
         synchronized (this) {
+            if (expectedGeneration != generation) return;
             if (!enabled && !preparing) return;
             generation++;
             timelineGeneration.incrementAndGet();
@@ -634,10 +681,21 @@ public final class RealtimeSubtitleController {
     }
 
     private void releaseRecognizer() {
-        if (translator != null) translator.release();
-        if (recognizer != null) recognizer.release();
+        RealtimeSubtitleRecognizer currentRecognizer = recognizer;
+        RealtimeSubtitleTranslator currentTranslator = translator;
         recognizer = null;
         translator = null;
+        releaseRecognizer(currentRecognizer, currentTranslator);
+    }
+
+    private void resetRecognizer(RealtimeSubtitleRecognizer recognizer, RealtimeSubtitleTranslator translator) {
+        if (translator != null) translator.reset();
+        if (recognizer != null) recognizer.reset();
+    }
+
+    private void releaseRecognizer(RealtimeSubtitleRecognizer recognizer, RealtimeSubtitleTranslator translator) {
+        if (translator != null) translator.release();
+        if (recognizer != null) recognizer.release();
         previousChunkEndUs = C.TIME_UNSET;
     }
 
@@ -726,6 +784,14 @@ public final class RealtimeSubtitleController {
     private void runOnMain(Runnable action) {
         if (Looper.myLooper() == Looper.getMainLooper()) action.run();
         else main.post(action);
+    }
+
+    private void notifyState(int expectedGeneration, State state, String message) {
+        main.post(() -> {
+            if (expectedGeneration != generation) return;
+            Listener callback = listener.get();
+            if (callback != null) callback.onStateChanged(state, message == null ? "" : message);
+        });
     }
 
     private void notifyState(State state, String message) {

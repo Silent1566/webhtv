@@ -31,6 +31,22 @@ public class HistorySeasonSnapshotProjectionTest {
     }
 
     @Test
+    public void movieRouteDoesNotConsumeTvSeasonSnapshotWithCollidingIdentity() {
+        History movie = history("movie", 88, 100, "site-a@@@vod-a");
+        movie.setCid(7);
+        movie.setPosition(120);
+        TmdbSeasonProgress tvSnapshot = TmdbSeasonProgress.of(
+                7, "tv", 88, 6, 1, 1_080_193, 2_276_000, movie.getKey());
+        tvSnapshot.updatedAt = 300;
+
+        List<History> result = HistoryDisplayPolicy.project(List.of(movie), List.of(tvSnapshot), true);
+
+        assertEquals(1, result.size());
+        assertEquals(120, result.get(0).getPosition());
+        assertEquals(0, result.get(0).getTmdbSeasonNumber());
+    }
+
+    @Test
     public void newerUnknownHistoryRouteStaysBesideOldSnapshot() {
         History unknown = history("tv", 88, 300, "site-a@@@vod-a");
         unknown.setCid(7);

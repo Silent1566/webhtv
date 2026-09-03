@@ -158,6 +158,7 @@ public final class TrackDialog extends BaseBottomSheetDialog implements TrackAda
         binding.search.setOnClickListener(this::onSearch);
         binding.ai.setOnClickListener(this::onAiTranslate);
         binding.realtimeAi.setOnClickListener(this::onRealtimeAi);
+        binding.realtimeLanguage.setOnClickListener(this::onRealtimeLanguage);
         binding.aiRegenerate.setOnClickListener(this::onAiRegenerate);
         binding.subtitle.setOnClickListener(this::onSubtitle);
     }
@@ -175,6 +176,8 @@ public final class TrackDialog extends BaseBottomSheetDialog implements TrackAda
         binding.search.setVisibility(hasSearch() ? View.VISIBLE : View.GONE);
         binding.ai.setVisibility(hasAi() ? View.VISIBLE : View.GONE);
         binding.realtimeAi.setVisibility(hasRealtimeAi() ? View.VISIBLE : View.GONE);
+        binding.realtimeLanguage.setVisibility(hasRealtimeAi() ? View.VISIBLE : View.GONE);
+        updateRealtimeLanguage();
         updateRealtimeButton();
         binding.aiRegenerate.setVisibility(hasAiRegenerate() ? View.VISIBLE : View.GONE);
         binding.aiStatus.setVisibility(View.GONE);
@@ -234,27 +237,58 @@ public final class TrackDialog extends BaseBottomSheetDialog implements TrackAda
             return;
         }
         if (!controller.isModelReady()) {
-            showRealtimeModelSelection();
+            showRealtimeModelSelection(true);
             return;
         }
         enableRealtimeAi();
     }
 
     private void showRealtimeModelSelection() {
+        showRealtimeModelSelection(true);
+    }
+
+    private void onRealtimeLanguage(View view) {
+        showRealtimeModelSelection(false);
+    }
+
+    private void showRealtimeModelSelection(boolean startAfterSelection) {
         String[] labels = ResUtil.getStringArray(R.array.select_realtime_subtitle_model);
         String[] values = ResUtil.getStringArray(R.array.select_realtime_subtitle_model_value);
+        String currentValue = Setting.getRealtimeSubtitleModel();
         int checked = 0;
         for (int i = 0; i < values.length; i++) {
-            if (TextUtils.equals(values[i], Setting.getRealtimeSubtitleModel())) {
+            if (TextUtils.equals(values[i], currentValue)) {
                 checked = i;
                 break;
             }
         }
         SubtitleSettingsDialog.showRealtimeModel(requireActivity(), labels, checked, false, index -> {
             if (index < 0 || index >= values.length) return;
+            boolean changed = !TextUtils.equals(currentValue, values[index]);
             Setting.putRealtimeSubtitleModel(values[index]);
-            enableRealtimeAi();
+            updateRealtimeLanguage();
+            RealtimeSubtitleController controller = RealtimeSubtitleController.get();
+            if (controller.isEnabled() || controller.isPreparing()) {
+                if (changed) controller.switchModel(player);
+                return;
+            }
+            if (startAfterSelection) enableRealtimeAi();
         }, null);
+    }
+
+    private void updateRealtimeLanguage() {
+        if (!isUiAlive()) return;
+        String[] labels = ResUtil.getStringArray(R.array.select_realtime_subtitle_language);
+        String[] values = ResUtil.getStringArray(R.array.select_realtime_subtitle_model_value);
+        String selected = Setting.getRealtimeSubtitleModel();
+        int index = 0;
+        for (int i = 0; i < values.length; i++) {
+            if (TextUtils.equals(values[i], selected)) {
+                index = i;
+                break;
+            }
+        }
+        binding.realtimeLanguageText.setText(labels != null && index < labels.length ? labels[index] : selected);
     }
 
     private void enableRealtimeAi() {
@@ -294,6 +328,7 @@ public final class TrackDialog extends BaseBottomSheetDialog implements TrackAda
     @Override
     public void onStateChanged(RealtimeSubtitleController.State state, String message) {
         realtimeState = state;
+        updateRealtimeLanguage();
         updateRealtimeButton();
         if (!isUiAlive()) return;
         switch (state) {
@@ -302,7 +337,10 @@ public final class TrackDialog extends BaseBottomSheetDialog implements TrackAda
                 if (progress > 0) showAiStatus(getString(R.string.subtitle_realtime_preparing_progress, progress));
                 else showAiStatus(R.string.subtitle_realtime_preparing);
             }
-            case ON -> showAiStatus(R.string.subtitle_realtime_on);
+            case ON -> {
+                if (TextUtils.isEmpty(message)) showAiStatus(R.string.subtitle_realtime_on);
+                else showAiMessage(getString(R.string.subtitle_realtime_failed, message));
+            }
             case ERROR -> showAiMessage(getString(R.string.subtitle_realtime_failed, message));
             case OFF -> {
                 if (!aiTranslating) showAiStatus("");

@@ -26,6 +26,9 @@ import com.fongmi.android.tv.bean.TmdbMatchCache;
 import com.fongmi.android.tv.bean.TmdbSeasonMatchCache;
 import com.fongmi.android.tv.bean.Update;
 import com.fongmi.android.tv.utils.AppCache;
+import com.fongmi.android.tv.update.GithubProxy;
+import com.fongmi.android.tv.update.OciMirror;
+import com.fongmi.android.tv.update.UpdateSource;
 import com.fongmi.android.tv.utils.WebViewUtil;
 import com.github.catvod.crawler.DebugLogStore;
 import com.github.catvod.crawler.SpiderDebug;
@@ -72,6 +75,12 @@ public class Setting {
     public static final int INTRO_SKIP_OFF = 0;
     public static final int INTRO_SKIP_AUTO = 1;
     public static final int INTRO_SKIP_CONFIRM = 2;
+    public static final int INTRO_SKIP_KIND_RECAP = 1;
+    public static final int INTRO_SKIP_KIND_INTRO = 1 << 1;
+    public static final int INTRO_SKIP_KIND_OUTRO = 1 << 2;
+    public static final int INTRO_SKIP_KIND_PREVIEW = 1 << 3;
+    public static final int INTRO_SKIP_KIND_ALL = INTRO_SKIP_KIND_RECAP | INTRO_SKIP_KIND_INTRO | INTRO_SKIP_KIND_OUTRO | INTRO_SKIP_KIND_PREVIEW;
+    public static final int INTRO_SKIP_KIND_DEFAULT = INTRO_SKIP_KIND_RECAP | INTRO_SKIP_KIND_INTRO | INTRO_SKIP_KIND_OUTRO;
     public static final int DETAIL_INTERACTION_ORIGINAL = 1;
     public static final int DETAIL_THEME_CURRENT = DETAIL_STYLE_NATIVE;
     private static final Type STRING_LIST = new TypeToken<List<String>>() {}.getType();
@@ -718,13 +727,52 @@ public class Setting {
         Prefers.put("update", update);
     }
 
-    public static String getUpdateChannel() {
-        String channel = Prefers.getString("update_channel", Update.CHANNEL_STABLE);
-        return Update.CHANNEL_BETA.equals(channel) ? Update.CHANNEL_BETA : Update.CHANNEL_STABLE;
+    public static String getUpdateSource() {
+        return UpdateSource.normalize(Prefers.getString("update_source", UpdateSource.OCI));
     }
 
-    public static void putUpdateChannel(String channel) {
-        Prefers.put("update_channel", Update.CHANNEL_BETA.equals(channel) ? Update.CHANNEL_BETA : Update.CHANNEL_STABLE);
+    public static void putUpdateSource(String source) {
+        Prefers.put("update_source", UpdateSource.normalize(source));
+    }
+
+    public static String getUpdateGithubProxy() {
+        return GithubProxy.find(Prefers.getString("update_github_proxy", GithubProxy.DIRECT)).id;
+    }
+
+    public static void putUpdateGithubProxy(String proxy) {
+        Prefers.put("update_github_proxy", GithubProxy.find(proxy).id);
+    }
+
+    public static String getUpdateGithubProxyUrl() {
+        return Prefers.getString("update_github_proxy_url");
+    }
+
+    public static void putUpdateGithubProxyUrl(String url) {
+        Prefers.put("update_github_proxy_url", url == null ? "" : url.trim());
+    }
+
+    public static String getUpdateGithubProxyMode() {
+        return GithubProxy.normalizeMode(Prefers.getString("update_github_proxy_mode", GithubProxy.MODE_FULL_URL));
+    }
+
+    public static void putUpdateGithubProxyMode(String mode) {
+        Prefers.put("update_github_proxy_mode", GithubProxy.normalizeMode(mode));
+    }
+
+    public static String getUpdateOciMirror() {
+        return OciMirror.find(Prefers.getString("update_oci_mirror", OciMirror.DEFAULT)).id;
+    }
+
+    public static void putUpdateOciMirror(String mirror) {
+        Prefers.put("update_oci_mirror", OciMirror.find(mirror).id);
+    }
+
+    public static String getUpdateOciMirrorUrl() {
+        return Prefers.getString("update_oci_mirror_url");
+    }
+
+    public static void putUpdateOciMirrorUrl(String url) {
+        Prefers.put("update_oci_mirror_url", url == null ? "" : url.trim());
     }
 
     public static String getGithubProxy() {
@@ -873,11 +921,11 @@ public class Setting {
         Prefers.put("ai_ad_detection", enabled);
     }
 
-    public static TmdbMatchCache getTmdbMatchCache() {
+    public static synchronized TmdbMatchCache getTmdbMatchCache() {
         return TmdbMatchCache.objectFrom(AppCache.get(AppCache.KEY_TMDB_MATCH));
     }
 
-    public static void putTmdbMatchCache(TmdbMatchCache cache) {
+    public static synchronized void putTmdbMatchCache(TmdbMatchCache cache) {
         AppCache.put(AppCache.KEY_TMDB_MATCH, App.gson().toJson(cache));
     }
 
@@ -1368,6 +1416,22 @@ public class Setting {
 
     public static void putAutoSkipIntroOutro(boolean enabled) {
         putIntroSkipMode(enabled ? INTRO_SKIP_AUTO : INTRO_SKIP_OFF);
+    }
+
+    /**
+     * 允许跳过的片段类型位掩码。默认回顾 + 片头 + 片尾，预告不默认开——预告在片尾之后，
+     * 跳掉它等于直接进下一集，属于更激进的行为，让用户自己选。
+     */
+    public static int getIntroSkipKinds() {
+        return Prefers.getInt("intro_skip_kinds", INTRO_SKIP_KIND_DEFAULT);
+    }
+
+    public static void putIntroSkipKinds(int kinds) {
+        Prefers.put("intro_skip_kinds", kinds & INTRO_SKIP_KIND_ALL);
+    }
+
+    public static boolean isIntroSkipKindEnabled(int kind) {
+        return (getIntroSkipKinds() & kind) != 0;
     }
 
     public static int getSearchUi() {

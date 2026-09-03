@@ -269,6 +269,19 @@
     <string name="intro_skip_confirm_intro">Skip intro</string>
     <string name="intro_skip_confirm_recap">Skip recap</string>
     <string name="intro_skip_confirm_outro">Skip outro</string>
+    <string name="intro_skip_confirm_preview">Skip next-episode preview</string>
+    <!-- Detected (not user-set) intro/outro time shown on the control bar; %1$s is the timestamp -->
+    <string name="intro_skip_detected_value">~%1$s</string>
+    <string name="intro_skip_kind_recap">Recap</string>
+    <string name="intro_skip_kind_intro">Intro</string>
+    <string name="intro_skip_kind_outro">Outro</string>
+    <string name="intro_skip_kind_preview">Preview</string>
+    <string name="setting_intro_skip_kinds">Segments to skip</string>
+    <string name="intro_skip_kinds_none">None</string>
+    <string name="intro_skip_kinds_all">All</string>
+    <!-- Shown after an automatic skip; %1$s is the segment type -->
+    <string name="intro_skip_notice_seeked">Skipped %1$s</string>
+    <string name="intro_skip_notice_ended">Skipped %1$s, going to the next episode</string>
     <string name="personal_recommendation_confirm_title">Enable personal recommendations</string>
     <string name="personal_recommendation_confirm_message">Personal recommendations read movie and show titles from local viewing history, and may send the current title and history titles to TMDB or Douban as search keywords to build related lists.\n\nPlayback URLs, account information, source configuration, and playback progress are not sent. You can turn this off at any time.</string>
     <string name="setting_search_thread">Search threads</string>
@@ -1264,6 +1277,7 @@
     <string name="subtitle_manual_apply_failed">Subtitle found but could not be applied</string>
     <string name="subtitle_manual_inactive">Start playback before searching subtitles</string>
     <string name="player_subtitle_realtime_model">Real-time recognition language</string>
+    <string name="subtitle_realtime_source_language">Original audio language</string>
     <string name="subtitle_realtime_model_status">%1$s · %2$s</string>
     <string name="subtitle_realtime_model_select_title">Select audio source language</string>
     <string name="subtitle_realtime_model_delete_action">Delete model</string>
@@ -1509,6 +1523,38 @@
     <string name="update_backup_done">Backup completed, starting update</string>
     <string name="update_backup_failed">Backup failed, will continue update anyway</string>
     <string name="update_backup_permission_denied">Storage permission denied, cannot backup, will continue update anyway</string>
+    <string name="update_settings">Update settings</string>
+    <string name="update_settings_title">Update settings</string>
+    <string name="update_settings_source">Download method</string>
+    <string name="update_source_github">GitHub</string>
+    <string name="update_source_oci">OCI</string>
+    <string name="update_github_proxy">GitHub proxy</string>
+    <string name="update_github_proxy_value">GitHub proxy · %1$s</string>
+    <string name="update_oci_mirror">OCI Registry mirror</string>
+    <string name="update_oci_mirror_value">OCI mirror · %1$s</string>
+    <string name="update_custom_url">Custom HTTPS origin</string>
+    <string name="update_proxy_mode_full">Full URL prefix</string>
+    <string name="update_proxy_mode_strip">Remove https://</string>
+    <string name="update_proxy_direct">Direct</string>
+    <string name="update_proxy_custom">Custom</string>
+    <string name="update_proxy_invalid">Enter a valid HTTPS origin without credentials or a path.</string>
+    <string name="update_settings_save">Save</string>
+    <string name="update_settings_saved">Update settings saved</string>
+    <string name="apk_push_url_busy">Another APK link download is already active</string>
+    <string name="apk_push_url_schedule_failed">Unable to start the APK link download</string>
+    <string name="apk_push_url_downloading">APK link received. Downloading on this device...</string>
+    <string name="apk_push_url_install_ready">APK downloaded. Confirm installation.</string>
+    <string name="apk_push_url_download_failed">APK link download failed: %1$s</string>
+    <string name="apk_push_url_progress_title">Receiving APK</string>
+    <string name="apk_push_url_progress_hint">Downloading the APK sent over your LAN. Android will still ask you to confirm installation.</string>
+    <string name="apk_push_url_progress_known">Receiving %1$d%% · %2$s / %3$s</string>
+    <string name="apk_push_url_progress_unknown">Received %1$s</string>
+    <string name="apk_push_url_progress_detail_remaining">%1$s/s · %2$s left · %3$s elapsed</string>
+    <string name="apk_push_url_progress_detail">%1$s/s · %2$s elapsed</string>
+    <string name="apk_push_url_cancel">Cancel download</string>
+    <string name="apk_push_url_canceled">APK download canceled</string>
+    <string name="update_download_identity">The update package identity or signature does not match this app.</string>
+    <string name="update_download_source_unavailable">The selected update source is not available for this release.</string>
 
     <!-- Crash -->
     <string name="crash_info">An unexpected error occurred.\nSorry for the inconvenience.</string>
@@ -1750,6 +1796,16 @@
         <item>es</item>
         <item>ja</item>
         <item>zh-en</item>
+    </string-array>
+    <string-array name="select_realtime_subtitle_language">
+        <item>Mandarin</item>
+        <item>Cantonese</item>
+        <item>English</item>
+        <item>German</item>
+        <item>French</item>
+        <item>Spanish</item>
+        <item>Japanese</item>
+        <item>Chinese + English</item>
     </string-array>
     <string-array name="select_subtitle_language">
         <item>Chinese first</item>

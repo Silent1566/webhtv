@@ -18,7 +18,7 @@ public class TmdbEpisodeWiringTest {
         assertTrue(activity.contains("addMetaChip(episodeInfo.detailText(this));"));
         assertTrue(activity.contains("if (!episodeInfo.isSeasonScoped())"));
         assertTrue(activity.contains("addMetaChip(currentSeasonContextLabel());"));
-        assertTrue(activity.contains("String progress = tmdbEpisodeInfo().compactText(this);"));
+        assertTrue(activity.contains("historyEpisodeTitle(selectedEpisode)"));
         assertTrue(activity.contains("item.setRemarks(coalesce(tmdbEpisodeInfo().detailText(this), getMarkText(), vod.getRemarks()));"));
     }
 

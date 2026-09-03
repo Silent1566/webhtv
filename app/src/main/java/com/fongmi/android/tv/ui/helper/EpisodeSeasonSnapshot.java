@@ -51,6 +51,31 @@ public final class EpisodeSeasonSnapshot {
         return structureFingerprint(episodes, null);
     }
 
+    /**
+     * Order-insensitive shape digest for manual bindings.
+     * <p>TMDB 富集会在会话中途重排选集（见 TmdbEpisodeSorter），排序前后按位置算出的摘要必然不同，
+     * 于是手动季度绑定每次重进都会被当成"源结构变了"而丢弃。这里比较 (集号, 名称) 的多重集合，
+     * 既不受排序影响，又仍能识别新增、删除与改名。
+     */
+    public static String stableStructureFingerprint(List<Episode> episodes) {
+        MessageDigest digest = sha256();
+        update(digest, "episodes-stable");
+        if (episodes == null) {
+            update(digest, "<null>");
+            return hex(digest.digest());
+        }
+        update(digest, Integer.toString(episodes.size()));
+        List<String> entries = new ArrayList<>(episodes.size());
+        for (Episode episode : episodes) {
+            String name = episode == null ? "<null>" : Objects.toString(episode.getName(), "");
+            int number = episode == null ? -1 : episode.getNumber();
+            entries.add(number + "" + name);
+        }
+        entries.sort(Comparator.naturalOrder());
+        for (String entry : entries) update(digest, entry);
+        return hex(digest.digest());
+    }
+
     /** Persistent route digest; includes TMDB season counts used by automatic slicing. */
     public static String structureFingerprint(List<Episode> episodes, Map<Integer, Integer> seasonCounts) {
         MessageDigest digest = sha256();

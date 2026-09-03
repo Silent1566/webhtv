@@ -109,6 +109,7 @@ import com.fongmi.android.tv.ui.host.TmdbDetailHost;
 import com.fongmi.android.tv.playback.PlaybackEventCollector;
 import com.fongmi.android.tv.playback.HistoryResumePayload;
 import com.fongmi.android.tv.playback.PlaybackOrientation;
+import com.fongmi.android.tv.player.IntroSkipKinds;
 import com.fongmi.android.tv.player.IntroSkipPlayback;
 import com.fongmi.android.tv.player.PlayerManager;
 import com.fongmi.android.tv.player.PlayerHelper;
@@ -275,6 +276,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private final TmdbService tmdbService = new TmdbService();
     private final Task.Scope detailTasks = new Task.Scope(Task.executor());
     private final IntroSkipPlayback introSkipPlayback = new IntroSkipPlayback();
+    private androidx.appcompat.app.AlertDialog introSkipConfirmDialog;
+    private boolean introSkipListenersReady;
     private final SubtitlePlaybackSession subtitlePlaybackSession = new SubtitlePlaybackSession(this);
     private final List<TmdbPerson> detailCastItems = new ArrayList<>();
     private final List<TmdbPerson> castItems = new ArrayList<>();
@@ -734,6 +737,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             player().stop();
             player().clear();
         }
+        updateNavigationKey();
         binding.loading.setVisibility(View.VISIBLE);
         setLoadingOnlyBeforeDefaultPlayback(shouldUseLoadingOnlyBeforeDefaultPlayback());
         hideInlineLoading();
@@ -2489,11 +2493,13 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             if (initialTmdbItem != null) {
                 tmdbBundle = loadTmdbBundle(initialTmdbItem);
             } else {
+                boolean manual = isManualTmdbMatch();
                 TmdbItem match = getCachedTmdbMatch();
                 if (match != null) {
                     try {
                         tmdbBundle = loadTmdbBundle(match);
-                        if (TmdbMatchPolicy.isUnwantedSplitSeasonVariant(getNameText(), tmdbBundle.detail())) {
+                        // 手动选择由用户拍板，分季变体检查只用于过滤自动匹配的误命中。
+                        if (!manual && TmdbMatchPolicy.isUnwantedSplitSeasonVariant(getNameText(), tmdbBundle.detail())) {
                             logTmdbMatch("缓存匹配跳过：当前标题=%s，缓存标题=%s，TMDB=%d 是分季变体", getNameText(), match.getTitle(), match.getTmdbId());
                             match = null;
                             tmdbBundle = null;
@@ -3229,7 +3235,11 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
 
     private TmdbItem getCachedTmdbMatch() {
         if (!isTmdbAllowedForCurrentSite()) return null;
-        TmdbItem item = Setting.getTmdbMatchCache().find(getKeyText(), getIdText(), getTmdbRawTitle());
+        TmdbMatchCache cache = Setting.getTmdbMatchCache();
+        // 手动选择优先，且不做标题兼容性校验：用户之所以手动选，正是因为标题解析结果不对。
+        TmdbItem manual = cache.findManual(getKeyText(), getIdText(), getTmdbRawTitle());
+        if (manual != null) return manual;
+        TmdbItem item = cache.find(getKeyText(), getIdText(), getTmdbRawTitle());
         if (!isCachedTmdbMatchCompatible(item)) return null;
         return item;
     }
@@ -3255,11 +3265,52 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         return TmdbSitePolicy.isEnabled(tmdbConfig, getKeyText(), getIdText());
     }
 
+    private boolean isManualTmdbMatch() {
+        return isTmdbAllowedForCurrentSite()
+                && Setting.getTmdbMatchCache().isManual(getKeyText(), getIdText(), getTmdbRawTitle());
+    }
+
     private void saveTmdbMatch(TmdbItem item) {
         if (item == null || item.getTmdbId() <= 0) return;
-        TmdbMatchCache cache = Setting.getTmdbMatchCache();
-        cache.put(getKeyText(), getIdText(), getTmdbRawTitle(), item);
-        Setting.putTmdbMatchCache(cache);
+        // 读-改-写要整体互斥：自动匹配在后台线程写，手动选择在主线程写，
+        // 不加锁会让后到的自动结果基于旧快照覆盖掉刚落盘的手动选择。
+        synchronized (Setting.class) {
+            TmdbMatchCache cache = Setting.getTmdbMatchCache();
+            cache.put(getKeyText(), getIdText(), getTmdbRawTitle(), item);
+            Setting.putTmdbMatchCache(cache);
+        }
+    }
+
+    /** 记录用户手动选定的 TMDB 条目，覆盖此前的自动匹配并锁定后续自动写入。 */
+    private void saveManualTmdbMatch(TmdbItem item) {
+        if (item == null || item.getTmdbId() <= 0) return;
+        List<String> aliases = tmdbSourceTitleAliases();
+        synchronized (Setting.class) {
+            TmdbMatchCache cache = Setting.getTmdbMatchCache();
+            cache.putManual(getKeyText(), getIdText(), aliases, item);
+            Setting.putTmdbMatchCache(cache);
+        }
+    }
+
+    /**
+     * 站源标题在富集后会被改写，手动绑定要覆盖所有可能作为读取键的别名。
+     * 别名只取站源侧信号，且与 getTmdbRawTitle() 的优先级一一对应：
+     * vod.getName() 在富集后已是"上一次"的 TMDB 标题，把它当别名写进去会留下一条
+     * 指向旧条目的精确键（A→B→C 连续切换后 key(标题A) 仍指向 B），历史记录里存的
+     * 正是那个旧标题，History.resolveTmdbIdentity 反查就会读回旧选择。
+     * 因此只在 sourceVodName 为空、即它确实是读取键时才纳入。
+     */
+    private List<String> tmdbSourceTitleAliases() {
+        List<String> aliases = new ArrayList<>();
+        addTmdbSourceTitleAlias(aliases, sourceVodName);
+        if (aliases.isEmpty()) addTmdbSourceTitleAlias(aliases, vod == null ? "" : vod.getName());
+        addTmdbSourceTitleAlias(aliases, getNameText());
+        return aliases;
+    }
+
+    private void addTmdbSourceTitleAlias(List<String> aliases, String title) {
+        if (TextUtils.isEmpty(title) || aliases.contains(title)) return;
+        aliases.add(title);
     }
 
     private void saveManualTmdbLearning(TmdbItem item) {
@@ -3456,6 +3507,9 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
                         return;
                     }
                     resetManualTmdbPresentation();
+                    // 必须先落盘：applyTmdbResultNow 里的 enrichVod 会把 vod.getName()
+                    // 改写成 TMDB 标题，之后再取别名就会把 TMDB 标题当成站源标题记进去。
+                    saveManualTmdbMatch(bundle.item());
                     applyTmdbResultNow(new TmdbLoadResult(bundle, List.of()));
                     scheduleManualTmdbEpisodeRebind(applyGeneration, bundle.item());
                     saveManualTmdbLearning(bundle.item());
@@ -6967,6 +7021,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         Site site = getCurrentSite();
         ensureInlineDanmakuController();
         startPlayer(getHistoryKey(), result, useParse, site == null ? 0 : site.getTimeout(), buildMetadata());
+        updateNavigationKey();
         subtitlePlaybackSession.onPlaybackStarted(this, result);
         searchInlineDanmaku(result);
         binding.playerPanel.requestFocus();
@@ -8524,6 +8579,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private boolean resetInlineOpening() {
+        // 长按清空是「这里不要有值」，别紧接着又把探测值渲染上去，看起来像没清掉
+        introSkipPlayback.suppressDetected(true);
         setInlineOpening(0);
         setInlineHideCallback();
         return true;
@@ -8545,6 +8602,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private boolean resetInlineEnding() {
+        introSkipPlayback.suppressDetected(false);
         setInlineEnding(0);
         setInlineHideCallback();
         return true;
@@ -8558,6 +8616,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private void updateInlineOpeningEndingText() {
+        if (binding == null) return;
         binding.playerOpening.setText(inlineOpeningLabel());
         binding.playerEnding.setText(inlineEndingLabel());
         if (!Util.isMobile() || detailActionRoot == null) return;
@@ -8566,11 +8625,23 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private String inlineOpeningLabel() {
-        return history != null && history.getOpening() > 0 ? Util.timeMs(history.getOpening()) : getString(R.string.play_op);
+        if (history != null && history.getOpening() > 0) return Util.timeMs(history.getOpening());
+        long detected = detectedIntroSkipValue(true);
+        return detected > 0 ? getString(R.string.intro_skip_detected_value, Util.timeMs(detected)) : getString(R.string.play_op);
     }
 
     private String inlineEndingLabel() {
-        return history != null && history.getEnding() > 0 ? Util.timeMs(history.getEnding()) : getString(R.string.play_ed);
+        if (history != null && history.getEnding() > 0) return Util.timeMs(history.getEnding());
+        long detected = detectedIntroSkipValue(false);
+        return detected > 0 ? getString(R.string.intro_skip_detected_value, Util.timeMs(detected)) : getString(R.string.play_ed);
+    }
+
+    /** 关掉自动跳过时不显示探测值——那种情况下这个数字不会导致任何动作，显示出来是误导。 */
+    private long detectedIntroSkipValue(boolean opening) {
+        // isReleased 必查：服务已 release 但 Activity 还握着 mService 的窗口里，
+        // PlayerManager.getDuration() 会直接对空的 player 取值抛 NPE
+        if (!Setting.isIntroSkipEnabled() || player() == null || player().isReleased()) return -1;
+        return opening ? introSkipPlayback.getDetectedOpeningMs() : introSkipPlayback.getDetectedEndingMs(player().getDuration());
     }
 
     private void onInlineBack() {
@@ -9812,8 +9883,12 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private void checkInlineNext(boolean notify) {
-        if (history != null && history.isRevPlay()) onInlinePrev(notify);
-        else onInlineNext(notify);
+        advanceInlineEpisode(notify);
+    }
+
+    /** @return 是否真的切走了。末集/倒序首集切不动，调用方据此决定要不要提示「进入下一集」。 */
+    private boolean advanceInlineEpisode(boolean notify) {
+        return history != null && history.isRevPlay() ? onInlinePrev(notify) : onInlineNext(notify);
     }
 
     private void checkInlinePrev() {
@@ -9821,14 +9896,16 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         else onInlinePrev(true);
     }
 
-    private void onInlineNext(boolean notify) {
-        if (playAdjacentEpisode(1, false)) return;
+    private boolean onInlineNext(boolean notify) {
+        if (playAdjacentEpisode(1, false)) return true;
         if (notify) Notify.show(history != null && history.isRevPlay() ? R.string.error_play_prev : R.string.error_play_next);
+        return false;
     }
 
-    private void onInlinePrev(boolean notify) {
-        if (playAdjacentEpisode(-1, false)) return;
+    private boolean onInlinePrev(boolean notify) {
+        if (playAdjacentEpisode(-1, false)) return true;
         if (notify) Notify.show(history != null && history.isRevPlay() ? R.string.error_play_next : R.string.error_play_prev);
+        return false;
     }
 
     private void checkInlineEnded(boolean notify) {
@@ -10243,12 +10320,15 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         if (position > 0 && service() != null && player() != null && !player().isEmpty()) player().seekTo(position);
     }
 
-    private void applyInlineStartPosition() {
-        if (inlineStartPositionApplied || history == null || controller() == null) return;
+    /** @return 本次是否真的下发了续播 seek——落点还没生效前不能让自动跳过介入。 */
+    private boolean applyInlineStartPosition() {
+        if (inlineStartPositionApplied || history == null || controller() == null) return false;
         long position = getInlineStartPosition();
         inlineStartPositionApplied = true;
-        if (position > 0) introSkipPlayback.setResumePosition(position);
-        if (position > 0) controller().seekTo(position);
+        if (position <= 0) return false;
+        introSkipPlayback.setResumePosition(position);
+        controller().seekTo(position);
+        return true;
     }
 
     @Override
@@ -10325,12 +10405,12 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             hideInlineLoading();
             hideInlineControls();
             player().reset();
-            applyInlineStartPosition();
+            boolean pendingResumeSeekApplied = applyInlineStartPosition();
             updateInlineButtons(player().isPlaying());
             recordAdFeedbackHost(); // 播放地址已确定，记入本站域名基线
             applyInlineShortDramaMode();
             requestIntroSkipPlan();
-            applyAutoIntroSkip();
+            if (!pendingResumeSeekApplied) applyAutoIntroSkip();
             if (shouldShowDetailFullscreenControlsOnReady()) {
                 inlineFirstReady = true;  // 标记已显示过控制栏
                 showInlineControls(true, false);
@@ -10640,18 +10720,84 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private void requestIntroSkipPlan() {
-        if (!Setting.isAutoSkipIntroOutro() || player() == null) {
+        if (!Setting.isIntroSkipEnabled() || player() == null) {
             introSkipPlayback.reset();
+            updateInlineOpeningEndingText();
             return;
         }
+        ensureIntroSkipListeners();
         IntroSkipService.Query query = buildIntroSkipQuery();
+        // 切集后 plan 已被 reset，这里先刷一次，避免 query 拿不到时残留上一集的探测值
+        updateInlineOpeningEndingText();
         if (query == null) return;
-        introSkipPlayback.request(query, this::applyAutoIntroSkip);
+        introSkipPlayback.request(query, this::onIntroSkipPlanLoaded);
+    }
+
+    private void onIntroSkipPlanLoaded() {
+        updateInlineOpeningEndingText();
+        applyAutoIntroSkip();
+        preloadAdjacentIntroSkipPlans();
+    }
+
+    /**
+     * 预热前后各一集。查询不需要时长（IntroDB 不收，TheIntroDB 可选），这里传 0 即可；
+     * 缓存按剧集身份存原始段，等那一集真开播时按其实际时长折算，不再走网络。
+     */
+    private void preloadAdjacentIntroSkipPlans() {
+        if (!Setting.isIntroSkipEnabled()) return;
+        TmdbItem item = matchedTmdbItem;
+        if (item == null || item.getTmdbId() <= 0 || !item.isTv()) return;
+        if (selectedFlag == null || selectedFlag.getEpisodes() == null || selectedEpisode == null) return;
+        List<Episode> episodes = selectedFlag.getEpisodes();
+        int index = episodes.indexOf(selectedEpisode);
+        if (index < 0) return;
+        String imdbId = introSkipImdbId();
+        for (int offset : new int[]{1, -1}) {
+            int next = index + offset;
+            if (next < 0 || next >= episodes.size()) continue;
+            TmdbEpisode tmdbEpisode = episodes.get(next).getTmdbEpisode();
+            if (tmdbEpisode == null) continue;
+            int season = tmdbEpisode.getSeasonNumber();
+            int number = tmdbEpisode.getNumber();
+            if (season < 0 || number <= 0) continue;
+            introSkipPlayback.preload(new IntroSkipService.Query(item.getTmdbId(), imdbId, item.getMediaType(), season, number, 0));
+        }
     }
 
     private boolean applyAutoIntroSkip() {
-        if (!Setting.isAutoSkipIntroOutro() || player() == null) return false;
-        return introSkipPlayback.apply(player(), () -> checkInlineEnded(false));
+        if (!Setting.isIntroSkipEnabled() || player() == null) return false;
+        // notify=true：片尾无处可跳（末集/电影）时至少要有提示，不能静默无反应
+        return introSkipPlayback.apply(player(), () -> advanceInlineEpisode(true));
+    }
+
+    /**
+     * 内嵌播放页原先没接确认监听，确认模式下什么都不会发生。这里补上，与另两个播放页一致。
+     */
+    private void ensureIntroSkipListeners() {
+        if (introSkipListenersReady) return;
+        introSkipListenersReady = true;
+        introSkipPlayback.setSkipConfirmListener((segment, action) -> {
+            if (isFinishing() || isDestroyed()) return false;
+            if (introSkipConfirmDialog != null && introSkipConfirmDialog.isShowing()) return false;
+            introSkipConfirmDialog = new MaterialAlertDialogBuilder(this)
+                    .setTitle(R.string.intro_skip_confirm_title)
+                    .setMessage(IntroSkipKinds.confirmMessage(segment))
+                    .setPositiveButton(android.R.string.ok, (dialog, which) -> action.run())
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .show();
+            return true;
+        });
+        introSkipPlayback.setSkipNoticeListener(IntroSkipKinds::notifySkipped);
+        introSkipPlayback.setSkipConfirmDismisser(this::dismissIntroSkipConfirm);
+    }
+
+    private void dismissIntroSkipConfirm() {
+        if (introSkipConfirmDialog == null) return;
+        try {
+            introSkipConfirmDialog.dismiss();
+        } catch (Throwable ignored) {
+        }
+        introSkipConfirmDialog = null;
     }
 
     private IntroSkipService.Query buildIntroSkipQuery() {

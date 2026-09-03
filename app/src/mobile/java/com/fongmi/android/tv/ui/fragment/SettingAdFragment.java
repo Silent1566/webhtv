@@ -34,6 +34,7 @@ import com.fongmi.android.tv.api.config.UserAdRuleStore;
 import com.fongmi.android.tv.databinding.FragmentSettingAdBinding;
 import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.service.PlaybackService;
+import com.fongmi.android.tv.player.IntroSkipKinds;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.subtitle.RealtimeSubtitleSpeechRecognitionFactory;
 import com.fongmi.android.tv.ui.base.BaseFragment;
@@ -103,6 +104,7 @@ public class SettingAdFragment extends BaseFragment {
         mBinding.speechAdSkipSeconds.setOnClickListener(this::editSpeechAdSkipSeconds);
         mBinding.speechAdSkipMode.setOnClickListener(this::selectSpeechAdSkipMode);
         mBinding.autoSkipIntroOutro.setOnClickListener(this::setAutoSkipIntroOutro);
+        mBinding.introSkipKinds.setOnClickListener(view -> IntroSkipKinds.show(requireActivity(), this::setText));
     }
 
     private void setText() {
@@ -138,6 +140,7 @@ public class SettingAdFragment extends BaseFragment {
             setError(mBinding.speechAdSkipModeText);
         });
         safeSet("autoSkipIntroOutro", mBinding.autoSkipIntroOutroText, () -> introSkipMode[Setting.getIntroSkipMode()]);
+        safeSet("introSkipKinds", mBinding.introSkipKindsText, IntroSkipKinds::summary);
     }
 
     private boolean canSetText() {

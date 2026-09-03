@@ -58,13 +58,13 @@ public final class HistoryDisplayPolicy {
                 if (item == null) continue;
                 // 季号未知的路由行若已派生出季度快照，就由快照代表这部剧，否则同剧占两格
                 if (!supersededByOwnSeasonSnapshot(item, progress)) base.add(item);
-                routes.put(routeKey(item.getCid(), item.getTmdbId(), item.getKey()), item);
+                routes.put(routeKey(item), item);
             }
         }
         for (TmdbSeasonProgress snapshot : progress) {
             if (snapshot == null || snapshot.episodeNumber <= 0 || snapshot.seasonNumber < 0
                     || snapshot.sourceHistoryKey.isEmpty()) continue;
-            History route = routes.get(routeKey(snapshot.cid, snapshot.tmdbId, snapshot.sourceHistoryKey));
+            History route = routes.get(routeKey(snapshot.cid, snapshot.mediaType, snapshot.tmdbId, snapshot.sourceHistoryKey));
             if (route == null) continue;
             History item = route.copy();
             TmdbSeasonProgressStore.apply(item, snapshot);
@@ -75,8 +75,13 @@ public final class HistoryDisplayPolicy {
         return project(base, true);
     }
 
-    private static String routeKey(int cid, int tmdbId, String historyKey) {
-        return cid + ":" + tmdbId + ":" + (historyKey == null ? "" : historyKey);
+    private static String routeKey(History item) {
+        return routeKey(item.getCid(), item.getMediaType(), item.getTmdbId(), item.getKey());
+    }
+
+    private static String routeKey(int cid, String mediaType, int tmdbId, String historyKey) {
+        return cid + ":" + (mediaType == null ? "" : mediaType.trim().toLowerCase(Locale.ROOT))
+                + ":" + tmdbId + ":" + (historyKey == null ? "" : historyKey);
     }
 
     private static String seasonDisplayName(String title, int season) {

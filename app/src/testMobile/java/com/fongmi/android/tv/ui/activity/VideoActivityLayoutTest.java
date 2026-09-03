@@ -287,15 +287,25 @@ public class VideoActivityLayoutTest {
         String chooseBody = chooseMethod >= 0 && chooseMethodEnd > chooseMethod ? source.substring(chooseMethod, chooseMethodEnd) : "";
         int invalidateInternalRefresh = chooseBody.indexOf("playerKernelSwitchRequestId++;");
         int launchExternalPlayer = chooseBody.indexOf("PlayerHelper.choose", invalidateInternalRefresh);
+        int resultMethod = source.indexOf("private void switchPlayerKernelWithResult(");
+        int resultMethodEnd = source.indexOf("private boolean onTextLong()", resultMethod);
+        String resultBody = resultMethod >= 0 && resultMethodEnd > resultMethod ? source.substring(resultMethod, resultMethodEnd) : "";
+        int switchMethod = source.indexOf("private boolean refreshAndSwitchPlayerKernel(");
+        int requestDeclaration = source.indexOf("int requestId = ++playerKernelSwitchRequestId;", switchMethod);
+        int currentFlag = source.indexOf("Flag currentFlag = getFlag();", switchMethod);
 
         assertTrue(sourcePath + " is missing onPlayerKernel", clickMethod >= 0);
         assertTrue("player kernel click must open the shared chooser", clickBody.contains("onChoose();"));
         assertFalse("player kernel click must not switch to the next core before user selection", clickBody.contains("refreshAndSwitchPlayerKernel"));
         assertTrue("the selected core must retain the refreshed-source switch path", chooseBody.contains("refreshAndSwitchPlayerKernel(which)"));
         assertFalse("a later core selection must not be discarded while an earlier refresh is running", source.contains("if (playerKernelSwitchRefreshing) return true;"));
-        assertTrue("only the latest core selection may apply its refreshed result", source.contains("if (requestId != playerKernelSwitchRequestId) return;"));
+        assertTrue("only the latest core selection and current playback context may apply its refreshed result",
+                resultBody.contains("requestId != playerKernelSwitchRequestId")
+                        && resultBody.contains("isCurrentPlayerContentRequest(requestId, generation, key, flag, episode)")
+                        && resultBody.contains("return;"));
         assertTrue("external playback selection must invalidate an in-flight internal core refresh", invalidateInternalRefresh >= 0 && launchExternalPlayer > invalidateInternalRefresh);
-        assertTrue("an internal selection without refresh metadata must still invalidate an older request", source.indexOf("int requestId = ++playerKernelSwitchRequestId;") < source.indexOf("Flag currentFlag = getFlag();"));
+        assertTrue("an internal selection without refresh metadata must still invalidate an older request",
+                switchMethod >= 0 && requestDeclaration >= switchMethod && currentFlag > requestDeclaration);
     }
 
     @Test
@@ -719,7 +729,7 @@ public class VideoActivityLayoutTest {
         String mobileText = methodBody(mobile, "private void setText(Vod item)", "private boolean shouldUseTmdbTabletWideLayout()");
         assertTrue("mobile detail content must be captured before TMDB reveal can return early",
                 mobileText.indexOf("setDetailLyrics(item.getContent());") >= 0
-                        && mobileText.indexOf("setDetailLyrics(item.getContent());") < mobileText.indexOf("if (shouldWaitForTmdbDetailReveal())"));
+                        && mobileText.indexOf("setDetailLyrics(item.getContent());") < mobileText.indexOf("if (isTmdbDetailEnrichmentPending())"));
         assertTrue("mobile detail binding must refresh immersive audio labels", mobileText.contains("updateAudioStageText();"));
     }
 
@@ -1361,7 +1371,7 @@ public class VideoActivityLayoutTest {
         int end = source.indexOf("private void hideProgress()", method);
         String body = method >= 0 && end > method ? source.substring(method, end) : "";
         int showOverlay = body.indexOf("mBinding.progress.getRoot().setVisibility(View.VISIBLE);");
-        int initialDetailGuard = body.indexOf("if (mVod == null && shouldLoadTmdbDetail() && !mTmdbContentLoaded) mBinding.progressLayout.showProgress();");
+        int initialDetailGuard = body.indexOf("if (mVod == null && shouldLoadTmdbDetail() && !mTmdbContentLoaded && !shouldRevealShellWhileLoading()) mBinding.progressLayout.showProgress();");
         int preserveDetail = body.indexOf("else if (mVod != null && !mBinding.progressLayout.isContent()) mBinding.progressLayout.showContent();");
 
         assertTrue(sourcePath + " is missing showProgress", method >= 0);
@@ -2151,20 +2161,105 @@ public class VideoActivityLayoutTest {
     }
 
     @Test
-    public void leanbackOriginalEnhancedKeepsLoadingUntilFinalDetailReveal() throws Exception {
+    public void leanbackOriginalEnhancedRevealsShellInsteadOfStackingASecondLoadingLayer() throws Exception {
         Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
         int method = source.indexOf("private void checkCast()");
         int end = source.indexOf("private void checkId()", method);
         String body = method >= 0 && end > method ? source.substring(method, end) : "";
-        int enhancedLoading = body.indexOf("shouldLoadTmdbDetail() && Setting.isOriginalEnhancedDetailPage()");
-        int initialPreview = body.indexOf("hasInitialPreview()");
+        String overlay = methodBody(source, "private boolean shouldShowTmdbLoadingOverlay()", "private boolean shouldRevealShellWhileLoading()");
+        String shell = methodBody(source, "private boolean shouldRevealShellWhileLoading()", "private void setOriginalEnhancedActionVisibility(");
+        String reveal = methodBody(source, "private void revealShellWhileTmdbLoads()", "private void finishTmdbDetail()");
 
         assertTrue(sourcePath + " is missing checkCast", method >= 0);
-        assertTrue("original enhanced mode must stay on loading instead of showing and then replacing an initial preview",
-                enhancedLoading >= 0
-                        && body.indexOf("mBinding.progressLayout.showProgress();", enhancedLoading) > enhancedLoading
-                        && initialPreview > enhancedLoading);
+        assertFalse("original enhanced entry must not blank the whole page before the player window loading layer",
+                body.contains("shouldLoadTmdbDetail() && Setting.isOriginalEnhancedDetailPage()"));
+        assertTrue("original enhanced entry must reveal the initial preview shell", body.contains("hasInitialPreview()) showInitialPreview();"));
+        assertTrue("the full-screen TMDB loading overlay must be suppressed while the shell is revealed",
+                overlay.contains("!shouldRevealShellWhileLoading()"));
+        assertTrue("shell reveal must be scoped to the original enhanced detail page",
+                shell.contains("Setting.isOriginalEnhancedDetailPage()"));
+        assertTrue("shell reveal must show content instead of leaving the page on progress",
+                reveal.contains("mBinding.progressLayout.showContent();"));
+        assertTrue("shell reveal must pre-suppress the source text that TMDB later overwrites",
+                reveal.contains("suppressTmdbNativeTextFields();"));
+    }
+
+    @Test
+    public void leanbackShellRevealDoesNotStealFocusOnTheLaterTmdbReveal() throws Exception {
+        Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        String body = methodBody(source, "private void revealTmdbDetail()", "private void applyTmdbDetailFields()");
+        String shell = methodBody(source, "private void revealShellWhileTmdbLoads()", "private void finishTmdbDetail()");
+
+        assertTrue(sourcePath + " is missing revealTmdbDetail", !body.isEmpty());
+        assertTrue("the later TMDB reveal must know whether loading actually hid the content",
+                body.contains("boolean hiddenByLoading = !mBinding.progressLayout.isContent();"));
+        assertTrue("focus must only be pulled back to the player when loading had hidden the content",
+                body.contains("if (hiddenByLoading) mBinding.video.post(() -> mBinding.video.requestFocus());"));
+        assertTrue("a shell revealed without an initial preview must restore focus only when nothing else is focused",
+                shell.contains("boolean hiddenByLoading = !mBinding.progressLayout.isContent();")
+                        && shell.contains("if (hiddenByLoading && !mBinding.getRoot().hasFocus())")
+                        && shell.contains("mBinding.video.post(() -> {")
+                        && shell.contains("if (!mBinding.getRoot().hasFocus()) mBinding.video.requestFocus();"));
+    }
+
+    @Test
+    public void mobileOriginalEnhancedRevealsShellWithoutASecondDetailSpinner() throws Exception {
+        Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        String waitReveal = methodBody(source, "private boolean shouldWaitForTmdbDetailReveal()", "private boolean shouldRevealShellWhileLoading()");
+        String shell = methodBody(source, "private boolean shouldRevealShellWhileLoading()", "private void showInitialPreview()");
+        String text = methodBody(source, "private void setText(Vod item)", "private boolean shouldUseTmdbTabletWideLayout()");
+
+        assertTrue("the detail area must stop waiting for TMDB before revealing in original enhanced mode",
+                waitReveal.contains("isTmdbDetailEnrichmentPending() && !shouldRevealShellWhileLoading()"));
+        assertTrue("shell reveal must be scoped to the original enhanced detail page",
+                shell.contains("Setting.isOriginalEnhancedDetailPage()"));
+        assertTrue("source text must still wait for TMDB enrichment so the revealed shell does not swap text",
+                text.contains("if (isTmdbDetailEnrichmentPending()) {"));
+    }
+
+    @Test
+    public void mobileEveryFullPageProgressOnEntryIsGuardedByShellReveal() throws Exception {
+        // 回归：删掉「整页转圈」这一层时只守住了 TMDB overlay 与缓存命中两条路，
+        // 漏了 getDetail 这条常走的主路 —— 它无条件 showProgress()，把刚揭开的骨架又压回
+        // INVISIBLE，于是原生增强进入播放页依旧是两层加载。这里把进入路径上每一处
+        // 整页 showProgress() 都钉住，必须由 shouldRevealShellWhileLoading() 让路。
+        Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        String cached = methodBody(source, "private boolean setCachedTmdbDetail()", "private void checkLand()");
+        String detail = methodBody(source, "private void getDetail(boolean refresh)", "private void prefetchDirectTmdbDetail()");
+        String preview = methodBody(source, "private void showInitialPreview()", "private History createHistory(Vod item)");
+
+        assertTrue("the cache-hit path must not blank the page once the shell is revealed",
+                cached.contains("if (!shouldRevealShellWhileLoading()) mBinding.progressLayout.showProgress();"));
+        assertTrue("the network detail path must not blank the page once the shell is revealed",
+                detail.contains("if (!shouldRevealShellWhileLoading()) mBinding.progressLayout.showProgress();"));
+        assertFalse("getDetail must not call showProgress unconditionally",
+                detail.contains("\n        mBinding.progressLayout.showProgress();"));
+        assertTrue("the initial preview must actually switch ProgressLayout to CONTENT, not just set artwork",
+                preview.contains("mBinding.progressLayout.showContent();"));
+    }
+
+    @Test
+    public void mobileEnhancedBackdropKeepsAnOpaqueBaseColorBehindTheShell() throws Exception {
+        // 原生增强把 root/scroll/swipeLayout/progressLayout 全设成 TRANSPARENT 以便全屏 backdrop 透出，
+        // 但 contextWall 初始是 gone、图还要等网络。root 若留透明，这段空窗期会露出
+        // Material3 DynamicColors 的窗口底色(设备实测为紫色)。root 必须垫不透明底色。
+        Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        String base = methodBody(source, "private int enhancedBackdropBaseColor()", "private void applyOriginalEnhancedBackdropLayout()");
+        String surface = methodBody(source, "private void applyFusionThemeSurface()", "private void applyContextWallScrimTheme()");
+
+        assertTrue("the enhanced backdrop base color must be opaque in both themes",
+                base.contains("0xFFF3F6F9") && base.contains("0xFF0F141A"));
+        assertTrue("initTmdbMode must seed the enhanced root with the opaque base color",
+                source.contains("mBinding.getRoot().setBackgroundColor(enhancedBackdropBaseColor());"));
+        assertTrue("theme re-application must keep the opaque base under the backdrop surface",
+                surface.contains("shouldUseTmdbBackdropSurface() ? enhancedBackdropBaseColor()"));
+        assertFalse("the backdrop surface must no longer reset the root to a transparent window background",
+                surface.contains("mTmdbFallbackToNative || shouldUseTmdbBackdropSurface() ? Color.TRANSPARENT"));
     }
 
     @Test
@@ -2952,8 +3047,10 @@ public class VideoActivityLayoutTest {
         assertTrue("unmatched TMDB fallback must keep a readable dark scrim over the app wallpaper",
                 source.indexOf("mBinding.videoContextScrim.setBackgroundResource(R.drawable.shape_video_context_scrim);", scrim) > scrim
                         && source.indexOf("mBinding.videoContextScrim.setVisibility(View.VISIBLE);", scrim) > scrim);
+        // 回退必须排在 backdrop surface 判定之前：原生增强下 TMDB 未匹配时，
+        // 若先命中 backdrop surface 就会拿到不透明底色，App 壁纸再也透不出来。
         assertTrue("fusion theme refresh must not cover unmatched fallback with a solid color",
-                source.indexOf("mBinding.getRoot().setBackgroundColor(mTmdbFallbackToNative || shouldUseTmdbBackdropSurface() ? Color.TRANSPARENT", theme) > theme);
+                source.indexOf("int base = mTmdbFallbackToNative ? Color.TRANSPARENT", theme) > theme);
     }
 
     @Test
@@ -2975,11 +3072,14 @@ public class VideoActivityLayoutTest {
         assertTrue("colorful and native styled TMDB detail must receive backdrop slideshow changes",
                 source.indexOf("shouldUseTmdbBackdropSurface()", init) > init
                         && source.indexOf("setContextWall(imageUrl, true);", init) > init);
-        assertTrue("colorful and native styled TMDB detail must use the transparent fullscreen backdrop layout",
+        assertTrue("colorful and native styled TMDB detail must use the fullscreen backdrop layout with transparent inner layers",
                 source.indexOf("applyOriginalEnhancedBackdropLayout();", init) > init
                         && source.indexOf("mBinding.scroll.setBackgroundColor(Color.TRANSPARENT);", init) > init);
-        assertTrue("colorful and native styled TMDB detail must not be covered by later theme surface refreshes",
-                source.indexOf("mTmdbFallbackToNative || shouldUseTmdbBackdropSurface() ? Color.TRANSPARENT", themeSurface) > themeSurface);
+        // root 例外：内层保持透明让 backdrop 透出，但 root 垫不透明底色。contextWall 初始 gone、
+        // 图要等网络，root 若透明会露出 Material3 DynamicColors 窗口底色(实测紫)。
+        // contextWall 是首个子视图、绘制在 root 底色之上，所以垫底不会遮住 backdrop。
+        assertTrue("the backdrop surface must keep an opaque root base so the window background never shows through",
+                source.indexOf("shouldUseTmdbBackdropSurface() ? enhancedBackdropBaseColor()", themeSurface) > themeSurface);
         assertTrue("header theme refresh must re-hide the standalone hero artwork",
                 source.indexOf("mTmdbHeaderView.refreshTheme();", move) > move
                         && source.indexOf("mTmdbHeaderView.hideNativeHeroBackdrop();", move) > move);

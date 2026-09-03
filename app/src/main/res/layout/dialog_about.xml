@@ -136,5 +136,17 @@
             app:backgroundTint="@color/dialog_primary_button_bg"
             app:cornerRadius="8dp" />
 
+        <androidx.appcompat.widget.AppCompatImageButton
+            android:id="@+id/updateSettings"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:layout_gravity="end"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/selector_dialog_step_button"
+            android:contentDescription="@string/update_settings"
+            android:padding="10dp"
+            android:src="@drawable/ic_remote_settings"
+            app:tint="#5F6368" />
+
     </androidx.appcompat.widget.LinearLayoutCompat>
 </androidx.appcompat.widget.LinearLayoutCompat>

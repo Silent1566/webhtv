@@ -96,6 +96,113 @@ public class PlaybackOwnershipSourceTest {
     }
 
     @Test
+    public void itemSwitchesInvalidateInFlightPlayerRequests() throws Exception {
+        String viewModel = read("app/src/main/java/com/fongmi/android/tv/model/SiteViewModel.java");
+
+        assertTrue("SiteViewModel must expose a player-content cancellation hook",
+                viewModel.contains("public void cancelPlayerContent()"));
+        assertTrue("cancellation must invalidate the old task id",
+                viewModel.indexOf("taskIds.get(TaskType.PLAYER).incrementAndGet();") >= 0);
+        assertTrue("cancellation must clear stale LiveData",
+                viewModel.indexOf("player.setValue(null);") >= 0);
+        for (String path : new String[] {
+                "app/src/mobile/java/com/fongmi/android/tv/ui/activity/VideoActivity.java",
+                "app/src/leanback/java/com/fongmi/android/tv/ui/activity/VideoActivity.java"
+        }) {
+            String source = read(path);
+            int newIntent = source.indexOf("protected void onNewIntent(Intent intent)");
+            int end = source.indexOf("protected void initView", newIntent);
+            int cancel = source.indexOf("cancelPlayerContent();", newIntent);
+            assertTrue(path + " must cancel player content on item switch",
+                    newIntent >= 0 && cancel > newIntent && (end < 0 || cancel < end));
+        }
+    }
+
+    @Test
+    public void tmdbDetailRefreshesNavigationAfterResettingOldItemOwnership() throws Exception {
+        String source = read("app/src/main/java/com/fongmi/android/tv/ui/activity/TmdbDetailActivity.java");
+
+        int newIntent = source.indexOf("protected void onNewIntent(Intent intent)");
+        int reset = source.indexOf("resetPlaybackOwnership();", newIntent);
+        int navigation = source.indexOf("updateNavigationKey();", newIntent);
+
+        assertTrue("TMDB detail must reset stale ownership on item switch", newIntent >= 0 && reset > newIntent);
+        assertTrue("TMDB detail must refresh the service navigation key after that reset", navigation > reset);
+    }
+
+    @Test
+    public void staleSpinnerFallbackCannotExposeAnotherItemsPlayback() throws Exception {
+        for (String path : new String[] {
+                "app/src/mobile/java/com/fongmi/android/tv/ui/activity/VideoActivity.java",
+                "app/src/leanback/java/com/fongmi/android/tv/ui/activity/VideoActivity.java"
+        }) {
+            String source = read(path);
+            int fallback = source.indexOf("private void hidePlaybackProgressIfStale()");
+            int close = source.indexOf("showPlaybackContent();", fallback);
+            String guard = source.substring(fallback, close);
+            assertTrue(path + " must require a nonempty current owner before hiding the spinner",
+                    guard.contains("player().isReleased()")
+                            && guard.contains("player().isEmpty()")
+                            && guard.contains("player().getPlaybackState() != Player.STATE_READY")
+                            && guard.contains("!isOwner()"));
+
+            int seekFallback = source.indexOf("private void hideSeekProgressIfReady()");
+            int seekClose = source.indexOf("showPlaybackContent();", seekFallback);
+            String seekGuard = source.substring(seekFallback, seekClose);
+            assertTrue(path + " must keep the seek fallback owner-scoped",
+                    seekGuard.contains("!isOwner()"));
+        }
+    }
+
+    @Test
+    public void staleSwitchCallbacksRecheckPageAndPlaybackContextWithApplyGuard() throws Exception {
+        String mobile = read("app/src/mobile/java/com/fongmi/android/tv/ui/activity/VideoActivity.java");
+        String leanback = read("app/src/leanback/java/com/fongmi/android/tv/ui/activity/VideoActivity.java");
+
+        assertTrue("mobile switch callbacks must use the captured request context",
+                mobile.contains("isCurrentPlayerContentRequest(requestId, generation, key, flag, episode)"));
+        assertTrue("mobile decode failures must not clear a newer request",
+                mobile.contains("if (!isCurrentPlayerContentRequest(requestId, generation, key, flag, episode)) return;"));
+        assertTrue("leanback switch callbacks must use the captured request context",
+                leanback.contains("isCurrentPlayerContentRequest(requestId, generation, key, flag, episode)"));
+        assertTrue("leanback failures must not clear a newer request",
+                leanback.contains("if (!isCurrentPlayerContentRequest(requestId, generation, key, flag, episode)) return;"));
+    }
+
+    @Test
+    public void switchingEpisodesClearsPendingSwitchStateAfterRefresh() throws Exception {
+        String mobile = read("app/src/mobile/java/com/fongmi/android/tv/ui/activity/VideoActivity.java");
+        String leanback = read("app/src/leanback/java/com/fongmi/android/tv/ui/activity/VideoActivity.java");
+
+        assertTrue("mobile episode playback must invalidate older switch requests",
+                mobile.contains("playerContentGeneration++;")
+                        && mobile.contains("decodeSwitchRefreshing = false;"));
+        assertTrue("leanback episode playback must invalidate older switch requests",
+                leanback.contains("playerContentGeneration++;")
+                        && leanback.contains("playerKernelSwitchRefreshing = false;"));
+        assertTrue("mobile item switch must discard a result waiting for the service",
+                mobile.contains("mPendingPlayerResult = null;"));
+        int mobileRequest = mobile.indexOf("private void beginPlayerContentRequest");
+        int leanbackRequest = leanback.indexOf("private void beginPlayerContentRequest");
+        assertTrue("mobile episode request must discard a result waiting for the service",
+                mobile.substring(mobileRequest, mobile.indexOf("\n    }", mobileRequest))
+                        .contains("mPendingPlayerResult = null;"));
+        assertTrue("leanback episode request must discard a result waiting for the service",
+                leanback.substring(leanbackRequest, leanback.indexOf("\n    }", leanbackRequest))
+                        .contains("mPendingPlayer = null;"));
+    }
+
+    @Test
+    public void kernelSwitchReleasesRefreshingStateBeforeApplyGuard() throws Exception {
+        String source = read("app/src/leanback/java/com/fongmi/android/tv/ui/activity/VideoActivity.java");
+        int method = source.indexOf("private void switchPlayerKernelWithResult");
+        int clear = source.indexOf("playerKernelSwitchRefreshing = false;", method);
+        int apply = source.indexOf("if (!canApplyPlayerContentRequest", method);
+        assertTrue("leanback must clear a current switch before checking temporary player availability",
+                method >= 0 && clear > method && apply > method && clear < apply);
+    }
+
+    @Test
     public void switchingToAnotherItemReleasesThePreviousSessionKey() throws Exception {
         // onNewIntent 换的是条目，旧会话已作废；不清令牌会让新条目一直拿旧 key 比对
         assertTrue("the reset hook must exist", read(PLAYBACK).contains("protected final void resetPlaybackOwnership()"));
@@ -135,13 +242,10 @@ public class PlaybackOwnershipSourceTest {
     }
 
     /**
-     * 加载圈不能只由 STATE_READY 收。
-     *
-     * <p>那条回调受 isOwner() 把关，归属一旦因任何原因失配，圈就永久留在屏上——
-     * 画面在动、圈不走。兜底必须绕开归属，直接读播放器状态。
+     * 加载圈的兜底必须与当前播放会话保持一致。
      */
     @Test
-    public void theSpinnerHasAnOwnershipIndependentFallback() throws Exception {
+    public void theSpinnerFallbackStaysOwnerScoped() throws Exception {
         for (String path : new String[] {
                 "app/src/mobile/java/com/fongmi/android/tv/ui/activity/VideoActivity.java",
                 "app/src/leanback/java/com/fongmi/android/tv/ui/activity/VideoActivity.java"
@@ -151,7 +255,7 @@ public class PlaybackOwnershipSourceTest {
             assertTrue(path + " must provide a spinner fallback", fallback > 0);
 
             String body = source.substring(fallback, source.indexOf("\n    }", fallback));
-            assertFalse(path + " the fallback must not depend on ownership", body.contains("isOwner()"));
+            assertTrue(path + " the fallback must reject a stale playback owner", body.contains("!isOwner()"));
             assertTrue(path + " the fallback must read the player state directly",
                     body.contains("player().getPlaybackState() != Player.STATE_READY"));
             // 详情还没加载完时播放器是空的，那时的圈属于详情页自己，不能收
@@ -165,6 +269,44 @@ public class PlaybackOwnershipSourceTest {
             assertTrue(path + " must drive the fallback from the traffic ticker",
                     source.indexOf("hidePlaybackProgressIfStale();", traffic) > traffic);
         }
+    }
+
+    @Test
+    public void staleSwitchCallbacksRecheckPageAndPlaybackContext() throws Exception {
+        String mobile = read("app/src/mobile/java/com/fongmi/android/tv/ui/activity/VideoActivity.java");
+        String leanback = read("app/src/leanback/java/com/fongmi/android/tv/ui/activity/VideoActivity.java");
+
+        assertTrue("mobile switch callbacks must use the captured request context",
+                mobile.contains("isCurrentPlayerContentRequest(requestId, generation, key, flag, episode)"));
+        assertTrue("mobile switch failures must not clear a newer request",
+                mobile.contains("if (!isCurrentPlayerContentRequest(requestId, generation, key, flag, episode)) return;"));
+        assertTrue("leanback switch callbacks must use the captured request context",
+                leanback.contains("isCurrentPlayerContentRequest(requestId, generation, key, flag, episode)"));
+        assertTrue("leanback switch failures must not clear a newer request",
+                leanback.contains("if (!isCurrentPlayerContentRequest(requestId, generation, key, flag, episode)) return;"));
+        assertTrue("mobile switch callbacks must have an apply guard",
+                mobile.contains("private boolean canApplyPlayerContentRequest(int requestId, int generation,"));
+        assertTrue("leanback switch callbacks must have an apply guard",
+                leanback.contains("private boolean canApplyPlayerContentRequest(int requestId, int generation,"));
+        assertTrue("mobile switch callbacks must have a request-state helper",
+                mobile.contains("private int beginPlayerContentSwitch(int requestId, String key, String flag, String episode)"));
+        assertTrue("leanback switch callbacks must have a request-state helper",
+                leanback.contains("private int beginPlayerContentSwitch(int requestId, String key, String flag, String episode)"));
+    }
+
+    @Test
+    public void switchingEpisodesClearsPendingSwitchState() throws Exception {
+        String mobile = read("app/src/mobile/java/com/fongmi/android/tv/ui/activity/VideoActivity.java");
+        String leanback = read("app/src/leanback/java/com/fongmi/android/tv/ui/activity/VideoActivity.java");
+
+        assertTrue("mobile item refresh must invalidate the player request generation",
+                mobile.contains("playerContentGeneration++;")
+                        && mobile.contains("decodeSwitchRefreshing = false;"));
+        assertTrue("leanback item refresh must invalidate the player request generation",
+                leanback.contains("playerContentGeneration++;")
+                        && leanback.contains("playerKernelSwitchRefreshing = false;"));
+        assertTrue("mobile item switch must discard a result waiting for the service",
+                mobile.contains("mPendingPlayerResult = null;"));
     }
 
     private static int countOccurrences(String text, String needle) {

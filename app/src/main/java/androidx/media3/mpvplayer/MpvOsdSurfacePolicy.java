@@ -24,6 +24,15 @@ final class MpvOsdSurfacePolicy {
         return !isDisabled(primarySelection) || !isDisabled(secondarySelection);
     }
 
+    static boolean shouldKeepSurface(boolean requestedNow, boolean usedForCurrentMedia) {
+        return requestedNow || usedForCurrentMedia;
+    }
+
+    static boolean shouldDeferDestroyedSurfaceDetach(boolean requested,
+                                                     boolean videoAttached) {
+        return requested && videoAttached;
+    }
+
     private static boolean isDisabled(String value) {
         if (value == null) return false;
         String normalized = value.trim();

@@ -120,6 +120,73 @@ public class TrackDialogTest {
     }
 
     @Test
+    public void realtimeLanguageCanBeChangedFromTrackDialogWithoutRebuildingPlayback() throws Exception {
+        Path root = moduleRoot();
+        String dialog = read(root.resolve(Path.of("src", "main", "java", "com", "fongmi", "android", "tv", "ui", "dialog", "TrackDialog.java")));
+        String controller = read(root.resolve(Path.of("src", "main", "java", "com", "fongmi", "android", "tv", "subtitle", "RealtimeSubtitleController.java")));
+        String mobileLayout = read(root.resolve(Path.of("src", "mobile", "res", "layout", "dialog_track.xml")));
+        String leanbackLayout = read(root.resolve(Path.of("src", "leanback", "res", "layout", "dialog_track.xml")));
+
+        assertTrue("track dialog must expose the realtime recognition language selector",
+                dialog.contains("binding.realtimeLanguage.setOnClickListener(this::onRealtimeLanguage")
+                        && dialog.contains("binding.realtimeLanguage.setVisibility(hasRealtimeAi() ? View.VISIBLE : View.GONE)"));
+        assertTrue("both playback layouts must expose the realtime recognition language selector",
+                mobileLayout.contains("@+id/realtimeLanguage")
+                        && mobileLayout.contains("@+id/realtimeLanguageText")
+                        && leanbackLayout.contains("@+id/realtimeLanguage")
+                        && leanbackLayout.contains("@+id/realtimeLanguageText"));
+        assertTrue("an active realtime session must switch the selected model in place",
+                dialog.contains("controller.switchModel(player)")
+                        && controller.contains("public synchronized void switchModel(PlayerManager player)"));
+        assertTrue("model switching must invalidate old audio and subtitle timeline work",
+                controller.contains("timelineGeneration.incrementAndGet()")
+                        && controller.contains("audioQueue.clear()"));
+        assertTrue("stale recognizer errors must not terminate a newer model switch",
+                controller.contains("if (request != generation) return;")
+                        && controller.contains("worker.execute(() -> {")
+                        && controller.contains("failRecognizer(error, request);"));
+        assertTrue("stale audio drain failures must not terminate a newer realtime session",
+                controller.contains("int drainGeneration = generation;")
+                        && controller.contains("failRecognizer(e, drainGeneration);"));
+        assertTrue("recognizer failures must recheck the expected generation before changing session state",
+                controller.contains("private synchronized void failRecognizer(Throwable error, int expectedGeneration)")
+                        && controller.contains("if (expectedGeneration != generation) return;"));
+        int switchStart = controller.indexOf("public synchronized void switchModel(PlayerManager player)");
+        int prepareStart = controller.indexOf("private void prepareModel", switchStart);
+        String switchBody = controller.substring(switchStart, prepareStart);
+        assertFalse("switching the recognition model must retain the existing audio pipeline and playback session",
+                switchBody.contains("releaseMediaSignals()")
+                        || switchBody.contains("restorePlayback("));
+        int resetOld = controller.indexOf("if (replacing) resetRecognizer(previousRecognizer, previousTranslator);", prepareStart);
+        int createNew = controller.indexOf("RealtimeSubtitleRecognizer.create", prepareStart);
+        int releaseOld = controller.indexOf("releaseRecognizer(previousRecognizer, previousTranslator);", createNew);
+        assertTrue("model switching must invalidate the old recognizer before creating the next one",
+                resetOld >= prepareStart && createNew > resetOld);
+        assertTrue("the old native recognizer must be released after the new one is installed",
+                releaseOld > createNew);
+        assertTrue("stale model preparation state must not be published after a newer selection",
+                controller.contains("notifyState(request, State.PREPARING, \"\")")
+                        && controller.contains("notifyState(request, State.ON, \"\")")
+                        && controller.contains("private void notifyState(int expectedGeneration, State state, String message)"));
+        assertTrue("a stale model-ready callback must not disable native subtitles after realtime subtitles were turned off",
+                controller.contains("if (request != generation || !enabled) return;")
+                        && controller.contains("disableNativeSubtitle();")
+                        && controller.contains("startCueTicker();"));
+        int replacementFailureStart = controller.indexOf("if (replacing && (previousRecognizer != null || previousTranslator != null))");
+        int replacementFailureEnd = controller.indexOf("enabled = false;", replacementFailureStart);
+        String replacementFailureBody = replacementFailureStart >= 0 && replacementFailureEnd > replacementFailureStart
+                ? controller.substring(replacementFailureStart, replacementFailureEnd) : "";
+        assertTrue("a failed model switch must recheck its generation before restoring the previous session",
+                replacementFailureBody.contains("synchronized (this)")
+                        && replacementFailureBody.contains("if (request != generation) return;")
+                        && replacementFailureBody.indexOf("if (request != generation) return;") > replacementFailureBody.indexOf("synchronized (this)"));
+        assertTrue("a stale model-switch recovery callback must not restart the subtitle ticker",
+                replacementFailureBody.contains("main.post(() -> {")
+                        && replacementFailureBody.contains("if (request != generation || !enabled) return;")
+                        && replacementFailureBody.contains("startCueTicker();"));
+    }
+
+    @Test
     public void appliedAiSubtitleIsPrependedWithoutRemovingExistingTrackOptions() throws Exception {
         Path root = moduleRoot();
         String dialog = read(root.resolve(Path.of("src", "main", "java", "com", "fongmi", "android", "tv", "ui", "dialog", "TrackDialog.java")));

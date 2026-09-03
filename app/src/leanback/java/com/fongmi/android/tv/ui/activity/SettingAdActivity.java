@@ -30,6 +30,7 @@ import com.fongmi.android.tv.api.config.UserAdRuleStore;
 import com.fongmi.android.tv.databinding.ActivitySettingAdBinding;
 import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.service.PlaybackService;
+import com.fongmi.android.tv.player.IntroSkipKinds;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.subtitle.RealtimeSubtitleSpeechRecognitionFactory;
 import com.fongmi.android.tv.ui.base.BaseActivity;
@@ -91,6 +92,7 @@ public class SettingAdActivity extends BaseActivity {
         mBinding.speechAdSkipSeconds.setOnClickListener(this::editSpeechAdSkipSeconds);
         mBinding.speechAdSkipMode.setOnClickListener(this::selectSpeechAdSkipMode);
         mBinding.autoSkipIntroOutro.setOnClickListener(this::setAutoSkipIntroOutro);
+        mBinding.introSkipKinds.setOnClickListener(view -> IntroSkipKinds.show(this, this::setText));
     }
 
     /** 规则文件要读盘并完整解析，放后台线程，取回后再刷新摘要。 */
@@ -130,6 +132,7 @@ public class SettingAdActivity extends BaseActivity {
         safeSet("speechAdSkipMode", mBinding.speechAdSkipModeText, () -> speech.mode() == AdSkipPolicyController.Mode.AUTO
                 ? getString(R.string.speech_ad_skip_mode_auto) : getString(R.string.speech_ad_skip_mode_prompt));
         safeSet("autoSkipIntroOutro", mBinding.autoSkipIntroOutroText, () -> introSkipMode[Setting.getIntroSkipMode()]);
+        safeSet("introSkipKinds", mBinding.introSkipKindsText, IntroSkipKinds::summary);
     }
 
     private boolean canSetText() {

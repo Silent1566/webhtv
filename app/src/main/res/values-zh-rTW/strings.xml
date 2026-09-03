@@ -243,6 +243,19 @@
     <string name="intro_skip_confirm_intro">跳過片頭</string>
     <string name="intro_skip_confirm_recap">跳過前情提要</string>
     <string name="intro_skip_confirm_outro">跳過片尾</string>
+    <string name="intro_skip_confirm_preview">跳過下集預告</string>
+    <!-- 控制列上顯示的自動偵測值（非使用者手動設定），%1$s 為時間 -->
+    <string name="intro_skip_detected_value">~%1$s</string>
+    <string name="intro_skip_kind_recap">前情回顧</string>
+    <string name="intro_skip_kind_intro">片頭</string>
+    <string name="intro_skip_kind_outro">片尾</string>
+    <string name="intro_skip_kind_preview">下集預告</string>
+    <string name="setting_intro_skip_kinds">跳過的片段類型</string>
+    <string name="intro_skip_kinds_none">未選擇</string>
+    <string name="intro_skip_kinds_all">全部</string>
+    <!-- 自動跳過後的提示，%1$s 為片段類型 -->
+    <string name="intro_skip_notice_seeked">已跳過%1$s</string>
+    <string name="intro_skip_notice_ended">%1$s已跳過，進入下一集</string>
     <string name="personal_recommendation_confirm_title">啟用個性推薦</string>
     <string name="personal_recommendation_confirm_message">個性推薦會讀取本機觀看歷史中的影片名稱，並可能將當前影片名和歷史影片名作為搜尋關鍵詞發送到 TMDB 或豆瓣，用於生成相關作品列表。\n\n不會發送播放地址、帳號資訊、站源配置或播放進度。你可以隨時關閉此功能。</string>
     <string name="setting_search_ui">搜尋佈局</string>
@@ -1220,6 +1233,7 @@
     <string name="subtitle_manual_apply_failed">已找到字幕但無法套用</string>
     <string name="subtitle_manual_inactive">請先開始播放再搜尋字幕</string>
     <string name="player_subtitle_realtime_model">即時識別語言</string>
+    <string name="subtitle_realtime_source_language">原聲識別語言</string>
     <string name="subtitle_realtime_model_status">%1$s · %2$s</string>
     <string name="subtitle_realtime_model_select_title">選擇音訊原語言</string>
     <string name="subtitle_realtime_model_delete_action">刪除模型</string>
@@ -1437,6 +1451,38 @@
     <string name="update_backup_done">備份完成，開始更新</string>
     <string name="update_backup_failed">備份失敗，仍將繼續更新</string>
     <string name="update_backup_permission_denied">未授予儲存權限，無法備份，仍將繼續更新</string>
+    <string name="update_settings">更新設定</string>
+    <string name="update_settings_title">更新設定</string>
+    <string name="update_settings_source">更新方式</string>
+    <string name="update_source_github">GitHub</string>
+    <string name="update_source_oci">OCI</string>
+    <string name="update_github_proxy">GitHub 代理</string>
+    <string name="update_github_proxy_value">GitHub 代理 · %1$s</string>
+    <string name="update_oci_mirror">OCI 映像代理</string>
+    <string name="update_oci_mirror_value">OCI 映像 · %1$s</string>
+    <string name="update_custom_url">自訂 HTTPS 位址</string>
+    <string name="update_proxy_mode_full">完整 URL 前綴</string>
+    <string name="update_proxy_mode_strip">移除 https://</string>
+    <string name="update_proxy_direct">直接連線</string>
+    <string name="update_proxy_custom">自訂</string>
+    <string name="update_proxy_invalid">請輸入不含帳號、密碼和路徑的有效 HTTPS 位址。</string>
+    <string name="update_settings_save">儲存</string>
+    <string name="update_settings_saved">更新設定已儲存</string>
+    <string name="apk_push_url_busy">已有 APK 連結下載工作正在進行</string>
+    <string name="apk_push_url_schedule_failed">無法啟動 APK 連結下載</string>
+    <string name="apk_push_url_downloading">已收到 APK 連結，正在本機下載…</string>
+    <string name="apk_push_url_install_ready">APK 已下載，請確認安裝</string>
+    <string name="apk_push_url_download_failed">APK 連結下載失敗：%1$s</string>
+    <string name="apk_push_url_progress_title">正在接收 APK</string>
+    <string name="apk_push_url_progress_hint">正在下載區域網路裝置推送的 APK，完成後仍需在 Android 系統介面確認安裝。</string>
+    <string name="apk_push_url_progress_known">正在接收 %1$d%% · %2$s / %3$s</string>
+    <string name="apk_push_url_progress_unknown">已接收 %1$s</string>
+    <string name="apk_push_url_progress_detail_remaining">%1$s/s · 剩餘 %2$s · 已用 %3$s</string>
+    <string name="apk_push_url_progress_detail">%1$s/s · 已用 %2$s</string>
+    <string name="apk_push_url_cancel">取消下載</string>
+    <string name="apk_push_url_canceled">已取消 APK 下載</string>
+    <string name="update_download_identity">更新套件身份或簽章與目前應用程式不相符。</string>
+    <string name="update_download_source_unavailable">此版本沒有可用的更新來源。</string>
 
     <!-- Crash -->
     <string name="crash_info">發生意外錯誤\n抱歉給您帶來不便</string>
@@ -1597,6 +1643,16 @@
         <item>es</item>
         <item>ja</item>
         <item>zh-en</item>
+    </string-array>
+    <string-array name="select_realtime_subtitle_language">
+        <item>普通話</item>
+        <item>粵語</item>
+        <item>英語</item>
+        <item>德語</item>
+        <item>法語</item>
+        <item>西班牙語</item>
+        <item>日語</item>
+        <item>中英混合</item>
     </string-array>
     <string-array name="select_subtitle_language">
         <item>中文優先</item>
