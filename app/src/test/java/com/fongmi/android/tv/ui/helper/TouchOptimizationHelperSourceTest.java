@@ -8,6 +8,9 @@ import java.nio.file.Path;
 
 import javax.xml.parsers.DocumentBuilderFactory;
 
+import org.w3c.dom.Document;
+import org.w3c.dom.Node;
+
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -56,6 +59,18 @@ public class TouchOptimizationHelperSourceTest {
     }
 
     @Test
+    public void touchOptimizationRowFollowsPersonalSettingsRow() throws Exception {
+        Path layout = path("app/src/leanback/res/layout/activity_setting.xml");
+        Document document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(layout.toFile());
+        Node personal = findById(document, "@+id/personal");
+        Node touchOptimization = findById(document, "@+id/touchOptimization");
+        Node personalRow = personal.getParentNode();
+
+        assertTrue(personalRow.getParentNode().isSameNode(touchOptimization.getParentNode()));
+        assertTrue(elementIndex(touchOptimization) == elementIndex(personalRow) + 1);
+    }
+
+    @Test
     public void activityAppliesOptimizationToNewContentAndRegistersFragmentsEarly() throws Exception {
         String source = read("app/src/leanback/java/com/fongmi/android/tv/ui/base/BaseActivity.java");
         int register = source.indexOf("registerFragmentLifecycleCallbacks();");
@@ -98,5 +113,22 @@ public class TouchOptimizationHelperSourceTest {
     private static Path path(String value) {
         Path direct = Path.of(value);
         return Files.exists(direct) ? direct : Path.of(value.substring("app/".length()));
+    }
+
+    private static Node findById(Document document, String id) {
+        var nodes = document.getElementsByTagName("*");
+        for (int i = 0; i < nodes.getLength(); i++) {
+            var attribute = nodes.item(i).getAttributes().getNamedItem("android:id");
+            if (attribute != null && id.equals(attribute.getNodeValue())) return nodes.item(i);
+        }
+        throw new AssertionError(id + " not found");
+    }
+
+    private static int elementIndex(Node node) {
+        int index = 0;
+        for (Node sibling = node.getPreviousSibling(); sibling != null; sibling = sibling.getPreviousSibling()) {
+            if (sibling.getNodeType() == Node.ELEMENT_NODE) index++;
+        }
+        return index;
     }
 }
