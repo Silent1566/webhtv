@@ -4,8 +4,8 @@
 
 - 目标：手动或自动加载过外挂字幕的剧集，退出后从历史记录重新播放时自动挂回同一个字幕文件，无需再次选择。
 - 验收：同一集重进自动带字幕；换集、换源、字幕文件已删除时静默降级到现有自动匹配，不报错、不挂错字幕。
-- 当前状态：设计待评审，未开始实施。
-- 下一步：等待用户批准本设计后进入实施阶段。
+- 当前状态：已实施。18 个新增单测在 mobile 与 leanback 均全绿，两个变体编译通过；设备冒烟未执行。
+- 下一步：执行任务守卫收尾，提交并创建恢复标签。
 
 ## 1. 结论
 
@@ -354,3 +354,32 @@ start(spec) / parse(...)
 禁止：为本功能改动字幕样式、在线搜索、AI 翻译、实时字幕、内嵌轨道选择的任何既有行为；禁止挪用 `legacyKey` 或 `mediaType`；禁止在 `PlayerManager` 里直接读写 History。
 
 待后续评估（不阻塞本期）：`mode = disabled` 的"记住关闭字幕"；跨源字幕继承；把 cacheDir 里的字幕迁到 `Path.files()` 以获得真正的长期持久性（可参照 `FileChooser.persistentImport()` 的 md5 命名 + 原子移动写法）。
+
+## 12. 实施记录
+
+### 12.1 与设计的偏差
+
+三处，都是实施时才暴露的约束：
+
+1. **注入载体从 `PlaySpec` 改到 `PlayerManager` 字段。** 设计里想让宿主把字幕塞进 spec，但 `parse()` 路径的 spec 是 `PlayerManager` 自己构造的（`PlayerManager.java:5911`），宿主拿不到。改为 `PlayerManager.setPendingRestoreSub(Sub)` 登记，`restorePendingSubtitle()` 在 `prepareMpvOutputForNewItem()` 开头消费一次即清。
+
+2. **注入必须在 `instanceof MpvPlayerEngine` 早退之前。** 该方法第 5347 行有 `if (!(engine instanceof MpvPlayerEngine mpv)) return;`，注入点放在它之后会让 Exo 和 IJK 完全拿不到恢复的字幕。同时也必须早于第 5370 行算 `externalSubtitleActive` 的位置，否则 MPV 的输出模式判定会漏掉这条刚挂上的字幕。
+
+3. **迁移列声明是可空 TEXT，不是 NOT NULL。** 实体里 `subtitleSource` 是普通 `String`，Room 导出的 45.json 里是 ``​`subtitleSource` TEXT DEFAULT ''``。迁移写 `NOT NULL` 会让 `validateMigration` 在升级后失败。与 `MIGRATION_38_39` 加 `mediaType` / `legacyKey` 的写法一致。
+
+另外新增了设计里没有的 `SubtitleRestoreCoordinator`：三个宿主的记录与恢复规则完全相同，放共享类避免写三遍。
+
+### 12.2 恢复点比设计多一处
+
+除了 `setPlayer(Result)` 主起播路径，`onItemClick(Result)`（切清晰度）也要恢复——它同样重建 spec，字幕列表跟着重置。mobile `VideoActivity.java:2610`、leanback `VideoActivity.java:3086`。
+
+`TmdbDetailActivity` 的落盘不能复用 `syncInlineHistory()`：那个方法会先跑 `updateInlineHistoryProgress()`，而恢复发生在起播之前，播放器还停在上一集，进度写回去就错了。为它单独加了 `persistHistorySubtitleSource()`。
+
+### 12.3 验证记录
+
+- `:app:compileMobileArm64_v8aDebugJavaWithJavac`、`:app:compileLeanbackArm64_v8aDebugJavaWithJavac`：均通过。
+- 新增 18 个单测（`SubtitleSourceTest` 7、`SubtitleRestorePolicyTest` 7、`HistorySubtitleSourceTest` 4）在 mobile 与 leanback 两个变体均 0 失败。
+- 反向插桩确认测试有效：把 `Decision.drop("episode-changed")` 改成 `inject()` → `SubtitleRestorePolicyTest` 7 中 1 失败；删掉 `History.copy()` 里的 `item.subtitleSource` → `copyCarriesSubtitleSource` 失败。两处随即改回。
+- `:app:testMobileArm64_v8aDebugUnitTest` 全量 4139 个，3 个失败：`AboutDialogLayoutTest > mobileGithubProxyActionsDoNotRequireFocusBeforeClick`、`FfmpegVc1SupportTest > codecName_mapsWvc1ToVc1`、`FfmpegVc1SupportTest > extraData_returnsFirstInitializationBlockForWvc1`。在 `eb4e334c4f` 干净 HEAD 的临时 worktree 上单独跑这两个类，同样是这 3 个失败，与本任务无关。
+- Room schema `app/schemas/com.fongmi.android.tv.db.AppDatabase/45.json` 已生成并含 `subtitleSource` 列。
+- 未执行：真实设备冒烟（第 7 节的 5 条场景）。需要在有设备时补验，尤其是"字幕文件被删后静默降级"和"换集不挂上一集字幕"。

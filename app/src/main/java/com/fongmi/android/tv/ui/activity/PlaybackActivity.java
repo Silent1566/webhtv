@@ -32,6 +32,7 @@ import androidx.media3.ui.PlayerView;
 
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.bean.Result;
+import com.fongmi.android.tv.bean.Sub;
 import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.player.PlaybackAutoContext;
 import com.fongmi.android.tv.player.PlaybackServiceReleasePolicy;
@@ -286,6 +287,13 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
     }
 
     protected void onTracksChanged() {
+    }
+
+    /**
+     * 用户选中了一个外挂字幕。有本地历史语义的子类覆写它把来源记下来，
+     * 好让下次从历史进来时自动挂回同一个字幕。
+     */
+    protected void onSubtitleSelected(Sub sub) {
     }
 
     protected void onTitlesChanged() {
@@ -884,6 +892,11 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
             if (shutter != null) shutter.setVisibility(View.INVISIBLE);
             getExoView().setShutterBackgroundColor(Color.TRANSPARENT);
             PlaybackActivity.this.onExoFirstFrame();
+        }
+
+        @Override
+        public void onSubtitleSelected(Sub sub) {
+            if (isOwner()) PlaybackActivity.this.onSubtitleSelected(sub);
         }
 
         @Override

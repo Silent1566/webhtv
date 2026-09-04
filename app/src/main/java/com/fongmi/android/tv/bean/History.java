@@ -23,6 +23,7 @@ import com.fongmi.android.tv.history.HistoryDisplayPolicy;
 import com.fongmi.android.tv.player.VideoAspectMode;
 import com.fongmi.android.tv.playback.PlaybackProgressWriter;
 import com.fongmi.android.tv.playback.PlaybackDeleteTombstoneStore;
+import com.fongmi.android.tv.playback.SubtitleSource;
 import com.fongmi.android.tv.playback.TmdbSeasonProgressStore;
 import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.Setting;
@@ -118,6 +119,15 @@ public class History implements Diffable<History> {
     @SerializedName("player")
     @ColumnInfo(defaultValue = "-1")
     private int player = PlayerSetting.NONE;
+    /**
+     * 外挂字幕来源的 JSON（{@link SubtitleSource}），空串表示这条记录没有外部字幕偏好。
+     *
+     * <p>存整个值对象而不是拆五列：这几个字段没有一个会进 WHERE 或 ORDER BY，
+     * 拆列只会让 {@link #copy()}、迁移和备份各多几行。
+     */
+    @SerializedName("subtitleSource")
+    @ColumnInfo(defaultValue = "")
+    private String subtitleSource;
     private transient long updateTime;
     private transient String playbackSourceKey;
     @Ignore
@@ -165,6 +175,7 @@ public class History implements Diffable<History> {
         item.tmdbSeasonNumber = tmdbSeasonNumber;
         item.tmdbEpisodeNumber = tmdbEpisodeNumber;
         item.player = player;
+        item.subtitleSource = subtitleSource;
         item.updateTime = updateTime;
         item.playbackSourceKey = playbackSourceKey;
         item.sourceBindingKey = sourceBindingKey;
@@ -776,6 +787,23 @@ public class History implements Diffable<History> {
 
     public void setPlayer(int player) {
         this.player = PlayerSetting.sanitizePlayer(player);
+    }
+
+    public String getSubtitleSource() {
+        return subtitleSource == null ? "" : subtitleSource;
+    }
+
+    public void setSubtitleSource(String subtitleSource) {
+        this.subtitleSource = subtitleSource == null ? "" : subtitleSource;
+    }
+
+    /** 解析失败返回 null，不抛——一条脏数据不能让整条历史不可用。 */
+    public SubtitleSource getSubtitleSourceObject() {
+        return SubtitleSource.decode(subtitleSource);
+    }
+
+    public void setSubtitleSourceObject(SubtitleSource source) {
+        this.subtitleSource = SubtitleSource.encode(source);
     }
 
     public int getCid() {
