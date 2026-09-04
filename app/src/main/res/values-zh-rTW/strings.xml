@@ -822,6 +822,7 @@
     <string name="setting_proxy_test_failed">代理測試失敗：%1$s</string>
     <string name="setting_one_key_sync">一鍵同步</string>
     <string name="setting_incognito">無痕模式</string>
+    <string name="setting_touch_optimization">觸屏優化</string>
     <string name="setting_drive_check">網盤檢測</string>
     <string name="setting_audio_source">音訊源配置</string>
     <string name="setting_novel_source">小說源配置</string>

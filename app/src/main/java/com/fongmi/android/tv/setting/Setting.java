@@ -30,6 +30,7 @@ import com.fongmi.android.tv.update.GithubProxy;
 import com.fongmi.android.tv.update.OciMirror;
 import com.fongmi.android.tv.update.UpdateSource;
 import com.fongmi.android.tv.utils.WebViewUtil;
+import com.fongmi.android.tv.utils.Util;
 import com.github.catvod.crawler.DebugLogStore;
 import com.github.catvod.crawler.SpiderDebug;
 import com.github.catvod.utils.Trans;
@@ -389,6 +390,14 @@ public class Setting {
 
     public static void putIncognito(boolean incognito) {
         Prefers.put("incognito", incognito);
+    }
+
+    public static boolean isTouchOptimized() {
+        return Util.isLeanback() && Prefers.getBoolean("touch_optimized");
+    }
+
+    public static void putTouchOptimized(boolean enabled) {
+        Prefers.put("touch_optimized", enabled);
     }
 
     public static int getLanguage() {
