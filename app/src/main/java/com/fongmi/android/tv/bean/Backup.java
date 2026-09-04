@@ -253,7 +253,10 @@ public class Backup {
 
     private static boolean isAppPref(String key) {
         return APP_PREFS.contains(key)
-                || Set.of("update_source", "update_oci_mirror", "update_oci_mirror_url").contains(key)
+                // 三个 update_github_proxy* 是已废弃的旧键，但必须继续随「设置」备份走：
+                // 从旧版备份恢复时它们要落盘，Setting.migrateLegacyGithubProxy() 才会触发
+                // 并把用户当年的代理选择迁到 github_proxy。剔掉它们等于把那个选择丢弃而非迁移。
+                || Set.of("update_source", "update_github_proxy", "update_github_proxy_url", "update_github_proxy_mode", "update_oci_mirror", "update_oci_mirror_url").contains(key)
                 || key.startsWith("danmaku_") || key.startsWith("playback_performance_") || key.startsWith("perf_exo_") || key.startsWith("perf_mpv_") || key.startsWith("perf_ijk_") || key.startsWith("perf_kernel_");
     }
 

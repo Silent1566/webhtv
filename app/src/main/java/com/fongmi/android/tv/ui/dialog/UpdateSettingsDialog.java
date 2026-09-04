@@ -182,10 +182,14 @@ public final class UpdateSettingsDialog {
     }
 
     private static boolean focusPrimary(DialogUpdateSettingsBinding binding, State state) {
+        // GitHub 标签下 ociPanel 是 GONE，对隐藏视图 requestFocus 恒返回 false，
+        // 遥控从标签条往下就走不动，保存按钮再也聚焦不到。此时直接跳到保存。
+        if (UpdateSource.GITHUB.equals(state.source)) return binding.save.requestFocus();
         return binding.ociMirror.requestFocus();
     }
 
     private static boolean focusLastControl(DialogUpdateSettingsBinding binding, State state) {
+        if (UpdateSource.GITHUB.equals(state.source)) return focusSelectedTab(binding);
         if (OciMirror.CUSTOM.equals(state.ociMirror)) return binding.ociCustom.requestFocus();
         return binding.ociMirror.requestFocus();
     }

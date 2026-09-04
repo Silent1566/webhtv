@@ -12,6 +12,7 @@ import com.fongmi.android.tv.bean.Class;
 import com.fongmi.android.tv.bean.Result;
 import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.bean.Vod;
+import com.fongmi.android.tv.event.CatWebEvent;
 import com.fongmi.android.tv.player.Source;
 import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.utils.PushParser;
@@ -139,6 +140,9 @@ public class SiteApi {
         }
 
         Result result;
+        // 取一次时刻，隔着 spider 调用；调用后若最近一次开页请求落在这之后，就是这次调用开的页。
+        // 那是个副作用，缓存会吞掉它，见 cacheDetail 的说明。
+        long beforeSpider = System.currentTimeMillis();
         if (isSpider(site)) {
             String detailContent = site.recent().spider().detailContent(Arrays.asList(requestId));
             SpiderDebug.log("detail", detailContent);
@@ -153,15 +157,69 @@ public class SiteApi {
         }
         Source.get().parse(result.getVod().setFlags());
         result = applyPushTitle(push, result);
-        // 「什么都没有」的条目不值得缓存，缓存了还有害：猫源的设置项正是这种形态，
-        // 它的副作用（请求宿主开网页）发生在 spider 调用里，命中缓存就跳过了 spider，
-        // 于是网页再也不开，只剩一个空详情页。
-        if (!result.getList().isEmpty() && !CatAction.blank(result.getVod())) {
-            String content = result.toString();
-            VodDetailCache.putContent(sourceKey, id, content);
-            SpiderDebug.log("detail-cache", "store key=%s,id=%s,size=%d", key, id, content.length());
-        }
+        cacheDetail(key, sourceKey, id, result, beforeSpider);
         return result;
+    }
+
+    /**
+     * 把详情结果写进缓存，除非这条不该缓存。
+     *
+     * <p>设置类入口的实际工作发生在 {@code detailContent} <b>里面</b>——弹输入框、写配置、扫码、
+     * 请求宿主开网页。缓存命中时压根不调 spider，那些副作用就再也不发生：第二次点击弹窗不出、
+     * 网页不开，宿主还会拿着占位结果直奔播放页。这正是「设置类入口只有第一次点击生效，
+     * 第二次进播放页；过 5 分钟又能点一次」的由来。
+     *
+     * <p>三道挡板，各挡一种形态：
+     * <ul>
+     *   <li>{@link CatAction#blank}：什么都没有的条目（猫源老式动作项），缓存它也没意义
+     *   <li>{@link #hasMetadata}：只有占位线路、没有元数据的条目（设置类站点的签名）
+     *   <li>{@link CatWebEvent#requestedAfter}：这次调用顺带开过网页，那是副作用
+     * </ul>
+     * 前两道看结果形状，第三道看副作用——形状千变万化，副作用是确凿的，两类都要。
+     *
+     * @param beforeSpider 调 spider 之前的时刻。判定用 {@code >=}，所以同一毫秒内的陈旧开页
+     *                     记录会让这条详情也躲过缓存——那个方向是安全的，代价只是下次点击
+     *                     多走一次 spider。并发的另一次开页同理。
+     */
+    private static void cacheDetail(String key, String sourceKey, String id, Result result, long beforeSpider) {
+        if (result.getList().isEmpty() || CatAction.blank(result.getVod())) return;
+        if (!hasMetadata(result.getVod())) {
+            SpiderDebug.log("detail-cache", "skip key=%s,id=%s reason=noMetadata", key, id);
+            return;
+        }
+        if (CatWebEvent.requestedAfter(beforeSpider)) {
+            SpiderDebug.log("detail-cache", "skip key=%s,id=%s reason=webOpened", key, id);
+            return;
+        }
+        String content = result.toString();
+        VodDetailCache.putContent(sourceKey, id, content);
+        SpiderDebug.log("detail-cache", "store key=%s,id=%s,size=%d", key, id, content.length());
+    }
+
+    /**
+     * 这份详情带没带元数据——名字、封面、简介，有一项就算。
+     *
+     * <p>「只有线路、没有元数据」是<b>设置类站点</b>的签名。那类站点把每个设置项做成一个条目，
+     * 真正的工作发生在 {@code detailContent} 里——弹输入框、写配置、扫码；返回值只是个占位的
+     * 假线路，好让宿主别报错。实测某网盘配置源返回的就是：
+     * <pre>{"list":[{"vod_play_from":"Config","vod_play_url":"Config$Config"}],"parse":0,"jx":0}</pre>
+     *
+     * <p>缓存住这种条目就等于把那个动作阉掉：命中缓存时 {@code detailContent} 压根不被调用，
+     * 弹窗再也不出现，宿主还会拿着那个叫 {@code Config} 的假地址直奔播放页——这正是
+     * 「设置类入口只有第一次点击生效，第二次进播放页」的由来。
+     *
+     * <p>{@link CatAction#blank} 挡不住它：{@code vod_play_from}/{@code vod_play_url} 会生成一条
+     * Flag，{@code getFlags()} 非空，{@code blank} 就不成立。所以这里<b>刻意不看线路</b>——线路是
+     * 占位结果也能轻易凑出来的东西，而元数据不是。
+     *
+     * <p>代价：真把元数据全放在列表项、detail 只回线路的源，每次进详情都要重新调一次 spider。
+     * 那是缓存引入之前的原有行为，不是退步；而反过来把动作缓存掉是功能损坏。
+     */
+    private static boolean hasMetadata(Vod vod) {
+        if (vod == null) return false;
+        return !vod.getName().isEmpty()
+                || !TextUtils.isEmpty(vod.getPic())
+                || !TextUtils.isEmpty(vod.getContent());
     }
 
     private static String detailCacheSourceKey(String key, Site site) {
