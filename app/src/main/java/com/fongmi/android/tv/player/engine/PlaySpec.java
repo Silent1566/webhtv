@@ -207,5 +207,6 @@ public class PlaySpec {
     public void addDanmaku(Danmaku item) {
         if (danmakus == null) danmakus = new ArrayList<>();
         if (!item.isEmpty() && !danmakus.contains(item)) danmakus.add(item);
+        danmakus.forEach(danmaku -> danmaku.setSelected(danmaku.getUrl().equals(item.getUrl())));
     }
 }
