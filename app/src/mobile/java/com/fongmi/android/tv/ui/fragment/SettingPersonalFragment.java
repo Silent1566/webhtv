@@ -59,6 +59,7 @@ public class SettingPersonalFragment extends BaseFragment {
     protected void initEvent() {
         mBinding.searchThread.setOnClickListener(this::setSearchThread);
         mBinding.autoBackup.setOnClickListener(this::setAutoBackup);
+        mBinding.playbackOverlay.setOnClickListener(this::setPlaybackOverlay);
         mBinding.playBackToDetail.setOnClickListener(this::setPlayBackToDetail);
         mBinding.episodeHistory.setOnClickListener(this::setEpisodeHistory);
         mBinding.globalHistory.setOnClickListener(this::setGlobalHistory);
@@ -76,6 +77,7 @@ public class SettingPersonalFragment extends BaseFragment {
     private void setText() {
         mBinding.searchThreadText.setText(String.valueOf(Setting.getSearchThread()));
         mBinding.autoBackupText.setText(getSwitch(isAutoBackupEnabled()));
+        mBinding.playbackOverlayText.setText(getSwitch(Setting.isPlaybackOverlayEnabled()));
         mBinding.playBackToDetailText.setText(getSwitch(Setting.isPlayBackToDetail()));
         mBinding.episodeHistoryText.setText(getSwitch(Setting.isEpisodeHistory()));
         mBinding.globalHistoryText.setText((globalHistoryMode = getResources().getStringArray(R.array.select_global_history_mode))[Setting.getGlobalHistoryMode()]);
@@ -127,6 +129,11 @@ public class SettingPersonalFragment extends BaseFragment {
 
     private boolean isAutoBackupEnabled() {
         return AutoBackupPolicy.isEffective(Setting.isAutoBackup(), Setting.hasFileAccess());
+    }
+
+    private void setPlaybackOverlay(View view) {
+        Setting.putPlaybackOverlayEnabled(!Setting.isPlaybackOverlayEnabled());
+        setText();
     }
 
     private void setPlayBackToDetail(View view) {
