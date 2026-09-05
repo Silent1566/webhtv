@@ -68,8 +68,7 @@ public class SettingAppearanceActivity extends BaseActivity {
     private void setUiScale(View view) {
         int index = (Setting.getUiScaleIndex() + 1) % uiScale.length;
         Setting.putUiScaleIndex(index);
-        RefreshEvent.size();
-        setText();
+        RefreshEvent.uiScale();
     }
 
     private void setLanguage(View view) {
