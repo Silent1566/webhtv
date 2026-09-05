@@ -57,6 +57,15 @@ public class BackupPreferenceFilterTest {
     }
 
     @Test
+    public void playbackOverlayFollowsSettingsOption() {
+        SyncOptions settingsOnly = new SyncOptions().config(false).spider(false).webHome(false).settings(true);
+        SyncOptions spiderOnly = new SyncOptions().config(false).spider(true).webHome(false).settings(false);
+
+        assertTrue(Backup.include("playback_overlay_enabled", settingsOnly));
+        assertFalse(Backup.include("playback_overlay_enabled", spiderOnly));
+    }
+
+    @Test
     public void githubProxyPreferencesFollowSettingsOption() {
         SyncOptions settingsOnly = new SyncOptions().config(false).spider(false).webHome(false).settings(true);
         SyncOptions webHomeOnly = new SyncOptions().config(false).spider(false).webHome(true).settings(false);

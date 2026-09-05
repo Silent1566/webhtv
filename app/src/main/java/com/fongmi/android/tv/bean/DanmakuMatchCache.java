@@ -14,6 +14,8 @@ public final class DanmakuMatchCache {
 
     private static final Gson GSON = new Gson();
     private Map<String, Entry> items;
+    private Map<String, Entry> seriesItems;
+    private Map<String, Entry> tmdbSeasonItems;
 
     public static DanmakuMatchCache objectFrom(String json) {
         try {
@@ -26,6 +28,8 @@ public final class DanmakuMatchCache {
 
     public DanmakuMatchCache() {
         this.items = new HashMap<>();
+        this.seriesItems = new HashMap<>();
+        this.tmdbSeasonItems = new HashMap<>();
     }
 
     public Danmaku find(String siteKey, String vodId, String episodeName) {
@@ -52,13 +56,62 @@ public final class DanmakuMatchCache {
         return result;
     }
 
+    public String findSeriesSearchTitle(String siteKey, String vodId) {
+        if (isBlank(siteKey) || isBlank(vodId)) return "";
+        Entry entry = getSeriesItems().get(seriesKey(siteKey, vodId));
+        return entry == null ? "" : clean(entry.searchTitle);
+    }
+
+    public void putSeries(String siteKey, String vodId, String searchTitle, String rawTitle, Danmaku item) {
+        if (isBlank(siteKey) || isBlank(vodId)) return;
+        putManual(seriesKey(siteKey, vodId), searchTitle, rawTitle, item, getSeriesItems());
+    }
+
+    public String findTmdbSeasonSearchTitle(int tmdbId, int seasonNumber) {
+        if (tmdbId <= 0 || seasonNumber <= 0) return "";
+        Entry entry = getTmdbSeasonItems().get(tmdbSeasonKey(tmdbId, seasonNumber));
+        return entry == null ? "" : clean(entry.searchTitle);
+    }
+
+    public void putTmdbSeason(int tmdbId, int seasonNumber, String searchTitle, String rawTitle, Danmaku item) {
+        if (tmdbId <= 0 || seasonNumber <= 0) return;
+        putManual(tmdbSeasonKey(tmdbId, seasonNumber), searchTitle, rawTitle, item, getTmdbSeasonItems());
+    }
+
     public Map<String, Entry> getItems() {
         if (items == null) items = new HashMap<>();
         return items;
     }
 
+    public Map<String, Entry> getSeriesItems() {
+        if (seriesItems == null) seriesItems = new HashMap<>();
+        return seriesItems;
+    }
+
+    public Map<String, Entry> getTmdbSeasonItems() {
+        if (tmdbSeasonItems == null) tmdbSeasonItems = new HashMap<>();
+        return tmdbSeasonItems;
+    }
+
     private String key(String siteKey, String vodId, String episodeName) {
         return clean(siteKey) + "@@@" + clean(vodId) + "@@@" + normalizedEpisodeKey(episodeName);
+    }
+
+    private String seriesKey(String siteKey, String vodId) {
+        return clean(siteKey) + "@@@" + clean(vodId);
+    }
+
+    private String tmdbSeasonKey(int tmdbId, int seasonNumber) {
+        return "tmdb@@@" + tmdbId + "@@@" + seasonNumber;
+    }
+
+    private static void putManual(String key, String searchTitle, String rawTitle, Danmaku item, Map<String, Entry> target) {
+        if (isBlank(key) || item == null || item.isEmpty()) return;
+        String keyword = isBlank(searchTitle) ? clean(rawTitle) : clean(searchTitle);
+        if (keyword.isEmpty()) return;
+        Entry entry = Entry.from(keyword, rawTitle, item);
+        if (entry == null) return;
+        target.put(key, entry);
     }
 
     private static String normalizedEpisodeKey(String episodeName) {

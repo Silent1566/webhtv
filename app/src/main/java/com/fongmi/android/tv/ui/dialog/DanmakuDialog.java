@@ -32,6 +32,8 @@ public final class DanmakuDialog extends BaseBottomSheetDialog implements Danmak
     private String vodId;
     private String rawTitle;
     private String episodeName;
+    private int tmdbId;
+    private int tmdbSeasonNumber;
 
     public interface Host {
 
@@ -56,6 +58,12 @@ public final class DanmakuDialog extends BaseBottomSheetDialog implements Danmak
         this.vodId = clean(vodId);
         this.rawTitle = clean(rawTitle);
         this.episodeName = clean(episodeName);
+        return this;
+    }
+
+    public DanmakuDialog tmdb(int tmdbId, int tmdbSeasonNumber) {
+        this.tmdbId = tmdbId;
+        this.tmdbSeasonNumber = tmdbSeasonNumber;
         return this;
     }
 
@@ -105,8 +113,10 @@ public final class DanmakuDialog extends BaseBottomSheetDialog implements Danmak
         FragmentActivity activity = getActivity();
         if (activity == null) return;
         dismissAllowingStateLoss();
-        if (shouldUseInputDialog(activity)) DanmakuSearchInputDialog.create().player(player).identity(siteKey, vodId, rawTitle, episodeName).restoreParent(true).show(activity);
-        else DanmakuSearchDialog.create().player(player).identity(siteKey, vodId, rawTitle, episodeName).restoreParent(true).show(activity);
+        if (shouldUseInputDialog(activity))
+            DanmakuSearchInputDialog.create().player(player).identity(siteKey, vodId, rawTitle, episodeName).tmdb(tmdbId, tmdbSeasonNumber).restoreParent(true).show(activity);
+        else
+            DanmakuSearchDialog.create().player(player).identity(siteKey, vodId, rawTitle, episodeName).tmdb(tmdbId, tmdbSeasonNumber).restoreParent(true).show(activity);
     }
 
     private boolean shouldUseInputDialog(FragmentActivity activity) {
