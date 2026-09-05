@@ -24,7 +24,6 @@ import com.fongmi.android.tv.utils.Github;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.Task;
-import com.fongmi.android.tv.update.GithubProxy;
 import com.fongmi.android.tv.update.HttpUpdateTransfer;
 import com.fongmi.android.tv.update.OciArtifact;
 import com.fongmi.android.tv.update.OciMirror;
@@ -33,6 +32,7 @@ import com.fongmi.android.tv.update.UpdateHttp;
 import com.fongmi.android.tv.update.UpdateRoutePlanner;
 import com.fongmi.android.tv.update.UpdateTarget;
 import com.fongmi.android.tv.update.UpdateTransfer;
+import com.fongmi.android.tv.utils.GithubProxy;
 import com.github.catvod.utils.Path;
 
 import org.json.JSONArray;
@@ -240,7 +240,8 @@ public class Updater implements UpdateTransfer.Callback, UpdateListener {
     private Update readUpdate(String channel, String manifestUrl, String source, Map<String, String> headers, String fallbackNotes) {
         Update update = Update.empty(channel);
         try {
-            String proxiedUrl = com.fongmi.android.tv.utils.GithubProxy.apply(manifestUrl);
+            GithubProxy.Config config = GithubProxy.config();
+            String proxiedUrl = config.rewrite(manifestUrl);
             String text = UpdateHttp.string(proxiedUrl, headers, GITHUB_REQUEST_TIMEOUT_MS);
             if (TextUtils.isEmpty(text)) throw new IllegalStateException("Empty update manifest: " + manifestUrl);
             JSONObject object = new JSONObject(text);
@@ -347,7 +348,9 @@ public class Updater implements UpdateTransfer.Callback, UpdateListener {
 
     private String readReleaseNotes(String tag) {
         try {
-            return new JSONObject(UpdateHttp.string(com.fongmi.android.tv.utils.GithubProxy.apply(Github.getReleaseApi(tag)), GITHUB_API_HEADERS, GITHUB_REQUEST_TIMEOUT_MS)).optString("body");
+            GithubProxy.Config config = GithubProxy.config();
+            String proxiedUrl = config.rewrite(Github.getReleaseApi(tag));
+            return new JSONObject(UpdateHttp.string(proxiedUrl, GITHUB_API_HEADERS, GITHUB_REQUEST_TIMEOUT_MS)).optString("body");
         } catch (Exception ignored) {
             return "";
         }
@@ -434,7 +437,7 @@ public class Updater implements UpdateTransfer.Callback, UpdateListener {
 
     private List<UpdateTarget> getRoutes(Update update) {
         try {
-            GithubProxy.Config github = GithubProxy.resolve(Setting.getUpdateGithubProxy(), Setting.getUpdateGithubProxyUrl(), Setting.getUpdateGithubProxyMode());
+            GithubProxy.Config github = GithubProxy.config();
             String endpoint = update.oci == null ? "" : OciMirror.resolve(Setting.getUpdateOciMirror(), Setting.getUpdateOciMirrorUrl(), update.oci);
             return UpdateRoutePlanner.plan(Setting.getUpdateSource(), update.githubUrl, update.oci, github, endpoint);
         } catch (Exception e) {

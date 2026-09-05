@@ -24,6 +24,17 @@
         android:textSize="13sp"
         tools:text="https://gh-proxy.com/" />
 
+    <com.google.android.material.textview.MaterialTextView
+        android:id="@+id/latency"
+        android:layout_width="wrap_content"
+        android:layout_height="44dp"
+        android:layout_marginStart="8dp"
+        android:gravity="center"
+        android:minWidth="74dp"
+        android:textColor="#5F6368"
+        android:textSize="12sp"
+        tools:text="123 ms" />
+
     <androidx.appcompat.widget.AppCompatImageButton
         android:id="@+id/remove"
         android:layout_width="44dp"

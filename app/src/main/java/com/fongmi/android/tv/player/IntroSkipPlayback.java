@@ -391,9 +391,15 @@ public class IntroSkipPlayback {
     }
 
     /**
-     * 段落身份。两个 provider 对首段使用不同字段名（例如 intro 与 intro#0），共享一次性状态；
-     * 后续数组项保留序号，避免同一 provider 的多个片段互相吞掉。映射后的身份不含本地折算
-     * 后的时间边界，所以本集时长小幅抖动不会换出新 id；跨 provider 的同义字段也归到同一别名。
+     * 段落身份。同一 provider 内两个字段名可能指同一段（例如 intro 与 intro#0），去掉首项序号
+     * 让它们共享一次性状态；后续数组项保留序号，避免同一 provider 的多个片段互相吞掉。身份不含
+     * 本地折算后的时间边界，所以本集时长小幅抖动不会换出新 id。
+     *
+     * <p>带上 provider：跨 provider <b>不</b>归一。别名映射（credits→outro 等）只在同一家内部
+     * 消解字段名差异，一旦把两家折进同一个 id，两家对同一类片段给出的不同边界就会共享
+     * {@code skipped}——去重时若因起点相差过大判为两段而各自保留，跳过其中一段会让另一段被
+     * {@code isSegmentHandled} 永久吞掉，用户再也跳不到真正的片尾。同段合并由服务层
+     * {@code addDeduped}/{@code overlaps} 按时间轴负责，那里才有边界信息。
      */
     private String id(Segment segment) {
         if (segment == null) return "";
@@ -403,6 +409,6 @@ public class IntroSkipPlayback {
         if (identity.startsWith("trailer")) identity = "preview" + identity.substring("trailer".length());
         if (identity.startsWith("next_episode")) identity = "preview" + identity.substring("next_episode".length());
         if (identity.startsWith("next_preview")) identity = "preview" + identity.substring("next_preview".length());
-        return segment.getKind() + "|" + identity;
+        return segment.getKind() + "|" + segment.getProvider() + "|" + identity;
     }
 }

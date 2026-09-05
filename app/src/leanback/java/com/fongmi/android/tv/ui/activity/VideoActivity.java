@@ -75,6 +75,7 @@ import com.fongmi.android.tv.model.SiteViewModel;
 import com.fongmi.android.tv.model.SearchProgress;
 import com.fongmi.android.tv.playback.PlaybackEventCollector;
 import com.fongmi.android.tv.playback.HistoryResumePayload;
+import com.fongmi.android.tv.playback.SubtitleRestoreCoordinator;
 import com.fongmi.android.tv.player.IntroSkipKinds;
 import com.fongmi.android.tv.player.IntroSkipPlayback;
 import com.fongmi.android.tv.player.PlayerHelper;
@@ -130,6 +131,7 @@ import com.fongmi.android.tv.ui.helper.EpisodeRangePolicy;
 import com.fongmi.android.tv.ui.helper.EpisodeSeasonPolicy;
 import com.fongmi.android.tv.ui.helper.SourceEpisodeSeasonCache;
 import com.fongmi.android.tv.ui.helper.PlayerControlFocusHelper;
+import com.fongmi.android.tv.ui.helper.TouchOptimizationHelper;
 import com.fongmi.android.tv.ui.helper.TmdbEpisodeGridPolicy;
 import com.fongmi.android.tv.ui.helper.TmdbNavigation;
 import com.fongmi.android.tv.ui.helper.TmdbVideoPlayback;
@@ -2724,6 +2726,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         mInitialPlaybackPosition = resolveInitialPlaybackPosition();
         SpiderDebug.log("video-flow", "startPlayer dispatch initialPosition=%d music=%s ijk=%s", mInitialPlaybackPosition, isMusicLike(), service() != null && player().isIjk());
         long start = System.currentTimeMillis();
+        if (SubtitleRestoreCoordinator.restore(mHistory, player(), result)) syncHistory();
         startPlayer(getHistoryKey(), result, isUseParse(), getSite().getTimeout(), buildMetadata(), mInitialPlaybackPosition);
         SpiderDebug.log("video-flow", "startPlayer return cost=%dms sincePlayerStart=%dms", System.currentTimeMillis() - start, System.currentTimeMillis() - playerStartTime);
         subtitlePlaybackSession.onPlaybackStarted(this, result);
@@ -3082,6 +3085,8 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     public void onItemClick(Result result) {
         updateActionQuality(result);
         beginPlayHealth();
+        // 切清晰度也会重建 spec，字幕列表跟着重置，所以这里同样要恢复一次。
+        if (SubtitleRestoreCoordinator.restore(mHistory, player(), result)) syncHistory();
         startPlayer(getHistoryKey(), result, isUseParse(), getSite().getTimeout(), buildMetadata());
         subtitlePlaybackSession.onPlaybackStarted(this, result);
     }
@@ -5091,6 +5096,11 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         mClock.setCallback(this);
         // 轨道要等新引擎 prepare 完才回来，重建那一刻按钮还是隐藏态，弹窗必须在这里再抄一次。
         refreshControlDialog();
+    }
+
+    @Override
+    protected void onSubtitleSelected(Sub sub) {
+        if (SubtitleRestoreCoordinator.remember(mHistory, sub)) syncHistory();
     }
 
     @Override
@@ -10390,6 +10400,7 @@ private void showAudioSheet(BottomSheetDialog dialog, boolean draggable, boolean
         applyAudioSheetWindowGlass(dialog);
         hideSystemBarsForAudioSheet(dialog);
         focusAudioSheetContent(dialog);
+        syncAudioDialog(dialog);
     }
 
 private void showCompactPlaybackSheet(BottomSheetDialog dialog) {
@@ -10436,6 +10447,7 @@ private void showLyricsSearchSheetDialog(BottomSheetDialog dialog) {
         applyAudioSheetWindowGlass(dialog);
         hideSystemBarsForAudioSheet(dialog);
         focusAudioSheetContent(dialog);
+        syncAudioDialog(dialog);
         Window window = dialog.getWindow();
         if (window == null) return;
         WindowManager.LayoutParams params = window.getAttributes();
@@ -10474,6 +10486,7 @@ private void showAudioDrawerSheet(BottomSheetDialog dialog, boolean atStart) {
         applyAudioSheetWindowGlass(dialog);
         hideSystemBarsForAudioSheet(dialog);
         focusAudioSheetContent(dialog);
+        syncAudioDialog(dialog);
     }
 
 private void showAudioQueueDrawerDialog(Dialog dialog) {
@@ -10498,6 +10511,11 @@ private void showAudioQueueDrawerDialog(Dialog dialog) {
         window.clearFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND);
         hideSystemBarsForAudioDialog(dialog);
         focusAudioQueueSelectedItem();
+        syncAudioDialog(dialog);
+    }
+
+private void syncAudioDialog(Dialog dialog) {
+        TouchOptimizationHelper.sync(dialog);
     }
 
 private void focusAudioSheetContent(BottomSheetDialog dialog) {

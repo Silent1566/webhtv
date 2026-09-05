@@ -40,7 +40,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @Database(entities = {Keep.class, Site.class, Live.class, Track.class, Config.class, Device.class, History.class, PlaybackDeleteTombstone.class, TmdbSeasonProgress.class}, version = AppDatabase.VERSION)
 public abstract class AppDatabase extends RoomDatabase {
 
-    public static final int VERSION = 44;
+    public static final int VERSION = 45;
     public static final String NAME = "tv";
     public static final String SYMBOL = "@@@";
     private static final int BACKUP_KEEP_COUNT = 7;
@@ -178,6 +178,7 @@ public abstract class AppDatabase extends RoomDatabase {
                 .addMigrations(Migrations.MIGRATION_41_42)
                 .addMigrations(Migrations.MIGRATION_42_43)
                 .addMigrations(Migrations.MIGRATION_43_44)
+                .addMigrations(Migrations.MIGRATION_44_45)
                 .fallbackToDestructiveMigration(true)
                 .allowMainThreadQueries().build();
     }

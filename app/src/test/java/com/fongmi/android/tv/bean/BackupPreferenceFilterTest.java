@@ -48,14 +48,25 @@ public class BackupPreferenceFilterTest {
     }
 
     @Test
+    public void touchOptimizationFollowsSettingsOption() {
+        SyncOptions settingsOnly = new SyncOptions().config(false).spider(false).webHome(false).settings(true);
+        SyncOptions spiderOnly = new SyncOptions().config(false).spider(true).webHome(false).settings(false);
+
+        assertTrue(Backup.include("touch_optimized", settingsOnly));
+        assertFalse(Backup.include("touch_optimized", spiderOnly));
+    }
+
+    @Test
     public void githubProxyPreferencesFollowSettingsOption() {
         SyncOptions settingsOnly = new SyncOptions().config(false).spider(false).webHome(false).settings(true);
         SyncOptions webHomeOnly = new SyncOptions().config(false).spider(false).webHome(true).settings(false);
 
         assertTrue(Backup.include("github_proxy", settingsOnly));
         assertTrue(Backup.include("github_proxy_enabled", settingsOnly));
+        assertTrue(Backup.include("github_proxy_mode", settingsOnly));
         assertFalse(Backup.include("github_proxy", webHomeOnly));
         assertFalse(Backup.include("github_proxy_enabled", webHomeOnly));
+        assertFalse(Backup.include("github_proxy_mode", webHomeOnly));
     }
 
     @Test
@@ -143,6 +154,8 @@ public class BackupPreferenceFilterTest {
         SyncOptions settings = new SyncOptions().config(false).spider(false).settings(true);
 
         assertTrue(Backup.include("update_source", settings));
+        // 旧键仍要备份：恢复到新版后 Setting.migrateLegacyGithubProxy() 靠它们把
+        // 用户当年的代理选择迁成 github_proxy 多源列表，剔掉就等于丢弃而非迁移。
         assertTrue(Backup.include("update_github_proxy", settings));
         assertTrue(Backup.include("update_github_proxy_url", settings));
         assertTrue(Backup.include("update_github_proxy_mode", settings));

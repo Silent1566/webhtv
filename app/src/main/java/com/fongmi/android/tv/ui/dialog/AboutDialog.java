@@ -15,6 +15,7 @@ import android.view.WindowManager;
 import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.FragmentActivity;
 
+import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.BuildConfig;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.databinding.DialogAboutBinding;
@@ -25,13 +26,20 @@ import com.fongmi.android.tv.utils.AppVersion;
 import com.fongmi.android.tv.utils.GithubProxy;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
+import com.fongmi.android.tv.utils.Task;
 import com.fongmi.android.tv.utils.Util;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.github.catvod.net.OkHttp;
+
+import java.util.List;
+import java.util.Locale;
+import java.util.concurrent.TimeUnit;
 
 public final class AboutDialog {
 
     private static final int DIALOG_VERTICAL_MARGIN_DP = 96;
     private static final int FULLSCREEN_INSET_DP = 32;
+    private static final long PROBE_TIMEOUT_MS = TimeUnit.SECONDS.toMillis(5);
 
     private AboutDialog() {
     }
@@ -77,7 +85,15 @@ public final class AboutDialog {
             }
         });
         binding.list.setAdapter(adapter);
-        binding.list.setHasFixedSize(true);
+        binding.list.setHasFixedSize(false);
+        binding.modeGroup.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
+            if (isChecked) Setting.putGithubProxyMode(checkedId == R.id.modeStrip
+                    ? GithubProxy.MODE_STRIP_SCHEME
+                    : GithubProxy.MODE_FULL_URL);
+        });
+        binding.modeGroup.check(GithubProxy.MODE_STRIP_SCHEME.equals(Setting.getGithubProxyMode())
+                ? R.id.modeStrip
+                : R.id.modeFull);
         binding.enabled.setChecked(Setting.isGithubProxyEnabled());
         binding.enabled.setOnCheckedChangeListener((buttonView, isChecked) -> Setting.putGithubProxyEnabled(isChecked));
         refreshGithubProxy(binding);
@@ -96,20 +112,27 @@ public final class AboutDialog {
             Setting.putGithubProxy(GithubProxy.defaultSources());
             refreshGithubProxy(binding);
         });
+        binding.probe.setOnClickListener(v -> probeLatency(binding));
 
         View.OnKeyListener dpadNav = (v, keyCode, event) -> {
             if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
             if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN && v == binding.enabled) {
-                return binding.input.requestFocus();
+                return binding.modeGroup.requestFocus();
             }
             if (keyCode == KeyEvent.KEYCODE_DPAD_UP && v == binding.enabled) {
                 return binding.list.requestFocus();
+            }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN && v == binding.modeGroup) {
+                return binding.input.requestFocus();
+            }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_UP && v == binding.modeGroup) {
+                return binding.enabled.requestFocus();
             }
             if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN && v == binding.input) {
                 return binding.reset.requestFocus();
             }
             if (keyCode == KeyEvent.KEYCODE_DPAD_UP && v == binding.input) {
-                return binding.enabled.requestFocus();
+                return binding.modeGroup.requestFocus();
             }
             if (keyCode == KeyEvent.KEYCODE_DPAD_UP && v == binding.reset) {
                 return binding.input.requestFocus();
@@ -117,6 +140,7 @@ public final class AboutDialog {
             return false;
         };
         binding.enabled.setOnKeyListener(dpadNav);
+        binding.probe.setOnKeyListener(dpadNav);
         binding.input.setOnKeyListener(dpadNav);
         binding.reset.setOnKeyListener(dpadNav);
 
@@ -139,28 +163,47 @@ public final class AboutDialog {
         configureGithubProxyWindow(activity, githubDialog, binding);
     }
 
+    private static void probeLatency(DialogGithubProxyBinding binding) {
+        GithubProxyAdapter adapter = (GithubProxyAdapter) binding.list.getAdapter();
+        if (adapter == null || adapter.isProbing()) return;
+        List<String> sources = GithubProxy.getSources();
+        adapter.startProbe(sources);
+        for (String source : sources) {
+            Task.submitLarge(() -> {
+                long start = System.nanoTime();
+                try (var response = OkHttp.newCall(OkHttp.client(PROBE_TIMEOUT_MS), GithubProxy.probeUrl(source), source).execute()) {
+                    long elapsed = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
+                    String value = App.get().getString(R.string.setting_github_proxy_latency, elapsed);
+                    App.post(() -> adapter.setLatency(source, value));
+                } catch (Exception e) {
+                    App.post(() -> adapter.setLatency(source, App.get().getString(R.string.setting_github_proxy_latency_failed)));
+                }
+            });
+        }
+    }
+
     private static void configureGithubProxyWindow(FragmentActivity activity, AlertDialog dialog, DialogGithubProxyBinding binding) {
-        if (!Util.isLeanback()) return;
+        boolean leanback = Util.isLeanback();
         Window window = dialog.getWindow();
         if (window == null) return;
-        // 电视端铺满全屏：不再按屏幕比例手算宽高，列表改为吃掉剩余空间。
+        // 手机与电视都铺满全屏：不再按屏幕比例手算宽高，列表改为吃掉剩余空间。
         // 这个弹窗经 MaterialAlertDialogBuilder.setView 装载，root 会被 AlertController
         // 以 MATCH_PARENT 塞进 @id/custom，窗口给满高度后列表即可自由伸展。
         WindowManager.LayoutParams params = window.getAttributes();
         params.width = WindowManager.LayoutParams.MATCH_PARENT;
-        params.height = WindowManager.LayoutParams.MATCH_PARENT;
+        params.height = WindowManager.LayoutParams.WRAP_CONTENT;
         window.setAttributes(params);
-        // 这个弹窗有 URL 输入框。小窗居中时系统还能上推窗口避让键盘，铺满全屏后没有余量，
+        // 弹窗有 URL 输入框。小窗居中时系统还能上推窗口避让键盘，铺满全屏后没有余量，
         // 必须显式 ADJUST_RESIZE 让窗口自身缩小，否则输入框会被屏幕键盘盖住。
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
-        ViewGroup.LayoutParams listParams = binding.list.getLayoutParams();
-        listParams.height = 0;
-        if (listParams instanceof androidx.appcompat.widget.LinearLayoutCompat.LayoutParams) {
-            ((androidx.appcompat.widget.LinearLayoutCompat.LayoutParams) listParams).weight = 1;
-        } else if (listParams instanceof android.widget.LinearLayout.LayoutParams) {
-            ((android.widget.LinearLayout.LayoutParams) listParams).weight = 1;
-        }
-        binding.list.setLayoutParams(listParams);
+        if (leanback) binding.list.requestFocus();
+        else binding.list.post(() -> {
+            for (int i = 0; i < binding.list.getChildCount(); i++) {
+                View child = binding.list.getChildAt(i);
+                child.findViewById(R.id.text).setFocusable(false);
+                child.findViewById(R.id.remove).setFocusable(false);
+            }
+        });
     }
 
     private static void refreshGithubProxy(DialogGithubProxyBinding binding) {
