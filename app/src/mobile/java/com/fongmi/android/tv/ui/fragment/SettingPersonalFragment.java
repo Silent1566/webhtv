@@ -70,6 +70,7 @@ public class SettingPersonalFragment extends BaseFragment {
         mBinding.searchResultSort.setOnClickListener(this::setSearchResultSort);
         mBinding.resetApp.setOnClickListener(this::showResetAppDialog);
         mBinding.appBranding.setOnClickListener(this::startAppBranding);
+        mBinding.touchOptimization.setOnClickListener(this::setTouchOptimization);
     }
 
     private void setText() {
@@ -85,6 +86,7 @@ public class SettingPersonalFragment extends BaseFragment {
         mBinding.siteColumnText.setText((siteColumn = getResources().getStringArray(R.array.select_site_column))[Setting.getSiteColumn() - 1]);
         mBinding.searchResultSortText.setText((searchResultSort = getResources().getStringArray(R.array.select_search_result_sort))[Setting.getSearchResultSort()]);
         mBinding.appBrandingText.setText(AppBranding.getSummary(requireContext()));
+        mBinding.touchOptimizationText.setText(getSwitch(Setting.isTouchOptimized()));
     }
 
     private String getSearchColumnText() {
@@ -187,6 +189,12 @@ public class SettingPersonalFragment extends BaseFragment {
 
     private void startAppBranding(View view) {
         AppBrandingActivity.start(requireActivity());
+    }
+
+    private void setTouchOptimization(View view) {
+        boolean enabled = !Setting.isTouchOptimized();
+        Setting.putTouchOptimized(enabled);
+        mBinding.touchOptimizationText.setText(getSwitch(enabled));
     }
 
     private void resetApp() {

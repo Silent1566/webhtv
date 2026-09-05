@@ -22,6 +22,7 @@ import com.fongmi.android.tv.ui.dialog.HomeButtonDialog;
 import com.fongmi.android.tv.ui.dialog.HomeMenuKeyDialog;
 import com.fongmi.android.tv.ui.dialog.SpeedSettingDialog;
 import com.fongmi.android.tv.ui.dialog.SliderNumberDialog;
+import com.fongmi.android.tv.ui.helper.TouchOptimizationHelper;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.PermissionUtil;
 import com.fongmi.android.tv.utils.Util;
@@ -78,6 +79,7 @@ public class SettingPersonalActivity extends BaseActivity {
         // mBinding.searchColumn.setOnClickListener(this::setSearchColumn); // 在搜索页面切换更方便
         mBinding.appBranding.setOnClickListener(this::startAppBranding);
         mBinding.resetApp.setOnClickListener(this::showResetAppDialog);
+        mBinding.touchOptimization.setOnClickListener(this::setTouchOptimization);
     }
 
     @Override
@@ -104,6 +106,7 @@ public class SettingPersonalActivity extends BaseActivity {
         mBinding.searchResultSortText.setText((searchResultSort = getResources().getStringArray(R.array.select_search_result_sort))[Setting.getSearchResultSort()]);
         // mBinding.searchColumnText.setText(getSearchColumnText()); // 在搜索页面切换更方便
         mBinding.appBrandingText.setText(AppBranding.getSummary(this));
+        mBinding.touchOptimizationText.setText(getSwitch(Setting.isTouchOptimized()));
     }
 
     private String getSearchColumnText() {
@@ -223,6 +226,13 @@ public class SettingPersonalActivity extends BaseActivity {
 
     private void startAppBranding(View view) {
         AppBrandingActivity.start(this);
+    }
+
+    private void setTouchOptimization(View view) {
+        boolean enabled = !Setting.isTouchOptimized();
+        Setting.putTouchOptimized(enabled);
+        mBinding.touchOptimizationText.setText(getSwitch(enabled));
+        TouchOptimizationHelper.sync(getWindow().getDecorView());
     }
 
     private void resetApp() {

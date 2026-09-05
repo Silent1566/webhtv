@@ -43,7 +43,7 @@ public class TouchOptimizationHelperSourceTest {
 
     @Test
     public void touchOptimizationToggleCanEnableModeWithOneTouch() throws Exception {
-        Path layout = path("app/src/leanback/res/layout/activity_setting.xml");
+        Path layout = path("app/src/leanback/res/layout/activity_setting_personal.xml");
         var document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(layout.toFile());
         var nodes = document.getElementsByTagName("androidx.appcompat.widget.LinearLayoutCompat");
 
@@ -59,15 +59,12 @@ public class TouchOptimizationHelperSourceTest {
     }
 
     @Test
-    public void touchOptimizationRowFollowsPersonalSettingsRow() throws Exception {
+    public void touchOptimizationRowIsRemovedFromRootSettingScreen() throws Exception {
         Path layout = path("app/src/leanback/res/layout/activity_setting.xml");
-        Document document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(layout.toFile());
-        Node personal = findById(document, "@+id/personal");
-        Node touchOptimization = findById(document, "@+id/touchOptimization");
-        Node personalRow = personal.getParentNode();
+        var document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(layout.toFile());
 
-        assertTrue(personalRow.getParentNode().isSameNode(touchOptimization.getParentNode()));
-        assertTrue(elementIndex(touchOptimization) == elementIndex(personalRow) + 1);
+        assertFalse(hasId(document, "@+id/touchOptimization"));
+        assertFalse(hasId(document, "@+id/touchOptimizationText"));
     }
 
     @Test
@@ -106,6 +103,37 @@ public class TouchOptimizationHelperSourceTest {
         assertTrue(videoActivity.contains("TouchOptimizationHelper.sync(dialog);"));
     }
 
+    @Test
+    public void touchOptimizationToggleCanEnableModeWithOneTouchMobile() throws Exception {
+        Path layout = path("app/src/mobile/res/layout/fragment_setting_personal.xml");
+        var document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(layout.toFile());
+        var nodes = document.getElementsByTagName("androidx.appcompat.widget.LinearLayoutCompat");
+
+        for (int i = 0; i < nodes.getLength(); i++) {
+            var attributes = nodes.item(i).getAttributes();
+            var id = attributes.getNamedItem("android:id");
+            if (id == null || !"@+id/touchOptimization".equals(id.getNodeValue())) continue;
+            assertTrue("true".equals(attributes.getNamedItem("android:focusable").getNodeValue()));
+            assertTrue("false".equals(attributes.getNamedItem("android:focusableInTouchMode").getNodeValue()));
+            return;
+        }
+        throw new AssertionError("touchOptimization row not found");
+    }
+
+    @Test
+    public void personalSettingsBindTouchOptimizationToggle() throws Exception {
+        String leanback = read("app/src/leanback/java/com/fongmi/android/tv/ui/activity/SettingPersonalActivity.java");
+        String mobile = read("app/src/mobile/java/com/fongmi/android/tv/ui/fragment/SettingPersonalFragment.java");
+        String root = read("app/src/leanback/java/com/fongmi/android/tv/ui/activity/SettingActivity.java");
+
+        assertTrue(leanback.contains("mBinding.touchOptimization.setOnClickListener(this::setTouchOptimization);"));
+        assertTrue(leanback.contains("mBinding.touchOptimizationText.setText(getSwitch(Setting.isTouchOptimized()));"));
+        assertTrue(leanback.contains("TouchOptimizationHelper.sync(getWindow().getDecorView());"));
+        assertTrue(mobile.contains("mBinding.touchOptimization.setOnClickListener(this::setTouchOptimization);"));
+        assertTrue(mobile.contains("mBinding.touchOptimizationText.setText(getSwitch(Setting.isTouchOptimized()));"));
+        assertFalse(root.contains("mBinding.touchOptimization"));
+    }
+
     private static String read(String path) throws Exception {
         return Files.readString(path(path), StandardCharsets.UTF_8);
     }
@@ -130,5 +158,14 @@ public class TouchOptimizationHelperSourceTest {
             if (sibling.getNodeType() == Node.ELEMENT_NODE) index++;
         }
         return index;
+    }
+
+    private static boolean hasId(Document document, String id) {
+        var nodes = document.getElementsByTagName("*");
+        for (int i = 0; i < nodes.getLength(); i++) {
+            var attribute = nodes.item(i).getAttributes().getNamedItem("android:id");
+            if (attribute != null && id.equals(attribute.getNodeValue())) return true;
+        }
+        return false;
     }
 }
