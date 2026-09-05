@@ -12,11 +12,13 @@ import com.fongmi.android.tv.api.config.WallConfig;
 import com.fongmi.android.tv.databinding.ActivitySettingAppearanceBinding;
 import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.event.RefreshEvent;
+import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.dialog.ConfigDialog;
 import com.fongmi.android.tv.ui.dialog.HistoryDialog;
+import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
 
 import org.greenrobot.eventbus.Subscribe;
@@ -59,6 +61,7 @@ public class SettingAppearanceActivity extends BaseActivity {
         mBinding.wall.setOnClickListener(this::onWall);
         mBinding.wall.setOnLongClickListener(this::onWallEdit);
         mBinding.wallHome.setOnClickListener(this::setWallDefault);
+        mBinding.wallRefresh.setOnClickListener(this::setWallRefresh);
         mBinding.wallHistory.setOnClickListener(this::onWallHistory);
     }
 
@@ -73,7 +76,6 @@ public class SettingAppearanceActivity extends BaseActivity {
         int index = (Setting.getLanguageIndex() + 1) % language.length;
         Setting.putLanguageIndex(index);
         RefreshEvent.language();
-        setText();
     }
 
     private void setSize(View view) {
@@ -99,9 +101,35 @@ public class SettingAppearanceActivity extends BaseActivity {
         ConfigEvent.wall();
     }
 
+    private void setWallRefresh(View view) {
+        Setting.putWall(0);
+        WallConfig.get().load(getCallback());
+    }
+
     private boolean onWallHistory(View view) {
         HistoryDialog.create().wall().show(this);
         return true;
+    }
+
+    private Callback getCallback() {
+        return new Callback() {
+            @Override
+            public void start() {
+                Notify.progress(getActivity());
+            }
+
+            @Override
+            public void success() {
+                Notify.dismiss();
+                setWallText();
+            }
+
+            @Override
+            public void error(String msg) {
+                Notify.dismiss();
+                Notify.show(msg);
+            }
+        };
     }
 
     private void setWallText() {
