@@ -864,6 +864,7 @@
     <string name="setting_proxy_test_failed">代理测试失败：%1$s</string>
     <string name="setting_one_key_sync">一键同步</string>
     <string name="setting_incognito">无痕模式</string>
+    <string name="setting_touch_optimization">触屏优化</string>
     <string name="setting_drive_check">网盘检测</string>
     <string name="setting_audio_source">音频源配置</string>
     <string name="setting_novel_source">小说源配置</string>

@@ -8,6 +8,7 @@ import androidx.collection.ArrayMap;
 
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.bean.Danmaku;
+import com.fongmi.android.tv.bean.DanmakuMatchCache;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.player.danmaku.DanmakuUrlPolicy;
 import com.fongmi.android.tv.setting.DanmakuSetting;
@@ -19,6 +20,7 @@ import com.github.catvod.net.OkHttp;
 import com.github.catvod.utils.Trans;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -106,7 +108,10 @@ public class DanmakuApi {
             return;
         }
         MediaTitleResolver resolver = new MediaTitleResolver();
+        DanmakuMatchCache cache = Setting.getDanmakuMatchCache();
+        List<String> manualTitles = manualSearchTitles(request, cache);
         List<String> titles = resolver.queryTitles(request, 3);
+        titles.addAll(0, manualTitles);
         if (SpiderDebug.isEnabled()) SpiderDebug.log("danmaku", "resolved titles raw=%s episode=%s titles=%s", request.getRawTitle(), request.getEpisodeName(), titles);
         searchFirst(titles, request.getEpisodeName(), 0, found, () -> {
             List<String> cleanedTitles = resolver.queryCleanedTitles(request, 3);
@@ -125,6 +130,15 @@ public class DanmakuApi {
         if (titles == null || TextUtils.isEmpty(title)) return false;
         for (String item : titles) if (title.equalsIgnoreCase(item)) return true;
         return false;
+    }
+
+    private static List<String> manualSearchTitles(MediaTitleRequest request, DanmakuMatchCache cache) {
+        List<String> titles = new ArrayList<>();
+        String siteTitle = cache.findSeriesSearchTitle(request.getSiteKey(), request.getVodId());
+        if (!siteTitle.isEmpty()) titles.add(siteTitle);
+        String tmdbTitle = cache.findTmdbSeasonSearchTitle(request.getTmdbId(), request.getTmdbSeasonNumber());
+        if (!tmdbTitle.isEmpty() && !containsTitle(titles, tmdbTitle)) titles.add(tmdbTitle);
+        return titles;
     }
 
     private static void searchFirst(List<String> titles, String episode, int index, Consumer<Danmaku> found, Runnable exhausted) {

@@ -21,6 +21,7 @@ import androidx.core.content.ContextCompat;
 import androidx.core.widget.TextViewCompat;
 
 import com.fongmi.android.tv.R;
+import com.fongmi.android.tv.ui.helper.TouchOptimizationHelper;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.Util;
 import com.google.android.material.button.MaterialButton;
@@ -35,6 +36,7 @@ public final class LightDialog {
         if (dialog == null) return;
         Window window = dialog.getWindow();
         if (window == null) return;
+        TouchOptimizationHelper.sync(dialog);
         Drawable background = ContextCompat.getDrawable(dialog.getContext(), R.drawable.shape_shell_proxy_dialog);
         if (background == null) return;
         int verticalInset = (int) (dialog.getContext().getResources().getDisplayMetrics().density * 24);
@@ -124,7 +126,10 @@ public final class LightDialog {
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
         dialog.setContentView(root(context, title, content, positive, listener(dialog, onPositive), negative, listener(dialog, onNegative), neutral, listener(dialog, onNeutral), heightPx > 0));
         dialog.setCanceledOnTouchOutside(true);
-        dialog.setOnShowListener(d -> applyWindow(dialog, context, landFactor, portFactor, maxDp, heightPx));
+        dialog.setOnShowListener(d -> {
+            applyWindow(dialog, context, landFactor, portFactor, maxDp, heightPx);
+            TouchOptimizationHelper.sync(dialog);
+        });
         return dialog;
     }
 

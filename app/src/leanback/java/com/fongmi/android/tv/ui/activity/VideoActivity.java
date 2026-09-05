@@ -131,6 +131,7 @@ import com.fongmi.android.tv.ui.helper.EpisodeRangePolicy;
 import com.fongmi.android.tv.ui.helper.EpisodeSeasonPolicy;
 import com.fongmi.android.tv.ui.helper.SourceEpisodeSeasonCache;
 import com.fongmi.android.tv.ui.helper.PlayerControlFocusHelper;
+import com.fongmi.android.tv.ui.helper.TouchOptimizationHelper;
 import com.fongmi.android.tv.ui.helper.TmdbEpisodeGridPolicy;
 import com.fongmi.android.tv.ui.helper.TmdbNavigation;
 import com.fongmi.android.tv.ui.helper.TmdbVideoPlayback;
@@ -2735,6 +2736,8 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
                 .rawTitle(mHistory.getVodName())
                 .rawRemarks(mHistory.getVodRemarks())
                 .episodeName(getEpisode().getName())
+                .tmdbId(danmakuTmdbId())
+                .tmdbSeasonNumber(danmakuTmdbSeasonNumber())
                 .source(MediaTitleLearningExample.SOURCE_DANMAKU_AUTO)
                 .allowAi(true)
                 .build(), danmaku -> {
@@ -2751,6 +2754,19 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
             // 阅读结果接管前台，但保留本页：一次返回回到来源播放页。
         }
         return handled;
+    }
+
+    private int danmakuTmdbId() {
+        TmdbItem item = getMatchedTmdbItem();
+        return item == null ? 0 : item.getTmdbId();
+    }
+
+    private int danmakuTmdbSeasonNumber() {
+        TmdbItem item = getMatchedTmdbItem();
+        if (item == null || !item.isTv()) return 0;
+        Episode episode = getEpisode();
+        TmdbEpisode tmdbEpisode = episode == null ? null : episode.getTmdbEpisode();
+        return tmdbEpisode == null ? 0 : tmdbEpisode.getSeasonNumber();
     }
 
     private boolean canApplyPlayerResult() {
@@ -4196,7 +4212,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     private void onDanmaku() {
-        DanmakuDialog.create().player(player()).identity(getKey(), getId(), mHistory == null ? "" : mHistory.getVodName(), getDanmakuEpisodeName()).show(this);
+        DanmakuDialog.create().player(player()).identity(getKey(), getId(), mHistory == null ? "" : mHistory.getVodName(), getDanmakuEpisodeName()).tmdb(danmakuTmdbId(), danmakuTmdbSeasonNumber()).show(this);
         hideControl();
     }
 
@@ -10399,6 +10415,7 @@ private void showAudioSheet(BottomSheetDialog dialog, boolean draggable, boolean
         applyAudioSheetWindowGlass(dialog);
         hideSystemBarsForAudioSheet(dialog);
         focusAudioSheetContent(dialog);
+        syncAudioDialog(dialog);
     }
 
 private void showCompactPlaybackSheet(BottomSheetDialog dialog) {
@@ -10445,6 +10462,7 @@ private void showLyricsSearchSheetDialog(BottomSheetDialog dialog) {
         applyAudioSheetWindowGlass(dialog);
         hideSystemBarsForAudioSheet(dialog);
         focusAudioSheetContent(dialog);
+        syncAudioDialog(dialog);
         Window window = dialog.getWindow();
         if (window == null) return;
         WindowManager.LayoutParams params = window.getAttributes();
@@ -10483,6 +10501,7 @@ private void showAudioDrawerSheet(BottomSheetDialog dialog, boolean atStart) {
         applyAudioSheetWindowGlass(dialog);
         hideSystemBarsForAudioSheet(dialog);
         focusAudioSheetContent(dialog);
+        syncAudioDialog(dialog);
     }
 
 private void showAudioQueueDrawerDialog(Dialog dialog) {
@@ -10507,6 +10526,11 @@ private void showAudioQueueDrawerDialog(Dialog dialog) {
         window.clearFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND);
         hideSystemBarsForAudioDialog(dialog);
         focusAudioQueueSelectedItem();
+        syncAudioDialog(dialog);
+    }
+
+private void syncAudioDialog(Dialog dialog) {
+        TouchOptimizationHelper.sync(dialog);
     }
 
 private void focusAudioSheetContent(BottomSheetDialog dialog) {

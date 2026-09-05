@@ -88,6 +88,9 @@ public final class DanmakuSearchInputDialog extends DialogFragment implements Ca
     private String vodId;
     private String rawTitle;
     private String episodeName;
+    private int tmdbId;
+    private int tmdbSeasonNumber;
+    private final DanmakuSearchIntent searchIntent = new DanmakuSearchIntent();
 
     public static DanmakuSearchInputDialog create() {
         return new DanmakuSearchInputDialog();
@@ -113,6 +116,12 @@ public final class DanmakuSearchInputDialog extends DialogFragment implements Ca
         this.vodId = clean(vodId);
         this.rawTitle = clean(rawTitle);
         this.episodeName = clean(episodeName);
+        return this;
+    }
+
+    public DanmakuSearchInputDialog tmdb(int tmdbId, int tmdbSeasonNumber) {
+        this.tmdbId = tmdbId;
+        this.tmdbSeasonNumber = tmdbSeasonNumber;
         return this;
     }
 
@@ -158,13 +167,14 @@ public final class DanmakuSearchInputDialog extends DialogFragment implements Ca
         super.onDismiss(dialog);
         FragmentActivity activity = getActivity();
         if (selected || !restoreParent || activity == null || activity.isFinishing()) return;
-        DanmakuDialog.create().player(player).identity(siteKey, vodId, rawTitle, episodeName).show(activity);
+        DanmakuDialog.create().player(player).identity(siteKey, vodId, rawTitle, episodeName).tmdb(tmdbId, tmdbSeasonNumber).show(activity);
     }
 
     @Override
     public void onDestroyView() {
         super.onDestroyView();
         activeCall = null;
+        searchIntent.cancel();
         DanmakuApi.cancel();
     }
 
@@ -179,7 +189,10 @@ public final class DanmakuSearchInputDialog extends DialogFragment implements Ca
     private void rememberManualDanmaku(Danmaku item) {
         if (TextUtils.isEmpty(siteKey) || TextUtils.isEmpty(vodId) || item == null || item.isEmpty()) return;
         DanmakuMatchCache cache = Setting.getDanmakuMatchCache();
-        MediaTitleLearningExample example = cache.put(siteKey, vodId, first(episodeName, getEpisode()), getKeyword(), first(rawTitle, getTitle()), item);
+        String keyword = searchIntent.getResultKeyword();
+        MediaTitleLearningExample example = cache.put(siteKey, vodId, first(episodeName, getEpisode()), keyword, first(rawTitle, getTitle()), item);
+        cache.putSeries(siteKey, vodId, keyword, first(rawTitle, getTitle()), item);
+        cache.putTmdbSeason(tmdbId, tmdbSeasonNumber, keyword, first(rawTitle, getTitle()), item);
         Setting.putDanmakuMatchCache(cache);
         if (example != null) MediaTitleLearningStore.load().put(example);
     }
@@ -353,14 +366,20 @@ public final class DanmakuSearchInputDialog extends DialogFragment implements Ca
         input.setError(null);
         showProgress();
         activeCall = null;
+        searchIntent.cancel();
         Util.hideKeyboard(input);
         Call call = DanmakuApi.newCall(keyword, getEpisode());
         if (call == null) {
             showError(getString(R.string.danmaku_api_invalid));
             return;
         }
+        searchIntent.begin(call, keyword);
         activeCall = call;
         call.enqueue(this);
+    }
+
+    private boolean isCurrentResult(Call call) {
+        return call == activeCall && searchIntent.isCurrent(call);
     }
 
     private String getEpisode() {
@@ -559,21 +578,27 @@ public final class DanmakuSearchInputDialog extends DialogFragment implements Ca
 
     @Override
     public void onResponse(@NonNull Call call, @NonNull Response response) {
-        if (call != activeCall) return;
+        if (call != activeCall || !searchIntent.complete(call)) return;
         try {
             String body = response.body() == null ? "" : response.body().string();
             List<Danmaku> items = DanmakuApi.arrayFrom(body);
             if (items.isEmpty()) throw new Exception(ResUtil.getString(R.string.error_empty));
-            App.post(() -> onSuccess(items));
+            App.post(() -> {
+                if (isCurrentResult(call)) onSuccess(items);
+            });
         } catch (Exception e) {
-            App.post(() -> showError(e.getMessage()));
+            App.post(() -> {
+                if (isCurrentResult(call)) showError(e.getMessage());
+            });
         }
     }
 
     @Override
     public void onFailure(@NonNull Call call, @NonNull IOException e) {
-        if (call != activeCall) return;
-        App.post(() -> showError(e.getMessage()));
+        if (call != activeCall || !searchIntent.complete(call)) return;
+        App.post(() -> {
+            if (isCurrentResult(call)) showError(e.getMessage());
+        });
     }
 
     private int dp(int value) {
