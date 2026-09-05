@@ -4760,9 +4760,12 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             clearDetailEpisodeFocusRowIfNeeded(view);
             return;
         }
-        if (!episodeGridMode) return;
         int position = binding.episodeContainer.getChildAdapterPosition(view);
         if (position == RecyclerView.NO_POSITION) return;
+        if (!episodeGridMode) {
+            alignDetailEpisodeFocusedRow(view, position);
+            return;
+        }
         int rowStart = detailEpisodeRowStart(position);
         boolean sameFocusedRow = rowStart == lastDetailEpisodeFocusRowStart;
         lastDetailEpisodeFocusRowStart = rowStart;
@@ -5068,7 +5071,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         if (visibleHolder != null) {
             binding.episodeContainer.stopScroll();
             visibleHolder.itemView.requestFocus();
-            alignDetailEpisodeFocusedRow(visibleHolder.itemView, target);
+            if (episodeGridMode) alignDetailEpisodeFocusedRow(visibleHolder.itemView, target);
             return true;
         }
         binding.episodeContainer.post(() -> {
@@ -5081,7 +5084,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
                     return;
                 }
                 holder.itemView.requestFocus();
-                alignDetailEpisodeFocusedRow(holder.itemView, target);
+                if (episodeGridMode) alignDetailEpisodeFocusedRow(holder.itemView, target);
             }, 80);
         });
         return true;
@@ -5102,12 +5105,32 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private void alignDetailEpisodeFocusedRow(View focusedView, int position) {
         if (binding == null || focusedView == null) return;
         RecyclerView.LayoutManager layoutManager = binding.episodeContainer.getLayoutManager();
+        if (layoutManager instanceof LinearLayoutManager linearLayoutManager
+                && linearLayoutManager.getOrientation() == LinearLayoutManager.HORIZONTAL) {
+            focusedView.post(() -> {
+                if (binding == null || episodeGridMode || getCurrentFocus() != focusedView) return;
+                if (binding.episodeContainer.getChildAdapterPosition(focusedView) != position) return;
+                alignDetailEpisodeFocusedCardHorizontallyNow(focusedView);
+            });
+            return;
+        }
         if (!(layoutManager instanceof GridLayoutManager)) return;
         focusedView.post(() -> {
             if (binding == null || getCurrentFocus() != focusedView) return;
             if (binding.episodeContainer.getChildAdapterPosition(focusedView) != position) return;
             alignDetailEpisodeFocusedCardNow(focusedView);
         });
+    }
+
+    private void alignDetailEpisodeFocusedCardHorizontallyNow(View focusedView) {
+        if (binding == null || binding.episodeContainer.getWidth() <= 0) return;
+        int contentLeft = binding.episodeContainer.getPaddingLeft();
+        int contentRight = binding.episodeContainer.getWidth() - binding.episodeContainer.getPaddingRight();
+        int viewportCenter = contentLeft + (contentRight - contentLeft) / 2;
+        int cardCenter = focusedView.getLeft() + focusedView.getWidth() / 2;
+        int delta = cardCenter - viewportCenter;
+        if (Math.abs(delta) <= ResUtil.dp2px(2)) return;
+        binding.episodeContainer.smoothScrollBy(delta, 0);
     }
 
     private void alignDetailEpisodeFocusedCardNow(View focusedView) {

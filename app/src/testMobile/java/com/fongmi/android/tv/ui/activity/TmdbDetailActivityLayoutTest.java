@@ -2231,6 +2231,26 @@ public class TmdbDetailActivityLayoutTest {
     }
 
     @Test
+    public void detailEpisodeListModeCentersTheFocusedCardLikeNativeEnhanced() throws Exception {
+        String activity = readJava("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java");
+        String focusChange = javaBlockAt(activity, "private void onDetailEpisodeFocusChange(");
+        String alignFocused = javaBlockAt(activity, "private void alignDetailEpisodeFocusedRow(");
+        String alignHorizontal = javaBlockAt(activity, "private void alignDetailEpisodeFocusedCardHorizontallyNow(");
+
+        assertTrue("list-mode focus changes must schedule the same centered item alignment as native enhanced",
+                focusChange.contains("if (!episodeGridMode)")
+                        && focusChange.contains("alignDetailEpisodeFocusedRow(view, position);"));
+        assertTrue("list-mode episode alignment must use the horizontal layout manager path",
+                alignFocused.contains("LinearLayoutManager.HORIZONTAL")
+                        && alignFocused.contains("alignDetailEpisodeFocusedCardHorizontallyNow(focusedView);"));
+        assertTrue("the focused episode card must be centered within the RecyclerView's usable width",
+                alignHorizontal.contains("binding.episodeContainer.getPaddingLeft()")
+                        && alignHorizontal.contains("binding.episodeContainer.getPaddingRight()")
+                        && alignHorizontal.contains("focusedView.getLeft() + focusedView.getWidth() / 2")
+                        && alignHorizontal.contains("binding.episodeContainer.smoothScrollBy(delta, 0);"));
+    }
+
+    @Test
     public void detailTmdbHorizontalRowsMoveWithinRowAndConsumeBoundaries() throws Exception {
         Path activityPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
         String activity = new String(Files.readAllBytes(activityPath), StandardCharsets.UTF_8);
