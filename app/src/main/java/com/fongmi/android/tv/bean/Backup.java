@@ -1,4 +1,3 @@
-[rtk] /!\ No hook installed — run `rtk init -g` for automatic token savings
 package com.fongmi.android.tv.bean;
 
 import android.content.SharedPreferences;
