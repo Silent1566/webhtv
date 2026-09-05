@@ -240,8 +240,9 @@
     <string name="setting_auto_backup">自动备份</string>
     <string name="setting_fullscreen_menu_key">全屏菜单键</string>
     <string name="setting_home_menu_key">首页菜单键</string>
-    <string name="setting_play_back_to_detail">播放返回详情</string>
-    <string name="setting_play_speed">播放倍速</string>
+   <string name="setting_play_back_to_detail">播放返回详情</string>
+   <string name="setting_playback_overlay">播放菜单遮盖层</string>
+   <string name="setting_play_speed">播放倍速</string>
     <string name="setting_episode_history">记录分集进度</string>
     <string name="setting_history_aggregation">历史记录跨源聚合</string>
     <string name="setting_history_aggregation_hint">基于 TMDB 匹配统一不同源的历史记录</string>

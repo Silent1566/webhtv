@@ -72,6 +72,7 @@ import com.fongmi.android.tv.setting.LiveEpgSetting;
 import com.fongmi.android.tv.setting.LiveSetting;
 import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.CustomCspSetting;
+import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.adapter.ChannelAdapter;
 import com.fongmi.android.tv.ui.helper.PipExitDecision;
 import com.fongmi.android.tv.ui.adapter.EpgDataAdapter;
@@ -247,6 +248,7 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
     @Override
     protected void initView(Bundle savedInstanceState) {
         super.initView(savedInstanceState);
+        applyPlaybackOverlay();
         mKeyDown = CustomKeyDown.create(this, mBinding.exo);
         captureLiveListBasePadding();
         setupWindowInsets();
@@ -277,6 +279,11 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
         setViewModel();
         applyPadLiveMode();
         mBinding.exo.post(() -> applyLiveResizeMode(LiveSetting.getScale()));
+    }
+
+    private void applyPlaybackOverlay() {
+        mBinding.control.getRoot().setBackgroundResource(R.color.transparent);
+        mBinding.control.bottom.setBackgroundResource(Setting.isPlaybackOverlayEnabled() ? R.drawable.shape_controller_scrim : R.color.transparent);
     }
 
     @Override

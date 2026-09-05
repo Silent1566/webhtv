@@ -1373,14 +1373,21 @@ public class Setting {
         Prefers.put("play_back_to_detail", backToDetail);
     }
 
-    public static boolean isSubtitleAutoMatchEnabled() {
-        return Prefers.getBoolean("subtitle_auto_match", false);
-    }
+   public static boolean isSubtitleAutoMatchEnabled() {
+       return Prefers.getBoolean("subtitle_auto_match", false);
+   }
 
-    public static void putSubtitleAutoMatchEnabled(boolean enabled) {
-        Prefers.put("subtitle_auto_match", enabled);
-    }
+   public static void putSubtitleAutoMatchEnabled(boolean enabled) {
+       Prefers.put("subtitle_auto_match", enabled);
+   }
 
+   public static boolean isPlaybackOverlayEnabled() {
+       return Prefers.getBoolean("playback_overlay_enabled", true);
+   }
+
+   public static void putPlaybackOverlayEnabled(boolean enabled) {
+       Prefers.put("playback_overlay_enabled", enabled);
+   }
     public static String getSubtitlePreferredLanguage() {
         return Prefers.getString("subtitle_preferred_language", "zh");
     }
