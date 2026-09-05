@@ -142,6 +142,21 @@ public class Migrations {
         }
     };
 
+    /**
+     * 外挂字幕随历史恢复：History 新增 subtitleSource 列。
+     * 空串表示这条记录没有外部字幕偏好，起播时不注入。
+     *
+     * <p>列声明必须与 Room 导出的 45.json 一致——实体里是普通 String，
+     * 所以是可空列。写成 NOT NULL 会让迁移后的 validateMigration 失败。
+     */
+    public static final Migration MIGRATION_44_45 = new Migration(44, 45) {
+        @Override
+        public void migrate(@NonNull SupportSQLiteDatabase database) {
+            addColumnIfMissing(database, "History", "subtitleSource",
+                    "ALTER TABLE History ADD COLUMN `subtitleSource` TEXT DEFAULT ''");
+        }
+    };
+
     private static void addColumnIfMissing(
             SupportSQLiteDatabase database,
             String table,
