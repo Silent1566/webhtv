@@ -29,6 +29,7 @@ public class AdRuleAdapter extends RecyclerView.Adapter<AdRuleAdapter.ViewHolder
         private Rule defaultRule;
         private String defaultRuleId;
         private HlsRuleConfig.Entry hlsRule;
+        private Boolean hlsEnabledOverride;
         private String source;
 
         public static RuleItem fromUser(UserAdRule rule) {
@@ -74,7 +75,7 @@ public class AdRuleAdapter extends RecyclerView.Adapter<AdRuleAdapter.ViewHolder
                 return source + " · 域名 " + defaultRule.getHosts().size() + " · URL规则 " + defaultRule.getRegex().size() + " · 白名单 " + defaultRule.getExclude().size();
             }
             String status = hlsRule.valid()
-                    ? context.getString(hlsRule.enabled() ? R.string.ad_rule_hls_enabled : R.string.ad_rule_hls_disabled)
+                    ? context.getString(isEnabled() ? R.string.ad_rule_hls_enabled : R.string.ad_rule_hls_disabled)
                     : context.getString(R.string.ad_rule_hls_invalid, hlsRule.error());
             return context.getString(R.string.ad_rule_hls_builtin_summary, hlsRule.version(), status);
         }
@@ -82,7 +83,11 @@ public class AdRuleAdapter extends RecyclerView.Adapter<AdRuleAdapter.ViewHolder
         public boolean isEnabled() {
             if (type == RuleType.USER_RULE) return userRule.isEnabled();
             if (type == RuleType.DEFAULT_RULE) return !DisabledDefaultRuleStore.isDisabled(defaultRuleId);
-            return hlsRule.enabled();
+            return hlsEnabledOverride == null ? hlsRule.enabled() : hlsEnabledOverride;
+        }
+
+        private void setHlsEnabled(boolean enabled) {
+            if (type == RuleType.HLS_RULE) hlsEnabledOverride = enabled;
         }
 
         public boolean isEditable() {
@@ -111,6 +116,64 @@ public class AdRuleAdapter extends RecyclerView.Adapter<AdRuleAdapter.ViewHolder
         this.mItems = items;
         notifyDataSetChanged();
         return this;
+    }
+
+    public void refreshUserEnabled(UserAdRule rule) {
+        if (mItems == null || rule == null) return;
+        for (int i = 0; i < mItems.size(); i++) {
+            RuleItem item = mItems.get(i);
+            if (item.getType() == RuleType.USER_RULE && item.getUserRule() == rule) {
+                notifyItemChanged(i, rule.isEnabled());
+                return;
+            }
+        }
+    }
+
+    public void refreshDefaultEnabled(String ruleId, boolean enabled) {
+        if (mItems == null || ruleId == null) return;
+        for (int i = 0; i < mItems.size(); i++) {
+            RuleItem item = mItems.get(i);
+            if (item.getType() == RuleType.DEFAULT_RULE && ruleId.equals(item.getDefaultRuleId())) {
+                notifyItemChanged(i, enabled);
+                return;
+            }
+        }
+    }
+
+    public void refreshHlsEnabled(String key, boolean enabled) {
+        if (mItems == null || key == null) return;
+        for (int i = 0; i < mItems.size(); i++) {
+            RuleItem item = mItems.get(i);
+            if (item.getType() == RuleType.HLS_RULE && key.equals(item.getHlsRule().key())) {
+                item.setHlsEnabled(enabled);
+                notifyItemChanged(i, enabled);
+                return;
+            }
+        }
+    }
+
+    public int positionOfUserRule(UserAdRule rule) {
+        return positionOf(RuleType.USER_RULE, rule, null, null);
+    }
+
+    public int positionOfDefaultRule(String ruleId) {
+        return positionOf(RuleType.DEFAULT_RULE, null, ruleId, null);
+    }
+
+    public int positionOfHlsRule(String key) {
+        return positionOf(RuleType.HLS_RULE, null, null, key);
+    }
+
+    private int positionOf(RuleType type, UserAdRule userRule, String ruleId, String key) {
+        if (mItems == null) return -1;
+        for (int i = 0; i < mItems.size(); i++) {
+            RuleItem item = mItems.get(i);
+            if (item.getType() != type) continue;
+            if (type == RuleType.USER_RULE && item.getUserRule() == userRule) return i;
+            if (type == RuleType.DEFAULT_RULE && ruleId != null && ruleId.equals(item.getDefaultRuleId())) return i;
+            if (type == RuleType.HLS_RULE && key != null && key.equals(item.getHlsRule().key())) return i;
+        }
+        return -1;
     }
 
     public int removeUserRule(UserAdRule rule) {
@@ -165,6 +228,20 @@ public class AdRuleAdapter extends RecyclerView.Adapter<AdRuleAdapter.ViewHolder
         }
         holder.binding.toggle.setContentDescription((item.isEnabled() ? "关闭" : "启用") + item.getName());
         holder.binding.toggle.setOnClickListener(v -> onToggleClick(holder, item));
+    }
+
+    @Override
+    public void onBindViewHolder(@NonNull ViewHolder holder, int position, @NonNull List<Object> payloads) {
+        if (!payloads.isEmpty() && payloads.get(payloads.size() - 1) instanceof Boolean enabled) {
+            RuleItem item = mItems.get(position);
+            holder.binding.toggle.setChecked(enabled);
+            holder.binding.toggle.setContentDescription((enabled ? "关闭" : "启用") + item.getName());
+            if (item.getType() == RuleType.HLS_RULE) {
+                holder.binding.summary.setText(item.getSummary(holder.itemView.getContext()));
+            }
+            return;
+        }
+        super.onBindViewHolder(holder, position, payloads);
     }
 
     private void onToggleClick(ViewHolder holder, RuleItem item) {

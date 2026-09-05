@@ -18,6 +18,10 @@ public class UserAdRule {
     public static final String SOURCE_INTERFACE_ADS = "interface_ads";
     public static final String SOURCE_INTERFACE_RULE = "interface_rule";
 
+    public static boolean isInterfaceSource(String source) {
+        return SOURCE_INTERFACE_ADS.equals(source) || SOURCE_INTERFACE_RULE.equals(source);
+    }
+
     @SerializedName("id")
     private String id;
 
@@ -78,6 +82,10 @@ public class UserAdRule {
     }
 
     public static UserAdRule fromImportedCandidate(ImportedAdRuleCandidate candidate) {
+        return fromImportedCandidate(candidate, false);
+    }
+
+    public static UserAdRule fromImportedCandidate(ImportedAdRuleCandidate candidate, boolean enabled) {
         UserAdRule rule = new UserAdRule();
         rule.name = candidate.getName();
         rule.source = "ads".equals(candidate.getSourceType()) ? SOURCE_INTERFACE_ADS : SOURCE_INTERFACE_RULE;
@@ -86,7 +94,7 @@ public class UserAdRule {
         rule.regex = new ArrayList<>(candidate.getRegex());
         rule.exclude = new ArrayList<>(candidate.getExclude());
         rule.importedCandidateId = candidate.getId();
-        rule.enabled = false;
+        rule.enabled = enabled;
         return rule;
     }
 
@@ -197,7 +205,7 @@ public class UserAdRule {
      * 列表摘要：来源 · 域名 N · 广告规则 N · 白名单 N
      */
     public String getSummary() {
-        String label = SOURCE_AI.equals(source) ? "AI 识别" : source != null && source.startsWith("interface_") ? "接口导入" : "手动添加";
+        String label = SOURCE_AI.equals(source) ? "AI 识别" : isInterfaceSource(source) ? "接口导入" : "手动添加";
         if (!getSourceName().isEmpty()) label += " · " + getSourceName();
         return label + " · 域名 " + getHosts().size() + " · 广告规则 " + getRegex().size() + " · 白名单 " + getExclude().size();
     }
