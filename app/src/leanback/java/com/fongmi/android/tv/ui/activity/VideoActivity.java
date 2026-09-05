@@ -131,6 +131,7 @@ import com.fongmi.android.tv.ui.helper.EpisodeRangePolicy;
 import com.fongmi.android.tv.ui.helper.EpisodeSeasonPolicy;
 import com.fongmi.android.tv.ui.helper.SourceEpisodeSeasonCache;
 import com.fongmi.android.tv.ui.helper.PlayerControlFocusHelper;
+import com.fongmi.android.tv.ui.helper.TouchOptimizationHelper;
 import com.fongmi.android.tv.ui.helper.TmdbEpisodeGridPolicy;
 import com.fongmi.android.tv.ui.helper.TmdbNavigation;
 import com.fongmi.android.tv.ui.helper.TmdbVideoPlayback;
@@ -10414,6 +10415,7 @@ private void showAudioSheet(BottomSheetDialog dialog, boolean draggable, boolean
         applyAudioSheetWindowGlass(dialog);
         hideSystemBarsForAudioSheet(dialog);
         focusAudioSheetContent(dialog);
+        syncAudioDialog(dialog);
     }
 
 private void showCompactPlaybackSheet(BottomSheetDialog dialog) {
@@ -10460,6 +10462,7 @@ private void showLyricsSearchSheetDialog(BottomSheetDialog dialog) {
         applyAudioSheetWindowGlass(dialog);
         hideSystemBarsForAudioSheet(dialog);
         focusAudioSheetContent(dialog);
+        syncAudioDialog(dialog);
         Window window = dialog.getWindow();
         if (window == null) return;
         WindowManager.LayoutParams params = window.getAttributes();
@@ -10498,6 +10501,7 @@ private void showAudioDrawerSheet(BottomSheetDialog dialog, boolean atStart) {
         applyAudioSheetWindowGlass(dialog);
         hideSystemBarsForAudioSheet(dialog);
         focusAudioSheetContent(dialog);
+        syncAudioDialog(dialog);
     }
 
 private void showAudioQueueDrawerDialog(Dialog dialog) {
@@ -10522,6 +10526,11 @@ private void showAudioQueueDrawerDialog(Dialog dialog) {
         window.clearFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND);
         hideSystemBarsForAudioDialog(dialog);
         focusAudioQueueSelectedItem();
+        syncAudioDialog(dialog);
+    }
+
+private void syncAudioDialog(Dialog dialog) {
+        TouchOptimizationHelper.sync(dialog);
     }
 
 private void focusAudioSheetContent(BottomSheetDialog dialog) {

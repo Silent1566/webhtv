@@ -30,6 +30,7 @@ import com.fongmi.android.tv.update.OciMirror;
 import com.fongmi.android.tv.update.UpdateSource;
 import com.fongmi.android.tv.utils.GithubProxy;
 import com.fongmi.android.tv.utils.WebViewUtil;
+import com.fongmi.android.tv.utils.Util;
 import com.github.catvod.crawler.DebugLogStore;
 import com.github.catvod.crawler.SpiderDebug;
 import com.github.catvod.utils.Trans;
@@ -389,6 +390,14 @@ public class Setting {
 
     public static void putIncognito(boolean incognito) {
         Prefers.put("incognito", incognito);
+    }
+
+    public static boolean isTouchOptimized() {
+        return Util.isLeanback() && Prefers.getBoolean("touch_optimized");
+    }
+
+    public static void putTouchOptimized(boolean enabled) {
+        Prefers.put("touch_optimized", enabled);
     }
 
     public static int getLanguage() {
@@ -1373,14 +1382,21 @@ public class Setting {
         Prefers.put("play_back_to_detail", backToDetail);
     }
 
-    public static boolean isSubtitleAutoMatchEnabled() {
-        return Prefers.getBoolean("subtitle_auto_match", false);
-    }
+   public static boolean isSubtitleAutoMatchEnabled() {
+       return Prefers.getBoolean("subtitle_auto_match", false);
+   }
 
-    public static void putSubtitleAutoMatchEnabled(boolean enabled) {
-        Prefers.put("subtitle_auto_match", enabled);
-    }
+   public static void putSubtitleAutoMatchEnabled(boolean enabled) {
+       Prefers.put("subtitle_auto_match", enabled);
+   }
 
+   public static boolean isPlaybackOverlayEnabled() {
+       return Prefers.getBoolean("playback_overlay_enabled", true);
+   }
+
+   public static void putPlaybackOverlayEnabled(boolean enabled) {
+       Prefers.put("playback_overlay_enabled", enabled);
+   }
     public static String getSubtitlePreferredLanguage() {
         return Prefers.getString("subtitle_preferred_language", "zh");
     }

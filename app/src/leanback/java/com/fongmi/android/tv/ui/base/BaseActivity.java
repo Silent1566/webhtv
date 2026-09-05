@@ -8,9 +8,13 @@ import android.content.res.Resources;
 import android.os.Bundle;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.Window;
 
 import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.NonNull;
+import androidx.fragment.app.DialogFragment;
+import androidx.fragment.app.Fragment;
+import androidx.fragment.app.FragmentManager;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.fragment.app.FragmentActivity;
 import androidx.recyclerview.widget.RecyclerView;
@@ -21,6 +25,7 @@ import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.server.process.ApkUrlPush;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.custom.CustomWallView;
+import com.fongmi.android.tv.ui.helper.TouchOptimizationHelper;
 import com.fongmi.android.tv.utils.Util;
 
 import org.greenrobot.eventbus.EventBus;
@@ -41,6 +46,7 @@ public abstract class BaseActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        registerFragmentLifecycleCallbacks();
         setContentView(getBinding().getRoot());
         EventBus.getDefault().register(this);
         initView(savedInstanceState);
@@ -52,8 +58,8 @@ public abstract class BaseActivity extends AppCompatActivity {
     @Override
     public void setContentView(View view) {
         super.setContentView(view);
-        if (!customWall()) return;
-        addCustomWall();
+        if (customWall()) addCustomWall();
+        TouchOptimizationHelper.sync(getWindow().getDecorView());
     }
 
     private void addCustomWall() {
@@ -166,8 +172,26 @@ public abstract class BaseActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        TouchOptimizationHelper.sync(getWindow().getDecorView());
         Updater.create().resume(this);
         ApkUrlPush.get().resume(this);
+    }
+
+    private void registerFragmentLifecycleCallbacks() {
+        getSupportFragmentManager().registerFragmentLifecycleCallbacks(new FragmentManager.FragmentLifecycleCallbacks() {
+            @Override
+            public void onFragmentViewCreated(@NonNull FragmentManager fragmentManager, @NonNull Fragment fragment, @NonNull View view, Bundle savedInstanceState) {
+                TouchOptimizationHelper.sync(view);
+            }
+
+            @Override
+            public void onFragmentStarted(@NonNull FragmentManager fragmentManager, @NonNull Fragment fragment) {
+                if (!(fragment instanceof DialogFragment dialog) || dialog.getDialog() == null) return;
+                Window window = dialog.getDialog().getWindow();
+                if (window == null) return;
+                window.getDecorView().post(() -> TouchOptimizationHelper.sync(window.getDecorView()));
+            }
+        }, true);
     }
 
     @Override

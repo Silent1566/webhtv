@@ -2,7 +2,7 @@
 
 ## 状态
 
-提案待评审：已纳入 TMDB 全局关联，用于跨站点复用手动匹配意图
+已实现并完成合并复评：站点级与 TMDB 全局关联可复用手动匹配意图；关键词绑定到产生所选结果的已提交请求。验证与当前同步状态见 `docs/beta-sync-review-20260905.md`。
 
 ## 日期
 
@@ -181,7 +181,7 @@ TMDB 全局季级 key：
 1. 保留现有本集 `put(siteKey, vodId, episodeName, ...)`。
 2. 写入站点系列级 `putSeries(siteKey, vodId, searchTitle, rawTitle, item)`。
 3. 如果当前播放上下文有可信 TMDB 身份，写入全局 `putTmdbSeason(tmdbId, seasonNumber, searchTitle, rawTitle, item)`。
-4. `searchTitle` 优先取弹幕搜索对话框当前关键词；为空时回退 rawTitle。
+4. `searchTitle` 取产生当前结果的已提交请求关键词，不读取用户随后编辑的输入框；为空时回退 rawTitle。
 5. 站点系列级条目总是覆盖旧值，代表“用户最后一次手动确认的意图”。
 6. TMDB 全局条目同样覆盖旧值，但仅在 TMDB 身份可信时写入。
 
@@ -207,8 +207,8 @@ TMDB 全局季级 key：
 
 1. 查询本集缓存，命中则直接返回。
 2. 查询站点系列级手动搜索关键词。
-3. 站点级关键词为空时，查询 TMDB 全局季级手动搜索关键词。
-4. 若任一关键词非空，将它作为最高优先级标题调用 `searchFirst`。
+3. 查询 TMDB 全局季级手动搜索关键词，与站点关键词相同则去重。
+4. 按站点级、TMDB 全局季级的顺序，将非空关键词放在常规标题之前调用 `searchFirst`；站点关键词无结果时可以继续尝试全局关键词。
 5. 若手动关键词搜索无结果，继续现有 `resolver.queryTitles()`。
 6. 清洗标题 fallback 与 AI fallback 保持现有顺序。
 7. 两层关键词都为空时，不改变现有搜索行为。

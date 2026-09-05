@@ -822,6 +822,7 @@
     <string name="setting_proxy_test_failed">代理測試失敗：%1$s</string>
     <string name="setting_one_key_sync">一鍵同步</string>
     <string name="setting_incognito">無痕模式</string>
+    <string name="setting_touch_optimization">觸屏優化</string>
     <string name="setting_drive_check">網盤檢測</string>
     <string name="setting_audio_source">音訊源配置</string>
     <string name="setting_novel_source">小說源配置</string>
@@ -2342,8 +2343,9 @@
     <string name="setting_auto_backup">自動備份</string>
     <string name="setting_fullscreen_menu_key">全屏菜單鍵</string>
     <string name="setting_home_menu_key">首頁菜單鍵</string>
-    <string name="setting_play_back_to_detail">播放返回詳情</string>
-    <string name="setting_play_speed">播放倍速</string>
+   <string name="setting_play_back_to_detail">播放返回詳情</string>
+   <string name="setting_playback_overlay">播放選單遮罩</string>
+   <string name="setting_play_speed">播放倍速</string>
     <string name="setting_episode_history">記錄分集進度</string>
     <string name="setting_history_aggregation">歷史記錄跨源聚合</string>
     <string name="setting_history_aggregation_hint">基於 TMDB 匹配統一不同源的歷史記錄</string>

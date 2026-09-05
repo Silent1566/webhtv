@@ -1376,6 +1376,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
     protected void initView(Bundle savedInstanceState) {
         mTmdbDetailTimeout = this::showTmdbDetailFallback;
         super.initView(savedInstanceState);
+        applyPlaybackOverlay();
         mRestoringConfigurationPlayback = savedInstanceState != null;
         ViewCompat.setOnApplyWindowInsetsListener(mBinding.getRoot(), (v, insets) -> setStatusBar(insets));
         mKeyDown = CustomKeyDown.create(this, mBinding.exo);
@@ -10508,6 +10509,11 @@ private void dismissKaraokeResultDialogForRecreation() {
         mSuppressKaraokeResultAction = false;
         mKaraokeResultDialog = null;
         SpiderDebug.log("karaoke-result", "dismiss old window for configuration change");
+    }
+
+    private void applyPlaybackOverlay() {
+        mBinding.control.getRoot().setBackgroundResource(R.color.transparent);
+        mBinding.control.bottom.setBackgroundResource(Setting.isPlaybackOverlayEnabled() ? R.drawable.shape_controller_scrim : R.color.transparent);
     }
 
 }

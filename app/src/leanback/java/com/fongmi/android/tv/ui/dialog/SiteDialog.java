@@ -34,6 +34,7 @@ import com.fongmi.android.tv.impl.SiteListener;
 import com.fongmi.android.tv.setting.SiteGroupOrderStore;
 import com.fongmi.android.tv.ui.adapter.SiteAdapter;
 import com.fongmi.android.tv.ui.custom.SpaceItemDecoration;
+import com.fongmi.android.tv.ui.helper.TouchOptimizationHelper;
 import com.fongmi.android.tv.utils.KeyUtil;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
@@ -144,6 +145,7 @@ public class SiteDialog extends BaseAlertDialog implements SiteAdapter.OnClickLi
         directDialog.show();
         log("show call end cost=%sms total=%sms", cost(showDialogStart), cost());
         applyWindow(directDialog.getWindow());
+        TouchOptimizationHelper.sync(directDialog);
         log("window applied total=%sms", cost());
     }
 

@@ -242,8 +242,9 @@
     <string name="setting_auto_backup">Automatic backup</string>
     <string name="setting_fullscreen_menu_key">Fullscreen menu key</string>
     <string name="setting_home_menu_key">Home menu key</string>
-    <string name="setting_play_back_to_detail">Return playback to detail</string>
-    <string name="setting_play_speed">Playback speed</string>
+   <string name="setting_play_back_to_detail">Return playback to detail</string>
+   <string name="setting_playback_overlay">Playback menu overlay</string>
+   <string name="setting_play_speed">Playback speed</string>
     <string name="setting_episode_history">Remember episode progress</string>
     <string name="setting_history_aggregation">Aggregate history by TMDB</string>
     <string name="setting_history_aggregation_hint">Unify history across sources based on TMDB match</string>
@@ -866,6 +867,7 @@
     <string name="setting_proxy_test_failed">Proxy test failed: %1$s</string>
     <string name="setting_one_key_sync">One-key sync</string>
     <string name="setting_incognito">Incognito mode</string>
+    <string name="setting_touch_optimization">Touch optimization</string>
     <string name="setting_drive_check">Drive link check</string>
     <string name="setting_audio_source">Audio source config</string>
     <string name="setting_novel_source">Novel source config</string>

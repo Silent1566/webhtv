@@ -240,8 +240,9 @@
     <string name="setting_auto_backup">自动备份</string>
     <string name="setting_fullscreen_menu_key">全屏菜单键</string>
     <string name="setting_home_menu_key">首页菜单键</string>
-    <string name="setting_play_back_to_detail">播放返回详情</string>
-    <string name="setting_play_speed">播放倍速</string>
+   <string name="setting_play_back_to_detail">播放返回详情</string>
+   <string name="setting_playback_overlay">播放菜单遮盖层</string>
+   <string name="setting_play_speed">播放倍速</string>
     <string name="setting_episode_history">记录分集进度</string>
     <string name="setting_history_aggregation">历史记录跨源聚合</string>
     <string name="setting_history_aggregation_hint">基于 TMDB 匹配统一不同源的历史记录</string>
@@ -863,6 +864,7 @@
     <string name="setting_proxy_test_failed">代理测试失败：%1$s</string>
     <string name="setting_one_key_sync">一键同步</string>
     <string name="setting_incognito">无痕模式</string>
+    <string name="setting_touch_optimization">触屏优化</string>
     <string name="setting_drive_check">网盘检测</string>
     <string name="setting_audio_source">音频源配置</string>
     <string name="setting_novel_source">小说源配置</string>
