@@ -7012,7 +7012,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         updateInlineButtons(false);
         Site site = getCurrentSite();
         ensureInlineDanmakuController();
-        if (SubtitleRestoreCoordinator.restore(history, player())) persistHistorySubtitleSource();
+        if (SubtitleRestoreCoordinator.restore(history, player(), result)) persistHistorySubtitleSource();
         startPlayer(getHistoryKey(), result, useParse, site == null ? 0 : site.getTimeout(), buildMetadata());
         updateNavigationKey();
         subtitlePlaybackSession.onPlaybackStarted(this, result);
@@ -10583,10 +10583,12 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     /**
-     * 只落字幕来源，不带播放进度。
+     * 落盘字幕来源，不重新采样播放器进度。
      *
-     * <p>{@link #syncInlineHistory()} 会先跑 {@code updateInlineHistoryProgress()}，
-     * 而恢复发生在起播之前——那时播放器还停在上一集，进度写回去就错了。
+     * <p>不能用 {@link #syncInlineHistory()}：那个方法会先跑
+     * {@code updateInlineHistoryProgress()} 去读播放器当前位置，而恢复发生在起播之前——
+     * 那时播放器还停在上一集，读到的进度会被记到新集头上。这里只写 history 对象上
+     * 已有的字段快照（进度已由 {@code updateInlineHistory} 按新集重置好）。
      */
     private void persistHistorySubtitleSource() {
         if (history == null || Setting.isIncognito()) return;

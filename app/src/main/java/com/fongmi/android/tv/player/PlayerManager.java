@@ -1783,6 +1783,10 @@ public class PlayerManager implements ParseCallback {
         resetMpvOutputRuntime();
         closeMultiThreadProxyRegistration();
         spec = null;
+        // 待恢复字幕是绑定「下一次起播」的一次性登记。若那次起播被提前拦下
+        // （DRM 不支持、阅读器路由、地址为空），登记会留在这里；不清掉的话
+        // 会被后续某次无关起播（例如音频迷你播放器）取走并挂上。
+        pendingRestoreSub = null;
         clearPendingSwitchRestore();
         clearDanmaku("clear");
         lutAppliedForItem = false;

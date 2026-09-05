@@ -44,13 +44,13 @@ public class SubtitleRestorePolicyTest {
     }
 
     @Test
-    public void dropsSubtitleFromAnotherEpisode() {
+    public void keepsPreferenceWhenPlayingAnotherEpisode() {
         SubtitleRestorePolicy.Decision decision = decide(
                 source("/storage/emulated/0/a.srt", "https://site/ep11.m3u8"),
                 EPISODE, false, "/storage/emulated/0/a.srt");
 
         assertFalse("上一集的字幕挂到下一集会让时间轴完全错位", decision.restore());
-        assertTrue(decision.clear());
+        assertFalse("换集只是这一次不适用，清掉的话切回 ep11 就没字幕了", decision.clear());
         assertEquals("episode-changed", decision.reason());
     }
 
