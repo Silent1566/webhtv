@@ -5,10 +5,15 @@ import com.fongmi.android.tv.setting.Setting;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.net.URI;
 
 public final class GithubProxy {
 
     public static final String DEFAULT = "https://gh-proxy.com/";
+    public static final String DIRECT = "direct";
+    public static final String MODE_FULL_URL = "full_url";
+    public static final String MODE_STRIP_SCHEME = "strip_scheme";
+
     private static final String[] BUILT_IN = {
             DEFAULT,
             "https://ghfast.top/",
@@ -32,6 +37,19 @@ public final class GithubProxy {
         if (!enabled || !isGithubDownload(url) || isProxied(url)) return url;
         String proxy = first(configured);
         return isEmpty(proxy) ? url : normalize(proxy) + url;
+    }
+
+    public static Config config() {
+        return config(Setting.getGithubProxy(), Setting.getGithubProxyMode(), Setting.isGithubProxyEnabled());
+    }
+
+    public static Config config(String configured, String mode, boolean enabled) {
+        if (!enabled) return new Config(DIRECT, "", MODE_FULL_URL);
+        return new Config("proxy", normalize(first(configured)), normalizeMode(mode));
+    }
+
+    public static String normalizeMode(String mode) {
+        return MODE_STRIP_SCHEME.equals(mode) ? MODE_STRIP_SCHEME : MODE_FULL_URL;
     }
 
     public static String defaultSources() {
@@ -78,6 +96,15 @@ public final class GithubProxy {
         return String.join("\n", list);
     }
 
+    public static String addSources(String configured, String value) {
+        if (isEmpty(value)) return configured;
+        List<String> list = sources(configured);
+        for (String source : sources(value)) {
+            if (!list.contains(source)) list.add(source);
+        }
+        return String.join("\n", list);
+    }
+
     public static String removeSource(String source) {
         if (isEmpty(source)) return Setting.getGithubProxy();
         String normalized = normalize(source);
@@ -89,6 +116,32 @@ public final class GithubProxy {
     public static String normalizeConfig(String value) {
         List<String> sources = sources(value);
         return sources.isEmpty() ? defaultSources() : String.join("\n", sources);
+    }
+
+    public static String probeUrl(String source) {
+        String proxy = normalize(isEmpty(source) ? first(Setting.getGithubProxy()) : source);
+        return proxy + "https://github.com/Silent1566/webhtv/releases/download/update-channel/update.json";
+    }
+
+    public static final class Config {
+
+        public final String id;
+        public final String baseUrl;
+        public final String mode;
+
+        private Config(String id, String baseUrl, String mode) {
+            this.id = id;
+            this.baseUrl = baseUrl;
+            this.mode = mode;
+        }
+
+        public String rewrite(String url) {
+            String target = requireHttpsUrl(url);
+            if (DIRECT.equals(id) || baseUrl.isEmpty()) return target;
+            String prefix = baseUrl.endsWith("/") ? baseUrl : baseUrl + "/";
+            if (MODE_STRIP_SCHEME.equals(mode)) return prefix + target.substring("https://".length());
+            return prefix + target;
+        }
     }
 
     private static String first(String configured) {
@@ -123,6 +176,21 @@ public final class GithubProxy {
         String lower = url.toLowerCase(Locale.ROOT);
         for (String source : BUILT_IN) if (lower.startsWith(source.toLowerCase(Locale.ROOT))) return true;
         return lower.matches("https?://[^/]+/https?://.*");
+    }
+
+    private static String requireHttpsUrl(String value) {
+        try {
+            String text = value == null ? "" : value.trim();
+            URI uri = URI.create(text);
+            if (!"https".equalsIgnoreCase(uri.getScheme())) throw new IllegalArgumentException("HTTPS required");
+            if (uri.getHost() == null || uri.getHost().isEmpty()) throw new IllegalArgumentException("Host required");
+            if (uri.getUserInfo() != null) throw new IllegalArgumentException("Credentials are not allowed");
+            return text;
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Invalid HTTPS URL", e);
+        }
     }
 
     private static boolean isEmpty(String text) {

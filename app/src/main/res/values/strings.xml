@@ -926,6 +926,10 @@
     <string name="setting_github_proxy_remove">Remove</string>
     <string name="setting_github_proxy_reset">Reset to default</string>
     <string name="setting_github_proxy_invalid">Please enter a valid http/https URL</string>
+    <string name="setting_github_proxy_probe">Probe latency</string>
+    <string name="setting_github_proxy_latency">%1$d ms</string>
+    <string name="setting_github_proxy_latency_failed">Failed</string>
+    <string name="setting_github_proxy_latency_testing">Testing</string>
 
     <!-- Backup & Restore -->
     <string name="restore_select">Select backup</string>

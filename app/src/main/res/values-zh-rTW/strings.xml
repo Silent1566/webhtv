@@ -882,6 +882,10 @@
     <string name="setting_github_proxy_remove">移除</string>
     <string name="setting_github_proxy_reset">重設預設</string>
     <string name="setting_github_proxy_invalid">請輸入有效的 http/https 地址</string>
+    <string name="setting_github_proxy_probe">探測延遲</string>
+    <string name="setting_github_proxy_latency">%1$d ms</string>
+    <string name="setting_github_proxy_latency_failed">失敗</string>
+    <string name="setting_github_proxy_latency_testing">測試中</string>
 
     <!-- Backup & Restore -->
     <string name="restore_select">選擇備份</string>

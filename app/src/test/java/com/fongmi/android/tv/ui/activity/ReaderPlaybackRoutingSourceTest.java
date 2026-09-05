@@ -9,6 +9,7 @@ import org.junit.Test;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.regex.Pattern;
 
 public class ReaderPlaybackRoutingSourceTest {
 
@@ -92,12 +93,14 @@ public class ReaderPlaybackRoutingSourceTest {
     public void readerProgressRefreshesHistoryAfterEverySave() throws Exception {
         String source = read("app/src/main/java/com/fongmi/android/tv/ui/novel/ReaderHistory.java");
 
-        String savedThenRefreshed = "saveRow(history);\n        App.post(RefreshEvent::history);";
+        boolean savedThenRefreshed = Pattern.compile(
+                "saveRow\\(history\\);\\s*App\\.post\\(RefreshEvent::history\\);")
+                .matcher(source).find();
 
         assertTrue("reader history must save and refresh the updated row together",
-                source.contains(savedThenRefreshed));
+                savedThenRefreshed);
         assertTrue("reader history must refresh the history view after saving progress",
-                source.contains(savedThenRefreshed));
+                savedThenRefreshed);
     }
 
     @Test

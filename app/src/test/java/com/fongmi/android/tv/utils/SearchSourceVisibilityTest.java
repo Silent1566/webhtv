@@ -9,29 +9,22 @@ public class SearchSourceVisibilityTest {
 
     @Test
     public void sourceWithVisibleResultsIsAlwaysShown() {
-        assertTrue(SearchSourceVisibility.shouldShow(0, false, true));
-        assertTrue(SearchSourceVisibility.shouldShow(80, false, true));
-        assertTrue(SearchSourceVisibility.shouldShow(100, true, true));
+        assertTrue(SearchSourceVisibility.shouldShow(true));
     }
 
     @Test
-    public void unlimitedModePreservesExistingSourceOrderBehavior() {
-        assertTrue(SearchSourceVisibility.shouldShow(0, true, false));
-        assertFalse(SearchSourceVisibility.shouldShow(0, false, false));
-        assertTrue(SearchSourceVisibility.shouldShow(-1, true, false));
-        assertFalse(SearchSourceVisibility.shouldShow(-1, false, false));
+    public void emptySourceIsHiddenIncludingUnlimitedFixedOrderMode() {
+        assertFalse(SearchSourceVisibility.shouldShow(false));
     }
 
     @Test
     public void everyFilteredModeHidesSourcesWithoutMatches() {
-        assertFalse(SearchSourceVisibility.shouldShow(1, true, false));
-        assertFalse(SearchSourceVisibility.shouldShow(80, false, false));
-        assertFalse(SearchSourceVisibility.shouldShow(100, true, false));
+        assertFalse(SearchSourceVisibility.shouldShow(false));
     }
 
     @Test
     public void hiddenSourceAppearsAsSoonAsItGetsAMatch() {
-        assertFalse(SearchSourceVisibility.shouldShow(60, true, false));
-        assertTrue(SearchSourceVisibility.shouldShow(60, true, true));
+        assertFalse(SearchSourceVisibility.shouldShow(false));
+        assertTrue(SearchSourceVisibility.shouldShow(true));
     }
 }

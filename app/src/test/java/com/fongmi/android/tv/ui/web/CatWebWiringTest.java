@@ -130,8 +130,61 @@ public class CatWebWiringTest {
         int store = source.indexOf("VodDetailCache.putContent(sourceKey, id, content)");
         assertTrue("SiteApi 必须有详情缓存写入", store >= 0);
 
-        int guard = source.lastIndexOf("!CatAction.blank(result.getVod())", store);
+        int guard = source.lastIndexOf("CatAction.blank(result.getVod())", store);
         assertTrue("写缓存前必须排除「什么都没有」的详情", guard > 0 && guard < store);
+    }
+
+    /**
+     * 只有占位线路、没有元数据的详情不得进缓存。
+     *
+     * <p>设置类站点（网盘配置一类）把每个设置项做成条目，真正的工作在 {@code detailContent}
+     * 里发生——弹输入框、写配置；返回值只是个占位假线路，实测形如
+     * {@code {"list":[{"vod_play_from":"Config","vod_play_url":"Config$Config"}]}}。
+     * 缓存住它，第二次点击 spider 不被调用，弹窗不出，宿主拿着假地址直奔播放页。
+     *
+     * <p>{@code blank} 挡不住：占位线路会生成 Flag，{@code getFlags()} 非空。所以判定要看
+     * 元数据（名字/封面/简介）而<b>不看线路</b>——线路是占位结果也能凑出来的东西。
+     */
+    @Test
+    public void detailWithoutMetadataIsNotCached() throws IOException {
+        String source = read("com/fongmi/android/tv/api/SiteApi.java");
+        int store = source.indexOf("VodDetailCache.putContent(sourceKey, id, content)");
+        assertTrue("SiteApi 必须有详情缓存写入", store > 0);
+
+        int guard = source.lastIndexOf("!hasMetadata(result.getVod())", store);
+        assertTrue("写缓存前必须排除「只有占位线路、没有元数据」的详情", guard > 0 && guard < store);
+
+        int helper = source.indexOf("private static boolean hasMetadata(Vod vod)");
+        assertTrue("必须有 hasMetadata 判定", helper > 0);
+        String body = source.substring(helper, source.indexOf('}', source.indexOf("return", helper)));
+        assertTrue("判定必须看名字", body.contains("getName()"));
+        assertTrue("判定必须看封面", body.contains("getPic()"));
+        assertTrue("判定必须看简介", body.contains("getContent()"));
+        assertTrue("判定绝不能看线路——占位结果也有线路，看了就挡不住设置类站点",
+                !body.contains("getFlags()"));
+    }
+
+    /**
+     * 这次 spider 调用顺带开了网页，这条详情就绝不能进缓存。
+     *
+     * <p>开页是 spider 调用的副作用（bundle 反向调 {@code /msg}），缓存命中时不调 spider，
+     * 副作用也就不再发生——第二次点击网页不开、还会停在空详情页上，即「只有第一次生效」。
+     *
+     * <p>与 {@link #detailWithoutMetadataIsNotCached} 互补：那条看结果形状，这条看副作用。
+     * 形状千变万化，副作用是确凿的，两类都要。
+     */
+    @Test
+    public void webOpeningDetailIsNotCached() throws IOException {
+        String source = read("com/fongmi/android/tv/api/SiteApi.java");
+        int sample = source.indexOf("long beforeSpider = System.currentTimeMillis()");
+        assertTrue("必须在调 spider 之前先取一次时刻", sample > 0);
+
+        int spider = source.indexOf("site.recent().spider().detailContent(", sample);
+        assertTrue("取样必须在 spider 调用之前，否则跨不过副作用发生的那一刻", spider > sample);
+
+        int store = source.indexOf("VodDetailCache.putContent(sourceKey, id, content)");
+        int compare = source.lastIndexOf("CatWebEvent.requestedAfter(beforeSpider)", store);
+        assertTrue("写缓存前必须判定这次调用有没有开过页", compare > sample && compare < store);
     }
 
     @Test

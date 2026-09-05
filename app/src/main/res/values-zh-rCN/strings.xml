@@ -923,6 +923,10 @@
     <string name="setting_github_proxy_remove">移除</string>
     <string name="setting_github_proxy_reset">重置默认</string>
     <string name="setting_github_proxy_invalid">请输入有效的 http/https 地址</string>
+    <string name="setting_github_proxy_probe">探测延迟</string>
+    <string name="setting_github_proxy_latency">%1$d ms</string>
+    <string name="setting_github_proxy_latency_failed">失败</string>
+    <string name="setting_github_proxy_latency_testing">测试中</string>
 
     <!-- Backup & Restore -->
     <string name="restore_select">选择备份</string>
