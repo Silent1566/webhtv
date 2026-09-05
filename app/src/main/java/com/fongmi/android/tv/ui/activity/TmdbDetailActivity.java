@@ -106,6 +106,7 @@ import com.fongmi.android.tv.ui.host.TmdbDetailHost;
 import com.fongmi.android.tv.playback.PlaybackEventCollector;
 import com.fongmi.android.tv.playback.HistoryResumePayload;
 import com.fongmi.android.tv.playback.PlaybackOrientation;
+import com.fongmi.android.tv.playback.SubtitleRestoreCoordinator;
 import com.fongmi.android.tv.player.IntroSkipKinds;
 import com.fongmi.android.tv.player.IntroSkipPlayback;
 import com.fongmi.android.tv.player.PlayerManager;
@@ -7011,6 +7012,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         updateInlineButtons(false);
         Site site = getCurrentSite();
         ensureInlineDanmakuController();
+        if (SubtitleRestoreCoordinator.restore(history, player(), result)) persistHistorySubtitleSource();
         startPlayer(getHistoryKey(), result, useParse, site == null ? 0 : site.getTimeout(), buildMetadata());
         updateNavigationKey();
         subtitlePlaybackSession.onPlaybackStarted(this, result);
@@ -10573,6 +10575,25 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private void syncInlineHistory() {
         updateInlineHistoryProgress();
         if (history != null && !Setting.isIncognito()) Task.execute(() -> history.save());
+    }
+
+    @Override
+    protected void onSubtitleSelected(Sub sub) {
+        if (SubtitleRestoreCoordinator.remember(history, sub)) persistHistorySubtitleSource();
+    }
+
+    /**
+     * 落盘字幕来源，不重新采样播放器进度。
+     *
+     * <p>不能用 {@link #syncInlineHistory()}：那个方法会先跑
+     * {@code updateInlineHistoryProgress()} 去读播放器当前位置，而恢复发生在起播之前——
+     * 那时播放器还停在上一集，读到的进度会被记到新集头上。这里只写 history 对象上
+     * 已有的字段快照（进度已由 {@code updateInlineHistory} 按新集重置好）。
+     */
+    private void persistHistorySubtitleSource() {
+        if (history == null || Setting.isIncognito()) return;
+        History snapshot = history.copy();
+        Task.execute(snapshot::save);
     }
 
     private void updateInlineHistoryProgress() {

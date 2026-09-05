@@ -29,6 +29,7 @@ import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.BuildConfig;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.bean.Result;
+import com.fongmi.android.tv.bean.Sub;
 import com.fongmi.android.tv.browse.BrowseTree;
 import com.fongmi.android.tv.event.ActionEvent;
 import com.fongmi.android.tv.event.ConfigEvent;
@@ -677,6 +678,11 @@ private AudioHistory.Record audioHistoryRecord;
     }
 
     @Override
+    public void onSubtitleSelected(Sub sub) {
+        playerCallbacks.forEach(callback -> callback.onSubtitleSelected(sub));
+    }
+
+    @Override
     public void onPlayerRebuild(Player newPlayer, boolean resetVideoSurface) {
         exoPlayer.removeListener(listener);
         exoPlayer = newPlayer;
@@ -795,6 +801,9 @@ public void onIsPlayingChanged(boolean isPlaying) {
         }
 
         default void onExoFirstFrame() {
+        }
+
+        default void onSubtitleSelected(Sub sub) {
         }
 
         default void onPlayerRebuild(Player player, boolean resetVideoSurface) {

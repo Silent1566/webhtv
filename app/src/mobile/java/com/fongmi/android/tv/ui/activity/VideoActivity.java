@@ -92,6 +92,7 @@ import com.fongmi.android.tv.model.SiteViewModel;
 import com.fongmi.android.tv.playback.PlaybackEventCollector;
 import com.fongmi.android.tv.playback.HistoryResumePayload;
 import com.fongmi.android.tv.playback.PlaybackOrientation;
+import com.fongmi.android.tv.playback.SubtitleRestoreCoordinator;
 import com.fongmi.android.tv.player.IntroSkipKinds;
 import com.fongmi.android.tv.player.IntroSkipPlayback;
 import com.fongmi.android.tv.player.PlayerHelper;
@@ -2487,6 +2488,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         mBinding.control.parse.setVisibility(isFullscreen() && isUseParse() && PlayerButtonSetting.isVisible(PlayerButtonSetting.PARSE) ? View.VISIBLE : View.GONE);
         if (redirectToAudioIfNeeded(result)) return;
         List<Danmaku> siteDanmakus = result.getDanmaku();
+        if (SubtitleRestoreCoordinator.restore(mHistory, player(), result)) syncHistory();
         startPlayer(getHistoryKey(), result, isUseParse(), getSite().getTimeout(), buildMetadata());
         subtitlePlaybackSession.onPlaybackStarted(this, result);
         if (DanmakuApi.canAutoSearch(siteDanmakus)) DanmakuApi.search(MediaTitleRequest.builder()
@@ -2607,6 +2609,8 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
     public void onItemClick(Result result) {
         updateActionQuality(result);
         beginPlayHealth();
+        // 切清晰度也会重建 spec，字幕列表跟着重置，所以这里同样要恢复一次。
+        if (SubtitleRestoreCoordinator.restore(mHistory, player(), result)) syncHistory();
         startPlayer(getHistoryKey(), result, isUseParse(), getSite().getTimeout(), buildMetadata());
         subtitlePlaybackSession.onPlaybackStarted(this, result);
     }
@@ -5783,6 +5787,11 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         mClock.setCallback(this);
         // 轨道要等新引擎 prepare 完才回来，重建那一刻按钮还是隐藏态，弹窗必须在这里再抄一次。
         refreshControlDialog();
+    }
+
+    @Override
+    protected void onSubtitleSelected(Sub sub) {
+        if (SubtitleRestoreCoordinator.remember(mHistory, sub)) syncHistory();
     }
 
     private void updateAudioOnlyState() {

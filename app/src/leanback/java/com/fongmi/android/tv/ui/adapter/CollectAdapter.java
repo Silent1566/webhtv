@@ -21,6 +21,8 @@ public class CollectAdapter extends RecyclerView.Adapter<CollectAdapter.ViewHold
 
     private final OnClickListener listener;
     private final List<Collect> mItems;
+    private int progressCurrent;
+    private int progressTotal;
 
     public CollectAdapter(OnClickListener listener) {
         this.listener = listener;
@@ -47,6 +49,12 @@ public class CollectAdapter extends RecyclerView.Adapter<CollectAdapter.ViewHold
     public void add(List<Vod> items) {
         if (mItems.isEmpty()) return;
         mItems.get(0).getList().addAll(items);
+    }
+
+    public void setProgress(int current, int total) {
+        progressTotal = Math.max(0, total);
+        progressCurrent = Math.max(0, Math.min(current, progressTotal));
+        if (progressTotal > 0 && !mItems.isEmpty()) notifyChanged(0);
     }
 
     public int findCollectIndex(String siteKey) {
@@ -154,7 +162,10 @@ public class CollectAdapter extends RecyclerView.Adapter<CollectAdapter.ViewHold
             int adapterPosition = holder.getBindingAdapterPosition();
             return listener != null && adapterPosition >= 0 && listener.onCollectKey(adapterPosition, keyCode, event);
         });
-        holder.binding.text.setText(item.getSite().getDisplayName());
+        String name = item.getSite().getDisplayName();
+        holder.binding.text.setText("all".equals(item.getSite().getKey()) && progressTotal > 0
+            ? name + " " + progressCurrent + "/" + progressTotal
+            : name);
         holder.binding.text.setSelected(holder.binding.text.hasFocus() || item.isSelected());
         holder.binding.text.setOnFocusChangeListener((v, hasFocus) -> holder.binding.text.setSelected(hasFocus || item.isSelected()));
     }

@@ -303,6 +303,7 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
 
     private void setSearchProgress(SearchProgress progress) {
         if (progress == null) return;
+        mCollectAdapter.setProgress(progress.current(), progress.total());
         mSearchCompleted = progress.total() > 0 && progress.current() >= progress.total();
         if (mSearchCompleted && mCollectAdapter.getItemCount() > 0) updateEmptyState(mCollectAdapter.getActivated());
     }
