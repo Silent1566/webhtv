@@ -2221,13 +2221,13 @@ public class TmdbDetailActivityLayoutTest {
                         && containerKeyBody.contains("KeyUtil.isLeftKey(event)")
                         && containerKeyBody.contains("KeyUtil.isRightKey(event)"));
         assertTrue("list-mode DPAD_LEFT should move to the previous episode and consume the first-card boundary",
-                listBody.contains("if (KeyUtil.isLeftKey(event))")
-                        && listBody.contains("if (position <= 0) return true;")
-                        && listBody.contains("return focusDetailEpisode(position - 1);"));
+                 listBody.contains("if (KeyUtil.isLeftKey(event))")
+                         && listBody.contains("if (position <= 0) return true;")
+                         && listBody.contains("return focusDetailEpisode(position - 1);"));
         assertTrue("list-mode DPAD_RIGHT should move to the next episode and consume the last-card boundary",
-                listBody.contains("if (KeyUtil.isRightKey(event))")
-                        && listBody.contains("position >= episodeAdapter.getItemCount() - 1")
-                        && listBody.contains("return focusDetailEpisode(position + 1);"));
+                 listBody.contains("if (KeyUtil.isRightKey(event))")
+                         && listBody.contains("position >= episodeAdapter.getItemCount() - 1")
+                         && listBody.contains("return focusDetailEpisode(position + 1);"));
     }
 
     @Test
