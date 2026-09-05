@@ -866,6 +866,7 @@
     <string name="setting_proxy_test_failed">Proxy test failed: %1$s</string>
     <string name="setting_one_key_sync">One-key sync</string>
     <string name="setting_incognito">Incognito mode</string>
+    <string name="setting_touch_optimization">Touch optimization</string>
     <string name="setting_drive_check">Drive link check</string>
     <string name="setting_audio_source">Audio source config</string>
     <string name="setting_novel_source">Novel source config</string>
