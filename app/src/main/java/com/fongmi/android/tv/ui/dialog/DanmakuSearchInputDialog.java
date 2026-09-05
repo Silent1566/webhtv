@@ -88,6 +88,8 @@ public final class DanmakuSearchInputDialog extends DialogFragment implements Ca
     private String vodId;
     private String rawTitle;
     private String episodeName;
+    private int tmdbId;
+    private int tmdbSeasonNumber;
 
     public static DanmakuSearchInputDialog create() {
         return new DanmakuSearchInputDialog();
@@ -113,6 +115,12 @@ public final class DanmakuSearchInputDialog extends DialogFragment implements Ca
         this.vodId = clean(vodId);
         this.rawTitle = clean(rawTitle);
         this.episodeName = clean(episodeName);
+        return this;
+    }
+
+    public DanmakuSearchInputDialog tmdb(int tmdbId, int tmdbSeasonNumber) {
+        this.tmdbId = tmdbId;
+        this.tmdbSeasonNumber = tmdbSeasonNumber;
         return this;
     }
 
@@ -158,7 +166,7 @@ public final class DanmakuSearchInputDialog extends DialogFragment implements Ca
         super.onDismiss(dialog);
         FragmentActivity activity = getActivity();
         if (selected || !restoreParent || activity == null || activity.isFinishing()) return;
-        DanmakuDialog.create().player(player).identity(siteKey, vodId, rawTitle, episodeName).show(activity);
+        DanmakuDialog.create().player(player).identity(siteKey, vodId, rawTitle, episodeName).tmdb(tmdbId, tmdbSeasonNumber).show(activity);
     }
 
     @Override
@@ -180,6 +188,8 @@ public final class DanmakuSearchInputDialog extends DialogFragment implements Ca
         if (TextUtils.isEmpty(siteKey) || TextUtils.isEmpty(vodId) || item == null || item.isEmpty()) return;
         DanmakuMatchCache cache = Setting.getDanmakuMatchCache();
         MediaTitleLearningExample example = cache.put(siteKey, vodId, first(episodeName, getEpisode()), getKeyword(), first(rawTitle, getTitle()), item);
+        cache.putSeries(siteKey, vodId, getKeyword(), first(rawTitle, getTitle()), item);
+        cache.putTmdbSeason(tmdbId, tmdbSeasonNumber, getKeyword(), first(rawTitle, getTitle()), item);
         Setting.putDanmakuMatchCache(cache);
         if (example != null) MediaTitleLearningStore.load().put(example);
     }

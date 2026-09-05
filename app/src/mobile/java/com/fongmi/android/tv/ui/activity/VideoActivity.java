@@ -2496,6 +2496,8 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
                 .rawTitle(mHistory.getVodName())
                 .rawRemarks(mHistory.getVodRemarks())
                 .episodeName(getEpisode().getName())
+                .tmdbId(danmakuTmdbId())
+                .tmdbSeasonNumber(danmakuTmdbSeasonNumber())
                 .source(MediaTitleLearningExample.SOURCE_DANMAKU_AUTO)
                 .allowAi(true)
                 .build(), danmaku -> {
@@ -2514,6 +2516,21 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
             // 阅读结果接管前台，但保留本页：一次返回回到来源播放页。
         }
         return handled;
+    }
+
+    private int danmakuTmdbId() {
+        TmdbItem item = mTmdbUIAdapter == null ? null : mTmdbUIAdapter.getTmdbItem();
+        if (item == null) item = getTmdbItem();
+        return item == null ? 0 : item.getTmdbId();
+    }
+
+    private int danmakuTmdbSeasonNumber() {
+        TmdbItem item = mTmdbUIAdapter == null ? null : mTmdbUIAdapter.getTmdbItem();
+        if (item == null) item = getTmdbItem();
+        if (item == null || !item.isTv()) return 0;
+        Episode episode = getEpisode();
+        TmdbEpisode tmdbEpisode = episode == null ? null : episode.getTmdbEpisode();
+        return tmdbEpisode == null ? 0 : tmdbEpisode.getSeasonNumber();
     }
 
     private void recordDetailHealth(Result result, long cost) {
@@ -3241,7 +3258,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
     }
 
     private void onDanmaku() {
-        DanmakuDialog.create().player(player()).identity(getKey(), getId(), mHistory == null ? "" : mHistory.getVodName(), getDanmakuEpisodeName()).show(this);
+        DanmakuDialog.create().player(player()).identity(getKey(), getId(), mHistory == null ? "" : mHistory.getVodName(), getDanmakuEpisodeName()).tmdb(danmakuTmdbId(), danmakuTmdbSeasonNumber()).show(this);
         hideControl();
     }
 
@@ -3260,7 +3277,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
 
     @Override
     public void onDanmakuPanel() {
-        DanmakuDialog.create().player(player()).identity(getKey(), getId(), mHistory == null ? "" : mHistory.getVodName(), getDanmakuEpisodeName()).show(this);
+        DanmakuDialog.create().player(player()).identity(getKey(), getId(), mHistory == null ? "" : mHistory.getVodName(), getDanmakuEpisodeName()).tmdb(danmakuTmdbId(), danmakuTmdbSeasonNumber()).show(this);
     }
 
     @Override

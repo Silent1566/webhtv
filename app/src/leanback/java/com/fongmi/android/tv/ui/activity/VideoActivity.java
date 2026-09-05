@@ -2735,6 +2735,8 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
                 .rawTitle(mHistory.getVodName())
                 .rawRemarks(mHistory.getVodRemarks())
                 .episodeName(getEpisode().getName())
+                .tmdbId(danmakuTmdbId())
+                .tmdbSeasonNumber(danmakuTmdbSeasonNumber())
                 .source(MediaTitleLearningExample.SOURCE_DANMAKU_AUTO)
                 .allowAi(true)
                 .build(), danmaku -> {
@@ -2751,6 +2753,19 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
             // 阅读结果接管前台，但保留本页：一次返回回到来源播放页。
         }
         return handled;
+    }
+
+    private int danmakuTmdbId() {
+        TmdbItem item = getMatchedTmdbItem();
+        return item == null ? 0 : item.getTmdbId();
+    }
+
+    private int danmakuTmdbSeasonNumber() {
+        TmdbItem item = getMatchedTmdbItem();
+        if (item == null || !item.isTv()) return 0;
+        Episode episode = getEpisode();
+        TmdbEpisode tmdbEpisode = episode == null ? null : episode.getTmdbEpisode();
+        return tmdbEpisode == null ? 0 : tmdbEpisode.getSeasonNumber();
     }
 
     private boolean canApplyPlayerResult() {
@@ -4196,7 +4211,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     private void onDanmaku() {
-        DanmakuDialog.create().player(player()).identity(getKey(), getId(), mHistory == null ? "" : mHistory.getVodName(), getDanmakuEpisodeName()).show(this);
+        DanmakuDialog.create().player(player()).identity(getKey(), getId(), mHistory == null ? "" : mHistory.getVodName(), getDanmakuEpisodeName()).tmdb(danmakuTmdbId(), danmakuTmdbSeasonNumber()).show(this);
         hideControl();
     }
 

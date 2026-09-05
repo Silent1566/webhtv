@@ -89,6 +89,8 @@ public final class DanmakuSearchDialog extends DialogFragment implements Callbac
     private String vodId;
     private String rawTitle;
     private String episodeName;
+    private int tmdbId;
+    private int tmdbSeasonNumber;
 
     public static DanmakuSearchDialog create() {
         return new DanmakuSearchDialog();
@@ -130,6 +132,12 @@ public final class DanmakuSearchDialog extends DialogFragment implements Callbac
         this.vodId = clean(vodId);
         this.rawTitle = clean(rawTitle);
         this.episodeName = clean(episodeName);
+        return this;
+    }
+
+    public DanmakuSearchDialog tmdb(int tmdbId, int tmdbSeasonNumber) {
+        this.tmdbId = tmdbId;
+        this.tmdbSeasonNumber = tmdbSeasonNumber;
         return this;
     }
 
@@ -186,7 +194,7 @@ public final class DanmakuSearchDialog extends DialogFragment implements Callbac
         super.onDismiss(dialog);
         FragmentActivity activity = getActivity();
         if (!restoreParent || activity == null || activity.isFinishing()) return;
-        DanmakuDialog.create().player(player).identity(siteKey, vodId, rawTitle, episodeName).show(activity);
+        DanmakuDialog.create().player(player).identity(siteKey, vodId, rawTitle, episodeName).tmdb(tmdbId, tmdbSeasonNumber).show(activity);
     }
 
     private LinearLayout createContentView() {
@@ -352,6 +360,8 @@ public final class DanmakuSearchDialog extends DialogFragment implements Callbac
         if (TextUtils.isEmpty(siteKey) || TextUtils.isEmpty(vodId) || item == null || item.isEmpty()) return;
         DanmakuMatchCache cache = Setting.getDanmakuMatchCache();
         MediaTitleLearningExample example = cache.put(siteKey, vodId, first(episodeName, getEpisode().toString().trim()), getKeywordText(), first(rawTitle, getTitle().toString()), item);
+        cache.putSeries(siteKey, vodId, getKeywordText(), first(rawTitle, getTitle().toString()), item);
+        cache.putTmdbSeason(tmdbId, tmdbSeasonNumber, getKeywordText(), first(rawTitle, getTitle().toString()), item);
         Setting.putDanmakuMatchCache(cache);
         if (example != null) MediaTitleLearningStore.load().put(example);
     }

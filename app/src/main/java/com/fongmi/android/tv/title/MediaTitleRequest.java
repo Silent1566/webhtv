@@ -15,6 +15,8 @@ public final class MediaTitleRequest {
     private String episodeName;
     private String flag;
     private String source;
+    private int tmdbId;
+    private int tmdbSeasonNumber;
     private List<MediaTitleLearningExample> learningExamples;
     private boolean allowAi;
 
@@ -28,6 +30,8 @@ public final class MediaTitleRequest {
         this.episodeName = clean(builder.episodeName);
         this.flag = clean(builder.flag);
         this.source = clean(builder.source);
+        this.tmdbId = builder.tmdbId;
+        this.tmdbSeasonNumber = builder.tmdbSeasonNumber;
         this.learningExamples = new ArrayList<>(builder.learningExamples);
         this.allowAi = builder.allowAi;
     }
@@ -72,6 +76,14 @@ public final class MediaTitleRequest {
         return source;
     }
 
+    public int getTmdbId() {
+        return tmdbId;
+    }
+
+    public int getTmdbSeasonNumber() {
+        return tmdbSeasonNumber;
+    }
+
     public List<MediaTitleLearningExample> getLearningExamples() {
         return Collections.unmodifiableList(learningExamples);
     }
@@ -95,6 +107,8 @@ public final class MediaTitleRequest {
         private String episodeName;
         private String flag;
         private String source;
+        private int tmdbId;
+        private int tmdbSeasonNumber;
         private final List<MediaTitleLearningExample> learningExamples = new ArrayList<>();
         private boolean allowAi;
 
@@ -140,6 +154,16 @@ public final class MediaTitleRequest {
 
         public Builder source(String source) {
             this.source = source;
+            return this;
+        }
+
+        public Builder tmdbId(int tmdbId) {
+            this.tmdbId = tmdbId;
+            return this;
+        }
+
+        public Builder tmdbSeasonNumber(int tmdbSeasonNumber) {
+            this.tmdbSeasonNumber = tmdbSeasonNumber;
             return this;
         }
 

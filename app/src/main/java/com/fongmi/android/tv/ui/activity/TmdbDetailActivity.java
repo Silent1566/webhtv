@@ -7028,6 +7028,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
                 .rawTitle(playbackHistoryName())
                 .rawRemarks(history.getVodRemarks())
                 .episodeName(historyEpisodeTitle(selectedEpisode))
+                .tmdbId(danmakuTmdbId())
+                .tmdbSeasonNumber(danmakuTmdbSeasonNumber())
                 .source(MediaTitleLearningExample.SOURCE_DANMAKU_AUTO)
                 .allowAi(true)
                 .build(), danmaku -> applyInlineDanmaku(result, danmaku));
@@ -7038,6 +7040,18 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         if (DanmakuSetting.isSpiderFirst() && !result.getDanmaku().isEmpty()) player().addDanmaku(danmaku);
         else player().setDanmaku(danmaku);
         refreshInlineDanmakuButtons();
+    }
+
+    private int danmakuTmdbId() {
+        TmdbItem item = matchedTmdbItem;
+        return item == null ? 0 : item.getTmdbId();
+    }
+
+    private int danmakuTmdbSeasonNumber() {
+        TmdbItem item = matchedTmdbItem;
+        if (item == null || !item.isTv()) return 0;
+        TmdbEpisode tmdbEpisode = selectedEpisode == null ? null : selectedEpisode.getTmdbEpisode();
+        return tmdbEpisode == null ? 0 : tmdbEpisode.getSeasonNumber();
     }
 
     private void refreshInlineDanmakuButtons() {
@@ -8429,7 +8443,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
 
     private void showInlineDanmaku() {
         if (service() == null || player().isEmpty()) return;
-        DanmakuDialog.create().player(player()).identity(getKeyText(), getIdText(), playbackHistoryName(), selectedEpisode == null ? "" : historyEpisodeTitle(selectedEpisode)).show(this);
+        DanmakuDialog.create().player(player()).identity(getKeyText(), getIdText(), playbackHistoryName(), selectedEpisode == null ? "" : historyEpisodeTitle(selectedEpisode)).tmdb(danmakuTmdbId(), danmakuTmdbSeasonNumber()).show(this);
     }
 
     private void showInlineTitle() {
