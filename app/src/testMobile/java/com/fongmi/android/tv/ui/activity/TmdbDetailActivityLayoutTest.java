@@ -2221,13 +2221,33 @@ public class TmdbDetailActivityLayoutTest {
                         && containerKeyBody.contains("KeyUtil.isLeftKey(event)")
                         && containerKeyBody.contains("KeyUtil.isRightKey(event)"));
         assertTrue("list-mode DPAD_LEFT should move to the previous episode and consume the first-card boundary",
-                listBody.contains("if (KeyUtil.isLeftKey(event))")
-                        && listBody.contains("if (position <= 0) return true;")
-                        && listBody.contains("return focusDetailEpisode(position - 1);"));
+                 listBody.contains("if (KeyUtil.isLeftKey(event))")
+                         && listBody.contains("if (position <= 0) return true;")
+                         && listBody.contains("return focusDetailEpisode(position - 1);"));
         assertTrue("list-mode DPAD_RIGHT should move to the next episode and consume the last-card boundary",
-                listBody.contains("if (KeyUtil.isRightKey(event))")
-                        && listBody.contains("position >= episodeAdapter.getItemCount() - 1")
-                        && listBody.contains("return focusDetailEpisode(position + 1);"));
+                 listBody.contains("if (KeyUtil.isRightKey(event))")
+                         && listBody.contains("position >= episodeAdapter.getItemCount() - 1")
+                         && listBody.contains("return focusDetailEpisode(position + 1);"));
+    }
+
+    @Test
+    public void detailEpisodeListModeCentersTheFocusedCardLikeNativeEnhanced() throws Exception {
+        String activity = readJava("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java");
+        String focusChange = javaBlockAt(activity, "private void onDetailEpisodeFocusChange(");
+        String alignFocused = javaBlockAt(activity, "private void alignDetailEpisodeFocusedRow(");
+        String alignHorizontal = javaBlockAt(activity, "private void alignDetailEpisodeFocusedCardHorizontallyNow(");
+
+        assertTrue("list-mode focus changes must schedule the same centered item alignment as native enhanced",
+                focusChange.contains("if (!episodeGridMode)")
+                        && focusChange.contains("alignDetailEpisodeFocusedRow(view, position);"));
+        assertTrue("list-mode episode alignment must use the horizontal layout manager path",
+                alignFocused.contains("LinearLayoutManager.HORIZONTAL")
+                        && alignFocused.contains("alignDetailEpisodeFocusedCardHorizontallyNow(focusedView);"));
+        assertTrue("the focused episode card must be centered within the RecyclerView's usable width",
+                alignHorizontal.contains("binding.episodeContainer.getPaddingLeft()")
+                        && alignHorizontal.contains("binding.episodeContainer.getPaddingRight()")
+                        && alignHorizontal.contains("focusedView.getLeft() + focusedView.getWidth() / 2")
+                        && alignHorizontal.contains("binding.episodeContainer.smoothScrollBy(delta, 0);"));
     }
 
     @Test
