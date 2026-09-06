@@ -4,10 +4,10 @@ import android.view.View;
 import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
-import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.fongmi.android.tv.R;
+import com.fongmi.android.tv.ui.helper.SiteDialogTheme;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.google.android.material.button.MaterialButton;
 
@@ -18,11 +18,13 @@ import java.util.Objects;
 public class SiteGroupAdapter extends RecyclerView.Adapter<SiteGroupAdapter.ViewHolder> {
 
     private final OnClickListener listener;
+    private final SiteDialogTheme theme;
     private final List<String> items;
     private String selectedGroup;
 
-    public SiteGroupAdapter(OnClickListener listener) {
+    public SiteGroupAdapter(OnClickListener listener, SiteDialogTheme theme) {
         this.listener = listener;
+        this.theme = theme;
         this.items = new ArrayList<>();
         this.selectedGroup = "";
     }
@@ -75,9 +77,7 @@ public class SiteGroupAdapter extends RecyclerView.Adapter<SiteGroupAdapter.View
         button.setInsetTop(0);
         button.setInsetBottom(0);
         button.setPadding(ResUtil.dp2px(14), ResUtil.dp2px(6), ResUtil.dp2px(14), ResUtil.dp2px(6));
-        button.setTextColor(ContextCompat.getColorStateList(parent.getContext(), R.color.dialog_outlined_button_text));
-        button.setBackgroundTintList(ContextCompat.getColorStateList(parent.getContext(), R.color.dialog_outlined_button_bg));
-        button.setStrokeColor(ContextCompat.getColorStateList(parent.getContext(), R.color.dialog_outlined_button_stroke));
+        theme.apply(button);
         return new ViewHolder(button);
     }
 
