@@ -13,8 +13,11 @@ public class SiteDialogThemeSourceTest {
     @Test
     public void siteDialogFollowsActivityThemeInsteadOfForcingLightDialog() throws Exception {
         String dialog = read("app/src/mobile/java/com/fongmi/android/tv/ui/dialog/SiteDialog.java");
+        String layout = read("app/src/mobile/res/layout/dialog_site.xml");
         assertFalse("site selection must not force the static light dialog theme", dialog.contains("ThemeOverlay_WebHTV_LightDialog"));
         assertTrue("site selection should use the theme-aware dialog base", dialog.contains("return builder().setView(getBinding().getRoot());"));
+        assertFalse("site dialog root must not hard-code white drawable", layout.contains("@drawable/shape_shell_proxy_dialog"));
+        assertTrue("site dialog root should resolve activity surface color", layout.contains("?attr/colorSurfaceContainer"));
     }
 
     @Test
