@@ -11,12 +11,12 @@ import static org.junit.Assert.assertTrue;
 
 public class SiteDialogThemeSourceTest {
     @Test
-    public void siteDialogThemeUsesDynamicColors() throws Exception {
-        String styles = read("app/src/main/res/values/styles.xml");
-        assertFalse("dialog theme must not hard-code white background", styles.contains("android:colorBackground\">@color/white"));
-        assertFalse("dialog theme must not hard-code white colorSurface", styles.contains("colorSurface\">@color/white"));
-        assertTrue("dialog theme must use dynamic colorSurfaceContainer", styles.contains("colorSurface\">?attr/colorSurfaceContainer"));
-        assertTrue("dialog theme must use dynamic windowBackground", styles.contains("windowBackground\">?attr/colorSurfaceContainer"));
+    public void siteDialogAppliesDynamicColorProgrammatically() throws Exception {
+        String dialog = read("app/src/mobile/java/com/fongmi/android/tv/ui/dialog/SiteDialog.java");
+        assertFalse("site selection must not force the static light dialog theme", dialog.contains("ThemeOverlay_WebHTV_LightDialog"));
+        assertTrue("site selection should use the theme-aware dialog base", dialog.contains("return builder().setView(getBinding().getRoot());"));
+        assertTrue("site dialog must apply dynamic color to root view", dialog.contains("binding.getRoot().setBackgroundColor(color)"));
+        assertTrue("site dialog must read dynamic color from settings", dialog.contains("Setting.getDynamicColor()"));
     }
 
     @Test
