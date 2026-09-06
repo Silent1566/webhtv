@@ -11,14 +11,12 @@ import static org.junit.Assert.assertTrue;
 
 public class SiteDialogThemeSourceTest {
     @Test
-    public void siteDialogUsesThemeResolvedSurfaceWithoutOverwritingIt() throws Exception {
-        String dialog = read("app/src/mobile/java/com/fongmi/android/tv/ui/dialog/SiteDialog.java");
-        String layout = read("app/src/mobile/res/layout/dialog_site.xml");
-        assertFalse("site selection must not force the static light dialog theme", dialog.contains("ThemeOverlay_WebHTV_LightDialog"));
-        assertTrue("site selection should use the theme-aware dialog base", dialog.contains("return builder().setView(getBinding().getRoot());"));
-        assertFalse("site dialog must not replace the themed surface with the seed color", dialog.contains("binding.getRoot().setBackgroundColor("));
-        assertTrue("site dialog root should resolve the activity surface color", layout.contains("android:background=\"?attr/colorSurfaceContainer\""));
-        assertFalse("site dialog root must not hard-code the legacy white drawable", layout.contains("@drawable/shape_shell_proxy_dialog"));
+    public void siteDialogThemeUsesDynamicColors() throws Exception {
+        String styles = read("app/src/main/res/values/styles.xml");
+        assertFalse("dialog theme must not hard-code white background", styles.contains("android:colorBackground\">@color/white"));
+        assertFalse("dialog theme must not hard-code white colorSurface", styles.contains("colorSurface\">@color/white"));
+        assertTrue("dialog theme must use dynamic colorSurfaceContainer", styles.contains("colorSurface\">?attr/colorSurfaceContainer"));
+        assertTrue("dialog theme must use dynamic windowBackground", styles.contains("windowBackground\">?attr/colorSurfaceContainer"));
     }
 
     @Test
