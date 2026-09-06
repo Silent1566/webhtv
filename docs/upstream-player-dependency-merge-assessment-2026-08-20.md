@@ -56,6 +56,7 @@
 | 29 | `E-SP7` | Exo 性能/播放行为 | H.264/AVC 受约束轨道恢复自适应选轨，避免 800Kbps 视频固定到过高分辨率导致掉帧 | **已实施，待真实设备 A/B 验收**：`ExoUtil.applyVideoLimit()` 已恢复自适应选轨；定向单测和 Mobile arm64 Java 编译通过 | [E-SP7-exo-avc-adaptive-selection.md](E-SP7-exo-avc-adaptive-selection.md) |
 | 30 | `C9` | 通用/上游应用同步 | 合并 `origin/beta` 在 C6 之后的播放器、片段跳过、实时字幕、更新校验和移动详情页修复，并复审 E-SP7 合并树 | **已完成并推送**：`80ded1386a108dc8d1b08610c5b616d4d0f1f77f` / `recovery/C9-beta-sync/20260903072404-80ded1386a10`；E-SP7 定向测试、beta 受影响 175 项测试和两产品 Java 编译通过 | [C9-beta-sync.md](C9-beta-sync.md) |
 | 31 | `C10` | 通用/播放器供应链 | 播放器 AAR、Maven sidecar、lock、MPV native override 和构建输入以上游为准 | **清理已验证，待提交**：正式发布输入及全部 MPV native override 已与 `fish2018/webtv:main@ec478b0b697422a7785171c7b51a35b7a526564e` 对齐；v556 残留已删除，双 ABI MPV ELF 门禁通过，详情见 [C10-binary-upstream-alignment.md](C10-binary-upstream-alignment.md) | [C10-binary-upstream-alignment.md](C10-binary-upstream-alignment.md) |
+| 32 | `C12` | 通用/上游应用同步 | 合并 `origin/beta` 在 C11 之后的触控优化、弹幕手动匹配记忆、TMDB 焦点、MPV duration 修复，并复审本地未推送广告规则批量导入/启停 | **实施中**：beta `cebe42b190d5d7f1306e4ea3d0b6d833112ad464`，本地基线 `60fc55e18cf755d25dc9c140908188fb21898c44`；当前无冲突合并树待复审 | [C12-beta-sync.md](C12-beta-sync.md) |
 
 `C1` 是跨播放器真实输入验收维度，不单独形成代码任务或文档；它写入对应的 E/P 任务文档。`E-SP3` 已在 `fongmi-sync` 完成 App/Media3 合并，保留既有 `E4-J1`/`E6-1`/`E7-1`/`E7-2 + C3` 能力；`E9-3` 与已完成的 `P1` 现已共同进入集成树，后续按既定顺序处理 P2 阶段。
 

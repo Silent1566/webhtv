@@ -307,6 +307,7 @@ private String playerContentKey = "";
 private String playerContentFlag = "";
 private String playerContentEpisode = "";
 private Result mAppliedPlayerResult;
+private long mInitialPlaybackPosition = C.TIME_UNSET;
 private AudioPlaybackResolver.Resolved mImmersiveAudioResolved;
 private int mAudioArtworkColor = Color.rgb(55, 45, 68);
 private final Map<String, String> mAudioQueueFlags = new HashMap<>();
@@ -1299,6 +1300,11 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
     protected void onServiceConnected() {
         player().setDanmakuController(mBinding.exo.getDanmakuController());
         applyPendingPlayerKernel();
+        // The history kernel can rebuild the service player before a PlaySpec
+        // exists. In that window PlaybackActivity's ownership guard correctly
+        // skips its rebuild callback, so refresh the direct progress source
+        // after the pending kernel has been applied.
+        getSeekView().setProgressPlayer(player().getPlayer());
         syncDesktopLyricsAudioContent();
         setPlayerKernel();
         setDecode();
@@ -1944,6 +1950,9 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         }
         mPendingPlayerKernel = PlayerSetting.NONE;
         player().preparePlayer(kernel);
+        // preparePlayer() is intentionally allowed before playback ownership
+        // is established; keep the mobile seek view on the replacement player.
+        getSeekView().setProgressPlayer(player().getPlayer());
         setPlayerKernel();
         setDecode();
         return kernel;
@@ -1959,6 +1968,9 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         mPendingPlayerKernel = PlayerSetting.NONE;
         if (!PlayerSetting.isPlayer(kernel)) return;
         player().preparePlayer(kernel);
+        // See applyHistoryPlayerKernel(): this rebuild happens before the
+        // first media spec and therefore may not reach onPlayerRebuilt().
+        getSeekView().setProgressPlayer(player().getPlayer());
     }
 
     /**
@@ -2488,8 +2500,10 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         mBinding.control.parse.setVisibility(isFullscreen() && isUseParse() && PlayerButtonSetting.isVisible(PlayerButtonSetting.PARSE) ? View.VISIBLE : View.GONE);
         if (redirectToAudioIfNeeded(result)) return;
         List<Danmaku> siteDanmakus = result.getDanmaku();
+        mInitialPlaybackPosition = resolveInitialPlaybackPosition();
+        SpiderDebug.log("video-flow", "startPlayer dispatch initialPosition=%d music=%s ijk=%s", mInitialPlaybackPosition, isMusicLike(), service() != null && player().isIjk());
         if (SubtitleRestoreCoordinator.restore(mHistory, player(), result)) syncHistory();
-        startPlayer(getHistoryKey(), result, isUseParse(), getSite().getTimeout(), buildMetadata());
+        startPlayer(getHistoryKey(), result, isUseParse(), getSite().getTimeout(), buildMetadata(), mInitialPlaybackPosition);
         subtitlePlaybackSession.onPlaybackStarted(this, result);
         if (DanmakuApi.canAutoSearch(siteDanmakus)) DanmakuApi.search(MediaTitleRequest.builder()
                 .siteKey(getKey())
@@ -7271,19 +7285,23 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         pendingResumeSeekMs = C.TIME_UNSET;
         if (mHistory == null) {
             tmdbHistoryResumePending = false;
+            mInitialPlaybackPosition = C.TIME_UNSET;
             return;
         }
-        if (mHistory.isNearEnding()) {
-            SpiderDebug.log("video-flow", "reset near-end history position=%d duration=%d key=%s", mHistory.getPosition(), mHistory.getDuration(), getHistoryKey());
-            mHistory.resetPlaybackPosition();
-            syncHistory();
-        }
-        long position = Math.max(mHistory.getOpening(), mHistory.getPosition());
-        if (position <= 0) {
+        long position = resolveInitialPlaybackPosition();
+        if (position == C.TIME_UNSET || position <= 0) {
             tmdbHistoryResumePending = false;
+            mInitialPlaybackPosition = C.TIME_UNSET;
             return;
         }
         mIntroSkipPlayback.setResumePosition(position);
+        if (mInitialPlaybackPosition == position) {
+            SpiderDebug.log("video-flow", "skip duplicate restore seek position=%d key=%s", position, getHistoryKey());
+            mInitialPlaybackPosition = C.TIME_UNSET;
+            tmdbHistoryResumePending = false;
+            return;
+        }
+        mInitialPlaybackPosition = C.TIME_UNSET;
         if (player().isIjk()) pendingResumeSeekMs = position;
         else {
             player().seekTo(position);
@@ -7300,7 +7318,18 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         return mHistory == null ? PlayerSetting.getDefaultSpeed() : mHistory.getPlaybackSpeed(PlayerSetting.getDefaultSpeed());
     }
 
-    private void checkOrientation() {
+private long resolveInitialPlaybackPosition() {
+        if (mHistory == null) return C.TIME_UNSET;
+        if (mHistory.isNearEnding()) {
+            SpiderDebug.log("video-flow", "reset near-end history position=%d duration=%d key=%s", mHistory.getPosition(), mHistory.getDuration(), getHistoryKey());
+            mHistory.resetPlaybackPosition();
+            syncHistory();
+        }
+        long position = Math.max(mHistory.getOpening(), mHistory.getPosition());
+        return position > 0 ? position : C.TIME_UNSET;
+    }
+
+private void checkOrientation() {
         if (isFullscreen() && !isRotate() && player().isPortrait()) {
             setRequestedOrientation(PlaybackOrientation.getPortraitVideoSizeOrientation());
             setRotate(true);
