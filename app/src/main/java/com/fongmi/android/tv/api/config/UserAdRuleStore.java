@@ -37,9 +37,19 @@ public class UserAdRuleStore {
 
     public static synchronized void add(UserAdRule rule) {
         if (rule == null) return;
+        addAll(List.of(rule));
+    }
+
+    public static synchronized void addAll(List<UserAdRule> incoming) {
+        if (incoming == null || incoming.isEmpty()) return;
         List<UserAdRule> rules = load();
-        rules.add(rule);
-        save(rules);
+        boolean added = false;
+        for (UserAdRule rule : incoming) {
+            if (rule == null) continue;
+            rules.add(rule);
+            added = true;
+        }
+        if (added) save(rules);
     }
 
     public static void delete(String id) {
@@ -68,6 +78,18 @@ public class UserAdRuleStore {
             }
         }
         save(rules);
+    }
+
+    public static synchronized int setInterfaceRulesEnabled(boolean enabled) {
+        List<UserAdRule> rules = load();
+        int changed = 0;
+        for (UserAdRule rule : rules) {
+            if (rule == null || !UserAdRule.isInterfaceSource(rule.getSource()) || rule.isEnabled() == enabled) continue;
+            rule.setEnabled(enabled);
+            changed++;
+        }
+        if (changed > 0) save(rules);
+        return changed;
     }
 
     /**

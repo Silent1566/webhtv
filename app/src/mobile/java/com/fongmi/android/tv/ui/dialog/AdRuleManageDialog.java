@@ -1,5 +1,6 @@
 package com.fongmi.android.tv.ui.dialog;
 
+import android.app.Dialog;
 import android.content.Context;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
@@ -7,8 +8,11 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.FragmentActivity;
 import androidx.viewbinding.ViewBinding;
 
@@ -30,6 +34,7 @@ import com.fongmi.android.tv.ui.adapter.AdRuleAdapter;
 import com.fongmi.android.tv.ui.custom.SpaceItemDecoration;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.google.android.material.button.MaterialButton;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -86,6 +91,8 @@ public class AdRuleManageDialog extends BaseAlertDialog implements AdRuleAdapter
         binding.add.setOnClickListener(v -> onAddManual());
         binding.stats.setOnClickListener(v -> onStats());
         binding.importCandidates.setOnClickListener(v -> onImportCandidates());
+        binding.enableImported.setOnClickListener(v -> onEnableImported());
+        binding.disableImported.setOnClickListener(v -> onDisableImported());
     }
 
     private void loadData() {
@@ -120,6 +127,8 @@ public class AdRuleManageDialog extends BaseAlertDialog implements AdRuleAdapter
         int pending = ImportedAdRuleCandidateStore.pending().size();
         binding.importCandidates.setVisibility(pending == 0 ? View.GONE : View.VISIBLE);
         binding.importCandidates.setText(getString(R.string.ad_rule_import_candidates, pending));
+        boolean hasImported = userRules.stream().anyMatch(rule -> UserAdRule.isInterfaceSource(rule.getSource()));
+        binding.importBulkActions.setVisibility(hasImported ? View.VISIBLE : View.GONE);
     }
 
     private void onAddManual() {
@@ -128,6 +137,25 @@ public class AdRuleManageDialog extends BaseAlertDialog implements AdRuleAdapter
 
     private void onStats() {
         AdBlockStatsDialog.create((FragmentActivity) requireActivity()).show();
+    }
+
+    private void onEnableImported() {
+        if (UserAdRuleStore.setInterfaceRulesEnabled(true) == 0) return;
+        loadData();
+        if (callback != null) callback.onRuleChanged();
+    }
+
+    private void onDisableImported() {
+        new MaterialAlertDialogBuilder(requireActivity(), R.style.Theme_WebHTV_LightDialog)
+                .setTitle(R.string.ad_rule_disable_imported)
+                .setMessage(R.string.ad_rule_disable_imported_confirm)
+                .setPositiveButton(android.R.string.ok, (dialog, which) -> {
+                    UserAdRuleStore.setInterfaceRulesEnabled(false);
+                    loadData();
+                    if (callback != null) callback.onRuleChanged();
+                })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
     }
 
     private void onImportCandidates() {
@@ -142,19 +170,91 @@ public class AdRuleManageDialog extends BaseAlertDialog implements AdRuleAdapter
                 .toArray(String[]::new);
         boolean[] selected = new boolean[candidates.size()];
         for (int i = 0; i < selected.length; i++) selected[i] = ImportedAdRuleCandidate.RISK_LOW.equals(candidates.get(i).getRiskLevel());
-        new MaterialAlertDialogBuilder(requireActivity(), R.style.Theme_WebHTV_LightDialog)
+        final AlertDialog[] dialogRef = new AlertDialog[1];
+        View toolbar = createCandidateToolbar(
+                () -> updateCandidateSelection(dialogRef[0], candidates, selected, 0),
+                () -> updateCandidateSelection(dialogRef[0], candidates, selected, 1),
+                () -> updateCandidateSelection(dialogRef[0], candidates, selected, 2),
+                () -> ignoreCandidates(dialogRef[0], candidates));
+        MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(requireActivity(), R.style.Theme_WebHTV_LightDialog)
                 .setTitle(R.string.ad_rule_import_title)
+                .setCustomTitle(toolbar)
                 .setMultiChoiceItems(labels, selected, (dialog, which, checked) -> selected[which] = checked)
-                .setPositiveButton(R.string.ad_rule_import_action, (dialog, which) -> {
-                    for (int i = 0; i < candidates.size(); i++) if (selected[i]) ImportedAdRuleCandidateStore.importCandidate(candidates.get(i).getId());
-                    onRuleEdited();
-                })
-                .setNeutralButton(R.string.ad_rule_ignore_all, (dialog, which) -> {
-                    for (ImportedAdRuleCandidate candidate : candidates) ImportedAdRuleCandidateStore.ignore(candidate.getId());
-                    loadData();
-                })
-                .setNegativeButton(android.R.string.cancel, null)
-                .show();
+                .setPositiveButton(R.string.ad_rule_import_enable_action, (dialog, which) -> importSelectedCandidates(candidates, selected, true))
+                .setNeutralButton(R.string.ad_rule_import_action, (dialog, which) -> importSelectedCandidates(candidates, selected, false))
+                .setNegativeButton(android.R.string.cancel, null);
+        dialogRef[0] = builder.create();
+        dialogRef[0].show();
+    }
+
+    private void ignoreCandidates(Dialog dialog, List<ImportedAdRuleCandidate> candidates) {
+        List<String> ids = new ArrayList<>();
+        for (ImportedAdRuleCandidate candidate : candidates) ids.add(candidate.getId());
+        ImportedAdRuleCandidateStore.ignoreCandidates(ids);
+        if (dialog != null) dialog.dismiss();
+        loadData();
+    }
+
+    private void importSelectedCandidates(List<ImportedAdRuleCandidate> candidates, boolean[] selected, boolean enabled) {
+        List<String> ids = new ArrayList<>();
+        for (int i = 0; i < candidates.size(); i++) if (selected[i]) ids.add(candidates.get(i).getId());
+        if (!ids.isEmpty()) ImportedAdRuleCandidateStore.importCandidates(ids, enabled);
+        onRuleEdited();
+    }
+
+    private View createCandidateToolbar(Runnable selectLowRisk, Runnable selectAll, Runnable invert, Runnable ignoreAll) {
+        LinearLayout root = new LinearLayout(requireContext());
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(ResUtil.dp2px(24), ResUtil.dp2px(8), ResUtil.dp2px(24), 0);
+        TextView title = new TextView(requireContext());
+        title.setText(R.string.ad_rule_import_title);
+        title.setTextSize(20);
+        root.addView(title, new LinearLayout.LayoutParams(-1, -2));
+        MaterialButton lowRisk = candidateActionButton(R.string.ad_rule_select_low_risk);
+        lowRisk.setOnClickListener(v -> selectLowRisk.run());
+        MaterialButton all = candidateActionButton(R.string.ad_rule_select_all);
+        all.setOnClickListener(v -> selectAll.run());
+        MaterialButton invertButton = candidateActionButton(R.string.ad_rule_invert_selection);
+        invertButton.setOnClickListener(v -> invert.run());
+        MaterialButton ignore = candidateActionButton(R.string.ad_rule_ignore_all);
+        ignore.setOnClickListener(v -> ignoreAll.run());
+        root.addView(lowRisk, new LinearLayout.LayoutParams(-1, -2));
+        LinearLayout row = new LinearLayout(requireContext());
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams first = new LinearLayout.LayoutParams(0, -2, 1f);
+        first.setMargins(0, ResUtil.dp2px(4), ResUtil.dp2px(2), 0);
+        row.addView(all, first);
+        LinearLayout.LayoutParams middle = new LinearLayout.LayoutParams(0, -2, 1f);
+        middle.setMargins(ResUtil.dp2px(2), ResUtil.dp2px(4), ResUtil.dp2px(2), 0);
+        row.addView(invertButton, middle);
+        LinearLayout.LayoutParams last = new LinearLayout.LayoutParams(0, -2, 1f);
+        last.setMargins(ResUtil.dp2px(2), ResUtil.dp2px(4), 0, 0);
+        row.addView(ignore, last);
+        root.addView(row);
+        return root;
+    }
+
+    private MaterialButton candidateActionButton(int textRes) {
+        MaterialButton button = new MaterialButton(requireContext());
+        button.setText(textRes);
+        button.setAllCaps(false);
+        button.setTextSize(12);
+        button.setMinHeight(ResUtil.dp2px(40));
+        return button;
+    }
+
+    private void updateCandidateSelection(Dialog dialog, List<ImportedAdRuleCandidate> candidates,
+                                          boolean[] selected, int mode) {
+        if (mode == 0) {
+            for (int i = 0; i < selected.length; i++) selected[i] = ImportedAdRuleCandidate.RISK_LOW.equals(candidates.get(i).getRiskLevel());
+        } else if (mode == 1) {
+            for (int i = 0; i < selected.length; i++) selected[i] = true;
+        } else {
+            for (int i = 0; i < selected.length; i++) selected[i] = !selected[i];
+        }
+        if (dialog instanceof AlertDialog alert && alert.getListView() != null) {
+            for (int i = 0; i < selected.length; i++) alert.getListView().setItemChecked(i, selected[i]);
+        }
     }
 
     private void onRuleEdited() {
@@ -176,9 +276,12 @@ public class AdRuleManageDialog extends BaseAlertDialog implements AdRuleAdapter
 
     @Override
     public void onHlsRuleClick(HlsRuleConfig.Entry item) {
+        HlsRuleConfig.Entry current = HlsRuleConfig.getEntries().stream()
+                .filter(entry -> item.key().equals(entry.key()))
+                .findFirst().orElse(item);
         new MaterialAlertDialogBuilder(requireActivity(), R.style.Theme_WebHTV_LightDialog)
-                .setTitle(item.name().isBlank() ? item.id() : item.name())
-                .setMessage(getHlsRuleDetail(item))
+                .setTitle(current.name().isBlank() ? current.id() : current.name())
+                .setMessage(getHlsRuleDetail(current))
                 .setPositiveButton(android.R.string.ok, null)
                 .show();
     }
@@ -250,7 +353,7 @@ public class AdRuleManageDialog extends BaseAlertDialog implements AdRuleAdapter
     public void onUserToggleClick(UserAdRule item, boolean enabled) {
         if (!enabled) {
             int message = UserAdRule.SOURCE_AI.equals(item.getSource()) ? R.string.ad_rule_ai_disable_confirm
-                    : item.getSource() != null && item.getSource().startsWith("interface_") ? R.string.ad_rule_imported_disable_confirm
+                    : UserAdRule.isInterfaceSource(item.getSource()) ? R.string.ad_rule_imported_disable_confirm
                     : R.string.ad_rule_manual_disable_confirm;
             confirmDisable(item.getName(), message, () -> setUserEnabled(item, false));
         }
@@ -260,7 +363,7 @@ public class AdRuleManageDialog extends BaseAlertDialog implements AdRuleAdapter
     private void setUserEnabled(UserAdRule item, boolean enabled) {
         item.setEnabled(enabled);
         UserAdRuleStore.update(item);
-        loadData();
+        adapter.refreshUserEnabled(item);
         if (callback != null) callback.onRuleChanged();
     }
 
@@ -272,14 +375,14 @@ public class AdRuleManageDialog extends BaseAlertDialog implements AdRuleAdapter
 
     private void setDefaultEnabled(String ruleId, boolean enabled) {
         DisabledDefaultRuleStore.setDisabled(ruleId, !enabled);
-        loadData();
+        adapter.refreshDefaultEnabled(ruleId, enabled);
         if (callback != null) callback.onRuleChanged();
     }
 
     @Override
     public void onHlsToggleClick(HlsRuleConfig.Entry item, boolean enabled) {
         HlsRuleStateStore.setEnabled(item.key(), enabled);
-        loadData();
+        adapter.refreshHlsEnabled(item.key(), enabled);
         if (callback != null) callback.onRuleChanged();
     }
 
