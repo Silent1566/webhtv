@@ -289,8 +289,8 @@ public class AdRuleManageDialog extends BaseAlertDialog implements AdRuleAdapter
         lowRisk.setOnClickListener(v -> selectLowRisk.run());
         MaterialButton all = candidateActionButton(R.string.ad_rule_select_all);
         all.setOnClickListener(v -> selectAll.run());
-        MaterialButton invert = candidateActionButton(R.string.ad_rule_invert_selection);
-        invert.setOnClickListener(v -> invert.run());
+        MaterialButton invertButton = candidateActionButton(R.string.ad_rule_invert_selection);
+        invertButton.setOnClickListener(v -> invert.run());
         MaterialButton ignore = candidateActionButton(R.string.ad_rule_ignore_all);
         ignore.setOnClickListener(v -> ignoreAll.run());
         root.addView(lowRisk, new LinearLayout.LayoutParams(-1, -2));
@@ -301,7 +301,7 @@ public class AdRuleManageDialog extends BaseAlertDialog implements AdRuleAdapter
         row.addView(all, first);
         LinearLayout.LayoutParams middle = new LinearLayout.LayoutParams(0, -2, 1f);
         middle.setMargins(ResUtil.dp2px(2), ResUtil.dp2px(4), ResUtil.dp2px(2), 0);
-        row.addView(invert, middle);
+        row.addView(invertButton, middle);
         LinearLayout.LayoutParams last = new LinearLayout.LayoutParams(0, -2, 1f);
         last.setMargins(ResUtil.dp2px(2), ResUtil.dp2px(4), 0, 0);
         row.addView(ignore, last);
