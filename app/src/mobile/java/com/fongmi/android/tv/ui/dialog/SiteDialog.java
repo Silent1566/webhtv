@@ -324,5 +324,13 @@ public class SiteDialog extends BaseAlertDialog implements SiteAdapter.OnClickLi
         window.getDecorView().setPadding(0, 0, 0, 0);
         window.setAttributes(params);
         window.setLayout(params.width, WindowManager.LayoutParams.WRAP_CONTENT);
+        applyDynamicColor();
+    }
+
+    private void applyDynamicColor() {
+        int color = Setting.getDynamicColor();
+        if (color != 0 && binding != null) {
+            binding.getRoot().setBackgroundColor(color);
+        }
     }
 }
