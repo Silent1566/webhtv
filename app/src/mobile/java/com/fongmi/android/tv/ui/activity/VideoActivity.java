@@ -1300,6 +1300,11 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
     protected void onServiceConnected() {
         player().setDanmakuController(mBinding.exo.getDanmakuController());
         applyPendingPlayerKernel();
+        // The history kernel can rebuild the service player before a PlaySpec
+        // exists. In that window PlaybackActivity's ownership guard correctly
+        // skips its rebuild callback, so refresh the direct progress source
+        // after the pending kernel has been applied.
+        getSeekView().setProgressPlayer(player().getPlayer());
         syncDesktopLyricsAudioContent();
         setPlayerKernel();
         setDecode();
@@ -1945,6 +1950,9 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         }
         mPendingPlayerKernel = PlayerSetting.NONE;
         player().preparePlayer(kernel);
+        // preparePlayer() is intentionally allowed before playback ownership
+        // is established; keep the mobile seek view on the replacement player.
+        getSeekView().setProgressPlayer(player().getPlayer());
         setPlayerKernel();
         setDecode();
         return kernel;
@@ -1960,6 +1968,9 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         mPendingPlayerKernel = PlayerSetting.NONE;
         if (!PlayerSetting.isPlayer(kernel)) return;
         player().preparePlayer(kernel);
+        // See applyHistoryPlayerKernel(): this rebuild happens before the
+        // first media spec and therefore may not reach onPlayerRebuilt().
+        getSeekView().setProgressPlayer(player().getPlayer());
     }
 
     /**
