@@ -3522,12 +3522,12 @@ public final class MpvPlayer extends SimpleBasePlayer implements MPVLib.EventObs
         if (released || mediaItem == null || playbackState == Player.STATE_IDLE || playbackState == Player.STATE_ENDED || playerError != null) return;
         updatePreloadCacheOverlay();
         if (currentLikelyHls) requestHlsPreload(cachedPositionMs);
-        // A missing timeline stays missing if mpv never publishes a second duration
-        // property change (or if that event was already consumed before playback
-        // started). Recover it on the existing one-second playback-state loop.
-        long timelineDurationMs = cachedDurationMs > 0 || !initialized ? -1 : doublePropertyMs("duration", -1);
-        if (timelineDurationMs > 0 && timelineDurationMs != cachedDurationMs) {
-            cachedDurationMs = timelineDurationMs;
+        // Always try to get duration if we don't have it cached, to recover from missing events.
+        if (initialized && cachedDurationMs <= 0) {
+            long timelineDurationMs = doublePropertyMs("duration", -1);
+            if (timelineDurationMs > 0 && timelineDurationMs != cachedDurationMs) {
+                cachedDurationMs = timelineDurationMs;
+            }
         }
         invalidateState();
         startStateRefresh();

@@ -227,6 +227,34 @@ public class PlayerPlaybackRegressionSourceTest {
                 releaseBlock.contains("if (owner) mService.clearNavigationCallback(getNavigationCallback());"));
     }
 
+    @Test
+    public void mobileExoStartupPassesResumePositionAndSkipsTheSecondRestoreSeek() throws Exception {
+        String mobile = readMobileJava("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java");
+        String playback = readMainJava("com", "fongmi", "android", "tv", "ui", "activity", "PlaybackActivity.java");
+        int setPlayer = mobile.indexOf("private void setPlayer(Result result)");
+        int setPlayerEnd = mobile.indexOf("\n    private ", setPlayer + 1);
+        int setPosition = mobile.indexOf("private void setPosition()");
+        int setPositionEnd = mobile.indexOf("\n    private ", setPosition + 1);
+        int onPrepare = mobile.indexOf("protected void onPrepare()");
+        int startPlayerOverload = playback.indexOf("protected void startPlayer(String key, Result result, boolean useParse, long timeout,");
+
+        assertTrue("mobile startup must calculate the history position before dispatching the first player start",
+                setPlayer >= 0 && setPlayerEnd > setPlayer
+                        && mobile.indexOf("mInitialPlaybackPosition = resolveInitialPlaybackPosition();", setPlayer) > setPlayer
+                        && mobile.indexOf("startPlayer(getHistoryKey(), result, isUseParse(), getSite().getTimeout(), buildMetadata(), mInitialPlaybackPosition);", setPlayer) > setPlayer);
+        assertTrue("onPrepare must keep the existing position setup hook",
+                onPrepare >= 0 && mobile.indexOf("setPosition();", onPrepare) > onPrepare);
+        assertTrue("mobile position restoration must consume the initial position instead of seeking to it again",
+                setPosition >= 0 && setPositionEnd > setPosition
+                        && mobile.indexOf("long position = resolveInitialPlaybackPosition();", setPosition) > setPosition
+                        && mobile.indexOf("if (mInitialPlaybackPosition == position)", setPosition) > setPosition
+                        && mobile.indexOf("mInitialPlaybackPosition = C.TIME_UNSET;", setPosition) > setPosition
+                        && mobile.indexOf("player().seekTo(position);", setPosition) > mobile.indexOf("mInitialPlaybackPosition = C.TIME_UNSET;", setPosition)
+                        && mobile.indexOf("player().seekTo(position);", setPosition) < setPositionEnd);
+        assertTrue("the base activity must expose the position-aware start overload used by mobile",
+                startPlayerOverload >= 0 && playback.indexOf("player().start(PlaySpec.from(result, key, metadata), timeout, PlayerSetting.isAutoPlay(), startPositionMs);", startPlayerOverload) > startPlayerOverload);
+    }
+
     private static void assertFocusRefreshAfter(String source, String methodSignature, String visibilityMutation) {
         int method = source.indexOf(methodSignature);
         int methodEnd = source.indexOf("\n    private ", method + 1);
