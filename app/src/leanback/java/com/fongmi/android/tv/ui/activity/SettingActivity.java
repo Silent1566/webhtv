@@ -246,7 +246,7 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
     }
 
     private void onAppearance(View view) {
-        SettingAppearanceActivity.start(this);
+        AppearanceDialog.show(this);
     }
 
     private void onPersonal(View view) {
