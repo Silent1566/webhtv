@@ -1818,6 +1818,11 @@ public final class MpvPlayer extends SimpleBasePlayer implements MPVLib.EventObs
                     stabilizedPositionMs(doubleSecondsToMs(value, cachedPositionMs));
             case "duration", "duration/full" -> {
                 long durationMs = doubleSecondsToMs(value, cachedDurationMs);
+                // mpv can publish an initial duration observation as zero before the
+                // demuxer knows the real timeline. If the later value does not change,
+                // no property-change event arrives, so zero would stick. Keep the
+                // timeline unset instead of materializing an unknown duration as zero.
+                if (durationMs == 0) durationMs = C.TIME_UNSET;
                 if (durationMs != cachedDurationMs) {
                     cachedDurationMs = durationMs;
                     stateChanged = true;
@@ -2196,6 +2201,15 @@ public final class MpvPlayer extends SimpleBasePlayer implements MPVLib.EventObs
             case MPVLib.MpvEvent.MPV_EVENT_PLAYBACK_RESTART -> {
                 playbackRestarted = true;
                 endSeekBuffering("playback-restart");
+                // Some sources do not send a second duration change after the startup
+                // zero observation. Read the settled timeline once playback restarts.
+                if (cachedDurationMs == C.TIME_UNSET || cachedDurationMs == 0) {
+                    long durationMs = doublePropertyMs("duration", C.TIME_UNSET);
+                    if (durationMs != cachedDurationMs) {
+                        cachedDurationMs = durationMs;
+                        invalidateState();
+                    }
+                }
                 if (config.deferStartupTrackRefresh()) {
                     scheduleTrackRefresh("event=playback-restart");
                 }
@@ -3508,6 +3522,13 @@ public final class MpvPlayer extends SimpleBasePlayer implements MPVLib.EventObs
         if (released || mediaItem == null || playbackState == Player.STATE_IDLE || playbackState == Player.STATE_ENDED || playerError != null) return;
         updatePreloadCacheOverlay();
         if (currentLikelyHls) requestHlsPreload(cachedPositionMs);
+        // A missing timeline stays missing if mpv never publishes a second duration
+        // property change (or if that event was already consumed before playback
+        // started). Recover it on the existing one-second playback-state loop.
+        long timelineDurationMs = cachedDurationMs > 0 || !initialized ? -1 : doublePropertyMs("duration", -1);
+        if (timelineDurationMs > 0 && timelineDurationMs != cachedDurationMs) {
+            cachedDurationMs = timelineDurationMs;
+        }
         invalidateState();
         startStateRefresh();
     }
