@@ -1297,11 +1297,13 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             addInlineCustomButton(playerActions, button);
             if (mobileActions != null) addInlineCustomButton(mobileActions, button);
         }
+        setupInlineCustomButtonFocus();
         updateInlineCustomButtonVisibility();
     }
 
     private void addInlineCustomButton(ViewGroup container, MpvConfigStore.CustomButton button) {
         TextView view = new TextView(this);
+        view.setId(View.generateViewId());
         view.setTextSize(13);
         view.setTextColor(Color.WHITE);
         view.setGravity(Gravity.CENTER);
@@ -1338,6 +1340,28 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         boolean visible = service() != null && player() != null
                 && !player().isEmpty() && player().isMpv();
         for (View view : inlineCustomActionViews) view.setVisibility(visible ? View.VISIBLE : View.GONE);
+    }
+
+    /**
+     * 自定义按钮不属于 PlayerButtonSetting 的固定按钮集合，不能依赖固定按钮的焦点链。
+     * 否则 TV 端最后一个内置按钮的右焦点仍然是 NO_ID，动态追加的按钮无法用方向键到达。
+     */
+    private void setupInlineCustomButtonFocus() {
+        if (Util.isMobile()) return;
+        ViewGroup container = (ViewGroup) binding.playerActionRow.getChildAt(0);
+        List<View> focusable = new ArrayList<>();
+        for (int i = 0; i < container.getChildCount(); i++) {
+            View view = container.getChildAt(i);
+            if (view.getVisibility() == View.VISIBLE && view.isEnabled() && view.isFocusable()) focusable.add(view);
+        }
+        for (int i = 0; i < focusable.size(); i++) {
+            View current = focusable.get(i);
+            View previous = focusable.get(i == 0 ? focusable.size() - 1 : i - 1);
+            View next = focusable.get(i == focusable.size() - 1 ? 0 : i + 1);
+            current.setNextFocusLeftId(previous.getId());
+            current.setNextFocusRightId(next.getId());
+            current.setNextFocusUpId(current.getId());
+        }
     }
 
     private void inflateMobileInlineControl() {
@@ -7401,6 +7425,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         setInlineFullscreenIcon();
         updateMobileInlineButtons(playing, hasPlayer, episodeCount, hasTitle);
         applyInlinePlayerButtonSettings();
+        setupInlineCustomButtonFocus();
         updateInlineDisplayPanel();
         // 更新按钮颜色
         updateInlineButtonColors();
