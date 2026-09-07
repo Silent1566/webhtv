@@ -47,6 +47,7 @@ import com.fongmi.android.tv.ui.adapter.SearchAdapter;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.custom.CustomScroller;
 import com.fongmi.android.tv.ui.dialog.SliderNumberDialog;
+import com.fongmi.android.tv.ui.helper.TouchOptimizationHelper;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.SearchPageState;
@@ -57,7 +58,9 @@ import com.google.android.material.textview.MaterialTextView;
 import com.google.gson.reflect.TypeToken;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 public class CollectActivity extends BaseActivity implements CollectAdapter.OnClickListener, SearchAdapter.OnClickListener, CustomScroller.Callback {
@@ -89,6 +92,7 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
     private String mPendingCollectSiteKey = "";
     private boolean mScrolling;
     private boolean mLeavingForPlayback;
+    private final Map<String, SearchPosition> mSearchPositions = new HashMap<>();
 
     public static void start(Activity activity, String keyword) {
         start(activity, keyword, null, null);
@@ -236,6 +240,7 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
         mBinding.collect.addOnChildViewHolderSelectedListener(new OnChildViewHolderSelectedListener() {
             @Override
             public void onChildViewHolderSelected(@NonNull RecyclerView parent, @Nullable RecyclerView.ViewHolder child, int position, int subposition) {
+                if (TouchOptimizationHelper.isTouchActive(parent)) return;
                 scheduleCollect(position, 260);
             }
         });
@@ -246,6 +251,7 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
         mBinding.collectHorizontal.addOnChildViewHolderSelectedListener(new OnChildViewHolderSelectedListener() {
             @Override
             public void onChildViewHolderSelected(@NonNull RecyclerView parent, @Nullable RecyclerView.ViewHolder child, int position, int subposition) {
+                if (TouchOptimizationHelper.isTouchActive(parent)) return;
                 scheduleCollect(position, 260);
             }
         });
@@ -262,6 +268,7 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
         mBinding.recycler.addOnScrollListener(mImageScrollListener = new RecyclerView.OnScrollListener() {
             @Override
             public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {
+                saveSearchPosition(getActiveSiteKey());
                 if (!canLoadImage()) return;
                 ensureSearchRows(count, 2);
                 preloadNextRows(count);
@@ -378,6 +385,7 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
         SliderNumberDialog.show(this, R.string.search_filter_similarity, mSimilarity, 0, 100, "%", R.string.search_filter_similarity_hint, value -> {
             mSimilarity = value;
             Setting.putSearchSimilarity(value);
+            mSearchPositions.clear();
             updateFilterControls();
             applyFilters(activeSiteKey);
         });
@@ -450,6 +458,7 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
 
     private void setFilterGroup(String group) {
         String activeSiteKey = getActiveSiteKey();
+        mSearchPositions.clear();
         mFilterGroup = Objects.toString(group, "");
         updateFilterControls();
         applyFilters(activeSiteKey);
@@ -574,6 +583,7 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
 
     private void search() {
         mSearchCompleted = false;
+        mSearchPositions.clear();
         mPaging.clear();
         removeApplyCollect();
         mCollectAdapter.clear();
@@ -648,6 +658,7 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
     }
 
     private void updateRecyclerLayout() {
+        mSearchPositions.clear();
         int count = getCount();
         GridLayoutManager layoutManager = (GridLayoutManager) mBinding.recycler.getLayoutManager();
         if (layoutManager != null) {
@@ -805,6 +816,7 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
 
     private void scheduleCollect(int position, long delayMillis) {
         if (position < 0 || position >= mCollectAdapter.getItemCount()) return;
+        saveSearchPosition(getActiveSiteKey());
         Collect item = mCollectAdapter.get(position);
         String siteKey = item.getSite().getKey();
         boolean same = siteKey.equals(getActiveSiteKey());
@@ -836,27 +848,51 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
     }
 
     private void setSearchItemsLazy(List<Vod> items) {
-        mSearchAdapter.setSource(items, getCount() * 4);
+        String siteKey = getActiveSiteKey();
+        SearchPosition saved = mSearchPositions.get(siteKey);
+        int position = saved == null ? 0 : saved.adapterPosition;
+        mSearchAdapter.setSource(items, Math.max(getCount() * 4, position + getCount()));
         mBinding.recycler.post(() -> {
-            scrollSearchToTop();
+            if (!siteKey.equals(getActiveSiteKey())) return;
+            restoreSearchPosition(siteKey);
             ensureSearchRows(getCount(), 2);
             preloadNextRows(getCount());
         });
     }
 
-    private void scrollSearchToTop() {
+    private void saveSearchPosition(String siteKey) {
+        if (TextUtils.isEmpty(siteKey) || mBinding == null || mBinding.recycler == null) return;
         RecyclerView.LayoutManager manager = mBinding.recycler.getLayoutManager();
-        if (manager instanceof GridLayoutManager layoutManager) layoutManager.scrollToPositionWithOffset(0, 0);
-        else mBinding.recycler.scrollToPosition(0);
+        if (!(manager instanceof GridLayoutManager layoutManager)) return;
+        int position = layoutManager.findFirstVisibleItemPosition();
+        if (position == RecyclerView.NO_POSITION) return;
+        View first = layoutManager.findViewByPosition(position);
+        if (first == null) return;
+        int offset = first.getTop() - mBinding.recycler.getPaddingTop();
+        mSearchPositions.put(siteKey, new SearchPosition(position, offset));
+    }
+
+    private void restoreSearchPosition(String siteKey) {
+        RecyclerView.LayoutManager manager = mBinding.recycler.getLayoutManager();
+        if (!(manager instanceof GridLayoutManager layoutManager)) return;
+        int itemCount = mSearchAdapter == null ? 0 : mSearchAdapter.getItemCount();
+        if (itemCount <= 0) return;
+        SearchPosition saved = mSearchPositions.get(siteKey);
+        int position = saved == null ? 0 : Math.min(saved.adapterPosition, itemCount - 1);
+        int offset = saved == null ? 0 : saved.offset;
+        layoutManager.scrollToPositionWithOffset(Math.max(0, position), offset);
     }
 
     private boolean focusFirstSearchResult() {
         if (mSearchAdapter == null || mSearchAdapter.getItemCount() == 0) return false;
         mBinding.recycler.post(() -> {
-            scrollSearchToTop();
+            restoreSearchPosition(getActiveSiteKey());
             mBinding.recycler.post(() -> {
                 RecyclerView.LayoutManager manager = mBinding.recycler.getLayoutManager();
-                View target = manager == null ? null : manager.findViewByPosition(0);
+                SearchPosition saved = mSearchPositions.get(getActiveSiteKey());
+                int itemCount = mSearchAdapter == null ? 0 : mSearchAdapter.getItemCount();
+                int position = saved == null || itemCount <= 0 ? 0 : Math.min(saved.adapterPosition, itemCount - 1);
+                View target = manager == null ? null : manager.findViewByPosition(position);
                 if (target != null) target.requestFocus();
                 else mBinding.recycler.requestFocus();
             });
@@ -914,9 +950,7 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
     }
 
     private boolean focusFirstResult() {
-        if (mBinding.recycler.getChildCount() == 0) return false;
-        mBinding.recycler.getChildAt(0).requestFocus();
-        return true;
+        return focusFirstSearchResult();
     }
 
     private void focusSelectedCollect() {
@@ -972,6 +1006,16 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
         super.onResume();
         mLeavingForPlayback = false;
         if (canLoadImage()) Glide.with(this).resumeRequests();
+    }
+
+    private static final class SearchPosition {
+        private final int adapterPosition;
+        private final int offset;
+
+        private SearchPosition(int adapterPosition, int offset) {
+            this.adapterPosition = Math.max(0, adapterPosition);
+            this.offset = offset;
+        }
     }
 
     @Override

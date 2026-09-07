@@ -59,6 +59,7 @@ import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.adapter.BaseDiffCallback;
 import com.fongmi.android.tv.ui.adapter.TypeAdapter;
 import com.fongmi.android.tv.ui.base.BaseActivity;
+import com.fongmi.android.tv.ui.helper.TouchOptimizationHelper;
 import com.fongmi.android.tv.ui.custom.CustomRowPresenter;
 import com.fongmi.android.tv.ui.custom.CustomSelector;
 import com.fongmi.android.tv.ui.custom.CustomTitleView;
@@ -231,7 +232,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
                 mSelectedTypeView = child.itemView;
                 mSelectedTypeView.setSelected(true);
                 if (parent.hasFocus()) updateToolbarVisibility(true);
-                if (Setting.isHomeVodAutoLoad()) scheduleTypeSwitch(position);
+                if (Setting.isHomeVodAutoLoad() && !Setting.isTouchOptimized() && !TouchOptimizationHelper.isTouchActive(parent)) scheduleTypeSwitch(position);
             }
         });
     }
