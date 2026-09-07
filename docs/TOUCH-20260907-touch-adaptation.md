@@ -23,9 +23,24 @@
 - 手势：横滑预览、仅正常 UP 提交一次；CANCEL/多指/失焦不提交；左/右半屏起点锁定亮度/音量；OSD 抬手清理；小窗点击、关闭优化、控制栏按钮和遥控器不回归。
 - 回滚：恢复本任务唯一提交前状态；未提交阶段回退仅限 guard 内任务补丁，不触及其他工作。关闭触屏优化可回到旧输入行为。
 
+## R2 实施记录（TOUCH-20260907-R2）
+
+### 实际实现
+- `TouchOptimizationHelper` 在不把 leanback 依赖泄漏到 mobile 公共源码的前提下，通过 leanback 运行时公开 API 绑定 `BaseGridView` 的触摸/按键拦截器：触摸 DOWN 临时切到 `FOCUS_SCROLL_ITEM` 并禁用焦点搜索，D-pad 到来时恢复原策略；优化关闭时不安装/不保留该行为。动态 RecyclerView 子项仍由现有 attach listener 覆盖。
+- `HomeActivity` 和 `CollectActivity` 在站源/类别选择回调中忽略触摸期间的焦点变化；点击回调仍执行真实切换。首页自动切类仅保留遥控器路径。
+- `CollectActivity` 为每个站源保存首个可见 adapter position 与像素 top offset；恢复时按当前 adapter 数量夹紧，异步恢复前再次确认站源仍是 active；新搜索、分组/相似度筛选和列数改变清空旧位置。
+- TV `VideoActivity` 不再将公共 `PlayerGesture` 直接接到 TV 播放器：优化关闭时保留 `CustomKeyDownVod`；优化开启且全屏时由 TV 层使用现有 `seekTo` 通道处理横滑，按按下点左/右半屏分别调亮度/音乐音量，使用 `BrightnessPolicy`、`AudioManager` 和 TV widget OSD。多指、CANCEL、失焦不提交 seek；正常 UP 只提交一次并清理 OSD。
+
+### R2 验证
+- `git diff --check`：通过。
+- `bash ./gradlew :app:testLeanbackArm64_v8aDebugUnitTest --tests com.fongmi.android.tv.ui.helper.TouchOptimizationHelperSourceTest :app:assembleLeanbackArm64_v8aDebug --no-daemon`：通过，11 tests completed；同时完成 Leanback Arm64 Java 编译并组装 `app/build/outputs/apk/leanbackArm64_v8a/debug/app-leanback-arm64_v8a-debug.apk`。
+- 首次测试失败原因已修正：旧源码断言仍要求上一版已撤销的 `PlayerGesture` 接线，非生产代码失败；测试契约已改为断言当前 TV 触摸接线、像素恢复、焦点策略和取消边界。
+- 设备端：使用 `192.168.50.3:5555` 安装上述 APK 成功，`monkey -p com.silent.android.webhtv 1` 启动成功，前台为 `HomeActivity`，进程 PID `6464`；本次只完成启动冒烟，未宣称完整触摸场景已在设备端覆盖。
+
 ## Recovery anchor
-- 目标/范围：上述完整验收；继续原 `TOUCH-20260907` guard，原始脏路径 0，当前脏文件均为任务草稿。
-- 分支/HEAD：`dev1` / `db59f3eeb85ff0e4ed993e814d9b81b08036bcb7`。
-- 已完成：精确 Leanback 布局原因已确认；旧草稿 arm64 Java 编译及源码测试成功，但没有充分覆盖目标，不能用它闭合任务。
-- 未验证：即将替换的触摸导航、结果状态与 TV 手势；设备端真实 MotionEvent 行为。
-- 下一步：在原 scope 内实现所选窄适配，并用行为测试/代表性设备场景验证。
+- 目标/范围：完成首页/站源触摸滚动与不误切换、按站源恢复结果像素位置、TV 全屏横滑 seek 与左右半屏亮度/音量 OSD；保留触屏开关关闭和遥控器语义。
+- 阶段：`TOUCH-20260907-R2`，guard active；上一提交 `3bb2ff086ffbf0aab5906205526bd9f887e22fd7` 和恢复标签保留。
+- 当前文件：本 R2 guard 的 7 个任务文件处于未提交修改；无其他脏路径。
+- 已验证：Leanback Arm64 Java 编译、11 项 focused 源码契约测试、`git diff --check`、Arm64 APK 组装，以及设备安装/`HomeActivity` 启动冒烟。
+- 未验证：完整设备端 MotionEvent/焦点回弹与各类手势场景；仍需按验收清单在真实设备上继续覆盖。
+- 下一步：执行 `task_guard.sh finish`，原子提交本 R2 变更并创建恢复 tag。
