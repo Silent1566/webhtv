@@ -8,6 +8,7 @@ import com.github.catvod.crawler.SpiderDebug;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 public final class MediaTitleResolver {
 
@@ -38,9 +39,11 @@ public final class MediaTitleResolver {
         MediaTitleResolution resolution = parser.parse(safe);
         if (!forceAi) applyTmdbCache(safe, resolution);
         String skipReason = aiSkipReason(safe, resolution, forceAi);
-        SpiderDebug.log("ai-title", "rule source=%s raw=%s canonical=%s confidence=%.2f force=%s candidates=%s",
-                resolution.getSource(), safe.getRawTitle(), resolution.getCanonicalTitle(), resolution.getConfidence(), forceAi, resolution.queryTitles());
+        SpiderDebug.log("ai-title", "rule source=%s ruleSource=%s raw=%s canonical=%s confidence=%.2f context=%.2f/%d force=%s breakdown=%s degradation=%s candidates=%s",
+                resolution.getSource(), resolution.getRuleSource(), safe.getRawTitle(), resolution.getCanonicalTitle(), resolution.getConfidence(),
+                resolution.getContextConfidence(), resolution.getContextGroupSize(), forceAi, resolution.getConfidenceBreakdown(), resolution.getDegradationReason(), resolution.queryTitles());
         if (!skipReason.isEmpty()) {
+            if (resolution.getDegradationReason().isEmpty()) resolution.setDegradationReason(skipReason);
             SpiderDebug.log("ai-title", "skip title-extraction reason=%s raw=%s canonical=%s allowAi=%s enabled=%s ready=%s",
                     skipReason, safe.getRawTitle(), resolution.getCanonicalTitle(), safe.isAllowAi(), Setting.isAiTitleExtraction(), Setting.isAiConfigReady());
             return resolution;
@@ -53,7 +56,15 @@ public final class MediaTitleResolver {
             ai = new AiTitleExtractionService(config).extract(safe, resolution);
             if (ai != null) cache.write(safe, config, ai);
         }
-        return ai == null || (!forceAi && ai.getConfidence() < 0.55f) ? resolution : merge(resolution, ai);
+        if (ai == null) {
+            resolution.setDegradationReason("ai-unavailable");
+            return resolution;
+        }
+        if (!forceAi && ai.getConfidence() < 0.55f) {
+            resolution.setDegradationReason("ai-low-confidence");
+            return resolution;
+        }
+        return merge(resolution, ai);
     }
 
     public List<String> queryTitles(MediaTitleRequest request, int limit) {
@@ -93,6 +104,8 @@ public final class MediaTitleResolver {
         List<MediaTitleLearningExample> examples = new ArrayList<>(safe.getLearningExamples());
         examples.addAll(MediaTitleLearningStore.load().find(safe, 5));
         examples.addAll(Setting.getDanmakuMatchCache().learningExamples(parser.cleanTitle(safe.getRawTitle())));
+        List<String> contextTitles = new ArrayList<>(safe.getContextTitles());
+        addContextTitle(contextTitles, safe.getSearchKeyword(), safe.getRawTitle());
         return MediaTitleRequest.builder()
                 .siteKey(safe.getSiteKey())
                 .vodId(safe.getVodId())
@@ -103,9 +116,19 @@ public final class MediaTitleResolver {
                 .episodeName(safe.getEpisodeName())
                 .flag(safe.getFlag())
                 .source(safe.getSource())
+                .folderName(safe.getFolderName())
+                .contextTitles(contextTitles)
+                .tmdbId(safe.getTmdbId())
+                .tmdbSeasonNumber(safe.getTmdbSeasonNumber())
                 .allowAi(safe.isAllowAi())
                 .learningExamples(examples)
                 .build();
+    }
+
+    private void addContextTitle(List<String> values, String candidate, String rawTitle) {
+        if (candidate == null || candidate.trim().isEmpty() || candidate.equalsIgnoreCase(rawTitle)) return;
+        for (String value : values) if (value.equalsIgnoreCase(candidate)) return;
+        values.add(candidate);
     }
 
     private void applyTmdbCache(MediaTitleRequest request, MediaTitleResolution resolution) {
@@ -116,6 +139,8 @@ public final class MediaTitleResolver {
         resolution.setMediaType(item.getMediaType());
         resolution.setConfidence(0.95f);
         resolution.setSource(MediaTitleResolution.SOURCE_TMDB_CACHE);
+        resolution.setDegradationReason("");
+        resolution.setConfidenceBreakdown(resolution.getConfidenceBreakdown() + ",tmdb=1.00,final=0.95");
         resolution.addCandidate(MediaTitleCandidate.of(item.getTitle(), MediaTitleCandidate.SOURCE_TMDB, 0.96f));
     }
 
@@ -146,6 +171,10 @@ public final class MediaTitleResolver {
         merged.addCandidate(MediaTitleCandidate.of(rule.getCanonicalTitle(), MediaTitleCandidate.SOURCE_RULE, Math.min(0.75f, rule.getConfidence())));
         merged.addCandidate(MediaTitleCandidate.of(rule.getRuleTitle(), MediaTitleCandidate.SOURCE_RULE, Math.min(0.7f, rule.getConfidence())));
         if (!rule.getRawTitle().equals(rule.getRuleTitle())) merged.addCandidate(MediaTitleCandidate.of(rule.getRawTitle(), MediaTitleCandidate.SOURCE_RAW, 0.25f));
+        String breakdown = rule.getConfidenceBreakdown();
+        if (!breakdown.isEmpty()) breakdown += ",";
+        merged.setConfidenceBreakdown(breakdown + String.format(Locale.ROOT, "ai=%.2f,final=%.2f", ai.getConfidence(), merged.getConfidence()));
+        merged.setDegradationReason("");
         return merged;
     }
 
@@ -161,7 +190,13 @@ public final class MediaTitleResolver {
         result.setEpisodeNumber(source.getEpisodeNumber());
         result.setEpisodeTitle(source.getEpisodeTitle());
         result.setConfidence(source.getConfidence());
+        result.setContextConfidence(source.getContextConfidence());
+        result.setContextGroupSize(source.getContextGroupSize());
         result.setSource(source.getSource());
+        result.setRuleSource(source.getRuleSource());
+        result.setAiReasonCode(source.getAiReasonCode());
+        result.setConfidenceBreakdown(source.getConfidenceBreakdown());
+        result.setDegradationReason(source.getDegradationReason());
         result.setNeedsVerification(source.isNeedsVerification());
         for (String alias : source.getAliases()) result.addAlias(alias);
         for (MediaTitleCandidate candidate : source.getCandidates()) result.addCandidate(candidate);

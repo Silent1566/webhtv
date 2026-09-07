@@ -58,6 +58,23 @@ public class AiTitleExtractionServiceTest {
     }
 
     @Test
+    public void buildPrompt_includesBoundedRecognitionContextAndEvidence() {
+        MediaTitleRequest request = MediaTitleRequest.builder()
+                .rawTitle("qyn 第二季 防和谐版")
+                .folderName("/media/庆余年")
+                .contextTitles(List.of("庆余年 第二季 第01集", "庆余年 第二季 第02集"))
+                .build();
+        MediaTitleResolution rule = new MediaTitleParser().parse(request);
+
+        String prompt = AiTitleExtractionService.buildPrompt(request, rule);
+
+        assertTrue(prompt.contains("\"folderName\":\"庆余年\""));
+        assertTrue(prompt.contains("\"contextTitles\":[\"庆余年 第二季 第01集\",\"庆余年 第二季 第02集\"]"));
+        assertTrue(prompt.contains("\"ruleSource\""));
+        assertTrue(prompt.contains("\"contextConfidence\""));
+    }
+
+    @Test
     public void parseResponse_acceptsStrictJsonAndAddsAliasCandidates() {
         MediaTitleResolution rule = new MediaTitleParser().parse(MediaTitleRequest.builder()
                 .rawTitle("qyn 第二季 4K")
@@ -81,5 +98,50 @@ public class AiTitleExtractionServiceTest {
         MediaTitleResolution result = AiTitleExtractionService.parseResponse("{\"canonicalTitle\":\"庆余年 4K 第5集\",\"confidence\":0.95}", rule);
 
         assertNull(result);
+    }
+
+    @Test
+    public void parseResponse_preservesFallbackMetadataWhenAiOmitsFields() {
+        MediaTitleResolution rule = new MediaTitleParser().parse(MediaTitleRequest.builder()
+                .rawTitle("庆余年2 S02E05 4K")
+                .build());
+
+        MediaTitleResolution result = AiTitleExtractionService.parseResponse(
+                "{\"canonicalTitle\":\"庆余年\",\"confidence\":0.91}", rule);
+
+        assertNotNull(result);
+        assertEquals("tv", result.getMediaType());
+        assertEquals(2, result.getSeasonNumber());
+        assertEquals(5, result.getEpisodeNumber());
+        assertEquals(0.91f, result.getConfidence(), 0.001f);
+        assertEquals(rule.getRuleSource(), result.getRuleSource());
+    }
+
+    @Test
+    public void parseResponse_rejectsOutOfRangeNumbersAndKeepsSafeFallback() {
+        MediaTitleResolution rule = new MediaTitleParser().parse(MediaTitleRequest.builder()
+                .rawTitle("庆余年2 S02E05 4K")
+                .build());
+
+        MediaTitleResolution result = AiTitleExtractionService.parseResponse(
+                "{\"canonicalTitle\":\"庆余年\",\"seasonNumber\":999,\"episodeNumber\":99999,\"year\":3024,\"confidence\":0.91}", rule);
+
+        assertNotNull(result);
+        assertEquals(2, result.getSeasonNumber());
+        assertEquals(5, result.getEpisodeNumber());
+        assertEquals(0, result.getYear());
+    }
+
+    @Test
+    public void parseResponse_usesLaterValidNumberWhenEarlierAliasIsInvalid() {
+        MediaTitleResolution rule = new MediaTitleParser().parse(MediaTitleRequest.builder()
+                .rawTitle("庆余年2 S02E05 4K")
+                .build());
+
+        MediaTitleResolution result = AiTitleExtractionService.parseResponse(
+                "{\"canonicalTitle\":\"庆余年\",\"seasonNumber\":999,\"season\":2,\"confidence\":0.91}", rule);
+
+        assertNotNull(result);
+        assertEquals(2, result.getSeasonNumber());
     }
 }

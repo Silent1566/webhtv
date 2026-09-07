@@ -2300,6 +2300,8 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
             player().clear();
         }
         updateNavigationKey();
+        // singleTop 切换条目时也要先按新 Intent 准备详情壳，不能沿用旧条目的操作按钮。
+        prepareInitialDetailShell();
         mBinding.progressLayout.showProgress();
     }
 

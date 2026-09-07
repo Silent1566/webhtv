@@ -27,11 +27,18 @@ public final class MediaTitleParser {
         String raw = first(safe.getRawTitle(), safe.getRawRemarks(), safe.getEpisodeName());
         String combined = join(raw, safe.getRawRemarks(), safe.getEpisodeName());
         String ruleTitle = cleanTitle(raw);
+        float ruleConfidence = ruleConfidence(raw, ruleTitle);
+        List<String> contextCandidates = contextTitles(safe);
+        String contextTitle = contextConsensusTitle(contextCandidates);
+        float contextConfidence = contextConfidence(contextCandidates, ruleTitle, contextTitle);
         MediaTitleLearningExample learning = bestLearningExample(ruleTitle, combined, safe.getLearningExamples());
 
         MediaTitleResolution resolution = new MediaTitleResolution();
         resolution.setRawTitle(raw);
         resolution.setRuleTitle(ruleTitle);
+        resolution.setRuleSource(ruleSource(raw, ruleTitle));
+        resolution.setContextConfidence(contextConfidence);
+        resolution.setContextGroupSize(contextCandidates.isEmpty() ? 0 : contextCandidates.size() + 1);
         resolution.setYear(firstPositive(firstYear(safe.getVodYear()), firstYear(combined)));
         resolution.setSeasonNumber(firstPositive(seasonNumber(combined), inferTrailingSeason(raw)));
         resolution.setEpisodeNumber(episodeNumber(combined));
@@ -48,15 +55,24 @@ public final class MediaTitleParser {
             resolution.addCandidate(MediaTitleCandidate.of(learning.getExpectedTitle(), MediaTitleCandidate.SOURCE_MANUAL, 0.98f));
             resolution.addAlias(learning.getRuleTitle());
         } else {
-            resolution.setCanonicalTitle(ruleTitle);
-            resolution.setConfidence(ruleConfidence(raw, ruleTitle));
+            boolean useContext = !contextTitle.isEmpty() && contextConfidence >= 0.85f
+                    && (ruleTitle.isEmpty() || ruleConfidence < 0.75f);
+            resolution.setCanonicalTitle(useContext ? contextTitle : ruleTitle);
+            resolution.setConfidence(useContext
+                    ? Math.max(ruleConfidence, Math.min(0.88f, 0.55f + contextConfidence * 0.35f))
+                    : ruleConfidence);
             resolution.setSource(MediaTitleResolution.SOURCE_RULE);
+            if (useContext) resolution.addCandidate(MediaTitleCandidate.of(contextTitle, MediaTitleCandidate.SOURCE_CONTEXT, contextConfidence));
         }
 
         resolution.addCandidate(MediaTitleCandidate.of(resolution.getCanonicalTitle(), learning != null ? MediaTitleCandidate.SOURCE_MANUAL : MediaTitleCandidate.SOURCE_RULE, resolution.getConfidence()));
         resolution.addCandidate(MediaTitleCandidate.of(ruleTitle, MediaTitleCandidate.SOURCE_RULE, Math.min(0.8f, resolution.getConfidence())));
+        if (learning == null && !contextTitle.isEmpty() && contextConfidence >= 0.85f) {
+            resolution.addCandidate(MediaTitleCandidate.of(contextTitle, MediaTitleCandidate.SOURCE_CONTEXT, contextConfidence));
+        }
         if (!raw.equals(ruleTitle)) resolution.addCandidate(MediaTitleCandidate.of(raw, MediaTitleCandidate.SOURCE_RAW, 0.25f));
         resolution.addAlias(ruleTitle);
+        resolution.setConfidenceBreakdown(String.format(Locale.ROOT, "rule=%.2f,context=%.2f,final=%.2f", ruleConfidence, contextConfidence, resolution.getConfidence()));
         return resolution;
     }
 
@@ -124,6 +140,54 @@ public final class MediaTitleParser {
 
     public String normalizeSearchText(String text) {
         return cleanTitle(text).replaceAll("[\\s·•:：\\-_/\\\\|()（）\\[\\]【】]+", "").toLowerCase(Locale.ROOT);
+    }
+
+    private List<String> contextTitles(MediaTitleRequest request) {
+        List<String> result = new ArrayList<>();
+        for (String raw : request.getContextTitles()) {
+            List<String> candidates = cleanSearchTitles(MediaTitleRequest.builder().rawTitle(raw).build());
+            if (!candidates.isEmpty()) result.add(candidates.get(0));
+        }
+        return result;
+    }
+
+    private String contextConsensusTitle(List<String> titles) {
+        if (titles.isEmpty()) return "";
+        String best = "";
+        int bestCount = 0;
+        for (String title : titles) {
+            int count = 0;
+            String normalized = normalizeSearchText(title);
+            for (String candidate : titles) if (normalized.equals(normalizeSearchText(candidate))) count++;
+            if (count > bestCount) {
+                best = title;
+                bestCount = count;
+            }
+        }
+        return best;
+    }
+
+    private float contextConfidence(List<String> titles, String ruleTitle, String consensusTitle) {
+        if (titles.isEmpty() || consensusTitle.isEmpty()) return 0f;
+        int matches = 0;
+        String consensus = normalizeSearchText(consensusTitle);
+        for (String title : titles) if (consensus.equals(normalizeSearchText(title))) matches++;
+        float consensusScore = matches / (float) titles.size();
+        double ruleScore = similarity(normalizeSearchText(ruleTitle), consensus);
+        if (titles.size() == 1 && ruleScore < 0.9d) return 0.65f;
+        return (float) Math.min(1d, Math.max(consensusScore, ruleScore));
+    }
+
+    private String ruleSource(String raw, String ruleTitle) {
+        if (isBlank(ruleTitle)) return "empty";
+        List<String> rules = new ArrayList<>();
+        if (EPISODE_PATTERN.matcher(raw == null ? "" : raw).find()) rules.add("episode");
+        if (SEASON_PATTERN.matcher(raw == null ? "" : raw).find()) rules.add("season");
+        if (YEAR_PATTERN.matcher(raw == null ? "" : raw).find()) rules.add("year");
+        if (NOISE_WORDS.matcher(raw == null ? "" : raw).find() || FRAME_RATE_PATTERN.matcher(raw == null ? "" : raw).find()) rules.add("media-noise");
+        if (BRACKET_PATTERN.matcher(raw == null ? "" : raw).find()) rules.add("bracket");
+        if (SUSPICIOUS_MARKERS.matcher(raw == null ? "" : raw).find()) rules.add("obfuscation");
+        return rules.isEmpty() ? "plain" : String.join("+", rules);
     }
 
     private void addCleanSearchTitles(List<String> result, String text) {
@@ -280,6 +344,7 @@ public final class MediaTitleParser {
         String normalized = normalize(value);
         if (normalized.length() < 2) return false;
         if (normalized.matches("(?i)(?:更新至|更至|连载至|全集|合集|完结|电影|电视剧|剧集|动漫|动画|综艺|tv)")) return false;
+        if (value.matches("(?i)^(?:更新至|更至|连载至|全|共)?\\s*[0-9零〇一二三四五六七八九十两百]+\\s*[集话話回期章节節](?:完结|更新中)?$")) return false;
         return !value.matches("^第\\s*[0-9零〇一二三四五六七八九十两百]+\\s*[集话話回期章节節].*");
     }
 

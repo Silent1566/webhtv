@@ -143,4 +143,67 @@ public class MediaTitleParserTest {
 
         assertEquals("云秀行", resolution.getCanonicalTitle());
     }
+
+    @Test
+    public void parse_usesStrongContextConsensusForLowConfidenceObfuscatedTitle() {
+        MediaTitleResolution resolution = new MediaTitleParser().parse(
+                MediaTitleRequest.builder()
+                        .rawTitle("qyn 第2季 防和谐版")
+                        .contextTitles(List.of(
+                                "庆余年 第二季 第01集 4K",
+                                "庆余年 第二季 第02集 1080P",
+                                "庆余年 第二季 第03集 WEB-DL"))
+                        .build());
+
+        assertEquals("庆余年", resolution.getCanonicalTitle());
+        assertTrue(resolution.getContextConfidence() >= 0.85f);
+        assertEquals(4, resolution.getContextGroupSize());
+        assertTrue(resolution.getCandidates().stream().anyMatch(candidate ->
+                MediaTitleCandidate.SOURCE_CONTEXT.equals(candidate.getSource())));
+        assertTrue(resolution.getConfidenceBreakdown().contains("context="));
+    }
+
+    @Test
+    public void parse_doesNotLetOneConflictingContextReplaceUsefulRuleTitle() {
+        MediaTitleResolution resolution = new MediaTitleParser().parse(
+                MediaTitleRequest.builder()
+                        .rawTitle("庆余年 第05集 4K")
+                        .contextTitles(List.of("另一部剧 第01集"))
+                        .build());
+
+        assertEquals("庆余年", resolution.getCanonicalTitle());
+        assertTrue(resolution.getContextConfidence() < 0.85f);
+    }
+
+    @Test
+    public void parse_doesNotPromoteRemarksOrEpisodeNameToContextVotes() {
+        MediaTitleResolution resolution = new MediaTitleParser().parse(
+                MediaTitleRequest.builder()
+                        .rawTitle("qyn 防和谐版")
+                        .rawRemarks("更新至18集")
+                        .episodeName("第18集")
+                        .build());
+
+        assertEquals(0, resolution.getContextGroupSize());
+        assertEquals(0f, resolution.getContextConfidence(), 0.001f);
+    }
+
+    @Test
+    public void parse_countsEachContextInputOnceWhenOneInputHasSeveralSearchCandidates() {
+        MediaTitleResolution resolution = new MediaTitleParser().parse(
+                MediaTitleRequest.builder()
+                        .rawTitle("qyn 第2季")
+                        .contextTitles(List.of("组 | 庆余年 | 01"))
+                        .build());
+
+        assertEquals(2, resolution.getContextGroupSize());
+    }
+
+    @Test
+    public void cleanSearchTitles_rejectsPureUpdateRemark() {
+        List<String> titles = new MediaTitleParser().cleanSearchTitles(
+                MediaTitleRequest.builder().rawTitle("更新至18集").build());
+
+        assertTrue(titles.isEmpty());
+    }
 }

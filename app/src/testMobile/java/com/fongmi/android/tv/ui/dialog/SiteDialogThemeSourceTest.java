@@ -69,13 +69,16 @@ public class SiteDialogThemeSourceTest {
 
     @Test
     public void everyActivityAppliesThemeChangesImmediately() throws Exception {
-        for (String flavor : new String[]{"mobile", "leanback"}) {
-            String base = read("app/src/" + flavor + "/java/com/fongmi/android/tv/ui/base/BaseActivity.java");
-            String themeChange = flavor.equals("leanback")
-                    ? "event.getType() == RefreshEvent.Type.LANGUAGE || event.getType() == RefreshEvent.Type.UI_SCALE || event.getType() == RefreshEvent.Type.THEME"
-                    : "event.getType() == RefreshEvent.Type.LANGUAGE || event.getType() == RefreshEvent.Type.THEME";
-            assertTrue("theme changes must recreate activities in " + flavor, base.contains(themeChange));
-        }
+        String mobile = read("app/src/mobile/java/com/fongmi/android/tv/ui/base/BaseActivity.java");
+        assertTrue(mobile.contains("event.getType() == RefreshEvent.Type.LANGUAGE"));
+        assertTrue(mobile.contains("event.getType() == RefreshEvent.Type.THEME"));
+        assertTrue(mobile.contains("recreate()"));
+
+        String leanback = read("app/src/leanback/java/com/fongmi/android/tv/ui/base/BaseActivity.java");
+        assertTrue(leanback.contains("event.getType() == RefreshEvent.Type.LANGUAGE"));
+        assertTrue(leanback.contains("event.getType() == RefreshEvent.Type.UI_SCALE"));
+        assertTrue(leanback.contains("event.getType() == RefreshEvent.Type.THEME"));
+        assertTrue(leanback.contains("recreate()"));
     }
 
     private String read(String path) throws Exception {

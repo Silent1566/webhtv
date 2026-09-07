@@ -28,6 +28,8 @@ public final class AiTitleExtractionService {
     private static final int READ_TIMEOUT_SECONDS = 25;
     private static final int CALL_TIMEOUT_SECONDS = 35;
     private static final int MAX_LEARNING_EXAMPLES = 5;
+    private static final int MAX_REASONABLE_SEASON = 100;
+    private static final int MAX_REASONABLE_EPISODE = 10000;
 
     private final AiConfig config;
 
@@ -76,9 +78,16 @@ public final class AiTitleExtractionService {
         input.addProperty("ruleTitle", rule.getRuleTitle());
         input.addProperty("rawRemarks", request.getRawRemarks());
         input.addProperty("episodeName", request.getEpisodeName());
+        input.addProperty("folderName", request.getFolderName());
+        JsonArray contextTitles = new JsonArray();
+        for (String title : request.getContextTitles()) contextTitles.add(title);
+        input.add("contextTitles", contextTitles);
         input.addProperty("year", rule.getYear());
         input.addProperty("seasonNumber", rule.getSeasonNumber());
         input.addProperty("episodeNumber", rule.getEpisodeNumber());
+        input.addProperty("ruleSource", rule.getRuleSource());
+        input.addProperty("contextConfidence", rule.getContextConfidence());
+        input.addProperty("contextGroupSize", rule.getContextGroupSize());
 
         JsonArray examples = new JsonArray();
         List<MediaTitleLearningExample> learning = request.getLearningExamples();
@@ -111,19 +120,21 @@ public final class AiTitleExtractionService {
             JsonObject object = element.getAsJsonObject();
             MediaTitleParser parser = new MediaTitleParser();
             String rawTitle = firstString(object, "canonicalTitle", "title", "name");
-            if (containsNoise(rawTitle)) return null;
+            if (!isUsableAiTitle(rawTitle) || containsNoise(rawTitle)) return null;
             String title = parser.cleanTitle(rawTitle);
-            if (title.isEmpty() || containsNoise(title)) return null;
+            if (!isUsableAiTitle(title) || containsNoise(title)) return null;
             MediaTitleResolution result = copyRule(fallback);
             result.setCanonicalTitle(title);
             result.setOriginalTitle(firstString(object, "originalTitle", "originalName"));
-            result.setMediaType(firstString(object, "mediaType", "type"));
-            result.setYear(firstInt(object, "year", "releaseYear"));
-            result.setSeasonNumber(firstInt(object, "seasonNumber", "season"));
-            result.setEpisodeNumber(firstInt(object, "episodeNumber", "episode"));
+            String mediaType = firstString(object, "mediaType", "type").toLowerCase(Locale.ROOT);
+            if ("tv".equals(mediaType) || "movie".equals(mediaType)) result.setMediaType(mediaType);
+            result.setYear(firstValidInt(object, fallback.getYear(), 1900, 2099, "year", "releaseYear"));
+            result.setSeasonNumber(firstValidInt(object, fallback.getSeasonNumber(), 1, MAX_REASONABLE_SEASON, "seasonNumber", "season"));
+            result.setEpisodeNumber(firstValidInt(object, fallback.getEpisodeNumber(), 1, MAX_REASONABLE_EPISODE, "episodeNumber", "episode"));
             result.setEpisodeTitle(parser.cleanTitle(firstString(object, "episodeTitle")));
-            result.setConfidence((float) firstDouble(object, "confidence", "score"));
+            result.setConfidence(confidence(object, fallback));
             result.setSource(MediaTitleResolution.SOURCE_AI);
+            result.setAiReasonCode(firstString(object, "reasonCode", "reason"));
             result.setNeedsVerification(!normalize(title).equals(normalize(fallback.getRuleTitle())) && result.getConfidence() < 0.9f);
             result.addCandidate(MediaTitleCandidate.of(title, MediaTitleCandidate.SOURCE_AI, result.getConfidence()));
             for (JsonElement alias : array(object, "aliases")) {
@@ -155,6 +166,12 @@ public final class AiTitleExtractionService {
         result.setEpisodeTitle(source.getEpisodeTitle());
         result.setConfidence(source.getConfidence());
         result.setSource(source.getSource());
+        result.setAiReasonCode(source.getAiReasonCode());
+        result.setContextConfidence(source.getContextConfidence());
+        result.setContextGroupSize(source.getContextGroupSize());
+        result.setRuleSource(source.getRuleSource());
+        result.setConfidenceBreakdown(source.getConfidenceBreakdown());
+        result.setDegradationReason(source.getDegradationReason());
         result.setNeedsVerification(source.isNeedsVerification());
         for (String alias : source.getAliases()) result.addAlias(alias);
         for (MediaTitleCandidate candidate : source.getCandidates()) result.addCandidate(candidate);
@@ -186,24 +203,38 @@ public final class AiTitleExtractionService {
         return Objects.toString(object.get(key).getAsString(), "").trim();
     }
 
-    private static int firstInt(JsonObject object, String... keys) {
+    private static int firstValidInt(JsonObject object, int fallback, int min, int max, String... keys) {
         for (String key : keys) {
             try {
-                if (object != null && object.has(key) && !object.get(key).isJsonNull()) return object.get(key).getAsInt();
+                if (object == null || !object.has(key) || object.get(key).isJsonNull()) continue;
+                int value = object.get(key).getAsInt();
+                if (value >= min && value <= max) return value;
             } catch (Throwable ignored) {
             }
         }
-        return -1;
+        return fallback;
     }
 
-    private static double firstDouble(JsonObject object, String... keys) {
-        for (String key : keys) {
+    private static float confidence(JsonObject object, MediaTitleResolution fallback) {
+        for (String key : new String[]{"confidence", "score"}) {
             try {
-                if (object != null && object.has(key) && !object.get(key).isJsonNull()) return object.get(key).getAsDouble();
+                if (object == null || !object.has(key) || object.get(key).isJsonNull()) continue;
+                double value = object.get(key).getAsDouble();
+                if (Double.isNaN(value) || Double.isInfinite(value) || value < 0d || value > 1d) return 0f;
+                return (float) value;
             } catch (Throwable ignored) {
+                return 0f;
             }
         }
-        return 0.0;
+        return Math.max(0.65f, fallback == null ? 0f : fallback.getConfidence());
+    }
+
+    private static boolean isUsableAiTitle(String text) {
+        String value = Objects.toString(text, "").trim();
+        if (value.isEmpty() || value.length() > 80 || value.indexOf('\n') >= 0 || value.indexOf('\r') >= 0) return false;
+        if (value.matches(".*https?://.*") || value.matches(".*[\\\\/].*")) return false;
+        if (!value.matches(".*[\\u4e00-\\u9fffA-Za-z].*")) return false;
+        return !value.matches("(?i)^(更新至|更至|连载至|全集|合集|完结|电影|电视剧|剧集|动漫|动画|综艺|tv)$");
     }
 
     private static String extractJson(String text) {
@@ -235,7 +266,4 @@ public final class AiTitleExtractionService {
         return text == null ? "" : text.replaceAll("[\\s·•:：\\-_/\\\\|()（）\\[\\]【】]+", "").trim().toLowerCase(Locale.ROOT);
     }
 
-    private static boolean isBlank(String text) {
-        return text == null || text.trim().isEmpty();
-    }
 }
