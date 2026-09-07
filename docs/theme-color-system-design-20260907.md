@@ -1,6 +1,6 @@
 # TweakCN 风格主题配色系统设计
 
-> 状态：设计阶段，尚未实施
+> 状态：阶段 A+B 已实施（mobile 首版）；阶段 C/D/E 尚未实施
 > 设计日期：2026-09-07
 > 适用范围：Android mobile 优先；共享主题模型可供 leanback/TV 后续消费
 > 参考：<https://tweakcn.com/community> 以及用户提供的五张界面截图
@@ -9,11 +9,11 @@
 ## Recovery anchor
 
 - 目标：为 WebHTV 设计一个可持久化、可预览、可导入/导出的原生主题配色系统，达到截图所示的“主题配色”编辑体验，同时保持现有首页、详情页、播放页和站源功能可回退。
-- 验收标准：设计明确主题数据模型、用户流程、原生颜色消费边界、旧设置迁移、导入/导出安全规则、应用/回滚策略和分阶段验证；未获明确实施批准前不修改运行时代码。
-- 当前文件/符号：`app/src/mobile/java/com/fongmi/android/tv/ui/dialog/ThemeDialog.java`、`AppearanceDialog.java`、`app/src/main/java/com/fongmi/android/tv/setting/Setting.java`、`BaseActivity`、`CustomWallView`、`SiteDialogTheme`。
-- 已完成证据：已查看五张参考截图；已核对当前主题色、动态壁纸、Material 3 和刷新事件实现；当前工作树另有预先存在的 `app/src/main/java/com/fongmi/android/tv/ui/helper/TouchOptimizationHelper.java` 脏改动，属于保护路径，不纳入本任务。
-- 未验证项：本设计尚未落地，未进行编译、设备交互或视觉验收。
-- 下一步唯一动作：用户批准设计后，以本文件为基线启动独立实现任务；实现前先锁定具体阶段和路径范围。
+- 验收标准：阶段 A+B 已具备可持久化 profile、旧设置迁移、校验/解析、last-good 回退、备份白名单、mobile 草稿编辑器、实时预览、取消/应用和三个核心颜色编辑；阶段 C/D/E 仍需单独实施和验证。
+- 当前文件/符号：`app/src/main/java/com/fongmi/android/tv/theme/`、`app/src/mobile/java/com/fongmi/android/tv/ui/dialog/ThemeEditorDialog.java`、`ThemeColorPickerDialog.java`、`ThemePreviewView.java`、`AppearanceDialog.java`、`app/src/main/java/com/fongmi/android/tv/setting/Setting.java`、`BaseActivity`、`CustomWallView`、`SiteDialogTheme`。
+- 已完成证据：已查看五张参考截图；已核对当前主题色、动态壁纸、Material 3 和刷新事件实现；已完成 22 个主题/备份 JVM 单测、mobile Java 编译和 mobile 资源处理；当前工作树另有预先存在的 `app/src/main/java/com/fongmi/android/tv/ui/helper/TouchOptimizationHelper.java` 脏改动，属于保护路径，不纳入本任务。
+- 未验证项：未进行连接设备交互、视觉截图验收；阶段 C 的原生页面 token 接入、阶段 D 的导入/导出与 TweakCN 映射、阶段 E 的 TV/社区索引均未实现。
+- 下一步唯一动作：在本阶段提交后，单独审批并启动阶段 C 或阶段 D；不要将未实现阶段宣称为完成。
 
 ---
 
@@ -660,4 +660,49 @@ validate(draft)
 3. 是否接受现有播放器画面/特殊黑色遮罩不参与普通页面主题换色？
 4. 是否批准先实施阶段 A+B，完成后再单独审批阶段 C 的全局原生页面接入？
 
-在以上边界未确认前，本文件只作为设计基线，不修改生产代码、资源、锁文件或运行时行为。
+阶段 A+B 已获实施并完成；阶段 C/D/E 仍需单独确认范围后再修改对应生产代码、资源或运行时行为。
+
+---
+
+## 14. 实施记录：阶段 A+B（2026-09-07）
+
+### 已实现
+
+- 新增 `com.fongmi.android.tv.theme` 共享数据层：`ThemeProfile`、`ThemeTokens`、`ThemeColorUtil`、`ThemeProfileCodec`、`ThemeProfileValidator`、`ThemeProfileStore`、`ThemeResolver`。
+- `App.onCreate()` 启动时执行旧 `theme_color` 到 profile 的无阻塞迁移；保留 `theme_color` 镜像，保存 `theme_profile_json`、`theme_profile_last_good` 和 `theme_profile_schema`。
+- profile JSON 限制 256 KiB、最大嵌套深度 8、只接受对象、拒绝脚本/Intent/类名/CSS 等危险字段，颜色统一规范化为大写不透明 `#RRGGBB`，显式角色执行对比度校验。
+- 将三个 profile 字段加入 `Backup.APP_PREFS`，兼容旧备份的 `theme_color`。
+- mobile 的“主题色彩”入口改为 `ThemeEditorDialog`：草稿态实时预览、壁纸/着色壁纸/纯色、系统/浅色/深色、预设高亮色、`primary`/`appBackground`/`surface` 三个核心颜色、HEX 编辑、重置、取消和应用。
+- 应用使用一次 `SharedPreferences.Editor.commit()` 写入当前 profile、旧镜像和 last-good，成功后发布既有 `RefreshEvent.theme()`；失败不发布刷新事件。
+
+### 明确未实现
+
+- 阶段 C：BaseActivity/语义资源/首页/详情/播放器控制层的全局 token 消费尚未接入；现有 Dynamic Color、壁纸和旧页面资源仍是运行时主路径。
+- 阶段 D：JSON/HTTPS/SAF 导入导出、TweakCN/shadcn token 映射、社区浏览入口尚未接入编辑器 UI；当前 codec/validator 只为后续导入提供安全基础。
+- 阶段 E：leanback 完整焦点主题和社区索引尚未实施。
+
+### 验证
+
+执行：
+
+```text
+bash ./gradlew :app:testMobileArm64_v8aDebugUnitTest \
+  --tests com.fongmi.android.tv.theme.ThemeProfileCodecTest \
+  --tests com.fongmi.android.tv.theme.ThemeProfileValidatorTest \
+  --tests com.fongmi.android.tv.theme.ThemeProfileMigrationTest \
+  --tests com.fongmi.android.tv.theme.ThemeResolverTest \
+  --tests com.fongmi.android.tv.bean.BackupPreferenceFilterTest \
+  :app:compileMobileArm64_v8aDebugJavaWithJavac \
+  :app:processMobileArm64_v8aDebugResources \
+  --no-daemon --console=plain
+```
+
+结果：`BUILD SUCCESSFUL`；本轮指定的主题/备份测试通过；mobile Java 编译和资源处理通过。未进行设备交互和视觉截图验收。预存的 `TouchOptimizationHelper.java` 改动未被修改或纳入本任务。
+
+### Recovery anchor（实施后）
+
+- 目标：完成主题系统阶段 A+B 的可回滚首版，不扩大到阶段 C/D/E。
+- 当前文件：`app/src/main/java/com/fongmi/android/tv/theme/**`、mobile 主题编辑器/预览/布局、备份与字符串、主题单测。
+- 已完成：代码、资源、测试均在 task guard 声明范围；上述验证通过。
+- 未完成：设备/视觉验收，以及阶段 C/D/E。
+- 下一步唯一动作：记录最终 diff 后执行 `task_guard.sh finish`，原子提交并创建本地恢复 tag。
