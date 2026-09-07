@@ -27,8 +27,8 @@ import com.fongmi.android.tv.impl.SiteListener;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.dialog.AboutDialog;
-import com.fongmi.android.tv.ui.dialog.ConfigDialog;
 import com.fongmi.android.tv.ui.dialog.AppearanceDialog;
+import com.fongmi.android.tv.ui.dialog.ConfigDialog;
 import com.fongmi.android.tv.ui.dialog.DohDialog;
 import com.fongmi.android.tv.ui.dialog.HistoryDialog;
 import com.fongmi.android.tv.ui.dialog.LiveDialog;
@@ -105,6 +105,7 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
         mBinding.vod.setOnClickListener(this::onVod);
         mBinding.doh.setOnClickListener(this::setDoh);
         mBinding.live.setOnClickListener(this::onLive);
+        mBinding.wall.setOnClickListener(this::onWall);
         mBinding.cache.setOnClickListener(this::onCache);
         mBinding.backup.setOnClickListener(this::onBackup);
         mBinding.enhance.setOnClickListener(this::onEnhance);
@@ -122,9 +123,13 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
         mBinding.vodHome.setOnClickListener(this::onVodHome);
         mBinding.live.setOnLongClickListener(this::onLiveEdit);
         mBinding.liveHome.setOnClickListener(this::onLiveHome);
+        mBinding.wall.setOnLongClickListener(this::onWallEdit);
         mBinding.incognito.setOnClickListener(this::setIncognito);
         mBinding.vodHistory.setOnClickListener(this::onVodHistory);
         mBinding.liveHistory.setOnClickListener(this::onLiveHistory);
+        mBinding.wallDefault.setOnClickListener(this::setWallDefault);
+        mBinding.wallRefresh.setOnClickListener(this::setWallRefresh);
+        mBinding.wallRefresh.setOnLongClickListener(this::onWallHistory);
     }
 
     @Override
@@ -192,6 +197,10 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
         ConfigDialog.create().live().show(this);
     }
 
+    private void onWall(View view) {
+        ConfigDialog.create().wall().show(this);
+    }
+
     private boolean onVodEdit(View view) {
         ConfigDialog.create().vod().edit().show(this);
         return true;
@@ -199,6 +208,11 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
 
     private boolean onLiveEdit(View view) {
         ConfigDialog.create().live().edit().show(this);
+        return true;
+    }
+
+    private boolean onWallEdit(View view) {
+        ConfigDialog.create().wall().edit().show(this);
         return true;
     }
 
@@ -256,6 +270,23 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
 
     private void onVersion(View view) {
         AboutDialog.show(this, () -> Updater.create().force().start(this));
+    }
+
+    private void setWallDefault(View view) {
+        Setting.putWall(Setting.nextDefaultWall());
+        Setting.putWallType(0);
+        setWallText();
+        ConfigEvent.wall();
+    }
+
+    private void setWallRefresh(View view) {
+        Setting.putWall(0);
+        WallConfig.get().load(getCallback());
+    }
+
+    private boolean onWallHistory(View view) {
+        HistoryDialog.create().wall().show(this);
+        return true;
     }
 
     private void setIncognito(View view) {
