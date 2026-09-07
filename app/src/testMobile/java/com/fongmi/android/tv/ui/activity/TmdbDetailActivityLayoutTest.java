@@ -1120,13 +1120,13 @@ public class TmdbDetailActivityLayoutTest {
     @Test
     public void episodeDetailDismissRestoresLongPressedCardFocus() throws Exception {
         String source = readJava("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java");
-        int show = source.indexOf("private void showTmdbEpisodeDetail(Episode episode, int episodeNumber, RecyclerView returnRecycler)");
+        int show = source.indexOf("private void showTmdbEpisodeDetail(Episode episode, int episodeNumber, TmdbEpisode boundTmdbEpisode, RecyclerView returnRecycler)");
         int restore = source.indexOf("private void restoreEpisodeDetailFocus(RecyclerView recycler, Episode episode)", show);
 
         assertTrue("TMDB episode detail must define an exact-card focus restore helper", show >= 0 && restore > show);
         assertTrue("each episode list must provide its own recycler as the focus return target",
-                source.contains("showTmdbEpisodeDetail(episode, episodeNumber, binding.episodeContainer);")
-                        && source.contains("showTmdbEpisodeDetail(episode, episodeNumber, recycler);"));
+                source.contains("showTmdbEpisodeDetail(episode, episodeNumber, tmdbEpisode, binding.episodeContainer);")
+                        && source.contains("showTmdbEpisodeDetail(episode, episodeNumber, tmdbEpisode, recycler);"));
         int dismiss = source.indexOf("OnDismissListener dismissListener", show);
         int movie = source.indexOf("// 电影场景", dismiss);
         String dismissBody = source.substring(dismiss, movie);
@@ -3351,10 +3351,34 @@ public class TmdbDetailActivityLayoutTest {
 
         assertTrue("empty auto grouping must reuse the resolver's unique season for episode data",
                 dataSeason.contains("tmdbSeasonChoiceResolution().getSelectedSeason()"));
-        assertTrue("episode detail must use the same resolved fallback season as episode data",
-                episodeDetail.contains("int detailSeasonNumber = tmdbEpisodeDataSeason(")
+        assertTrue("episode detail must use the card mapping and retain the same resolved fallback season as episode data",
+                episodeDetail.contains("int detailSeasonNumber = tmdbEpisodeDataSeason(detailEpisodes);")
+                        && episodeDetail.contains("if (boundTmdbEpisode != null)")
+                        && episodeDetail.contains("boundTmdbEpisode.getSeasonNumber()")
                         && episodeDetail.contains("int displaySeasonNumber = detailSeasonNumber;")
                         && episodeDetail.contains("int seasonNumber = detailSeasonNumber;"));
+    }
+
+    @Test
+    public void episodeDetailUsesLongPressedCardMappingForManualSeason() throws Exception {
+        String source = readJava("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java");
+        String adapter = readJava("com", "fongmi", "android", "tv", "ui", "adapter", "TmdbEpisodeAdapter.java");
+        String detail = source.substring(source.indexOf("private void showTmdbEpisodeDetail"),
+                source.indexOf("private EpisodePosition historyEpisodePosition"));
+
+        assertTrue("long press must pass the validated TMDB episode bound to the visible card",
+                adapter.contains("void onItemLongClick(View anchor, Episode item, int episodeNumber, TmdbEpisode tmdbEpisode)")
+                        && adapter.contains("TmdbEpisode boundTmdbEpisode = tmdbEpisode;")
+                        && adapter.contains("listener.onItemLongClick(view, episode, episodeNumber, boundTmdbEpisode);"));
+        assertTrue("episode detail must use the bound card season and episode number",
+                detail.contains("TmdbEpisode boundTmdbEpisode")
+                        && detail.contains("boundTmdbEpisode.getSeasonNumber()")
+                        && detail.contains("boundTmdbEpisode.getNumber()")
+                        && detail.contains("tmdbService.episode(item, seasonNumber, requestEpisodeNumber"));
+        assertTrue("unmapped cards and API failures must still open a source detail dialog",
+                detail.contains("if (boundTmdbEpisode == null)")
+                        && detail.contains("EpisodeDetailDialog.show(this, episode, getSite(), null, null, dismissListener);")
+                        && detail.contains("if (!isTmdbEpisodeDetailSeasonCurrent(displaySeasonNumber)) return;"));
     }
 
     @Test
