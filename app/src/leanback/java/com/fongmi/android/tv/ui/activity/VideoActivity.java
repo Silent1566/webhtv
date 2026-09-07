@@ -1348,6 +1348,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         mApplyAudioBackgroundRunnable = this::applyAudioBackground;
         mHideAudioFocusRunnable = this::hideAudioStageFocusHighlight;
         SpiderDebug.log("video-flow", "initView state ready cost=%dms", System.currentTimeMillis() - start);
+        prepareInitialDetailShell();
         checkCast();
         SpiderDebug.log("video-flow", "initView preview ready cost=%dms", System.currentTimeMillis() - start);
         setRecyclerView();
@@ -1356,10 +1357,19 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         setVideoView();
         SpiderDebug.log("video-flow", "initView video view ready cost=%dms", System.currentTimeMillis() - start);
         setViewModel();
-        // 初始化：隐藏换源按钮
-        mBinding.change1.setVisibility(View.GONE);
         checkId();
         SpiderDebug.log("video-flow", "initView end cost=%dms sinceLaunch=%dms", System.currentTimeMillis() - start, getLaunchCost(System.currentTimeMillis()));
+    }
+
+    /**
+     * 在首帧揭开预览前先确定详情模式，避免原生增强异步详情回来前短暂显示普通详情按钮。
+     * 未配置好 TMDB 时仍保留普通详情入口。
+     */
+    private void prepareInitialDetailShell() {
+        boolean tmdbDetail = shouldLoadTmdbDetail();
+        boolean enhancedDetail = tmdbDetail && (Setting.isOriginalEnhancedDetailPage() || isIntentTmdbPlayback());
+        setOriginalEnhancedActionVisibility(enhancedDetail);
+        if (enhancedDetail && shouldUseTmdbLayout()) suppressTmdbNativeTextFields();
     }
 
     @Override
@@ -2290,6 +2300,8 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
             player().clear();
         }
         updateNavigationKey();
+        // singleTop 切换条目时也要先按新 Intent 准备详情壳，不能沿用旧条目的操作按钮。
+        prepareInitialDetailShell();
         mBinding.progressLayout.showProgress();
     }
 
@@ -2962,10 +2974,14 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     private void setEpisodeAdapter(List<Episode> items) {
-        setEpisodeAdapter(items, true);
+        setEpisodeAdapter(items, true, true);
     }
 
     private void setEpisodeAdapter(List<Episode> items, boolean scrollToCurrent) {
+        setEpisodeAdapter(items, scrollToCurrent, true);
+    }
+
+    private void setEpisodeAdapter(List<Episode> items, boolean scrollToCurrent, boolean updateEpisodeChrome) {
         updateEpisodeSeasonContext();
         boolean isEmpty = items.isEmpty();
         boolean hasMultiple = items.size() > 1;
@@ -2997,10 +3013,12 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         // useTmdbCards=false 被隐藏，用户无法切回列表。
         if (useTmdbCards && hasMultiple) episodeGridMode = Setting.getTmdbEpisodeGridMode();
         if (!useTmdbCards || !hasMultiple) episodeGridMode = false;
-        mBinding.episodeHeader.setVisibility(showTmdbEpisodeChrome && !isEmpty ? View.VISIBLE : View.GONE);
-        mBinding.episodeReverse.setVisibility(showTmdbEpisodeChrome && hasMultiple ? View.VISIBLE : View.GONE);
-        mBinding.episodeViewMode.setVisibility(showTmdbEpisodeChrome && hasMultiple && useTmdbCards ? View.VISIBLE : View.GONE);
-        mBinding.episodeFileName.setVisibility(showTmdbEpisodeChrome && hasMultiple ? View.VISIBLE : View.GONE);
+        if (updateEpisodeChrome) {
+            mBinding.episodeHeader.setVisibility(showTmdbEpisodeChrome && !isEmpty ? View.VISIBLE : View.GONE);
+            mBinding.episodeReverse.setVisibility(showTmdbEpisodeChrome && hasMultiple ? View.VISIBLE : View.GONE);
+            mBinding.episodeViewMode.setVisibility(showTmdbEpisodeChrome && hasMultiple && useTmdbCards ? View.VISIBLE : View.GONE);
+            mBinding.episodeFileName.setVisibility(showTmdbEpisodeChrome && hasMultiple ? View.VISIBLE : View.GONE);
+        }
         updateEpisodeFallbackStillUrl();
         mEpisodeAdapter.setUseTmdbCard(useTmdbCards);
         mEpisodeGridAdapter.setUseTmdbCard(useTmdbCards);
@@ -3199,7 +3217,8 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
 
     private void reverseEpisode(boolean scroll) {
         mFlagAdapter.reverse();
-        setEpisodeAdapter(getFlag().getEpisodes(), scroll);
+        // 倒序只改变列表顺序；保留已经显示的工具栏，避免一次重绑期间 TMDB 状态短暂未就绪时闪退。
+        setEpisodeAdapter(getFlag().getEpisodes(), scroll, false);
         if (scroll) scrollToCurrentEpisode();
         else scrollToFirstEpisode();
     }
@@ -3215,7 +3234,8 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         if (mBinding.episodeFileName.getVisibility() != View.VISIBLE) return;
         boolean showScraped = !Setting.getTmdbEpisodeShowScrapedName();
         Setting.putTmdbEpisodeShowScrapedName(showScraped);
-        setEpisodeAdapter(getFlag().getEpisodes(), true);
+        // 原文件名只改变列表标题；工具栏可见性不应随这次重绑重新计算。
+        setEpisodeAdapter(getFlag().getEpisodes(), true, false);
     }
 
     private void applyEpisodeViewMode(boolean scrollToCurrent) {
