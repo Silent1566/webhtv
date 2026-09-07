@@ -112,6 +112,7 @@ import com.fongmi.android.tv.player.IntroSkipPlayback;
 import com.fongmi.android.tv.player.PlayerManager;
 import com.fongmi.android.tv.player.PlayerHelper;
 import com.fongmi.android.tv.player.exo.MediaSourceFactory;
+import com.fongmi.android.tv.player.mpv.MpvConfigStore;
 import com.fongmi.android.tv.service.AiAdDetectionService;
 import com.fongmi.android.tv.service.AiEpisodeSeasonService;
 import com.fongmi.android.tv.service.AiRecommendationService;
@@ -415,6 +416,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private int mAdFeedbackGeneration;
     private int tmdbDialogGeneration;
     private AiEpisodeSeasonService aiSeasonService;
+    private final List<View> inlineCustomActionViews = new ArrayList<>();
+    private boolean inlineCustomButtonsInitialized;
     private AlertDialog aiSeasonLoadingDialog;
     private int tmdbApplyGeneration;
     private int tmdbEpisodeDetailGeneration;
@@ -1206,6 +1209,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         binding.playerSearch.setOnLongClickListener(view -> openGlobalSourceSearch());
         inlinePlayerUi.bindInlineActions();
         setupMobileInlineControl();
+        setupInlineCustomButtons();
         hideInlineControls();
         updateInlineButtons(false);
         focusInlinePlayerPanel();
@@ -1272,6 +1276,68 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         parse.setHasFixedSize(true);
         parse.setItemAnimator(null);
         parse.setAdapter(inlineParseAdapter = new InlineParseAdapter());
+    }
+
+    /**
+     * 影视原生模式和详情页使用不同的控制条。原生模式会在 VideoActivity
+     * 中创建 scripts 按钮，详情页此前只绑定了内置按钮，因此沉浸融合模式
+     * 虽然 MPV 已加载脚本桥接文件，却没有任何入口发送 script-message。
+     */
+    private void setupInlineCustomButtons() {
+        if (inlineCustomButtonsInitialized) return;
+        inlineCustomButtonsInitialized = true;
+        List<MpvConfigStore.CustomButton> buttons = MpvConfigStore.customButtons();
+        if (buttons.isEmpty()) return;
+
+        ViewGroup playerActions = (ViewGroup) binding.playerActionRow.getChildAt(0);
+        ViewGroup mobileActions = Util.isMobile() && detailActionRoot != null
+                ? detailActionRoot.findViewById(R.id.container) : null;
+        for (MpvConfigStore.CustomButton button : buttons) {
+            if (button == null || !button.enabled) continue;
+            addInlineCustomButton(playerActions, button);
+            if (mobileActions != null) addInlineCustomButton(mobileActions, button);
+        }
+        updateInlineCustomButtonVisibility();
+    }
+
+    private void addInlineCustomButton(ViewGroup container, MpvConfigStore.CustomButton button) {
+        TextView view = new TextView(this);
+        view.setTextSize(13);
+        view.setTextColor(Color.WHITE);
+        view.setGravity(Gravity.CENTER);
+        view.setMinHeight(ResUtil.dp2px(40));
+        view.setMinWidth(ResUtil.dp2px(56));
+        view.setPadding(ResUtil.dp2px(8), ResUtil.dp2px(4), ResUtil.dp2px(8), ResUtil.dp2px(4));
+        view.setBackgroundResource(R.drawable.selector_control_sheet_button);
+        view.setText(button.title);
+        view.setSingleLine(true);
+        view.setMaxWidth(ResUtil.dp2px(144));
+        view.setEllipsize(TextUtils.TruncateAt.END);
+        view.setContentDescription(button.title);
+        view.setOnClickListener(item -> dispatchInlineCustomButton(item, button.id, false));
+        view.setOnLongClickListener(item -> {
+            dispatchInlineCustomButton(item, button.id, true);
+            return true;
+        });
+        view.setFocusable(true);
+        if (Util.isLeanback()) view.setFocusableInTouchMode(true);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ResUtil.dp2px(40));
+        params.setMargins(ResUtil.dp2px(4), ResUtil.dp2px(2), ResUtil.dp2px(4), ResUtil.dp2px(2));
+        container.addView(view, params);
+        inlineCustomActionViews.add(view);
+    }
+
+    private void dispatchInlineCustomButton(View view, String id, boolean longPress) {
+        if (service() == null || player() == null || !player().isMpv()) return;
+        if (player().sendMpvCustomButton(id, longPress)) view.setSelected(!view.isSelected());
+        setInlineHideCallback();
+    }
+
+    private void updateInlineCustomButtonVisibility() {
+        boolean visible = service() != null && player() != null
+                && !player().isEmpty() && player().isMpv();
+        for (View view : inlineCustomActionViews) view.setVisibility(visible ? View.VISIBLE : View.GONE);
     }
 
     private void inflateMobileInlineControl() {
@@ -7272,9 +7338,11 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private void updateInlineButtons(boolean playing) {
         if (!isInlinePlayerMode() || inlineControlController == null) {
             setInlineDecodeText(getString(R.string.play_decode_idle));
+            updateInlineCustomButtonVisibility();
             return;
         }
         boolean hasPlayer = service() != null && !player().isEmpty();
+        updateInlineCustomButtonVisibility();
         setInlineSpeedText(service() == null || player().isEmpty() ? getString(R.string.play_speed) : player().getSpeedText());
         setInlineDecodeText(inlineDecodeText(hasPlayer));
         binding.playerExternal.setText(service() == null ? getString(R.string.play_exo) : player().getPlayerText());
