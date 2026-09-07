@@ -57,7 +57,9 @@ import com.google.android.material.textview.MaterialTextView;
 import com.google.gson.reflect.TypeToken;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 public class CollectActivity extends BaseActivity implements CollectAdapter.OnClickListener, SearchAdapter.OnClickListener, CustomScroller.Callback {
@@ -89,6 +91,7 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
     private String mPendingCollectSiteKey = "";
     private boolean mScrolling;
     private boolean mLeavingForPlayback;
+    private final Map<String, Integer> mSearchPositions = new HashMap<>();
 
     public static void start(Activity activity, String keyword) {
         start(activity, keyword, null, null);
@@ -805,6 +808,7 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
 
     private void scheduleCollect(int position, long delayMillis) {
         if (position < 0 || position >= mCollectAdapter.getItemCount()) return;
+        saveSearchPosition(getActiveSiteKey());
         Collect item = mCollectAdapter.get(position);
         String siteKey = item.getSite().getKey();
         boolean same = siteKey.equals(getActiveSiteKey());
@@ -836,27 +840,40 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
     }
 
     private void setSearchItemsLazy(List<Vod> items) {
-        mSearchAdapter.setSource(items, getCount() * 4);
+        String siteKey = getActiveSiteKey();
+        int position = mSearchPositions.getOrDefault(siteKey, 0);
+        mSearchAdapter.setSource(items, Math.max(getCount() * 4, position + getCount()));
         mBinding.recycler.post(() -> {
-            scrollSearchToTop();
+            restoreSearchPosition(siteKey);
             ensureSearchRows(getCount(), 2);
             preloadNextRows(getCount());
         });
     }
 
-    private void scrollSearchToTop() {
+    private void saveSearchPosition(String siteKey) {
+        if (TextUtils.isEmpty(siteKey) || mBinding == null || mBinding.recycler == null) return;
         RecyclerView.LayoutManager manager = mBinding.recycler.getLayoutManager();
-        if (manager instanceof GridLayoutManager layoutManager) layoutManager.scrollToPositionWithOffset(0, 0);
-        else mBinding.recycler.scrollToPosition(0);
+        if (manager instanceof GridLayoutManager layoutManager) {
+            int position = layoutManager.findFirstVisibleItemPosition();
+            if (position != RecyclerView.NO_POSITION) mSearchPositions.put(siteKey, position);
+        }
+    }
+
+    private void restoreSearchPosition(String siteKey) {
+        RecyclerView.LayoutManager manager = mBinding.recycler.getLayoutManager();
+        int position = Math.max(0, mSearchPositions.getOrDefault(siteKey, 0));
+        if (manager instanceof GridLayoutManager layoutManager) layoutManager.scrollToPositionWithOffset(position, 0);
+        else mBinding.recycler.scrollToPosition(position);
     }
 
     private boolean focusFirstSearchResult() {
         if (mSearchAdapter == null || mSearchAdapter.getItemCount() == 0) return false;
         mBinding.recycler.post(() -> {
-            scrollSearchToTop();
+            restoreSearchPosition(getActiveSiteKey());
             mBinding.recycler.post(() -> {
                 RecyclerView.LayoutManager manager = mBinding.recycler.getLayoutManager();
-                View target = manager == null ? null : manager.findViewByPosition(0);
+                int position = Math.max(0, mSearchPositions.getOrDefault(getActiveSiteKey(), 0));
+                View target = manager == null ? null : manager.findViewByPosition(position);
                 if (target != null) target.requestFocus();
                 else mBinding.recycler.requestFocus();
             });

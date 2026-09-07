@@ -90,6 +90,19 @@ public class TouchOptimizationHelperSourceTest {
     }
 
     @Test
+    public void tvSearchRestoresPerSitePositionAndPlayerUsesSharedGestures() throws Exception {
+        String collect = read("app/src/leanback/java/com/fongmi/android/tv/ui/activity/CollectActivity.java");
+        String video = read("app/src/leanback/java/com/fongmi/android/tv/ui/activity/VideoActivity.java");
+        assertTrue(collect.contains("Map<String, Integer> mSearchPositions"));
+        assertTrue(collect.contains("saveSearchPosition(getActiveSiteKey())"));
+        assertTrue(collect.contains("restoreSearchPosition(siteKey)"));
+        assertFalse(collect.contains("private void scrollSearchToTop()"));
+        assertTrue(video.contains("implements CustomKeyDownVod.Listener, PlayerGesture.Listener"));
+        assertTrue(video.contains("mGesture = PlayerGesture.create(this, mBinding.video, this);"));
+        assertTrue(video.contains("mBinding.video.setOnTouchListener((view, event) -> mGesture.onTouchEvent(event));"));
+    }
+
+    @Test
     public void highFrequencyDirectDialogsAndPlaybackSheetsAreSynchronized() throws Exception {
         String helper = read("app/src/main/java/com/fongmi/android/tv/ui/helper/TouchOptimizationHelper.java");
         String lightDialog = read("app/src/main/java/com/fongmi/android/tv/ui/dialog/LightDialog.java");

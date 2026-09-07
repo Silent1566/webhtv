@@ -108,6 +108,7 @@ import com.fongmi.android.tv.ui.adapter.QualityAdapter;
 import com.fongmi.android.tv.ui.adapter.QuickAdapter;
 import com.fongmi.android.tv.ui.audio.AudioPlaybackResolver;
 import com.fongmi.android.tv.ui.custom.CustomKeyDownVod;
+import com.fongmi.android.tv.ui.custom.PlayerGesture;
 import com.fongmi.android.tv.ui.custom.CustomMovement;
 import com.fongmi.android.tv.ui.custom.CustomSeekView;
 import com.fongmi.android.tv.ui.custom.PlayerOsdController;
@@ -231,7 +232,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.textfield.TextInputLayout;
 
-public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.Listener, TrackDialog.Listener, ArrayAdapter.OnClickListener, FlagAdapter.OnClickListener, EpisodeAdapter.OnClickListener, QualityAdapter.OnClickListener, QuickAdapter.OnClickListener, ParseAdapter.OnClickListener, Clock.Callback, SubtitlePlaybackSession.Host, com.fongmi.android.tv.ui.host.TmdbDetailHost, ControlDialog.Listener, CastDialog.Listener, com.fongmi.android.tv.ui.novel.NovelReaderHost {
+public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.Listener, PlayerGesture.Listener, TrackDialog.Listener, ArrayAdapter.OnClickListener, FlagAdapter.OnClickListener, EpisodeAdapter.OnClickListener, QualityAdapter.OnClickListener, QuickAdapter.OnClickListener, ParseAdapter.OnClickListener, Clock.Callback, SubtitlePlaybackSession.Host, com.fongmi.android.tv.ui.host.TmdbDetailHost, ControlDialog.Listener, CastDialog.Listener, com.fongmi.android.tv.ui.novel.NovelReaderHost {
     private static final long LYRICS_OFFSET_MIN_MS = -5000L;
     private static final long LYRICS_OFFSET_MAX_MS = 5000L;
     private static final long LYRICS_OFFSET_STEP_MS = 500L;
@@ -358,6 +359,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     private androidx.appcompat.app.AlertDialog mIntroSkipConfirmDialog;
     private final SubtitlePlaybackSession subtitlePlaybackSession = new SubtitlePlaybackSession(this);
     private CustomKeyDownVod mKeyDown;
+    private PlayerGesture mGesture;
     private SiteViewModel mViewModel;
     private List<String> mBroken;
     private History mHistory;
@@ -1334,6 +1336,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         mPiP = mPlayerUi.pip();
         setupAudioStageOverlay();
         mKeyDown = CustomKeyDownVod.create(this);
+        mGesture = PlayerGesture.create(this, mBinding.video, this);
         mObserveDetail = this::setDetail;
         mObservePlayer = this::setPlayer;
         mObserveSearch = this::setSearch;
@@ -1455,7 +1458,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         mBinding.control.action.ending.setOnLongClickListener(view -> onEndingReset());
         mBinding.control.action.opening.setOnLongClickListener(view -> onOpeningReset());
         setActionFocusScroll();
-        mBinding.video.setOnTouchListener((view, event) -> mKeyDown.onTouchEvent(event));
+        mBinding.video.setOnTouchListener((view, event) -> mGesture.onTouchEvent(event));
         mBinding.flag.addOnChildViewHolderSelectedListener(new OnChildViewHolderSelectedListener() {
             @Override
             public void onChildViewHolderSelected(@NonNull RecyclerView parent, @Nullable RecyclerView.ViewHolder child, int position, int subposition) {
@@ -7483,6 +7486,28 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
             return true;
         }
         return false;
+    }
+
+    @Override
+    public void onBright(int progress) {
+        Notify.show("亮度 " + progress + "%");
+    }
+
+    @Override
+    public void onVolume(int progress) {
+        Notify.show("音量 " + progress + "%");
+    }
+
+    @Override
+    public void onFlingUp() {
+    }
+
+    @Override
+    public void onFlingDown() {
+    }
+
+    @Override
+    public void onTouchEnd() {
     }
 
     @Override

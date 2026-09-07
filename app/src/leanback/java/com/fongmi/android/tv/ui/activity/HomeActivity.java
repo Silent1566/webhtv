@@ -228,7 +228,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
                 mSelectedTypeView = child.itemView;
                 mSelectedTypeView.setSelected(true);
                 if (parent.hasFocus()) updateToolbarVisibility(true);
-                if (Setting.isHomeVodAutoLoad()) scheduleTypeSwitch(position);
+                if (Setting.isHomeVodAutoLoad() && !Setting.isTouchOptimized()) scheduleTypeSwitch(position);
             }
         });
     }
