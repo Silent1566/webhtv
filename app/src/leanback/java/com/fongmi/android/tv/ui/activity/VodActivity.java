@@ -120,9 +120,9 @@ public class VodActivity extends BaseActivity implements TypeAdapter.OnClickList
                 if (mPendingContentRow != NO_PENDING_CONTENT_ROW) {
                     int contentRow = mPendingContentRow;
                     mPendingContentRow = NO_PENDING_CONTENT_ROW;
-                    mBinding.pager.post(() -> {
-                        if (mBinding.pager.getCurrentItem() == position) getFragment().requestContentFocus(contentRow);
-                    });
+                    if (mBinding.pager.getCurrentItem() == position) {
+                        getFragment().requestContentFocus(contentRow);
+                    }
                     return;
                 }
                 mBinding.recycler.requestFocus();
