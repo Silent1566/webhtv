@@ -785,7 +785,6 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
     @Override
     public boolean onCollectKey(int position, int keyCode, KeyEvent event) {
         if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
-        if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) return focusFirstSearchResult();
         if (isSearchLandscape()) {
             if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
                 mBinding.searchColumn.requestFocus();
@@ -795,6 +794,8 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
             if (position == 0 && keyCode == KeyEvent.KEYCODE_DPAD_LEFT) return true;
             return false;
         }
+        // 横排站点的左右键交给列表导航；只有竖排站点按右键进入搜索结果。
+        if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) return focusFirstSearchResult();
         // 在第一项按上键，跳转到切换按钮
         if (position == 0 && keyCode == KeyEvent.KEYCODE_DPAD_UP) {
             mBinding.searchColumn.requestFocus();
