@@ -227,7 +227,10 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
                 if (child == null) return;
                 mSelectedTypeView = child.itemView;
                 mSelectedTypeView.setSelected(true);
-                if (parent.hasFocus()) updateToolbarVisibility(true);
+                if (parent.hasFocus()) {
+                    updateToolbarVisibility(true);
+                    if (isCategoryVisible() && mFolder != null) mFolder.requestContentFocus(0);
+                }
                 if (Setting.isHomeVodAutoLoad()) scheduleTypeSwitch(position);
             }
         });
@@ -339,6 +342,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
         else transaction.add(R.id.categoryContainer, target, tag);
         target.setUserVisibleHint(true);
         transaction.runOnCommit(() -> {
+            target.requestContentFocus(0);
             restoreTypeFocus(keepTypeFocus, item);
             if (toggleFilter && target == mFolder && isCurrentCategory(item)) updateFilter(item);
         });
