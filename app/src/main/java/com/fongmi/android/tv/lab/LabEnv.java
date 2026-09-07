@@ -606,13 +606,8 @@ public final class LabEnv {
     }
 
     public static String displayVersion(LabModels.Item item) {
-        if (item.downloads != null) {
-            for (LabModels.Download download : item.downloads) {
-                if (arch().equals(download.arch) && download.version != null && !download.version.isEmpty()) {
-                    return download.version;
-                }
-            }
-        }
+        LabModels.Download download = findDownload(item);
+        if (download != null && !TextUtils.isEmpty(download.version)) return download.version;
         return item.version == null ? "" : item.version;
     }
 

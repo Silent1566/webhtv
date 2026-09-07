@@ -7,6 +7,7 @@ import java.util.Arrays;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
 
 public final class LabEnvTest {
 
@@ -57,5 +58,20 @@ public final class LabEnvTest {
         item.downloads = Arrays.asList(arm64);
 
         assertNull(LabEnv.findDownload(item, "armeabi-v7a"));
+    }
+
+    @Test
+    public void selectedDownloadUsesNormalizedAbiForVersion() {
+        LabModels.Item item = new LabModels.Item();
+        item.version = "fallback";
+        LabModels.Download arm64 = new LabModels.Download();
+        String selectedArch = LabEnv.arch();
+        assertTrue(selectedArch.equals("arm64-v8a") || selectedArch.equals("armeabi-v7a"));
+        arm64.arch = selectedArch.replace('-', '_');
+        arm64.version = "3.12";
+        item.downloads = Arrays.asList(arm64);
+
+        assertSame(arm64, LabEnv.findDownload(item, selectedArch));
+        assertEquals("3.12", LabEnv.displayVersion(item));
     }
 }
