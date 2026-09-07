@@ -48,6 +48,7 @@ public final class PlaybackPerformanceCatalog {
     public static final String MPV_HLS_BITRATE = "mpv_hls_bitrate";
     public static final String MPV_REBUFFER = "mpv_rebuffer";
     public static final String MPV_OPTION_PRIORITY = "mpv_option_priority";
+    public static final String MPV_MULTICHANNEL_AUDIO = "mpv_multichannel_audio";
     public static final String IJK_SCENE = "ijk_scene";
     public static final String IJK_BUFFER = "ijk_buffer";
     public static final String IJK_PACKET_BUFFERING = "ijk_packet_buffering";
@@ -142,6 +143,7 @@ public final class PlaybackPerformanceCatalog {
         options.add(option(MPV_VERBOSE_LOG, DECODE, "详细日志", "怎么选：正常播放保持“正常”（默认）；只在排查崩溃、解码或缓冲问题时临时打开详细日志。代价：增加JNI、字符串处理和日志I/O，可能干扰低性能设备的流畅度。"));
         options.add(option(DV7_HDR10_FALLBACK, DECODE, "DV7处理", "作用：设备能原生播放 Dolby Vision Profile 7 时始终保留原始 DV7；否则默认尝试“升级P8.1”保留动态元数据，也可选择直接“降级HDR10”。设备不支持P8.1或转换/解码失败时会自动回退HDR10。P8.1逐帧重写RPU，会比HDR10过滤增加少量CPU处理。"));
         options.add(option(AUDIO_PASSTHROUGH, AUDIO, "音频直通", "怎么选：电视/功放明确支持Dolby、DTS且需要多声道时开启；出现无声、杂音或同步异常立即关闭。代价：压缩音频交给外部设备后，MPV无法完成所有混音和重采样处理。"));
+        options.add(option(MPV_MULTICHANNEL_AUDIO, AUDIO, "非直通多声道", "怎么选：默认“立体声兼容”，电视直出遇到不能直通的多声道音轨时优先切换同语言2.0音轨，性能和设备兼容性最好；选择“多声道 PCM”会保留当前5.1/7.1音轨并由MPV解码输出，可能增加CPU负担，最终声道数仍取决于电视或功放的PCM能力。"));
         options.add(option(PREFER_AAC, AUDIO, "AAC 优先", "怎么选：高级音轨无声或设备兼容性差时开启；功放支持原始多声道、希望保留最佳音轨时关闭。代价：可能从Dolby/DTS切到质量或声道较低的AAC。"));
     }
 

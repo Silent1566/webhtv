@@ -26,6 +26,8 @@ public final class MpvPerformanceSetting {
     public static final int HLS_LOWEST = 3;
     public static final int PRIORITY_PERFORMANCE = 0;
     public static final int PRIORITY_CONFIG = 1;
+    public static final int MULTICHANNEL_STEREO_COMPAT = 0;
+    public static final int MULTICHANNEL_PCM = 1;
     // Kept only to migrate the temporary four-choice test build. Formal UI
     // exposes direct / legacy / stable, and old "auto" values become legacy.
     public static final int VULKAN_BACKEND_AUTO = 0;
@@ -48,6 +50,7 @@ public final class MpvPerformanceSetting {
     private static final String KEY_REBUFFER_MS = "perf_mpv_rebuffer_ms";
     private static final String KEY_OPTION_PRIORITY = "perf_mpv_option_priority";
     private static final String KEY_VULKAN_BACKEND = "perf_mpv_vulkan_backend";
+    private static final String KEY_MULTICHANNEL_AUDIO = "perf_mpv_multichannel_audio";
 
     private MpvPerformanceSetting() {
     }
@@ -309,6 +312,27 @@ public final class MpvPerformanceSetting {
         return isPerformancePriority() ? "播放性能优先" : "mpv.conf优先";
     }
 
+    public static int getMultichannelAudioMode() {
+        return clamp(Prefers.getInt(KEY_MULTICHANNEL_AUDIO,
+                MULTICHANNEL_STEREO_COMPAT),
+                MULTICHANNEL_STEREO_COMPAT, MULTICHANNEL_PCM);
+    }
+
+    public static void putMultichannelAudioMode(int value) {
+        Prefers.put(KEY_MULTICHANNEL_AUDIO, clamp(value,
+                MULTICHANNEL_STEREO_COMPAT, MULTICHANNEL_PCM));
+        PlaybackPerformanceSetting.markOverride(
+                PlaybackPerformanceCatalog.MPV_MULTICHANNEL_AUDIO);
+    }
+
+    public static boolean isMultichannelPcm() {
+        return getMultichannelAudioMode() == MULTICHANNEL_PCM;
+    }
+
+    public static String getMultichannelAudioText() {
+        return isMultichannelPcm() ? "多声道 PCM" : "立体声兼容";
+    }
+
     public static int getVulkanBackend() {
         return normalizeVulkanBackend(Prefers.getInt(
                 KEY_VULKAN_BACKEND, VULKAN_BACKEND_DIRECT));
@@ -367,6 +391,7 @@ public final class MpvPerformanceSetting {
         Prefers.put(KEY_FRAME_RATE, FRAME_RATE_SEAMLESS);
         Prefers.put(KEY_HLS_BITRATE, HLS_HIGHEST);
         Prefers.put(KEY_VULKAN_BACKEND, VULKAN_BACKEND_DIRECT);
+        Prefers.put(KEY_MULTICHANNEL_AUDIO, MULTICHANNEL_STEREO_COMPAT);
         applyRebufferPreset(PlaybackPerformanceSetting.PROFILE_RECOMMENDED);
     }
 
@@ -382,6 +407,7 @@ public final class MpvPerformanceSetting {
         Prefers.put(KEY_FRAME_RATE, FRAME_RATE_SEAMLESS);
         Prefers.put(KEY_HLS_BITRATE, HLS_HIGHEST);
         Prefers.put(KEY_VULKAN_BACKEND, VULKAN_BACKEND_DIRECT);
+        Prefers.put(KEY_MULTICHANNEL_AUDIO, MULTICHANNEL_STEREO_COMPAT);
         applyRebufferPreset(PlaybackPerformanceSetting.PROFILE_AUTO);
     }
 
@@ -401,6 +427,7 @@ public final class MpvPerformanceSetting {
         Prefers.put(KEY_FRAME_RATE, FRAME_RATE_OFF);
         Prefers.put(KEY_HLS_BITRATE, HLS_8_MBPS);
         Prefers.put(KEY_VULKAN_BACKEND, VULKAN_BACKEND_DIRECT);
+        Prefers.put(KEY_MULTICHANNEL_AUDIO, MULTICHANNEL_STEREO_COMPAT);
         applyRebufferPreset(PlaybackPerformanceSetting.PROFILE_LIGHTWEIGHT);
     }
 

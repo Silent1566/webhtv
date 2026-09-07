@@ -18,6 +18,7 @@ import androidx.annotation.Nullable;
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.bean.Track;
+import com.fongmi.android.tv.player.AudioPlaybackDiagnostics;
 import com.fongmi.android.tv.player.PlayerHelper;
 import com.fongmi.android.tv.player.PlaybackRoute;
 import com.fongmi.android.tv.player.PlaybackResourceClassifier;
@@ -52,6 +53,10 @@ public class MpvPlayerEngine implements PlayerEngine {
     static final String DV7_PRESERVE = "preserve";
     static final String DV7_P81 = "p81";
     static final String DV7_HDR10 = "hdr10";
+    static final String DV8_PRESERVE = "preserve";
+    static final String DV8_HDR10 = "hdr10";
+    static final String HWDEC_SOFTWARE_FALLBACK_OPTION = "hwdec-software-fallback";
+    static final String HWDEC_SOFTWARE_FALLBACK_DISABLED = "no";
 
     private MpvPlayer player;
     private PlaySpec spec;
@@ -67,6 +72,7 @@ public class MpvPlayerEngine implements PlayerEngine {
     private String hwdecOverride;
     private String configuredHwdec = "no";
     private String dv7HandlingOption;
+    private String dv8HandlingOption = DV8_PRESERVE;
     private boolean dv7P81FallbackTried;
     private boolean initialSubtitleSurfaceRequested;
     private String initialSubtitleTrackId;
@@ -78,6 +84,7 @@ public class MpvPlayerEngine implements PlayerEngine {
         this.lutAllowed = lutAllowed;
         this.videoSizeProbeListener = videoSizeProbeListener;
         resetDv7HandlingForNewItem();
+        resetDv8HandlingForNewItem();
         this.player = buildPlayer(listener);
     }
 
@@ -144,6 +151,10 @@ public class MpvPlayerEngine implements PlayerEngine {
     @Override
     public boolean isHard() {
         return decode == HARD;
+    }
+
+    static String hardwareDecodeSoftwareFallbackOption() {
+        return HWDEC_SOFTWARE_FALLBACK_DISABLED;
     }
 
     @Override
@@ -397,6 +408,10 @@ public class MpvPlayerEngine implements PlayerEngine {
         player.clearAutoHlsBitrate();
     }
 
+    public boolean sendScriptMessage(String message, String... args) {
+        return player.sendScriptMessage(message, args);
+    }
+
     /** Cached track/proxy HLS state; this method never performs a native query. */
     public MpvPlayer.AutoHlsRuntimeSnapshot getAutoHlsRuntimeSnapshot() {
         return player.getAutoHlsRuntimeSnapshot();
@@ -460,12 +475,17 @@ public class MpvPlayerEngine implements PlayerEngine {
             }
         }
         String currentVo = player.getObservedCurrentVideoOutput();
+        int reportedProfile = details.dolbyVisionProfile() > 0
+                ? details.dolbyVisionProfile() : details.sourceDolbyVisionProfile();
+        int reportedLevel = details.dolbyVisionLevel() > 0
+                ? details.dolbyVisionLevel() : details.sourceDolbyVisionLevel();
         boolean fallbackConfigured = isConfiguredDv7Hdr10Fallback(
-                details, isHard(), isDv7Hdr10Active());
+                details, isHard(), isDv7Hdr10Active())
+                || isConfiguredDv8Hdr10Fallback(details, isHard(), isDv8Hdr10Active());
         return new VideoPlaybackDetails(
                 details.sourceCodecs(),
-                details.dolbyVisionProfile(),
-                details.dolbyVisionLevel(),
+                reportedProfile,
+                reportedLevel,
                 details.decodedCodec(),
                 details.decoderName(),
                 player.getObservedHwdecCurrent(),
@@ -475,17 +495,35 @@ public class MpvPlayerEngine implements PlayerEngine {
                 details.sourceDolbyVisionProfile() == 7 && isDv7P81Active());
     }
 
+    @Override
+    public AudioPlaybackDiagnostics.Snapshot getAudioPlaybackDiagnostics() {
+        return player.getAudioPlaybackDiagnostics();
+    }
+
     static boolean isConfiguredDv7Hdr10Fallback(
             MpvPlayer.VideoTrackDiagnostics details,
             boolean hardDecode,
             boolean fallbackEnabled) {
-        return details != null && details.dolbyVisionProfile() == 7
+        return details != null && sourceDolbyVisionProfile(details) == 7
                 && hardDecode && fallbackEnabled;
+    }
+
+    static boolean isConfiguredDv8Hdr10Fallback(
+            MpvPlayer.VideoTrackDiagnostics details,
+            boolean hardDecode,
+            boolean fallbackEnabled) {
+        return details != null && sourceDolbyVisionProfile(details) == 8
+                && hardDecode && fallbackEnabled;
+    }
+
+    private static int sourceDolbyVisionProfile(MpvPlayer.VideoTrackDiagnostics details) {
+        return details.sourceDolbyVisionProfile() > 0
+                ? details.sourceDolbyVisionProfile() : details.dolbyVisionProfile();
     }
 
     static boolean isDolbyVisionHdr10Fallback(
             MpvPlayer.VideoTrackDiagnostics details, String currentVo) {
-        if (details == null || details.dolbyVisionProfile() != 7
+        if (details == null || sourceDolbyVisionProfile(details) != 7
                 || currentVo == null) return false;
         String output = currentVo.trim().toLowerCase(java.util.Locale.US);
         return output.equals("gpu") || output.startsWith("gpu-next");
@@ -506,6 +544,29 @@ public class MpvPlayerEngine implements PlayerEngine {
                 PlaybackPerformanceSetting.getMpvDv7HandlingMode());
         dv7P81FallbackTried = false;
         return !dv7HandlingOption.equals(previous);
+    }
+
+    public boolean resetDv8HandlingForNewItem() {
+        String previous = dv8HandlingOption;
+        dv8HandlingOption = DV8_PRESERVE;
+        return !dv8HandlingOption.equals(previous);
+    }
+
+    public boolean updateDv8Handling(
+            MpvAutoOutputPolicy.DolbyVisionSupport nativeDv8,
+            MpvAutoOutputPolicy.DolbyVisionSupport hevcHdr10) {
+        String selected = selectDv8Handling(nativeDv8, hevcHdr10);
+        if (selected.equals(dv8HandlingOption)) return false;
+        dv8HandlingOption = selected;
+        return true;
+    }
+
+    static String selectDv8Handling(
+            MpvAutoOutputPolicy.DolbyVisionSupport nativeDv8,
+            MpvAutoOutputPolicy.DolbyVisionSupport hevcHdr10) {
+        return nativeDv8 == MpvAutoOutputPolicy.DolbyVisionSupport.UNSUPPORTED
+                && hevcHdr10 == MpvAutoOutputPolicy.DolbyVisionSupport.SUPPORTED
+                ? DV8_HDR10 : DV8_PRESERVE;
     }
 
     public boolean updateDv7Handling(
@@ -552,6 +613,14 @@ public class MpvPlayerEngine implements PlayerEngine {
 
     public boolean isDv7Hdr10Active() {
         return DV7_HDR10.equals(dv7HandlingOption);
+    }
+
+    public boolean isDv8Hdr10Active() {
+        return DV8_HDR10.equals(dv8HandlingOption);
+    }
+
+    public String getDv8HandlingOption() {
+        return dv8HandlingOption;
     }
 
     public String getDv7HandlingOption() {
@@ -868,6 +937,7 @@ public class MpvPlayerEngine implements PlayerEngine {
 
     private MpvPlayerConfig buildConfig() {
         MpvConfigStore.ensureReady();
+        MpvConfigStore.ensureCustomButtonScript();
         boolean zeroCopyBlocked = MpvPerformanceSetting.isZeroCopyBlocked();
         boolean autoDirectEligible = !zeroCopyBlocked && MpvAutoOutputPolicy.canStartSurfaceDirect(
                 decode == HARD,
@@ -901,7 +971,10 @@ public class MpvPlayerEngine implements PlayerEngine {
         MpvPlayerConfig.Builder builder = MpvPlayerConfig.builder(App.get())
                 .configDir(MpvConfigStore.configDir())
                 .hwdec(hwdec)
+                .option(HWDEC_SOFTWARE_FALLBACK_OPTION,
+                        hardwareDecodeSoftwareFallbackOption())
                 .audioSpdif(resolveAudioSpdifCodecs())
+                .multichannelPcm(MpvPerformanceSetting.isMultichannelPcm())
                 .logLevel(MpvPerformanceSetting.isVerboseLog() ? "all=v" : "all=warn")
                 .demuxerMaxBytes(getDemuxerMaxBytes())
                 .demuxerMaxBackBytes(getDemuxerMaxBackBytes())
@@ -922,7 +995,9 @@ public class MpvPlayerEngine implements PlayerEngine {
                 .option("interpolation", MpvPerformanceSetting.isInterpolation() ? "yes" : "no")
                 .option("hls-bitrate", MpvPerformanceSetting.getHlsBitrateOption())
                 .option("demuxer-dovi-profile7",
-                        getDv7HandlingOption());
+                        getDv7HandlingOption())
+                .option("demuxer-dovi-profile8",
+                        getDv8HandlingOption());
         if (useVulkan && !appBackendOverride.isEmpty()) {
             builder.option(MpvVulkanBackendPolicy.OPTION, appBackendOverride);
         } else if (useVulkan && automaticBackend && !automaticOverride.isEmpty()) {
@@ -977,8 +1052,9 @@ public class MpvPlayerEngine implements PlayerEngine {
 
     private String resolveAudioSpdifCodecs() {
         boolean enabled = PlayerSetting.isAudioPassThrough(PlayerSetting.MPV);
-        String codecs = enabled ? MpvAudioCapabilities.getAudioSpdifCodecs(App.get()) : "";
-        SpiderDebug.log("mpv-audio", "configured enabled=%s codecs=%s",
+        String codecs = enabled ? MpvAudioCapabilities.getAudioSpdifCodecs(App.get())
+                : String.join(",", MpvAudioCapabilities.getAudioCompressedCodecs(App.get()));
+        SpiderDebug.log("mpv-audio", "configured passthrough=%s codecs=%s",
                 enabled, codecs.isEmpty() ? "pcm" : codecs);
         return codecs;
     }

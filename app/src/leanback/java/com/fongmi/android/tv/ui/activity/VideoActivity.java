@@ -212,6 +212,7 @@ import com.fongmi.android.tv.player.lyrics.LyricsRequest;
 import com.fongmi.android.tv.player.lyrics.LyricsRepository;
 import com.fongmi.android.tv.player.lyrics.LyricsResult;
 import com.fongmi.android.tv.player.lut.LutSetting;
+import com.fongmi.android.tv.player.mpv.MpvConfigStore;
 import com.fongmi.android.tv.setting.LyricsSetting;
 import com.fongmi.android.tv.ui.custom.AudioPlayerBackgroundDrawable;
 import com.fongmi.android.tv.ui.custom.KaraokeResultView;
@@ -347,6 +348,9 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     private PartAdapter mPartAdapter;
     private BackdropAdapter mBackdropAdapter;
     private Map<String, View> mActionButtons;
+    private final List<View> mCustomActionViews = new ArrayList<>();
+    private HorizontalScrollView mCustomPortraitButtons;
+    private LinearLayout mCustomPortraitButtonRow;
     private QuickSearchDialog mQuickSearchDialog;
     private VodPlayerUiController mPlayerUi;
     private PlayerOsdController mOsd;
@@ -1344,6 +1348,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         mApplyAudioBackgroundRunnable = this::applyAudioBackground;
         mHideAudioFocusRunnable = this::hideAudioStageFocusHighlight;
         SpiderDebug.log("video-flow", "initView state ready cost=%dms", System.currentTimeMillis() - start);
+        prepareInitialDetailShell();
         checkCast();
         SpiderDebug.log("video-flow", "initView preview ready cost=%dms", System.currentTimeMillis() - start);
         setRecyclerView();
@@ -1352,10 +1357,19 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         setVideoView();
         SpiderDebug.log("video-flow", "initView video view ready cost=%dms", System.currentTimeMillis() - start);
         setViewModel();
-        // 初始化：隐藏换源按钮
-        mBinding.change1.setVisibility(View.GONE);
         checkId();
         SpiderDebug.log("video-flow", "initView end cost=%dms sinceLaunch=%dms", System.currentTimeMillis() - start, getLaunchCost(System.currentTimeMillis()));
+    }
+
+    /**
+     * 在首帧揭开预览前先确定详情模式，避免原生增强异步详情回来前短暂显示普通详情按钮。
+     * 未配置好 TMDB 时仍保留普通详情入口。
+     */
+    private void prepareInitialDetailShell() {
+        boolean tmdbDetail = shouldLoadTmdbDetail();
+        boolean enhancedDetail = tmdbDetail && (Setting.isOriginalEnhancedDetailPage() || isIntentTmdbPlayback());
+        setOriginalEnhancedActionVisibility(enhancedDetail);
+        if (enhancedDetail && shouldUseTmdbLayout()) suppressTmdbNativeTextFields();
     }
 
     @Override
@@ -1620,6 +1634,9 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         addActionButton(PlayerButtonSetting.TIMER, mBinding.control.action.timer);
         addActionButton(PlayerButtonSetting.REPEAT, mBinding.control.action.repeat);
         PlayerButtonSetting.applyOrder(mBinding.control.action.container, mActionButtons);
+        setupCustomActionButtons();
+        placePanDiagnosticAction();
+        updatePanDiagnosticAction();
         applyActionButtonVisibility();
     }
 
@@ -1627,7 +1644,91 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         mActionButtons.put(id, view);
     }
 
+    private void setupCustomActionButtons() {
+        ensureCustomButtonContainers();
+        for (View view : mCustomActionViews) {
+            ViewParent parent = view.getParent();
+            if (parent instanceof ViewGroup) ((ViewGroup) parent).removeView(view);
+        }
+        mCustomActionViews.clear();
+        mCustomPortraitButtonRow.removeAllViews();
+        List<MpvConfigStore.CustomButton> buttons = MpvConfigStore.customButtons();
+        for (int index = 0; index < buttons.size(); index++) {
+            MpvConfigStore.CustomButton button = buttons.get(index);
+            if (!button.enabled) continue;
+            TextView view = new TextView(this);
+            view.setTextSize(13);
+            view.setTextColor(Color.WHITE);
+            view.setGravity(Gravity.CENTER);
+            view.setMinHeight(ResUtil.dp2px(40));
+            view.setMinWidth(ResUtil.dp2px(56));
+            view.setPadding(ResUtil.dp2px(10), ResUtil.dp2px(4), ResUtil.dp2px(10), ResUtil.dp2px(4));
+            view.setBackgroundResource(R.drawable.selector_control_sheet_button);
+            view.setText(button.title);
+            view.setSingleLine(true);
+            view.setMaxWidth(ResUtil.dp2px(144));
+            view.setEllipsize(TextUtils.TruncateAt.END);
+            view.setContentDescription(button.title);
+            view.setOnClickListener(item -> {
+                if (player().sendMpvCustomButton(button.id, false)) {
+                    toggleCustomButtonState(item);
+                }
+                setR1Callback();
+            });
+            view.setOnLongClickListener(item -> {
+                if (player().sendMpvCustomButton(button.id, true)) {
+                    toggleCustomButtonState(item);
+                }
+                setR1Callback();
+                return true;
+            });
+            view.setFocusable(true);
+            view.setFocusableInTouchMode(true);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ResUtil.dp2px(40));
+            params.setMargins(ResUtil.dp2px(4), ResUtil.dp2px(2), ResUtil.dp2px(4), ResUtil.dp2px(2));
+            mCustomPortraitButtonRow.addView(view, params);
+            mCustomActionViews.add(view);
+        }
+        updateCustomButtonVisibility();
+    }
+
+    private void toggleCustomButtonState(View view) {
+        view.setSelected(!view.isSelected());
+    }
+
+    private void ensureCustomButtonContainers() {
+        if (mCustomPortraitButtons != null) return;
+        mCustomPortraitButtons = new HorizontalScrollView(this);
+        mCustomPortraitButtons.setHorizontalScrollBarEnabled(false);
+        mCustomPortraitButtons.setFillViewport(false);
+        mCustomPortraitButtons.setClipToPadding(false);
+        mCustomPortraitButtons.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        mCustomPortraitButtonRow = new LinearLayout(this);
+        mCustomPortraitButtonRow.setGravity(Gravity.CENTER_VERTICAL);
+        mCustomPortraitButtonRow.setOrientation(LinearLayout.HORIZONTAL);
+        mCustomPortraitButtonRow.setClipChildren(false);
+        mCustomPortraitButtons.addView(mCustomPortraitButtonRow, new HorizontalScrollView.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.setMargins(0, 0, 0, ResUtil.dp2px(8));
+        ((ViewGroup) mBinding.control.getRoot()).addView(mCustomPortraitButtons, 0, params);
+    }
+
+    private void updateCustomButtonVisibility() {
+        boolean visible = service() != null && player().isMpv() && isVisible(mBinding.control.getRoot());
+        if (mCustomPortraitButtons != null) mCustomPortraitButtons.setVisibility(visible ? View.VISIBLE : View.GONE);
+    }
+
+    private void placePanDiagnosticAction() {
+        ViewGroup container = mBinding.control.action.container;
+        View diagnostic = mBinding.control.action.panDiagnostic;
+        View anchor = mBinding.control.action.playParams;
+        if (diagnostic.getParent() != container || anchor.getParent() != container) return;
+        container.removeView(diagnostic);
+        container.addView(diagnostic, Math.min(container.getChildCount(), container.indexOfChild(anchor) + 1));
+    }
+
     private void applyActionButtonVisibility() {
+        updateCustomButtonVisibility();
         mBinding.control.action.cast.setVisibility(isFullscreen() ? View.GONE : View.VISIBLE);
         updateImmersiveAudioAction();
         updatePanDiagnosticAction();
@@ -2199,6 +2300,8 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
             player().clear();
         }
         updateNavigationKey();
+        // singleTop 切换条目时也要先按新 Intent 准备详情壳，不能沿用旧条目的操作按钮。
+        prepareInitialDetailShell();
         mBinding.progressLayout.showProgress();
     }
 
@@ -2871,10 +2974,14 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     private void setEpisodeAdapter(List<Episode> items) {
-        setEpisodeAdapter(items, true);
+        setEpisodeAdapter(items, true, true);
     }
 
     private void setEpisodeAdapter(List<Episode> items, boolean scrollToCurrent) {
+        setEpisodeAdapter(items, scrollToCurrent, true);
+    }
+
+    private void setEpisodeAdapter(List<Episode> items, boolean scrollToCurrent, boolean updateEpisodeChrome) {
         updateEpisodeSeasonContext();
         boolean isEmpty = items.isEmpty();
         boolean hasMultiple = items.size() > 1;
@@ -2906,10 +3013,12 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         // useTmdbCards=false 被隐藏，用户无法切回列表。
         if (useTmdbCards && hasMultiple) episodeGridMode = Setting.getTmdbEpisodeGridMode();
         if (!useTmdbCards || !hasMultiple) episodeGridMode = false;
-        mBinding.episodeHeader.setVisibility(showTmdbEpisodeChrome && !isEmpty ? View.VISIBLE : View.GONE);
-        mBinding.episodeReverse.setVisibility(showTmdbEpisodeChrome && hasMultiple ? View.VISIBLE : View.GONE);
-        mBinding.episodeViewMode.setVisibility(showTmdbEpisodeChrome && hasMultiple && useTmdbCards ? View.VISIBLE : View.GONE);
-        mBinding.episodeFileName.setVisibility(showTmdbEpisodeChrome && hasMultiple ? View.VISIBLE : View.GONE);
+        if (updateEpisodeChrome) {
+            mBinding.episodeHeader.setVisibility(showTmdbEpisodeChrome && !isEmpty ? View.VISIBLE : View.GONE);
+            mBinding.episodeReverse.setVisibility(showTmdbEpisodeChrome && hasMultiple ? View.VISIBLE : View.GONE);
+            mBinding.episodeViewMode.setVisibility(showTmdbEpisodeChrome && hasMultiple && useTmdbCards ? View.VISIBLE : View.GONE);
+            mBinding.episodeFileName.setVisibility(showTmdbEpisodeChrome && hasMultiple ? View.VISIBLE : View.GONE);
+        }
         updateEpisodeFallbackStillUrl();
         mEpisodeAdapter.setUseTmdbCard(useTmdbCards);
         mEpisodeGridAdapter.setUseTmdbCard(useTmdbCards);
@@ -3108,7 +3217,8 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
 
     private void reverseEpisode(boolean scroll) {
         mFlagAdapter.reverse();
-        setEpisodeAdapter(getFlag().getEpisodes(), scroll);
+        // 倒序只改变列表顺序；保留已经显示的工具栏，避免一次重绑期间 TMDB 状态短暂未就绪时闪退。
+        setEpisodeAdapter(getFlag().getEpisodes(), scroll, false);
         if (scroll) scrollToCurrentEpisode();
         else scrollToFirstEpisode();
     }
@@ -3124,7 +3234,8 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         if (mBinding.episodeFileName.getVisibility() != View.VISIBLE) return;
         boolean showScraped = !Setting.getTmdbEpisodeShowScrapedName();
         Setting.putTmdbEpisodeShowScrapedName(showScraped);
-        setEpisodeAdapter(getFlag().getEpisodes(), true);
+        // 原文件名只改变列表标题；工具栏可见性不应随这次重绑重新计算。
+        setEpisodeAdapter(getFlag().getEpisodes(), true, false);
     }
 
     private void applyEpisodeViewMode(boolean scrollToCurrent) {
@@ -4394,6 +4505,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         showTopInfo();
         setPlayParamsState();
         mBinding.control.getRoot().setVisibility(View.VISIBLE);
+        updateCustomButtonVisibility();
         if (mOsd != null) mOsd.setControlsVisible(true);
         PlayerControlFocusHelper.ensureFocus(mBinding.control.getRoot(), view);
         setR1Callback();
@@ -4401,6 +4513,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
 
     private void hideControl() {
         mBinding.control.getRoot().setVisibility(View.GONE);
+        updateCustomButtonVisibility();
         if (mOsd != null) mOsd.setControlsVisible(false);
         if (player().isPlaying()) mBinding.widget.top.setVisibility(View.GONE);
         App.removeCallbacks(mR1);

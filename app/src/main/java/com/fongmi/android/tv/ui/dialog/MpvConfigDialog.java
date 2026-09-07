@@ -200,7 +200,7 @@ public class MpvConfigDialog extends BaseAlertDialog implements MpvConfigProfile
             popup.dismiss();
             openEditor(profile);
         }));
-        if (!profile.isDefault()) content.addView(actionItem(R.string.mpv_config_rename, R.drawable.ic_mpv_rename, false, () -> {
+        if (!profile.isDefault() && !profile.isCustomButton() && !MpvConfigStore.TARGET_SCRIPTS.equals(target)) content.addView(actionItem(R.string.mpv_config_rename, R.drawable.ic_mpv_rename, false, () -> {
             popup.dismiss();
             showRename(profile);
         }));
@@ -286,6 +286,11 @@ public class MpvConfigDialog extends BaseAlertDialog implements MpvConfigProfile
         showEditor(null, displayName, template, true);
     }
 
+    private void onScriptButtonSaved() {
+        reload();
+        notifyChanged();
+    }
+
     @Override
     public void onImport(String name, String path) {
         String selectedTarget = target;
@@ -307,8 +312,13 @@ public class MpvConfigDialog extends BaseAlertDialog implements MpvConfigProfile
                 String content = MpvConfigStore.profileContent(target, profile.id);
                 App.post(() -> {
                     Notify.dismiss();
-                    String name = profile.isDefault() ? getString(R.string.mpv_config_default_copy) : profile.name;
-                    showEditor(profile.id, name, content, profile.isDefault());
+                    if (MpvConfigStore.TARGET_SCRIPTS.equals(target)) {
+                        MpvConfigCreateDialog.showScriptSettings(getChildFragmentManager(), profile.id,
+                                profile.name, content, MpvConfigStore.scriptButton(profile.id), this::onScriptButtonSaved);
+                    } else {
+                        String name = profile.isDefault() ? getString(R.string.mpv_config_default_copy) : profile.name;
+                        showEditor(profile.id, name, content, profile.isDefault());
+                    }
                 });
             } catch (Throwable e) {
                 App.post(() -> {
@@ -324,7 +334,7 @@ public class MpvConfigDialog extends BaseAlertDialog implements MpvConfigProfile
             try {
                 String savedId = MpvConfigStore.saveTextProfile(target, id, name, text);
                 if (creating && !MpvConfigStore.TARGET_SCRIPTS.equals(target)) MpvConfigStore.selectProfile(target, savedId);
-                reload();
+                if (binding != null) binding.getRoot().post(this::reload);
                 Notify.show(R.string.mpv_config_profile_saved);
                 notifyChanged();
                 return true;

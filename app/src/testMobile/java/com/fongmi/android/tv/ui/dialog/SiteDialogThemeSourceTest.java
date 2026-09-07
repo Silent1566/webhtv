@@ -60,13 +60,25 @@ public class SiteDialogThemeSourceTest {
     }
 
     @Test
+    public void leanbackThemeChoicesAreDpadFocusable() throws Exception {
+        String layout = read("app/src/leanback/res/layout/adapter_theme.xml");
+        assertTrue(layout.contains("android:background=\"@drawable/selector_item\""));
+        assertTrue(layout.contains("android:focusable=\"true\""));
+        assertTrue(layout.contains("android:focusableInTouchMode=\"true\""));
+    }
+
+    @Test
     public void everyActivityAppliesThemeChangesImmediately() throws Exception {
-        for (String flavor : new String[]{"mobile", "leanback"}) {
-            String base = read("app/src/" + flavor + "/java/com/fongmi/android/tv/ui/base/BaseActivity.java");
-            assertTrue("theme changes must recreate activities in " + flavor,
-                    base.contains("RefreshEvent.Type.THEME")
-                            && base.contains("recreate()"));
-        }
+        String mobile = read("app/src/mobile/java/com/fongmi/android/tv/ui/base/BaseActivity.java");
+        assertTrue(mobile.contains("event.getType() == RefreshEvent.Type.LANGUAGE"));
+        assertTrue(mobile.contains("event.getType() == RefreshEvent.Type.THEME"));
+        assertTrue(mobile.contains("recreate()"));
+
+        String leanback = read("app/src/leanback/java/com/fongmi/android/tv/ui/base/BaseActivity.java");
+        assertTrue(leanback.contains("event.getType() == RefreshEvent.Type.LANGUAGE"));
+        assertTrue(leanback.contains("event.getType() == RefreshEvent.Type.UI_SCALE"));
+        assertTrue(leanback.contains("event.getType() == RefreshEvent.Type.THEME"));
+        assertTrue(leanback.contains("recreate()"));
     }
 
     private String read(String path) throws Exception {

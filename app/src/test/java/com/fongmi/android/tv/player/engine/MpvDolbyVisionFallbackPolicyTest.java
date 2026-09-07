@@ -72,6 +72,29 @@ public class MpvDolbyVisionFallbackPolicyTest {
                         PlaybackPerformanceSetting.DV7_HANDLING_P81));
     }
 
+    @Test
+    public void profile8SelectsHdr10OnlyWithRegularHevcSupport() {
+        assertEquals(MpvPlayerEngine.DV8_HDR10,
+                MpvPlayerEngine.selectDv8Handling(
+                        MpvAutoOutputPolicy.DolbyVisionSupport.UNSUPPORTED,
+                        MpvAutoOutputPolicy.DolbyVisionSupport.SUPPORTED));
+        assertEquals(MpvPlayerEngine.DV8_PRESERVE,
+                MpvPlayerEngine.selectDv8Handling(
+                        MpvAutoOutputPolicy.DolbyVisionSupport.UNSUPPORTED,
+                        MpvAutoOutputPolicy.DolbyVisionSupport.UNKNOWN));
+        assertEquals(MpvPlayerEngine.DV8_PRESERVE,
+                MpvPlayerEngine.selectDv8Handling(
+                        MpvAutoOutputPolicy.DolbyVisionSupport.SUPPORTED,
+                        MpvAutoOutputPolicy.DolbyVisionSupport.SUPPORTED));
+    }
+
+    @Test
+    public void configuredProfile8FallbackIsReportedSeparatelyFromDv7() {
+        MpvPlayer.VideoTrackDiagnostics details = details(8);
+        assertTrue(MpvPlayerEngine.isConfiguredDv8Hdr10Fallback(details, true, true));
+        assertFalse(MpvPlayerEngine.isConfiguredDv7Hdr10Fallback(details, true, true));
+    }
+
     private static MpvPlayer.VideoTrackDiagnostics details(int profile) {
         return new MpvPlayer.VideoTrackDiagnostics(
                 "dvhe.0" + profile + ".06", profile, 6,

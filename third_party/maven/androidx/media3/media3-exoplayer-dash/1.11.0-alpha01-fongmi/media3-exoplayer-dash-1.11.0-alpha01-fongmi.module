@@ -35,11 +35,11 @@
         {
           "name": "media3-exoplayer-dash-1.11.0-alpha01-fongmi.aar",
           "url": "media3-exoplayer-dash-1.11.0-alpha01-fongmi.aar",
-          "size": 148198,
-          "sha512": "3309ab7ff490f69f99222cd3159afc6998b4da0432dbe9ceaf5cae2005d9b656b8c9e74172d071591711610887a3534eb9d32f7361b5b0eecc393e865176c4e2",
-          "sha256": "2fc009c2b20303bf7c8263db4259a08d94cc05e1578a53e5ff68cf159f1860dc",
-          "sha1": "aa218294976c4bfc97e536149ff5c6f3fac22ed0",
-          "md5": "e9c208658b15ba52de197165beb65cf9"
+          "size": 148014,
+          "sha512": "73c35274c37829f64fdc6b2a1b60c68c2beab369a28e0ba916e57552f415e2a2fbe351b38cd67e0783356c805d9142399f43081e17a34ccef9ce1aa0cbe382fd",
+          "sha256": "de557f0b91512a1e0726155bd0cbb23879279ce05a819ab27a49bea069225546",
+          "sha1": "f587bc028366d7671ff7fab7f6c1781a9b786227",
+          "md5": "afadabcd8613891485bb2fc8e280ded6"
         }
       ]
     },
@@ -71,11 +71,11 @@
         {
           "name": "media3-exoplayer-dash-1.11.0-alpha01-fongmi.aar",
           "url": "media3-exoplayer-dash-1.11.0-alpha01-fongmi.aar",
-          "size": 148198,
-          "sha512": "3309ab7ff490f69f99222cd3159afc6998b4da0432dbe9ceaf5cae2005d9b656b8c9e74172d071591711610887a3534eb9d32f7361b5b0eecc393e865176c4e2",
-          "sha256": "2fc009c2b20303bf7c8263db4259a08d94cc05e1578a53e5ff68cf159f1860dc",
-          "sha1": "aa218294976c4bfc97e536149ff5c6f3fac22ed0",
-          "md5": "e9c208658b15ba52de197165beb65cf9"
+          "size": 148014,
+          "sha512": "73c35274c37829f64fdc6b2a1b60c68c2beab369a28e0ba916e57552f415e2a2fbe351b38cd67e0783356c805d9142399f43081e17a34ccef9ce1aa0cbe382fd",
+          "sha256": "de557f0b91512a1e0726155bd0cbb23879279ce05a819ab27a49bea069225546",
+          "sha1": "f587bc028366d7671ff7fab7f6c1781a9b786227",
+          "md5": "afadabcd8613891485bb2fc8e280ded6"
         }
       ]
     },
@@ -91,11 +91,11 @@
         {
           "name": "media3-exoplayer-dash-1.11.0-alpha01-fongmi-sources.jar",
           "url": "media3-exoplayer-dash-1.11.0-alpha01-fongmi-sources.jar",
-          "size": 100485,
-          "sha512": "c71abdce85500bc6054953f0d0dcfbeceb229c643ece61b2cc0861abddd23cedbdeb9377fc3742c97ba48374f58516add3ca6a1494b72ea5dbacf3aeea35d398",
-          "sha256": "e24afff26ea1d21338b9c4f835b56e6ed5c95b996c46b9306cffbae2c5632af9",
-          "sha1": "33bd526b0fd8073b9b2c386fd78909c4c2fdcf7c",
-          "md5": "b5d67e20c63c66f5edc02aab0e1ef006"
+          "size": 100721,
+          "sha512": "be395bb090464b46cbad1c4f757979d66fe93ed40c67d35e556e1d678d59f796f0e8cd2e5b7cf9cd700a2fb1c1273af6c84967e4fa5a2f447b81239a339e2172",
+          "sha256": "5462494d6ed12e64b5597070b86206727775c760ebe040ef6d3a3a51244431d4",
+          "sha1": "02b048b70b27ab0b25a309ab2ebd392c14468a30",
+          "md5": "bf6850c431828f518395237260b062d8"
         }
       ]
     }

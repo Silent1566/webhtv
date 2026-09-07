@@ -27,6 +27,7 @@ public final class MpvPlayerConfig {
     private final String gpuApi;
     private final String ao;
     private final String audioSpdif;
+    private final boolean multichannelPcm;
     private final String logLevel;
     private final boolean openglEs;
     private final boolean tlsVerify;
@@ -55,6 +56,7 @@ public final class MpvPlayerConfig {
         gpuApi = builder.gpuApi;
         ao = builder.ao;
         audioSpdif = builder.audioSpdif;
+        multichannelPcm = builder.multichannelPcm;
         logLevel = builder.logLevel;
         openglEs = builder.openglEs;
         tlsVerify = builder.tlsVerify;
@@ -120,6 +122,10 @@ public final class MpvPlayerConfig {
 
     public String audioSpdif() {
         return audioSpdif;
+    }
+
+    public boolean multichannelPcm() {
+        return multichannelPcm;
     }
 
     public String logLevel() {
@@ -196,6 +202,7 @@ public final class MpvPlayerConfig {
         private String gpuApi = "";
         private String ao = "audiotrack,opensles";
         private String audioSpdif = "";
+        private boolean multichannelPcm;
         private String logLevel = "all=v";
         private boolean openglEs = true;
         private boolean tlsVerify = true;
@@ -275,6 +282,11 @@ public final class MpvPlayerConfig {
 
         public Builder audioSpdif(String audioSpdif) {
             this.audioSpdif = audioSpdif;
+            return this;
+        }
+
+        public Builder multichannelPcm(boolean multichannelPcm) {
+            this.multichannelPcm = multichannelPcm;
             return this;
         }
 

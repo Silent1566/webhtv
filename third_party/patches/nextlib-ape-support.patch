@@ -1,0 +1,79 @@
+diff --git a/ffmpeg/setup.sh b/ffmpeg/setup.sh
+index 32d1674..b432ca2 100755
+--- a/ffmpeg/setup.sh
++++ b/ffmpeg/setup.sh
+@@ -18,7 +18,7 @@ MBEDTLS_DIR=$SOURCES_DIR/mbedtls-$MBEDTLS_VERSION
+ # Configuration
+ ANDROID_ABIS="armeabi-v7a arm64-v8a"
+ ANDROID_PLATFORM=21
+-ENABLED_DECODERS="vorbis opus flac alac pcm_mulaw pcm_alaw mp3 amrnb amrwb aac ac3 eac3 dca mlp truehd libarcdav3a h264 hevc mpeg2video mpegvideo libvpx_vp8 libvpx_vp9"
++ENABLED_DECODERS="vorbis opus flac alac pcm_mulaw pcm_alaw mp3 amrnb amrwb aac ac3 eac3 dca mlp truehd ape libarcdav3a h264 hevc mpeg2video mpegvideo libvpx_vp8 libvpx_vp9"
+ JOBS=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || sysctl -n hw.pysicalcpu || echo 4)
+
+diff --git a/media3ext/src/main/cpp/ffaudio.cpp b/media3ext/src/main/cpp/ffaudio.cpp
+index e1aeb9e..02087d8 100644
+--- a/media3ext/src/main/cpp/ffaudio.cpp
++++ b/media3ext/src/main/cpp/ffaudio.cpp
+@@ -109,6 +109,27 @@ AVCodecContext *createContext(JNIEnv *env, AVCodec *codec, jbyteArray extraData,
+         context->ch_layout.nb_channels = rawChannelCount;
+         av_channel_layout_default(&context->ch_layout, rawChannelCount);
+     }
++    if (context->codec_id == AV_CODEC_ID_APE) {
++        if (rawSampleRate <= 0 || rawChannelCount <= 0 || rawChannelCount > 2) {
++            LOGE("Invalid APE stream parameters: sampleRate=%d channels=%d.",
++                 rawSampleRate, rawChannelCount);
++            releaseContext(context);
++            return nullptr;
++        }
++        context->sample_rate = rawSampleRate;
++        context->ch_layout.nb_channels = rawChannelCount;
++        av_channel_layout_default(&context->ch_layout, rawChannelCount);
++        if (!extraData || env->GetArrayLength(extraData) < 6) {
++            LOGE("APE decoder requires six-byte extradata.");
++            releaseContext(context);
++            return nullptr;
++        }
++        jbyte flags[2];
++        env->GetByteArrayRegion(extraData, 4, 2, flags);
++        const int formatFlags = (flags[0] & 0xff) | ((flags[1] & 0xff) << 8);
++        context->bits_per_coded_sample = (formatFlags & 1) != 0
++                ? 8 : ((formatFlags & 8) != 0 ? 24 : 16);
++    }
+     context->err_recognition = AV_EF_IGNORE_ERR;
+     int result = avcodec_open2(context, codec, nullptr);
+     if (result < 0) {
+diff --git a/media3ext/src/main/java/io/github/anilbeesetti/nextlib/media3ext/ffdecoder/FfmpegAudioDecoder.java b/media3ext/src/main/java/io/github/anilbeesetti/nextlib/media3ext/ffdecoder/FfmpegAudioDecoder.java
+index c9a1e4a..f5136f4 100644
+--- a/media3ext/src/main/java/io/github/anilbeesetti/nextlib/media3ext/ffdecoder/FfmpegAudioDecoder.java
++++ b/media3ext/src/main/java/io/github/anilbeesetti/nextlib/media3ext/ffdecoder/FfmpegAudioDecoder.java
+@@ -204,6 +204,7 @@ final class FfmpegAudioDecoder
+     return switch (mimeType) {
+       case MimeTypes.AUDIO_AAC, MimeTypes.AUDIO_OPUS -> initializationData.get(0);
+       case MimeTypes.AUDIO_ALAC -> getAlacExtraData(initializationData);
++      case "audio/ape" -> initializationData.get(0);
+       case MimeTypes.AUDIO_VORBIS -> getVorbisExtraData(initializationData);
+       // Other codecs do not require extra data.
+       default -> null;
+diff --git a/media3ext/src/main/java/io/github/anilbeesetti/nextlib/media3ext/ffdecoder/FfmpegLibrary.java b/media3ext/src/main/java/io/github/anilbeesetti/nextlib/media3ext/ffdecoder/FfmpegLibrary.java
+index 11f225b..68c83fd 100644
+--- a/media3ext/src/main/java/io/github/anilbeesetti/nextlib/media3ext/ffdecoder/FfmpegLibrary.java
++++ b/media3ext/src/main/java/io/github/anilbeesetti/nextlib/media3ext/ffdecoder/FfmpegLibrary.java
+@@ -116,6 +116,7 @@ public final class FfmpegLibrary {
+       case MimeTypes.AUDIO_AMR_WB -> "amrwb";
+       case MimeTypes.AUDIO_FLAC -> "flac";
+       case MimeTypes.AUDIO_ALAC -> "alac";
++      case "audio/ape" -> "ape";
+       case MimeTypes.AUDIO_MLAW -> "pcm_mulaw";
+       case MimeTypes.AUDIO_ALAW -> "pcm_alaw";
+       case AUDIO_AV3A -> "libarcdav3a";
+diff --git a/build.gradle.kts b/build.gradle.kts
+index ba1e427..c4f5e93 100644
+--- a/build.gradle.kts
++++ b/build.gradle.kts
+@@ -11,7 +11,7 @@ subprojects {
+             coordinates(
+                 groupId = "io.github.anilbeesetti",
+                 artifactId = property("POM_ARTIFACT_ID") as String,
+-                version = "1.10.0-0.12.1-fongmi-softload-av3a-ffmpeg901-r2"
++                version = "1.10.0-0.12.1-fongmi-softload-av3a-ffmpeg901-r3"
+             )

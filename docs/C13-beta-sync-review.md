@@ -1,13 +1,13 @@
-# C13：dev4 合并 beta 最新代码并复评全部未推送改动
+# C13：dev1 合并 beta 最新代码并复评全部未推送改动
 
 ## Recovery anchor
 
-- **目标：** 将 `origin/beta` 最新代码合入 `dev4`，复评本地已提交未推送的手机版“外观与语言”入口，以及 beta 在 `dev4` 上次 PR 后新增的播放器、站点主题和冲突修复；发现问题即最小修复并重新验证，随后提交、创建恢复标签、推送 `dev4`、创建中文 PR 到 `beta`，最后拉取远端最新代码。
-- **任务守卫：** `beta-sync-review-20260907-dev4`，模式 `standard`，范围 `app/**`、`docs/**`、`gradle/**`、`gradlew`；开始时工作树干净，无受保护脏路径。
-- **本地基线：** `dev4@c344741692b3cb4e7dda473a8dbebb433ea50e65`；唯一未推送提交为手机版设置页复用既有 `AppearanceDialog` 的 C13 变更。
-- **beta 目标：** `origin/beta@cc88e278a8ddc2088a82a68dbf1671e419606a29`；共同祖先为 `03f600acc5672c858814e4eab720987b3980e027`。
-- **合并状态：** `git merge --no-commit --no-ff origin/beta` 自动完成，零未合并路径；本地 C13 两个文件与 beta 新增路径零重叠，因此未发生内容冲突。
-- **回滚：** 未提交时可 `git merge --abort`；提交后按本任务恢复标签整体回退。合并前已验证 C13 恢复点为 `recovery/C13-mobile-appearance-language/20260907020029-c344741692b3`。
+- **目标：** 将 `origin/beta` 最新代码合入 `dev1`，复评本地已提交未推送的手机版“外观与语言”入口、个性设置布局崩溃修复，以及 beta 在此前 PR 后新增的播放器、音频、标题识别和构建资产；发现问题即最小修复并重新验证，随后提交、创建恢复标签、推送 `dev1`、创建中文 PR 到 `beta`，最后拉取远端最新代码。
+- **任务守卫：** `beta-sync-review-dev1-20260907`，模式 `standard`，范围 `app/**`、`docs/**`、`gradle/**`、`gradlew`、`scripts/**`、`third_party/**`；初始受保护 dirty 路径为 `gradlew` 的执行位，已显式保留。
+- **本地基线：** `dev1@57932a7e7055489403d3e170bba706048df0e065`；未推送提交包含手机版外观与语言入口及个性设置布局崩溃修复。
+- **beta 目标：** `origin/beta@161b190fac6c304c240bfb3b142b4dfa531fb1d5`；共同祖先为 `b158b71b97ca7abc76cbc2cf9e4e4784ede8af43`。
+- **合并状态：** 针对上述最新 ref 重新 `git merge --no-commit --no-ff` 自动完成，零未合并路径；相对 beta 的最终本地差异为手机版个性设置布局修复、测试保护修复及本任务文档。
+- **回滚：** 未提交时可 `git merge --abort`；提交后按本任务恢复标签整体回退。合并前可回退至 `recovery/mobile-personal-settings-crash/20260907131223-57932a7e7055`。
 
 ## 评审范围和结果
 
@@ -19,6 +19,9 @@
 
 ### beta 增量
 
+- beta 在旧目标 `1f37b723f9ccdc02bc4cc44b6490d1c2cc547e2c` 之后又进入四个最新集成提交：`f0e9ab75bd0770b17db9f9bcd6101026d2c63466`、`7e6fd548190834408e40332e8392d2e379536511`、`161b190fac6c304c240bfb3b142b4dfa531fb1d5`，以及其父链中的 `fca898f9d940816c378ec37785184f46b334cd4d`。这些提交带入音频策略、MPV/Exo 兼容性、LitePan 标题识别、C4 供应链资产和 PR224 冲突收口；本轮以最终树复核，不把旧 merge 结果误称为最新 beta。
+- `docs/beta-sync-review-20260907-dev3.md`、`docs/C4-main-upstream-merge.md` 及对应任务记录已覆盖这些上游播放器/标题/供应链阶段的验证边界；本轮确认最终 beta 树继承且无未合并路径。
+
 - `dev4` 上次已合入 beta 的 PR #220 对应 `c78b7cb11550209b2c0f884441e4a0fb65784e05`。其后的播放器首播续播、MPV 时长恢复、进度绑定、站点主题及 PR #218 冲突处理均已有独立提交/恢复标签和验证记录；本轮复核最终树、对应测试和合并血缘，不重复已成功的设备场景。
 - 广告规则批量导入/启停来自已合入的 PR #219，最终实现和测试未被后续合并改写；本轮聚焦测试重新覆盖导入存储、规则来源、批量操作和焦点保持。
 - PR #218 的冲突修复 `016edd1d50fede43e119613737fe2288c99e45ba` 已用双端 Arm64 Java 编译验证主题事件语义；最终树保留 mobile 的 `LANGUAGE/THEME` 和 Leanback 的 `LANGUAGE/UI_SCALE/THEME`。
@@ -26,15 +29,14 @@
 ## 评审发现与修复
 
 1. **`gradlew` 可执行位回退。** beta 历史把包装器模式带回 `100644`，会让标准 `./gradlew` 调用失败；恢复为 `100755`，脚本内容和镜像配置不变。
-2. **两项源码测试使用过窄字符串断言。** 实现已正确：Leanback 为 `LANGUAGE/UI_SCALE/THEME` 三态重建，HLS 详情先重新解析最新条目再显示 `current.detail()`；旧测试分别只接受相邻 `LANGUAGE/THEME` 和 `item.detail()`，造成假失败。断言改为验证必要行为而非局部变量名/条件顺序。
+2. **语言事件测试保护退化。** 旧断言把两个事件写成一个相邻字符串，最新改动还只验证包含整体条件，可能漏掉单独删除 `LANGUAGE` 的回归；改为分别断言 mobile 的 `LANGUAGE/THEME`、Leanback 的 `LANGUAGE/UI_SCALE/THEME` 和 `recreate()`。
+3. **旧合并目标导致评审不完整。** 首次发现工作树针对 `1f37b723f9ccdc02bc4cc44b6490d1c2cc547e2c`，而远端已推进到 `161b190fac6c304c240bfb3b142b4dfa531fb1d5`；已中止旧合并并按最新 ref 重算合并，不提交遗漏 LitePan/音频/供应链增量。
 
 ## 验证与最终复评
 
-- 第一轮聚焦 Mobile Arm64 单测共 39 项：37 通过、2 项上述陈旧断言失败；同时 Mobile Java/资源编译通过。
-- 修复后以同一组目标重新运行：39/39 通过，`BUILD SUCCESSFUL in 38s`。覆盖 `SiteDialogThemeSourceTest`、`PlayerPlaybackRegressionSourceTest`、`AdRuleManageDialogLayoutTest`、`MobileAdRuleManageDialogTest`、`ImportedAdRuleCandidateStoreTest`、`UserAdRuleSourceTest`、`MobileSiteAdapterStyleTest`、`MpvMainThreadPropertySourceTest`。
-- Leanback Arm64 Java 编译通过，`BUILD SUCCESSFUL in 31s`。
-- `git diff --cached --check` 通过；无未合并路径；C13 与 beta 增量零路径重叠；`gradlew` 为可执行模式。
-- 修复后再次审查最终树：未发现剩余阻断问题。未重复已有的 SDK 28 站点配色探针、MPV/EXO 真机播放和核心切换，因为相关提交已有当前代码覆盖的成功设备证据，且本轮没有修改这些生产实现。
+- 第一轮旧 beta 目标的 Mobile Arm64 聚焦测试曾通过，但因目标已过时不能作为本轮闭环证据。
+- 最新 beta 合并树修复后，Mobile Arm64 定向测试 59 项全部通过（失败 0、错误 0、跳过 0），覆盖标题识别、AI 标题解析、缓存、站点主题、Exo 音频策略、MPV 音频策略和诊断；Mobile/Leanback Arm64 Java 编译均通过（`BUILD SUCCESSFUL in 1m 21s`）。未将 Java 编译扩大为真实设备播放结论。
+- `git diff --cached --check`、无未合并路径和 `gradlew` index 模式均作为提交前门禁；修复后再次审查最终树。
 
 ## 完整 beta 提交台账（相对共同祖先）
 
@@ -68,4 +70,4 @@
 
 ## 下一动作
 
-由任务守卫原子提交当前合并、两项测试修正、包装器模式和本文档并创建恢复标签；随后推送 `dev4`、创建中文 PR 到 `beta`，再拉取远端最新状态。
+定向验证已通过；下一步由任务守卫原子提交当前合并、测试修正、包装器模式和本文档并创建恢复标签；随后推送 `dev1`、创建中文 PR 到 `beta`，再拉取远端最新状态。

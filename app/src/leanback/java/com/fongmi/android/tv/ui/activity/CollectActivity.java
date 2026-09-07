@@ -250,6 +250,10 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
             }
         });
         setSearchLayout();
+        mBinding.collect.setOnKeyListener((view, keyCode, event) -> {
+            if (event.getAction() != KeyEvent.ACTION_DOWN || keyCode != KeyEvent.KEYCODE_DPAD_RIGHT) return false;
+            return focusFirstSearchResult();
+        });
         mBinding.recycler.setHasFixedSize(true);
         mBinding.recycler.setItemAnimator(null);
         mBinding.recycler.setItemViewCacheSize(count * 3);
@@ -781,6 +785,7 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
     @Override
     public boolean onCollectKey(int position, int keyCode, KeyEvent event) {
         if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+        if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) return focusFirstSearchResult();
         if (isSearchLandscape()) {
             if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
                 mBinding.searchColumn.requestFocus();
@@ -831,12 +836,32 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
     }
 
     private void setSearchItemsLazy(List<Vod> items) {
-        mBinding.recycler.scrollToPosition(0);
         mSearchAdapter.setSource(items, getCount() * 4);
         mBinding.recycler.post(() -> {
+            scrollSearchToTop();
             ensureSearchRows(getCount(), 2);
             preloadNextRows(getCount());
         });
+    }
+
+    private void scrollSearchToTop() {
+        RecyclerView.LayoutManager manager = mBinding.recycler.getLayoutManager();
+        if (manager instanceof GridLayoutManager layoutManager) layoutManager.scrollToPositionWithOffset(0, 0);
+        else mBinding.recycler.scrollToPosition(0);
+    }
+
+    private boolean focusFirstSearchResult() {
+        if (mSearchAdapter == null || mSearchAdapter.getItemCount() == 0) return false;
+        mBinding.recycler.post(() -> {
+            scrollSearchToTop();
+            mBinding.recycler.post(() -> {
+                RecyclerView.LayoutManager manager = mBinding.recycler.getLayoutManager();
+                View target = manager == null ? null : manager.findViewByPosition(0);
+                if (target != null) target.requestFocus();
+                else mBinding.recycler.requestFocus();
+            });
+        });
+        return true;
     }
 
     @Override

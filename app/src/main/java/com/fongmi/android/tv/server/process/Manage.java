@@ -22,6 +22,7 @@ import com.fongmi.android.tv.setting.CustomCspSetting;
 import com.fongmi.android.tv.setting.ProxySetting;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.utils.LoginStateSync;
+import com.fongmi.android.tv.utils.MpvConfigSync;
 import com.fongmi.android.tv.utils.ProgressRequestBody;
 import com.fongmi.android.tv.utils.ScanTask;
 import com.fongmi.android.tv.utils.SyncFiles;
@@ -555,11 +556,13 @@ public class Manage implements Process {
         SyncOptions options = SyncOptions.objectFrom(params.get("options"));
         if (params.containsKey("paths")) options.paths(params.get("paths"));
         SyncFiles.Archive archive = null;
+        MpvConfigSync.Archive mpvArchive = null;
         LoginStateSync.Archive loginArchive = null;
         try {
             if (!pull && SyncFiles.hasPaths(options)) archive = SyncFiles.createArchive(SyncFiles.getPaths(options));
+            if (!pull && options.isMpvConfig()) mpvArchive = MpvConfigSync.createArchive();
             if (!pull && options.isLoginState()) loginArchive = LoginStateSync.createArchive();
-            RequestBody body = buildSyncBody(pull, options, archive, loginArchive);
+            RequestBody body = buildSyncBody(pull, options, archive, mpvArchive, loginArchive);
             String remote = device.replaceAll("/+$", "") + "/action?do=sync&mode=" + (pull ? "2" : "1") + "&type=backup";
             SpiderDebug.log("sync", "manage start direction=%s device=%s options=%s archive=%s", pull ? "pull" : "push", device, options, archive == null ? "none" : archive.getFile().getAbsolutePath());
             try (okhttp3.Response response = OkHttp.client(Constant.TIMEOUT_SYNC_TRANSFER).newCall(new Request.Builder().url(remote).post(body).build()).execute()) {
@@ -578,6 +581,11 @@ public class Manage implements Process {
                 object.addProperty("rawSize", archive.getRawSize());
                 object.addProperty("zipSize", archive.getZipSize());
             }
+            if (mpvArchive != null) {
+                object.addProperty("mpvFiles", mpvArchive.getCount());
+                object.addProperty("mpvRawSize", mpvArchive.getRawSize());
+                object.addProperty("mpvZipSize", mpvArchive.getZipSize());
+            }
             if (loginArchive != null) {
                 object.addProperty("loginFiles", loginArchive.getCount());
                 object.addProperty("loginRawSize", loginArchive.getRawSize());
@@ -586,11 +594,12 @@ public class Manage implements Process {
             return json(object);
         } finally {
             if (archive != null) archive.delete();
+            if (mpvArchive != null) mpvArchive.delete();
             if (loginArchive != null) loginArchive.delete();
         }
     }
 
-    private RequestBody buildSyncBody(boolean pull, SyncOptions options, SyncFiles.Archive archive, LoginStateSync.Archive loginArchive) {
+    private RequestBody buildSyncBody(boolean pull, SyncOptions options, SyncFiles.Archive archive, MpvConfigSync.Archive mpvArchive, LoginStateSync.Archive loginArchive) {
         if (pull) {
             FormBody.Builder body = new FormBody.Builder();
             body.add("options", options.toString());
@@ -598,7 +607,7 @@ public class Manage implements Process {
             body.add("device", Device.get().toString());
             return body.build();
         }
-        if (archive == null && loginArchive == null) {
+        if (archive == null && mpvArchive == null && loginArchive == null) {
             FormBody.Builder body = new FormBody.Builder();
             body.add("options", options.toString());
             body.add("force", "false");
@@ -612,6 +621,7 @@ public class Manage implements Process {
         body.addFormDataPart("backup", Backup.create(options).toString());
         if (options.isRemoteRelay()) body.addFormDataPart("remoteRelay", RemoteStore.exportRelayConfig());
         if (archive != null) body.addFormDataPart(SyncFiles.PART_NAME, archive.getFile().getName(), new ProgressRequestBody(archive.getFile(), ZIP, null));
+        if (mpvArchive != null) body.addFormDataPart(MpvConfigSync.PART_NAME, mpvArchive.getFile().getName(), new ProgressRequestBody(mpvArchive.getFile(), ZIP, null));
         if (loginArchive != null) body.addFormDataPart(LoginStateSync.PART_NAME, loginArchive.getFile().getName(), new ProgressRequestBody(loginArchive.getFile(), ZIP, null));
         return body.build();
     }

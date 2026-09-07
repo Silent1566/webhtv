@@ -7,9 +7,11 @@ import android.os.Build;
 
 import org.junit.Test;
 
+import java.util.LinkedHashSet;
 import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 public class MpvAudioCapabilitiesTest {
 
@@ -37,6 +39,22 @@ public class MpvAudioCapabilitiesTest {
     @Test
     public void leavesSpdifDisabledWhenMedia3ReportsNoSurroundSupport() {
         assertEquals("", MpvAudioCapabilities.getAudioSpdifCodecs(encoding -> false));
+    }
+
+    @Test
+    public void doesNotAdvertiseCompressedDirectWithoutPassthroughRoute() {
+        Set<String> target = new LinkedHashSet<>();
+        MpvAudioCapabilities.addCompressedCodecsIfRouted(
+                target, Set.of("aac", "mp3"), false);
+        assertTrue(target.isEmpty());
+    }
+
+    @Test
+    public void advertisesCompressedDirectWhenPassthroughRouteExists() {
+        Set<String> target = new LinkedHashSet<>();
+        MpvAudioCapabilities.addCompressedCodecsIfRouted(
+                target, Set.of("aac", "mp3"), true);
+        assertEquals(Set.of("aac", "mp3"), target);
     }
 
     @Test

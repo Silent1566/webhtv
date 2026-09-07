@@ -215,6 +215,7 @@ verify_abi() {
   contains_string "$directory/libmvformat.so" "MMT protocol over TLV packets"
   contains_string "$directory/libmvformat.so" "WebHTV proxy range offset accepted"
   contains_string "$directory/libmvcodec.so" "failing hardware decode so the player can fall back"
+  contains_string "$directory/libmvcodec.so" "WebHTV hardware audio MediaCodec decoder:"
   contains_string "$directory/libmpv.so" "No usable fontconfig configuration file found, using fallback."
   if [ -n "$CURL_VERSION" ]; then
     contains_string "$directory/libmpv.so" "libcurl/$CURL_VERSION"

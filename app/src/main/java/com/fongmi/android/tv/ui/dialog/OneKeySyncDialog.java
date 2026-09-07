@@ -29,6 +29,7 @@ import com.fongmi.android.tv.utils.NsdDeviceDiscovery;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.FileUtil;
 import com.fongmi.android.tv.utils.LoginStateSync;
+import com.fongmi.android.tv.utils.MpvConfigSync;
 import com.fongmi.android.tv.utils.ProgressRequestBody;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.ScanTask;
@@ -186,7 +187,7 @@ public class OneKeySyncDialog extends BaseBottomSheetDialog implements SyncDevic
     }
 
     private MaterialCheckBox[] boxes() {
-        return new MaterialCheckBox[]{binding.config, binding.spider, binding.loginState, binding.webHome, binding.search, binding.history, binding.keep, binding.settings, binding.remoteRelay};
+        return new MaterialCheckBox[]{binding.config, binding.spider, binding.mpvConfig, binding.loginState, binding.webHome, binding.search, binding.history, binding.keep, binding.settings, binding.remoteRelay};
     }
 
     private void updateSyncPathSummary() {
@@ -201,6 +202,7 @@ public class OneKeySyncDialog extends BaseBottomSheetDialog implements SyncDevic
         return SyncOptions.defaults()
                 .config(binding.config.isChecked())
                 .spider(binding.spider.isChecked())
+                .mpvConfig(binding.mpvConfig.isChecked())
                 .loginState(binding.loginState.isChecked())
                 .webHome(binding.webHome.isChecked())
                 .search(binding.search.isChecked())
@@ -335,15 +337,17 @@ public class OneKeySyncDialog extends BaseBottomSheetDialog implements SyncDevic
         Task.execute(() -> {
             try {
                 SyncFiles.Archive archive = toRemote && SyncFiles.hasPaths(options) ? SyncFiles.createArchive(SyncFiles.getPaths(options), () -> syncing, this::onPrepareProgress) : null;
+                MpvConfigSync.Archive mpvArchive = toRemote && options.isMpvConfig() ? MpvConfigSync.createArchive() : null;
                 LoginStateSync.Archive loginArchive = toRemote && options.isLoginState() ? LoginStateSync.createArchive() : null;
-                RequestBody body = buildBody(options, archive, loginArchive);
+                RequestBody body = buildBody(options, archive, mpvArchive, loginArchive);
                 if (!syncing) {
                     if (archive != null) archive.delete();
+                    if (mpvArchive != null) mpvArchive.delete();
                     if (loginArchive != null) loginArchive.delete();
                     return;
                 }
                 App.post(() -> binding.start.setEnabled(true));
-                request(url, body, archive, loginArchive, 0);
+                request(url, body, archive, mpvArchive, loginArchive, 0);
             } catch (Exception e) {
                 if (!syncing) return;
                 App.post(() -> {
@@ -354,8 +358,8 @@ public class OneKeySyncDialog extends BaseBottomSheetDialog implements SyncDevic
         });
     }
 
-    private RequestBody buildBody(SyncOptions options, SyncFiles.Archive archive, LoginStateSync.Archive loginArchive) {
-        if (archive == null && loginArchive == null) {
+    private RequestBody buildBody(SyncOptions options, SyncFiles.Archive archive, MpvConfigSync.Archive mpvArchive, LoginStateSync.Archive loginArchive) {
+        if (archive == null && mpvArchive == null && loginArchive == null) {
             FormBody.Builder body = new FormBody.Builder();
             body.add("options", options.toString());
             body.add("force", "false");
@@ -371,6 +375,7 @@ public class OneKeySyncDialog extends BaseBottomSheetDialog implements SyncDevic
         body.addFormDataPart("backup", Backup.create(options).toString());
         if (options.isRemoteRelay()) body.addFormDataPart("remoteRelay", RemoteStore.exportRelayConfig());
         if (archive != null) body.addFormDataPart(SyncFiles.PART_NAME, archive.getFile().getName(), new ProgressRequestBody(archive.getFile(), ZIP, (written, total) -> App.post(() -> updateUpload(archive, written, total))));
+        if (mpvArchive != null) body.addFormDataPart(MpvConfigSync.PART_NAME, mpvArchive.getFile().getName(), new ProgressRequestBody(mpvArchive.getFile(), ZIP, null));
         if (loginArchive != null) body.addFormDataPart(LoginStateSync.PART_NAME, loginArchive.getFile().getName(), new ProgressRequestBody(loginArchive.getFile(), ZIP, null));
         return body.build();
     }
@@ -379,35 +384,38 @@ public class OneKeySyncDialog extends BaseBottomSheetDialog implements SyncDevic
         if (options.isRemoteRelay() && includeLocal) body.add("remoteRelay", RemoteStore.exportRelayConfig());
     }
 
-    private void request(String url, RequestBody body, SyncFiles.Archive archive, LoginStateSync.Archive loginArchive, int retry) {
+    private void request(String url, RequestBody body, SyncFiles.Archive archive, MpvConfigSync.Archive mpvArchive, LoginStateSync.Archive loginArchive, int retry) {
         syncCall = OkHttp.newCall(client, url, body);
-        syncCall.enqueue(callback(url, body, archive, loginArchive, retry));
+        syncCall.enqueue(callback(url, body, archive, mpvArchive, loginArchive, retry));
     }
 
-    private void retry(String url, RequestBody body, SyncFiles.Archive archive, LoginStateSync.Archive loginArchive, int retry, String msg) {
+    private void retry(String url, RequestBody body, SyncFiles.Archive archive, MpvConfigSync.Archive mpvArchive, LoginStateSync.Archive loginArchive, int retry, String msg) {
         if (!syncing) {
             if (archive != null) archive.delete();
+            if (mpvArchive != null) mpvArchive.delete();
             if (loginArchive != null) loginArchive.delete();
             return;
         }
         if (retry >= MAX_RETRY) {
             if (archive != null) archive.delete();
+            if (mpvArchive != null) mpvArchive.delete();
             if (loginArchive != null) loginArchive.delete();
             App.post(() -> {
                 setSyncing(false);
                 Notify.show(getString(R.string.sync_failed_with_reason, msg));
             });
         } else {
-            Task.schedule(() -> request(url, body, archive, loginArchive, retry + 1), RETRY_DELAY, TimeUnit.MILLISECONDS);
+            Task.schedule(() -> request(url, body, archive, mpvArchive, loginArchive, retry + 1), RETRY_DELAY, TimeUnit.MILLISECONDS);
         }
     }
 
-    private Callback callback(String url, RequestBody body, SyncFiles.Archive archive, LoginStateSync.Archive loginArchive, int retry) {
+    private Callback callback(String url, RequestBody body, SyncFiles.Archive archive, MpvConfigSync.Archive mpvArchive, LoginStateSync.Archive loginArchive, int retry) {
         return new Callback() {
             @Override
             public void onFailure(@NonNull Call call, @NonNull IOException e) {
                 if (call.isCanceled() || !syncing) {
                     if (archive != null) archive.delete();
+                    if (mpvArchive != null) mpvArchive.delete();
                     if (loginArchive != null) loginArchive.delete();
                     App.post(() -> {
                         setSyncing(false);
@@ -415,7 +423,7 @@ public class OneKeySyncDialog extends BaseBottomSheetDialog implements SyncDevic
                     });
                     return;
                 }
-                retry(url, body, archive, loginArchive, retry, e.getMessage());
+                retry(url, body, archive, mpvArchive, loginArchive, retry, e.getMessage());
             }
 
             @Override
@@ -423,12 +431,13 @@ public class OneKeySyncDialog extends BaseBottomSheetDialog implements SyncDevic
                 try (Response res = response) {
                     if (res.isSuccessful()) App.post(() -> {
                         if (archive != null) archive.delete();
+                        if (mpvArchive != null) mpvArchive.delete();
                         if (loginArchive != null) loginArchive.delete();
                         setSyncing(false);
                         Notify.show(R.string.sync_success);
                         dismiss();
                     });
-                    else retry(url, body, archive, loginArchive, retry, res.message());
+                    else retry(url, body, archive, mpvArchive, loginArchive, retry, res.message());
                 }
             }
         };

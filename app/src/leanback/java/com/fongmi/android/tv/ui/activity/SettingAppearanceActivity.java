@@ -49,7 +49,7 @@ public class SettingAppearanceActivity extends BaseActivity {
     private void setText() {
         mBinding.uiScaleText.setText((uiScale = ResUtil.getStringArray(R.array.select_ui_scale))[Setting.getUiScaleIndex()]);
         mBinding.languageText.setText((language = ResUtil.getStringArray(R.array.select_language))[Setting.getLanguageIndex()]);
-        mBinding.sizeText.setText((size = ResUtil.getStringArray(R.array.select_size))[PlayerSetting.getSize()]);
+        mBinding.sizeText.setText((size = ResUtil.getStringArray(R.array.select_size))[getSizeIndex()]);
         setWallText();
     }
 
@@ -78,10 +78,14 @@ public class SettingAppearanceActivity extends BaseActivity {
     }
 
     private void setSize(View view) {
-        int index = (PlayerSetting.getSize() + 1) % size.length;
+        int index = (getSizeIndex() + 1) % size.length;
         PlayerSetting.putSize(index);
         RefreshEvent.size();
         setText();
+    }
+
+    private int getSizeIndex() {
+        return Math.max(0, Math.min(PlayerSetting.getSize(), size.length - 1));
     }
 
     private void onWall(View view) {

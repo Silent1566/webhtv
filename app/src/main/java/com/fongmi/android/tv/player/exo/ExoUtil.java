@@ -24,6 +24,7 @@ import androidx.media3.common.MediaItem;
 import androidx.media3.common.MimeTypes;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
+import androidx.media3.common.TrackSelectionParameters;
 import androidx.media3.common.Tracks;
 import androidx.media3.exoplayer.DefaultLoadControl;
 import androidx.media3.exoplayer.DefaultRenderersFactory;
@@ -167,6 +168,7 @@ public class ExoUtil {
                 frameSchedulingSettings,
                 dolbyVisionPlaybackState,
                 null,
+                null,
                 null);
     }
 
@@ -178,7 +180,8 @@ public class ExoUtil {
             ExoFrameSchedulingPlayerSettings frameSchedulingSettings,
             @Nullable ExoDolbyVisionPlaybackState dolbyVisionPlaybackState,
             @Nullable PlaybackMediaSignalHub mediaSignals,
-            @Nullable PlaybackMediaClock mediaClock) {
+            @Nullable PlaybackMediaClock mediaClock,
+            @Nullable ExoCompressedAudioDirectPolicy compressedAudioDirectPolicy) {
         ExoFrameSchedulingPlayerSettings schedulingSettings =
                 frameSchedulingSettings == null
                         ? ExoFrameSchedulingPlayerSettings.capture(decode)
@@ -203,7 +206,8 @@ public class ExoUtil {
                         schedulingSettings,
                         dolbyVisionPlaybackState,
                         mediaSignals,
-                        mediaClock))
+                        mediaClock,
+                        compressedAudioDirectPolicy))
                 .setMediaSourceFactory(buildMediaSourceFactory(
                         dolbyVisionPlaybackState))
                 .setVideoChangeFrameRateStrategy(ExoPerformanceSetting.getFrameRateStrategy());
@@ -352,6 +356,11 @@ public class ExoUtil {
         DefaultTrackSelector trackSelector = new DefaultTrackSelector(App.get());
         DefaultTrackSelector.Parameters.Builder builder = trackSelector.buildUponParameters();
         if (PlayerSetting.isPreferAAC(PlayerSetting.EXO)) builder.setPreferredAudioMimeType(MimeTypes.AUDIO_AAC);
+        builder.setAudioOffloadPreferences(
+                new TrackSelectionParameters.AudioOffloadPreferences.Builder()
+                        .setAudioOffloadMode(TrackSelectionParameters
+                                .AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_ENABLED)
+                        .build());
         builder.setPreferredTextLanguages(LangUtil.getPreferredTextLanguages());
         ExoTunnelingPolicy.Decision tunneling = getTunnelingDecision(decode, tunnelingFallbackAttempted);
         builder.setTunnelingEnabled(tunneling.enabled());
@@ -724,7 +733,8 @@ public class ExoUtil {
             ExoFrameSchedulingPlayerSettings frameSchedulingSettings,
             @Nullable ExoDolbyVisionPlaybackState dolbyVisionPlaybackState,
             @Nullable PlaybackMediaSignalHub mediaSignals,
-            @Nullable PlaybackMediaClock mediaClock) {
+            @Nullable PlaybackMediaClock mediaClock,
+            @Nullable ExoCompressedAudioDirectPolicy compressedAudioDirectPolicy) {
         int videoRenderMode = getVideoRenderMode(decode);
         return buildRenderersFactory(
                 getAudioRenderMode(),
@@ -742,7 +752,8 @@ public class ExoUtil {
                 frameSchedulingSettings,
                 dolbyVisionPlaybackState,
                 mediaSignals,
-                mediaClock);
+                mediaClock,
+                compressedAudioDirectPolicy);
     }
 
     static RenderersFactory buildRenderersFactory() {
@@ -771,6 +782,7 @@ public class ExoUtil {
                         codecQueueMode),
                 null,
                 null,
+                null,
                 null);
     }
 
@@ -787,7 +799,8 @@ public class ExoUtil {
             ExoFrameSchedulingPlayerSettings frameSchedulingSettings,
             @Nullable ExoDolbyVisionPlaybackState dolbyVisionPlaybackState,
             @Nullable PlaybackMediaSignalHub mediaSignals,
-            @Nullable PlaybackMediaClock mediaClock) {
+            @Nullable PlaybackMediaClock mediaClock,
+            @Nullable ExoCompressedAudioDirectPolicy compressedAudioDirectPolicy) {
         ExoFrameSchedulingExperimentPolicy.Decision frameSchedulingDecision =
                 frameSchedulingSettings.decision();
         int mode = PlayerSetting.getEffectiveFFmpegMode();
@@ -808,7 +821,8 @@ public class ExoUtil {
                 @Override
                 protected AudioSink buildAudioSink(@NonNull Context context, boolean enableFloatOutput, boolean enableAudioOutputPlaybackParams) {
                     return ExoUtil.buildAudioSink(context, enableFloatOutput, enableAudioOutputPlaybackParams,
-                            realtimePipeline, mediaSignals, mediaClock);
+                            realtimePipeline, mediaSignals, mediaClock,
+                            compressedAudioDirectPolicy);
                 }
             };
         } else if (useFfmpegAudioFallback(mode) || useFfmpegVideoRenderer(mode)) {
@@ -821,7 +835,8 @@ public class ExoUtil {
                 @Override
                 protected AudioSink buildAudioSink(@NonNull Context context, boolean enableFloatOutput, boolean enableAudioOutputPlaybackParams) {
                     return ExoUtil.buildAudioSink(context, enableFloatOutput, enableAudioOutputPlaybackParams,
-                            realtimePipeline, mediaSignals, mediaClock);
+                            realtimePipeline, mediaSignals, mediaClock,
+                            compressedAudioDirectPolicy);
                 }
             };
         } else {
@@ -829,7 +844,8 @@ public class ExoUtil {
                 @Override
                 protected AudioSink buildAudioSink(@NonNull Context context, boolean enableFloatOutput, boolean enableAudioOutputPlaybackParams) {
                     return ExoUtil.buildAudioSink(context, enableFloatOutput, enableAudioOutputPlaybackParams,
-                            realtimePipeline, mediaSignals, mediaClock);
+                            realtimePipeline, mediaSignals, mediaClock,
+                            compressedAudioDirectPolicy);
                 }
             };
         }
@@ -890,7 +906,8 @@ public class ExoUtil {
                                             boolean enableAudioOutputPlaybackParams,
                                             boolean realtimePipeline,
                                             @Nullable PlaybackMediaSignalHub mediaSignals,
-                                            @Nullable PlaybackMediaClock mediaClock) {
+                                            @Nullable PlaybackMediaClock mediaClock,
+                                            @Nullable ExoCompressedAudioDirectPolicy compressedAudioDirectPolicy) {
         boolean passthrough = PlayerSetting.isAudioPassThrough(PlayerSetting.EXO);
         if (SpiderDebug.isEnabled()) {
             AudioCapabilities capabilities = AudioCapabilities.getCapabilities(
@@ -929,6 +946,17 @@ public class ExoUtil {
         if (!passthrough) {
             builder.setAudioOutputProvider(new AudioTrackAudioOutputProvider.Builder(null).build());
         }
+        ExoCompressedAudioDirectPolicy directPolicy =
+                compressedAudioDirectPolicy == null
+                        ? new ExoCompressedAudioDirectPolicy(context)
+                        : compressedAudioDirectPolicy;
+        AudioTrackAudioOutputProvider outputProvider =
+                new AudioTrackAudioOutputProvider.Builder(
+                        passthrough ? context.getApplicationContext() : null)
+                        .setAudioOffloadSupportProvider(directPolicy)
+                        .setAudioTrackBuilderModifier(directPolicy::modifyAudioTrackBuilder)
+                        .build();
+        builder.setAudioOutputProvider(directPolicy.wrapOutputProvider(outputProvider));
         return builder.build();
     }
 

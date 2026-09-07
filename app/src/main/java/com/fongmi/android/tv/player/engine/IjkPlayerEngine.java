@@ -11,6 +11,7 @@ import androidx.media3.common.util.UnstableApi;
 
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.bean.Track;
+import com.fongmi.android.tv.player.AudioPlaybackDiagnostics;
 import com.fongmi.android.tv.player.PlaybackTrace;
 import com.fongmi.android.tv.player.PlaybackResourceClassifier;
 import com.fongmi.android.tv.player.PlaybackRoute;
@@ -212,6 +213,39 @@ public class IjkPlayerEngine implements PlayerEngine {
                 "",
                 "",
                 null);
+    }
+
+    @Override
+    public AudioPlaybackDiagnostics.Snapshot getAudioPlaybackDiagnostics() {
+        Format format = player.getSelectedAudioFormatSnapshot();
+        AudioPlaybackDiagnostics.Track track =
+                AudioPlaybackDiagnostics.track(format, "");
+        String decoderName = player.getAudioCodecInfoSnapshot();
+        AudioPlaybackDiagnostics.DecodeMode decodeMode = "PCM".equalsIgnoreCase(
+                track.codec()) ? AudioPlaybackDiagnostics.DecodeMode.NONE
+                : decoderName == null || decoderName.isBlank()
+                ? AudioPlaybackDiagnostics.DecodeMode.UNKNOWN
+                : AudioPlaybackDiagnostics.DecodeMode.SOFTWARE;
+        AudioPlaybackDiagnostics.OutputMode outputMode = decoderName == null
+                || decoderName.isBlank()
+                ? AudioPlaybackDiagnostics.OutputMode.UNKNOWN
+                : AudioPlaybackDiagnostics.OutputMode.PCM;
+        ErrorSnapshot error = player.getLastErrorSnapshot();
+        boolean decoderFailed = error != null
+                && error.stage() != null
+                && error.stage().ordinal() >= OpenStage.COMPONENT_OPENED.ordinal();
+        if (decoderFailed) {
+            AudioPlaybackDiagnostics.FailureReason failureReason = error.prepared()
+                    ? AudioPlaybackDiagnostics.FailureReason.DECODER_RUNTIME
+                    : AudioPlaybackDiagnostics.FailureReason.DECODER_INIT;
+            return new AudioPlaybackDiagnostics.Snapshot(track, track, decodeMode,
+                    decoderName, outputMode, 0, 0, false, "",
+                    AudioPlaybackDiagnostics.lastAttemptLevel(
+                            failureReason, outputMode, decodeMode),
+                    AudioPlaybackDiagnostics.RuntimeState.FAILED, failureReason);
+        }
+        return new AudioPlaybackDiagnostics.Snapshot(track, track, decodeMode,
+                decoderName, outputMode, 0, 0, false, "");
     }
 
     @Override

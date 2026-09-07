@@ -27,6 +27,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewConfiguration;
+import android.view.ViewParent;
 import android.view.WindowManager;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.ImageView;
@@ -220,6 +221,7 @@ import com.fongmi.android.tv.player.lyrics.LyricsLine;
 import com.fongmi.android.tv.player.lyrics.LyricsRepository;
 import com.fongmi.android.tv.player.lyrics.LyricsRequest;
 import com.fongmi.android.tv.player.lyrics.LyricsResult;
+import com.fongmi.android.tv.player.mpv.MpvConfigStore;
 import com.fongmi.android.tv.setting.LyricsSetting;
 import com.fongmi.android.tv.ui.custom.AudioPlayerBackgroundDrawable;
 import com.fongmi.android.tv.ui.custom.KaraokeResultView;
@@ -376,6 +378,13 @@ private int mAudioBackgroundRandomNonce;
     private PersonalRecommendationService.RecommendationPage mNativePersonalDoubanPage;
     private PersonalRecommendationService.RecommendationPage mNativePersonalAiPage;
     private Map<String, View> mActionButtons;
+    private final List<View> mCustomActionViews = new ArrayList<>();
+    private HorizontalScrollView mCustomLeftButtons;
+    private HorizontalScrollView mCustomRightButtons;
+    private HorizontalScrollView mCustomPortraitButtons;
+    private LinearLayout mCustomLeftButtonRow;
+    private LinearLayout mCustomRightButtonRow;
+    private LinearLayout mCustomPortraitButtonRow;
     private SiteViewModel mViewModel;
     private FlagAdapter mFlagAdapter;
     private VodPlayerUiController mPlayerUi;
@@ -1752,6 +1761,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         setupActionButtons();
         mBinding.video.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
             mPiP.update(this, view);
+            updateCustomButtonLayout();
             Log.d(SIZE_TAG, "video layout new=" + (right - left) + "x" + (bottom - top)
                     + " old=" + (oldRight - oldLeft) + "x" + (oldBottom - oldTop)
                     + " fullscreen=" + isFullscreen()
@@ -1796,6 +1806,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         addActionButton(PlayerButtonSetting.NEXT, mBinding.control.action.next);
         addActionButton(PlayerButtonSetting.EPISODES, mBinding.control.action.episodes);
         applyActionButtonSettings();
+        setupCustomActionButtons();
         setPlayParamsState();
     }
 
@@ -1803,8 +1814,141 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         mActionButtons.put(id, view);
     }
 
+    private void setupCustomActionButtons() {
+        ensureCustomButtonContainers();
+        for (View view : mCustomActionViews) {
+            ViewParent parent = view.getParent();
+            if (parent instanceof ViewGroup) ((ViewGroup) parent).removeView(view);
+        }
+        mCustomActionViews.clear();
+        mCustomLeftButtonRow.removeAllViews();
+        mCustomRightButtonRow.removeAllViews();
+        mCustomPortraitButtonRow.removeAllViews();
+        List<MpvConfigStore.CustomButton> buttons = MpvConfigStore.customButtons();
+        boolean landscape = isLand();
+        for (int index = 0; index < buttons.size(); index++) {
+            MpvConfigStore.CustomButton button = buttons.get(index);
+            if (!button.enabled) continue;
+            TextView view = new TextView(this);
+            view.setTextSize(13);
+            view.setTextColor(Color.WHITE);
+            view.setGravity(Gravity.CENTER);
+            view.setMinHeight(ResUtil.dp2px(40));
+            view.setMinWidth(ResUtil.dp2px(56));
+            view.setPadding(ResUtil.dp2px(10), ResUtil.dp2px(4), ResUtil.dp2px(10), ResUtil.dp2px(4));
+            view.setBackgroundResource(R.drawable.selector_control_sheet_button);
+            view.setText(button.title);
+            view.setSingleLine(true);
+            view.setMaxWidth(ResUtil.dp2px(144));
+            view.setEllipsize(TextUtils.TruncateAt.END);
+            view.setContentDescription(button.title);
+            view.setOnClickListener(item -> {
+                if (player().sendMpvCustomButton(button.id, false)) {
+                    toggleCustomButtonState(item);
+                }
+                setR1Callback();
+            });
+            view.setOnLongClickListener(item -> {
+                if (player().sendMpvCustomButton(button.id, true)) {
+                    toggleCustomButtonState(item);
+                }
+                setR1Callback();
+                return true;
+            });
+            if (Util.isLeanback()) {
+                view.setFocusable(true);
+                view.setFocusableInTouchMode(true);
+            }
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ResUtil.dp2px(40));
+            params.setMargins(ResUtil.dp2px(4), ResUtil.dp2px(2), ResUtil.dp2px(4), ResUtil.dp2px(2));
+            LinearLayout target = landscape
+                    ? (index < 4 ? mCustomLeftButtonRow : mCustomRightButtonRow)
+                    : mCustomPortraitButtonRow;
+            target.addView(view, params);
+            mCustomActionViews.add(view);
+        }
+        updateCustomButtonLayout();
+        updateCustomButtonVisibility();
+    }
+
+    private void toggleCustomButtonState(View view) {
+        view.setSelected(!view.isSelected());
+    }
+
+    private void ensureCustomButtonContainers() {
+        if (mCustomLeftButtons != null) return;
+        mCustomLeftButtons = createCustomButtonScroll();
+        mCustomRightButtons = createCustomButtonScroll();
+        mCustomPortraitButtons = createCustomButtonScroll();
+        mCustomLeftButtonRow = createCustomButtonRow(mCustomLeftButtons);
+        mCustomRightButtonRow = createCustomButtonRow(mCustomRightButtons);
+        mCustomPortraitButtonRow = createCustomButtonRow(mCustomPortraitButtons);
+        mCustomRightButtons.setFillViewport(true);
+        mCustomRightButtonRow.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
+        mCustomRightButtonRow.getLayoutParams().width = ViewGroup.LayoutParams.MATCH_PARENT;
+
+        FrameLayout.LayoutParams leftParams = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.START | Gravity.TOP);
+        FrameLayout.LayoutParams rightParams = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.END | Gravity.TOP);
+        int margin = ResUtil.dp2px(8);
+        leftParams.setMargins(margin, 0, margin, 0);
+        rightParams.setMargins(margin, 0, margin, 0);
+        mBinding.video.addView(mCustomLeftButtons, leftParams);
+        mBinding.video.addView(mCustomRightButtons, rightParams);
+
+        RelativeLayout.LayoutParams portraitParams = new RelativeLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        portraitParams.addRule(RelativeLayout.ABOVE, R.id.bottom);
+        portraitParams.setMargins(margin, 0, margin, ResUtil.dp2px(2));
+        ((ViewGroup) mBinding.control.getRoot()).addView(mCustomPortraitButtons, portraitParams);
+    }
+
+    private HorizontalScrollView createCustomButtonScroll() {
+        HorizontalScrollView scroll = new HorizontalScrollView(this);
+        scroll.setHorizontalScrollBarEnabled(false);
+        scroll.setFillViewport(false);
+        scroll.setClipToPadding(false);
+        scroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        return scroll;
+    }
+
+    private LinearLayout createCustomButtonRow(HorizontalScrollView scroll) {
+        LinearLayout row = new LinearLayout(this);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setClipChildren(false);
+        scroll.addView(row, new HorizontalScrollView.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        return row;
+    }
+
+    private void updateCustomButtonLayout() {
+        if (mCustomLeftButtons == null || mBinding.video.getWidth() <= 0) return;
+        boolean landscape = isLand();
+        if (!landscape) return;
+
+        int margin = ResUtil.dp2px(8);
+        int width = Math.max(ResUtil.dp2px(96), mBinding.video.getWidth() / 2 - margin * 2);
+        int height = Math.max(mCustomLeftButtons.getMeasuredHeight(), ResUtil.dp2px(40));
+        int top = Math.max(margin, Math.round(mBinding.video.getHeight() * 0.65f - height / 2f));
+        FrameLayout.LayoutParams leftParams = (FrameLayout.LayoutParams) mCustomLeftButtons.getLayoutParams();
+        FrameLayout.LayoutParams rightParams = (FrameLayout.LayoutParams) mCustomRightButtons.getLayoutParams();
+        leftParams.width = width;
+        rightParams.width = width;
+        leftParams.topMargin = top;
+        rightParams.topMargin = top;
+        mCustomLeftButtons.setLayoutParams(leftParams);
+        mCustomRightButtons.setLayoutParams(rightParams);
+    }
+
+    private void updateCustomButtonVisibility() {
+        boolean visible = service() != null && player().isMpv() && isVisible(mBinding.control.getRoot());
+        if (mCustomLeftButtons != null) mCustomLeftButtons.setVisibility(visible && isLand() ? View.VISIBLE : View.GONE);
+        if (mCustomRightButtons != null) mCustomRightButtons.setVisibility(visible && isLand() ? View.VISIBLE : View.GONE);
+        if (mCustomPortraitButtons != null) mCustomPortraitButtons.setVisibility(visible && !isLand() ? View.VISIBLE : View.GONE);
+        updateCustomButtonLayout();
+    }
+
     private void applyActionButtonVisibility() {
         if (mActionButtons != null) PlayerButtonSetting.applyVisibility(mActionButtons);
+        updateCustomButtonVisibility();
     }
 
     private void applyActionButtonSettings() {
@@ -4962,6 +5106,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         mBinding.control.top.setVisibility(isLock() ? View.GONE : View.VISIBLE);
         syncShortDramaControlLayout(shortDrama);
         mBinding.control.getRoot().setVisibility(View.VISIBLE);
+        updateCustomButtonVisibility();
         if (mOsd != null) mOsd.setControlsVisible(true);
         checkFullscreenImg();
         mBinding.control.getRoot().post(() -> PlayerControlFocusHelper.ensureFocus(mBinding.control.getRoot(), mBinding.control.play));
@@ -4974,6 +5119,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
 
     private void hideControl() {
         mBinding.control.getRoot().setVisibility(View.GONE);
+        updateCustomButtonVisibility();
         if (mOsd != null) mOsd.setControlsVisible(false);
         App.removeCallbacks(mR1);
         setOsdSuppressed(false);
@@ -8960,6 +9106,7 @@ private void checkOrientation() {
             return;
         }
         syncFullscreenForOrientation(newConfig.orientation);
+        setupCustomActionButtons();
         if (!isFullscreen()) {
             applyTmdbTabletVideoLayoutIfNeeded();
             if (mVod != null) bindTmdbTabletTopSummary(mVod);

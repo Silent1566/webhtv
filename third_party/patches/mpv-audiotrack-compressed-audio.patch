@@ -1,0 +1,1062 @@
+diff --git a/audio/aframe.c b/audio/aframe.c
+index fbba7a3..b22aae4 100644
+--- a/audio/aframe.c
++++ b/audio/aframe.c
+@@ -34,6 +34,9 @@ struct mp_aframe {
+     struct mp_chmap chmap;
+     // We support spdif formats, which are allocated as AV_SAMPLE_FMT_S16.
+     int format;
++    // Raw encoded frames have a variable number of bytes independent of the
++    // audio sample count stored in AVFrame::nb_samples.
++    size_t data_size;
+     double pts;
+     double speed;
+ };
+@@ -67,6 +70,7 @@ struct mp_aframe *mp_aframe_new_ref(struct mp_aframe *frame)
+
+     dst->chmap = frame->chmap;
+     dst->format = frame->format;
++    dst->data_size = frame->data_size;
+     dst->pts = frame->pts;
+     dst->speed = frame->speed;
+ 
+@@ -87,6 +91,7 @@ void mp_aframe_reset(struct mp_aframe *frame)
+     av_frame_unref(frame->av_frame);
+     frame->chmap.num = 0;
+     frame->format = 0;
++    frame->data_size = 0;
+     frame->pts = MP_NOPTS_VALUE;
+     frame->speed = 1.0;
+ }
+@@ -306,9 +311,10 @@ bool mp_aframe_set_format(struct mp_aframe *frame, int format)
+         return false;
+     enum AVSampleFormat av_format = af_to_avformat(format);
+     if (av_format == AV_SAMPLE_FMT_NONE && format) {
+-        if (!af_fmt_is_spdif(format))
++        if (!af_fmt_is_spdif(format) && !af_fmt_is_encoded(format))
+             return false;
+-        av_format = AV_SAMPLE_FMT_S16;
++        if (af_fmt_is_spdif(format))
++            av_format = AV_SAMPLE_FMT_S16;
+     }
+     frame->format = format;
+     frame->av_frame->format = av_format;
+@@ -391,10 +397,28 @@ int mp_aframe_get_planes(struct mp_aframe *frame)
+ size_t mp_aframe_get_sstride(struct mp_aframe *frame)
+ {
+     int format = mp_aframe_get_format(frame);
++    if (af_fmt_is_encoded(format))
++        return 1;
+     return af_fmt_to_bytes(format) *
+            (af_fmt_is_planar(format) ? 1 : mp_aframe_get_channels(frame));
+ }
+ 
++size_t mp_aframe_get_data_size(struct mp_aframe *frame)
++{
++    if (af_fmt_is_encoded(frame->format))
++        return frame->data_size;
++    return (size_t)mp_aframe_get_total_plane_samples(frame) *
++           af_fmt_to_bytes(frame->format);
++}
++
++bool mp_aframe_set_data_size(struct mp_aframe *frame, size_t size)
++{
++    if (!af_fmt_is_encoded(frame->format) || !mp_aframe_is_allocated(frame))
++        return false;
++    frame->data_size = size;
++    return true;
++}
++
+ // Return total number of samples on each plane.
+ int mp_aframe_get_total_plane_samples(struct mp_aframe *frame)
+ {
+@@ -420,6 +444,16 @@ void mp_aframe_skip_samples(struct mp_aframe *f, int samples)
+ {
+     mp_assert(samples >= 0 && samples <= mp_aframe_get_size(f));
+ 
++    if (af_fmt_is_encoded(f->format)) {
++        // Raw access units are indivisible. Consumers must either keep the
++        // complete packet or drop it; partial byte slicing would corrupt it.
++        if (samples == mp_aframe_get_size(f)) {
++            f->av_frame->nb_samples = 0;
++            f->data_size = 0;
++        }
++        return;
++    }
++
+     if (av_frame_make_writable(f->av_frame) < 0)
+         return; // go complain to ffmpeg
+ 
+@@ -500,7 +534,8 @@ void mp_aframe_clip_timestamps(struct mp_aframe *f, double start, double end)
+             if (f->pts >= end) {
+                 f->av_frame->nb_samples = 0;
+             } else {
+-                if (af_fmt_is_spdif(mp_aframe_get_format(f)))
++                if (af_fmt_is_spdif(mp_aframe_get_format(f)) ||
++                    af_fmt_is_encoded(mp_aframe_get_format(f)))
+                     return;
+                 int new = (end - f->pts) * rate;
+                 f->av_frame->nb_samples = MPCLAMP(new, 0, f->av_frame->nb_samples);
+@@ -513,7 +548,8 @@ void mp_aframe_clip_timestamps(struct mp_aframe *f, double start, double end)
+                 f->av_frame->nb_samples = 0;
+                 f->pts = f_end;
+             } else {
+-                if (af_fmt_is_spdif(mp_aframe_get_format(f)))
++                if (af_fmt_is_spdif(mp_aframe_get_format(f)) ||
++                    af_fmt_is_encoded(mp_aframe_get_format(f)))
+                     return;
+                 int skip = (start - f->pts) * rate;
+                 skip = MPCLAMP(skip, 0, f->av_frame->nb_samples);
+@@ -527,6 +563,9 @@ bool mp_aframe_copy_samples(struct mp_aframe *dst, int dst_offset,
+                             struct mp_aframe *src, int src_offset,
+                             int samples)
+ {
++    if (af_fmt_is_encoded(mp_aframe_get_format(dst)) ||
++        af_fmt_is_encoded(mp_aframe_get_format(src)))
++        return false;
+     if (!mp_aframe_config_equals(dst, src))
+         return false;
+ 
+@@ -552,6 +591,8 @@ bool mp_aframe_copy_samples(struct mp_aframe *dst, int dst_offset,
+ 
+ bool mp_aframe_set_silence(struct mp_aframe *f, int offset, int samples)
+ {
++    if (af_fmt_is_encoded(mp_aframe_get_format(f)))
++        return false;
+     if (mp_aframe_get_size(f) < offset + samples)
+         return false;
+ 
+@@ -610,6 +651,8 @@ bool mp_aframe_reverse(struct mp_aframe *f)
+ 
+ int mp_aframe_approx_byte_size(struct mp_aframe *frame)
+ {
++    if (af_fmt_is_encoded(frame->format))
++        return sizeof(*frame) + mp_aframe_get_data_size(frame);
+     // God damn, AVFrame is too fucking annoying. Just go with the size that
+     // allocating a new frame would use.
+     int planes = mp_aframe_get_planes(frame);
+@@ -638,17 +681,33 @@ static void mp_aframe_pool_destructor(void *p)
+ // Like mp_aframe_allocate(), but use the pool to allocate data.
+ int mp_aframe_pool_allocate(struct mp_aframe_pool *pool, struct mp_aframe *frame,
+                             int samples)
++{
++    size_t data_size = af_fmt_is_encoded(frame->format)
++        ? (size_t)MPMAX(samples, 1) : 0;
++    return mp_aframe_pool_allocate_size(pool, frame, samples, data_size);
++}
++
++int mp_aframe_pool_allocate_size(struct mp_aframe_pool *pool,
++                                 struct mp_aframe *frame, int samples,
++                                 size_t data_size)
+ {
+     int planes = mp_aframe_get_planes(frame);
+     size_t sstride = mp_aframe_get_sstride(frame);
+     // FFmpeg hardcodes similar hidden possibly-requirements in a number of
+     // places: av_frame_get_buffer(), libavcodec's get_buffer(), mem.c,
+     // probably more.
+-    int align_samples = MP_ALIGN_UP(MPMAX(samples, 1), 32);
+-    int plane_size = MP_ALIGN_UP(sstride * align_samples, 64);
+-    int size = plane_size * planes;
++    size_t plane_size;
++    if (af_fmt_is_encoded(frame->format)) {
++        if (!data_size || data_size > INT_MAX)
++            return -1;
++        plane_size = MP_ALIGN_UP(data_size, 64);
++    } else {
++        int align_samples = MP_ALIGN_UP(MPMAX(samples, 1), 32);
++        plane_size = MP_ALIGN_UP(sstride * align_samples, 64);
++    }
++    size_t size = plane_size * planes;
+ 
+-    if (size <= 0 || mp_aframe_is_allocated(frame))
++    if (size == 0 || size > INT_MAX || mp_aframe_is_allocated(frame))
+         return -1;
+ 
+     if (!pool->avpool || size > pool->element_size) {
+@@ -679,7 +738,8 @@ int mp_aframe_pool_allocate(struct mp_aframe_pool *pool, struct mp_aframe *frame
+     av_frame->buf[0] = av_buffer_pool_get(pool->avpool);
+     if (!av_frame->buf[0])
+         return -1;
+-    av_frame->linesize[0] = samples * sstride;
++    av_frame->linesize[0] = af_fmt_is_encoded(frame->format)
++        ? data_size : samples * sstride;
+     for (int n = 0; n < planes; n++)
+         av_frame->extended_data[n] = av_frame->buf[0]->data + n * plane_size;
+     if (planes > AV_NUM_DATA_POINTERS) {
+@@ -687,6 +747,7 @@ int mp_aframe_pool_allocate(struct mp_aframe_pool *pool, struct mp_aframe *frame
+             av_frame->data[n] = av_frame->extended_data[n];
+     }
+     av_frame->nb_samples = samples;
++    frame->data_size = af_fmt_is_encoded(frame->format) ? data_size : 0;
+ 
+     return 0;
+ }
+diff --git a/audio/aframe.h b/audio/aframe.h
+index d19c7e8..dfb8d4a 100644
+--- a/audio/aframe.h
++++ b/audio/aframe.h
+@@ -51,6 +51,8 @@ void mp_aframe_mul_speed(struct mp_aframe *frame, double factor);
+ int mp_aframe_get_planes(struct mp_aframe *frame);
+ int mp_aframe_get_total_plane_samples(struct mp_aframe *frame);
+ size_t mp_aframe_get_sstride(struct mp_aframe *frame);
++size_t mp_aframe_get_data_size(struct mp_aframe *frame);
++bool mp_aframe_set_data_size(struct mp_aframe *frame, size_t size);
+ 
+ bool mp_aframe_reverse(struct mp_aframe *frame);
+ 
+@@ -73,3 +75,6 @@ struct mp_aframe_pool;
+ struct mp_aframe_pool *mp_aframe_pool_create(void *ta_parent);
+ int mp_aframe_pool_allocate(struct mp_aframe_pool *pool, struct mp_aframe *frame,
+                             int samples);
++int mp_aframe_pool_allocate_size(struct mp_aframe_pool *pool,
++                                 struct mp_aframe *frame, int samples,
++                                 size_t data_size);
+diff --git a/audio/decode/ad_spdif.c b/audio/decode/ad_spdif.c
+index 0bce4c6..ccd83ad 100644
+--- a/audio/decode/ad_spdif.c
++++ b/audio/decode/ad_spdif.c
+@@ -50,6 +50,7 @@ struct spdifContext {
+     uint8_t          out_buffer[OUTBUF_SIZE];
+     bool             need_close;
+     bool             use_dts_hd;
++    bool             raw_compressed;
+     bool             codec_params_probed;
+     int              codec_profile;
+     int              codec_rate;
+@@ -350,6 +351,54 @@ fail:
+     return -1;
+ }
+ 
++static int init_raw_filter(struct mp_filter *da)
++{
++    struct spdifContext *ctx = da->priv;
++    struct mp_codec_params *codec = ctx->codec;
++    int format = ctx->codec_id == AV_CODEC_ID_AAC ? AF_FORMAT_AAC : AF_FORMAT_MP3;
++    int rate = codec->samplerate;
++    int channels = codec->channels.num;
++
++    if ((!rate || !channels) && codec->lav_codecpar) {
++        if (!rate)
++            rate = codec->lav_codecpar->sample_rate;
++        if (!channels)
++            channels = codec->lav_codecpar->ch_layout.nb_channels;
++    }
++    if (rate <= 0)
++        rate = ctx->codec_id == AV_CODEC_ID_MP3 ? 44100 : 48000;
++    if (channels <= 0)
++        channels = 2;
++
++    ctx->fmt = mp_aframe_create();
++    talloc_steal(ctx, ctx->fmt);
++    struct mp_chmap chmap;
++    mp_chmap_from_channels(&chmap, channels);
++    if (!mp_aframe_set_chmap(ctx->fmt, &chmap) ||
++        !mp_aframe_set_format(ctx->fmt, format) ||
++        !mp_aframe_set_rate(ctx->fmt, rate))
++    {
++        TA_FREEP(&ctx->fmt);
++        return -1;
++    }
++    ctx->codec_rate = rate;
++    return 0;
++}
++
++static int raw_packet_samples(struct spdifContext *ctx,
++                              const struct demux_packet *pkt)
++{
++    int samples = 0;
++    if (ctx->codec->lav_codecpar)
++        samples = av_get_audio_frame_duration2(ctx->codec->lav_codecpar, pkt->len);
++    if (samples <= 0) {
++        // AAC-LC and MPEG audio packets used by AudioTrack are complete access
++        // units in the demuxer. These defaults cover packets without codecpar.
++        samples = ctx->codec_id == AV_CODEC_ID_AAC ? 1024 : 1152;
++    }
++    return samples;
++}
++
+ static void ad_spdif_process(struct mp_filter *da)
+ {
+     struct spdifContext *spdif_ctx = da->priv;
+@@ -374,6 +423,33 @@ static void ad_spdif_process(struct mp_filter *da)
+     double pts = mpkt->pts;
+     bool drop_packet = false;
+ 
++    if (spdif_ctx->raw_compressed) {
++        if (!spdif_ctx->fmt && init_raw_filter(da) < 0)
++            goto done;
++
++        int samples = raw_packet_samples(spdif_ctx, mpkt);
++        out = mp_aframe_new_ref(spdif_ctx->fmt);
++        if (!out || mp_aframe_pool_allocate_size(spdif_ctx->pool, out,
++                                                 samples, mpkt->len) < 0)
++        {
++            TA_FREEP(&out);
++            goto done;
++        }
++
++        uint8_t **data = mp_aframe_get_data_rw(out);
++        if (!data) {
++            TA_FREEP(&out);
++            goto done;
++        }
++        memcpy(data[0], mpkt->buffer, mpkt->len);
++        if (!mp_aframe_set_data_size(out, mpkt->len)) {
++            TA_FREEP(&out);
++            goto done;
++        }
++        mp_aframe_set_pts(out, pts);
++        goto done;
++    }
++
+     if (!spdif_ctx->avpkt) {
+         spdif_ctx->avpkt = av_packet_alloc();
+         MP_HANDLE_OOM(spdif_ctx->avpkt);
+@@ -475,13 +551,16 @@ struct mp_decoder_list *select_spdif_codec(const char *codec, const char *pref)
+         return list;
+ 
+     bool spdif_allowed = false, dts_hd_allowed = false;
++    bool raw_allowed = false;
+     bstr sel = bstr0(pref);
+     while (sel.len) {
+         bstr decoder;
+         bstr_split_tok(sel, ",", &decoder, &sel);
+         if (decoder.len) {
+-            if (bstr_equals0(decoder, codec))
++            if (bstr_equals0(decoder, codec)) {
+                 spdif_allowed = true;
++                raw_allowed = strcmp(codec, "aac") == 0 || strcmp(codec, "mp3") == 0;
++            }
+             if (bstr_equals0(decoder, "dts-hd") && strcmp(codec, "dts") == 0)
+                 spdif_allowed = dts_hd_allowed = true;
+         }
+@@ -490,11 +569,14 @@ struct mp_decoder_list *select_spdif_codec(const char *codec, const char *pref)
+     if (!spdif_allowed)
+         return list;
+ 
+-    const char *suffix_name = dts_hd_allowed ? "dts_hd" : codec;
++    const char *suffix_name = raw_allowed ?
++        (strcmp(codec, "aac") == 0 ? "raw_aac" : "raw_mp3") :
++        (dts_hd_allowed ? "dts_hd" : codec);
+     char name[80];
+     snprintf(name, sizeof(name), "spdif_%s", suffix_name);
+     mp_add_decoder(list, codec, name,
+-                   "libavformat/spdifenc audio pass-through decoder");
++                   raw_allowed ? "AudioTrack compressed access-unit decoder" :
++                                  "libavformat/spdifenc audio pass-through decoder");
+     return list;
+ }
+ 
+@@ -525,6 +607,9 @@ static struct mp_decoder *create(struct mp_filter *parent,
+     spdif_ctx->pool = mp_aframe_pool_create(spdif_ctx);
+     spdif_ctx->public.f = da;
+ 
++    if (strcmp(decoder, "spdif_raw_aac") == 0 ||
++        strcmp(decoder, "spdif_raw_mp3") == 0)
++        spdif_ctx->raw_compressed = true;
+     if (strcmp(decoder, "spdif_dts_hd") == 0)
+         spdif_ctx->use_dts_hd = true;
+ 
+diff --git a/audio/format.c b/audio/format.c
+index 4441456..661f1fa 100644
+--- a/audio/format.c
++++ b/audio/format.c
+@@ -35,6 +35,8 @@ int af_fmt_to_bytes(int format)
+     }
+     if (af_fmt_is_spdif(format))
+         return 2;
++    if (af_fmt_is_encoded(format))
++        return 1;
+     return 0;
+ }
+ 
+@@ -53,7 +55,8 @@ bool af_fmt_is_float(int format)
+ // true for both unsigned and signed ints
+ bool af_fmt_is_int(int format)
+ {
+-    return format && !af_fmt_is_spdif(format) && !af_fmt_is_float(format);
++    return format && !af_fmt_is_spdif(format) && !af_fmt_is_encoded(format) &&
++           !af_fmt_is_float(format);
+ }
+ 
+ bool af_fmt_is_spdif(int format)
+@@ -61,9 +64,15 @@ bool af_fmt_is_spdif(int format)
+     return af_format_sample_alignment(format) > 1;
+ }
+ 
++bool af_fmt_is_encoded(int format)
++{
++    return format == AF_FORMAT_AAC || format == AF_FORMAT_MP3;
++}
++
+ bool af_fmt_is_pcm(int format)
+ {
+-    return af_fmt_is_valid(format) && !af_fmt_is_spdif(format);
++    return af_fmt_is_valid(format) && !af_fmt_is_spdif(format) &&
++           !af_fmt_is_encoded(format);
+ }
+ 
+ static const int planar_formats[][2] = {
+@@ -128,6 +137,8 @@ const char *af_fmt_to_str(int format)
+     case AF_FORMAT_S64P:        return "s64p";
+     case AF_FORMAT_FLOATP:      return "floatp";
+     case AF_FORMAT_DOUBLEP:     return "doublep";
++    case AF_FORMAT_AAC:         return "aac";
++    case AF_FORMAT_MP3:         return "mp3";
+     case AF_FORMAT_S_AAC:       return "spdif-aac";
+     case AF_FORMAT_S_AC3:       return "spdif-ac3";
+     case AF_FORMAT_S_DTS:       return "spdif-dts";
+@@ -255,6 +266,9 @@ int af_select_best_samplerate(int src_samplerate, const int *available)
+ int af_format_sample_alignment(int format)
+ {
+     switch (format) {
++    case AF_FORMAT_AAC:
++    case AF_FORMAT_MP3:
++        return 1;
+     case AF_FORMAT_S_AAC:       return 16384 / 4;
+     case AF_FORMAT_S_AC3:       return 6144 / 4;
+     case AF_FORMAT_S_DTSHD:     return 32768 / 16;
+diff --git a/audio/format.h b/audio/format.h
+index bdd4744..239375a 100644
+--- a/audio/format.h
++++ b/audio/format.h
+@@ -39,6 +39,11 @@ enum af_format {
+     AF_FORMAT_FLOATP,
+     AF_FORMAT_DOUBLEP,
+ 
++    // Raw compressed access units. Unlike AF_FORMAT_S_* these are not
++    // IEC61937 carriers and must not be treated as PCM samples.
++    AF_FORMAT_AAC,
++    AF_FORMAT_MP3,
++
+     // All of these use IEC61937 framing, and otherwise pretend to be like PCM.
+     AF_FORMAT_S_AAC,
+     AF_FORMAT_S_AC3,
+@@ -61,6 +66,7 @@ bool af_fmt_is_float(int format);
+ bool af_fmt_is_int(int format);
+ bool af_fmt_is_planar(int format);
+ bool af_fmt_is_spdif(int format);
++bool af_fmt_is_encoded(int format);
+ bool af_fmt_is_pcm(int format);
+ 
+ int af_fmt_to_planar(int format);
+diff --git a/audio/out/ao_audiotrack.c b/audio/out/ao_audiotrack.c
+index 50b7ec4..ac1b5cb 100644
+--- a/audio/out/ao_audiotrack.c
++++ b/audio/out/ao_audiotrack.c
+@@ -23,6 +23,7 @@
+ #include "ao.h"
+ #include "internal.h"
++#include "audio/aframe.h"
+ #include "common/msg.h"
+ #include "audio/format.h"
+@@ -62,6 +63,8 @@ struct priv {
+ 
+     bool cfg_pcm_float;
+     int cfg_session_id;
++    bool compressed;
++    bool offload;
+ 
+     bool thread_terminate;
+     bool thread_created;
+@@ -190,6 +192,8 @@ static struct JNIAudioFormat {
+     jint ENCODING_PCM_16BIT;
+     jint ENCODING_PCM_FLOAT;
+     jint ENCODING_IEC61937;
++    jint ENCODING_MP3;
++    jint ENCODING_AAC_LC;
+     jint CHANNEL_OUT_MONO;
+     jint CHANNEL_OUT_STEREO;
+     jint CHANNEL_OUT_FRONT_CENTER;
+@@ -205,6 +209,8 @@ static const struct MPJniField AudioFormat_mapping[] = {
+     {"ENCODING_PCM_16BIT", "I", MP_JNI_STATIC_FIELD_AS_INT, OFFSET(ENCODING_PCM_16BIT), 1},
+     {"ENCODING_PCM_FLOAT", "I", MP_JNI_STATIC_FIELD_AS_INT, OFFSET(ENCODING_PCM_FLOAT), 1},
+     {"ENCODING_IEC61937", "I", MP_JNI_STATIC_FIELD_AS_INT, OFFSET(ENCODING_IEC61937), 0},
++    {"ENCODING_MP3", "I", MP_JNI_STATIC_FIELD_AS_INT, OFFSET(ENCODING_MP3), 0},
++    {"ENCODING_AAC_LC", "I", MP_JNI_STATIC_FIELD_AS_INT, OFFSET(ENCODING_AAC_LC), 0},
+     {"CHANNEL_OUT_MONO", "I", MP_JNI_STATIC_FIELD_AS_INT, OFFSET(CHANNEL_OUT_MONO), 1},
+     {"CHANNEL_OUT_STEREO", "I", MP_JNI_STATIC_FIELD_AS_INT, OFFSET(CHANNEL_OUT_STEREO), 1},
+     {"CHANNEL_OUT_FRONT_CENTER", "I", MP_JNI_STATIC_FIELD_AS_INT, OFFSET(CHANNEL_OUT_FRONT_CENTER), 1},
+@@ -235,3 +238,32 @@ static const struct MPJniField AudioFormatBuilder_mapping[] = {
+     {0}
+ };
+ #undef OFFSET
++
++static struct JNIAudioTrackBuilder {
++    jclass clazz;
++    jmethodID ctor;
++    jmethodID setAudioAttributes;
++    jmethodID setAudioFormat;
++    jmethodID setTransferMode;
++    jmethodID setBufferSizeInBytes;
++    jmethodID setSessionId;
++    jmethodID setOffloadedPlayback;
++    jmethodID build;
++} AudioTrackBuilder;
++#define OFFSET(member) offsetof(struct JNIAudioTrackBuilder, member)
++static const struct MPJniField AudioTrackBuilder_mapping[] = {
++    {"android/media/AudioTrack$Builder", NULL, MP_JNI_CLASS, OFFSET(clazz), 0},
++    {"<init>", "()V", MP_JNI_METHOD, OFFSET(ctor), 0},
++    {"setAudioAttributes", "(Landroid/media/AudioAttributes;)Landroid/media/AudioTrack$Builder;", MP_JNI_METHOD, OFFSET(setAudioAttributes), 0},
++    {"setAudioFormat", "(Landroid/media/AudioFormat;)Landroid/media/AudioTrack$Builder;", MP_JNI_METHOD, OFFSET(setAudioFormat), 0},
++    {"setTransferMode", "(I)Landroid/media/AudioTrack$Builder;", MP_JNI_METHOD, OFFSET(setTransferMode), 0},
++    {"setBufferSizeInBytes", "(I)Landroid/media/AudioTrack$Builder;", MP_JNI_METHOD, OFFSET(setBufferSizeInBytes), 0},
++    {"setSessionId", "(I)Landroid/media/AudioTrack$Builder;", MP_JNI_METHOD, OFFSET(setSessionId), 0},
++    {"setOffloadedPlayback", "(Z)Landroid/media/AudioTrack$Builder;", MP_JNI_METHOD, OFFSET(setOffloadedPlayback), 0},
++    {"build", "()Landroid/media/AudioTrack;", MP_JNI_METHOD, OFFSET(build), 0},
++    {0}
++};
++#undef OFFSET
+ static struct JNIBuildVersion {
+     jclass clazz;
+     jint SDK_INT;
+@@ -288,12 +320,46 @@ static const struct {
+     ENTRY(AudioAttributesBuilder),
+     ENTRY(AudioFormat),
+     ENTRY(AudioFormatBuilder),
++    ENTRY(AudioTrackBuilder),
+     ENTRY(BuildVersion),
+     ENTRY(AudioManager),
+     ENTRY(AudioTimestamp),
+ };
+ #undef ENTRY
+ 
++static jobject AudioTrack_Build(struct ao *ao, jobject attr, jobject format,
++                                bool offload)
++{
++    JNIEnv *env = MP_JNI_GET_ENV(ao);
++    if (!env)
++        return NULL;
++    struct priv *p = ao->priv;
++    jobject builder = MP_JNI_NEW(AudioTrackBuilder.clazz, AudioTrackBuilder.ctor);
++    if (MP_JNI_EXCEPTION_LOG(ao) < 0 || !builder)
++        return NULL;
++
++    jobject tmp = MP_JNI_CALL_OBJECT(builder, AudioTrackBuilder.setAudioAttributes, attr);
++    MP_JNI_LOCAL_FREEP(&tmp);
++    tmp = MP_JNI_CALL_OBJECT(builder, AudioTrackBuilder.setAudioFormat, format);
++    MP_JNI_LOCAL_FREEP(&tmp);
++    tmp = MP_JNI_CALL_OBJECT(builder, AudioTrackBuilder.setTransferMode,
++                             AudioTrack.MODE_STREAM);
++    MP_JNI_LOCAL_FREEP(&tmp);
++    tmp = MP_JNI_CALL_OBJECT(builder, AudioTrackBuilder.setBufferSizeInBytes, p->size);
++    MP_JNI_LOCAL_FREEP(&tmp);
++    tmp = MP_JNI_CALL_OBJECT(builder, AudioTrackBuilder.setSessionId, p->cfg_session_id);
++    MP_JNI_LOCAL_FREEP(&tmp);
++    if (AudioTrackBuilder.setOffloadedPlayback && BuildVersion.SDK_INT >= 29)
++    {
++        tmp = MP_JNI_CALL_OBJECT(builder, AudioTrackBuilder.setOffloadedPlayback,
++                                 offload ? JNI_TRUE : JNI_FALSE);
++        MP_JNI_LOCAL_FREEP(&tmp);
++    }
++    jobject result = MP_JNI_CALL_OBJECT(builder, AudioTrackBuilder.build);
++    MP_JNI_LOCAL_FREEP(&builder);
++    return result;
++}
++
+ static int AudioTrack_New(struct ao *ao)
+ {
+     struct priv *p = ao->priv;
+@@ -328,15 +391,28 @@ static int AudioTrack_New(struct ao *ao)
+         jobject attr = MP_JNI_CALL_OBJECT(attr_builder, AudioAttributesBuilder.build);
+         MP_JNI_LOCAL_FREEP(&attr_builder);
+ 
+-        audiotrack = MP_JNI_NEW(
+-            AudioTrack.clazz,
+-            AudioTrack.ctorV21,
+-            attr,
+-            format,
+-            p->size,
+-            AudioTrack.MODE_STREAM,
+-            p->cfg_session_id
+-        );
++        if (p->compressed && AudioTrackBuilder.clazz &&
++            AudioTrackBuilder.ctor && AudioTrackBuilder.build)
++        {
++            bool can_offload = AudioTrackBuilder.setOffloadedPlayback &&
++                               BuildVersion.SDK_INT >= 29;
++            audiotrack = AudioTrack_Build(ao, attr, format, can_offload);
++            if (MP_JNI_EXCEPTION_LOG(ao) < 0 ||
++                (audiotrack && MP_JNI_CALL_INT(audiotrack, AudioTrack.getState)
++                    != AudioTrack.STATE_INITIALIZED)) {
++                if (audiotrack) {
++                    MP_JNI_CALL_VOID(audiotrack, AudioTrack.release);
++                    MP_JNI_EXCEPTION_LOG(ao);
++                    MP_JNI_LOCAL_FREEP(&audiotrack);
++                }
++                MP_VERBOSE(ao, "Offloaded AudioTrack rejected; retrying direct encoded output\n");
++                audiotrack = AudioTrack_Build(ao, attr, format, false);
++                if (MP_JNI_EXCEPTION_LOG(ao) < 0 ||
++                    (audiotrack && MP_JNI_CALL_INT(audiotrack, AudioTrack.getState)
++                        != AudioTrack.STATE_INITIALIZED)) {
++                    if (audiotrack) {
++                        MP_JNI_CALL_VOID(audiotrack, AudioTrack.release);
++                        MP_JNI_EXCEPTION_LOG(ao);
++                        MP_JNI_LOCAL_FREEP(&audiotrack);
++                    }
++                    audiotrack = NULL;
++                }
++                p->offload = false;
++            } else {
++                p->offload = can_offload;
++            }
++        } else {
++            audiotrack = MP_JNI_NEW(
++                AudioTrack.clazz,
++                AudioTrack.ctorV21,
++                attr,
++                format,
++                p->size,
++                AudioTrack.MODE_STREAM,
++                p->cfg_session_id
++            );
++        }
+ 
+         MP_JNI_LOCAL_FREEP(&format);
+         MP_JNI_LOCAL_FREEP(&attr);
+@@ -501,16 +577,26 @@ static double AudioTrack_getLatency(struct ao *ao)
+     return MPCLAMP(delay, 0.0, 2.0);
+ }
+ 
+-static int AudioTrack_write(struct ao *ao, int len)
++static int AudioTrack_write(struct ao *ao, const void *source, int len)
+ {
+     struct priv *p = ao->priv;
+     if (!p->audiotrack)
+         return -1;
+     JNIEnv *env = MP_JNI_GET_ENV(ao);
+-    void *buf = p->chunk;
++    void *buf = source ? (void *)source : p->chunk;
+ 
+     jint ret;
+-    if (p->format == AudioFormat.ENCODING_IEC61937) {
++    if (p->compressed) {
++        if (len > p->chunksize)
++            return -1;
++        memcpy(p->chunk, buf, len);
++        jobject bbuf = MP_JNI_CALL_OBJECT(p->bbuf, ByteBuffer.clear);
++        if (MP_JNI_EXCEPTION_LOG(ao) < 0) return -1;
++        MP_JNI_LOCAL_FREEP(&bbuf);
++        ret = MP_JNI_CALL_INT(p->audiotrack, AudioTrack.writeBufferV21,
++                              p->bbuf, len, AudioTrack.WRITE_BLOCKING);
++        if (MP_JNI_EXCEPTION_LOG(ao) < 0) return -1;
++    } else if (p->format == AudioFormat.ENCODING_IEC61937) {
+         (*env)->SetShortArrayRegion(env, p->shortarray, 0, len / 2, buf);
+         if (MP_JNI_EXCEPTION_LOG(ao) < 0) return -1;
+         ret = MP_JNI_CALL_INT(p->audiotrack, AudioTrack.writeShortV23, p->shortarray, 0, len / 2, AudioTrack.WRITE_BLOCKING);
+@@ -598,17 +684,43 @@ static MP_THREAD_VOID ao_thread(void *arg)
+             int64_t ts = mp_time_ns();
+             ts += MP_TIME_S_TO_NS(read_samples / (double)(ao->samplerate));
+             ts += MP_TIME_S_TO_NS(AudioTrack_getLatency(ao));
+-            int samples = ao_read_data(ao, &p->chunk, read_samples, ts, NULL, false, false);
+-            int ret = AudioTrack_write(ao, samples * ao->sstride);
+-            if (ret >= 0) {
+-                p->written_frames += ret / ao->sstride;
+-            } else if (ret == AudioManager.ERROR_DEAD_OBJECT) {
+-                MP_WARN(ao, "AudioTrack.write failed with ERROR_DEAD_OBJECT. Recreating AudioTrack...\n");
+-                if (AudioTrack_Recreate(ao) < 0) {
+-                    MP_ERR(ao, "AudioTrack_Recreate failed\n");
++            if (p->compressed) {
++                struct mp_aframe *frame = ao_read_frame(ao);
++                if (!frame) {
++                    mp_cond_timedwait(&p->wakeup, &p->lock, MP_TIME_MS_TO_NS(20));
++                    continue;
++                }
++                uint8_t **data = mp_aframe_get_data_ro(frame);
++                size_t size = mp_aframe_get_data_size(frame);
++                int ret = data && size <= INT_MAX
++                        ? AudioTrack_write(ao, data[0], size) : -1;
++                if (ret == (int)size)
++                    p->written_frames += mp_aframe_get_size(frame);
++                else if (ret >= 0)
++                    ret = -1;
++                talloc_free(frame);
++                if (ret == AudioManager.ERROR_DEAD_OBJECT) {
++                    MP_WARN(ao, "Compressed AudioTrack died; requesting one-shot PCM fallback\n");
++                    ao_request_reload(ao);
++                    break;
++                } else if (ret < 0) {
++                    MP_ERR(ao, "Compressed AudioTrack.write failed with %d\n", ret);
++                    ao_request_reload(ao);
++                    break;
+                 }
+             } else {
+-                MP_ERR(ao, "AudioTrack.write failed with %d\n", ret);
++                int samples = ao_read_data(ao, &p->chunk, read_samples, ts, NULL, false, false);
++                int ret = AudioTrack_write(ao, NULL, samples * ao->sstride);
++                if (ret >= 0) {
++                    p->written_frames += ret / ao->sstride;
++                } else if (ret == AudioManager.ERROR_DEAD_OBJECT) {
++                    MP_WARN(ao, "AudioTrack.write failed with ERROR_DEAD_OBJECT. Recreating AudioTrack...\n");
++                    if (AudioTrack_Recreate(ao) < 0) {
++                        MP_ERR(ao, "AudioTrack_Recreate failed\n");
++                    }
++                } else {
++                    MP_ERR(ao, "AudioTrack.write failed with %d\n", ret);
++                }
+             }
+         } else {
+             mp_cond_timedwait(&p->wakeup, &p->lock, MP_TIME_MS_TO_NS(300));
+@@ -672,7 +784,15 @@ static int init(struct ao *ao)
+     if (init_jni(ao) < 0)
+         return -1;
+ 
+-    if (af_fmt_is_spdif(ao->format)) {
++    p->compressed = af_fmt_is_encoded(ao->format);
++    if (p->compressed) {
++        p->format = ao->format == AF_FORMAT_AAC
++                ? AudioFormat.ENCODING_AAC_LC : AudioFormat.ENCODING_MP3;
++        if (!p->format || !AudioTrack.writeBufferV21) {
++            MP_ERR(ao, "compressed AudioTrack requires API21 ByteBuffer writes\n");
++            return -1;
++        }
++    } else if (af_fmt_is_spdif(ao->format)) {
+         p->format = AudioFormat.ENCODING_IEC61937;
+         if (!p->format || !AudioTrack.writeShortV23) {
+             MP_ERR(ao, "spdif passthrough not supported by API\n");
+@@ -713,13 +713,21 @@ static int init(struct ao *ao)
+     if (p->format == AudioFormat.ENCODING_IEC61937) {
+         // Android documents a stereo channel mask for IEC61937, but the
+         // mature VLC AudioTrack backend uses 7.1 for TrueHD because several
+         // Android TV firmwares reject or down-route its 8-channel carrier
+         // when it is declared as stereo.
+         if (ao->format == AF_FORMAT_S_TRUEHD) {
+             MP_VERBOSE(ao, "Using 7.1 IEC61937 carrier mask for TrueHD\n");
+             p->channel_config = AudioFormat.CHANNEL_OUT_7POINT1_SURROUND;
+         } else if (BuildVersion.SDK_INT >= ANDROID_API_LEVEL_S &&
+                    ao->channels.num == 8) {
+             MP_VERBOSE(ao, "Using 7.1 IEC61937 carrier mask for Android 12+ 8-channel stream\n");
+             p->channel_config = AudioFormat.CHANNEL_OUT_7POINT1_SURROUND;
+         } else {
+             p->channel_config = AudioFormat.CHANNEL_OUT_STEREO;
+         }
+     } else {
++        // Android AudioTrack exposes channel masks only through 7.1. AV3A
++        // can carry 9/12-channel layouts that cannot be represented here;
++        // force a deterministic stereo downmix instead of an arbitrary
++        // channel-map fallback (for example 9 -> 7).
++        if (ao->channels.num > 8) {
++            MP_VERBOSE(ao, "AudioTrack supports at most 8 channels; downmixing %d-channel audio to stereo\n",
++                       ao->channels.num);
++            ao->channels = (struct mp_chmap) MP_CHMAP_INIT_STEREO;
++        }
+         struct mp_chmap_sel sel = {0};
+         for (int i = 0; i < MP_ARRAY_SIZE(layouts); i++) {
+             if (layout_map[i])
+                 mp_chmap_sel_add_map(&sel, &layouts[i]);
+         }
+         if (!ao_chmap_sel_adjust(ao, &sel, &ao->channels))
+             goto error;
+         p->channel_config = layout_map[ao->channels.num];
+         mp_assert(p->channel_config);
+     }
+
+@@ -746,8 +754,14 @@ static int init(struct ao *ao)
+     min = MP_ALIGN_UP(min, bps);
+     max = MP_ALIGN_UP(max, bps);
+     p->size = MPCLAMP(buffer_size * 2, min, max);
++    if (p->compressed) {
++        // Compressed AudioTrack profiles commonly reject the tiny buffer
++        // calculated from encoded bytes. Keep one bounded 256 KiB packet
++        // window, matching the proven direct-output probe and Media3 path.
++        p->size = MPMAX(p->size, 256 * 1024);
++    }
+     MP_VERBOSE(ao, "Setting bufferSize = %d (driver=%d, min=%d, max=%d)\n", p->size, buffer_size, min, max);
+     mp_assert(p->size % bps == 0);
+     ao->device_buffer = p->size / bps;
+
+diff --git a/audio/out/buffer.c b/audio/out/buffer.c
+index 277b524..16258b1 100644
+--- a/audio/out/buffer.c
++++ b/audio/out/buffer.c
+@@ -227,6 +227,41 @@ int ao_read_data(struct ao *ao, void **data, int samples, int64_t out_time_ns, b
+     return pos;
+ }
+ 
++struct mp_aframe *ao_read_frame(struct ao *ao)
++{
++    struct buffer_state *p = ao->buffer_state;
++    struct mp_aframe *result = NULL;
++
++    mp_mutex_lock(&p->lock);
++    if (!p->playing || p->paused)
++        goto done;
++
++    while (!p->pending) {
++        struct mp_frame frame = mp_pin_out_read(p->input->pins[0]);
++        if (!frame.type)
++            break;
++        if (frame.type == MP_FRAME_AUDIO) {
++            p->pending = frame.data;
++            break;
++        }
++        if (frame.type == MP_FRAME_EOF) {
++            p->playing = false;
++            ao->wakeup_cb(ao->wakeup_ctx);
++            break;
++        }
++        mp_frame_unref(&frame);
++    }
++
++    if (p->pending && af_fmt_is_encoded(mp_aframe_get_format(p->pending))) {
++        result = p->pending;
++        p->pending = NULL;
++    }
++
++done:
++    mp_mutex_unlock(&p->lock);
++    return result;
++}
++
+ // Same as ao_read_data(), but convert data according to *fmt.
+ // fmt->src_fmt and fmt->channels must be the same as the AO parameters.
+ int ao_read_data_converted(struct ao *ao, struct ao_convert_fmt *fmt,
+diff --git a/audio/out/internal.h b/audio/out/internal.h
+index 85fa777..861bd28 100644
+--- a/audio/out/internal.h
++++ b/audio/out/internal.h
+@@ -202,6 +202,11 @@ struct ao_driver {
+ 
+ int ao_read_data(struct ao *ao, void **data, int samples, int64_t out_time_ns, bool *eof, bool pad_silence, bool blocking);
+ 
++// Pull one complete encoded audio access unit. The returned frame is owned by
++// the caller and must be freed with talloc_free(). This is only valid for
++// non-PCM formats; PCM AOs continue to use ao_read_data().
++struct mp_aframe *ao_read_frame(struct ao *ao);
++
+ bool ao_chmap_sel_adjust(struct ao *ao, const struct mp_chmap_sel *s,
+                          struct mp_chmap *map);
+ bool ao_chmap_sel_adjust2(struct ao *ao, const struct mp_chmap_sel *s,
+diff --git a/player/audio.c b/player/audio.c
+index b3e975d..ecdc5df 100644
+--- a/player/audio.c
++++ b/player/audio.c
+@@ -416,10 +416,11 @@ static int reinit_audio_filters_and_output(struct MPContext *mpctx)
+     mp_aframe_get_chmap(out_fmt, &out_channels);
+ 
+     int ao_flags = 0;
+-    bool spdif_fallback = af_fmt_is_spdif(out_format) &&
+-                          ao_c->spdif_passthrough;
++    bool compressed_fallback =
++        (af_fmt_is_spdif(out_format) || af_fmt_is_encoded(out_format)) &&
++        ao_c->spdif_passthrough;
+ 
+-    if (opts->ao_null_fallback && !spdif_fallback)
++    if (opts->ao_null_fallback && !compressed_fallback)
+         ao_flags |= AO_INIT_NULL_FALLBACK;
+ 
+     if (opts->audio_stream_silence)
+@@ -465,13 +466,26 @@ static int reinit_audio_filters_and_output(struct MPContext *mpctx)
+     }
+ 
+     if (!mpctx->ao) {
+-        // If spdif was used, try to fallback to PCM.
+-        if (spdif_fallback && ao_c->track && ao_c->track->dec) {
+-            MP_VERBOSE(mpctx, "Falling back to PCM output.\n");
++        // If compressed output was used, fall back to the decoder's PCM path.
++        if (compressed_fallback && ao_c->track && ao_c->track->dec) {
++            MP_VERBOSE(mpctx, "Falling back to PCM output after compressed AO failure.\n");
++            bool encoded = af_fmt_is_encoded(out_format);
++            if (encoded) {
++                // Drop queued raw access units before replacing the decoder.
++                mp_decoder_wrapper_suspend(ao_c->track->dec);
++                mp_output_chain_reset_harder(ao_c->filter);
++            }
+             ao_c->spdif_passthrough = false;
++            if (encoded)
++                mp_decoder_wrapper_set_audio_software(ao_c->track->dec, true);
+-            ao_c->spdif_failed = true;
++            ao_c->spdif_failed = af_fmt_is_spdif(out_format);
+             mp_decoder_wrapper_set_spdif_flag(ao_c->track->dec, false);
+-            if (!mp_decoder_wrapper_reinit(ao_c->track->dec))
++            bool reinit_ok = mp_decoder_wrapper_reinit(ao_c->track->dec);
++            if (encoded)
++                mp_decoder_wrapper_resume(ao_c->track->dec);
++            if (encoded)
++                issue_refresh_seek(mpctx, MPSEEK_EXACT);
++            if (!reinit_ok)
+                 goto init_error;
+             reset_audio_state(mpctx);
+             mp_output_chain_reset_harder(ao_c->filter);
+@@ -767,6 +777,10 @@ void reload_audio_output(struct MPContext *mpctx)
+     if (!mpctx->ao)
+         return;
+ 
++    bool encoded_output_failed = mpctx->ao_filter_fmt &&
++        af_fmt_is_encoded(mp_aframe_get_format(mpctx->ao_filter_fmt));
++
+     ao_reset(mpctx->ao);
+     uninit_audio_out(mpctx);
+-    reinit_audio_filters(mpctx); // mostly to issue refresh seek
++    if (!encoded_output_failed)
++        reinit_audio_filters(mpctx); // mostly to issue refresh seek
+-
++
+     struct ao_chain *ao_c = mpctx->ao_chain;
+@@ -778,6 +792,24 @@ void reload_audio_output(struct MPContext *mpctx)
+         mp_output_chain_reset_harder(ao_c->filter);
+     }
+ 
++    if (encoded_output_failed && ao_c && ao_c->track && ao_c->track->dec) {
++        MP_VERBOSE(mpctx, "Falling back to PCM after compressed AudioTrack write failure.\n");
++        mp_decoder_wrapper_suspend(ao_c->track->dec);
++        // Clear stale encoded frames before replacing the decoder.
++        mp_output_chain_reset_harder(ao_c->filter);
++        ao_c->spdif_passthrough = false;
++        mp_decoder_wrapper_set_audio_software(ao_c->track->dec, true);
++        ao_c->spdif_failed = false;
++        mp_decoder_wrapper_set_spdif_flag(ao_c->track->dec, false);
++        bool reinit_ok = mp_decoder_wrapper_reinit(ao_c->track->dec);
++        mp_decoder_wrapper_resume(ao_c->track->dec);
++        reinit_audio_filters(mpctx); // rebuild after PCM decoder is active
++        if (!reinit_ok) {
++            MP_ERR(mpctx, "Error reinitializing audio after compressed output failure.\n");
++            error_on_track(mpctx, ao_c->track);
++        }
++    }
++
+     // Whether we can use spdif might have changed. If we failed to use spdif
+     // in the previous initialization, try it with spdif again (we'll fallback
+     // to PCM again if necessary).
+diff --git a/audio/out/ao_opensles.c b/audio/out/ao_opensles.c
+--- a/audio/out/ao_opensles.c
++++ b/audio/out/ao_opensles.c
+@@ -102,5 +102,10 @@ static int init(struct ao *ao)
+ {
+     struct priv *p = ao->priv;
++    if (af_fmt_is_encoded(ao->format)) {
++        MP_ERR(ao, "OpenSLES cannot output encoded audio; requesting PCM fallback\n");
++        return -1;
++    }
+     SLDataLocator_BufferQueue locator_buffer_queue;
+     SLDataLocator_OutputMix locator_output_mix;
+     SLAndroidDataFormat_PCM_EX pcm;
+diff --git a/filters/f_decoder_wrapper.h b/filters/f_decoder_wrapper.h
+--- a/filters/f_decoder_wrapper.h
++++ b/filters/f_decoder_wrapper.h
+@@ -50,6 +50,10 @@ double mp_decoder_wrapper_get_container_fps(struct mp_decoder_wrapper *d);
+ // Whether to prefer spdif wrapper over real decoders on next reinit.
+ void mp_decoder_wrapper_set_spdif_flag(struct mp_decoder_wrapper *d, bool spdif);
++
++// Force the current audio track to use its named FFmpeg software decoder on
++// the next and subsequent reinitializations after compressed output failure.
++void mp_decoder_wrapper_set_audio_software(struct mp_decoder_wrapper *d, bool software);
+-
++
+ // Whether to decode only 1 frame and then stop, and cache the frame across resets.
+ void mp_decoder_wrapper_set_coverart_flag(struct mp_decoder_wrapper *d, bool c);
+
+diff --git a/filters/f_swresample.c b/filters/f_swresample.c
+index 3a6a1b6..b0d65c2 100644
+--- a/filters/f_swresample.c
++++ b/filters/f_swresample.c
+@@ -155,6 +155,9 @@ static bool configure_lavrr(struct priv *p, bool verbose)
+     struct mp_chmap map_in = p->in_channels;
+     struct mp_chmap map_out = p->out_channels;
+-
++    bool unknown_stereo_downmix =
++        mp_chmap_is_unknown(&map_in) && map_in.num > 2 &&
++        mp_chmap_is_stereo(&map_out);
++
+     // Try not to do any remixing if at least one is "unknown". Some corner
+     // cases also benefit from disabling all channel handling logic if the
+     // src/dst layouts are the same (like fl-fr-na -> fl-fr-na).
+@@ -161,5 +164,6 @@ static bool configure_lavrr(struct priv *p, bool verbose)
+-    if (mp_chmap_is_unknown(&map_in) || mp_chmap_is_unknown(&map_out) ||
+-        mp_chmap_equals(&map_in, &map_out))
++    if (!unknown_stereo_downmix &&
++        (mp_chmap_is_unknown(&map_in) || mp_chmap_is_unknown(&map_out) ||
++         mp_chmap_equals(&map_in, &map_out)))
+     {
+         mp_chmap_set_unknown(&map_in, map_in.num);
+         mp_chmap_set_unknown(&map_out, map_out.num);
+@@ -242,4 +247,22 @@ static bool configure_lavrr(struct priv *p, bool verbose)
+     av_opt_set_int(p->avrctx, "out_sample_fmt",     out_samplefmtp, 0);
+-
++    if (unknown_stereo_downmix) {
++        // AV3A mixed content may append object channels to a sound bed. The
++        // decoder preserves their order but cannot describe them as fixed
++        // speakers, so fold every input index into both stereo outputs.
++        double matrix[2][MP_NUM_CHANNELS] = {{0}};
++        double gain = 1.0 / map_in.num;
++        for (int n = 0; n < map_in.num; n++) {
++            matrix[0][n] = gain;
++            matrix[1][n] = gain;
++        }
++        if (swr_set_matrix(p->avrctx, &matrix[0][0], MP_NUM_CHANNELS) < 0) {
++            MP_ERR(p, "Failed to configure unknown %d-channel stereo downmix.\n",
++                   map_in.num);
++            goto error;
++        }
++        MP_VERBOSE(p, "Using equal-gain stereo downmix for unknown %d-channel input.\n",
++                   map_in.num);
++    }
++
+     AVChannelLayout fake_layout;
+     av_channel_layout_default(&fake_layout, map_out.num);
+diff --git a/filters/f_decoder_wrapper.c b/filters/f_decoder_wrapper.c
+--- a/filters/f_decoder_wrapper.c
++++ b/filters/f_decoder_wrapper.c
+@@ -230,6 +230,7 @@ struct priv {
+     // --- Protected by cache_lock.
+     char *cur_hwdec;
+     bool try_spdif;
++    bool force_software_audio;
+     bool attached_picture;
+     bool pts_reset;
+@@ -465,6 +466,7 @@ static bool reinit_decoder(struct priv *p)
+     const struct mp_decoder_fns *driver = NULL;
+     struct mp_decoder_list *list = NULL;
+     char *user_list = NULL;
++    bool force_software_audio = false;
+     char *fallback = NULL;
+@@ -477,8 +479,9 @@ static bool reinit_decoder(struct priv *p)
+         fallback = "aac";
+-
++
+         mp_mutex_lock(&p->cache_lock);
+         bool try_spdif = p->try_spdif;
++        force_software_audio = p->force_software_audio;
+         mp_mutex_unlock(&p->cache_lock);
+@@ -492,6 +495,20 @@ static bool reinit_decoder(struct priv *p)
+             }
+         }
+     }
+-
++
++    if (force_software_audio && p->codec->type == STREAM_AUDIO &&
++        p->codec->codec)
++    {
++        // The previous attempt may have selected ad_spdif.  Force the
++        // software decoder driver as well as its candidate entry; otherwise
++        // ad_spdif accepts the name but keeps producing encoded frames.
++        if (list) {
++            talloc_free(list);
++            list = NULL;
++        }
++        driver = &ad_lavc;
++        list = talloc_zero(NULL, struct mp_decoder_list);
++        if (list)
++            mp_add_decoder(list, p->codec->codec, p->codec->codec,
++                           "FFmpeg software audio decoder");
++    }
++
+     if (!driver)
+         return false;
+@@ -587,6 +599,16 @@ void mp_decoder_wrapper_set_spdif_flag(struct mp_decoder_wrapper *d, bool spdif)
+     mp_mutex_unlock(&p->cache_lock);
+ }
+-
++
++void mp_decoder_wrapper_set_audio_software(struct mp_decoder_wrapper *d,
++                                           bool software)
++{
++    struct priv *p = d->f->priv;
++    mp_mutex_lock(&p->cache_lock);
++    p->force_software_audio = software;
++    mp_mutex_unlock(&p->cache_lock);
++}
++
+ void mp_decoder_wrapper_set_coverart_flag(struct mp_decoder_wrapper *d, bool c)
+ {
+     struct priv *p = d->f->priv;
