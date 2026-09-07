@@ -55,22 +55,14 @@
 
     <style name="Theme.WebHTV.LightDialog" parent="Theme.Material3.Light.Dialog.Alert">
         <item name="android:windowNoTitle">true</item>
-        <item name="android:windowBackground">@drawable/shape_shell_proxy_dialog</item>
-        <item name="android:colorBackground">@color/white</item>
-        <item name="android:colorBackgroundFloating">@color/white</item>
+        <item name="android:windowBackground">?attr/colorSurfaceContainer</item>
+        <item name="android:colorBackground">?attr/colorSurfaceContainer</item>
         <item name="android:textColorPrimary">#202124</item>
         <item name="android:textColorSecondary">#5F6368</item>
         <item name="android:textColorHint">#8A8F98</item>
         <item name="android:fontFamily">sans</item>
         <item name="android:textCursorDrawable">@drawable/shape_cursor_dialog</item>
-        <item name="colorSurface">@color/white</item>
-        <item name="colorSurfaceBright">@color/white</item>
-        <item name="colorSurfaceDim">@color/white</item>
-        <item name="colorSurfaceContainer">@color/white</item>
-        <item name="colorSurfaceContainerHigh">@color/white</item>
-        <item name="colorSurfaceContainerHighest">@color/white</item>
-        <item name="colorSurfaceContainerLow">@color/white</item>
-        <item name="colorSurfaceContainerLowest">@color/white</item>
+        <item name="colorSurface">?attr/colorSurfaceContainer</item>
         <item name="colorOnSurface">#202124</item>
         <item name="colorOnSurfaceVariant">#5F6368</item>
         <item name="colorPrimary">#1A73E8</item>
@@ -80,21 +72,13 @@
     </style>
 
     <style name="ThemeOverlay.WebHTV.LightDialog" parent="ThemeOverlay.Material3.MaterialAlertDialog">
-        <item name="android:colorBackground">@color/white</item>
-        <item name="android:colorBackgroundFloating">@color/white</item>
+        <item name="android:colorBackground">?attr/colorSurfaceContainer</item>
         <item name="android:textColorPrimary">#202124</item>
         <item name="android:textColorSecondary">#5F6368</item>
         <item name="android:textColorHint">#8A8F98</item>
         <item name="android:fontFamily">sans</item>
         <item name="android:textCursorDrawable">@drawable/shape_cursor_dialog</item>
-        <item name="colorSurface">@color/white</item>
-        <item name="colorSurfaceBright">@color/white</item>
-        <item name="colorSurfaceDim">@color/white</item>
-        <item name="colorSurfaceContainer">@color/white</item>
-        <item name="colorSurfaceContainerHigh">@color/white</item>
-        <item name="colorSurfaceContainerHighest">@color/white</item>
-        <item name="colorSurfaceContainerLow">@color/white</item>
-        <item name="colorSurfaceContainerLowest">@color/white</item>
+        <item name="colorSurface">?attr/colorSurfaceContainer</item>
         <item name="colorOnSurface">#202124</item>
         <item name="colorOnSurfaceVariant">#5F6368</item>
         <item name="colorPrimary">#1A73E8</item>
