@@ -1,5 +1,16 @@
 # dev2 第二轮 beta 同步与电视端详情闪烁复评（2026-09-07）
 
+## Recovery anchor（本次最新收口）
+
+- 目标：合并远端最新 beta，评审当前全部改动（含已提交未推送），修复、验证、复评通过后提交、推送并创建中文 PR 到 beta，最后确认远端最新状态。
+- 本次远端基线：`origin/beta@9fc936fd88cb5b58d645c49b97209b0f246ed078`；已无冲突合并为本地 `ff6f6562d42ad3e1efdf1941c564899b86e455cd`。
+- 本次相对 beta 的独有代码：`804d83f6e88a07974ef1b48d302558fbc78e7329` 在 `TmdbDetailActivity.java` 增加融合播放器 MPV 自定义按钮入口；首轮复审发现 TV 动态按钮未接入方向键焦点链，已在同文件补充稳定 View ID 与动态焦点链重建。
+- 当前保护路径：5 个 `*.bak20260906*` 备份文件，均保持未修改、不纳入提交；任务守卫为 `M202609071946-beta-review-fusion-mpv-scripts`，范围为 `TmdbDetailActivity.java` 与本文档。
+- 已完成证据：Mobile Arm64 `TmdbDetailActivityLayoutTest` 与 Leanback Arm64 Java 编译均 `BUILD SUCCESSFUL`（日志 `/tmp/beta-review-fusion-mpv-scripts-final.log`）；此前双 flavor 编译日志为 `/tmp/beta-review-fusion-mpv-scripts-gradle.log`；`git diff --check` 与任务守卫 check 通过。
+- 最新复评结论：自定义按钮只读取启用配置，短按/长按分别透传 MPV script-message；非 MPV、无服务或空播放器时隐藏；Mobile 双动作栏不重复挂载；TV 动态按钮已分配稳定 ID 并接入可见焦点链。未发现剩余 P1/P2 阻断问题。
+- 未决风险：真实设备逐帧视觉与遥控器验证不在本地证据内；该边界不影响源码编译、源契约测试和焦点链静态复评结论。
+- 回滚锚点：`ff6f6562d42ad3e1efdf1941c564899b86e455cd`；下一动作：任务守卫原子提交并创建恢复标签，然后推送 dev2、创建中文 PR 到 beta，最后拉取远端最新状态。
+
 ## Recovery anchor
 
 - 目标：合并远端最新 beta，评审全部当前改动（含已提交未推送），修复、定向验证、复评通过后提交与恢复标签，推送 dev2 并创建中文 PR 到 beta，最后拉取远端最新状态。
