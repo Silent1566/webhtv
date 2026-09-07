@@ -34,11 +34,14 @@ import org.greenrobot.eventbus.ThreadMode;
 
 import java.util.Optional;
 
-public class VodActivity extends BaseActivity implements TypeAdapter.OnClickListener, FolderFragment.FilterHost {
+public class VodActivity extends BaseActivity implements TypeAdapter.OnClickListener, FolderFragment.FilterHost, FolderFragment.CategoryEdgeHost {
+
+    private static final int NO_PENDING_CONTENT_ROW = -1;
 
     private ActivityVodBinding mBinding;
     private TypeAdapter mAdapter;
     private View mOldView;
+    private int mPendingContentRow = NO_PENDING_CONTENT_ROW;
 
     public static void start(Activity activity, Result result) {
         start(activity, VodConfig.get().getHome().getKey(), result);
@@ -114,6 +117,14 @@ public class VodActivity extends BaseActivity implements TypeAdapter.OnClickList
             @Override
             public void onPageSelected(int position) {
                 mBinding.recycler.setSelectedPosition(position);
+                if (mPendingContentRow != NO_PENDING_CONTENT_ROW) {
+                    int contentRow = mPendingContentRow;
+                    mPendingContentRow = NO_PENDING_CONTENT_ROW;
+                    mBinding.pager.post(() -> {
+                        if (mBinding.pager.getCurrentItem() == position) getFragment().requestContentFocus(contentRow);
+                    });
+                    return;
+                }
                 mBinding.recycler.requestFocus();
             }
         });
@@ -188,6 +199,16 @@ public class VodActivity extends BaseActivity implements TypeAdapter.OnClickList
     @Override
     public void onRefresh(Class item) {
         getFragment().onRefresh();
+    }
+
+    @Override
+    public void onCategoryContentHorizontalEdge(Class item, int contentRow, boolean towardEnd) {
+        int position = mAdapter.indexOf(item);
+        int target = position + (towardEnd ? 1 : -1);
+        if (position != mBinding.pager.getCurrentItem() || contentRow < 0 || target < 0 || target >= mAdapter.getItemCount()) return;
+        App.removeCallbacks(mRunnable);
+        mPendingContentRow = contentRow == 0 ? 0 : NO_PENDING_CONTENT_ROW;
+        mBinding.pager.setCurrentItem(target);
     }
 
     @Override
