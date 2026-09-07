@@ -128,7 +128,7 @@ public class AdRuleManageDialogLayoutTest {
                 dialog.contains("rule.getScript()")
                         && dialog.contains("R.string.ad_rule_detail_script"));
         assertTrue("HLS detail must contain the complete serialized rule",
-                dialog.contains("item.detail()"));
+                dialog.contains("current.detail()"));
         assertTrue("long rule content must be readable with a remote",
                 detail.contains("androidx.core.widget.NestedScrollView")
                         && detail.contains("android:scrollbars=\"vertical\"")

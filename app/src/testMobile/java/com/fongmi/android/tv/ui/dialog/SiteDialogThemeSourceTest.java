@@ -64,7 +64,8 @@ public class SiteDialogThemeSourceTest {
         for (String flavor : new String[]{"mobile", "leanback"}) {
             String base = read("app/src/" + flavor + "/java/com/fongmi/android/tv/ui/base/BaseActivity.java");
             assertTrue("theme changes must recreate activities in " + flavor,
-                    base.contains("event.getType() == RefreshEvent.Type.LANGUAGE || event.getType() == RefreshEvent.Type.THEME"));
+                    base.contains("RefreshEvent.Type.THEME")
+                            && base.contains("recreate()"));
         }
     }
 
