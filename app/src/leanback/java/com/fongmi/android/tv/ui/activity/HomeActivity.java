@@ -209,6 +209,9 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
             syncNativeContentInset();
             syncWebOverlayLayout();
         });
+        mBinding.typeRecycler.setOnFocusChangeListener((view, hasFocus) -> {
+            if (hasFocus && isCategoryVisible() && mFolder != null) mFolder.scrollContentToTop();
+        });
         mBinding.recycler.addOnChildViewHolderSelectedListener(new OnChildViewHolderSelectedListener() {
             @Override
             public void onChildViewHolderSelected(@NonNull RecyclerView parent, @Nullable RecyclerView.ViewHolder child, int position, int subposition) {
@@ -339,6 +342,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
         else transaction.add(R.id.categoryContainer, target, tag);
         target.setUserVisibleHint(true);
         transaction.runOnCommit(() -> {
+            target.scrollContentToTop();
             restoreTypeFocus(keepTypeFocus, item);
             if (toggleFilter && target == mFolder && isCurrentCategory(item)) updateFilter(item);
         });
