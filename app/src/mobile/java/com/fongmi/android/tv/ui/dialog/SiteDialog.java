@@ -12,6 +12,7 @@ import android.view.WindowManager;
 import android.view.inputmethod.EditorInfo;
 
 import androidx.annotation.NonNull;
+import androidx.core.widget.TextViewCompat;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.ItemTouchHelper;
@@ -31,6 +32,7 @@ import com.fongmi.android.tv.ui.adapter.SiteAdapter;
 import com.fongmi.android.tv.ui.adapter.SiteGroupAdapter;
 import com.fongmi.android.tv.ui.custom.CustomTextListener;
 import com.fongmi.android.tv.ui.custom.SpaceItemDecoration;
+import com.fongmi.android.tv.ui.helper.SiteDialogTheme;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.Util;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
@@ -79,13 +81,20 @@ public class SiteDialog extends BaseAlertDialog implements SiteAdapter.OnClickLi
 
     @Override
     protected MaterialAlertDialogBuilder getBuilder() {
-        return new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog).setView(getBinding().getRoot());
+        return builder().setView(getBinding().getRoot());
     }
 
     @Override
     protected void initView() {
-        adapter = new SiteAdapter(this);
-        groupAdapter = new SiteGroupAdapter(this::onGroupClick);
+        SiteDialogTheme theme = SiteDialogTheme.resolve(binding.getRoot().getContext(), Setting.getDynamicColor());
+        binding.getRoot().setBackgroundColor(theme.surface());
+        binding.keyword.setTextColor(theme.onSurface());
+        binding.keyword.setHintTextColor(theme.onSurfaceVariant());
+        TextViewCompat.setCompoundDrawableTintList(binding.keyword, theme.accent());
+        theme.tint(binding.block);
+        theme.tint(binding.search);
+        adapter = new SiteAdapter(this, theme);
+        groupAdapter = new SiteGroupAdapter(this::onGroupClick, theme);
         groups = getGroups();
         binding.recycler.setAdapter(adapter);
         binding.groupList.setLayoutManager(new LinearLayoutManager(requireContext(), RecyclerView.HORIZONTAL, false));

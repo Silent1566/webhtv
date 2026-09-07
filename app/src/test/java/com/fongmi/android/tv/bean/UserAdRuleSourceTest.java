@@ -1,6 +1,8 @@
 package com.fongmi.android.tv.bean;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import com.google.gson.Gson;
 
@@ -25,5 +27,23 @@ public class UserAdRuleSourceTest {
         UserAdRule rule = UserAdRule.fromImportedCandidate(candidate);
 
         assertEquals("接口导入 · 我的接口 · 域名 0 · 广告规则 0 · 白名单 0", rule.getSummary());
+    }
+
+    @Test
+    public void importedRuleActivationIsAnExplicitChoice() {
+        ImportedAdRuleCandidate candidate = new ImportedAdRuleCandidate();
+        candidate.setSourceType("ads");
+
+        assertFalse(UserAdRule.fromImportedCandidate(candidate).isEnabled());
+        assertTrue(UserAdRule.fromImportedCandidate(candidate, true).isEnabled());
+    }
+
+    @Test
+    public void interfaceSourceClassificationOnlyMatchesSupportedImportedTypes() {
+        assertTrue(UserAdRule.isInterfaceSource(UserAdRule.SOURCE_INTERFACE_ADS));
+        assertTrue(UserAdRule.isInterfaceSource(UserAdRule.SOURCE_INTERFACE_RULE));
+        assertFalse(UserAdRule.isInterfaceSource(UserAdRule.SOURCE_AI));
+        assertFalse(UserAdRule.isInterfaceSource("interface_future"));
+        assertFalse(UserAdRule.isInterfaceSource(null));
     }
 }
