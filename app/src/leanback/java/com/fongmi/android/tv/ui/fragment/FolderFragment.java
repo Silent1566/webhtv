@@ -41,6 +41,7 @@ public class FolderFragment extends BaseFragment {
     private FragmentFolderBinding mBinding;
     private Boolean pendingFilterVisible;
     private Integer pendingContentRow;
+    private boolean pendingScrollToTop;
     private Class mType;
 
     public static FolderFragment newInstance(String key, Class type) {
@@ -98,6 +99,7 @@ public class FolderFragment extends BaseFragment {
         FragmentTransaction transaction = getChildFragmentManager().beginTransaction().replace(R.id.container, TypeFragment.newInstance(getKey(), mType.getTypeId(), mType.getStyle(), getExtend(), mType.isFolder(), getHistoryResumeCid(), getHistoryResumeKey(), getHistoryResumeTargetCid()));
         transaction.runOnCommit(this::applyPendingFilter);
         transaction.runOnCommit(this::applyPendingContentFocus);
+        transaction.runOnCommit(this::applyPendingScrollToTop);
         transaction.commit();
     }
 
@@ -161,8 +163,22 @@ public class FolderFragment extends BaseFragment {
         pendingContentRow = null;
     }
 
+    public void scrollContentToTop() {
+        pendingScrollToTop = true;
+        applyPendingScrollToTop();
+    }
+
+    private void applyPendingScrollToTop() {
+        if (!pendingScrollToTop) return;
+        TypeFragment child = getChild();
+        if (child == null) return;
+        child.scrollContentToTop();
+        pendingScrollToTop = false;
+    }
+
     public void clearContentFocusRequest() {
         pendingContentRow = null;
+        pendingScrollToTop = false;
         TypeFragment child = getChild();
         if (child != null) child.clearContentFocusRequest();
     }
