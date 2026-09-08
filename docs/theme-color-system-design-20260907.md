@@ -1,6 +1,6 @@
 # TweakCN 风格主题配色系统设计
 
-> 状态：阶段 A+B 已实施（mobile 首版）；阶段 C 已实施（mobile/leanback 运行时绑定）；阶段 D/E 尚未实施
+> 状态：阶段 A+B 已实施（mobile 首版）；阶段 C 已实施（mobile/leanback 运行时绑定）；阶段 D 已实施（mobile 导入/导出闭环）；阶段 E 尚未实施
 > 设计日期：2026-09-07
 > 适用范围：Android mobile 优先；共享主题模型可供 leanback/TV 后续消费
 > 参考：<https://tweakcn.com/community> 以及用户提供的五张界面截图
@@ -9,11 +9,11 @@
 ## Recovery anchor
 
 - 目标：为 WebHTV 设计一个可持久化、可预览、可导入/导出的原生主题配色系统，达到截图所示的“主题配色”编辑体验，同时保持现有首页、详情页、播放页和站源功能可回退。
-- 验收标准：阶段 A+B 已具备可持久化 profile、旧设置迁移、校验/解析、last-good 回退、备份白名单、mobile 草稿编辑器、实时预览、取消/应用和三个核心颜色编辑；阶段 C 已具备运行时明暗模式、语义控件绑定、站源弹窗 token、壁纸 scrim 和播放器控制层隔离；阶段 D/E 仍需单独实施和验证。
+- 验收标准：阶段 A+B 已具备可持久化 profile、旧设置迁移、校验/解析、last-good 回退、备份白名单、mobile 草稿编辑器、实时预览、取消/应用和三个核心颜色编辑；阶段 C 已具备运行时明暗模式、语义控件绑定、站源弹窗 token、壁纸 scrim 和播放器控制层隔离；阶段 D 已具备 TweakCN/JSON/HTTPS/SAF 导入、预览警告、导出和系统分享；阶段 E 仍需单独实施和验证。
 - 当前文件/符号：`app/src/main/java/com/fongmi/android/tv/theme/`、`app/src/mobile/java/com/fongmi/android/tv/ui/dialog/ThemeEditorDialog.java`、`ThemeColorPickerDialog.java`、`ThemePreviewView.java`、`AppearanceDialog.java`、`app/src/main/java/com/fongmi/android/tv/setting/Setting.java`、`BaseActivity`、`CustomWallView`、`SiteDialogTheme`。
-- 已完成证据：已查看五张参考截图；已核对当前主题色、动态壁纸、Material 3 和刷新事件实现；阶段 A+B 的主题/备份 JVM 单测、mobile Java 编译和 mobile 资源处理通过；阶段 C 的 mobile/leanback Java 编译、主题单测和源代码契约测试通过；当前工作树无需保护的预存脏路径。
-- 未验证项：未进行连接设备交互、视觉截图验收；阶段 D 的导入/导出与 TweakCN 映射、阶段 E 的 TV/社区索引均未实现。
-- 下一步唯一动作：执行本阶段 `task_guard.sh finish` 原子提交并创建恢复 tag；随后按计划为阶段 D 新建独立 guard，不与阶段 C 混合。
+- 已完成证据：已查看五张参考截图；已核对当前主题色、动态壁纸、Material 3 和刷新事件实现；阶段 A+B 的主题/备份 JVM 单测、mobile Java 编译和 mobile 资源处理通过；阶段 C 的 mobile/leanback Java 编译、主题单测和源代码契约测试通过；阶段 D 的 25 项主题定向测试、mobile Java 编译和 mobile 资源处理通过；当前工作树无需保护的预存脏路径。
+- 未验证项：未进行连接设备交互、视觉截图验收；阶段 E 的 TV/社区索引未实现。
+- 下一步唯一动作：为阶段 E 建立独立 guard，先实施 leanback 焦点语义绑定，再补本地签名/哈希索引与缓存验证；不与阶段 D 混合。
 
 ---
 
@@ -678,7 +678,7 @@ validate(draft)
 ### 明确未实现
 
 - 阶段 C：BaseActivity/语义资源/首页/详情/播放器控制层的全局 token 消费尚未接入；现有 Dynamic Color、壁纸和旧页面资源仍是运行时主路径。
-- 阶段 D：JSON/HTTPS/SAF 导入导出、TweakCN/shadcn token 映射、社区浏览入口尚未接入编辑器 UI；当前 codec/validator 只为后续导入提供安全基础。
+- 阶段 D：已实施 JSON/HTTPS/SAF 导入导出、TweakCN/shadcn 常见 token 映射、社区浏览器入口、导入预览/警告与 draft-only 回滚；尚未进行设备交互和视觉截图验收。
 - 阶段 E：leanback 完整焦点主题和社区索引尚未实施。
 
 ### 验证
@@ -737,3 +737,31 @@ bash ./gradlew :app:compileMobileArm64_v8aDebugJavaWithJavac \
 - 回滚：撤销阶段 C 提交即可回到阶段 A+B；profile、`theme_color` 和壁纸键仍保持兼容。
 - 剩余：阶段 D 的 JSON/HTTPS/SAF 导入导出、TweakCN token 映射和社区浏览入口；阶段 E 的 TV 完整焦点资源与签名社区索引。
 - 下一步：执行本任务 guard finish；新阶段 D 必须使用独立 task ID、独立 guard 和独立验证。
+
+## 16. 实施记录：阶段 D（2026-09-08）
+
+### 已实现
+
+- 新增 `ThemeColorUtil.normalizeCss`，支持 allowlist 范围内的 HEX、RGB、HSL 和 Oklch 颜色转换；透明色、CSS/字体/圆角等非颜色字段不进入原生主题。
+- `ThemeTweakCnAdapter` 支持 WebHTV profile、扁平 shadcn token 和真实 TweakCN registry 的 `cssVars.light`/`cssVars.dark` 结构；缺失 dark 角色从扁平主题复制，未支持 token 进入最多 32 条警告。
+- `ThemeTransfer` 使用无 Cookie、无代理、禁自动跳转的 HTTPS 客户端；解析 DNS 后拒绝私有/特殊地址，响应体和 SAF 输入均限制为 256 KiB，并关闭响应资源。
+- 新增 `ThemeImportDialog`：支持粘贴 JSON、HTTPS 链接、`OpenDocument` SAF 文件、TweakCN 社区浏览器入口、导入预览和 warning；导入只回传 draft，不直接写入 `ThemeProfileStore`。
+- `ThemeEditorDialog` 接入导入、SAF `CreateDocument` 导出和系统文本分享；只有既有“应用”操作才持久化并发布主题刷新事件。
+
+### 验证
+
+```text
+bash ./gradlew :app:testMobileArm64_v8aDebugUnitTest \
+  --tests 'com.fongmi.android.tv.theme.*' \
+  :app:compileMobileArm64_v8aDebugJavaWithJavac \
+  :app:processMobileArm64_v8aDebugResources \
+  --no-daemon --console=plain
+```
+
+结果：`BUILD SUCCESSFUL`；主题相关测试 25 项全部通过，mobile Java 编译和资源处理通过。首次验证捕获并修复了 `OpenDocument` 的 `String[]` 输入类型错误，以及契约测试工作目录和未支持 token warning 的问题；修复后未再出现失败。未进行连接设备和视觉截图验收。
+
+### 回滚与剩余范围
+
+- 回滚：撤销阶段 D 提交即可回到阶段 C；profile schema、`theme_profile_json`、`theme_profile_last_good`、旧 `theme_color` 镜像和播放器路径保持兼容。
+- 剩余：阶段 E 的 leanback 完整焦点主题、TV 语义资源完整迁移，以及受签名/哈希保护的静态主题索引、预览图、版本回滚和缓存。
+- 下一步：建立 `THEME-COLOR-E-20260908` 独立 guard；不把 TV/社区索引与阶段 D 的 mobile 导入导出混写。

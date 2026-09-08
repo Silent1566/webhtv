@@ -1,11 +1,16 @@
 package com.fongmi.android.tv.ui.dialog;
 
+import android.app.Activity;
+import android.content.Intent;
 import android.content.res.Configuration;
 import android.graphics.drawable.GradientDrawable;
+import android.net.Uri;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.Toast;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -82,6 +87,13 @@ public final class ThemeEditorDialog extends BaseAlertDialog {
         });
         binding.buttonCancel.setOnClickListener(view -> dismiss());
         binding.buttonApply.setOnClickListener(view -> apply());
+        binding.buttonImport.setOnClickListener(view -> ThemeImportDialog.show(this, profile -> {
+            draft = profile.copy();
+            presetAdapter.setSelected(selectedPrimary());
+            render();
+        }));
+        binding.buttonExport.setOnClickListener(view -> exportDraft());
+        binding.buttonShare.setOnClickListener(view -> shareDraft());
         binding.primaryRow.setOnClickListener(view -> editColor(R.string.theme_color_primary, "primary"));
         binding.backgroundRow.setOnClickListener(view -> editColor(R.string.theme_color_background, "appBackground"));
         binding.surfaceRow.setOnClickListener(view -> editColor(R.string.theme_color_surface, "surface"));
@@ -129,6 +141,28 @@ public final class ThemeEditorDialog extends BaseAlertDialog {
         });
     }
 
+    private void exportDraft() {
+        ThemeProfileValidator.Result checked = ThemeProfileValidator.validate(draft);
+        if (!checked.valid()) {
+            Toast.makeText(requireContext(), checked.message(), Toast.LENGTH_LONG).show();
+            return;
+        }
+        exportLauncher.launch(ThemeExport.createDocumentIntent(checked.profile()));
+    }
+
+    private void shareDraft() {
+        ThemeProfileValidator.Result checked = ThemeProfileValidator.validate(draft);
+        if (!checked.valid()) {
+            Toast.makeText(requireContext(), checked.message(), Toast.LENGTH_LONG).show();
+            return;
+        }
+        try {
+            startActivity(ThemeExport.shareIntent(checked.profile()));
+        } catch (RuntimeException e) {
+            Toast.makeText(requireContext(), R.string.theme_export_unavailable, Toast.LENGTH_LONG).show();
+        }
+    }
+
     private void apply() {
         ThemeProfileStore.ApplyResult result = ThemeProfileStore.apply(draft);
         if (!result.success()) {
@@ -174,6 +208,19 @@ public final class ThemeEditorDialog extends BaseAlertDialog {
         int mode = requireContext().getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
         return mode == Configuration.UI_MODE_NIGHT_YES;
     }
+
+    private final ActivityResultLauncher<Intent> exportLauncher = registerForActivityResult(
+            new ActivityResultContracts.StartActivityForResult(), result -> {
+                if (result.getResultCode() != Activity.RESULT_OK || result.getData() == null) return;
+                Uri uri = result.getData().getData();
+                if (uri == null) return;
+                try {
+                    ThemeExport.write(requireActivity(), uri, draft);
+                    Toast.makeText(requireContext(), R.string.theme_exported, Toast.LENGTH_LONG).show();
+                } catch (Exception e) {
+                    Toast.makeText(requireContext(), R.string.theme_export_failed, Toast.LENGTH_LONG).show();
+                }
+            });
 
     private void swatch(View view, int color) {
         GradientDrawable drawable = new GradientDrawable();
