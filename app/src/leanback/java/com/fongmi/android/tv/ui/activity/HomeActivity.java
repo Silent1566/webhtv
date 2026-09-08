@@ -265,12 +265,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
         mBinding.typeRecycler.removeCallbacks(mTypeSwitch);
         int position = mTypeAdapter.indexOf(item);
         mBinding.typeRecycler.setSelectedPosition(position);
-        if (Setting.isHomeVodAutoLoad()) {
-            focusCategoryButton(item);
-        } else {
-            if (contentRow == 0) focusFirstCard(item);
-            else focusCategoryButton(item);
-        }
+        focusCategoryButton(item);
     }
 
     private Class getAdjacentCategory(Class item, boolean towardEnd) {
@@ -288,10 +283,17 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     }
 
     private void focusCategoryButton(Class item) {
-        mBinding.typeRecycler.setVisibility(View.VISIBLE);
-        updateToolbarVisibility(true);
-        mBinding.typeRecycler.requestFocus();
         showCategoryContent(item);
+        mBinding.typeRecycler.post(() -> {
+            if (!isCurrentCategory(item)) return;
+            int position = mTypeAdapter.indexOf(item);
+            if (position < 0 || mBinding.typeRecycler.getSelectedPosition() != position) return;
+            mBinding.typeRecycler.setVisibility(View.VISIBLE);
+            updateToolbarVisibility(true);
+            mBinding.typeRecycler.setSelectedPosition(position, holder -> {
+                if (isCurrentCategory(item)) holder.itemView.requestFocus();
+            });
+        });
     }
 
     private void showHomeContent() {

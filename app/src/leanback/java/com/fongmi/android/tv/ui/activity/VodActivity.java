@@ -36,12 +36,10 @@ import java.util.Optional;
 
 public class VodActivity extends BaseActivity implements TypeAdapter.OnClickListener, FolderFragment.FilterHost, FolderFragment.CategoryEdgeHost {
 
-    private static final int NO_PENDING_CONTENT_ROW = -1;
-
     private ActivityVodBinding mBinding;
     private TypeAdapter mAdapter;
     private View mOldView;
-    private int mPendingContentRow = NO_PENDING_CONTENT_ROW;
+    private boolean mPendingCategoryFocus;
 
     public static void start(Activity activity, Result result) {
         start(activity, VodConfig.get().getHome().getKey(), result);
@@ -117,12 +115,15 @@ public class VodActivity extends BaseActivity implements TypeAdapter.OnClickList
             @Override
             public void onPageSelected(int position) {
                 mBinding.recycler.setSelectedPosition(position);
-                if (mPendingContentRow != NO_PENDING_CONTENT_ROW) {
-                    int contentRow = mPendingContentRow;
-                    mPendingContentRow = NO_PENDING_CONTENT_ROW;
-                    if (mBinding.pager.getCurrentItem() == position) {
-                        getFragment().requestContentFocus(contentRow);
-                    }
+                if (mPendingCategoryFocus) {
+                    mPendingCategoryFocus = false;
+                    getFragment().scrollContentToTop();
+                    mBinding.recycler.post(() -> {
+                        if (mBinding.pager.getCurrentItem() != position) return;
+                        mBinding.recycler.setSelectedPosition(position, holder -> {
+                            if (mBinding.pager.getCurrentItem() == position) holder.itemView.requestFocus();
+                        });
+                    });
                     return;
                 }
                 mBinding.recycler.requestFocus();
@@ -207,7 +208,7 @@ public class VodActivity extends BaseActivity implements TypeAdapter.OnClickList
         int target = position + (towardEnd ? 1 : -1);
         if (position != mBinding.pager.getCurrentItem() || contentRow < 0 || target < 0 || target >= mAdapter.getItemCount()) return;
         App.removeCallbacks(mRunnable);
-        mPendingContentRow = contentRow;
+        mPendingCategoryFocus = true;
         mBinding.pager.setCurrentItem(target);
     }
 
