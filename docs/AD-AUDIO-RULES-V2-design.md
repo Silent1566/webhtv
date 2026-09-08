@@ -2,7 +2,7 @@
 
 > 任务：`AD-AUDIO-RULES-V2`
 >
-> 状态：设计评审稿已交付；Phase 1 纯 JVM 规则层已通过 34 项测试，尚未接入播放链路。Phase 2～4 仍是待确认的实施计划，不代表整项升级完成。
+> 状态：设计评审稿已交付；Phase 1 已提交并通过 34 项 JVM 测试，尚未接线。Phase 2 的时间/锁/线程评审已补齐，建议先实施 2A 执行隔离，再实施 2B 规则与精确度验收；仍待明确实施确认。Phase 3～4 未实施，不代表整项升级完成。
 >
 > 编写日期：2026-09-08（Asia/Shanghai）
 >
@@ -147,16 +147,17 @@
 4. 同一规则在 30 秒冷却窗口内不重复发候选；
 5. 命中后输出 `ruleId`、`preRollMs`、`postRollMs`、`firstStartUs`、`lastEndUs` 和 timeline token，不在 Match 中输出原文；
 6. seek、切源、音频 flush、引擎重建和规则热更新提升 generation，清空所有状态；旧 callback 丢弃；
-7. 语音识别 callback 的时间可能早于当前播放位置，候选生成时必须通过 `PlaybackMediaClock` 校准，并钳制到 `[0,duration]`；无法校准时只提示，不自动 seek。
+7. Provider 的候选保持原始 capture 时间；**只能由现有 `AdSkipCoordinator.targetFor` 使用 `PlaybackMediaClock` 转为媒体时间并做 duration 钳制**。Provider 不能预先加 media anchor，也不能拿媒体总时长钳制 capture 坐标，避免重复转换。无法取得新鲜时钟或目标已过期时不得 seek。
 
 候选区间定义：
 
 ```text
-candidateStart = min(durationMs, max(0, firstStartMs - preRollMs))
-candidateEnd   = min(durationMs, lastEndMs + postRollMs)
+captureStart = max(0, firstStartUs / 1000 - preRollMs)
+captureEnd   = lastEndUs / 1000 + postRollMs
+mediaTarget  = clamp(clock.mapCaptureToMediaMs(captureEnd), 0, mediaDurationMs)
 ```
 
-若 `candidateEnd <= candidateStart`、时间轴过期、媒体为直播或不可 seek，则丢弃候选并记录固定枚举诊断。
+若原始区间为空、映射失败、时间轴过期、媒体为直播/不可 seek，或最终 `mediaTarget <= currentPosition`，则丢弃候选并记录固定枚举诊断。Phase 1 的带 duration 辅助方法只在同坐标系下有意义，不能代替既有 Coordinator 的媒体坐标校验。
 
 未知 duration 以负值表示，此时仅计算未钳制上界的候选，不构成自动 seek 授权。Phase 1 的时间来源是**整个识别片段边界**，不是词级对齐结果；不能声称精确定位“关键词后第 30 秒”。Phase 2 必须确认识别器能否提供可靠终点/对齐，不能把回调墙钟或过期播放位置冒充关键词时间。
 
@@ -200,7 +201,7 @@ candidateEnd   = min(durationMs, lastEndMs + postRollMs)
 
 1. **音频入口零推理**：Hub/AudioProcessor 回调只做格式检查、有限复制或入有界邮箱；不得创建 Sherpa recognizer、执行 ONNX decode、规则匹配或日志 I/O。
 2. **低优先级识别线程**：语音 Provider 使用独立的后台 `Executor`，创建线程时设置 Android background 优先级；不与 UI、Exo 控制线程共用执行器。
-3. **线程数上限**：TV 默认 Sherpa/ONNX 推理线程为 1，至少先完成 1/2 线程 A/B；不得继续按 `CPU/2` 无上限启用。高性能设备只有在 profile 证明无掉帧后才允许 2。
+3. **线程数上限**：语音广告专用 profile 先使用 1 个推理线程，并完成 1/2 线程 A/B；现有 `threadCount()` 实际已限制为 1～4，问题不是“没有上限”，而是未按播放共存负载验证。实时字幕的原默认配置不随广告 profile 改变；提高广告上限需要 profile 证明无回归。
 4. **有界退压**：PCM 和识别任务都有固定上限；过载时丢弃最旧帧并 reset 当前语音识别段，禁止无界积压和反向阻塞音频生产者。
 5. **分阶段启用**：模型未验证、播放状态不适合、媒体非 VOD、时钟无效或 Provider backlog 超阈值时，保持 `DEGRADED/IDLE`；不为了“凑完整识别”牺牲播放。
 6. **可观测指标**：记录识别耗时桶、队列峰值、丢帧数、recognizer reset 次数和 Provider 状态；禁止记录 PCM、完整文本、URL、Cookie、关键词正文。
@@ -405,11 +406,119 @@ org.junit.runner.JUnitCore
 
 回滚本阶段实现提交即可移除未接线的规则层，保留设计基线与现有播放行为；后续若已经接线，必须先回滚接线阶段再回滚本阶段，不重写历史或移动已发布标签。
 
+## 13. Phase 2 决策补充：执行隔离、时间合同与验收
+
+### 13.1 本轮权限与冻结基线
+
+- 本轮仅更新本文件，不修改运行时代码或依赖；guard 单元为 `AD-AUDIO-RULES-V2-P2-DESIGN`。接续时工作区干净，分支 `dev2`，HEAD 为 `fa8f8959b17dd923397776fa9492152da232a819`。
+- 不重新实施 2026-08-18 的旧关键词 Provider 计划；该计划已存在实现。参考 `docs/superpowers/specs/2026-08-18-speech-ad-keyword-provider-design.md` 时，以当前代码和后续修复为准。
+- 必须保留 `532be2d7ed5b1562c36d6d85b824d5072d51b849`（语音链路修复）、`9355ea530e467c27d6fb28413c2cf6cb471ce729`（timeline reset 保留会话）及 `4cf2f76e2dea95f0ba69baeb66258d5b1a04035f`（原 Provider）已形成的行为。它们是本地保护基线，不是本轮 cherry-pick 候选。
+- Java 制品为 `app/libs/sherpa-onnx-v1.13.4.jar`，SHA-256 为 `c529915aa0c56213678065ad47f3d19c39564555c3a6d95bdbb79e8af82b88fe`；`javap` 确认 Result 有 text/tokens/timestamps/ysProbs，ModelConfig Builder 有 `setNumThreads`，没有通用 ORT session/spinning 配置入口。此检查不证明配套原生库的构建来源。
+- Sherpa `v1.13.4` 官方源码固定为 `142807252687d81b40d6315f23470a1512a00de3`；Media3 保持目录中的 `1.11.0-alpha01-fongmi`。**不升级任何 JAR/AAR/SO，不改 JNI，不引入 Vosk**。
+
+### 13.2 当前调用链的具体事实
+
+以下定位均对应上述本地 HEAD；风险是代码推导，尚未在 TV 上复现根因。
+
+| 路径 / 符号 | 已观察事实 | 决策影响 |
+|---|---|---|
+| `subtitle/RealtimeSubtitleRecognizer.java:147-174`，`acceptStreaming` / `emitStreamingResult` | 只在 endpoint 或 4.8 秒自适应边界发结果；随后 reset。不是每个 PCM 帧都发累计 partial。终点有末 token 时间加 0.32 秒的估算 | 不先写一个复杂的通用 partial 去重框架；透传完整区间，但不得将估算宣称词级精确度 |
+| 同文件 `acceptOffline` / `recognizeLoop` / `recognize`（177-230） | VAD 片段按采样数计算起止，后台队列容量 3；队列积压时只保留最新片段，省略较旧识别段 | 被省略的时间不能与后续文本静默拼接成跨句命中；广告 profile 需要连续性标识/重置，不能直接改变字幕现有策略 |
+| `subtitle/SpeechRecognitionFactory.java` 与 `RealtimeSubtitleSpeechRecognitionFactory.java:46-80` | 门面和适配器均透传 text/startUs/endUs/token；Session 本身没有并发安全保证 | 复用现有门面，不新建另一套识别 SDK；native 会话必须有单一串行所有者 |
+| `ad/audio/SpeechAdSignalProvider.java:308-314`，`recognitionListener` | Provider 转发时丢弃 `endUs` | 2B 恢复终点传递，不能用旧 HostPosition 或回调墙钟补齐 |
+| 同文件 `activateLocked`（285-289）、`drainMailbox`（429-445）、`closeRecognitionSessionLocked`（634 起） | 初始化、accept、reset/close 进入 Provider 锁域；Hub 以 `DIRECT_EXECUTOR` 调用 consumer | 慢推理可让音频入队等待 Provider 锁；禁止仅“换成低优先级”后宣布阻塞消失 |
+| `player/audio/PlaybackMediaSignalHub.java:247-295` | mailbox 内调用 executor；DIRECT_EXECUTOR 会在调用线程执行 drain，consumer 本身虽不在 drain 的局部锁块内，但外侧 offer/schedule 调用尚未退出 | 不把这个注册方式误认为天然异步。关闭注册与 Provider 锁还可能形成反向获取关系，入口和清理需要解耦 |
+| `RealtimeSubtitleRecognizer.release`（123-144）及 `recognize`（219-230） | release 等待 `recognitionFuture.get()`；离线结果回调又可进入 Provider 锁 | 持 Provider 锁等待 native worker 可能产生循环等待；不使用超时后直接释放 native 指针作为“修复” |
+| `ad/audio/AdAudioRuntimeController.java:387,390-398,498-504,566-573` | PCM 指纹与 Speech 使用同一 worker，路由白名单只加入固定 `speech-keyword` ID | 2A 分离 worker；2B 同步更新规则 ID 白名单与配置版本，否则新 matcher 命中也会被丢弃 |
+| `ad/audio/AdSkipCoordinator.targetFor`（288-307）与 `player/audio/PlaybackMediaClock.Snapshot.mapCaptureToMediaMs` | Coordinator 对 captureEnd 加 media anchor、验证 fresh/generation、钳制 duration，并拒绝已经过去的目标 | 唯一坐标转换与 seek authority 保持不动；修正本文件早先可能导致重复转换的描述 |
+| `SpeechAdSignalProviderTest.candidateUsesCaptureTimeAndLeavesDurationClampingToTheCoordinator` | 现有测试明确要求 Provider 不用 media duration 钳制 capture 区间 | 这是保护合同，不把该用例当作旧预期删除 |
+
+同时保留缓冲期间 park 而不销毁模型、seek/flush 后同会话 reset 并拒绝旧回调、模型未就绪 fail-open、旧 ASCII 单词边界和指纹独立策略。
+
+### 13.3 最佳实践证据记录
+
+访问日期统一为 **2026-09-08，Asia/Shanghai**。A 为当前接口/源码直接证据；B 为维护者对特定问题的解释；C 为未经本地复现的外部报告。GitHub 内容经 agent-reach 的 `gh api` 路由读取；本机 `agent-reach` 可执行程序不可用。官方网页由网页读取工具取得，没有修改代理配置。
+
+| 证据类别 | 来源、revision 与已读位置 | 等级 / 支持的判断 / 局限与影响 |
+|---|---|---|
+| 精确上游源码 | `https://github.com/k2-fsa/sherpa-onnx/blob/142807252687d81b40d6315f23470a1512a00de3/sherpa-onnx/java-api/src/main/java/com/k2fsa/sherpa/onnx/OnlineRecognizerResult.java` 与 `OnlineModelConfig.java` | A：Java 公开 token 时间戳和线程数，不公开完整词起止或任意 ORT 配置；采用已有 API，不为本阶段新增 JNI 选项 |
+| 精确上游实现 | 同 revision 的 `sherpa-onnx/csrc/online-recognizer-transducer-impl.h`，`Convert` / `GetResult` / `Reset`；`online-transducer-greedy-search-decoder.cc` | A：token 时间来自解码帧，另有 segment/start_time；Java Result 没有 start_time 字段；重置后时间对齐仍须多片段样本验证，不能仅按最新 PCM 末尾推断 |
+| 官方运行时文档 | `https://onnxruntime.ai/docs/performance/tune-performance/threading.html`，thread management/intra-op/spinning | A：intra-op=1 不创建额外 intra-op worker；旋转等待、线程池和多 Session 有 CPU/延迟权衡。官方建议不能证明 WebHTV 总线程数为 1，也不能通过未暴露的 Java API“关闭全部 spinning”；只设置可用的线程预算并测量 |
+| 官方平台文档 | `https://developer.android.com/topic/performance/threads`，thread priority | A：后台线程仍与渲染线程争 CPU；Android Process 优先级作用于调度，Java Thread 优先级不能作为整套 native 线程的资源隔离证明。仅广告执行入口设 background，音频/视频线程不降级 |
+| 上游维护者讨论 | `https://github.com/k2-fsa/sherpa-onnx/issues/982#issuecomment-2160185844`，2024-06-11；关联 PR #989 | B：该维护者说明针对 CTC 的 token 时间性质有限。不能推广为所有模型都有完整词区间；只用其支持“模型相关、必须验收”的边界，不移植该历史 PR |
+| 上游现场性能报告 | `https://github.com/k2-fsa/sherpa-onnx/issues/2151` 及 2025-12-16 维护者追问 | C：报告多实例/多线程下的性能下降，但维护者仍要求完整代码；没有可移植 TV 结论。拒绝据此做全局线程池/亲和性/native 重构 |
+| 成熟 Android 应用源码 | Sherpa 同 revision 的 `android/SherpaOnnxVadAsr/app/src/main/java/com/k2fsa/sherpa/onnx/MainActivity.kt` | A：示例有后台录音/识别与流释放流程，可对照生命周期；它是麦克风应用，不证明 Exo PCM 回调可阻塞，也不授权增加麦克风权限 |
+| 独立项目对照 | `https://github.com/alphacep/vosk-android-demo/blob/a5e58ec399135f78325bd3e289849fc3fb57ce96/app/src/main/java/org/vosk/demo/VoskActivity.java`，官方 Android demo | A（边界对照）：其活动/识别服务关系与 WebHTV 播放音轨旁路不同，只作 API/生命周期比较；不照搬 SDK、录音入口或性能结论。旧星落评估只对应 5.8.5，不冒充 6.0.1 证据 |
+| 测试/测量与论文适用性 | 当前本地 `SpeechAdSignalProviderTest` / `SpeechAdRuntimeEndToEndTest`；外部现场报告如上 | 本轮阅读旧回归合同而不重复测试。本阶段不改变模型/识别算法，新的算法论文不决定锁所有权设计；没有同款 TV 上可迁移的公开 benchmark，所以实际性能仍是设备门槛，不用论文/博客替代。本项目定向并发测试与实际设备对照才决定是否放行 |
+
+以上覆盖了源码、官方文档、issue/维护者、相关应用和现场报告；不声称已完成真实设备性能证明。临时源码/JSON 保存于 `/tmp/AD-AUDIO-RULES-V2-phase2-evidence/`，持久结论和固定 revision 以本节为准。当前证据已能决定 2A 设计，不再为同一问题扩大搜索。
+
+### 13.4 方案比较与推荐
+
+| 方案 | 正确性/兼容性 | 性能/生命周期 | 结论 |
+|---|---|---|---|
+| 不改 | 旧关键词可继续使用，但新规则仍无入口 | 共享 worker 与锁等待风险不变 | 保留为回滚基线，不代表满足升级目标 |
+| 原样照搬采集器/其他 ASR demo | 引入另一音轨/麦克风、SDK 或模型所有权；不解决 WebHTV capture 坐标与旧修复 | 新增 CPU、内存、包体和 native 生命周期；平台演示不是 TV 播放证明 | 拒绝 |
+| 只设 numThreads=1 或只调优先级 | 不解决丢终点/新 ID 路由，也不消除持锁等待 | 可能降低竞争，仍可阻塞或死锁；降线程也可能扩大积压 | 不作为完整修复 |
+| WebHTV 适配：先 2A 执行隔离，再 2B 时间与规则接线 | 保留旧配置/字幕路径、capture 合同、单 Coordinator；逐阶段验证 | 单独 native owner、有界消息、不持控制锁推理；可独立回滚，不改二进制 | **推荐** |
+
+#### Phase 2A：执行与生命周期隔离（当前建议批准的最小单元）
+
+1. 创建**语音广告专用串行 owner worker**，不复用 PCM 指纹 worker；所有模型 create、Session accept/reset/close 由该 owner 串行处理。字幕默认创建入口和现有线程策略不变，广告工厂显式传入受限 profile。
+2. Host/Hub 回调只更新可见 token/状态或进入有界输入队列；无模型校验、初始化、推理、文件/日志 I/O、Future 等待。不能只把 `recognitionSession.accept` 移出 synchronized 后允许 close 并发释放指针。
+3. 控制状态锁不跨 native 调用；识别回调只投递带 instance/session/generation/timeline 的有界结果事件，不等待主线程或 Provider 锁。reset/close 先逻辑失效 token，再由 owner 执行物理 reset/release；释放未完成时不启动第二个替代会话。
+4. owner 的唤醒任务合并，PCM/结果均有固定容量；生命周期命令优先于旧 PCM。丢帧/丢识别段标记不连续并 reset 本段，不能跨缺口拼词。对于正在 native decode 的会话，超时只诊断/停用，不并行 free，不伪造“已经释放”。
+5. 广告 profile 从 numThreads=1 开始；Android background priority 仅在新广告 worker 内设置。不启用 native affinity、全局 ORT 线程池或新的 JNI 开关。新增固定枚举/计数/耗时诊断，不记录文本、关键词、PCM 或媒体 URL。
+6. 保留旧关键词规则、模式、时长与 Prefs；暂不启用新复合规则。新增慢 create/accept/close 和迟到回调的并发测试，先证明音频入口/指纹工作不必等待 ASR，再做设备共存测试。
+
+拟批准路径（不是本轮实际修改授权）：
+
+```text
+app/src/main/java/com/fongmi/android/tv/ad/audio/SpeechAdSignalProvider.java
+app/src/main/java/com/fongmi/android/tv/ad/audio/AdAudioRuntimeController.java
+app/src/main/java/com/fongmi/android/tv/ad/audio/AdAudioDiagnostics.java
+app/src/main/java/com/fongmi/android/tv/subtitle/RealtimeSubtitleSpeechRecognitionFactory.java
+app/src/main/java/com/fongmi/android/tv/subtitle/RealtimeSubtitleRecognizer.java
+app/src/test/java/com/fongmi/android/tv/ad/audio/SpeechAdSignalProviderTest.java
+app/src/test/java/com/fongmi/android/tv/ad/audio/AdAudioRuntimeControllerTest.java
+app/src/test/java/com/fongmi/android/tv/ad/audio/SpeechAdRuntimeEndToEndTest.java
+app/src/test/java/com/fongmi/android/tv/subtitle/RealtimeSubtitleRecognizerTest.java
+docs/AD-AUDIO-RULES-V2-design.md
+```
+
+实现若确需另增 owner/配置类或公共接口，先列出最小路径与合同变动，不能悄悄扩大此集合。既有实时字幕回归不可删除或改成永远不验证；只为广告新增 profile，并维持原调用重载的语义。
+
+#### Phase 2B：新规则、时间精度和唯一跳转
+
+- 透传真实识别区间并接入 `SpeechAdMatcher`；保留旧关键词集合，不把 ASCII 单词边界降为任意子串。新规则快照与规则 ID 白名单、路由 version 同步更新，旧 callback 不能使用新快照。
+- Phase 1 的整结果起止无法定位结果中间的关键字：后续需加入匹配字符范围和可选 token 对齐数据，保留旧调用重载。NFKC/BPE/字节回退或 tokens/timestamps 长度不匹配时不能逐项硬配；无可靠边界只作明确标识的近似候选，不自动执行。
+- `+0.32 秒` 与 VAD 整段终点都不是词边界真值。自动路径必须在合法标注音频上量化“末关键词结束 + post”误差；建议先冻结 **500 ms 最大额外时间误差**作为待批准门槛，超过或无法校准不启用该模型的自动路径。不能把停用自动路径当作整项任务完成，必须完成至少一个目标模型/设备的自动场景验收。
+- 只产生 capture 坐标候选；沿用 multiplexer → policy → coordinator 处理最终 seek。至少覆盖从非零 media anchor 开始、seek 后重建时间轴、片尾钳制、迟到结果、指纹/语音同时命中和冲突规则最多一次有效跳转。
+- Phase 2B 需要补充批准 matcher/配置/路由的具体范围；UI、导入冲突展示和远程来源仍属于 Phase 3，不并入 2A。
+
+### 13.5 验证、资源与发布门槛
+
+**决定性 JVM 回归**：使用可阻塞的 fake recognizer 和 latch/barrier，而不是 sleep 猜时序。慢 ASR 时 Hub 发布和独立指纹任务可完成；close/reset 立即使 token 失效且 native 不并发释放；积压丢弃后不跨空洞命中；配置替换只接受当前 ID；保留既有 capture/duration、park、同 Session reset、prompt/auto/undo 测试。真实模型不适合用 JVM stub 证明。
+
+**最小构建**：一次 `bash ./gradlew :app:testLeanbackArm64_v8aDebugUnitTest` 的定向相关测试加 Leanback arm64 debug 构建；除相关编辑/不确定失败外不重跑。不为本阶段重建 FFmpeg/Media3/JNI/所有 ABI。共享字幕 factory 的 Android 调用/生命周期由相关测试和这一构建覆盖，不据此声称所有设备均兼容。
+
+**真实 TV 对照**（批准后先冻结样本/阈值，再看结果）：
+
+- 同一设备、OS、APK hash、模型 hash、媒体与解码器、输出/倍速、网络和温度条件；每组先预热，再至少 3 次同长度观测，报告中位数、p95 与离散范围。包括关闭语音、模型未就绪、模型就绪线程 1/2，以及语音+实时字幕同时开启。
+- 复用 `PlaybackAnalyticsListener.onDroppedVideoFrames` 的累计计数，以及已有 `onAudioUnderrun` 调试日志；后者当前受 `SpiderDebug` 开关约束，必须两组使用相同开关。不能用 UI FPS 代替视频解码丢帧；不另建一套播放器统计体系。
+- 建议门槛：无新增 ANR/音频 underrun/死锁；音频投递 p99 ≤1 ms 且单次不超过 5 ms；5 分钟样本新增视频丢帧不超过 1 帧；额外启动/seek p95 ≤50 ms；目标设备内 ASR 实时系数 <1、队列不持续增长。以上是**待批准的产品门槛，不是行业标准或已测结果**；方差跨越门槛则继续取证，不只取最快一轮。
+- 降级只能作为运行时安全保护。若正常目标负载下持续停用识别，说明功能/性能验收未通过，不能按“主播放不再卡”宣布完成。
+
+**设备事实**：2026-09-08 13:40 左右 `adb devices -l` 有 `192.168.50.3:5555/5557/5559/5561` 四个在线端点，显示型号分别为 LIO_AN00、SM_N9700、V1923A、HD1910；没有指定哪个是目标 TV，也没有测试本轮模型。不能凭“ADB 在线”证明有合格 TV 环境。本轮未安装、改设置或播放这些设备；目标 TV 与合法标注音频需在设备验收前落实，不阻止 2A 的代码/并发验证准备。
+
+**资源/包体/回滚**：只新增广告专用 Java worker/profile 与有界队列，不引入第二条 PCM 管线、麦克风、依赖或 native 制品；精确 APK 增量在构建后记录，不能宣称为零。2A、2B 分别原子提交并打恢复标签；回滚先 2B 后 2A，保留用户关键词、缓存、字幕默认行为。功能 flag 默认关闭不等于通过回归；任何 material regression 未解决时不得发布/宣称整项完成。
+
 ### Recovery anchor
 
-- **目标/验收**：交付去广告升级设计并收口 Phase 1 独立 JVM 语法/匹配层；不把后续播放能力视为完成。
-- **状态**：34 项测试通过，本文与六个新文件为本次任务所有；将由当前 guard 一次提交并打恢复标签。
-- **已验证**：纯 JVM 编译、语法/安全上限/时间窗回归；未验证 APK、真实识别器、设备性能与 seek 接线。
-- **风险**：片段时间不等于词时间；宽泛词误伤；旧关键词词边界；partial 去重、generation 和唯一 seek 仍须由后续集成落实。
-- **恢复锚点**：设计基线 `045ae26ab2374264f72dd4c266eca2f1f2dfc5e9`；本阶段实现与恢复标签由以上提交记录定位。
-- **唯一下一步**：取得 Phase 2 输入/时间对齐及性能验收方案的确认，再启动新的实现会话。
+- **完整目标**：按本文件完成社区指纹兼容、复合语音规则、播放实时性、配置/UI 与受控自动跳过；不把纯规则层或单纯降级重新定义为最终完成。
+- **当前状态**：Phase 1 已闭环；本轮只修订 Phase 2 决策文档，无运行时变更。2A 推荐实施但未取得明确代码阶段确认，2B/3/4 未实施。
+- **已完成证据**：Phase 1 的 34 项 JVM 测试；本轮精确本地调用链、后续本地修复、Sherpa v1.13.4 源码与 JAR API、官方线程资料及相关 issue/应用对照；未重复 Phase 1 测试。
+- **当前文件**：仅 `docs/AD-AUDIO-RULES-V2-design.md`；本次设计提交/恢复标签由 `AD-AUDIO-RULES-V2-P2-DESIGN` guard 产生。
+- **风险/门槛**：锁/线程和坐标设计已选定；真实模型词时间误差、TV 资源共存、设备及音频样本仍待后续验证，不能用编译代替。
+- **回滚基线**：`fa8f8959b17dd923397776fa9492152da232a819`，`recovery/AD-AUDIO-RULES-V2/20260908133704-fa8f8959b17d`；本轮可仅回滚文档，不影响代码。
+- **唯一下一步**：取得明确的 Phase 2A 实施确认，随后在第 13.4 节所列范围启动代码 guard 会话。
