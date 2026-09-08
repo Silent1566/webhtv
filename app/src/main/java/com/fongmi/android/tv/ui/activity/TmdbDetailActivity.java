@@ -42,6 +42,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.core.widget.NestedScrollView;
+import androidx.core.view.OneShotPreDrawListener;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -4657,7 +4658,10 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         if (rv.getVisibility() != View.VISIBLE) return;
         RecyclerView.Adapter<?> adapter = rv.getAdapter();
         if (adapter == null || adapter.getItemCount() == 0) return;
-        if (rv.getChildCount() > 0) return; // 已有子 View，未处于错位态
+        // 主选集卡片仍可见时，未消费的刷新也会使其 adapter position 持续为 NO_POSITION。
+        // 其它 TMDB 列表保持原有的无子 View 恢复条件。
+        boolean pendingEpisodeLayout = binding != null && rv == binding.episodeContainer && rv.hasPendingAdapterUpdates();
+        if (rv.getChildCount() > 0 && !pendingEpisodeLayout) return;
         if (rv.isComputingLayout()) {
             rv.post(() -> recoverRecyclerViewIfDetached(rv));
             return;
@@ -6112,14 +6116,25 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private void showTmdbEpisodeDetail(Episode episode, int episodeNumber, TmdbEpisode boundTmdbEpisode, RecyclerView returnRecycler) {
-        // 对话框关闭后完整重渲染剧集列表，防止焦点状态紊乱导致按钮失效
         android.content.DialogInterface.OnDismissListener dismissListener = d -> {
-            if (binding == null || binding.episodeContainer == null || returnRecycler == null) return;
-            // RecyclerView 可能仍在恢复布局，下一帧再完整重渲染（参考原生增强的 render 机制）
-            binding.episodeContainer.post(() -> {
-                // 完整重建列表 + 分组按钮（类似原生增强 render[0].run()）
+            if (binding == null || returnRecycler == null) return;
+            View previousFocus = returnRecycler.getRootView().findFocus();
+            returnRecycler.post(() -> {
+                if (binding == null || isFinishing() || isDestroyed() || !returnRecycler.isAttachedToWindow()) return;
                 rerenderEpisodeViewportOnly(false, true, true);
-                returnRecycler.post(() -> restoreEpisodeDetailFocus(returnRecycler, episode));
+                if (returnRecycler != binding.episodeContainer) {
+                    // 独立选集面板保留原有恢复路径。
+                    returnRecycler.post(() -> restoreEpisodeDetailFocus(returnRecycler, episode));
+                    return;
+                }
+                // post/postOnAnimation 不保证刷新已布局；在真实布局后的 pre-draw 恢复精确卡片。
+                OneShotPreDrawListener.add(returnRecycler, () -> {
+                    if (binding == null || isFinishing() || isDestroyed() || !returnRecycler.isShown()) return;
+                    View focus = returnRecycler.getRootView().findFocus();
+                    if (focus != null && focus != previousFocus && !isFocusInside(focus, returnRecycler)) return;
+                    restoreEpisodeDetailFocus(returnRecycler, episode);
+                });
+                recoverEpisodeViewportIfDetached();
             });
         };
 

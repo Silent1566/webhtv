@@ -1142,6 +1142,33 @@ public class TmdbDetailActivityLayoutTest {
     }
 
     @Test
+    public void episodeDetailDismissRepairsInvalidVisibleHoldersBeforeRestoringFocus() throws Exception {
+        String source = readJava("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java");
+        String recovery = javaBlockAt(source, "private void recoverRecyclerViewIfDetached(");
+        String show = javaBlockAt(source, "private void showTmdbEpisodeDetail(");
+        String dismiss = javaBlockAt(show, "OnDismissListener dismissListener");
+
+        assertTrue("visible cards with pending updates need a real layout so DPAD keys no longer see NO_POSITION",
+                recovery.contains("rv == binding.episodeContainer && rv.hasPendingAdapterUpdates()")
+                        && recovery.contains("if (rv.getChildCount() > 0 && !pendingEpisodeLayout) return;")
+                        && recovery.contains("rv.forceLayout();")
+                        && recovery.contains("v.forceLayout();")
+                        && recovery.contains("root.requestLayout();"));
+        assertTrue("register the one-shot post-layout restore before repairing the stalled layout",
+                dismiss.contains("OneShotPreDrawListener.add(returnRecycler, () -> {")
+                        && dismiss.contains("restoreEpisodeDetailFocus(returnRecycler, episode);")
+                        && dismiss.indexOf("OneShotPreDrawListener.add(") < dismiss.indexOf("recoverEpisodeViewportIfDetached();"));
+        assertTrue("the independent episode panel keeps its existing restore path",
+                dismiss.contains("if (returnRecycler != binding.episodeContainer) {")
+                        && dismiss.contains("returnRecycler.post(() -> restoreEpisodeDetailFocus(returnRecycler, episode));"));
+        assertTrue("dismiss must not steal focus from another button or an already closed activity",
+                dismiss.contains("!returnRecycler.isAttachedToWindow()")
+                        && dismiss.contains("isFinishing() || isDestroyed()")
+                        && dismiss.contains("!returnRecycler.isShown()")
+                        && dismiss.contains("focus != previousFocus && !isFocusInside(focus, returnRecycler)"));
+    }
+
+    @Test
     public void standaloneEpisodeModeToggleDoesNotForceSelectedScroll() throws Exception {
         Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
