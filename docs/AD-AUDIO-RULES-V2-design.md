@@ -692,3 +692,118 @@ bash ./gradlew :app:assembleLeanbackArm64_v8aDebug --console=plain
 - **未解决边界**：词级时间对齐、500 ms 误差门槛、真实 TV/模型性能、Phase 3/4；无安装/push/发布。
 - **回滚锚点**：Phase 2A annotated tag `recovery/AD-AUDIO-RULES-V2-P2A/20260908204153-1e5642857f32`；本阶段采用单 commit + `recovery/AD-AUDIO-RULES-V2-P2B/<timestamp>`，回滚用可逆 revert，不覆盖其他工作。
 - **唯一下一步**：用 `task_guard.sh finish` 原子提交本阶段代码、测试与设计记录，并创建 `recovery/AD-AUDIO-RULES-V2-P2B/<timestamp>` annotated 本地恢复标签；不把 JVM/构建通过写成 TV/模型验收通过。
+
+## 17. Phase 3 规则来源、设置与备份设计（2026-09-08）
+
+### 17.1 本轮决策问题与本地事实
+
+本轮只决定 Phase 3 的**规则持久化、导入/编辑、来源优先级、备份兼容和 Mobile/Leanback 入口语义**，不实施运行时代码。Phase 3 不包含远程语音规则同步、音频指纹协议、Media3/FFmpeg/JNI/native 变更，也不替代 Phase 4 的真实设备性能和识别精度验收。
+
+当前代码事实如下：
+
+- `app/src/main/java/com/fongmi/android/tv/ad/audio/SpeechAdSetting.java` 只有
+  `speech_ad_enabled`、`speech_ad_keywords`、`speech_ad_skip_seconds`、
+  `speech_ad_skip_mode` 四个旧 key；`SpeechAdConfig` 已有 `SpeechAdRuleSet`，但
+  `snapshot()` 尚未读取持久化的 v2 规则文档。
+- `SpeechAdRuleCodec` 已把输入限制为 UTF-8 64 KiB、最多 256 条规则，并在写入前可以给出行号错误；因此规则文档是有界配置，不应被当作无限增长的日志或数据库。
+- `SpeechAdRuleCodec` 的规则 ID 由规范文本摘要生成；同一规范规则可以稳定去重，但不同窗口不能默默合并为“最长窗口”。旧 `SpeechAdKeywordSet` 的 ASCII 单词边界语义仍必须保留，不能把旧关键词静默改写成字面量规则。
+- `SettingAdActivity` 与 `SettingAdFragment` 已有同语义但分开的设置入口，音频指纹导入已经使用 `ActivityResultContracts.OpenDocument`、`ContentResolver`、后台解析和失败保留旧规则的模式；这应作为语音规则 UI 的最小复用模板。
+- `Backup.create()` 会收集完整 `SharedPreferences`；按设置类别同步时，`Backup.APP_PREFS`/`Backup.include()` 才决定哪些 key 随设置备份。当前 `speech_ad_*` 和 `ad_audio_*` 尚未进入该白名单。
+- 产品 manifest 当前明确 `android:allowBackup="false"`。产品自己的 `Backup`/`AppBackup` 才是跨设备配置迁移合同；`AppBackup` 对 `filesDir` 只打包显式允许的子树，不能假定新文件会自动进入产品备份。
+- `PlayerManager.configureAdAudioRuntime()` 在刷新运行时时调用 `SpeechAdSetting.snapshot()`；新的设置写入成功后仍须沿用 `reloadAdAudioSettings()`，由现有 Runtime/Coordinator 重新装载，不能由 UI 直接 seek 或改动播放器坐标。
+
+### 17.2 最佳实践证据与决策影响
+
+本轮使用 IPv4/HTTP/1.1 直读官方页面；`agent-reach` 命令本机未安装，Jina 读取因 TLS EOF 不稳定，故不把路由器的失败当作证据。以下来源均在 **2026-09-08（Asia/Shanghai）** 访问，网页的 `Last-Modified` 作为页面 revision 记录；本地源码/测试以当前 HEAD `db8e98432ecd26029def37ff6e2bf01dc68cd793` 为准。
+
+| 来源 / revision | 等级与事实 | WebHTV 适用性及决策影响 |
+|---|---|---|
+| Android Developers，`https://developer.android.com/training/data-storage/shared-preferences`；页面 `Last-Modified: 2026-03-05` | A：`SharedPreferences` 面向相对较小的 key-value 集合；`apply()` 立即更新内存并异步落盘，`commit()` 同步落盘且不应在主线程调用；页面同时提示新项目优先评估 DataStore | 保留现有 `Prefers` 作为四个标量设置和一个受 64 KiB 限制的规则文本槽位，写入前先完整解析/规范化；不在 UI 线程调用同步 commit，不为本阶段引入 DataStore 迁移。若规则未来超出当前硬上限，另开存储迁移阶段。 |
+| Android Developers，`https://developer.android.com/training/data-storage/shared/documents-files`；页面 `Last-Modified: 2026-09-01` | A：Storage Access Framework 的 `ACTION_OPEN_DOCUMENT` 让用户从文档提供者选择文件；应用通过返回的 URI/`ContentResolver` 读取，不需要自行申请共享存储读权限 | 语音规则使用现有 `OpenDocument` launcher，接受 `text/plain`/文本扩展名并严格限制 UTF-8 字节数；读取成功后立即复制为应用自己的规范文本，不保存外部 URI 权限，避免源文件被删或权限变化影响播放。 |
+| AndroidX API reference，`https://developer.android.com/reference/androidx/activity/result/contract/ActivityResultContracts.OpenDocument`；`Added in androidx.activity 1.2.0` | A：`OpenDocument` 是 Activity Result contract，可按 MIME 类型创建文档选择 Intent；当前项目已有相同 API 调用，不需要新增依赖或回退到旧的 request-code API | Mobile/Leanback 各保留一个 launcher，但把解析/保存委托给同一设置语义；两端不能各自实现不同的规则格式。 |
+| Android Developers，`https://developer.android.com/identity/data/autobackup`；页面 `Last-Modified: 2026-02-26` | A：系统备份通过 include/exclude 控制 `sharedpref`/`file` 等 domain，并有传输类型和配额约束；系统备份配置不等于产品自定义导入导出 | 因为 WebHTV 关闭 `allowBackup` 且已有自定义 Backup JSON/ZIP，Phase 3 显式把新偏好 key 加入 `Backup.APP_PREFS`；不依赖系统 Auto Backup 迁移规则文档，也不在本阶段修改 manifest。 |
+| Android Developers，`https://developer.android.com/develop/ui/views/touch-and-input/keyboard-input/navigation`；页面 `Last-Modified: 2026-05-28` | A：交互控件应可获得焦点；方向键/D-pad 默认按布局猜测，错误时可用 `nextFocusUp/Down/Left/Right` 明确指定；必须逐控件测试方向导航 | Leanback 新增的每一行继续使用现有可聚焦 row 样式；若新增管理对话框改变焦点路径，补显式焦点属性和源码测试，并把真实 D-pad 测试列为设备验收，不以 XML 静态检查冒充设备通过。 |
+| 本地 `SpeechAdRuleCodec`、`AdAudioRuleStore`、`SettingAdActivity`、`SettingAdFragment`、`Backup` 及其测试 | A（项目源码）：已有有界解析、规范化、临时文件/原子替换、后台导入、旧快照保留、双入口和自定义备份框架 | 采用已有 WebHTV 约定，避免引入新依赖、新 JSON 协议或第二套播放器设置架构；新增行为必须有规则 codec、设置、备份和两端入口的定向测试。 |
+
+### 17.3 方案比较与推荐
+
+| 方案 | 正确性、兼容性与维护 | 性能、备份与可回滚性 | 决策 |
+|---|---|---|---|
+| 不变更：继续只有旧关键词四个 key | 风险最低，但用户提供的 `*`/`>` 规则没有可用入口；无法展示规则来源、数量和错误 | 不增加解析或 UI 成本，但 Phase 3 目标不成立 | 作为回滚基线，不满足目标 |
+| 原样采用平台“现代”路线：DataStore + 新 Preference 页面 + 系统 Auto Backup | 与当前 Java/`Prefers`/自定义 Backup 架构不一致；引入异步状态迁移、依赖和两套恢复合同；系统备份还受 manifest 当前关闭状态影响 | 可能更适合未来大量结构化设置，但本阶段范围大、回滚面大，不能解决既有两端设置复用 | 拒绝本阶段原样采用，保留为未来独立迁移候选 |
+| 直接把规则文本塞进现有 `speech_ad_keywords` | 会破坏旧 ASCII 单词边界、旧备份值和 UI 的关键词语义；非法复杂规则也难以区分 | 失败时容易覆盖旧设置，恢复和诊断不清晰 | 拒绝 |
+| **WebHTV 适配：标量沿用 Prefers，规则文档使用独立 bounded key，SAF 导入后规范化，产品 Backup 显式收录** | 保留旧四 key 和旧关键词 matcher；新增 `speech_ad_rules_v1` 不改变旧用户语义；用户编辑/导入共享同一 codec；全部失败都保留旧有效文档 | 64 KiB/256 条硬上限控制内存与解析成本；`apply()` 不阻塞 UI；自定义 Backup 能随 key 清除/恢复；默认 feature flag 关闭，可单 commit/revert | **推荐实施** |
+
+这里的“独立 bounded key”不是把复杂规则伪装成关键词：它是新 key `speech_ad_rules_v1`，只存 `SpeechAdRuleCodec.serialize()` 的规范纯文本；旧 `speech_ad_keywords` 永不迁移、覆盖或改变边界语义。选择 key 而不是新增内部文件，是因为产品 `Backup.create()`/`restorePrefers()` 已经对偏好有完整恢复合同，而 `AppBackup` 当前会跳过任意未列入允许子树的 `filesDir` 文件；不为一份最多 64 KiB 的设置文本新增文件归档协议。
+
+### 17.4 推荐设计的具体合同
+
+#### 持久化与来源
+
+新增的稳定 key 及默认值：
+
+```text
+speech_ad_rules_v1          = ""       # 规范纯文本；空表示无用户文档
+speech_ad_rules_source      = ""       # "user" 或 "imported"，仅记录当前文档来源
+speech_ad_builtin_enabled   = false    # 内置规则包默认不参与运行时匹配
+```
+
+- 内置规则随 APK 放在 `app/src/main/res/raw/speech_ad_rules_v1.txt`，只读、可版本化，不写入用户 key。首期只放保守的多片段过渡句模板；宽泛单词、色情/儿童保护含义和“下集预告”不进入默认启用库。
+- `speech_ad_builtin_enabled=false`、`speech_ad_enabled=false` 共同保持当前默认关闭行为。用户打开语音能力后，旧关键词仍按旧 matcher 工作；只有用户显式打开内置规则后，内置规则才加入 `SpeechAdConfig.rules()`。
+- 用户编辑或导入都替换当前自定义文档，分别把 `speech_ad_rules_source` 记为 `user` 或 `imported`；两者不是两个并行规则池，避免用户不知道哪一份生效。内置规则与自定义文档合并时按 `custom > builtin` 的稳定 ID 优先；规范文本相同只保留一条，ID 相同但规范文本不同则整次合并失败并保留旧有效快照，不取最长窗口。
+- `SpeechAdSetting.snapshot()` 只返回已验证的 `SpeechAdConfig`。写入入口先执行完整 parse、canonicalize 和上限检查，再一次性写 key；解析失败不得清空或部分写入旧文档。外部旧备份若带有非法值，运行时 fail-open、显示配置错误，并继续保留旧关键词路径。
+- 旧关键词**不自动转换**为 v2 规则。这是对第 5.3 节早期“自动转换”草案的明确修正：两种匹配边界不同，静默转换会把 `ad` 等旧边界语义改变为字面量命中，造成兼容回归。
+
+#### UI 与交互
+
+- 保留现有四个语音设置行；新增一个“语音规则”管理行和一个“内置规则”开关/状态行。摘要至少显示：当前来源（无、内置、用户编辑、用户导入）、有效规则数、内置开关、最近一次校验错误。规则正文不写日志。
+- 管理入口提供“编辑当前自定义规则、导入文本规则、清空自定义规则、恢复/查看内置规则”四个动作。编辑器使用多行 `EditText`；确定时先在后台或确认回调边界完成 codec 校验，错误必须带行号且保留旧快照。取消不产生写入。
+- 导入使用独立的 `ActivityResultContracts.OpenDocument` launcher，优先 MIME `text/plain`，同时按文件名接受 `.txt`；通过 `ContentResolver` 限制读取字节、严格 UTF-8 解码和解析，成功后只保存规范文本，不保留 URI。JSON 指纹导入入口和语音规则入口保持分离。
+- Mobile 与 Leanback 只共享设置语义/`SpeechAdSetting`，不强行共享现有 Activity/Fragment 基类；两端资源、按钮结果、错误文案和来源摘要保持一致。Leanback 每个新 row 必须 `focusable`，必要时添加 `nextFocus*`；源码测试覆盖入口、资源 ID、launcher 和 reload 调用，目标 TV 再执行 Up/Down/Left/Right 走查。
+- 每次成功编辑、导入、清空或切换内置规则后调用现有 `reloadAdAudioSettings()`。UI 不创建 Provider、不持有 native Session、不做 `seekTo`。
+
+#### 备份、恢复与迁移
+
+- 将 `speech_ad_rules_v1`、`speech_ad_rules_source`、`speech_ad_builtin_enabled` 加入 `Backup.APP_PREFS`，并用 `BackupPreferenceFilterTest` 验证：完整备份和 settings-only 同步包含三者，config/spider-only 不包含；不修改旧 key 的归属。
+- `Backup.create()` 已收集完整偏好，因此新 key 会进入完整产品备份；`Backup.restore()` 的 `restorePrefers(clear=true)` 会对新备份按 key 恢复，缺少这些新 key 的旧备份按默认值回退，不需要解压额外文件。系统 Auto Backup 仍不作为产品恢复合同。
+- 任何写入前都以规范文本为唯一持久化形式；不备份外部 URI、原始非法文本、解析错误、识别正文、媒体 URL 或请求头。恢复后沿用现有 `reload()`/播放器刷新路径，第一次运行仍保持语音默认关闭。
+- 旧用户升级不迁移关键词、不丢失关键词、不自动打开内置规则。回滚本阶段后，新 key 可被忽略，旧四 key 和旧 matcher 仍可读取；若已产生新 key，下一次设置恢复不会覆盖旧 key 的合法值。
+
+### 17.5 Phase 3 最小实施单元、验收与回滚
+
+获得明确的“开始实施”后，按以下一个可逆阶段执行；本设计阶段不修改这些路径：
+
+```text
+app/src/main/java/com/fongmi/android/tv/ad/audio/SpeechAdSetting.java
+app/src/main/java/com/fongmi/android/tv/bean/Backup.java
+app/src/leanback/java/com/fongmi/android/tv/ui/activity/SettingAdActivity.java
+app/src/mobile/java/com/fongmi/android/tv/ui/fragment/SettingAdFragment.java
+app/src/leanback/res/layout/activity_setting_ad.xml
+app/src/mobile/res/layout/fragment_setting_ad.xml
+app/src/main/res/raw/speech_ad_rules_v1.txt
+app/src/main/res/values/strings.xml
+app/src/main/res/values-zh-rCN/strings.xml
+app/src/main/res/values-zh-rTW/strings.xml
+app/src/test/java/com/fongmi/android/tv/ad/audio/SpeechAdConfigTest.java
+app/src/test/java/com/fongmi/android/tv/bean/BackupPreferenceFilterTest.java
+app/src/test/java/com/fongmi/android/tv/ui/activity/SpeechAdSettingSourceTest.java
+```
+
+验收至少包括：
+
+1. codec 正例/负例、64 KiB/256 条上限、重复 ID/不同窗口冲突、BOM/UTF-8、导入失败保留旧值；旧关键词 ASCII 边界回归不变。
+2. `SpeechAdSetting` 的默认关闭、旧 key 兼容、内置开关、自定义来源、规范 round-trip、坏恢复值 fail-open 和 `reloadAdAudioSettings()` 接线。
+3. 完整 Backup、settings-only、旧备份缺 key、三种新 key 的 include/filter 回归；不重复运行与本阶段无关的全量矩阵。
+4. Mobile/Leanback 的入口、资源、焦点 row、导入 launcher 和错误摘要源码测试；一次受影响的 Leanback arm64 JVM 定向测试及一次 Debug 构建。若有目标设备，再单独记录 D-pad 方向走查，不能用构建结果替代。
+
+回滚采用本阶段单 commit 的可逆 `git revert`：先关闭/移除内置规则参与和新 UI，再由旧四 key/旧关键词路径继续运行；不删除用户偏好或改动指纹缓存。若某个规则文档恢复失败，保留上一份规范文档并让语音 Provider fail-open，绝不清空指纹规则或阻塞主播放。
+
+### 17.6 决策状态与恢复锚点
+
+- **建议**：按第 17.3/17.4 节实施 Phase 3；这是当前最小、兼容现有 Java/Prefers/Backup、无新依赖且可独立回滚的路线。
+- **仍需用户批准**：本记录是设计研究和实施计划，不授权修改第 17.5 节代码/资源路径；收到明确“开始实施”前不得启动 Phase 3 实现 guard。
+- **当前未完成**：内置规则内容的最终文案审查、真实 TV D-pad 体验、模型/标注音频精度、Phase 4 灰度和设备指标；本节不声称这些门槛已通过。
+- **当前工作区/定位**：分支 `dev2`；HEAD `db8e98432ecd26029def37ff6e2bf01dc68cd793`；当前 guard `AD-AUDIO-RULES-V2-P3-DESIGN`，仅允许 `docs/AD-AUDIO-RULES-V2-design.md`，初始 protected dirty 路径为空。
+- **已完成证据**：本节完成本地代码事实审查和官方 Android 存储/SAF/备份/TV 导航证据记录；未运行 Phase 3 代码测试或构建，也未修改 APK/设备。
+- **回滚锚点**：P2B recovery tag `recovery/AD-AUDIO-RULES-V2-P2B/20260908220006-db8e98432ecd`；本设计提交可单独 revert，不影响 P2B 已验证运行时。
+- **唯一下一步**：等待用户批准“按第 17 节开始实施 Phase 3”；若批准，先重新核对工作区并启动 `AD-AUDIO-RULES-V2-P3` 实现 guard，不重复 P2B 的 106 项测试或 47 秒构建。
