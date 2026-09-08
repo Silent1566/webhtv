@@ -1,6 +1,6 @@
 # TweakCN 风格主题配色系统设计
 
-> 状态：阶段 A+B 已实施（mobile 首版）；阶段 C 已实施（mobile/leanback 运行时绑定）；阶段 D 已实施（mobile 导入/导出闭环）；阶段 E 尚未实施
+> 状态：阶段 A+B 已实施（mobile 首版）；阶段 C 已实施（mobile/leanback 运行时绑定）；阶段 D 已实施（mobile 导入/导出闭环）；阶段 E 实施中（TV 焦点语义与本地 catalog）
 > 设计日期：2026-09-07
 > 适用范围：Android mobile 优先；共享主题模型可供 leanback/TV 后续消费
 > 参考：<https://tweakcn.com/community> 以及用户提供的五张界面截图
@@ -13,7 +13,7 @@
 - 当前文件/符号：`app/src/main/java/com/fongmi/android/tv/theme/`、`app/src/mobile/java/com/fongmi/android/tv/ui/dialog/ThemeEditorDialog.java`、`ThemeColorPickerDialog.java`、`ThemePreviewView.java`、`AppearanceDialog.java`、`app/src/main/java/com/fongmi/android/tv/setting/Setting.java`、`BaseActivity`、`CustomWallView`、`SiteDialogTheme`。
 - 已完成证据：已查看五张参考截图；已核对当前主题色、动态壁纸、Material 3 和刷新事件实现；阶段 A+B 的主题/备份 JVM 单测、mobile Java 编译和 mobile 资源处理通过；阶段 C 的 mobile/leanback Java 编译、主题单测和源代码契约测试通过；阶段 D 的 25 项主题定向测试、mobile Java 编译和 mobile 资源处理通过；当前工作树无需保护的预存脏路径。
 - 未验证项：未进行连接设备交互、视觉截图验收；阶段 E 的 TV/社区索引未实现。
-- 下一步唯一动作：为阶段 E 建立独立 guard，先实施 leanback 焦点语义绑定，再补本地签名/哈希索引与缓存验证；不与阶段 D 混合。
+- 阶段 E 任务文档：`docs/THEME-COLOR-E-20260908-tv-catalog.md`；本阶段先实施 leanback 焦点语义绑定，再补本地 SHA-256 索引与缓存验证；不与阶段 D 混合。
 
 ---
 
@@ -566,7 +566,7 @@ validate(draft)
 
 完成标志：导出的文件可在另一台安装同版本应用中导入；不支持的 token 不会导致崩溃或执行代码。
 
-### 阶段 E：TV 与社区索引（后续）
+### 阶段 E：TV 与社区索引（实施中）
 
 范围：
 
@@ -575,7 +575,7 @@ validate(draft)
 - 受签名/哈希保护的静态主题索引和预览图；
 - 主题版本回滚和缓存。
 
-不与阶段 A-D 混合实施。
+任务文档：`docs/THEME-COLOR-E-20260908-tv-catalog.md`。本阶段仍不与阶段 A-D 混合实施；社区索引只做 APK 内置静态 catalog，不发起在线请求。
 
 ---
 

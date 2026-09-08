@@ -37,6 +37,15 @@ public final class ThemeController {
     private static final int[][] CONTROL_ICON_STATES = new int[][]{
             {android.R.attr.state_focused},
             {android.R.attr.state_selected},
+            {android.R.attr.state_activated},
+            {}
+    };
+
+    private static final int[][] LEANBACK_TEXT_STATES = new int[][]{
+            {android.R.attr.state_focused},
+            {android.R.attr.state_selected},
+            {android.R.attr.state_activated},
+            {-android.R.attr.state_enabled},
             {}
     };
 
@@ -70,12 +79,22 @@ public final class ThemeController {
         apply(activity.getWindow().getDecorView(), resolve(activity));
     }
 
+    /** Applies stateful colors to leanback selectors without touching player surfaces. */
+    public static void applyLeanback(Activity activity) {
+        applyLeanback(activity.getWindow().getDecorView(), resolve(activity));
+    }
+
     public static void apply(View root, ThemeTokens tokens) {
         if (root == null || tokens == null) return;
         if (ThemeProfile.BACKGROUND_SOLID.equals(ThemeProfileStore.load().background.type)) {
             root.setBackgroundColor(tokens.appBackground());
         }
         applyView(root, tokens);
+    }
+
+    public static void applyLeanback(View root, ThemeTokens tokens) {
+        if (root == null || tokens == null) return;
+        applyLeanbackView(root, tokens);
     }
 
     /**
@@ -131,6 +150,25 @@ public final class ThemeController {
         }
     }
 
+    private static void applyLeanbackView(View view, ThemeTokens tokens) {
+        if (view == null) return;
+        if (isPlayerRoot(view)) {
+            applyPlayerControls(view, tokens);
+            return;
+        }
+        if (view instanceof TextView text && isSemanticText(text)) {
+            text.setTextColor(leanbackTextColors(tokens));
+        } else if (view instanceof ImageView image && isSemanticIcon(image)) {
+            image.setImageTintList(leanbackIconColors(tokens));
+        }
+        if (isLeanbackSelectable(view)) {
+            ViewCompat.setBackgroundTintList(view, leanbackBackgroundColors(tokens));
+        }
+        if (view instanceof ViewGroup group) {
+            for (int i = 0; i < group.getChildCount(); i++) applyLeanbackView(group.getChildAt(i), tokens);
+        }
+    }
+
     private static void applyButton(MaterialButton button, ThemeTokens tokens) {
         String name = resourceName(button);
         boolean secondary = name.contains("cancel") || name.contains("reset") || name.contains("close")
@@ -159,12 +197,45 @@ public final class ThemeController {
 
     private static ColorStateList controlIconColors(ThemeTokens tokens) {
         return new ColorStateList(CONTROL_ICON_STATES,
-                new int[]{tokens.focus(), tokens.primary(), tokens.onSurfaceVariant()});
+                new int[]{tokens.focus(), tokens.primary(), tokens.primary(), tokens.onSurfaceVariant()});
     }
 
     private static ColorStateList playerIconColors(ThemeTokens tokens) {
         return new ColorStateList(CONTROL_ICON_STATES,
-                new int[]{tokens.focus(), tokens.primary(), Color.WHITE});
+                new int[]{tokens.focus(), tokens.primary(), tokens.primary(), Color.WHITE});
+    }
+
+    private static ColorStateList leanbackTextColors(ThemeTokens tokens) {
+        return new ColorStateList(LEANBACK_TEXT_STATES,
+                new int[]{tokens.onPrimary(), tokens.primary(), tokens.primary(), tokens.onSurfaceVariant(), tokens.onSurface()});
+    }
+
+    private static ColorStateList leanbackIconColors(ThemeTokens tokens) {
+        return new ColorStateList(LEANBACK_TEXT_STATES,
+                new int[]{tokens.onPrimary(), tokens.primary(), tokens.primary(), tokens.onSurfaceVariant(), tokens.onSurface()});
+    }
+
+    private static ColorStateList leanbackBackgroundColors(ThemeTokens tokens) {
+        int focus = withAlpha(tokens.focus(), 0x66);
+        int selected = withAlpha(tokens.primary(), 0x66);
+        int disabled = withAlpha(tokens.outline(), 0x36);
+        int normal = withAlpha(tokens.surface(), 0x22);
+        return new ColorStateList(new int[][]{
+                {android.R.attr.state_focused},
+                {android.R.attr.state_pressed},
+                {android.R.attr.state_activated},
+                {android.R.attr.state_selected},
+                {-android.R.attr.state_enabled},
+                {}
+        }, new int[]{focus, focus, selected, selected, disabled, normal});
+    }
+
+    private static int withAlpha(int color, int alpha) {
+        return Color.argb(alpha, Color.red(color), Color.green(color), Color.blue(color));
+    }
+
+    private static boolean isLeanbackSelectable(View view) {
+        return view.getBackground() != null && (view.isFocusable() || view.isClickable());
     }
 
     private static boolean isPlayerRoot(View view) {
