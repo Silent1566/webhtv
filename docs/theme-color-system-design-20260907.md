@@ -1,6 +1,6 @@
 # TweakCN 风格主题配色系统设计
 
-> 状态：阶段 A+B 已实施（mobile 首版）；阶段 C/D/E 尚未实施
+> 状态：阶段 A+B 已实施（mobile 首版）；阶段 C 已实施（mobile/leanback 运行时绑定）；阶段 D/E 尚未实施
 > 设计日期：2026-09-07
 > 适用范围：Android mobile 优先；共享主题模型可供 leanback/TV 后续消费
 > 参考：<https://tweakcn.com/community> 以及用户提供的五张界面截图
@@ -9,11 +9,11 @@
 ## Recovery anchor
 
 - 目标：为 WebHTV 设计一个可持久化、可预览、可导入/导出的原生主题配色系统，达到截图所示的“主题配色”编辑体验，同时保持现有首页、详情页、播放页和站源功能可回退。
-- 验收标准：阶段 A+B 已具备可持久化 profile、旧设置迁移、校验/解析、last-good 回退、备份白名单、mobile 草稿编辑器、实时预览、取消/应用和三个核心颜色编辑；阶段 C/D/E 仍需单独实施和验证。
+- 验收标准：阶段 A+B 已具备可持久化 profile、旧设置迁移、校验/解析、last-good 回退、备份白名单、mobile 草稿编辑器、实时预览、取消/应用和三个核心颜色编辑；阶段 C 已具备运行时明暗模式、语义控件绑定、站源弹窗 token、壁纸 scrim 和播放器控制层隔离；阶段 D/E 仍需单独实施和验证。
 - 当前文件/符号：`app/src/main/java/com/fongmi/android/tv/theme/`、`app/src/mobile/java/com/fongmi/android/tv/ui/dialog/ThemeEditorDialog.java`、`ThemeColorPickerDialog.java`、`ThemePreviewView.java`、`AppearanceDialog.java`、`app/src/main/java/com/fongmi/android/tv/setting/Setting.java`、`BaseActivity`、`CustomWallView`、`SiteDialogTheme`。
-- 已完成证据：已查看五张参考截图；已核对当前主题色、动态壁纸、Material 3 和刷新事件实现；已完成 22 个主题/备份 JVM 单测、mobile Java 编译和 mobile 资源处理；当前工作树另有预先存在的 `app/src/main/java/com/fongmi/android/tv/ui/helper/TouchOptimizationHelper.java` 脏改动，属于保护路径，不纳入本任务。
-- 未验证项：未进行连接设备交互、视觉截图验收；阶段 C 的原生页面 token 接入、阶段 D 的导入/导出与 TweakCN 映射、阶段 E 的 TV/社区索引均未实现。
-- 下一步唯一动作：在本阶段提交后，单独审批并启动阶段 C 或阶段 D；不要将未实现阶段宣称为完成。
+- 已完成证据：已查看五张参考截图；已核对当前主题色、动态壁纸、Material 3 和刷新事件实现；阶段 A+B 的主题/备份 JVM 单测、mobile Java 编译和 mobile 资源处理通过；阶段 C 的 mobile/leanback Java 编译、主题单测和源代码契约测试通过；当前工作树无需保护的预存脏路径。
+- 未验证项：未进行连接设备交互、视觉截图验收；阶段 D 的导入/导出与 TweakCN 映射、阶段 E 的 TV/社区索引均未实现。
+- 下一步唯一动作：执行本阶段 `task_guard.sh finish` 原子提交并创建恢复 tag；随后按计划为阶段 D 新建独立 guard，不与阶段 C 混合。
 
 ---
 
@@ -706,3 +706,34 @@ bash ./gradlew :app:testMobileArm64_v8aDebugUnitTest \
 - 已完成：代码、资源、测试均在 task guard 声明范围；上述验证通过。
 - 未完成：设备/视觉验收，以及阶段 C/D/E。
 - 下一步唯一动作：记录最终 diff 后执行 `task_guard.sh finish`，原子提交并创建本地恢复 tag。
+
+## 15. 实施记录：阶段 C（2026-09-08）
+
+### 已实现
+
+- 新增 `ThemeController`，在 Application 和 mobile/leanback `BaseActivity` 启动时读取已验证 profile，设置 `system/light/dark` 对应的 AppCompat 夜间模式；Activity 树完成后再次绑定，覆盖初始化期间动态创建的详情/播放器控件。
+- mobile 继续使用 Material Dynamic Color 作为有 seed profile 的增强路径；没有 seed 或低版本不可用时，由 `ThemeTokens` 直接绑定 Material toolbar、底部导航、TabLayout、FAB、MaterialButton、MaterialCardView、语义文字和语义图标。
+- 站源弹窗改为直接消费 `ThemeTokens`，不再以旧 `theme_color` seed 重新生成另一套颜色；旧的整数入口保留为兼容调用。
+- `CustomWallView` 增加独立、不可点击的 `themeScrim` 层：纯色 profile 使用不透明 canvas，着色壁纸使用受限 scrim，动态壁纸仍沿用原有 Exo/GIF 生命周期。
+- 播放器控制层显式标识为 `playerControlRoot`/`detailControlHost`，只应用 primary/focus 图标和进度条颜色，保留视频画面、黑色遮罩和控制文字的既有可读性；不对播放器内核或视频内容做主题改写。
+
+### 验证
+
+```text
+bash ./gradlew :app:testMobileArm64_v8aDebugUnitTest \
+  --tests com.fongmi.android.tv.theme.* \
+  --tests com.fongmi.android.tv.ui.dialog.SiteDialogThemeSourceTest \
+  --no-daemon --console=plain
+
+bash ./gradlew :app:compileMobileArm64_v8aDebugJavaWithJavac \
+  :app:compileLeanbackArm64_v8aDebugJavaWithJavac \
+  --no-daemon --console=plain
+```
+
+结果：两次定向主题测试/源代码契约测试通过；mobile 与 leanback Java 编译通过。第一次阶段 C 编译曾因错误的 `TabLayout` 方法名失败，修正为 `setSelectedTabIndicatorColor` 后重跑通过。尚未进行连接设备、视觉截图和全量 assemble 验收。
+
+### 回滚与剩余范围
+
+- 回滚：撤销阶段 C 提交即可回到阶段 A+B；profile、`theme_color` 和壁纸键仍保持兼容。
+- 剩余：阶段 D 的 JSON/HTTPS/SAF 导入导出、TweakCN token 映射和社区浏览入口；阶段 E 的 TV 完整焦点资源与签名社区索引。
+- 下一步：执行本任务 guard finish；新阶段 D 必须使用独立 task ID、独立 guard 和独立验证。

@@ -5,6 +5,7 @@ import android.content.res.ColorStateList;
 import android.widget.ImageView;
 
 import com.google.android.material.R;
+import com.fongmi.android.tv.theme.ThemeTokens;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.color.ColorRoles;
 import com.google.android.material.color.MaterialColors;
@@ -14,6 +15,23 @@ public record SiteDialogTheme(int surface, int onSurface, int onSurfaceVariant,
                               ColorStateList accent, ColorStateList buttonBackground,
                               ColorStateList buttonText, ColorStateList buttonStroke) {
 
+    public static SiteDialogTheme resolve(Context context, ThemeTokens tokens) {
+        int surface = tokens.surfaceElevated();
+        int primary = tokens.primary();
+        int onPrimary = tokens.onPrimary();
+        int container = tokens.primaryContainer();
+        int onContainer = tokens.onPrimaryContainer();
+        int onSurface = tokens.onSurface();
+        int onSurfaceVariant = tokens.onSurfaceVariant();
+        int outline = tokens.outline();
+        return new SiteDialogTheme(surface, onSurface, onSurfaceVariant,
+                ColorStateList.valueOf(primary),
+                states(primary, container, surface),
+                states(onPrimary, onContainer, onSurface),
+                states(primary, primary, outline));
+    }
+
+    /** Legacy entry point retained for callers outside the mobile dialog. */
     public static SiteDialogTheme resolve(Context context, int seedColor) {
         int surface = color(context, R.attr.colorSurfaceContainer);
         int primary = color(context, androidx.appcompat.R.attr.colorPrimary);
