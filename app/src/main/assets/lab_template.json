@@ -32,7 +32,7 @@
             "available": true,
             "show": true,
             "info": "爬虫运行时，支持多架构，适合低版本安卓和性能较差的设备，此运行时强制静默无感安装。\nsite配置：\n    {\n      \"key\": \"php甜圈短剧\",\n      \"name\": \"php | 甜圈短剧\",\n      \"api\": \"./vod/甜圈短剧.php\",\n      \"type\": \"3\"\n    }\n\n【需自备压缩包】此包没有官方 Android 构建，请把 php.zip 放到 根目录/EnvFiles/ 后再安装（根目录见右上角设置）。",
-            "binary_path": "bin/php8.3",
+            "binary_path": "bin/php",
             "var_path": {
                 "LD_LIBRARY_PATH": "bin"
             },
@@ -41,7 +41,7 @@
                     "id": "server",
                     "name": "轻量服务器",
                     "description": "php内置服务器，可以跑任何php脚本。",
-                    "command": "php8.3 -S 0.0.0.0:{port} -t {root_dir} -d error_log={sdcard}/WebHTV/logs/php_error.log",
+                    "command": "php -S 0.0.0.0:{port} -t {root_dir} -d error_log={sdcard}/WebHTV/logs/php_error.log",
                     "auto_execute": true,
                     "show_output": false,
                     "variables": [
@@ -82,7 +82,7 @@
                     "id": "modules",
                     "name": "查看模块",
                     "description": "查看已加载的 PHP 模块",
-                    "command": "php8.3 -m",
+                    "command": "php -m",
                     "auto_execute": false,
                     "show_output": true
                 },
@@ -90,7 +90,7 @@
                     "id": "test_all_types",
                     "name": "测试所有变量类型",
                     "description": "用于测试对话框 UI 的命令",
-                    "command": "php8.3 -r \"echo '{text_val} {num_val} {select_val} {switch_val} {file_val} {dir_val} {multiline_val}';\"",
+                    "command": "php -r \"echo '{text_val} {num_val} {select_val} {switch_val} {file_val} {dir_val} {multiline_val}';\"",
                     "auto_execute": false,
                     "show_output": true,
                     "variables": [
@@ -177,7 +177,7 @@
                         {
                             "title": "复制命令",
                             "action": "copy",
-                            "value": "php8.3 -r \"echo '{text_val}'\""
+                            "value": "php -r \"echo '{text_val}'\""
                         },
                         {
                             "title": "内置浏览",
@@ -1309,15 +1309,15 @@
                 {
                     "id": "php_version",
                     "name": "查看版本",
-                    "command": "proot -0 -r {envRootPath}/rootfs -b /dev -b /proc -b /sys -b /dev/urandom:/dev/random -w /root --kill-on-exit /usr/bin/env -i HOME=/root TERM=xterm-256color LANG=C.UTF-8 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin /bin/bash --login -c \"php -v\"",
+                    "command": "proot -0 -r {envRootPath}/rootfs -b /dev -b /proc -b /sys -b /dev/urandom:/dev/random -w /root --kill-on-exit /usr/bin/env -i HOME=/root TERM=xterm-256color LANG=C.UTF-8 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin /bin/bash --login -c \"php8.3 -v\"",
                     "auto_execute": false,
                     "show_output": true
                 },
                 {
                     "id": "php_serve",
                     "name": "启动内置服务",
-                    "description": "php -S 监听指定端口，站点根目录在 rootfs 内",
-                    "command": "proot -0 -r {envRootPath}/rootfs -b /dev -b /proc -b /sys -b /dev/urandom:/dev/random -w /root --kill-on-exit /usr/bin/env -i HOME=/root TERM=xterm-256color LANG=C.UTF-8 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin /bin/bash --login -c \"cd /root && php -S 0.0.0.0:{port}\"",
+                    "description": "php8.3 -S 监听指定端口，站点根目录在 rootfs 内",
+                    "command": "proot -0 -r {envRootPath}/rootfs -b /dev -b /proc -b /sys -b /dev/urandom:/dev/random -w /root --kill-on-exit /usr/bin/env -i HOME=/root TERM=xterm-256color LANG=C.UTF-8 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin /bin/bash --login -c \"cd /root && php8.3 -S 0.0.0.0:{port}\"",
                     "auto_execute": false,
                     "show_output": true,
                     "variables": [
