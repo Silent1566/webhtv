@@ -2,7 +2,7 @@
 
 > 任务：`AD-AUDIO-RULES-V2`
 >
-> 状态：设计评审稿；本文件先于代码实施，后续实现、验证、回滚记录继续追加在本文件。
+> 状态：设计评审稿已交付；Phase 1 纯 JVM 规则层已通过 34 项测试，尚未接入播放链路。Phase 2～4 仍是待确认的实施计划，不代表整项升级完成。
 >
 > 编写日期：2026-09-08（Asia/Shanghai）
 >
@@ -52,10 +52,10 @@
 | `https://github.com/0o755/m3u8-ad-audio-collector` | `070e4ff6f500386d0cfa779c981ba3cb39bf66e7` | 采集器、规则测试、提交 Worker；只调用 Probe 公共 API | 采集端与播放端职责不同；不复制 APK 内部实现 |
 | `https://github.com/0o755/m3u8-ad-audio-rules` | `bb0041673883f949045d272b845394a2b518882d` | 云端规则仓库，提交后经 Worker/GitHub Actions 校验、去重、冲突过滤、合并 | 规则仓库无签名；当前只能依靠 HTTPS、严格 schema、大小限制和 revision |
 | `https://raw.githubusercontent.com/0o755/m3u8-ad-audio-rules/main/rules.json` | 文件 SHA-256 `d5ab4d42196186221676727b81ddc7474363f76a3dd1360362cf16fc7bea6b6c` | `revision=3`、`schemaVersion=1`、`algorithm=spectral-sequence-v1`、5 条规则；每条有 4 个相位序列 | 通过 GitHub API 获取同一文件内容；不是固定发布包，后续内容会变 |
-| `https://m3u8-ad-audio-rules-sync.ccfork.workers.dev/rules.json` | 未能在本机读取 | 用户指定的实时 Worker 地址；协议文档声明原样转发 GitHub `rules.json` | 本机 TLS 连接在 2026-09-08 失败；不能以失败的 Worker 响应为实现依据，保留 GitHub Raw 作为可审计回退 |
+| `https://m3u8-ad-audio-rules-sync.ccfork.workers.dev/rules.json` | 2026-09-08 网页读取工具返回 `revision=3` | 实际响应头字段为 `ad-audio-probe-rules`、schema 1、`spectral-sequence-v1` | A：直接响应证据；早先本机 curl 的 TLS 失败仍保留为环境问题。网页工具可读取不代表本机或 Android 下载器已通过联网验收 |
 | `https://github.com/0o755/m3u8-ad-audio-collector/releases` | 当前 API 未发现正式 latest release | 用户另提供了采集器 APK/Demo 地址 | 不把未验证 APK 当作生产依赖；优先依赖公开源码、合同和规则文件 |
 
-用户提供的 `/run/user/1000/gvfs/.../星落6.0.1.apk` 是外部共享路径，本轮没有读取或反编译；它不作为本设计的必要证据，也不改变源码协议决策。
+用户提供的 `/run/user/1000/gvfs/smb-share:server=192.168.50.3,share=users/Maple/共享/星落6.0.1.apk` 已于 2026-09-08 做只读文件/ZIP 目录检查：81,613,887 字节、1,722 个 ZIP 条目、存在 `AndroidManifest.xml`，原生库目录仅见 `arm64-v8a`。文件名检索未出现 Sherpa/ONNX/Vosk/Whisper/fingerprint 等显式名称；这**不能证明没有这些能力**，也不能推断广告算法、识别精度或性能。未安装、执行、提取或反编译 APK；其交互行为对照仍未完成，不把它作为实现来源或生产依赖。
 
 ### 2.3 用户提供的语音语法
 
@@ -128,9 +128,9 @@
 
 1. 去除 UTF-8 BOM、首尾空白、空行和 `//` 行尾注释；`#` 仅作为文档头或整行注释。
 2. 只接受 ASCII/中文逗号 `,`/`，` 的一个动作后缀；没有动作后缀的行拒绝，不静默猜测。
-3. 动作 `,post` 映射为 `preRoll=0`、`postRoll=post`；动作 `[pre,post]` 映射为对应窗口。
+3. 动作 `,post` 映射为 `preRoll=0`、`postRoll=post`；动作 `,[pre,post]` 映射为对应窗口，也接受省略外侧逗号的 `[pre,post]`。规范输出统一使用 ASCII 逗号；多重动作后缀整行拒绝。
 4. 主体按 `>` 分成 1～8 个有序句段；每个句段长度限制 128 个 Unicode code point。
-5. `*` 只表示通配文本，不表示正则；连续 `*` 合并；主体去除不可识别控制字符。
+5. `*` 只表示通配文本，不表示正则；连续 `*` 合并；主体去除不可识别控制/格式字符，空白折叠。128 code point 上限适用于规范化后的整个句段，而不是每个 wildcard 分隔的字面量。
 6. 句段必须包含至少一个字母或数字；全是 `*`、空句段和只有标点的规则拒绝。
 7. `preRoll`/`postRoll` 限制在 0～120 秒；首期默认规则最多 30 秒，超过上限拒绝。
 8. 单文档最多 256 条规则、总输入 64 KiB、每条最多 8 个句段；超限整份拒绝并保留旧快照。
@@ -139,24 +139,28 @@
 
 ### 5.2 语音匹配状态机
 
-`SpeechAdMatcher` 维护当前 session/generation/timeline 的有界识别窗口：
+`SpeechAdMatcher` 由单一后台 worker 调用，维护当前 timeline 的有界识别窗口；session/generation 的旧 callback 必须由现有 Provider 先行拒绝，不能由一个 timeline token 替代全部代际校验：
 
-1. 每个识别结果只保留规范化文本、起止时间、timeline token 和有限长度；
-2. 对每条规则按 `>` 依次推进状态，第一句记录 `firstStartUs`，末句记录 `lastEndUs`；
-3. `*` 可跨 partial/final 片段，但窗口最长 30 秒；超过窗口重置该规则状态；
+1. 每个识别结果只保留规范化文本、起止时间、timeline token；每次输入最多 4,096 code point，共享窗口最多 128 个结果、8,192 UTF-16 code unit，超限按完整旧结果淘汰，不截断代理字符对；
+2. 规则按 `>` 顺序匹配，首字面量即使跨结果也保留原结果的 `firstStartUs`，末字面量保留所属结果的 `lastEndUs`；
+3. `*` 可跨增量识别片段，包括空串和换行；窗口从最早结果起点到最新结果终点最长 30 秒，未完成的首句也不得无限保留。Phase 1 只接受已定稿、非重叠、按时间递增的增量结果；重复/重叠结果拒绝，超长或无效输入中断文本连续性。累计 partial/final 去重与修订属于 Phase 2 适配职责，不能把两个累计全文直接拼接；
 4. 同一规则在 30 秒冷却窗口内不重复发候选；
-5. 命中后输出 `ruleId`、`preRollMs`、`postRollMs`、`firstStartMs`、`lastEndMs`，不输出原文；
+5. 命中后输出 `ruleId`、`preRollMs`、`postRollMs`、`firstStartUs`、`lastEndUs` 和 timeline token，不在 Match 中输出原文；
 6. seek、切源、音频 flush、引擎重建和规则热更新提升 generation，清空所有状态；旧 callback 丢弃；
 7. 语音识别 callback 的时间可能早于当前播放位置，候选生成时必须通过 `PlaybackMediaClock` 校准，并钳制到 `[0,duration]`；无法校准时只提示，不自动 seek。
 
 候选区间定义：
 
 ```text
-candidateStart = max(0, firstStartMs - preRollMs)
+candidateStart = min(durationMs, max(0, firstStartMs - preRollMs))
 candidateEnd   = min(durationMs, lastEndMs + postRollMs)
 ```
 
 若 `candidateEnd <= candidateStart`、时间轴过期、媒体为直播或不可 seek，则丢弃候选并记录固定枚举诊断。
+
+未知 duration 以负值表示，此时仅计算未钳制上界的候选，不构成自动 seek 授权。Phase 1 的时间来源是**整个识别片段边界**，不是词级对齐结果；不能声称精确定位“关键词后第 30 秒”。Phase 2 必须确认识别器能否提供可靠终点/对齐，不能把回调墙钟或过期播放位置冒充关键词时间。
+
+`[2,30]` 描述候选广告区间，不代表可以撤销已经播放的前 2 秒。在没有预扫描/前瞻缓冲的实时识别中，只能在命中后向有效终点前跳，不得为了“补跳前段”回 seek；本设计不新增预解码或播放延迟。迟到结果、已越过终点或时间不可信的候选不自动执行。
 
 ### 5.3 与现有关键词设置的迁移
 
@@ -166,9 +170,23 @@ candidateEnd   = min(durationMs, lastEndMs + postRollMs)
 - 规则来源分为 `builtin`、`user`、`imported`，合并时按稳定 ID 去重；用户规则优先，不自动覆盖用户同 ID 内容。
 - 首期不从音频指纹 `rules.json` 推导语音词，也不把识别文本自动写成 URL/HLS/音频指纹规则。
 
+旧关键词的 ASCII 单词边界语义必须继续保留；新规则的字面量包含匹配不能直接替代旧 `SpeechAdKeywordSet`，否则 `ad` 可能误命中 `download`。Phase 1 没有迁移旧设置。
+
+### 5.4 规则误伤、冲突与默认策略
+
+| 用户示例类型 | 设计处置 |
+|---|---|
+| “广告之后 > 马上回来”等明确过渡句 | 可作为候选模板，但未经误跳样本与时间对齐验收仍默认确认，不直接自动跳 |
+| “本片*冠名”“充值*优惠”“品牌*推荐”等单句 | 可能属于正常剧情/讨论，要求用户主动启用 |
+| “激情”“私密”“少妇”“美女*主播”“福利*视频”等宽泛词 | 默认不启用；不得把词命中描述成色情内容判断或可靠儿童保护 |
+| “下集预告”“精彩花絮” | 属于可选内容跳过，不等同广告，后续 UI 应与广告开关分离 |
+| 同一主体配置不同窗口，如 `本片*冠名,25` 与 `本片*冠名,[4,30]` | Phase 1 保留为不同 ID，仅完全相同的规范规则去重；Phase 3 导入需显式展示冲突、由用户选择。不得默默取最长窗口，Provider/Coordinator 接线后仍最多一次有效 seek |
+
+用户提供的完整示例不是经过精度验证的默认库；语法可解析与适合自动跳过是两项独立验收。
+
 ## 6. 播放实时性保护
 
-用户反馈已经证明：模型未下载时播放正常，模型下载并启用语音识别后 EXO 立即卡顿；因此“功能能识别”不是充分验收条件，播放实时性是硬约束。
+重点防范并验证“模型未就绪时正常、就绪后开启识别导致 EXO 卡顿”的风险。本轮没有执行真实模型/设备对照，不能把线程数或某个调用点认定为已证实根因；“功能能识别”不是充分验收条件，播放实时性是硬约束。
 
 ### 6.1 当前风险点
 
@@ -345,4 +363,53 @@ app/src/test/java/com/fongmi/android/tv/ad/audio/SpeechAdMatcherTest.java
 - **暂缓**：签名远程规则发布、数千条规则索引、语音规则云端同步，直到发布者合同和真实设备数据齐备。
 - **忽略**：直接引入采集器 APK、Probe 默认 Media3 播放器或把语音规则伪装成指纹 JSON。
 
-**唯一下一步**：经用户确认后，在任务文档所列范围内先实现 Phase 1 的四个 JVM 规则类和对应单元测试；通过后再进入 Provider 性能保护，不同时改 UI、下载器和原生依赖。
+**唯一下一步**：确认 Phase 2 的 Provider 输入/时间对齐合同、变更范围及真实 TV 性能验收方案后，再启动新的 guard 会话实施；不同时改 UI、下载器和原生依赖。
+
+## 12. Phase 1 实施与验证记录（2026-09-08）
+
+### 范围与完成情况
+
+- 分支 `dev2`；Phase 1 基线为设计提交 `045ae26ab2374264f72dd4c266eca2f1f2dfc5e9`，设计恢复标签为 `recovery/AD-AUDIO-RULES-V2/20260908130147-045ae26ab237`。
+- 延续原 `AD-AUDIO-RULES-V2`、`standard` guard 会话；初始受保护脏路径为空，交接时四个未跟踪规则类属于该会话，不重新归属其他任务。
+- 新增 `SpeechAdRule`、`SpeechAdRuleCodec`、`SpeechAdRuleSet`、`SpeechAdMatcher` 及两个对应测试类；仅这六个文件与本文档属于本阶段范围。
+- 不执行用户正则；规范文本产生稳定 ID，集合不可变；程序构造同样约束动作秒粒度，序列化输出不得突破文档大小上限。
+- 未修改 Provider、旧关键词设置、UI、指纹下载/缓存、依赖、JNI 或原生库；没有新增运行时默认开关或实际 seek。回滚不需要清理用户配置。
+
+### 决定性验证
+
+最终使用本机 `javac` 编译全部四个新类与两个测试类，随后运行缓存中的 JUnit 4.13.2：
+
+```text
+org.junit.runner.JUnitCore
+  com.fongmi.android.tv.ad.audio.SpeechAdRuleCodecTest
+  com.fongmi.android.tv.ad.audio.SpeechAdMatcherTest
+结果：OK (34 tests)，0 failures
+```
+
+- 覆盖 BOM/注释、中英文逗号、两个动作格式、规范化与 round-trip、重复/连续 wildcard、空串/换行与顺序匹配、非法多重后缀、规则数/文档字节/整句长度上限、不可变集合、时间窗/冷却/重叠回调/timeline reset、跨首句时间来源与 duration 钳制。
+- 新增边界回归用例先在旧实现复现 9 个失败，再于修正后全部通过；不是只更改断言使旧实现变绿。
+- 早先 `:app:testDebugUnitTest` 因缺少 flavor 任务失败，随后 Mobile arm64 定向 Gradle 执行完成主/测试源码编译，但发现两处错误的 duration 断言；它们已修正，最终 JVM 测试覆盖了修订实现。**不把先前 Gradle 失败写成成功，不声称最终源码经过 APK/设备验收**。本阶段没有 Android API/依赖改动，直接 JVM 编译和相同 JUnit 用例是本阶段规则合同的最终门槛。
+- 完整最终输出保存在本机 `/tmp/AD-AUDIO-RULES-V2-green.O8b3vf/test.log`；临时日志不是持久验收的唯一来源，测试命令、范围和结论在本文与提交的 Verification 字段中保留。
+
+### 尚未完成的验证与设计门槛
+
+- 真实 ASR 定稿/累计结果行为、词级或片段终点的可信度及媒体时钟换算；未解决前不得用新语音规则自动 seek。
+- 目标 TV 的 CPU、视频丢帧、AudioTrack underrun、队列丢弃与模型启动对照；低优先级和单线程只是待测方案，不是性能修复证明。
+- 指纹/语音同时命中后的唯一 seek、网络失败缓存保留和所有 UI/迁移交互，仍属于后续接线阶段。
+- 现有源码/规则直接证据与本地 JVM 反例测试足以限定 Phase 1 的语法合同，但**不等于整项最佳实践评审已完成**。Phase 2 前还需补齐其官方识别器/平台调度资料、相关上游 issue/回退讨论、成熟项目实现，以及目标设备测量；论文或外部 benchmark 若不适用于本地设备，必须记录不适用原因而不照搬性能结论。
+- 星落 APK 仅完成只读包目录对照，实际交互、算法和性能均未验证。
+
+### 提交与回滚
+
+本节与六个新源码/测试文件原子提交，guard 的提交 Verification 字段记录最终测试结果，并立即创建唯一的 `recovery/AD-AUDIO-RULES-V2/<timestamp>-<commit>` 注释标签；不以另一次文档提交追写自身 hash。可用 `git log -1 -- app/src/main/java/com/fongmi/android/tv/ad/audio/SpeechAdMatcher.java` 定位本阶段实现提交，其恢复标签由该提交的本地 annotated tag 标识。
+
+回滚本阶段实现提交即可移除未接线的规则层，保留设计基线与现有播放行为；后续若已经接线，必须先回滚接线阶段再回滚本阶段，不重写历史或移动已发布标签。
+
+### Recovery anchor
+
+- **目标/验收**：交付去广告升级设计并收口 Phase 1 独立 JVM 语法/匹配层；不把后续播放能力视为完成。
+- **状态**：34 项测试通过，本文与六个新文件为本次任务所有；将由当前 guard 一次提交并打恢复标签。
+- **已验证**：纯 JVM 编译、语法/安全上限/时间窗回归；未验证 APK、真实识别器、设备性能与 seek 接线。
+- **风险**：片段时间不等于词时间；宽泛词误伤；旧关键词词边界；partial 去重、generation 和唯一 seek 仍须由后续集成落实。
+- **恢复锚点**：设计基线 `045ae26ab2374264f72dd4c266eca2f1f2dfc5e9`；本阶段实现与恢复标签由以上提交记录定位。
+- **唯一下一步**：取得 Phase 2 输入/时间对齐及性能验收方案的确认，再启动新的实现会话。
