@@ -90,6 +90,7 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
     private final List<Vod> mPendingItems = new ArrayList<>();
     private Runnable mApplyCollect;
     private String mPendingCollectSiteKey = "";
+    private String mBoundSearchSiteKey = "";
     private boolean mScrolling;
     private boolean mLeavingForPlayback;
     private final Map<String, SearchPosition> mSearchPositions = new HashMap<>();
@@ -584,6 +585,7 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
     private void search() {
         mSearchCompleted = false;
         mSearchPositions.clear();
+        mBoundSearchSiteKey = "";
         mPaging.clear();
         removeApplyCollect();
         mCollectAdapter.clear();
@@ -659,6 +661,7 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
 
     private void updateRecyclerLayout() {
         mSearchPositions.clear();
+        mBoundSearchSiteKey = "";
         int count = getCount();
         GridLayoutManager layoutManager = (GridLayoutManager) mBinding.recycler.getLayoutManager();
         if (layoutManager != null) {
@@ -796,7 +799,6 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
     @Override
     public boolean onCollectKey(int position, int keyCode, KeyEvent event) {
         if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
-        if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) return focusFirstSearchResult();
         if (isSearchLandscape()) {
             if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
                 mBinding.searchColumn.requestFocus();
@@ -806,6 +808,8 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
             if (position == 0 && keyCode == KeyEvent.KEYCODE_DPAD_LEFT) return true;
             return false;
         }
+        // 横排站点的左右键交给列表导航；只有竖排站点按右键进入搜索结果。
+        if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) return focusFirstSearchResult();
         // 在第一项按上键，跳转到切换按钮
         if (position == 0 && keyCode == KeyEvent.KEYCODE_DPAD_UP) {
             mBinding.searchColumn.requestFocus();
@@ -821,6 +825,7 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
         String siteKey = item.getSite().getKey();
         boolean same = siteKey.equals(getActiveSiteKey());
         mCollectAdapter.setSelected(position);
+        if (!same) mBoundSearchSiteKey = "";
         restoreScroller(siteKey);
         mPendingItems.clear();
         if (same && delayMillis > 0 && siteKey.equals(mPendingCollectSiteKey)) return;
@@ -849,6 +854,7 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
 
     private void setSearchItemsLazy(List<Vod> items) {
         String siteKey = getActiveSiteKey();
+        mBoundSearchSiteKey = siteKey;
         SearchPosition saved = mSearchPositions.get(siteKey);
         int position = saved == null ? 0 : saved.adapterPosition;
         mSearchAdapter.setSource(items, Math.max(getCount() * 4, position + getCount()));
@@ -884,12 +890,24 @@ public class CollectActivity extends BaseActivity implements CollectAdapter.OnCl
     }
 
     private boolean focusFirstSearchResult() {
-        if (mSearchAdapter == null || mSearchAdapter.getItemCount() == 0) return false;
+        if (mSearchAdapter == null) return false;
+        String siteKey = getActiveSiteKey();
+        if (!siteKey.equals(mBoundSearchSiteKey)) {
+            removeApplyCollect();
+            Collect activated = mCollectAdapter.findActivated(siteKey);
+            if (activated == null) return false;
+            setSearchItemsLazy(new ArrayList<>(activated.getList()));
+            updateEmptyState(activated);
+            maybeLoadSelectedPage();
+        }
+        if (mSearchAdapter.getItemCount() == 0) return false;
         mBinding.recycler.post(() -> {
-            restoreSearchPosition(getActiveSiteKey());
+            if (!siteKey.equals(mBoundSearchSiteKey) || !siteKey.equals(getActiveSiteKey())) return;
+            restoreSearchPosition(siteKey);
             mBinding.recycler.post(() -> {
+                if (!siteKey.equals(mBoundSearchSiteKey) || !siteKey.equals(getActiveSiteKey())) return;
                 RecyclerView.LayoutManager manager = mBinding.recycler.getLayoutManager();
-                SearchPosition saved = mSearchPositions.get(getActiveSiteKey());
+                SearchPosition saved = mSearchPositions.get(siteKey);
                 int itemCount = mSearchAdapter == null ? 0 : mSearchAdapter.getItemCount();
                 int position = saved == null || itemCount <= 0 ? 0 : Math.min(saved.adapterPosition, itemCount - 1);
                 View target = manager == null ? null : manager.findViewByPosition(position);

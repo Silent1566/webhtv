@@ -58,14 +58,14 @@ public final class TouchOptimizationHelper {
         traverse(root, false);
     }
 
-    /** Returns whether a leanback grid is currently receiving a touch gesture. */
+    /** Returns whether a leanback grid is receiving a touch gesture or settling from one. */
     public static boolean isTouchActive(View view) {
         if (view == null) return false;
         synchronized (GRID_STATES) {
             for (Map.Entry<View, GridState> entry : GRID_STATES.entrySet()) {
                 View grid = entry.getKey();
                 GridState state = entry.getValue();
-                if (state == null || !state.touchActive || grid == null) continue;
+                if (state == null || (!state.touchActive && !state.touchSettling) || grid == null) continue;
                 if (view == grid || isDescendantOf(view, grid)) return true;
             }
         }
@@ -122,9 +122,12 @@ public final class TouchOptimizationHelper {
                 Class<?> touchListener = Class.forName(BASE_GRID_VIEW + "$OnTouchInterceptListener");
                 Method setter = grid.getClass().getMethod("setOnTouchInterceptListener", touchListener);
                 setter.invoke(grid, Proxy.newProxyInstance(touchListener.getClassLoader(), new Class[]{touchListener}, handler(state)));
-                Class<?> keyListener = Class.forName(BASE_GRID_VIEW + "$OnKeyInterceptListener");
-                Method keySetter = grid.getClass().getMethod("setOnKeyInterceptListener", keyListener);
-                keySetter.invoke(grid, Proxy.newProxyInstance(keyListener.getClassLoader(), new Class[]{keyListener}, handler(state)));
+                ((RecyclerView) grid).addOnScrollListener(new RecyclerView.OnScrollListener() {
+                    @Override
+                    public void onScrollStateChanged(@NonNull RecyclerView recyclerView, int newState) {
+                        if (newState == RecyclerView.SCROLL_STATE_IDLE && !state.touchActive) state.touchSettling = false;
+                    }
+                });
             } catch (ReflectiveOperationException | RuntimeException ignored) {
                 GRID_STATES.remove(grid);
             }
@@ -136,10 +139,6 @@ public final class TouchOptimizationHelper {
             if ("onInterceptTouchEvent".equals(method.getName()) && args != null && args.length > 0) {
                 return onTouch(state, (MotionEvent) args[0]);
             }
-            if ("onInterceptKeyEvent".equals(method.getName()) && args != null && args.length > 0) {
-                if (state.focusSuppressed) restoreGrid(state.grid.get());
-                return false;
-            }
             if (method.getReturnType() == boolean.class) return false;
             return null;
         };
@@ -147,19 +146,31 @@ public final class TouchOptimizationHelper {
 
     private static boolean onTouch(GridState state, MotionEvent event) {
         if (event == null || !Setting.isTouchOptimized()) {
+            state.touchGeneration++;
             restoreGrid(state.grid.get());
             return false;
         }
         View grid = state.grid.get();
         if (grid == null) return false;
         if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+            state.touchGeneration++;
+            state.touchSettling = false;
             state.touchActive = true;
-            state.focusSuppressed = true;
             invoke(grid, "setFocusScrollStrategy", int.class, FOCUS_SCROLL_ITEM);
             invoke(grid, "setFocusSearchDisabled", boolean.class, true);
         } else if (event.getActionMasked() == MotionEvent.ACTION_UP) {
+            int generation = ++state.touchGeneration;
             state.touchActive = false;
+            restoreGrid(grid);
+            state.touchSettling = true;
+            grid.post(() -> {
+                if (state.touchGeneration == generation && !state.touchActive
+                        && (!(grid instanceof RecyclerView recycler) || recycler.getScrollState() == RecyclerView.SCROLL_STATE_IDLE)) {
+                    state.touchSettling = false;
+                }
+            });
         } else if (event.getActionMasked() == MotionEvent.ACTION_CANCEL) {
+            state.touchGeneration++;
             restoreGrid(grid);
         }
         return false;
@@ -181,7 +192,7 @@ public final class TouchOptimizationHelper {
         invoke(grid, "setFocusScrollStrategy", int.class, state.focusStrategy);
         invoke(grid, "setFocusSearchDisabled", boolean.class, state.focusSearchDisabled);
         state.touchActive = false;
-        state.focusSuppressed = false;
+        state.touchSettling = false;
     }
 
     private static boolean isBaseGridView(View view) {
@@ -236,6 +247,7 @@ public final class TouchOptimizationHelper {
         private int focusStrategy;
         private boolean focusSearchDisabled;
         private boolean touchActive;
-        private boolean focusSuppressed;
+        private boolean touchSettling;
+        private int touchGeneration;
     }
 }

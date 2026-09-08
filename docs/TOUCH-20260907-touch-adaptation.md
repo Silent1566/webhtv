@@ -26,7 +26,7 @@
 ## R2 实施记录（TOUCH-20260907-R2）
 
 ### 实际实现
-- `TouchOptimizationHelper` 在不把 leanback 依赖泄漏到 mobile 公共源码的前提下，通过 leanback 运行时公开 API 绑定 `BaseGridView` 的触摸/按键拦截器：触摸 DOWN 临时切到 `FOCUS_SCROLL_ITEM` 并禁用焦点搜索，D-pad 到来时恢复原策略；优化关闭时不安装/不保留该行为。动态 RecyclerView 子项仍由现有 attach listener 覆盖。
+- `TouchOptimizationHelper` 在不把 leanback 依赖泄漏到 mobile 公共源码的前提下，通过 leanback 运行时公开 API 绑定 `BaseGridView` 的触摸拦截器：触摸 DOWN 临时切到 `FOCUS_SCROLL_ITEM` 并禁用焦点搜索，抬手/取消时恢复原策略，并在列表 settling 完成前继续抑制触摸触发的选中回调；不覆盖项目已有的 `setOnKeyInterceptListener`。优化关闭时不安装/不保留该行为。动态 RecyclerView 子项仍由现有 attach listener 覆盖。
 - `HomeActivity` 和 `CollectActivity` 在站源/类别选择回调中忽略触摸期间的焦点变化；点击回调仍执行真实切换。首页自动切类仅保留遥控器路径。
 - `CollectActivity` 为每个站源保存首个可见 adapter position 与像素 top offset；恢复时按当前 adapter 数量夹紧，异步恢复前再次确认站源仍是 active；新搜索、分组/相似度筛选和列数改变清空旧位置。
 - TV `VideoActivity` 不再将公共 `PlayerGesture` 直接接到 TV 播放器：优化关闭时保留 `CustomKeyDownVod`；优化开启且全屏时由 TV 层使用现有 `seekTo` 通道处理横滑，按按下点左/右半屏分别调亮度/音乐音量，使用 `BrightnessPolicy`、`AudioManager` 和 TV widget OSD。多指、CANCEL、失焦不提交 seek；正常 UP 只提交一次并清理 OSD。
