@@ -207,7 +207,7 @@ public class VodActivity extends BaseActivity implements TypeAdapter.OnClickList
         int target = position + (towardEnd ? 1 : -1);
         if (position != mBinding.pager.getCurrentItem() || contentRow < 0 || target < 0 || target >= mAdapter.getItemCount()) return;
         App.removeCallbacks(mRunnable);
-        mPendingContentRow = contentRow == 0 ? 0 : NO_PENDING_CONTENT_ROW;
+        mPendingContentRow = contentRow;
         mBinding.pager.setCurrentItem(target);
     }
 

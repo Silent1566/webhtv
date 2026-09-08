@@ -17,7 +17,7 @@ public class VodActivityCategoryEdgeTest {
         assertTrue("standalone VOD must receive category edge events", source.contains("FolderFragment.CategoryEdgeHost"));
         assertTrue("edge navigation must resolve the adjacent pager position", source.contains("int target = position + (towardEnd ? 1 : -1);"));
         assertTrue("edge navigation must switch the standalone VOD pager", source.contains("mBinding.pager.setCurrentItem(target);"));
-        assertTrue("the first content row must restore content focus after the page switch", source.contains("mPendingContentRow = contentRow == 0 ? 0 : NO_PENDING_CONTENT_ROW;"));
+        assertTrue("every content row must restore content focus after the page switch", source.contains("mPendingContentRow = contentRow;"));
         assertTrue("category-row edges must retain focus on the category strip", source.contains("if (mPendingContentRow != NO_PENDING_CONTENT_ROW)"));
         assertTrue("edge navigation must cancel a queued category pager update", source.contains("App.removeCallbacks(mRunnable);"));
     }
