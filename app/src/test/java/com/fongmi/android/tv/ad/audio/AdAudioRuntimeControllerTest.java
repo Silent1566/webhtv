@@ -14,6 +14,10 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class AdAudioRuntimeControllerTest {
@@ -355,7 +359,8 @@ public class AdAudioRuntimeControllerTest {
         FakeSpeechRecognitionFactory recognition = new FakeSpeechRecognitionFactory();
         AdAudioRuntimeController runtime = new AdAudioRuntimeController(
                 hub, new PlaybackMediaClock(500L),
-                AdAudioRuntimeControllerTest::emptySnapshot, playback, recognition);
+                AdAudioRuntimeControllerTest::emptySnapshot, playback, recognition,
+                Runnable::run, () -> { });
         FakeUiPort ui = new FakeUiPort();
 
         runtime.setSpeechConfig(SpeechAdConfig.create(
@@ -382,7 +387,8 @@ public class AdAudioRuntimeControllerTest {
         FakeSpeechRecognitionFactory recognition = new FakeSpeechRecognitionFactory();
         AdAudioRuntimeController runtime = new AdAudioRuntimeController(
                 hub, new PlaybackMediaClock(500L),
-                AdAudioRuntimeControllerTest::emptySnapshot, playback, recognition);
+                AdAudioRuntimeControllerTest::emptySnapshot, playback, recognition,
+                Runnable::run, () -> { });
         FakeUiPort ui = new FakeUiPort();
 
         runtime.setSpeechConfig(SpeechAdConfig.create(
@@ -418,7 +424,8 @@ public class AdAudioRuntimeControllerTest {
         FakeSpeechRecognitionFactory recognition = new FakeSpeechRecognitionFactory();
         AdAudioRuntimeController runtime = new AdAudioRuntimeController(
                 hub, new PlaybackMediaClock(500L),
-                AdAudioRuntimeControllerTest::emptySnapshot, playback, recognition);
+                AdAudioRuntimeControllerTest::emptySnapshot, playback, recognition,
+                Runnable::run, () -> { });
 
         runtime.setSpeechConfig(SpeechAdConfig.create(true, "赌场", 15, "PROMPT"));
         runtime.start(false);
@@ -463,7 +470,8 @@ public class AdAudioRuntimeControllerTest {
         FakeSpeechRecognitionFactory recognition = new FakeSpeechRecognitionFactory();
         AdAudioRuntimeController runtime = new AdAudioRuntimeController(
                 hub, new PlaybackMediaClock(500L),
-                AdAudioRuntimeControllerTest::emptySnapshot, playback, recognition);
+                AdAudioRuntimeControllerTest::emptySnapshot, playback, recognition,
+                Runnable::run, () -> { });
 
         runtime.setSpeechConfig(SpeechAdConfig.create(true, "赌场", 15, "PROMPT"));
         runtime.start(false);
@@ -479,6 +487,139 @@ public class AdAudioRuntimeControllerTest {
         assertEquals(1, first.closeCalls);
         assertEquals(2, recognition.sessions.size());
         runtime.close();
+    }
+
+    @Test(timeout = 15_000)
+    public void speechOnlyCaptureCanRebuildBeforeSlowNativeCreateFinishes() throws Exception {
+        PlaybackMediaSignalHub hub = new PlaybackMediaSignalHub(8);
+        hub.beginSession(0L);
+        FakePlaybackPort playback = new FakePlaybackPort(hub, true);
+        FakeSpeechRecognitionFactory recognition = new FakeSpeechRecognitionFactory();
+        ExecutorService owner = Executors.newSingleThreadExecutor();
+        ExecutorService caller = Executors.newSingleThreadExecutor();
+        CountDownLatch checking = new CountDownLatch(1);
+        CountDownLatch allowReady = new CountDownLatch(1);
+        CountDownLatch creating = new CountDownLatch(1);
+        CountDownLatch allowCreate = new CountDownLatch(1);
+        AtomicInteger readinessChecks = new AtomicInteger();
+        SpeechRecognitionFactory slowFactory = new SpeechRecognitionFactory() {
+            @Override
+            public boolean isReady() {
+                readinessChecks.incrementAndGet();
+                checking.countDown();
+                awaitLatch(allowReady);
+                return true;
+            }
+
+            @Override
+            public Session create(Listener listener) {
+                creating.countDown();
+                awaitLatch(allowCreate);
+                return recognition.create(listener);
+            }
+        };
+        AdAudioRuntimeController runtime = new AdAudioRuntimeController(
+                hub, new PlaybackMediaClock(500L),
+                AdAudioRuntimeControllerTest::emptySnapshot, playback, slowFactory,
+                owner, owner::shutdown);
+        PlaybackMediaSignalHub.PipelineLease pipeline = null;
+        try {
+            runtime.setSpeechConfig(SpeechAdConfig.create(true, "赌场", 15, "PROMPT"));
+            runtime.start(false); // Speech only: no fingerprint lease can mask activation.
+            caller.submit(() -> runtime.bindUi(new FakeUiPort())).get(2, TimeUnit.SECONDS);
+            assertTrue(checking.await(2, TimeUnit.SECONDS));
+            caller.submit(runtime::refresh).get(2, TimeUnit.SECONDS);
+            assertFalse(runtime.needsPipelineRebuild());
+            assertFalse(hub.isCaptureRequested(PlaybackMediaSignalHub.ConsumerKind.AD_AUDIO));
+
+            allowReady.countDown();
+            assertTrue(creating.await(2, TimeUnit.SECONDS));
+            // The next host refresh sees capture even while native create is blocked.
+            caller.submit(runtime::refresh).get(2, TimeUnit.SECONDS);
+            assertTrue(runtime.needsPipelineRebuild());
+            pipeline = hub.attachPipeline();
+            hub.resetTimeline(1_000L, PlaybackMediaSignalHub.ResetReason.ENGINE_REBUILD);
+            caller.submit(runtime::refresh).get(2, TimeUnit.SECONDS);
+            assertFalse(runtime.needsPipelineRebuild());
+            assertEquals(1, readinessChecks.get());
+
+            allowCreate.countDown();
+            owner.submit(() -> { }).get(2, TimeUnit.SECONDS);
+            hub.publishPcm(hub.session().frame(new float[] {0.1f}, 16_000, 1_000L));
+            owner.submit(() -> { }).get(2, TimeUnit.SECONDS);
+            assertEquals(1, recognition.sessions.size());
+            assertEquals(1, recognition.sessions.get(0).acceptCalls);
+            assertEquals(0, recognition.sessions.get(0).closeCalls);
+        } finally {
+            allowReady.countDown();
+            allowCreate.countDown();
+            runtime.close();
+            caller.shutdownNow();
+            owner.awaitTermination(2, TimeUnit.SECONDS);
+            if (pipeline != null) pipeline.close();
+            hub.close();
+        }
+    }
+
+    @Test(timeout = 15_000)
+    public void slowClosePrecedesReplacementCreateAndRuntimeShutdownKeepsFinalCleanup()
+            throws Exception {
+        PlaybackMediaSignalHub hub = new PlaybackMediaSignalHub(8);
+        hub.beginSession(0L);
+        FakeSpeechRecognitionFactory recognition = new FakeSpeechRecognitionFactory();
+        ExecutorService owner = Executors.newSingleThreadExecutor();
+        ExecutorService caller = Executors.newSingleThreadExecutor();
+        AdAudioRuntimeController runtime = new AdAudioRuntimeController(
+                hub, new PlaybackMediaClock(500L),
+                AdAudioRuntimeControllerTest::emptySnapshot,
+                new FakePlaybackPort(hub, true), recognition, owner, owner::shutdown);
+        try {
+            runtime.setSpeechConfig(SpeechAdConfig.create(true, "赌场", 15, "PROMPT"));
+            runtime.start(false);
+            runtime.bindUi(new FakeUiPort());
+            owner.submit(() -> { }).get(2, TimeUnit.SECONDS);
+            FakeSpeechSession first = recognition.sessions.get(0);
+            first.blockClose();
+            caller.submit(() -> runtime.setSpeechConfig(
+                    SpeechAdConfig.create(true, "首充", 20, "PROMPT")))
+                    .get(2, TimeUnit.SECONDS);
+            assertTrue(first.closeStarted.await(2, TimeUnit.SECONDS));
+            assertEquals(0, first.closeCalls);
+            assertEquals(1, recognition.sessions.size());
+
+            first.allowClose.countDown();
+            owner.submit(() -> { }).get(2, TimeUnit.SECONDS);
+            assertEquals(1, first.closeCalls);
+            assertEquals(2, recognition.sessions.size());
+            FakeSpeechSession second = recognition.sessions.get(1);
+            second.blockClose();
+            caller.submit(runtime::close).get(2, TimeUnit.SECONDS);
+            assertTrue(second.closeStarted.await(2, TimeUnit.SECONDS));
+            assertTrue(owner.isShutdown());
+            assertFalse(owner.isTerminated());
+            assertEquals(0, second.closeCalls);
+            second.allowClose.countDown();
+            assertTrue(owner.awaitTermination(2, TimeUnit.SECONDS));
+            assertEquals(1, second.closeCalls);
+            assertFalse(hub.isCaptureRequested(PlaybackMediaSignalHub.ConsumerKind.AD_AUDIO));
+        } finally {
+            for (FakeSpeechSession session : recognition.sessions) {
+                if (session.allowClose != null) session.allowClose.countDown();
+            }
+            runtime.close();
+            caller.shutdownNow();
+            owner.awaitTermination(2, TimeUnit.SECONDS);
+            hub.close();
+        }
+    }
+
+    private static void awaitLatch(CountDownLatch latch) {
+        try {
+            if (!latch.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("latch timed out");
+        } catch (InterruptedException error) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(error);
+        }
     }
 
     private static AdAudioRuntimeController runtime(
@@ -679,7 +820,10 @@ public class AdAudioRuntimeControllerTest {
     private static final class FakeSpeechSession
             implements SpeechRecognitionFactory.Session {
         private final SpeechRecognitionFactory.Listener listener;
+        private int acceptCalls;
         private int closeCalls;
+        private CountDownLatch closeStarted;
+        private CountDownLatch allowClose;
 
         private FakeSpeechSession(SpeechRecognitionFactory.Listener listener) {
             this.listener = listener;
@@ -688,6 +832,7 @@ public class AdAudioRuntimeControllerTest {
         @Override
         public void accept(float[] samples, long startUs, long endUs,
                            int timelineToken) {
+            acceptCalls++;
         }
 
         @Override
@@ -696,7 +841,16 @@ public class AdAudioRuntimeControllerTest {
 
         @Override
         public void close() {
+            if (closeStarted != null) {
+                closeStarted.countDown();
+                awaitLatch(allowClose);
+            }
             closeCalls++;
+        }
+
+        private void blockClose() {
+            closeStarted = new CountDownLatch(1);
+            allowClose = new CountDownLatch(1);
         }
     }
     private static final class FakeSignalProvider implements AdAudioSignalProvider {

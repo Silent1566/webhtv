@@ -16,7 +16,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class SpeechAdSignalProviderTest {
 
@@ -31,6 +36,10 @@ public class SpeechAdSignalProviderTest {
         fixture.publish(new float[] {0.1f, 0.2f}, 8_000, 10_000L);
         FakeSession recognizer = fixture.factory.current();
         assertEquals(4, recognizer.acceptedSamples.get(0).length);
+        assertEquals(10_000_000L, recognizer.lastStartUs);
+        assertEquals(10_000_250L, recognizer.lastEndUs);
+        assertEquals(SpeechRecognitionFactory.ExecutionProfile.AD_AUDIO,
+                fixture.factory.lastProfile);
         recognizer.emit("\u6b22\u8fce\u6765\u5230\u8d4c\u573a", recognizer.lastTimelineToken());
 
         assertEquals(1, fixture.emitted.size());
@@ -88,10 +97,27 @@ public class SpeechAdSignalProviderTest {
     }
 
     @Test
+    public void modelReadinessRunsOnOwnerInsteadOfHostPositionCallback() {
+        ManualExecutor worker = new ManualExecutor();
+        Fixture fixture = new Fixture(true, config(true, "赌场", 15), worker, 8);
+
+        fixture.host(1_000L, 20_000L, true, false);
+
+        assertEquals(0, fixture.factory.readyCalls);
+        assertTrue(fixture.factory.sessions.isEmpty());
+        worker.runAll();
+        assertEquals(1, fixture.factory.readyCalls);
+        assertEquals(1, fixture.factory.sessions.size());
+        fixture.close();
+    }
+
+    @Test
     public void resetDropsLateWorkAndContinuesWithTheSameRecognizerSession() {
         ManualExecutor worker = new ManualExecutor();
         Fixture fixture = new Fixture(true, config(true, "\u8d4c\u573a", 15), worker, 4);
         fixture.host(10_000L, 60_000L, true, false);
+        // Session creation is an owner-worker command in Phase 2A.
+        worker.runAll();
         FakeSession recognizer = fixture.factory.current();
         fixture.publish(new float[] {0.1f}, 16_000, 10_000L);
         worker.runAll();
@@ -120,6 +146,7 @@ public class SpeechAdSignalProviderTest {
         worker.runAll();
         assertEquals(2, recognizer.acceptedSamples.size());
         recognizer.emit("\u8d4c\u573a", recognizer.lastTimelineToken());
+        worker.runAll();
 
         assertEquals(1, fixture.emitted.size());
         assertEquals(resetSession.generation(), fixture.emitted.get(0).generation());
@@ -284,6 +311,7 @@ public class SpeechAdSignalProviderTest {
         ManualExecutor worker = new ManualExecutor();
         Fixture fixture = new Fixture(true, config(true, "\u8d4c\u573a", 15), worker, 2);
         fixture.host(1_000L, 20_000L, true, false);
+        worker.runAll();
 
         fixture.publish(new float[] {1.0f}, 16_000, 1_000L);
         fixture.publish(new float[] {2.0f}, 16_000, 1_100L);
@@ -295,6 +323,223 @@ public class SpeechAdSignalProviderTest {
         assertEquals(2, recognizer.acceptedSamples.size());
         assertEquals(2.0f, recognizer.acceptedSamples.get(0)[0], 0.0f);
         assertEquals(3.0f, recognizer.acceptedSamples.get(1)[0], 0.0f);
+        assertEquals(1, recognizer.resetCalls);
+        fixture.close();
+    }
+
+    @Test(timeout = 10_000)
+    public void slowAcceptDoesNotBlockResetOrCloseAndNativeCallsRemainSerialized()
+            throws Exception {
+        PlaybackMediaSignalHub hub = new PlaybackMediaSignalHub(4);
+        PlaybackMediaSignalHub.Session session = hub.beginSession(0L);
+        FakeRecognizerFactory factory = new FakeRecognizerFactory(true);
+        ExecutorService owner = Executors.newSingleThreadExecutor();
+        ExecutorService caller = Executors.newSingleThreadExecutor();
+        AdAudioDiagnostics diagnostics = new AdAudioDiagnostics();
+        List<AdAudioSignalProvider.AdAudioCandidate> emitted = new ArrayList<>();
+        SpeechAdSignalProvider provider = new SpeechAdSignalProvider(
+                hub, factory, () -> config(true, "赌场", 15), owner, diagnostics);
+        FakeSession recognizer = null;
+        try {
+            provider.setEnabled(true);
+            provider.start(context(session), rules(), listener(
+                    emitted, new ArrayList<>(), new ArrayList<>()));
+            provider.onHostPosition(host(session, 1_000L, 20_000L, true, false));
+            owner.submit(() -> { }).get(2, TimeUnit.SECONDS);
+            recognizer = factory.current();
+            recognizer.blockAccept();
+
+            caller.submit(() -> hub.publishPcm(session.frame(new float[] {0.1f}, 16_000, 1_000L)))
+                    .get(2, TimeUnit.SECONDS);
+            assertTrue(recognizer.acceptStarted.await(2, TimeUnit.SECONDS));
+            caller.submit(() -> {
+                provider.onHostPosition(host(session, 1_200L, 20_000L, true, false));
+                hub.publishPcm(session.frame(new float[] {0.2f}, 16_000, 1_200L));
+                hub.resetTimeline(2_000L, PlaybackMediaSignalHub.ResetReason.SEEK);
+            }).get(2, TimeUnit.SECONDS);
+            int staleToken = recognizer.lastTimelineToken;
+            recognizer.emit("赌场", staleToken);
+            assertEquals(0, recognizer.resetCalls);
+            recognizer.allowAccept.countDown();
+            owner.submit(() -> { }).get(2, TimeUnit.SECONDS);
+            assertEquals(1, recognizer.resetCalls);
+            assertFalse(recognizer.concurrentNativeCall.get());
+            assertTrue(emitted.isEmpty());
+
+            PlaybackMediaSignalHub.Session resetSession = hub.session();
+            provider.onHostPosition(host(resetSession, 2_000L, 20_000L, true, false));
+            recognizer.blockAccept();
+            caller.submit(() -> hub.publishPcm(resetSession.frame(new float[] {0.3f}, 16_000, 2_000L)))
+                    .get(2, TimeUnit.SECONDS);
+            assertTrue(recognizer.acceptStarted.await(2, TimeUnit.SECONDS));
+            caller.submit(provider::close).get(2, TimeUnit.SECONDS);
+            owner.shutdown(); // Exact production ordering: cleanup is still inside the owner.
+            assertEquals(0, recognizer.closeCalls);
+            recognizer.emit("赌场", recognizer.lastTimelineToken);
+            recognizer.allowAccept.countDown();
+            assertTrue(owner.awaitTermination(2, TimeUnit.SECONDS));
+            assertFalse(recognizer.concurrentNativeCall.get());
+            assertEquals(1, recognizer.closeCalls);
+            assertTrue(emitted.isEmpty());
+            assertFalse(hub.isCaptureRequested(PlaybackMediaSignalHub.ConsumerKind.AD_AUDIO));
+            assertEquals(1L, diagnostics.count(AdAudioDiagnostics.Code.SPEECH_CLOSE_PENDING));
+            assertEquals(1L, diagnostics.count(AdAudioDiagnostics.Code.SPEECH_CLOSED));
+            assertEquals(0L, diagnostics.count(AdAudioDiagnostics.Code.SPEECH_OWNER_REJECTED));
+        } finally {
+            if (recognizer != null && recognizer.allowAccept != null) recognizer.allowAccept.countDown();
+            provider.close();
+            owner.shutdown();
+            caller.shutdownNow();
+            owner.awaitTermination(2, TimeUnit.SECONDS);
+            hub.close();
+        }
+    }
+
+    @Test(timeout = 10_000)
+    public void closeFinishesPendingSubmissionBeforeTheRuntimeCanShutdownTheOwner()
+            throws Exception {
+        ExecutorService owner = Executors.newSingleThreadExecutor();
+        ExecutorService callers = Executors.newFixedThreadPool(2);
+        AtomicBoolean pauseSubmission = new AtomicBoolean();
+        CountDownLatch submitting = new CountDownLatch(1);
+        CountDownLatch allowSubmission = new CountDownLatch(1);
+        CountDownLatch closeEntered = new CountDownLatch(1);
+        CountDownLatch closeReturned = new CountDownLatch(1);
+        Executor handoff = command -> {
+            if (pauseSubmission.getAndSet(false)) {
+                submitting.countDown();
+                try {
+                    if (!allowSubmission.await(5, TimeUnit.SECONDS)) {
+                        throw new IllegalStateException("submission timed out");
+                    }
+                } catch (InterruptedException error) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException(error);
+                }
+            }
+            owner.execute(command);
+        };
+        Fixture fixture = new Fixture(true, config(true, "赌场", 15), handoff, 4);
+        try {
+            fixture.host(1_000L, 20_000L, true, false);
+            owner.submit(() -> { }).get(2, TimeUnit.SECONDS);
+            FakeSession session = fixture.factory.current();
+            pauseSubmission.set(true);
+            var publish = callers.submit(() -> fixture.publish(new float[] {0.1f}, 16_000, 1_000L));
+            assertTrue(submitting.await(2, TimeUnit.SECONDS));
+            var close = callers.submit(() -> {
+                closeEntered.countDown();
+                fixture.provider.close();
+                owner.shutdown();
+                closeReturned.countDown();
+            });
+            assertTrue(closeEntered.await(2, TimeUnit.SECONDS));
+            // Native isn't running here: the only pending work is the executor handoff.
+            assertFalse(closeReturned.await(200, TimeUnit.MILLISECONDS));
+            assertFalse(owner.isShutdown());
+            allowSubmission.countDown();
+            publish.get(2, TimeUnit.SECONDS);
+            close.get(2, TimeUnit.SECONDS);
+            assertTrue(owner.awaitTermination(2, TimeUnit.SECONDS));
+            assertEquals(1, session.closeCalls);
+            assertFalse(fixture.hub.isCaptureRequested(PlaybackMediaSignalHub.ConsumerKind.AD_AUDIO));
+            assertEquals(0L, fixture.diagnostics.count(AdAudioDiagnostics.Code.SPEECH_OWNER_REJECTED));
+        } finally {
+            allowSubmission.countDown();
+            fixture.close();
+            owner.shutdown();
+            callers.shutdownNow();
+            owner.awaitTermination(2, TimeUnit.SECONDS);
+        }
+    }
+
+    @Test
+    public void pcmGapRejectsInFlightTextAndResetsBeforeJoiningNewAudio() {
+        ManualExecutor owner = new ManualExecutor();
+        Fixture fixture = new Fixture(true, config(true, "赌场", 15), owner, 2);
+        fixture.host(1_000L, 20_000L, true, false);
+        owner.runAll();
+        FakeSession recognizer = fixture.factory.current();
+        recognizer.joinSpeech = true;
+        fixture.publish(new float[] {1f}, 16_000, 1_000L); // 赌
+        owner.runAll();
+        int previousTimeline = recognizer.lastTimelineToken;
+        fixture.publish(new float[] {0f}, 16_000, 1_100L);
+        fixture.publish(new float[] {0f}, 16_000, 1_200L);
+        fixture.publish(new float[] {3f}, 16_000, 1_300L); // 场, after a dropped frame
+        recognizer.emitAt("赌场", 1_000_000L, 1_300_000L, previousTimeline);
+        owner.runAll();
+        assertTrue(fixture.emitted.isEmpty());
+        assertEquals(1, recognizer.resetCalls);
+        assertNotEquals(previousTimeline, recognizer.lastTimelineToken);
+        assertEquals(2L, fixture.diagnostics.count(AdAudioDiagnostics.Code.SPEECH_PCM_QUEUE_PEAK));
+        fixture.close();
+    }
+
+    @Test
+    public void resetStormIsCoalescedAndRejectedInputDoesNotEnterNative() {
+        ManualExecutor owner = new ManualExecutor();
+        Fixture fixture = new Fixture(true, config(true, "赌场", 15), owner, 2);
+        fixture.host(1_000L, 20_000L, true, false);
+        owner.runAll();
+        FakeSession recognizer = fixture.factory.current();
+        for (int i = 0; i < 1_000; i++) fixture.hub.resetTimeline(
+                2_000L, PlaybackMediaSignalHub.ResetReason.SEEK);
+        assertEquals(1, owner.tasks.size());
+        owner.runAll();
+        assertEquals(1, recognizer.resetCalls);
+        fixture.provider.onHostPosition(host(fixture.hub.session(), 2_000L, 20_000L, true, false));
+        fixture.hub.publishPcm(fixture.hub.session().frame(new float[192_001], 16_000, 2_000L));
+        owner.runAll();
+        assertTrue(recognizer.acceptedSamples.isEmpty());
+        assertEquals(1L, fixture.diagnostics.count(AdAudioDiagnostics.Code.SPEECH_PCM_DROPPED));
+        fixture.close();
+    }
+
+    @Test
+    public void queuedResultsAreBoundedAndInvalidatedOnClose() {
+        ManualExecutor owner = new ManualExecutor();
+        Fixture fixture = new Fixture(true, config(true, "赌场", 15), owner, 2);
+        fixture.host(1_000L, 20_000L, true, false);
+        owner.runAll();
+        fixture.publish(new float[] {0.1f}, 16_000, 1_000L);
+        owner.runAll();
+        FakeSession recognizer = fixture.factory.current();
+        for (int i = 0; i < 20; i++) recognizer.emit("赌场", recognizer.lastTimelineToken);
+        assertEquals(12L, fixture.diagnostics.count(AdAudioDiagnostics.Code.QUEUE_OVERFLOW));
+        fixture.provider.close();
+        owner.runAll();
+        assertTrue(fixture.emitted.isEmpty());
+        assertEquals(1, recognizer.closeCalls);
+        fixture.close();
+    }
+
+    @Test
+    public void executorRejectionDegradesWithoutRunningNativeOnTheCaller() {
+        Executor rejecting = command -> { throw new java.util.concurrent.RejectedExecutionException(); };
+        Fixture fixture = new Fixture(true, config(true, "赌场", 15), rejecting, 2);
+        fixture.host(1_000L, 20_000L, true, false);
+        assertEquals(AdAudioSignalProvider.ProviderState.DEGRADED, fixture.provider.state());
+        assertEquals(0, fixture.factory.readyCalls);
+        assertTrue(fixture.factory.sessions.isEmpty());
+        assertFalse(fixture.hub.isCaptureRequested(PlaybackMediaSignalHub.ConsumerKind.AD_AUDIO));
+        assertEquals(1L, fixture.diagnostics.count(AdAudioDiagnostics.Code.SPEECH_OWNER_REJECTED));
+        fixture.close();
+    }
+
+    @Test
+    public void failedResetStopsThisProviderInsteadOfJoiningAcrossTheGap() {
+        Fixture fixture = new Fixture(true, config(true, "赌场", 15), Runnable::run, 2);
+        fixture.host(1_000L, 20_000L, true, false);
+        FakeSession recognizer = fixture.factory.current();
+        recognizer.throwOnReset = true;
+        PlaybackMediaSignalHub.Session reset = fixture.hub.resetTimeline(
+                2_000L, PlaybackMediaSignalHub.ResetReason.SEEK);
+        fixture.provider.onHostPosition(host(reset, 2_000L, 20_000L, true, false));
+        fixture.hub.publishPcm(reset.frame(new float[] {1f}, 16_000, 2_000L));
+        assertEquals(AdAudioSignalProvider.ProviderState.DEGRADED, fixture.provider.state());
+        assertEquals(1, recognizer.closeCalls);
+        assertTrue(recognizer.acceptedSamples.isEmpty());
         fixture.close();
     }
 
@@ -388,9 +633,11 @@ public class SpeechAdSignalProviderTest {
         private final List<AdAudioSignalProvider.ProviderError> errors = new ArrayList<>();
         private final List<AdAudioSignalProvider.TimelineReset> resets = new ArrayList<>();
         private final SpeechAdSignalProvider provider;
+        private final Executor worker;
 
         private Fixture(boolean modelReady, SpeechAdConfig config,
                         Executor worker, int mailboxCapacity) {
+            this.worker = worker;
             factory = new FakeRecognizerFactory(modelReady);
             provider = new SpeechAdSignalProvider(
                     hub, factory, () -> config, mailboxCapacity, worker, diagnostics);
@@ -411,6 +658,7 @@ public class SpeechAdSignalProviderTest {
         @Override
         public void close() {
             provider.close();
+            if (worker instanceof ManualExecutor manual) manual.runAll();
             hub.close();
         }
     }
@@ -418,6 +666,9 @@ public class SpeechAdSignalProviderTest {
     private static final class FakeRecognizerFactory implements SpeechRecognitionFactory {
         private final boolean ready;
         private final List<FakeSession> sessions = new ArrayList<>();
+        private final CountDownLatch sessionCreated = new CountDownLatch(1);
+        private int readyCalls;
+        private SpeechRecognitionFactory.ExecutionProfile lastProfile;
         private boolean throwOnCreate;
 
         private FakeRecognizerFactory(boolean ready) {
@@ -426,14 +677,22 @@ public class SpeechAdSignalProviderTest {
 
         @Override
         public boolean isReady() {
+            readyCalls++;
             return ready;
         }
 
         @Override
         public Session create(Listener listener) {
+            return create(listener, SpeechRecognitionFactory.ExecutionProfile.SUBTITLE);
+        }
+
+        @Override
+        public Session create(Listener listener, ExecutionProfile profile) {
             if (throwOnCreate) throw new IllegalStateException("create failed");
+            lastProfile = profile;
             FakeSession session = new FakeSession(listener);
             sessions.add(session);
+            sessionCreated.countDown();
             return session;
         }
 
@@ -453,6 +712,14 @@ public class SpeechAdSignalProviderTest {
         private int closeCalls;
         private boolean throwOnAccept;
         private boolean throwOnClose;
+        private boolean throwOnReset;
+        private boolean joinSpeech;
+        private final StringBuilder utterance = new StringBuilder();
+        private CountDownLatch acceptStarted;
+        private CountDownLatch allowAccept;
+        private final CountDownLatch closeFinished = new CountDownLatch(1);
+        private final AtomicBoolean concurrentNativeCall = new AtomicBoolean();
+        private volatile boolean nativeAccepting;
 
         private FakeSession(SpeechRecognitionFactory.Listener listener) {
             this.listener = listener;
@@ -465,17 +732,45 @@ public class SpeechAdSignalProviderTest {
             lastTimelineToken = timelineToken;
             lastStartUs = startUs;
             lastEndUs = endUs;
+            if (joinSpeech) {
+                if (samples[0] == 1f) utterance.append("赌");
+                if (samples[0] == 3f) {
+                    utterance.append("场");
+                    listener.onResult(utterance.toString(), startUs, endUs, timelineToken);
+                }
+            }
+            if (acceptStarted != null) {
+                nativeAccepting = true;
+                acceptStarted.countDown();
+                try {
+                    allowAccept.await();
+                } catch (InterruptedException error) {
+                    Thread.currentThread().interrupt();
+                } finally {
+                    nativeAccepting = false;
+                }
+            }
         }
 
         @Override
         public void reset() {
+            if (nativeAccepting) concurrentNativeCall.set(true);
             resetCalls++;
+            if (throwOnReset) throw new IllegalStateException("reset failed");
+            utterance.setLength(0);
         }
 
         @Override
         public void close() {
+            if (nativeAccepting) concurrentNativeCall.set(true);
             closeCalls++;
             if (throwOnClose) throw new IllegalStateException("close failed");
+            closeFinished.countDown();
+        }
+
+        private void blockAccept() {
+            acceptStarted = new CountDownLatch(1);
+            allowAccept = new CountDownLatch(1);
         }
 
         private int lastTimelineToken() {

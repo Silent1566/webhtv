@@ -2,7 +2,7 @@
 
 > 任务：`AD-AUDIO-RULES-V2`
 >
-> 状态：设计评审稿已交付；Phase 1 已提交并通过 34 项 JVM 测试，尚未接线。Phase 2 的时间/锁/线程评审已补齐，建议先实施 2A 执行隔离，再实施 2B 规则与精确度验收；仍待明确实施确认。Phase 3～4 未实施，不代表整项升级完成。
+> 状态：Phase 1 已提交且通过 34 项 JVM 测试，尚未接线。Phase 2A 执行/生命周期隔离已通过最终 50 项 JVM 回归与 Leanback arm64 Debug 构建，实际实现和交付边界见第 15 节。Phase 2B/3/4 未实施，TV 性能与真实语音精度未验收，不代表整项升级完成。
 >
 > 编写日期：2026-09-08（Asia/Shanghai）
 >
@@ -462,7 +462,7 @@ org.junit.runner.JUnitCore
 | 只设 numThreads=1 或只调优先级 | 不解决丢终点/新 ID 路由，也不消除持锁等待 | 可能降低竞争，仍可阻塞或死锁；降线程也可能扩大积压 | 不作为完整修复 |
 | WebHTV 适配：先 2A 执行隔离，再 2B 时间与规则接线 | 保留旧配置/字幕路径、capture 合同、单 Coordinator；逐阶段验证 | 单独 native owner、有界消息、不持控制锁推理；可独立回滚，不改二进制 | **推荐** |
 
-#### Phase 2A：执行与生命周期隔离（当前建议批准的最小单元）
+#### Phase 2A：执行与生命周期隔离（本次实现单元）
 
 1. 创建**语音广告专用串行 owner worker**，不复用 PCM 指纹 worker；所有模型 create、Session accept/reset/close 由该 owner 串行处理。字幕默认创建入口和现有线程策略不变，广告工厂显式传入受限 profile。
 2. Host/Hub 回调只更新可见 token/状态或进入有界输入队列；无模型校验、初始化、推理、文件/日志 I/O、Future 等待。不能只把 `recognitionSession.accept` 移出 synchronized 后允许 close 并发释放指针。
@@ -513,12 +513,121 @@ docs/AD-AUDIO-RULES-V2-design.md
 
 **资源/包体/回滚**：只新增广告专用 Java worker/profile 与有界队列，不引入第二条 PCM 管线、麦克风、依赖或 native 制品；精确 APK 增量在构建后记录，不能宣称为零。2A、2B 分别原子提交并打恢复标签；回滚先 2B 后 2A，保留用户关键词、缓存、字幕默认行为。功能 flag 默认关闭不等于通过回归；任何 material regression 未解决时不得发布/宣称整项完成。
 
+## 14. 设计补充与恢复校准（2026-09-08）
+
+> 历史说明：14.1/14.3 保留较早恢复时的草稿状态，不是当前交付状态；当前 guard 已覆盖接口及 2A 实现路径，以第 15 节为准。14.2 的安全与兼容约束仍适用。
+
+### 14.1 已提交设计与未提交草稿分开记录（历史）
+
+本轮恢复检查时，分支为 `dev2`，HEAD 为 Phase 2 设计提交 `411171eadfe07906b912210f5a669711f4476c11`。当前请求仍是“先输出更新相关设计文档”，上一版恢复锚点也明确要求先取得实施确认；交接摘要中的“正在实施”只说明存在草稿，不能替代阶段批准。本轮不继续代码实施、不撤销草稿、不扩大 guard 范围、不构建或安装 APK。
+
+当前已有 active guard `AD-AUDIO-RULES-V2-P2A`，基线与上述 HEAD 相同，其初始 dirty/protected 清单为空。本轮恢复时发现以下未提交修改，均按既有工作保留：
+
+| 路径（相对 `app/src/main/java/com/fongmi/android/tv/`） | 草稿内容及当前限制 |
+|---|---|
+| `ad/audio/AdAudioRuntimeController.java` | 已增加独立 speech worker，但生产关闭路径仍使用 `shutdownNow`；尚未证明异步 Session 释放不会被丢弃 |
+| `subtitle/RealtimeSubtitleRecognizer.java` | 已增加广告 profile/单线程预算；离线 worker 的单参数 `Process.setThreadPriority` 位于线程工厂调用体，而非新线程 Runnable 内，不能视为正确的新线程降优先级实现 |
+| `subtitle/RealtimeSubtitleSpeechRecognitionFactory.java` | 已增加带 profile 的创建入口；依赖下行接口草稿，尚未编译或验证默认字幕路径兼容性 |
+| `subtitle/SpeechRecognitionFactory.java` | 已增加 `ExecutionProfile` 与默认创建重载，但**不在当前 guard scope 内**；不得直接提交，也不得仅修改 guard 内部状态使其放行 |
+
+`SpeechAdSignalProvider.java` 尚未修改：模型创建及 `accept/reset/close` 的锁内执行问题仍在。新增 worker/profile 不等于已经完成执行隔离。第 13.5 节要求的并发测试、Leanback 构建及 TV 性能验收均未对这组草稿执行。
+
+### 14.2 补充到 Phase 2A 的实现与验收约束
+
+1. **接口范围先闭合**：优先评估在已声明的具体工厂和 Recognizer 路径内适配广告 profile，保持字幕默认入口与现有 `SpeechRecognitionFactory` 合同不变。确需修改接口时，须先明确批准该路径及兼容策略，再安全隔离并纳入任务；不能把已有越界草稿反推为授权。
+2. **释放任务必须执行，而不只是入队**：关闭先停止新输入并使 token 失效，再由同一串行 owner 完成 Session 释放。关闭线程池的顺序必须保证最终 close 命令仍可执行；不得在排入 close 后直接 `shutdownNow()` 丢弃它，也不得在主线程等待 native 推理结束。正常关闭优先采用能保留已提交清理任务的有序停止；超时只能记录未完成状态，不能并发 free。测试须验证慢 accept 返回后 close 恰好执行一次、旧回调无效、worker 最终终止；配置替换还须验证旧 close 在新 create 之前完成。
+3. **只降低实际广告线程的优先级**：单参数 `Process.setThreadPriority` 应在新 worker 的 Runnable 开始执行时调用，不能写在线程工厂返回 Thread 前的调用体中。离线 ASR 的 Java 子线程须在自己的执行入口设置，不能假定继承父线程的 Android 调度优先级；保留字幕及音视频线程默认策略。静态/profile 单测之外，真实 Android 验收要观察执行线程，而不是仅断言 Java `Thread.getPriority()`。
+4. **验证边界不变**：保留第 13.5 节的慢 create/accept/close、reset、迟到回调、PCM 缺口、指纹并行和 prompt/auto/undo 场景。规则接线、词时间对齐、UI、远程语音规则以及任何新 native 依赖不并入 2A。通过 JVM/构建只能说明相应代码门槛通过，不能替代 TV 播放性能或完整自动跳过验收。
+
+### 14.3 本轮增量证据与交付边界（历史）
+
+仅核对上述两个草稿风险对应的官方 API，不重复第 13.3 节已完成的上游调研：
+
+| 来源 / revision / 访问日期 | 等级、支持事实与决策影响 |
+|---|---|
+| `https://docs.oracle.com/en/java/javase/17/docs/api/java.base/java/util/concurrent/ExecutorService.html`；Java SE 17 API；2026-09-08 | A：`shutdown()` 允许已提交任务继续执行，`shutdownNow()` 阻止等待任务开始并尝试中断执行中任务。支持“有序保留释放任务”的设计，不保证 native 推理响应中断，也不证明当前草稿能够安全终止 |
+| `https://developer.android.com/reference/android/os/Process.html`；`setThreadPriority(int)` / `setThreadPriority(int,int)`，API level 1；2026-09-08 | A：单参数版本作用于调用线程，Android 优先级不由 Java 子线程自动继承。支持把设置放入各广告 worker 执行入口；不证明 native 线程预算或 TV 性能已达标 |
+
+agent-reach 的 Jina Reader 请求遇到 TLS EOF；本轮改由网页读取工具读取上述官方正文。该网络失败不记作源码/测试失败，不据此重跑构建。
+
+本次只对本文作增量更新，源码草稿保留。交付检查限于本文 diff/结构及四个草稿的 SHA-256 保全；不重跑 Phase 1 测试。当前 guard 同时包含未验证代码和一个越界文件，不能形成安全的整体完成提交，因此不调用 `finish`、不创建新 commit/tag；不以绕过 guard 的单独文档提交掩盖该状态。
+
+## 15. Phase 2A 实现与代码交付（2026-09-08）
+
+### 15.1 实际范围与实现决策
+
+沿用 `AD-AUDIO-RULES-V2-P2A` / `standard` guard，分支 `dev2`，基线 `411171eadfe07906b912210f5a669711f4476c11`。初始 dirty/staged/protected 均为空，11 个允许路径内的代码与本文作为同一逻辑单元收尾。
+
+实际改动：`ad/audio/AdAudioDiagnostics.java`、`AdAudioRuntimeController.java`、`SpeechAdSignalProvider.java`；`subtitle/SpeechRecognitionFactory.java`、`RealtimeSubtitleSpeechRecognitionFactory.java`、`RealtimeSubtitleRecognizer.java`；三个对应测试文件与本文。`SpeechAdRuntimeEndToEndTest.java` 在范围内但仅执行、未修改。没有修改 `PlayerManager`、Hub、UI、规则配置、依赖锁或 native 制品。
+
+| 合同 / 位置 | 最终实现与取舍 |
+|---|---|
+| `AdAudioRuntimeController.Workers/close` | 指纹 analysis 与 speech owner 使用独立 executor；生产 speech worker 异步串行、无 caller-runs fallback。先令 Provider 失效并交接清理任务，再 `shutdown()` 保留已接收任务，不在宿主等待 native。 |
+| `SpeechAdSignalProvider` 控制锁 | monitor 只保护状态和有界邮箱；模型检查/创建、resample、识别/reset、匹配、Hub 注册/释放和 native close 在锁外。生产模型生命周期由 speech owner 执行，Hub 继续轻量同步校验/有界复制/投递，不增加第二条 PCM 管线。 |
+| `dispatchOwner/runOwnerCommand` | 合并 wakeup 循环排空命令，PCM/结果间优先 lifecycle，不依靠关停后重新 submit。独立 `submissionLock` 覆盖 scheduled 标记到 executor 接收；重复 close 也必须完成交接后才能返回。生产该锁不覆盖 native 执行；所有 dispatch 调用须在 Provider monitor 外，不能在提交锁外加 scheduled 快路径。 |
+| 输入/结果边界 | 默认 PCM 邮箱 16 帧，单帧最多 192000 samples，采样率 8000–192000 Hz，拒绝空、非法时间或超限输入。结果/错误队列最多 8 项，文本最多 8192 字符。溢出立即更新 timeline token、使在途旧结果失效；合并 reset 后才接收保留的最新有界尾部，不能跨缺口拼词。 |
+| seek/park/close | 同媒体 seek 保留实例并 reset；无丢帧的缓冲只 park，实际丢弃 PCM 才断开片段。关闭先失效 token/摘下引用，再由 owner 锁外清理 Hub lease/registration 和 Session。过时创建结果在 owner 关闭；reset 失败停用实例，不继续拼接旧上下文。 |
+| factory/profile | 增加兼容的 `create(listener, profile)` 默认重载，旧 factory 可继续实现旧入口。广告在线/离线模型线程预算为 1，字幕默认入口及 `max(1,min(4,CPU/2))` 预算不变。广告 owner 和离线 worker 在各自 Runnable 入口设 Android background priority；不等同于全进程只有一个线程。 |
+| `RealtimeSubtitleRecognizer.release` | 停止新任务后等待识别 executor 真正退出，再释放 native；被中断仍等待，完成后恢复 interrupt 标记。广告路径由 owner 等待且不持 Provider monitor。native 永不返回时仍只能保留待关闭状态，未实现强杀/超时后并发 free。 |
+| diagnostics/旧行为 | speech 热路径仅内存计数，不写日志、不记录文本/URL。增加丢帧、queue peak、reset、close pending/closed、拒绝和三个 accept 耗时桶；peak 是高水位不是次数。候选仍用旧关键词 ID、capture 起点和 skipSeconds，Coordinator 保持唯一映射/seek 权限及 duration 钳制，prompt/auto/undo 不变。 |
+
+executor 拒绝时降级并使 token 失效，保留未清理引用，不在调用线程 fallback native free，不声称资源已关闭。生产 Runtime 的有序关停不应触发此拒绝，回归覆盖该提交顺序。
+
+### 15.2 审查与修复
+
+- **有效并已修复**：早期存在 Hub 清理锁反转、锁内日志 I/O、溢出未立即失效在途结果、递归 submit 在关停后丢清理、中断等待后提前 free 等风险，分别以锁外 owner 清理、内存 diagnostics、timeline token、单 wakeup drain 和真实终止等待修正，并补并发用例。
+- **独立审查发现并修复**：`ownerTaskScheduled=true` 到实际 `execute()` 之间的提交窗口，可能使新 create 越过旧 close，或让 shutdown 后清理被拒绝。追加提交交接锁和重复 close 屏障；`closeFinishesPendingSubmissionBeforeTheRuntimeCanShutdownTheOwner` 固定该窗口。按生产异步 executor 前提复核未发现新的确定反例。未调用跨模型/外部代理 CLI。
+- **保留的取舍**：仅开 speech 时，模型检查前无 capture，首次 `needsPipelineRebuild()` 为 false；创建命令在 native create 前取得 capture，后续宿主 refresh 可发现重建需求。只读核对 `PlayerManager.refreshAdAudioRuntime`、telemetry pump 及约 5 秒调度路径；不是立即唤醒或严格 5 秒保证，不改宿主策略。
+- **覆盖边界**：新增 Runtime/Hub 测试重放首次 refresh、阻塞检查/创建、capture、管线 attach/代际 reset 和 PCM 到达；另覆盖慢 close 先于替换 create、Runtime shutdown 保留最终 cleanup。这是 fake recognizer/Hub 租约测试，不是实际 Android PlayerManager/音频设备端到端验收。
+
+早期 35/37/49 项通过均属不同草稿，不代表最终补丁。首次 49 项通过后因提交竞态作了相关修复，才重跑相同门槛，不是对未改变版本重复验证。最后一次增量读取 ExecutorService 页面时 Jina 返回 HTTP 401、网页读取未返回可用正文，不记作新增证据；沿用第 13.3/14.3 节已记录来源，不扩大网络研究。
+
+### 15.3 最终验证与产物
+
+```bash
+bash ./gradlew :app:testLeanbackArm64_v8aDebugUnitTest \
+  --tests 'com.fongmi.android.tv.ad.audio.SpeechAdSignalProviderTest' \
+  --tests 'com.fongmi.android.tv.ad.audio.AdAudioRuntimeControllerTest' \
+  --tests 'com.fongmi.android.tv.ad.audio.SpeechAdRuntimeEndToEndTest' \
+  --tests 'com.fongmi.android.tv.subtitle.RealtimeSubtitleRecognizerTest' \
+  --tests 'com.fongmi.android.tv.ad.audio.AdAudioDiagnosticsTest' \
+  --console=plain
+```
+
+| 测试类 | 用例数 | failures / errors |
+|---|---:|---:|
+| `SpeechAdSignalProviderTest` | 21 | 0 / 0 |
+| `AdAudioRuntimeControllerTest` | 20 | 0 / 0 |
+| `SpeechAdRuntimeEndToEndTest` | 1 | 0 / 0 |
+| `RealtimeSubtitleRecognizerTest` | 5 | 0 / 0 |
+| `AdAudioDiagnosticsTest` | 3 | 0 / 0 |
+| **总计** | **50** | **0 / 0** |
+
+最终 JVM：`BUILD SUCCESSFUL in 13s`；日志 `/tmp/ad-audio-p2a-handoff-final-tests.log`；XML 位于 `app/build/test-results/testLeanbackArm64_v8aDebugUnitTest/`。慢 create/accept/close、提交交接、reset storm、PCM 缺口、迟到回调、执行拒绝和 release 中断使用受控 fake/latch/barrier；没有用 JVM stub 代替真实模型证明。
+
+随后一次 `bash ./gradlew :app:assembleLeanbackArm64_v8aDebug --console=plain`：`BUILD SUCCESSFUL in 10s`；日志 `/tmp/ad-audio-p2a-handoff-final-assemble.log`。仅执行既有 arm64 构建依赖链，无单独 FFmpeg/Media3 上游重建或全 ABI 矩阵。既有 CXX5202、废弃 API/Gradle 警告未阻止本目标，不在本次修复范围。
+
+- APK：`app/build/outputs/apk/leanbackArm64_v8a/debug/app-leanback-arm64_v8a-debug.apk`。
+- 字节数：`188769225`。
+- SHA-256：`434ef9e96edfa9fdec9907e36c2dfd3eb4100f4308dc5a9700035ad450281cfc`。
+- **没有可靠的同配置、实现前 APK 基线，完整 2A 包体增量仍未测量**；只记录绝对大小，不宣称零增量。未新增模型、JAR、AAR 或 `.so` 依赖。
+
+日志/XML/APK 仅为本地构建产物，不提交、上传或发布。最终代码/文档 whitespace、文档结构和 scope/commit/tag 检查在收尾执行，证据记录于 guard 归档。
+
+### 15.4 交付、回滚与未完成门槛
+
+**仅完成 2A 的代码隔离、确定性并发回归和 arm64 构建。** 未安装 APK、改设备设置、push、发布或启动 2B；旧关键词、默认启用开关和自动跳过策略不变。
+
+真实 TV/模型的调度、与播放/实时字幕共存的 CPU、视频丢帧、underrun、启动/seek、实时系数和精度仍按第 13.5 节冻结样本后验收；无合格 TV/标注音频结果，不能宣布整项升级或性能验收完成。词时间对齐、复合规则接入、UI/导入和远程语音规则仍属于 2B/3/4。
+
+实现与本文由当前 guard 一次原子提交，并创建 `recovery/AD-AUDIO-RULES-V2-P2A/<timestamp>` annotated 本地恢复标签；具体 commit/tag 由 `task_guard.sh finish` 输出和归档记录，不为自引用 ID 再开文档提交。回滚时先隔离其他工作，再 `git revert <2A-commit>` 回到 Phase 2 设计基线的运行时，保留 Phase 1 纯规则组件、用户配置与缓存；不使用 `reset --hard` 覆盖其他工作。
+
 ### Recovery anchor
 
-- **完整目标**：按本文件完成社区指纹兼容、复合语音规则、播放实时性、配置/UI 与受控自动跳过；不把纯规则层或单纯降级重新定义为最终完成。
-- **当前状态**：Phase 1 已闭环；本轮只修订 Phase 2 决策文档，无运行时变更。2A 推荐实施但未取得明确代码阶段确认，2B/3/4 未实施。
-- **已完成证据**：Phase 1 的 34 项 JVM 测试；本轮精确本地调用链、后续本地修复、Sherpa v1.13.4 源码与 JAR API、官方线程资料及相关 issue/应用对照；未重复 Phase 1 测试。
-- **当前文件**：仅 `docs/AD-AUDIO-RULES-V2-design.md`；本次设计提交/恢复标签由 `AD-AUDIO-RULES-V2-P2-DESIGN` guard 产生。
-- **风险/门槛**：锁/线程和坐标设计已选定；真实模型词时间误差、TV 资源共存、设备及音频样本仍待后续验证，不能用编译代替。
-- **回滚基线**：`fa8f8959b17dd923397776fa9492152da232a819`，`recovery/AD-AUDIO-RULES-V2/20260908133704-fa8f8959b17d`；本轮可仅回滚文档，不影响代码。
-- **唯一下一步**：取得明确的 Phase 2A 实施确认，随后在第 13.4 节所列范围启动代码 guard 会话。
+- **目标/验收**：2A 独立 speech owner、控制锁外 native/Hub 操作、有界输入/结果、逻辑失效和物理串行清理已实现；最终 50 项 JVM、Leanback arm64 Debug 构建通过。完整升级及 TV 验收尚未完成。
+- **工作区/定位**：`dev2`；基线 `411171eadfe07906b912210f5a669711f4476c11`；guard `AD-AUDIO-RULES-V2-P2A`，11 个允许路径、初始 protected 为空。本文与 6 个实现文件、3 个测试文件同一任务提交；以 `git log -1 --format=%H -- docs/AD-AUDIO-RULES-V2-design.md` 和该 guard 恢复标签定位，实际 Git/guard 状态优先。
+- **完成证据**：第 15.2 节独立审查和提交竞态修复；第 15.3 节最终 50/0/0 XML、13 秒测试、10 秒构建及 APK hash。旧 35/37/49 项是历史，不重跑 Phase 1。
+- **当前文件/符号**：Provider 的 `dispatchOwner/runOwnerCommand/close`、Runtime 的 `Workers/close`、factory profile 与 Recognizer 的 `awaitRecognitionTermination`。收尾前仅这些已验证代码及本文待提交；收尾后的实际残留以 guard/diff 为准，不丢弃已有修改。
+- **未解决边界**：真实 TV/模型性能精度、实际设备端到端、同配置实现前 APK 增量基线；native 永不返回只能保留待关闭。2B/3/4 未实施，无安装/push/发布。
+- **回滚锚点**：2A annotated recovery tag 保留已验证实现；运行时回退基线 `411171eadfe07906b912210f5a669711f4476c11`，采用可逆 revert，不覆盖用户脏文件。
+- **唯一下一步**：取得 Phase 2B（词时间对齐与复合规则接线）的明确阶段批准；未批准前不修改 matcher/配置/路由，不把代码门槛冒充设备发布门槛。
