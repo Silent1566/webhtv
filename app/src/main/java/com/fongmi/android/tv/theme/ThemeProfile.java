@@ -16,6 +16,17 @@ public class ThemeProfile {
     public static final String SEED_NONE = "none";
     public static final String SEED_WALLPAPER = "wallpaper";
     public static final String SEED_CUSTOM = "custom";
+    public static final String TWEAK_PRIMARY = "--primary";
+    public static final String TWEAK_PRIMARY_FOREGROUND = "--primary-foreground";
+    public static final String TWEAK_BACKGROUND = "--background";
+    public static final String TWEAK_CARD = "--card";
+    public static final String TWEAK_POPOVER = "--popover";
+    public static final String TWEAK_FOREGROUND = "--foreground";
+    public static final String TWEAK_MUTED_FOREGROUND = "--muted-foreground";
+    public static final String TWEAK_BORDER = "--border";
+    public static final String TWEAK_INPUT = "--input";
+    public static final String TWEAK_RING = "--ring";
+    public static final String TWEAK_DESTRUCTIVE = "--destructive";
 
     public int schemaVersion = SCHEMA_VERSION;
     public String format = FORMAT;
