@@ -91,14 +91,16 @@ public class TouchOptimizationHelperSourceTest {
         assertTrue(source.contains("setFocusScrollStrategy"));
         assertTrue(source.contains("setFocusSearchDisabled"));
         assertTrue(source.contains("onInterceptTouchEvent"));
-        assertTrue(source.contains("onInterceptKeyEvent"));
         assertTrue(source.contains("FOCUS_SCROLL_ITEM"));
-        assertTrue(source.contains("focusSuppressed"));
+        assertTrue(source.contains("state.touchSettling = true;"));
+        assertTrue(source.contains("restoreGrid(grid);"));
+        assertTrue(source.contains("onScrollStateChanged"));
     }
 
     @Test
     public void tvSearchRestoresPerSitePixelPositionAndPlayerUsesTvTouchContract() throws Exception {
         String collect = read("app/src/leanback/java/com/fongmi/android/tv/ui/activity/CollectActivity.java");
+        String home = read("app/src/leanback/java/com/fongmi/android/tv/ui/activity/HomeActivity.java");
         String video = read("app/src/leanback/java/com/fongmi/android/tv/ui/activity/VideoActivity.java");
         String widget = read("app/src/leanback/res/layout/view_widget_vod.xml");
         assertTrue(collect.contains("Map<String, SearchPosition> mSearchPositions"));
@@ -107,6 +109,10 @@ public class TouchOptimizationHelperSourceTest {
         assertTrue(collect.contains("scrollToPositionWithOffset"));
         assertTrue(collect.contains("mSearchPositions.clear()"));
         assertTrue(collect.contains("TouchOptimizationHelper.isTouchActive(parent)"));
+        assertTrue(collect.contains("mBoundSearchSiteKey"));
+        assertTrue(collect.contains("if (!siteKey.equals(mBoundSearchSiteKey))"));
+        assertTrue(home.contains("mTypeSelectionFromTouch"));
+        assertTrue(home.contains("if (Setting.isHomeVodAutoLoad() && !mTypeSelectionFromTouch) scheduleTypeSwitch(position);"));
         assertFalse(collect.contains("private void scrollSearchToTop()"));
         assertTrue(video.contains("private boolean onVideoTouch(View view, MotionEvent event)"));
         assertTrue(video.contains("if (!Setting.isTouchOptimized()) return mKeyDown.onTouchEvent(event);"));

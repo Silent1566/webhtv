@@ -3,6 +3,7 @@ package com.fongmi.android.tv.theme;
 import org.junit.Test;
 
 import java.io.ByteArrayInputStream;
+import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
 
 import static org.junit.Assert.assertEquals;
@@ -47,6 +48,31 @@ public class ThemeImportExportTest {
     }
 
     @Test
+    public void importAdaptersRejectOversizedAndDeeplyNestedJsonBeforeParsing() {
+        StringBuilder oversized = new StringBuilder(ThemeProfileValidator.MAX_JSON_BYTES + 1);
+        oversized.append("{\"primary\":\"");
+        while (oversized.length() <= ThemeProfileValidator.MAX_JSON_BYTES) oversized.append('x');
+        oversized.append("\"}");
+        try {
+            ThemeTweakCnAdapter.parse(oversized.toString());
+            fail("expected import size limit");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("too large"));
+        }
+
+        StringBuilder nested = new StringBuilder("{\"x\":");
+        for (int i = 0; i < ThemeProfileValidator.MAX_NESTING_DEPTH + 1; i++) nested.append('{');
+        nested.append("null");
+        for (int i = 0; i < ThemeProfileValidator.MAX_NESTING_DEPTH + 2; i++) nested.append('}');
+        try {
+            ThemeTweakCnAdapter.parse(nested.toString());
+            fail("expected import nesting limit");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("deeply nested"));
+        }
+    }
+
+    @Test
     public void unsupportedOnlyColorSetFailsWithoutChangingAnyStore() {
         try {
             ThemeTweakCnAdapter.parse("{\"font-sans\":\"sans\",\"radius\":\"1rem\"}");
@@ -54,6 +80,18 @@ public class ThemeImportExportTest {
         } catch (IllegalArgumentException expected) {
             assertTrue(expected.getMessage().contains("no supported"));
         }
+    }
+
+    @Test
+    public void transferRejectsPrivateIpv4Ipv6AndMappedAddresses() throws Exception {
+        assertFalse(ThemeTransfer.isPublicAddress(InetAddress.getByName("fc00::1")));
+        assertFalse(ThemeTransfer.isPublicAddress(InetAddress.getByName("fd12:3456::1")));
+        assertFalse(ThemeTransfer.isPublicAddress(InetAddress.getByName("2001:db8::1")));
+        assertFalse(ThemeTransfer.isPublicAddress(InetAddress.getByName("100.64.0.1")));
+        assertFalse(ThemeTransfer.isPublicAddress(InetAddress.getByName("192.0.2.1")));
+        assertFalse(ThemeTransfer.isPublicAddress(InetAddress.getByName("::ffff:192.168.1.1")));
+        assertTrue(ThemeTransfer.isPublicAddress(InetAddress.getByName("8.8.8.8")));
+        assertTrue(ThemeTransfer.isPublicAddress(InetAddress.getByName("2001:4860:4860::8888")));
     }
 
     @Test

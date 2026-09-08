@@ -20,6 +20,7 @@ public final class ThemeTweakCnAdapter {
 
     public static Result parse(String json) {
         if (json == null || json.isBlank()) throw new IllegalArgumentException("theme JSON is empty");
+        ThemeProfileCodec.validateJsonBounds(json);
         JsonElement root;
         try {
             root = JsonParser.parseString(json);

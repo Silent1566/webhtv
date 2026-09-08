@@ -19,9 +19,7 @@ public final class ThemeProfileCodec {
 
     public static ThemeProfile parse(String json) {
         if (json == null || json.isBlank()) throw new IllegalArgumentException("theme JSON is empty");
-        if (json.getBytes(StandardCharsets.UTF_8).length > ThemeProfileValidator.MAX_JSON_BYTES) {
-            throw new IllegalArgumentException("theme JSON is too large");
-        }
+        validateJsonBounds(json);
         JsonElement root;
         try {
             root = JsonParser.parseString(json);
@@ -39,6 +37,39 @@ public final class ThemeProfileCodec {
         ThemeProfileValidator.Result result = ThemeProfileValidator.validate(profile);
         if (!result.valid()) throw new IllegalArgumentException(result.message());
         return GSON.toJson(result.profile());
+    }
+
+    /**
+     * Bounds raw imported JSON before Gson builds a recursive tree. This keeps the
+     * nesting limit effective for pasted/downloaded input instead of discovering it
+     * only after a deeply nested payload has already been parsed.
+     */
+    static void validateJsonBounds(String json) {
+        if (json.getBytes(StandardCharsets.UTF_8).length > ThemeProfileValidator.MAX_JSON_BYTES) {
+            throw new IllegalArgumentException("theme JSON is too large");
+        }
+        int depth = 0;
+        boolean quoted = false;
+        boolean escaped = false;
+        for (int i = 0; i < json.length(); i++) {
+            char current = json.charAt(i);
+            if (quoted) {
+                if (escaped) escaped = false;
+                else if (current == '\\') escaped = true;
+                else if (current == '"') quoted = false;
+                continue;
+            }
+            if (current == '"') {
+                quoted = true;
+            } else if (current == '{' || current == '[') {
+                if (++depth > ThemeProfileValidator.MAX_NESTING_DEPTH) {
+                    throw new IllegalArgumentException("theme JSON is too deeply nested");
+                }
+            } else if (current == '}' || current == ']') {
+                depth--;
+                if (depth < 0) throw new IllegalArgumentException("theme JSON is invalid");
+            }
+        }
     }
 
     private static void inspect(JsonElement element, int depth) {

@@ -88,6 +88,39 @@ public final class ThemeTransfer {
         }
     }
 
+    static boolean isPublicAddress(InetAddress address) {
+        if (address == null || address.isAnyLocalAddress() || address.isLoopbackAddress()
+                || address.isLinkLocalAddress() || address.isSiteLocalAddress()
+                || address.isMulticastAddress()) return false;
+        byte[] bytes = address.getAddress();
+        if (bytes.length == 4) return isPublicIpv4(bytes, 0);
+        if (bytes.length != 16) return false;
+        // RFC 4193 ULA is not covered by InetAddress.isSiteLocalAddress().
+        if ((bytes[0] & 0xFE) == 0xFC) return false;
+        // RFC 3849 documentation space is not a routable public destination.
+        if ((bytes[0] & 0xFF) == 0x20 && (bytes[1] & 0xFF) == 0x01
+                && (bytes[2] & 0xFF) == 0x0D && (bytes[3] & 0xFF) == 0xB8) return false;
+        // Prevent IPv4-mapped IPv6 answers from bypassing the IPv4 policy.
+        boolean mapped = true;
+        for (int i = 0; i < 10; i++) mapped &= bytes[i] == 0;
+        mapped &= (bytes[10] & 0xFF) == 0xFF && (bytes[11] & 0xFF) == 0xFF;
+        return !mapped || isPublicIpv4(bytes, 12);
+    }
+
+    private static boolean isPublicIpv4(byte[] bytes, int offset) {
+        int first = bytes[offset] & 0xFF;
+        int second = bytes[offset + 1] & 0xFF;
+        int third = bytes[offset + 2] & 0xFF;
+        if (first == 0 || first == 10 || first == 127 || first >= 224) return false;
+        if (first == 100 && second >= 64 && second <= 127) return false; // RFC 6598 CGNAT
+        if (first == 169 && second == 254) return false;
+        if (first == 172 && second >= 16 && second <= 31) return false;
+        if (first == 192 && (second == 168 || (second == 0 && third <= 2))) return false;
+        if (first == 198 && (second == 18 || second == 19
+                || (second == 51 && third == 100))) return false;
+        return !(first == 203 && second == 0 && third == 113);
+    }
+
     private static List<InetAddress> lookupPublic(String hostname) throws IOException {
         if (hostname == null || hostname.isBlank()) throw new IOException("theme URL host is missing");
         List<InetAddress> addresses;
@@ -98,10 +131,7 @@ public final class ThemeTransfer {
         }
         if (addresses.isEmpty()) throw new IOException("theme URL host cannot be resolved");
         for (InetAddress address : addresses) {
-            if (address.isAnyLocalAddress() || address.isLoopbackAddress() || address.isLinkLocalAddress()
-                    || address.isSiteLocalAddress() || address.isMulticastAddress()) {
-                throw new IOException("private or special theme host is not allowed");
-            }
+            if (!isPublicAddress(address)) throw new IOException("private or special theme host is not allowed");
         }
         return addresses;
     }
