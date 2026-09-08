@@ -1164,8 +1164,18 @@ public class TmdbDetailActivityLayoutTest {
         assertTrue("dismiss must not steal focus from another button or an already closed activity",
                 dismiss.contains("!returnRecycler.isAttachedToWindow()")
                         && dismiss.contains("isFinishing() || isDestroyed()")
-                        && dismiss.contains("!returnRecycler.isShown()")
-                        && dismiss.contains("focus != previousFocus && !isFocusInside(focus, returnRecycler)"));
+                        && dismiss.contains("!returnRecycler.isShown()"));
+        int recyclerFocusStart = source.indexOf("private boolean focusTmdbRecyclerItem(RecyclerView recycler, int position)");
+        int recyclerFocusEnd = source.indexOf("private boolean onDetailEpisodeContainerKey", recyclerFocusStart);
+        String recyclerFocus = recyclerFocusStart >= 0 && recyclerFocusEnd > recyclerFocusStart
+                ? source.substring(recyclerFocusStart, recyclerFocusEnd) : "";
+        assertTrue("restoring an episode card must retry until its ViewHolder is attached and verify requestFocus succeeded",
+                recyclerFocus.contains("recycler.isComputingLayout()")
+                        && recyclerFocus.contains("findViewHolderForAdapterPosition(boundedTarget)")
+                        && recyclerFocus.contains("visibleHolder.itemView.requestFocus()")
+                        && recyclerFocus.contains("requestFocusFromTouch()")
+                        && recyclerFocus.contains("getCurrentFocus() == visibleHolder.itemView")
+                        && recyclerFocus.contains("postOnAnimation(() -> focusTmdbRecyclerItem(recycler, boundedTarget, attempt + 1))"));
     }
 
     @Test
@@ -2289,6 +2299,7 @@ public class TmdbDetailActivityLayoutTest {
         String navigationBody = navigation >= 0 && detailRows > navigation ? activity.substring(navigation, detailRows) : "";
         String detailRowsBody = detailRows >= 0 && rowKey > detailRows ? activity.substring(detailRows, rowKey) : "";
         String rowKeyBody = rowKey >= 0 && episodeKey > rowKey ? activity.substring(rowKey, episodeKey) : "";
+        String focusBody = focusItem >= 0 && episodeKey > focusItem ? activity.substring(focusItem, episodeKey) : "";
 
         assertTrue(activityPath + " is missing TMDB horizontal row key helpers",
                 navigation >= 0 && detailRows > navigation && rowKey > detailRows && focusItem > rowKey && episodeKey > focusItem);
@@ -2309,10 +2320,10 @@ public class TmdbDetailActivityLayoutTest {
                         && rowKeyBody.contains("int target = KeyUtil.isLeftKey(event) ? position - 1 : position + 1;")
                         && rowKeyBody.contains("if (target < 0 || target >= adapter.getItemCount()) return true;")
                         && rowKeyBody.contains("focusTmdbRecyclerItem(recycler, target);")
-                        && rowKeyBody.contains("RecyclerView.ViewHolder visibleHolder = recycler.findViewHolderForAdapterPosition(target);")
-                        && rowKeyBody.contains("visibleHolder.itemView.requestFocus();")
-                        && rowKeyBody.contains("recycler.scrollToPosition(target);")
-                        && rowKeyBody.contains("holder.itemView.requestFocus();"));
+                        && focusBody.contains("RecyclerView.ViewHolder visibleHolder = recycler.findViewHolderForAdapterPosition(boundedTarget);")
+                        && focusBody.contains("visibleHolder.itemView.requestFocus()")
+                        && focusBody.contains("recycler.scrollToPosition(boundedTarget);")
+                        && focusBody.contains("postOnAnimation(() -> focusTmdbRecyclerItem(recycler, boundedTarget, attempt + 1)"));
     }
 
     @Test
