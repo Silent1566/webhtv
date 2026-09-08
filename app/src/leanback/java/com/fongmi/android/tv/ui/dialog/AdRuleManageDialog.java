@@ -1,5 +1,6 @@
 package com.fongmi.android.tv.ui.dialog;
 
+import android.app.Dialog;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.graphics.Color;
@@ -10,6 +11,8 @@ import android.view.KeyEvent;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
@@ -32,6 +35,7 @@ import com.fongmi.android.tv.ui.adapter.AdRuleAdapter;
 import com.fongmi.android.tv.ui.custom.SpaceItemDecoration;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.google.android.material.button.MaterialButton;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -85,15 +89,37 @@ public class AdRuleManageDialog extends BaseAlertDialog implements AdRuleAdapter
         binding.add.setOnClickListener(v -> onAddManual());
         binding.stats.setOnClickListener(v -> onStats());
         binding.importCandidates.setOnClickListener(v -> onImportCandidates());
+        binding.enableImported.setOnClickListener(v -> onEnableImported());
+        binding.disableImported.setOnClickListener(v -> onDisableImported());
         binding.add.setOnKeyListener((v, keyCode, event) -> moveFocus(event, keyCode, KeyEvent.KEYCODE_DPAD_DOWN, binding.stats));
         binding.stats.setOnKeyListener((v, keyCode, event) -> {
             if (moveFocus(event, keyCode, KeyEvent.KEYCODE_DPAD_UP, binding.add)) return true;
             if (event.getAction() != KeyEvent.ACTION_DOWN || keyCode != KeyEvent.KEYCODE_DPAD_DOWN) return false;
             if (binding.importCandidates.getVisibility() == View.VISIBLE) return requestFocus(binding.importCandidates);
+            if (binding.importBulkActions.getVisibility() == View.VISIBLE) return requestFocus(binding.enableImported);
             return focusFirstRule();
         });
         binding.importCandidates.setOnKeyListener((v, keyCode, event) -> {
             if (moveFocus(event, keyCode, KeyEvent.KEYCODE_DPAD_UP, binding.stats)) return true;
+            if (event.getAction() == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                if (binding.importBulkActions.getVisibility() == View.VISIBLE) return requestFocus(binding.enableImported);
+                return focusFirstRule();
+            }
+            return false;
+        });
+        binding.enableImported.setOnKeyListener((v, keyCode, event) -> {
+            if (event.getAction() == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+                return requestFocus(binding.importCandidates.getVisibility() == View.VISIBLE ? binding.importCandidates : binding.stats);
+            }
+            if (moveFocus(event, keyCode, KeyEvent.KEYCODE_DPAD_RIGHT, binding.disableImported)) return true;
+            if (event.getAction() == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_DOWN) return focusFirstRule();
+            return false;
+        });
+        binding.disableImported.setOnKeyListener((v, keyCode, event) -> {
+            if (event.getAction() == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+                return requestFocus(binding.importCandidates.getVisibility() == View.VISIBLE ? binding.importCandidates : binding.stats);
+            }
+            if (moveFocus(event, keyCode, KeyEvent.KEYCODE_DPAD_LEFT, binding.enableImported)) return true;
             if (event.getAction() == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_DOWN) return focusFirstRule();
             return false;
         });
@@ -119,6 +145,25 @@ public class AdRuleManageDialog extends BaseAlertDialog implements AdRuleAdapter
         boolean focused = view.requestFocus();
         if (focused) view.post(() -> view.requestRectangleOnScreen(new Rect(0, 0, view.getWidth(), view.getHeight()), false));
         return focused;
+    }
+
+    private void restoreRuleFocus(int position) {
+        if (position < 0) return;
+        binding.recycler.scrollToPosition(position);
+        binding.recycler.post(() -> {
+            View row = binding.recycler.getLayoutManager() == null
+                    ? null : binding.recycler.getLayoutManager().findViewByPosition(position);
+            View target = row == null ? null : row.findViewById(R.id.toggle);
+            if (target == null) {
+                binding.recycler.post(() -> {
+                    View retryRow = binding.recycler.getLayoutManager() == null
+                            ? null : binding.recycler.getLayoutManager().findViewByPosition(position);
+                    requestFocus(retryRow == null ? null : retryRow.findViewById(R.id.toggle));
+                });
+            } else {
+                requestFocus(target);
+            }
+        });
     }
 
     private void loadData() {
@@ -153,6 +198,8 @@ public class AdRuleManageDialog extends BaseAlertDialog implements AdRuleAdapter
         int pending = ImportedAdRuleCandidateStore.pending().size();
         binding.importCandidates.setVisibility(pending == 0 ? View.GONE : View.VISIBLE);
         binding.importCandidates.setText(getString(R.string.ad_rule_import_candidates, pending));
+        boolean hasImported = userRules.stream().anyMatch(rule -> UserAdRule.isInterfaceSource(rule.getSource()));
+        binding.importBulkActions.setVisibility(hasImported ? View.VISIBLE : View.GONE);
     }
 
     private void onAddManual() {
@@ -161,6 +208,25 @@ public class AdRuleManageDialog extends BaseAlertDialog implements AdRuleAdapter
 
     private void onStats() {
         AdBlockStatsDialog.create((FragmentActivity) requireActivity()).show();
+    }
+
+    private void onEnableImported() {
+        if (UserAdRuleStore.setInterfaceRulesEnabled(true) == 0) return;
+        loadData();
+        if (callback != null) callback.onRuleChanged();
+    }
+
+    private void onDisableImported() {
+        new MaterialAlertDialogBuilder(requireActivity(), R.style.Theme_WebHTV_LightDialog)
+                .setTitle(R.string.ad_rule_disable_imported)
+                .setMessage(R.string.ad_rule_disable_imported_confirm)
+                .setPositiveButton(android.R.string.ok, (dialog, which) -> {
+                    UserAdRuleStore.setInterfaceRulesEnabled(false);
+                    loadData();
+                    if (callback != null) callback.onRuleChanged();
+                })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
     }
 
     private void onImportCandidates() {
@@ -175,19 +241,95 @@ public class AdRuleManageDialog extends BaseAlertDialog implements AdRuleAdapter
                 .toArray(String[]::new);
         boolean[] selected = new boolean[candidates.size()];
         for (int i = 0; i < selected.length; i++) selected[i] = ImportedAdRuleCandidate.RISK_LOW.equals(candidates.get(i).getRiskLevel());
-        new MaterialAlertDialogBuilder(requireActivity(), R.style.Theme_WebHTV_LightDialog)
+        final AlertDialog[] dialogRef = new AlertDialog[1];
+        View toolbar = createCandidateToolbar(
+                () -> updateCandidateSelection(dialogRef[0], candidates, selected, 0),
+                () -> updateCandidateSelection(dialogRef[0], candidates, selected, 1),
+                () -> updateCandidateSelection(dialogRef[0], candidates, selected, 2),
+                () -> ignoreCandidates(dialogRef[0], candidates));
+        MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(requireActivity(), R.style.Theme_WebHTV_LightDialog)
                 .setTitle(R.string.ad_rule_import_title)
+                .setCustomTitle(toolbar)
                 .setMultiChoiceItems(labels, selected, (dialog, which, checked) -> selected[which] = checked)
-                .setPositiveButton(R.string.ad_rule_import_action, (dialog, which) -> {
-                    for (int i = 0; i < candidates.size(); i++) if (selected[i]) ImportedAdRuleCandidateStore.importCandidate(candidates.get(i).getId());
-                    onRuleEdited();
-                })
-                .setNeutralButton(R.string.ad_rule_ignore_all, (dialog, which) -> {
-                    for (ImportedAdRuleCandidate candidate : candidates) ImportedAdRuleCandidateStore.ignore(candidate.getId());
-                    loadData();
-                })
-                .setNegativeButton(android.R.string.cancel, null)
-                .show();
+                .setPositiveButton(R.string.ad_rule_import_enable_action, (dialog, which) -> importSelectedCandidates(candidates, selected, true))
+                .setNeutralButton(R.string.ad_rule_import_action, (dialog, which) -> importSelectedCandidates(candidates, selected, false))
+                .setNegativeButton(android.R.string.cancel, null);
+        dialogRef[0] = builder.create();
+        View finalToolbar = toolbar;
+        dialogRef[0].setOnShowListener(dialog -> {
+            if (finalToolbar instanceof LinearLayout root && root.getChildCount() > 1) requestFocus(root.getChildAt(1));
+        });
+        dialogRef[0].show();
+    }
+
+    private void ignoreCandidates(Dialog dialog, List<ImportedAdRuleCandidate> candidates) {
+        List<String> ids = new ArrayList<>();
+        for (ImportedAdRuleCandidate candidate : candidates) ids.add(candidate.getId());
+        ImportedAdRuleCandidateStore.ignoreCandidates(ids);
+        if (dialog != null) dialog.dismiss();
+        loadData();
+    }
+
+    private void importSelectedCandidates(List<ImportedAdRuleCandidate> candidates, boolean[] selected, boolean enabled) {
+        List<String> ids = new ArrayList<>();
+        for (int i = 0; i < candidates.size(); i++) if (selected[i]) ids.add(candidates.get(i).getId());
+        if (!ids.isEmpty()) ImportedAdRuleCandidateStore.importCandidates(ids, enabled);
+        onRuleEdited();
+    }
+
+    private View createCandidateToolbar(Runnable selectLowRisk, Runnable selectAll, Runnable invert, Runnable ignoreAll) {
+        LinearLayout root = new LinearLayout(requireContext());
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(ResUtil.dp2px(24), ResUtil.dp2px(8), ResUtil.dp2px(24), 0);
+        TextView title = new TextView(requireContext());
+        title.setText(R.string.ad_rule_import_title);
+        title.setTextSize(20);
+        root.addView(title, new LinearLayout.LayoutParams(-1, -2));
+        MaterialButton lowRisk = candidateActionButton(R.string.ad_rule_select_low_risk);
+        lowRisk.setOnClickListener(v -> selectLowRisk.run());
+        MaterialButton all = candidateActionButton(R.string.ad_rule_select_all);
+        all.setOnClickListener(v -> selectAll.run());
+        MaterialButton invertButton = candidateActionButton(R.string.ad_rule_invert_selection);
+        invertButton.setOnClickListener(v -> invert.run());
+        MaterialButton ignore = candidateActionButton(R.string.ad_rule_ignore_all);
+        ignore.setOnClickListener(v -> ignoreAll.run());
+        root.addView(lowRisk, new LinearLayout.LayoutParams(-1, -2));
+        LinearLayout row = new LinearLayout(requireContext());
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams first = new LinearLayout.LayoutParams(0, -2, 1f);
+        first.setMargins(0, ResUtil.dp2px(4), ResUtil.dp2px(2), 0);
+        row.addView(all, first);
+        LinearLayout.LayoutParams middle = new LinearLayout.LayoutParams(0, -2, 1f);
+        middle.setMargins(ResUtil.dp2px(2), ResUtil.dp2px(4), ResUtil.dp2px(2), 0);
+        row.addView(invertButton, middle);
+        LinearLayout.LayoutParams last = new LinearLayout.LayoutParams(0, -2, 1f);
+        last.setMargins(ResUtil.dp2px(2), ResUtil.dp2px(4), 0, 0);
+        row.addView(ignore, last);
+        root.addView(row);
+        return root;
+    }
+
+    private MaterialButton candidateActionButton(int textRes) {
+        MaterialButton button = new MaterialButton(requireContext());
+        button.setText(textRes);
+        button.setAllCaps(false);
+        button.setTextSize(12);
+        button.setMinHeight(ResUtil.dp2px(40));
+        return button;
+    }
+
+    private void updateCandidateSelection(Dialog dialog, List<ImportedAdRuleCandidate> candidates,
+                                          boolean[] selected, int mode) {
+        if (mode == 0) {
+            for (int i = 0; i < selected.length; i++) selected[i] = ImportedAdRuleCandidate.RISK_LOW.equals(candidates.get(i).getRiskLevel());
+        } else if (mode == 1) {
+            for (int i = 0; i < selected.length; i++) selected[i] = true;
+        } else {
+            for (int i = 0; i < selected.length; i++) selected[i] = !selected[i];
+        }
+        if (dialog instanceof AlertDialog alert && alert.getListView() != null) {
+            for (int i = 0; i < selected.length; i++) alert.getListView().setItemChecked(i, selected[i]);
+        }
     }
 
     private void onRuleEdited() {
@@ -222,14 +364,17 @@ public class AdRuleManageDialog extends BaseAlertDialog implements AdRuleAdapter
     }
 
     private void showHlsRuleDetail(HlsRuleConfig.Entry item) {
-        String name = item.name().isBlank() ? item.id() : item.name();
-        String status = item.valid()
-                ? getString(item.enabled() ? R.string.ad_rule_hls_enabled : R.string.ad_rule_hls_disabled)
-                : getString(R.string.ad_rule_hls_invalid, item.error());
-        String content = getString(R.string.ad_rule_hls_builtin_summary, item.version(), status)
-                + "\n" + getString(R.string.ad_rule_detail_id, item.id())
-                + "\n" + getString(R.string.ad_rule_detail_source, item.source())
-                + "\n\n" + getString(R.string.ad_rule_detail_json) + "\n" + item.detail();
+        HlsRuleConfig.Entry current = HlsRuleConfig.getEntries().stream()
+                .filter(entry -> item.key().equals(entry.key()))
+                .findFirst().orElse(item);
+        String name = current.name().isBlank() ? current.id() : current.name();
+        String status = current.valid()
+                ? getString(current.enabled() ? R.string.ad_rule_hls_enabled : R.string.ad_rule_hls_disabled)
+                : getString(R.string.ad_rule_hls_invalid, current.error());
+        String content = getString(R.string.ad_rule_hls_builtin_summary, current.version(), status)
+                + "\n" + getString(R.string.ad_rule_detail_id, current.id())
+                + "\n" + getString(R.string.ad_rule_detail_source, current.source())
+                + "\n\n" + getString(R.string.ad_rule_detail_json) + "\n" + current.detail();
         showTextDetail(name, content, null);
     }
 
@@ -277,7 +422,7 @@ public class AdRuleManageDialog extends BaseAlertDialog implements AdRuleAdapter
                 .setTitle(name)
                 .setMessage(messageRes)
                 .setPositiveButton(android.R.string.ok, (dialog, which) -> action.run())
-                .setNegativeButton(android.R.string.cancel, (dialog, which) -> loadData())
+                .setNegativeButton(android.R.string.cancel, null)
                 .show();
     }
 
@@ -285,7 +430,7 @@ public class AdRuleManageDialog extends BaseAlertDialog implements AdRuleAdapter
     public void onUserToggleClick(UserAdRule item, boolean enabled) {
         if (!enabled) {
             int message = UserAdRule.SOURCE_AI.equals(item.getSource()) ? R.string.ad_rule_ai_disable_confirm
-                    : item.getSource() != null && item.getSource().startsWith("interface_") ? R.string.ad_rule_imported_disable_confirm
+                    : UserAdRule.isInterfaceSource(item.getSource()) ? R.string.ad_rule_imported_disable_confirm
                     : R.string.ad_rule_manual_disable_confirm;
             confirmDisable(item.getName(), message, () -> setUserEnabled(item, false));
         } else {
@@ -296,7 +441,9 @@ public class AdRuleManageDialog extends BaseAlertDialog implements AdRuleAdapter
     private void setUserEnabled(UserAdRule item, boolean enabled) {
         item.setEnabled(enabled);
         UserAdRuleStore.update(item);
-        loadData();
+        int position = adapter.positionOfUserRule(item);
+        adapter.refreshUserEnabled(item);
+        restoreRuleFocus(position);
         if (callback != null) callback.onRuleChanged();
     }
 
@@ -311,7 +458,9 @@ public class AdRuleManageDialog extends BaseAlertDialog implements AdRuleAdapter
 
     private void setDefaultEnabled(String ruleId, boolean enabled) {
         DisabledDefaultRuleStore.setDisabled(ruleId, !enabled);
-        loadData();
+        int position = adapter.positionOfDefaultRule(ruleId);
+        adapter.refreshDefaultEnabled(ruleId, enabled);
+        restoreRuleFocus(position);
         if (callback != null) callback.onRuleChanged();
     }
 
@@ -327,7 +476,9 @@ public class AdRuleManageDialog extends BaseAlertDialog implements AdRuleAdapter
 
     private void setHlsEnabled(String key, boolean enabled) {
         HlsRuleStateStore.setEnabled(key, enabled);
-        loadData();
+        int position = adapter.positionOfHlsRule(key);
+        adapter.refreshHlsEnabled(key, enabled);
+        restoreRuleFocus(position);
         if (callback != null) callback.onRuleChanged();
     }
 

@@ -1309,15 +1309,15 @@
                 {
                     "id": "php_version",
                     "name": "查看版本",
-                    "command": "proot -0 -r {envRootPath}/rootfs -b /dev -b /proc -b /sys -b /dev/urandom:/dev/random -w /root --kill-on-exit /usr/bin/env -i HOME=/root TERM=xterm-256color LANG=C.UTF-8 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin /bin/bash --login -c \"php -v\"",
+                    "command": "proot -0 -r {envRootPath}/rootfs -b /dev -b /proc -b /sys -b /dev/urandom:/dev/random -w /root --kill-on-exit /usr/bin/env -i HOME=/root TERM=xterm-256color LANG=C.UTF-8 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin /bin/bash --login -c \"php8.3 -v\"",
                     "auto_execute": false,
                     "show_output": true
                 },
                 {
                     "id": "php_serve",
                     "name": "启动内置服务",
-                    "description": "php -S 监听指定端口，站点根目录在 rootfs 内",
-                    "command": "proot -0 -r {envRootPath}/rootfs -b /dev -b /proc -b /sys -b /dev/urandom:/dev/random -w /root --kill-on-exit /usr/bin/env -i HOME=/root TERM=xterm-256color LANG=C.UTF-8 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin /bin/bash --login -c \"cd /root && php -S 0.0.0.0:{port}\"",
+                    "description": "php8.3 -S 监听指定端口，站点根目录在 rootfs 内",
+                    "command": "proot -0 -r {envRootPath}/rootfs -b /dev -b /proc -b /sys -b /dev/urandom:/dev/random -w /root --kill-on-exit /usr/bin/env -i HOME=/root TERM=xterm-256color LANG=C.UTF-8 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin /bin/bash --login -c \"cd /root && php8.3 -S 0.0.0.0:{port}\"",
                     "auto_execute": false,
                     "show_output": true,
                     "variables": [

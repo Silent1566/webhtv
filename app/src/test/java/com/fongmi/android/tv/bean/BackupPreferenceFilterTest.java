@@ -57,6 +57,15 @@ public class BackupPreferenceFilterTest {
     }
 
     @Test
+    public void playbackOverlayFollowsSettingsOption() {
+        SyncOptions settingsOnly = new SyncOptions().config(false).spider(false).webHome(false).settings(true);
+        SyncOptions spiderOnly = new SyncOptions().config(false).spider(true).webHome(false).settings(false);
+
+        assertTrue(Backup.include("playback_overlay_enabled", settingsOnly));
+        assertFalse(Backup.include("playback_overlay_enabled", spiderOnly));
+    }
+
+    @Test
     public void githubProxyPreferencesFollowSettingsOption() {
         SyncOptions settingsOnly = new SyncOptions().config(false).spider(false).webHome(false).settings(true);
         SyncOptions webHomeOnly = new SyncOptions().config(false).spider(false).webHome(true).settings(false);
@@ -147,6 +156,17 @@ public class BackupPreferenceFilterTest {
                 "perf_exo_network_protection_mode", everything));
         assertFalse(Backup.include(
                 "perf_exo_single_rate_rescue_enabled_v1", everything));
+    }
+
+    @Test
+    public void themeProfilePreferencesFollowSettingsOption() {
+        SyncOptions settingsOnly = new SyncOptions().config(false).spider(false).webHome(false).settings(true);
+        SyncOptions webHomeOnly = new SyncOptions().config(false).spider(false).webHome(true).settings(false);
+
+        assertTrue(Backup.include("theme_profile_json", settingsOnly));
+        assertTrue(Backup.include("theme_profile_last_good", settingsOnly));
+        assertTrue(Backup.include("theme_profile_schema", settingsOnly));
+        assertFalse(Backup.include("theme_profile_json", webHomeOnly));
     }
 
     @Test

@@ -100,23 +100,12 @@ public final class LabPackageAdapter extends RecyclerView.Adapter<LabPackageAdap
     }
 
     private String displayVersion(LabModels.Item item) {
-        if (item.downloads != null) {
-            for (LabModels.Download download : item.downloads) {
-                if (LabEnv.arch().equals(download.arch) && download.version != null && !download.version.isEmpty()) {
-                    return download.version;
-                }
-            }
-        }
-        return item.version == null ? "" : item.version;
+        return LabEnv.displayVersion(item);
     }
 
     private String size(LabModels.Item item) {
-        if (item.downloads != null) {
-            for (LabModels.Download download : item.downloads) {
-                if (LabEnv.arch().equals(download.arch) && download.size != null) return download.size;
-            }
-        }
-        return "";
+        LabModels.Download download = LabEnv.findDownload(item);
+        return download == null || download.size == null ? "" : download.size;
     }
 
     static class Holder extends RecyclerView.ViewHolder {

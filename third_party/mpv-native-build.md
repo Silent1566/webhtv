@@ -45,7 +45,7 @@ third_party/mpv-native-lock.json
 | MediaCodec/Vulkan | FongMi 分支内建 AImageReader/AHardwareBuffer OpenGL/Vulkan 后端、sync-fd、HDR/Dolby Vision 和双 Surface OSD；不再叠加旧 `fd679c81` 或 transient patch |
 | Dolby Vision双层硬解 | `third_party/patches/mpv-android-dovi-el-surface.patch`：把 GPU 杜比元数据处理与独立增强层解码拆成两项能力；Android AImageReader 只提供单路生产者 Surface，因此 `gpu-next` 保留 DV5 映射、DV 来源识别与 HDR10 基础层回退，但不启动第二个无 Surface 的 `mediacodec-copy`；非 Android 输出仍可显式声明 EL 合成能力 |
 | AudioTrack音频直通 | 保留 FongMi MPV 的 passthrough carrier rate 修复：PCM 可跟随设备原生采样率，SPDIF/IEC61937 必须保留编码器声明的载波采样率；E-AC3、TrueHD、DTS-HD 使用 192 kHz，不能改写为常见的 48 kHz，否则 MPV 会判定格式不一致并回退 PCM。`mpv-audiotrack-truehd-channel-mask.patch` 保留 TrueHD 全 API 7.1 兼容规则，并在 Android 12+ 仅对实际 8-channel carrier 使用 7.1 mask；DTS-HD HRA/其它 2-channel carrier 仍使用 stereo。App 侧对 DTS-HD 同时验证 stereo/7.1，取 Media3、HDMI/ARC/eARC/USB 路由编码和 MPV IEC61937 载波探测的交集；任一所需载波不被系统接受时不启用该格式直通，由 MPV 回退 PCM 解码。 |
-| MediaCodec直出 | `mpv-mediacodec-embed-optional-osd.patch` 允许关闭字幕时不创建额外 OSD Surface；`mpv-mediacodec-embed-timed-release.patch` 按播放 PTS 将缓冲帧提交给 MediaCodec，避免立即释放导致持续掉帧；`mpv-mediacodec-output-timing-diagnostics.patch` 只增加有界的提交/迟到/掉帧时序诊断。 |
+| MediaCodec直出 | `mpv-mediacodec-embed-optional-osd.patch` 允许关闭字幕时不创建额外 OSD Surface；`mpv-mediacodec-embed-timed-release.patch` 按播放 PTS 将缓冲帧提交给 MediaCodec，避免立即释放导致持续掉帧；`mpv-mediacodec-output-timing-diagnostics.patch` 只增加有界的提交/迟到/掉帧时序诊断。`ffmpeg-audio-mediacodec-hardware-first.patch` 让已有 AAC/MP3/AMR 音频 wrapper 只创建真实硬件 Codec，初始化失败后由 mpv 继续普通 FFmpeg decoder。 |
 | Vulkan硬解稳定性与功耗 | `auto` 通过 `mpv-android-vulkan-smart-backend.patch` 恢复优先 direct AHardwareBuffer 采样，避免 HDR 默认执行全分辨率转换；direct 不支持时回退 queue-safe stable pool，再回退通用 conversion。显式 `stable` 保留给问题驱动，App 在自动模式发生视频输出错误或已识别首帧超时时会重建为 stable，并按设备环境记忆。stable 额外尝试两种 packed RGB10 storage 格式，最后才扩大到 RGBA16F。 |
 | Matroska代理Seek | `third_party/patches/mpv-matroska-segment-end.patch`，可Seek但HTTP总长度未知时使用MKV自身声明的Segment边界读取SeekHead/Cues |
 | FFmpeg | `FongMi/FFmpeg@177f090e0503b7e013922ca903bde14b1c375f18`（9.0.1 fongmi） |
@@ -156,7 +156,7 @@ scripts/build_mpv_native.sh --abi arm64-v8a --jobs 8 --work-dir /tmp/webhtv-mpv-
 2. 检查 NDK revision 和 LLVM 工具。
 3. 在独立 Python venv 中安装固定版本 Meson/Ninja及 MbedTLS 生成工具依赖。
 4. 下载构建框架和每个固定 commit，初始化 MbedTLS、FreeType、libplacebo 子模块，并校验所有发行 tar 包 SHA-256。
-5. 对固定 FFmpeg commit 应用 `third_party/patches/ffmpeg-webhtv-proxy-range.patch`，只接受App内部代理写入的精确Range起点标记，使缺少`Content-Range`的206响应仍能按请求偏移重连；它不会制造未知的资源总长度。同时应用 `third_party/patches/ffmpeg-mediacodec-port-starvation.patch`，对 MediaCodec 输入、输出端同时不可用的状态采用短时有界等待，并返回真实解码错误让 mpv 的硬解失败计数触发下一硬解或软解回退，避免把端口永久不可用误判成普通 `EAGAIN` 后无限重试。
+5. 对固定 FFmpeg commit 应用 `third_party/patches/ffmpeg-webhtv-proxy-range.patch`，只接受App内部代理写入的精确Range起点标记，使缺少`Content-Range`的206响应仍能按请求偏移重连；它不会制造未知的资源总长度。同时应用 `third_party/patches/ffmpeg-mediacodec-port-starvation.patch`，对 MediaCodec 输入、输出端同时不可用的状态采用短时有界等待，并返回真实解码错误让 mpv 的硬解失败计数触发下一硬解或软解回退，避免把端口永久不可用误判成普通 `EAGAIN` 后无限重试。随后应用 `third_party/patches/ffmpeg-audio-mediacodec-hardware-first.patch`：API 29+ 要求 `isHardwareAccelerated()` 且排除 `isSoftwareOnly()`，旧系统排除已知软件 Codec 名称；没有真实硬件时让该 MediaCodec decoder 初始化失败并交回 mpv 软件后备，不在音频 buffer 热路径增加探测。
 6. 固定 MPV 到 FongMi 完整分支；该分支已经包含 AImageReader OpenGL/Vulkan、sync-fd、HDR/Dolby Vision、双 Surface OSD、直播状态、Android helper scheme，以及直通时保留 SPDIF/IEC61937 载波采样率的 AudioTrack 修复。WebHTV 按以下顺序应用 MPV 补丁：
    - `mpv-stream-cb-disc-controls.patch`
    - `mpv-android-dovi-el-surface.patch`

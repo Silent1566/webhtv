@@ -3,7 +3,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@drawable/shape_shell_proxy_dialog"
+    android:background="?attr/colorSurfaceContainer"
     android:orientation="vertical"
     android:padding="24dp">
 
@@ -33,11 +33,11 @@
             android:paddingStart="16dp"
             android:paddingEnd="16dp"
             android:singleLine="true"
-            android:textColor="#202124"
-            android:textColorHint="#8A8F98"
+            android:textColor="?attr/colorOnSurface"
+            android:textColorHint="?attr/colorOnSurfaceVariant"
             android:textSize="14sp"
             app:drawableStartCompat="@drawable/ic_site_search"
-            app:drawableTint="@color/dialog_outlined_button_text" />
+            app:drawableTint="?attr/colorPrimary" />
 
         <androidx.appcompat.widget.AppCompatImageView
             android:id="@+id/block"
@@ -48,7 +48,7 @@
             android:padding="0dp"
             android:scaleType="center"
             android:src="@drawable/ic_site_hidden"
-            app:tint="@color/dialog_outlined_button_text" />
+            app:tint="?attr/colorPrimary" />
 
         <androidx.appcompat.widget.AppCompatImageView
             android:id="@+id/search"
@@ -59,7 +59,7 @@
             android:padding="0dp"
             android:scaleType="center"
             android:src="@drawable/ic_site_single_column"
-            app:tint="@color/dialog_outlined_button_text" />
+            app:tint="?attr/colorPrimary" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 

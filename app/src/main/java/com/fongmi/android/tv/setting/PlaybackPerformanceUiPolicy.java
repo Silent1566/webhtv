@@ -21,7 +21,8 @@ public final class PlaybackPerformanceUiPolicy {
             PlaybackPerformanceCatalog.MPV_HWDEC,
             PlaybackPerformanceCatalog.MPV_FRAME_RATE,
             PlaybackPerformanceCatalog.MPV_OPTION_PRIORITY,
-            PlaybackPerformanceCatalog.AUDIO_PASSTHROUGH);
+            PlaybackPerformanceCatalog.AUDIO_PASSTHROUGH,
+            PlaybackPerformanceCatalog.MPV_MULTICHANNEL_AUDIO);
     private static final Set<String> IJK_COMMON = Set.of(
             PlaybackPerformanceCatalog.IJK_SCENE,
             PlaybackPerformanceCatalog.IJK_BUFFER,

@@ -1120,13 +1120,13 @@ public class TmdbDetailActivityLayoutTest {
     @Test
     public void episodeDetailDismissRestoresLongPressedCardFocus() throws Exception {
         String source = readJava("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java");
-        int show = source.indexOf("private void showTmdbEpisodeDetail(Episode episode, int episodeNumber, RecyclerView returnRecycler)");
+        int show = source.indexOf("private void showTmdbEpisodeDetail(Episode episode, int episodeNumber, TmdbEpisode boundTmdbEpisode, RecyclerView returnRecycler)");
         int restore = source.indexOf("private void restoreEpisodeDetailFocus(RecyclerView recycler, Episode episode)", show);
 
         assertTrue("TMDB episode detail must define an exact-card focus restore helper", show >= 0 && restore > show);
         assertTrue("each episode list must provide its own recycler as the focus return target",
-                source.contains("showTmdbEpisodeDetail(episode, episodeNumber, binding.episodeContainer);")
-                        && source.contains("showTmdbEpisodeDetail(episode, episodeNumber, recycler);"));
+                source.contains("showTmdbEpisodeDetail(episode, episodeNumber, tmdbEpisode, binding.episodeContainer);")
+                        && source.contains("showTmdbEpisodeDetail(episode, episodeNumber, tmdbEpisode, recycler);"));
         int dismiss = source.indexOf("OnDismissListener dismissListener", show);
         int movie = source.indexOf("// 电影场景", dismiss);
         String dismissBody = source.substring(dismiss, movie);
@@ -2221,13 +2221,33 @@ public class TmdbDetailActivityLayoutTest {
                         && containerKeyBody.contains("KeyUtil.isLeftKey(event)")
                         && containerKeyBody.contains("KeyUtil.isRightKey(event)"));
         assertTrue("list-mode DPAD_LEFT should move to the previous episode and consume the first-card boundary",
-                listBody.contains("if (KeyUtil.isLeftKey(event))")
-                        && listBody.contains("if (position <= 0) return true;")
-                        && listBody.contains("return focusDetailEpisode(position - 1);"));
+                 listBody.contains("if (KeyUtil.isLeftKey(event))")
+                         && listBody.contains("if (position <= 0) return true;")
+                         && listBody.contains("return focusDetailEpisode(position - 1);"));
         assertTrue("list-mode DPAD_RIGHT should move to the next episode and consume the last-card boundary",
-                listBody.contains("if (KeyUtil.isRightKey(event))")
-                        && listBody.contains("position >= episodeAdapter.getItemCount() - 1")
-                        && listBody.contains("return focusDetailEpisode(position + 1);"));
+                 listBody.contains("if (KeyUtil.isRightKey(event))")
+                         && listBody.contains("position >= episodeAdapter.getItemCount() - 1")
+                         && listBody.contains("return focusDetailEpisode(position + 1);"));
+    }
+
+    @Test
+    public void detailEpisodeListModeCentersTheFocusedCardLikeNativeEnhanced() throws Exception {
+        String activity = readJava("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java");
+        String focusChange = javaBlockAt(activity, "private void onDetailEpisodeFocusChange(");
+        String alignFocused = javaBlockAt(activity, "private void alignDetailEpisodeFocusedRow(");
+        String alignHorizontal = javaBlockAt(activity, "private void alignDetailEpisodeFocusedCardHorizontallyNow(");
+
+        assertTrue("list-mode focus changes must schedule the same centered item alignment as native enhanced",
+                focusChange.contains("if (!episodeGridMode)")
+                        && focusChange.contains("alignDetailEpisodeFocusedRow(view, position);"));
+        assertTrue("list-mode episode alignment must use the horizontal layout manager path",
+                alignFocused.contains("LinearLayoutManager.HORIZONTAL")
+                        && alignFocused.contains("alignDetailEpisodeFocusedCardHorizontallyNow(focusedView);"));
+        assertTrue("the focused episode card must be centered within the RecyclerView's usable width",
+                alignHorizontal.contains("binding.episodeContainer.getPaddingLeft()")
+                        && alignHorizontal.contains("binding.episodeContainer.getPaddingRight()")
+                        && alignHorizontal.contains("focusedView.getLeft() + focusedView.getWidth() / 2")
+                        && alignHorizontal.contains("binding.episodeContainer.smoothScrollBy(delta, 0);"));
     }
 
     @Test
@@ -3331,10 +3351,34 @@ public class TmdbDetailActivityLayoutTest {
 
         assertTrue("empty auto grouping must reuse the resolver's unique season for episode data",
                 dataSeason.contains("tmdbSeasonChoiceResolution().getSelectedSeason()"));
-        assertTrue("episode detail must use the same resolved fallback season as episode data",
-                episodeDetail.contains("int detailSeasonNumber = tmdbEpisodeDataSeason(")
+        assertTrue("episode detail must use the card mapping and retain the same resolved fallback season as episode data",
+                episodeDetail.contains("int detailSeasonNumber = tmdbEpisodeDataSeason(detailEpisodes);")
+                        && episodeDetail.contains("if (boundTmdbEpisode != null)")
+                        && episodeDetail.contains("boundTmdbEpisode.getSeasonNumber()")
                         && episodeDetail.contains("int displaySeasonNumber = detailSeasonNumber;")
                         && episodeDetail.contains("int seasonNumber = detailSeasonNumber;"));
+    }
+
+    @Test
+    public void episodeDetailUsesLongPressedCardMappingForManualSeason() throws Exception {
+        String source = readJava("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java");
+        String adapter = readJava("com", "fongmi", "android", "tv", "ui", "adapter", "TmdbEpisodeAdapter.java");
+        String detail = source.substring(source.indexOf("private void showTmdbEpisodeDetail"),
+                source.indexOf("private EpisodePosition historyEpisodePosition"));
+
+        assertTrue("long press must pass the validated TMDB episode bound to the visible card",
+                adapter.contains("void onItemLongClick(View anchor, Episode item, int episodeNumber, TmdbEpisode tmdbEpisode)")
+                        && adapter.contains("TmdbEpisode boundTmdbEpisode = tmdbEpisode;")
+                        && adapter.contains("listener.onItemLongClick(view, episode, episodeNumber, boundTmdbEpisode);"));
+        assertTrue("episode detail must use the bound card season and episode number",
+                detail.contains("TmdbEpisode boundTmdbEpisode")
+                        && detail.contains("boundTmdbEpisode.getSeasonNumber()")
+                        && detail.contains("boundTmdbEpisode.getNumber()")
+                        && detail.contains("tmdbService.episode(item, seasonNumber, requestEpisodeNumber"));
+        assertTrue("unmapped cards and API failures must still open a source detail dialog",
+                detail.contains("if (boundTmdbEpisode == null)")
+                        && detail.contains("EpisodeDetailDialog.show(this, episode, getSite(), null, null, dismissListener);")
+                        && detail.contains("if (!isTmdbEpisodeDetailSeasonCurrent(displaySeasonNumber)) return;"));
     }
 
     @Test

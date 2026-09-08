@@ -30,6 +30,10 @@ public class RefreshEvent {
         EventBus.getDefault().post(new RefreshEvent(Type.SIZE));
     }
 
+    public static void uiScale() {
+        EventBus.getDefault().post(new RefreshEvent(Type.UI_SCALE));
+    }
+
     public static void theme() {
         EventBus.getDefault().post(new RefreshEvent(Type.THEME));
     }
@@ -109,7 +113,7 @@ public class RefreshEvent {
     }
 
     public enum Type {
-        HOME, CATEGORY, HISTORY, KEEP, SIZE, THEME, LANGUAGE, LIVE, DETAIL, PLAYER, SUBTITLE, DANMAKU,
+        HOME, CATEGORY, HISTORY, KEEP, SIZE, UI_SCALE, THEME, LANGUAGE, LIVE, DETAIL, PLAYER, SUBTITLE, DANMAKU,
         VOD, VOD_CORE, VOD_RECOMMENDATIONS, VOD_PERSONAL, VOD_EPISODE_TITLES, VOD_RELATED_VIDEOS
     }
 }

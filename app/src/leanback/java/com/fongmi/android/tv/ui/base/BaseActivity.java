@@ -24,6 +24,8 @@ import com.fongmi.android.tv.Updater;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.server.process.ApkUrlPush;
 import com.fongmi.android.tv.setting.Setting;
+import com.fongmi.android.tv.theme.ThemeController;
+import com.fongmi.android.tv.theme.ThemeTokens;
 import com.fongmi.android.tv.ui.custom.CustomWallView;
 import com.fongmi.android.tv.ui.helper.TouchOptimizationHelper;
 import com.fongmi.android.tv.utils.Util;
@@ -32,9 +34,13 @@ import org.greenrobot.eventbus.EventBus;
 import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
 
+import me.jessyan.autosize.AutoSizeConfig;
 import me.jessyan.autosize.AutoSizeCompat;
 
 public abstract class BaseActivity extends AppCompatActivity {
+
+    private static final int DESIGN_WIDTH_IN_DP = 960;
+    private static final int DESIGN_HEIGHT_IN_DP = 540;
 
     protected abstract ViewBinding getBinding();
 
@@ -45,14 +51,20 @@ public abstract class BaseActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        ThemeController.applyNightMode(this);
         super.onCreate(savedInstanceState);
         registerFragmentLifecycleCallbacks();
         setContentView(getBinding().getRoot());
+        ThemeController.apply(this);
+        ThemeController.applyLeanback(this);
         EventBus.getDefault().register(this);
         initView(savedInstanceState);
         Util.hideSystemUI(this);
         setBackCallback();
         initEvent();
+        // Some detail/player controls are inflated during initView; bind them after the Activity tree is complete.
+        ThemeController.apply(this);
+        ThemeController.applyLeanback(this);
     }
 
     @Override
@@ -136,6 +148,8 @@ public abstract class BaseActivity extends AppCompatActivity {
 
     private Resources hackResources(Resources resources) {
         try {
+            // Keep the TV AutoSize pipeline and express the user scale through its design size.
+            applyUiScale();
             AutoSizeCompat.autoConvertDensityOfGlobal(resources);
             return resources;
         } catch (Exception ignored) {
@@ -143,9 +157,16 @@ public abstract class BaseActivity extends AppCompatActivity {
         }
     }
 
+    private void applyUiScale() {
+        AutoSizeConfig config = AutoSizeConfig.getInstance();
+        float factor = Setting.getUiScaleFactor(Setting.getUiScale());
+        config.setDesignWidthInDp(Math.round(DESIGN_WIDTH_IN_DP / factor));
+        config.setDesignHeightInDp(Math.round(DESIGN_HEIGHT_IN_DP / factor));
+    }
+
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onSubscribe(Object o) {
-        if (o instanceof RefreshEvent event && event.getType() == RefreshEvent.Type.LANGUAGE) recreate();
+        if (o instanceof RefreshEvent event && (event.getType() == RefreshEvent.Type.LANGUAGE || event.getType() == RefreshEvent.Type.UI_SCALE || event.getType() == RefreshEvent.Type.THEME)) recreate();
     }
 
     @Override
@@ -189,7 +210,12 @@ public abstract class BaseActivity extends AppCompatActivity {
                 if (!(fragment instanceof DialogFragment dialog) || dialog.getDialog() == null) return;
                 Window window = dialog.getDialog().getWindow();
                 if (window == null) return;
-                window.getDecorView().post(() -> TouchOptimizationHelper.sync(window.getDecorView()));
+                window.getDecorView().post(() -> {
+                    ThemeTokens tokens = ThemeController.resolve(BaseActivity.this);
+                    ThemeController.apply(window.getDecorView(), tokens);
+                    ThemeController.applyLeanback(window.getDecorView(), tokens);
+                    TouchOptimizationHelper.sync(window.getDecorView());
+                });
             }
         }, true);
     }

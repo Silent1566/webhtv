@@ -7,7 +7,7 @@ index 18acf58..0366f56 100644
                  groupId = "io.github.anilbeesetti",
                  artifactId = property("POM_ARTIFACT_ID") as String,
 -                version = "1.10.0-0.12.1-fongmi-softload"
-+                version = "1.10.0-0.12.1-fongmi-softload-av3a-ffmpeg901-r1"
++                version = "1.10.0-0.12.1-fongmi-softload-av3a-ffmpeg901-r2"
              )
  
              pom {
@@ -177,11 +177,14 @@ diff --git a/media3ext/src/main/cpp/ffaudio.cpp b/media3ext/src/main/cpp/ffaudio
 index 6d6169a..443faef 100644
 --- a/media3ext/src/main/cpp/ffaudio.cpp
 +++ b/media3ext/src/main/cpp/ffaudio.cpp
-@@ -2,6 +2,7 @@
+@@ -2,6 +2,10 @@
  #include <android/log.h>
  #include <jni.h>
  #include <cstdlib>
 +#include <cerrno>
++#include <cmath>
++#include <cstring>
++#include <vector>
  #include <android/native_window_jni.h>
  #include <algorithm>
  #include "ffcommon.h"
@@ -215,7 +218,7 @@ index 6d6169a..443faef 100644
      int result = 0;
      // Queue input data.
      result = avcodec_send_packet(context, packet);
-@@ -140,45 +146,83 @@ int decodePacket(AVCodecContext *context, AVPacket *packet,
+@@ -140,45 +146,127 @@ int decodePacket(AVCodecContext *context, AVPacket *packet,
              return transformError(result);
          }
  
@@ -257,6 +260,7 @@ index 6d6169a..443faef 100644
 -            result = swr_init(resampleContext);
 +            AVChannelLayout inputLayout{};
 +            AVChannelLayout outputLayout{};
++            bool inputLayoutUnknown = false;
 +            result = av_channel_layout_copy(&inputLayout, &frame->ch_layout);
 +            if (result < 0) {
 +                logError("av_channel_layout_copy", result);
@@ -271,6 +275,7 @@ index 6d6169a..443faef 100644
 +                LOGD("Downmixing FFmpeg audio from %d to %d channels.",
 +                     inputChannelCount, outputChannelCount);
 +            }
++            inputLayoutUnknown = inputLayout.order == AV_CHANNEL_ORDER_UNSPEC;
 +            if (result >= 0) {
 +                result = swr_alloc_set_opts2(
 +                        &resampleContext,
@@ -282,6 +287,59 @@ index 6d6169a..443faef 100644
 +                        sampleRate,
 +                        0,
 +                        nullptr);
++            }
++            if (result >= 0 && inputLayoutUnknown &&
++                outputChannelCount != inputChannelCount) {
++                const size_t matrixSize = static_cast<size_t>(outputChannelCount) *
++                                           static_cast<size_t>(inputChannelCount);
++                std::vector<double> matrix(matrixSize, 0.0);
++                if (context->codec != nullptr && context->codec->name != nullptr &&
++                    std::strcmp(context->codec->name, "libarcdav3a") == 0 &&
++                    inputChannelCount == 9 && outputChannelCount == 6) {
++                    // AV3A mixed content is six sound-bed channels followed by
++                    // three object channels. Keep the bed order and spread the
++                    // objects uniformly because their speaker positions are not
++                    // available in this decoder contract.
++                    for (int channel = 0; channel < 6; ++channel) {
++                        matrix[static_cast<size_t>(channel) * inputChannelCount + channel] = 1.0;
++                    }
++                    const double objectGain = 1.0 / outputChannelCount;
++                    for (int channel = 6; channel < 9; ++channel) {
++                        for (int output = 0; output < outputChannelCount; ++output) {
++                            matrix[static_cast<size_t>(output) * inputChannelCount + channel] =
++                                    objectGain;
++                        }
++                    }
++                    LOGD("Using AV3A mixed-content 9-to-6 channel matrix.");
++                } else {
++                    // Unknown layouts carry channel count and order only. Fold
++                    // every input index into each output instead of assigning
++                    // unknown channels fake speaker positions.
++                    const double gain = 1.0 / inputChannelCount;
++                    for (int output = 0; output < outputChannelCount; ++output) {
++                        for (int channel = 0; channel < inputChannelCount; ++channel) {
++                            matrix[static_cast<size_t>(output) * inputChannelCount + channel] =
++                                    gain;
++                        }
++                    }
++                    LOGD("Using equal-gain unknown-layout matrix from %d to %d channels.",
++                         inputChannelCount, outputChannelCount);
++                }
++                for (int output = 0; output < outputChannelCount; ++output) {
++                    double rowSum = 0.0;
++                    for (int channel = 0; channel < inputChannelCount; ++channel) {
++                        rowSum += std::abs(matrix[static_cast<size_t>(output) * inputChannelCount + channel]);
++                    }
++                    if (rowSum > 1.0) {
++                        for (int channel = 0; channel < inputChannelCount; ++channel) {
++                            matrix[static_cast<size_t>(output) * inputChannelCount + channel] /= rowSum;
++                        }
++                    }
++                }
++                result = swr_set_matrix(resampleContext, matrix.data(), inputChannelCount);
++                if (result < 0) {
++                    logError("swr_set_matrix", result);
++                }
 +            }
 +            av_channel_layout_uninit(&inputLayout);
 +            av_channel_layout_uninit(&outputLayout);

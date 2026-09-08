@@ -24,10 +24,10 @@ import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.impl.ConfigListener;
 import com.fongmi.android.tv.impl.LiveListener;
 import com.fongmi.android.tv.impl.SiteListener;
-import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.dialog.AboutDialog;
+import com.fongmi.android.tv.ui.dialog.AppearanceDialog;
 import com.fongmi.android.tv.ui.dialog.ConfigDialog;
 import com.fongmi.android.tv.ui.dialog.DohDialog;
 import com.fongmi.android.tv.ui.dialog.HistoryDialog;
@@ -39,7 +39,6 @@ import com.fongmi.android.tv.utils.AppVersion;
 import com.fongmi.android.tv.utils.FileUtil;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.PermissionUtil;
-import com.fongmi.android.tv.utils.ResUtil;
 import com.github.catvod.bean.Doh;
 import com.github.catvod.net.OkHttp;
 
@@ -52,8 +51,6 @@ import java.util.List;
 public class SettingActivity extends BaseActivity implements ConfigListener, SiteListener, LiveListener, DohDialog.Listener {
 
     private ActivitySettingBinding mBinding;
-    private String[] size;
-    private String[] language;
 
     public static void start(Activity activity) {
         activity.startActivity(new Intent(activity, SettingActivity.class));
@@ -92,8 +89,6 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
     private void setOtherText() {
         mBinding.dohText.setText(getDohList()[getDohIndex()]);
         mBinding.incognitoText.setText(getSwitch(Setting.isIncognito()));
-        mBinding.languageText.setText((language = ResUtil.getStringArray(R.array.select_language))[Setting.getLanguageIndex()]);
-        mBinding.sizeText.setText((size = ResUtil.getStringArray(R.array.select_size))[PlayerSetting.getSize()]);
     }
 
     private void setCacheText() {
@@ -111,8 +106,6 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
         mBinding.doh.setOnClickListener(this::setDoh);
         mBinding.live.setOnClickListener(this::onLive);
         mBinding.wall.setOnClickListener(this::onWall);
-        mBinding.size.setOnClickListener(this::setSize);
-        mBinding.language.setOnClickListener(this::setLanguage);
         mBinding.cache.setOnClickListener(this::onCache);
         mBinding.backup.setOnClickListener(this::onBackup);
         mBinding.enhance.setOnClickListener(this::onEnhance);
@@ -122,6 +115,7 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
         mBinding.player.setOnClickListener(this::onPlayer);
         mBinding.danmaku.setOnClickListener(this::onDanmaku);
         mBinding.subtitle.setOnClickListener(this::onSubtitle);
+        mBinding.appearance.setOnClickListener(this::onAppearance);
         mBinding.personal.setOnClickListener(this::onPersonal);
         mBinding.restore.setOnClickListener(this::onRestore);
         mBinding.version.setOnClickListener(this::onVersion);
@@ -266,6 +260,10 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
         SettingSubtitleActivity.start(this);
     }
 
+    private void onAppearance(View view) {
+        AppearanceDialog.show(this);
+    }
+
     private void onPersonal(View view) {
         SettingPersonalActivity.start(this);
     }
@@ -294,19 +292,6 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
     private void setIncognito(View view) {
         Setting.putIncognito(!Setting.isIncognito());
         mBinding.incognitoText.setText(getSwitch(Setting.isIncognito()));
-    }
-
-    private void setSize(View view) {
-        int index = (PlayerSetting.getSize() + 1) % size.length;
-        mBinding.sizeText.setText(size[index]);
-        PlayerSetting.putSize(index);
-        RefreshEvent.size();
-    }
-
-    private void setLanguage(View view) {
-        int index = (Setting.getLanguageIndex() + 1) % language.length;
-        Setting.putLanguageIndex(index);
-        RefreshEvent.language();
     }
 
     private void setDoh(View view) {

@@ -50,18 +50,38 @@ public final class MediaTitleCache {
         AiConfig safe = config == null ? new AiConfig().sanitize() : config.sanitize();
         String rawTitle = request == null ? "" : request.getRawTitle();
         if (rawTitle.trim().isEmpty()) return "";
-        String value = "v1|"
-                + Objects.toString(request.getSiteKey(), "") + "|"
-                + Objects.toString(request.getVodId(), "") + "|"
-                + Objects.toString(rawTitle, "") + "|"
-                + Objects.toString(request.getSearchKeyword(), "") + "|"
-                + Objects.toString(request.getEpisodeName(), "") + "|"
-                + Objects.toString(safe.getProtocol(), "") + "|"
-                + Objects.toString(safe.getEndpoint(), "") + "|"
-                + Objects.toString(safe.getModel(), "") + "|"
-                + Objects.toString(safe.getTitleExtractionPrompt(), "") + "|"
-                + PROMPT_VERSION;
-        return md5(value);
+        MediaTitleRequest safeRequest = request == null ? MediaTitleRequest.builder().build() : request;
+        StringBuilder value = new StringBuilder("v3|");
+        appendPart(value, safeRequest.getSiteKey());
+        appendPart(value, safeRequest.getVodId());
+        appendPart(value, rawTitle);
+        appendPart(value, safeRequest.getRawRemarks());
+        appendPart(value, safeRequest.getSearchKeyword());
+        appendPart(value, safeRequest.getVodYear());
+        appendPart(value, safeRequest.getEpisodeName());
+        appendPart(value, safeRequest.getFolderName());
+        for (String title : safeRequest.getContextTitles()) appendPart(value, title);
+        appendPart(value, safe.getProtocol());
+        appendPart(value, safe.getEndpoint());
+        appendPart(value, safe.getModel());
+        appendPart(value, safe.getTitleExtractionPrompt());
+        for (MediaTitleLearningExample example : safeRequest.getLearningExamples()) {
+            if (example == null) continue;
+            appendPart(value, example.getRawTitle());
+            appendPart(value, example.getRuleTitle());
+            appendPart(value, example.getExpectedTitle());
+            appendPart(value, example.getMediaType());
+            appendPart(value, Integer.toString(example.getYear()));
+            appendPart(value, Integer.toString(example.getSeasonNumber()));
+            appendPart(value, example.getSource());
+        }
+        appendPart(value, Integer.toString(PROMPT_VERSION));
+        return md5(value.toString());
+    }
+
+    private static void appendPart(StringBuilder value, String part) {
+        String text = Objects.toString(part, "");
+        value.append(text.length()).append(':').append(text).append('|');
     }
 
     private static String md5(String text) {

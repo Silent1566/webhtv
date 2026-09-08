@@ -332,7 +332,11 @@ finish_task() {
     [[ -n "$path" ]] || continue
     path_matches_file "$path" "$state_dir/protected" && continue
     path_matches_file "$path" "$state_dir/scope" || continue
-    git add -A -- "$path"
+    if [[ -e "$path" || -L "$path" ]]; then
+      git add -A -- "$path"
+    else
+      git add -u -- .
+    fi
     task_change_count=$((task_change_count + 1))
   done < <(list_dirty)
   ((task_change_count > 0)) || safety_gate "no task-owned changes to commit"

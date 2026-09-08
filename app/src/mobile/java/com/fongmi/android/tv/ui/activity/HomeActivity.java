@@ -262,10 +262,6 @@ public class HomeActivity extends BaseActivity implements NavigationBarView.OnIt
         }
     }
 
-    @Subscribe(threadMode = ThreadMode.MAIN)
-    public void onRefreshEvent(RefreshEvent event) {
-        if (event.getType() == RefreshEvent.Type.THEME) recreate();
-    }
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onServerEvent(ServerEvent event) {

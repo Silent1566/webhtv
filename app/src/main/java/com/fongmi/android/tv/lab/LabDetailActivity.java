@@ -130,14 +130,7 @@ public class LabDetailActivity extends AppCompatActivity implements LabCommandAd
     }
 
     private String displayVersion() {
-        if (item.downloads != null) {
-            for (LabModels.Download download : item.downloads) {
-                if (LabEnv.arch().equals(download.arch) && download.version != null && !download.version.isEmpty()) {
-                    return download.version;
-                }
-            }
-        }
-        return item.version == null ? "" : item.version;
+        return LabEnv.displayVersion(item);
     }
 
     private void updateButtons() {

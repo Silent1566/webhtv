@@ -1,0 +1,177 @@
+diff --git a/demux/demux.c b/demux/demux.c
+--- a/demux/demux.c
++++ b/demux/demux.c
+@@ -137,6 +137,9 @@
+             {"preserve", DEMUX_DOVI_PROFILE7_PRESERVE},
+             {"hdr10", DEMUX_DOVI_PROFILE7_HDR10},
+             {"p81", DEMUX_DOVI_PROFILE7_P81})},
++        {"demuxer-dovi-profile8", OPT_CHOICE(dovi_profile8_mode,
++            {"preserve", DEMUX_DOVI_PROFILE8_PRESERVE},
++            {"hdr10", DEMUX_DOVI_PROFILE8_HDR10})},
+         {0}
+     },
+     .size = sizeof(struct demux_opts),
+@@ -163,6 +166,7 @@
+             "video", "audio", "image", "archive", "playlist", NULL
+         },
+         .dovi_profile7_mode = DEMUX_DOVI_PROFILE7_PRESERVE,
++        .dovi_profile8_mode = DEMUX_DOVI_PROFILE8_PRESERVE,
+     },
+     .get_sub_options = get_demux_sub_opts,
+ };
+diff --git a/demux/demux.h b/demux/demux.h
+--- a/demux/demux.h
++++ b/demux/demux.h
+@@ -90,12 +90,18 @@
+     char **directory_filter;
+     int autocreate_playlist;
+     int dovi_profile7_mode;
++    int dovi_profile8_mode;
+ };
+ 
+ enum demux_dovi_profile7_mode {
+     DEMUX_DOVI_PROFILE7_PRESERVE = 0,
+     DEMUX_DOVI_PROFILE7_HDR10 = 1,
+     DEMUX_DOVI_PROFILE7_P81 = 2,
++};
++
++enum demux_dovi_profile8_mode {
++    DEMUX_DOVI_PROFILE8_PRESERVE = 0,
++    DEMUX_DOVI_PROFILE8_HDR10 = 1,
+ };
+ 
+ #define SEEK_FACTOR   (1 << 1)      // argument is in range [0,1]
+diff --git a/demux/dovi_split.c b/demux/dovi_split.c
+--- a/demux/dovi_split.c
++++ b/demux/dovi_split.c
+@@ -60,6 +60,10 @@
+     bool base_only = bl && bl->codec && bl->codec->dv_profile == 7 &&
+                      demuxer->opts && demuxer->opts->dovi_profile7_mode ==
+                                           DEMUX_DOVI_PROFILE7_HDR10;
++    bool profile8_base_only = bl && bl->codec && bl->codec->dv_profile == 8 &&
++                              demuxer->opts && demuxer->opts->dovi_profile8_mode ==
++                                                   DEMUX_DOVI_PROFILE8_HDR10;
++    base_only = base_only || profile8_base_only;
+     bool has_p81_config = false;
+     if (p81_requested && bl->codec->lav_codecpar) {
+         for (int i = 0; i < bl->codec->lav_codecpar->nb_coded_side_data; i++) {
+@@ -157,6 +157,15 @@
+     if (s->base_only || s->convert_p81) {
++        if (base_only) {
++            // Remove the DOVI configuration before copying par_out to the
++            // decoder-visible codec parameters.
++            av_packet_side_data_remove(s->bsf->par_out->coded_side_data,
++                                       &s->bsf->par_out->nb_coded_side_data,
++                                       AV_PKT_DATA_DOVI_CONF);
++            s->bsf->par_out->profile = AV_PROFILE_HEVC_MAIN_10;
++        }
+         if (bl->codec->lav_codecpar) {
+@@ -165,7 +174,16 @@
+             MPSWAP(AVCodecParameters, *bl->codec->lav_codecpar, *filtered);
+             avcodec_parameters_free(&filtered);
+         }
+-        bl->codec->dv_el_present = false;
++        if (base_only) {
++            // The BSF updates the DOVI flags but keeps the configuration
++            // record attached to par_out. Leaving it there makes the
++            // MediaCodec wrapper select the Dolby Vision MIME/profile again,
++            // even though the access unit is now an ordinary HEVC base layer.
++            av_packet_side_data_remove(s->bsf->par_out->coded_side_data,
++                                       &s->bsf->par_out->nb_coded_side_data,
++                                       AV_PKT_DATA_DOVI_CONF);
++            s->bsf->par_out->profile = AV_PROFILE_HEVC_MAIN_10;
++            bl->codec->source_dv_profile = bl->codec->dv_profile;
++            bl->codec->source_dv_level = bl->codec->dv_level;
++            bl->codec->dovi = false;
++            bl->codec->dv_profile = 0;
++            bl->codec->dv_level = 0;
++            bl->codec->dv_el_present = false;
++        } else {
++            bl->codec->dv_el_present = false;
++        }
+         if (s->convert_p81) {
+             bl->codec->dovi = true;
+             bl->codec->source_dv_profile = bl->codec->dv_profile;
+@@ -174,6 +187,10 @@
+             MP_INFO(demuxer, "DV7 P8.1 conversion: using FFmpeg dovi_rpu BSF.\n");
+             MP_VERBOSE(demuxer, "DV7 P8.1 conversion: synchronized Profile 8.1 "
+                                 "decoder parameters.\n");
++        } else if (profile8_base_only) {
++            MP_INFO(demuxer, "P8.1 HDR10 fallback: stripping RPU before decoder.\n");
++            MP_VERBOSE(demuxer, "P8.1 HDR10 fallback: synchronized decoder "
++                                "parameters to the HDR10 base layer.\n");
+         } else {
+             MP_INFO(demuxer, "DV7 HDR10 fallback: stripping EL/RPU before decoder.\n");
+             MP_VERBOSE(demuxer, "DV7 HDR10 fallback: synchronized decoder "
+@@ -330,7 +347,9 @@
+         if (s->convert_p81)
+             MP_ERR(s->demuxer, "DV7 P8.1 conversion: failed to produce converted packet.\n");
+         else
+-            MP_ERR(s->demuxer, "DV7 HDR10 fallback: failed to produce base-layer packet.\n");
++        MP_ERR(s->demuxer, s->bl->codec->source_dv_profile == 8
++                ? "P8.1 HDR10 fallback: failed to produce base-layer packet.\n"
++                : "DV7 HDR10 fallback: failed to produce base-layer packet.\n");
+         return false;
+     }
+ 
+diff --git a/video/decode/vd_lavc.c b/video/decode/vd_lavc.c
+--- a/video/decode/vd_lavc.c
++++ b/video/decode/vd_lavc.c
+@@ -567,8 +567,29 @@
+ {
+     return ctx->codec && ctx->codec->dv_profile == 7 &&
+            dovi_profile7_mode(vd) == DEMUX_DOVI_PROFILE7_HDR10;
++}
++
++static int dovi_profile8_mode(struct mp_filter *vd)
++{
++    struct demux_opts *opts = mp_get_config_group(vd, vd->global, &demux_conf);
++    return opts ? opts->dovi_profile8_mode : DEMUX_DOVI_PROFILE8_PRESERVE;
+ }
+ 
++static bool dovi_profile8_hdr10_fallback(struct mp_filter *vd,
++                                         const vd_ffmpeg_ctx *ctx)
++{
++    return ctx->codec && ctx->codec->source_dv_profile == 8 &&
++           !ctx->codec->dovi &&
++           dovi_profile8_mode(vd) == DEMUX_DOVI_PROFILE8_HDR10;
++}
++
++static bool dovi_hdr10_base_layer_fallback(struct mp_filter *vd,
++                                           const vd_ffmpeg_ctx *ctx)
++{
++    return dovi_profile7_hdr10_fallback(vd, ctx)
++           || dovi_profile8_hdr10_fallback(vd, ctx);
++}
++
+ // Select if and which hwdec to use. Also makes sure to get the decode device.
+ static void select_and_set_hwdec(struct mp_filter *vd)
+ {
+@@ -576,7 +597,7 @@
+     const char *codec = ctx->codec->codec;
+     bool native_dovi_sink =
+         ctx->vo && (ctx->vo->driver->caps & VO_CAP_NATIVE_DOVI) &&
+-        !dovi_profile7_hdr10_fallback(vd, ctx);
++        !dovi_hdr10_base_layer_fallback(vd, ctx);
+ 
+     m_config_cache_update(ctx->hwdec_opts_cache);
+ 
+@@ -947,10 +968,14 @@
+     bool native_dovi_sink =
+         ctx->vo && (ctx->vo->driver->caps & VO_CAP_NATIVE_DOVI);
+     bool decoder_native_dovi_sink = native_dovi_sink &&
+-                                    !dovi_profile7_hdr10_fallback(vd, ctx);
+-    if (native_dovi_sink && !decoder_native_dovi_sink)
+-        MP_INFO(vd, "DV7 HDR10 fallback: using MediaCodec base-layer decoder "
+-                   "with direct Surface output.\n");
++                                    !dovi_hdr10_base_layer_fallback(vd, ctx);
++    if (native_dovi_sink && !decoder_native_dovi_sink) {
++        MP_INFO(vd, dovi_profile8_hdr10_fallback(vd, ctx)
++                ? "P8.1 HDR10 fallback: using MediaCodec base-layer decoder "
++                  "with direct Surface output.\n"
++                : "DV7 HDR10 fallback: using MediaCodec base-layer decoder "
++                  "with direct Surface output.\n");
++    }
+     bool gpu_dovi_mapping = supports_gpu_dovi_mapping(ctx);
+     set_decoder_avopts(vd->log, avctx, lavc_param->avopts,
+                        decoder_native_dovi_sink, gpu_dovi_mapping);

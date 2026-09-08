@@ -40,13 +40,61 @@ final class MpvAudioCapabilities {
         for (String codec : advertised) {
             if (supportsMpvCarrier(codec)) carrierCodecs.add(codec);
         }
+        boolean passthroughRoute = hasPassthroughOutputDevice(manager);
+        addCompressedCodecsIfRouted(
+                carrierCodecs, getAudioCompressedCodecs(appContext), passthroughRoute);
         String value = String.join(",", carrierCodecs);
         if (SpiderDebug.isEnabled()) {
             SpiderDebug.log("mpv-audio", "spdif codecs=%s media3=%s devices=%s carrier=%s route=%s",
                     value, media3Codecs, describeDevices(manager), carrierCodecs,
-                    hasPassthroughOutputDevice(manager));
+                    passthroughRoute);
         }
         return value;
+    }
+
+    static void addCompressedCodecsIfRouted(Set<String> target, Set<String> compressed,
+                                            boolean passthroughRoute) {
+        if (passthroughRoute && target != null && compressed != null) {
+            target.addAll(compressed);
+        }
+    }
+
+    static Set<String> getAudioCompressedCodecs(Context context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return Set.of();
+        Context appContext = context.getApplicationContext();
+        AudioManager manager = (AudioManager) appContext.getSystemService(Context.AUDIO_SERVICE);
+        AudioAttributes attributes = new AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_MEDIA)
+                .setContentType(AudioAttributes.CONTENT_TYPE_MOVIE)
+                .build();
+        Set<String> codecs = new LinkedHashSet<>();
+        if (supportsDirect(manager, attributes, AudioFormat.ENCODING_AAC_LC,
+                48000, AudioFormat.CHANNEL_OUT_STEREO)) codecs.add("aac");
+        if (supportsDirect(manager, attributes, AudioFormat.ENCODING_MP3,
+                44100, AudioFormat.CHANNEL_OUT_STEREO)) codecs.add("mp3");
+        if (SpiderDebug.isEnabled()) {
+            SpiderDebug.log("mpv-audio", "compressed direct codecs=%s", codecs);
+        }
+        return codecs;
+    }
+
+    private static boolean supportsDirect(AudioManager manager,
+                                          AudioAttributes attributes, int encoding,
+                                          int sampleRate, int channelMask) {
+        try {
+            AudioFormat format = new AudioFormat.Builder()
+                    .setEncoding(encoding)
+                    .setSampleRate(sampleRate)
+                    .setChannelMask(channelMask)
+                    .build();
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && manager != null) {
+                return manager.getDirectPlaybackSupport(format, attributes)
+                        != AudioManager.DIRECT_PLAYBACK_NOT_SUPPORTED;
+            }
+            return AudioTrack.isDirectPlaybackSupported(format, attributes);
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
     static String getAudioSpdifCodecs(IntPredicate supportsEncoding) {

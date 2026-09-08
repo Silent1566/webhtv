@@ -344,6 +344,16 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
         return mBinding.recycler.requestFocus();
     }
 
+    public void scrollContentToTop() {
+        if (mBinding == null || mAdapter == null) return;
+        int target = filterVisible ? mFilters.size() : 0;
+        mBinding.recycler.post(() -> {
+            if (mBinding == null || mAdapter == null || mAdapter.size() <= target) return;
+            mBinding.recycler.showHeader();
+            mBinding.recycler.scrollToPosition(target);
+        });
+    }
+
     public void requestContentFocus(int contentRow) {
         pendingContentRow = Math.max(0, contentRow);
         contentFocusGeneration++;

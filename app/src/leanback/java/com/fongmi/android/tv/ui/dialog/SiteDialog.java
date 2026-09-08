@@ -687,4 +687,3 @@ public class SiteDialog extends BaseAlertDialog implements SiteAdapter.OnClickLi
         return -1;
     }
 }
-

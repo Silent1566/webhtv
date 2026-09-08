@@ -1,11 +1,14 @@
 package com.fongmi.android.tv.player.engine;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
 
 import androidx.media3.common.C;
 
 import com.fongmi.android.tv.bean.Result;
+import com.fongmi.android.tv.bean.Danmaku;
 import com.fongmi.android.tv.bean.Sub;
 
 import org.junit.Test;
@@ -62,11 +65,31 @@ public class PlaySpecTest {
         assertEquals(C.SELECTION_FLAG_FORCED, forced.getRawFlag());
     }
 
+    @Test
+    public void addDanmaku_selectsAutoSearchedLineWhenSiteDanmakuIsNotLoaded() {
+        Danmaku site = Danmaku.from("https://example.test/site.xml");
+        site.setSelected(true);
+        Danmaku auto = Danmaku.from("https://example.test/auto.xml");
+        PlaySpec spec = specWithDanmakus(site);
+
+        spec.addDanmaku(auto);
+
+        assertEquals(2, spec.getDanmakus().size());
+        assertTrue(auto.isSelected());
+        assertFalse(site.isSelected());
+    }
+
     private PlaySpec specWithSubs(Sub... subs) {
         Result result = new Result();
         result.setPlayUrl("https://play/");
         result.setUrl("movie.m3u8");
         result.setSubs(new ArrayList<>(List.of(subs)));
         return PlaySpec.from(result, "playback-1", null);
+    }
+
+    private PlaySpec specWithDanmakus(Danmaku... danmakus) {
+        PlaySpec spec = PlaySpec.from("playback-1", "movie.m3u8", null, null);
+        for (Danmaku danmaku : danmakus) spec.setDanmaku(danmaku);
+        return spec;
     }
 }

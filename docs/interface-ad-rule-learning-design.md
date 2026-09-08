@@ -2,9 +2,9 @@
 
 ## 1. 文档状态
 
-- 状态：提议（Proposed）
-- 版本：v0.1
-- 日期：2026-07-11
+- 状态：已接受，0905 优化实施中（Accepted / Implementing）
+- 版本：v0.2
+- 日期：2026-09-05
 - 适用范围：点播/直播配置接口中的 `ads`、`rules` 去广规则
 - 不包含：蜘蛛代码自动升级、站点实现更新、远程脚本执行、云端规则服务
 
@@ -46,6 +46,13 @@
 
 外部接口属于不可信输入，其中的 `rules` 同时承载去广、嗅探、网页交互和播放适配等不同用途。仅凭字段结构无法可靠判断其语义。因此第一阶段只生成候选规则，并要求用户确认后才写入 `UserAdRuleStore`。
 
+“用户确认”与“导入后默认停用”不是同一个概念。为减少电视端逐条操作，同时保留外部规则的安全边界，候选导入提供两个明确动作：
+
+- `导入并启用已选`：仅对用户当前选中的候选生效，适合低风险候选的批量落地；
+- `仅导入（保持停用）`：只保存到本地规则库，继续由用户在规则管理页逐条或批量启用。
+
+应用不会在后台分析完成、候选出现或用户打开页面时静默启用规则。
+
 ### 4.2 当前接口规则与持久化规则分层
 
 - 当前接口规则：继续由 `VodConfig` / `LiveConfig` 加载，只在该配置生效期间使用。
@@ -76,6 +83,38 @@ AI 结果不能绕过正则校验、风险阈值或用户确认。
 | `AdDetectionResult` | 复用 hosts/regex/exclude/confidence 表达候选分析结果 |
 | `AdRuleManageDialog` | 增加“待审核导入”入口和来源信息 |
 | `AdBlockStatsStore` | 后续用于累计命中次数和评估规则效果 |
+
+## 5.1 0905 稳定版反馈对应的设计决策
+
+### 问题证据
+
+当前实现中，`UserAdRule.fromImportedCandidate` 将导入规则设为 `enabled = false`，导入窗口只有一个“导入（默认停用）”动作；电视端每次切换开关都会重新执行 `loadData()` 和 `notifyDataSetChanged()`。这会把一次批量操作变成大量按键，并使 DPAD 焦点回到列表顶部。
+
+### 方案比较
+
+| 方案 | 优点 | 风险/缺点 | 决策 |
+|---|---|---|---|
+| 保持现状 | 不改变安全策略 | 电视端逐条开启，操作量随规则数增长；焦点体验差 | 拒绝 |
+| 所有导入规则静默启用 | 操作最少 | 外部规则未经逐条确认即全局生效，可能误杀正片或造成播放失败 | 拒绝 |
+| 增加显式“导入并启用”并保留“仅导入” | 用户可以一次确认并立即生效；仍保留安全回退路径 | 多一个明确动作，需要保留风险提示 | **采用** |
+| 只增加全选/反选 | 改动较小 | 只能减少选择动作，不能解决导入后逐条启用 | 作为辅助能力，不单独采用 |
+
+### 实施决策
+
+1. 候选列表默认勾选 LOW 风险规则；提供“低风险全选”“全选”“反选”。
+2. “导入并启用已选”将所选规则一次写入并设置为启用；“仅导入”保持停用。
+3. 候选持久化改为批量提交，避免每条规则重复读写偏好和重复失效 `RuleConfig`。
+4. 规则管理页提供接口导入规则的“全部启用/全部停用”，不影响 AI、手动、默认和 HLS 规则。
+5. 单条启停只刷新当前 RecyclerView 行，不重建整个列表；电视端因此保留当前规则和 DPAD 焦点。
+6. 全量刷新（编辑、删除、导入完成）仍保留现有流程；无法找到原焦点时回退到安全的首条规则焦点。
+
+### 最佳实践证据
+
+- AndroidX `RecyclerView.Adapter` 官方 API 文档（`notifyItemChanged(position, payload)`）：<https://developer.android.com/reference/androidx/recyclerview/widget/RecyclerView.Adapter>；访问日期 2026-09-05，证据等级 A：带 payload 的局部更新可将变更传递给带 payload 的绑定路径，适合只更新开关状态而避免无条件全量重绑。WebHTV 适用性：与现有 RecyclerView 规则行直接匹配。
+- Android `View.requestFocus()` 官方 API 文档：<https://developer.android.com/reference/android/view/View#requestFocus()>；访问日期 2026-09-05，证据等级 A：焦点恢复必须针对当前仍在窗口层级中的可聚焦 View，并应在列表布局完成后请求。WebHTV 适用性：用于 TV 行更新后的焦点保持和全量重载后的回退恢复。
+- Android `AlertDialog` 官方 API 文档：<https://developer.android.com/reference/android/app/AlertDialog>；Android `ListView` 官方 API 文档：<https://developer.android.com/reference/android/widget/ListView>；访问日期 2026-09-05，证据等级 A：多选列表状态由 `setItemChecked`/多选回调维护；WebHTV 使用自定义标题操作区同步“全选/反选”状态，不绕过候选列表的选择回调。
+
+以上选择不引入新依赖、不改变规则解析或匹配算法，不影响未参与本次操作的规则。
 
 ## 6. 总体流程
 
@@ -259,13 +298,37 @@ fingerprint = SHA-256(
 - hosts/regex/exclude 摘要；
 - 导入、忽略、编辑后导入、测试操作。
 
-默认勾选仅限 LOW 风险且置信度不低于 0.75 的候选，但仍需要用户点击确认。
+默认勾选仅限 LOW 风险候选；置信度继续在列表中展示并参与风险判断，但仍需要用户点击确认。
 
-### 12.3 导入结果
+### 12.3 0905 反馈优化后的候选操作
+
+候选列表增加：
+
+- 低风险全选；
+- 全选；
+- 反选；
+- 导入并启用已选；
+- 仅导入（保持停用）。
+
+“导入并启用已选”是显式用户动作，不属于后台自动发布。批量导入在一次协调批处理中完成：用户规则列表和候选状态分别写入各自的本地存储，不宣称跨两个偏好键的原子事务；已选规则的状态必须全部一致。如果用户选择仅导入，则所有新规则保持停用。
+
+### 12.4 规则管理页批量操作与 TV 焦点
+
+当存在接口导入规则时，规则管理页显示“全部启用接口导入规则”和“全部停用接口导入规则”。批量操作只匹配 `interface_ads` / `interface_rule` 来源，不修改 AI、手动、默认或内置 HLS 规则。
+
+单条切换完成后：
+
+1. 持久化对应规则；
+2. 仅以 payload 刷新当前行的开关和无障碍描述；
+3. 保留当前滚动位置、当前规则和当前控件焦点。
+
+这三项是电视端验收的必要条件，而不是可选的界面增强。
+
+### 12.5 导入结果
 
 导入后创建 `UserAdRule`：
 
-- `source = "interface_import"`；
+- `source = "interface_ads"` 或 `"interface_rule"`；
 - 名称默认带来源，例如“饭太硬导入：cdn.ryplay”；
 - 默认启用状态由用户确认页选择；
 - 保留候选 ID，便于后续识别上游更新。
@@ -315,7 +378,11 @@ InterfaceAdRuleLearningService.analyzeAsync(configMeta, config);
 - 完成分类、校验、规范化和指纹去重。
 - 保存待审核候选。
 - 提供候选列表和人工导入。
-- 导入到 `UserAdRuleStore`，不做自动启用。
+- 导入到 `UserAdRuleStore`；默认“仅导入”保持停用，但允许用户在确认页明确选择“导入并启用已选”。
+- 候选列表支持低风险全选、全选和反选。
+- 候选导入采用批量持久化。
+- 规则管理页支持接口导入规则批量启停。
+- TV 单条启停不再因全量刷新丢失焦点。
 
 ### Phase 2：来源更新与效果验证
 
@@ -374,13 +441,17 @@ Phase 1 完成需同时满足：
 6. 危险正则和过宽 host 不允许导入或默认启用。
 7. 学习流程失败不影响配置加载、首页展示和视频播放。
 8. 导入规则可在现有规则管理界面中启停、编辑和删除。
+9. 用户明确选择“导入并启用已选”后，所选规则立即生效且无需逐条开启。
+10. 用户选择“仅导入”时，新规则全部保持停用。
+11. TV 端切换任意规则后，焦点仍停留在该规则的原控件，不回到列表顶部。
+12. 批量导入至多产生一次用户规则列表写入和一次 `RuleConfig.invalidate()`；候选状态另行写入一次，不改变未选规则状态。
 
 ## 18. 待确认问题
 
 1. 候选规则是否随应用备份/恢复；建议 Phase 1 只备份已导入规则，不备份待审核候选。
 2. 用户切换接口后，已导入规则是否继续全局生效；建议继续生效，但在规则名称中清晰展示来源。
 3. 是否允许按站点或接口限定规则作用域；建议 Phase 2 引入，Phase 1 保持现有全局规则语义。
-4. 是否提供“低风险规则默认勾选”；建议提供，但仍要求用户最终确认。
+4. **已决策**：提供“低风险规则默认勾选”，但仍要求用户最终确认；同时提供全选和反选。
 
 ## 19. 边界约束
 
@@ -390,6 +461,7 @@ Phase 1 完成需同时满足：
 - 保留来源、指纹、风险和审核状态。
 - 学习任务与配置接入解耦。
 - 用户可回滚所有已导入规则。
+- “仅导入（保持停用）”始终可作为不启用的回退路径；批量启停只作用于接口导入来源。
 
 ### 实施前需要确认
 
@@ -404,6 +476,7 @@ Phase 1 完成需同时满足：
 - 将接口中的所有 `rules` 无差别转为广告规则。
 - 将带凭证的完整接口 URL 上传给 AI 或写入日志。
 - 未经校验和授权静默修改用户全局规则。
+- 不因“全选”操作跳过风险展示或将后台候选自动发布。
 
 ## 20. 相关文档与代码
 
@@ -412,7 +485,9 @@ Phase 1 完成需同时满足：
 - `app/src/main/java/com/fongmi/android/tv/api/config/VodConfig.java`
 - `app/src/main/java/com/fongmi/android/tv/api/config/LiveConfig.java`
 - `app/src/main/java/com/fongmi/android/tv/api/config/RuleConfig.java`
+- `app/src/main/java/com/fongmi/android/tv/api/config/ImportedAdRuleCandidateStore.java`
 - `app/src/main/java/com/fongmi/android/tv/api/config/UserAdRuleStore.java`
 - `app/src/main/java/com/fongmi/android/tv/bean/UserAdRule.java`
+- `app/src/mobile/java/com/fongmi/android/tv/ui/dialog/AdRuleManageDialog.java`
+- `app/src/leanback/java/com/fongmi/android/tv/ui/dialog/AdRuleManageDialog.java`
 - `app/src/main/java/com/fongmi/android/tv/bean/AdDetectionResult.java`
-

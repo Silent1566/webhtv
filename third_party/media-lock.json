@@ -56,32 +56,50 @@
       {
         "path": "third_party/patches/media3-precache-hls-safety.patch",
         "sha256": "9b48e895bd3923159f880152a54160e7c937b2b0369d717da559a7ad98fd14f7"
+      },
+      {
+        "path": "third_party/patches/media3-exo-av3a-mp4.patch",
+        "sha256": "b12123fe9dd09c83fc36e106bf7ebe64ab67404b165ceb6b0acbf45706d36874"
+      },
+      {
+        "path": "third_party/patches/media3-exo-av3a-dash-channel-config.patch",
+        "sha256": "76a1a876c8d8493a54826ad54a789ed487e9d11fe324c701af58821b4539b987"
+      },
+      {
+        "path": "third_party/patches/media3-exo-alac-wave.patch",
+        "sha256": "2b6de52af60d16f705c03963c3e40b872f899f1c1b17b21c48851f7ecfe571f3"
       }
     ],
     "artifact_overrides": [
       {
         "coordinate": "androidx.media3:media3-common:1.11.0-alpha01-fongmi",
-        "aar_sha256": "5a4815ab415c0650bc8adaa60e518f32df548ddcfafb43e02381281a96dac6e5",
-        "sources_sha256": "31c38835a729f422ba25835733aa94ac23d8fe6445df2d725a71e46a11d86bfc",
-        "reason": "E4-J1 adds Cue collision/region fields and LetterSpacingSpan data contracts"
+        "aar_sha256": "5935ba8de36c042ff3acb131eb89eaec1b3088af2805ea6e918136be81df547e",
+        "sources_sha256": "3504199e25d413ca623753f144cbd1f43a16cd800630e39d8fc30db7ae7e62f9",
+        "reason": "E4-J1 contracts plus E12-1 av3a RFC 6381 MIME mapping"
       },
       {
         "coordinate": "androidx.media3:media3-container:1.11.0-alpha01-fongmi",
-        "aar_sha256": "32c54bcb6113499267fadd75385d1a69a04eec3fcc34edf11e9bf6012d81ed91",
-        "sources_sha256": "9aee6336465f59a29efcadd5c72b26fd8cdaa3ee4ee88a74ad99de003ddc43b6",
-        "reason": "E2-1 adds Dolby Vision parser version/length safety"
+        "aar_sha256": "f8ba1799d57439b8906c39fb93ec43b8770f271853ec772589747592d46d3130",
+        "sources_sha256": "b6fdc128c011920046543ba1699f7666eb2cae0567b5b96a15e3b0a4d1af0d62",
+        "reason": "E2-1 Dolby Vision parser safety plus E12-1 av3a sample entry"
       },
       {
         "coordinate": "androidx.media3:media3-extractor:1.11.0-alpha01-fongmi",
-        "aar_sha256": "59a090bad8efc32552cf5a7ec1d2fb66444168bfbc97bd45e50764527f80c768",
-        "sources_sha256": "9314a303f402e903dd075db5e9babf9be6474da539a4b76bb1ed765b95b6ef4e",
-        "reason": "E-SP2 chained SeekHead/deferred Cues plus E2-1/E3-1b/E4-1/E7-2 extractor behavior"
+        "aar_sha256": "a7d798095700568c2f48cd7bc0bed67cb81ba13413f70fd359e530a07ad54b0c",
+        "sources_sha256": "ec22c28c9fef1f4fdb54b495da919a706d4a28b781ac6701790a259beee6dedd",
+        "reason": "E-SP2/E2-1/E3-1b/E4-1/E7-2/E12-1 extractor behavior plus AV3A MP4/CMAF and QuickTime wave/alac parsing"
       },
       {
         "coordinate": "androidx.media3:media3-exoplayer:1.11.0-alpha01-fongmi",
         "aar_sha256": "cfea29681799509923174cac7ce31b7e944e542db9df58fd56b7a86499a5c07e",
         "sources_sha256": "83f4f83b4f44e621d52002c161f63fbcb77be6856af4b1e4a4cb0982b04549e1",
         "reason": "E3-1a/E4-1 baseline plus E7-2 Blu-ray/DVD logical multi-extent routing and E-SP3-B HLS pre-cache request safety"
+      },
+      {
+        "coordinate": "androidx.media3:media3-exoplayer-dash:1.11.0-alpha01-fongmi",
+        "aar_sha256": "de557f0b91512a1e0726155bd0cbb23879279ce05a819ab27a49bea069225546",
+        "sources_sha256": "5462494d6ed12e64b5597070b86206727775c760ebe040ef6d3a3a51244431d4",
+        "reason": "E12 AVS3A P7 DASH AudioChannelConfiguration mapping"
       },
       {
         "coordinate": "androidx.media3:media3-datasource:1.11.0-alpha01-fongmi",
@@ -124,11 +142,12 @@
     "repo": "https://github.com/anilbeesetti/nextlib.git",
     "branch": "release/1.10.0-0.12.1",
     "commit": "6ff6cf9d0820382b3c233d018c52e4163b09d345",
-    "version": "1.10.0-0.12.1-fongmi-softload-av3a-ffmpeg901-r1",
+    "version": "1.10.0-0.12.1-fongmi-softload-av3a-ffmpeg901-r3",
     "upstream_version": "1.10.0-0.12.1",
     "patches": [
       "third_party/patches/nextlib-ffmpeg-soft-load-shedding.patch",
-      "third_party/patches/nextlib-av3a.patch"
+      "third_party/patches/nextlib-av3a.patch",
+      "third_party/patches/nextlib-ape-support.patch"
     ],
     "ffmpeg_repo": "https://github.com/FongMi/FFmpeg.git",
     "ffmpeg_commit": "177f090e0503b7e013922ca903bde14b1c375f18",

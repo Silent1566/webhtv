@@ -128,7 +128,7 @@ public class AdRuleManageDialogLayoutTest {
                 dialog.contains("rule.getScript()")
                         && dialog.contains("R.string.ad_rule_detail_script"));
         assertTrue("HLS detail must contain the complete serialized rule",
-                dialog.contains("item.detail()"));
+                dialog.contains("current.detail()"));
         assertTrue("long rule content must be readable with a remote",
                 detail.contains("androidx.core.widget.NestedScrollView")
                         && detail.contains("android:scrollbars=\"vertical\"")
@@ -143,6 +143,32 @@ public class AdRuleManageDialogLayoutTest {
         assertTrue("TV rule rows should render as one coherent card with a detail affordance",
                 row.contains("android:background=\"@drawable/shape_ad_rule_card\"")
                         && row.contains("@string/ad_rule_detail_hint"));
+    }
+
+    @Test
+    public void leanbackImportedRulesSupportBatchActionsAndKeepToggleFocus() throws Exception {
+        String source = read(projectRoot().resolve("app/src/leanback/java/com/fongmi/android/tv/ui/dialog/AdRuleManageDialog.java"));
+        String adapter = read(projectRoot().resolve("app/src/leanback/java/com/fongmi/android/tv/ui/adapter/AdRuleAdapter.java"));
+        String layout = read(projectRoot().resolve("app/src/leanback/res/layout/dialog_ad_rule_manage.xml"));
+        String store = read(projectRoot().resolve("app/src/main/java/com/fongmi/android/tv/api/config/ImportedAdRuleCandidateStore.java"));
+
+        assertTrue(source.contains("importSelectedCandidates(candidates, selected, true)")
+                && source.contains("importSelectedCandidates(candidates, selected, false)")
+                && source.contains("R.string.ad_rule_select_all")
+                && source.contains("R.string.ad_rule_invert_selection"));
+        assertTrue(layout.contains("android:id=\"@+id/importBulkActions\"")
+                && layout.contains("android:id=\"@+id/enableImported\"")
+                && layout.contains("android:id=\"@+id/disableImported\""));
+        assertTrue(store.contains("importCandidates(List<String> ids, boolean enabled)")
+                && store.contains("UserAdRuleStore.addAll(additions)"));
+        assertTrue(source.contains("adapter.refreshUserEnabled(item)")
+                && source.contains("adapter.refreshDefaultEnabled(ruleId, enabled)")
+                && source.contains("adapter.refreshHlsEnabled(key, enabled)")
+                && count(source, "restoreRuleFocus(position)") == 3);
+        assertTrue(adapter.contains("notifyItemChanged(i, enabled)")
+                && adapter.contains("List<Object> payloads"));
+        assertTrue("bulk action focus must return to stats when no pending-import button is visible",
+                source.contains("binding.importCandidates.getVisibility() == View.VISIBLE ? binding.importCandidates : binding.stats"));
     }
 
     private static void assertDeleteConfirmation(String source, boolean expectSafeTvFocus) {

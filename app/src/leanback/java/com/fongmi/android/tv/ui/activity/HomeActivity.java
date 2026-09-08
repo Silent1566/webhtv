@@ -59,6 +59,7 @@ import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.adapter.BaseDiffCallback;
 import com.fongmi.android.tv.ui.adapter.TypeAdapter;
 import com.fongmi.android.tv.ui.base.BaseActivity;
+import com.fongmi.android.tv.ui.helper.TouchOptimizationHelper;
 import com.fongmi.android.tv.ui.custom.CustomRowPresenter;
 import com.fongmi.android.tv.ui.custom.CustomSelector;
 import com.fongmi.android.tv.ui.custom.CustomTitleView;
@@ -131,6 +132,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     private boolean pendingOpenVod; // 手动点击"点播"后等待数据加载完成再进分类页
     private boolean webConfirmKeyDown;
     private boolean webConfirmLongPress;
+    private boolean mTypeSelectionFromTouch;
     private final Runnable mTypeSwitch = this::switchType;
     private final Runnable mWebConfirmLongPress = this::triggerWebFocusedLongPress;
     private final Runnable mDelayedInitConfig = this::initConfig;
@@ -209,6 +211,9 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
             syncNativeContentInset();
             syncWebOverlayLayout();
         });
+        mBinding.typeRecycler.setOnFocusChangeListener((view, hasFocus) -> {
+            if (hasFocus && isCategoryVisible() && mFolder != null) mFolder.scrollContentToTop();
+        });
         mBinding.recycler.addOnChildViewHolderSelectedListener(new OnChildViewHolderSelectedListener() {
             @Override
             public void onChildViewHolderSelected(@NonNull RecyclerView parent, @Nullable RecyclerView.ViewHolder child, int position, int subposition) {
@@ -228,7 +233,8 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
                 mSelectedTypeView = child.itemView;
                 mSelectedTypeView.setSelected(true);
                 if (parent.hasFocus()) updateToolbarVisibility(true);
-                if (Setting.isHomeVodAutoLoad()) scheduleTypeSwitch(position);
+                mTypeSelectionFromTouch = TouchOptimizationHelper.isTouchActive(parent);
+                if (Setting.isHomeVodAutoLoad() && !mTypeSelectionFromTouch) scheduleTypeSwitch(position);
             }
         });
     }
@@ -240,7 +246,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     }
 
     private void resumeTypeSwitch() {
-        if (!Setting.isHomeVodAutoLoad() || mBinding.typeRecycler.getVisibility() != View.VISIBLE) return;
+        if (!Setting.isHomeVodAutoLoad() || mTypeSelectionFromTouch || mBinding.typeRecycler.getVisibility() != View.VISIBLE) return;
         int position = mBinding.typeRecycler.getSelectedPosition();
         if (position >= 0) scheduleTypeSwitch(position);
     }
@@ -257,6 +263,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     @Override
     public void onCategoryContentHorizontalEdge(Class item, int contentRow, boolean towardEnd) {
         if (!isCurrentCategory(item) || contentRow < 0) return;
+        mTypeSelectionFromTouch = false;
         item = getAdjacentCategory(item, towardEnd);
         if (item == null) return;
         mBinding.typeRecycler.removeCallbacks(mTypeSwitch);
@@ -339,6 +346,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
         else transaction.add(R.id.categoryContainer, target, tag);
         target.setUserVisibleHint(true);
         transaction.runOnCommit(() -> {
+            target.scrollContentToTop();
             restoreTypeFocus(keepTypeFocus, item);
             if (toggleFilter && target == mFolder && isCurrentCategory(item)) updateFilter(item);
         });
@@ -952,6 +960,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
 
     @Override
     public void onItemClick(Class item) {
+        mTypeSelectionFromTouch = false;
         if (item.isHome()) showHomeContent();
         else if (isCurrentCategory(item)) updateFilter(item);
         else {

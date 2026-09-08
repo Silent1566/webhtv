@@ -54,7 +54,8 @@ public class PlaybackPerformanceUiPolicyTest {
                         PlaybackPerformanceCatalog.MPV_HWDEC,
                         PlaybackPerformanceCatalog.MPV_FRAME_RATE,
                         PlaybackPerformanceCatalog.MPV_OPTION_PRIORITY,
-                        PlaybackPerformanceCatalog.AUDIO_PASSTHROUGH),
+                        PlaybackPerformanceCatalog.AUDIO_PASSTHROUGH,
+                        PlaybackPerformanceCatalog.MPV_MULTICHANNEL_AUDIO),
                 ids(PlaybackPerformanceUiPolicy
                         .splitForKernel(PlayerSetting.MPV, false).common()));
         assertEquals(Set.of(

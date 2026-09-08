@@ -1,0 +1,42 @@
+diff --git a/libraries/common/src/main/java/androidx/media3/common/MimeTypes.java b/libraries/common/src/main/java/androidx/media3/common/MimeTypes.java
+--- a/libraries/common/src/main/java/androidx/media3/common/MimeTypes.java
++++ b/libraries/common/src/main/java/androidx/media3/common/MimeTypes.java
+@@ -532,5 +532,7 @@ public static String getMediaMimeType(@Nullable String codec) {
+       }
+       return mimeType == null ? MimeTypes.AUDIO_AAC : mimeType;
++    } else if (codec.startsWith("av3a")) {
++      return MimeTypes.AUDIO_AV3A;
+     } else if (codec.startsWith("mha1")) {
+       return MimeTypes.AUDIO_MPEGH_MHA1;
+     } else if (codec.startsWith("mhm1")) {
+diff --git a/libraries/container/src/main/java/androidx/media3/container/Mp4Box.java b/libraries/container/src/main/java/androidx/media3/container/Mp4Box.java
+--- a/libraries/container/src/main/java/androidx/media3/container/Mp4Box.java
++++ b/libraries/container/src/main/java/androidx/media3/container/Mp4Box.java
+@@ -60,5 +60,8 @@ public final class Mp4Box {
+   @SuppressWarnings("ConstantCaseForConstants")
+   public static final int TYPE_avcC = 0x61766343;
++
++  @SuppressWarnings("ConstantCaseForConstants")
++  public static final int TYPE_av3a = 0x61763361;
+ 
+   @SuppressWarnings("ConstantCaseForConstants")
+   public static final int TYPE_hvc1 = 0x68766331;
+diff --git a/libraries/extractor/src/main/java/androidx/media3/extractor/mp4/BoxParser.java b/libraries/extractor/src/main/java/androidx/media3/extractor/mp4/BoxParser.java
+--- a/libraries/extractor/src/main/java/androidx/media3/extractor/mp4/BoxParser.java
++++ b/libraries/extractor/src/main/java/androidx/media3/extractor/mp4/BoxParser.java
+@@ -1350,5 +1350,6 @@ public final class BoxParser {
+           || childAtomType == Mp4Box.TYPE__mp2
+           || childAtomType == Mp4Box.TYPE__mp3
+           || childAtomType == Mp4Box.TYPE_mha1
++          || childAtomType == Mp4Box.TYPE_av3a
+           || childAtomType == Mp4Box.TYPE_mhm1
+           || childAtomType == Mp4Box.TYPE_alac
+@@ -2191,6 +2192,8 @@ public final class BoxParser {
+       mimeType = MimeTypes.AUDIO_MPEG;
+     } else if (atomType == Mp4Box.TYPE_mha1) {
+       mimeType = MimeTypes.AUDIO_MPEGH_MHA1;
++    } else if (atomType == Mp4Box.TYPE_av3a) {
++      mimeType = MimeTypes.AUDIO_AV3A;
+     } else if (atomType == Mp4Box.TYPE_mhm1) {
+       mimeType = MimeTypes.AUDIO_MPEGH_MHM1;
+     } else if (atomType == Mp4Box.TYPE_alac) {

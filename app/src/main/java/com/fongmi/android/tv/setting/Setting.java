@@ -492,7 +492,7 @@ public class Setting {
         return context.createConfigurationContext(config);
     }
 
-    private static float getUiScaleFactor(int scale) {
+    public static float getUiScaleFactor(int scale) {
         return switch (scale) {
             case UI_SCALE_STANDARD -> 0.8f;
             case UI_SCALE_MILD_COMPACT -> 0.75f;
