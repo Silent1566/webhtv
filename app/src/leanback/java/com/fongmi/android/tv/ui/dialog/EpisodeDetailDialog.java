@@ -477,29 +477,15 @@ public class EpisodeDetailDialog {
 
             if (keyCode == android.view.KeyEvent.KEYCODE_DPAD_DOWN) {
                 // 从大海报往下：跳到第一个有数据的网格
-                if (focus == stillCard || (focus != null && focus.getParent() == stillCard)) {
-                    if (photosGrid != null && photosGrid.getVisibility() == View.VISIBLE
-                        && photosGrid.getAdapter() != null && photosGrid.getAdapter().getItemCount() > 0) {
-                        photosGrid.requestFocus();
-                        return true;
-                    }
-                    if (guestsGrid != null && guestsGrid.getVisibility() == View.VISIBLE
-                        && guestsGrid.getAdapter() != null && guestsGrid.getAdapter().getItemCount() > 0) {
-                        guestsGrid.requestFocus();
-                        return true;
-                    }
+                if (isSameOrDescendantOf(focus, stillCard)) {
+                    if (requestGridFocus(photosGrid) || requestGridFocus(guestsGrid)) return true;
                 }
             }
 
             if (keyCode == android.view.KeyEvent.KEYCODE_DPAD_UP) {
                 // 客串卡片先回到剧照，剧照再回到大海报；焦点实际在网格 item 上，需要检查父级关系
                 if (focus != null && (focus == guestsGrid || isDescendantOf(focus, guestsGrid))) {
-                    if (photosGrid != null && photosGrid.getVisibility() == View.VISIBLE
-                            && photosGrid.getAdapter() != null && photosGrid.getAdapter().getItemCount() > 0) {
-                        photosGrid.requestFocus();
-                    } else {
-                        stillCard.requestFocus();
-                    }
+                    if (!requestGridFocus(photosGrid)) stillCard.requestFocus();
                     return true;
                 }
                 if (focus != null && (focus == photosGrid || isDescendantOf(focus, photosGrid))) {
@@ -510,6 +496,25 @@ public class EpisodeDetailDialog {
 
             return false;
         });
+    }
+
+    /**
+     * 将焦点落到横向网格的实际卡片，而不是只把焦点留在网格容器上。
+     * RecyclerView/HorizontalGridView 只有在 holder 回调里请求子项焦点时，
+     * 才能可靠地触发 ScrollView 的垂直滚动和后续遥控导航。
+     */
+    private static boolean requestGridFocus(androidx.leanback.widget.HorizontalGridView grid) {
+        if (grid == null || grid.getVisibility() != View.VISIBLE
+                || grid.getAdapter() == null || grid.getAdapter().getItemCount() == 0) {
+            return false;
+        }
+        int position = Math.max(0, grid.getSelectedPosition());
+        grid.setSelectedPosition(position, holder -> holder.itemView.requestFocus());
+        return true;
+    }
+
+    private static boolean isSameOrDescendantOf(View view, View ancestor) {
+        return view != null && (view == ancestor || isDescendantOf(view, ancestor));
     }
 
     /**
