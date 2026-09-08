@@ -48,7 +48,7 @@ public class HomeCategoryNavigationSourceTest {
     }
 
     @Test
-    public void inlineCategoryEdgesSwitchCategoriesWithRowSpecificFocus() throws Exception {
+    public void inlineCategoryEdgesRespectDefaultVodLoadingFocusMode() throws Exception {
         String home = homeActivity();
         String folder = read(source("leanback", "java", "com", "fongmi", "android", "tv", "ui", "fragment", "FolderFragment.java"));
         String type = read(source("leanback", "java", "com", "fongmi", "android", "tv", "ui", "fragment", "TypeFragment.java"));
@@ -65,8 +65,9 @@ public class HomeCategoryNavigationSourceTest {
         assertTrue("nested folder pages must not switch the top-level category", forwardEdge.contains("if (getChildFragmentManager().getBackStackEntryCount() > 0) return;"));
         assertTrue("right and left edges must select the adjacent category in opposite directions", adjacent.contains("int target = position + (towardEnd ? 1 : -1);"));
         assertTrue("the synthetic home item must not be treated as an adjacent category", adjacent.contains("candidate.isHome()"));
-        assertTrue("first-row edges must focus the adjacent category's first card", edge.contains("if (contentRow == 0)") && edge.contains("focusFirstCard(item);"));
-        assertTrue("lower-row edges must focus the adjacent category button", edge.contains("else focusCategoryButton(item);"));
+        assertTrue("default VOD loading must return every cross-category edge to the category button", edge.contains("if (Setting.isHomeVodAutoLoad())") && edge.contains("focusCategoryButton(item);"));
+        assertTrue("manual VOD loading must preserve first-row card focus", edge.contains("if (contentRow == 0) focusFirstCard(item);"));
+        assertTrue("manual VOD loading must preserve lower-row category focus", edge.contains("else focusCategoryButton(item);"));
         assertTrue("cached category pages must be visible before receiving the first-card request", adjacent.contains("getSupportFragmentManager().executePendingTransactions();") && adjacent.contains("mFolder.requestContentFocus(0);"));
     }
 

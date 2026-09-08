@@ -265,8 +265,12 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
         mBinding.typeRecycler.removeCallbacks(mTypeSwitch);
         int position = mTypeAdapter.indexOf(item);
         mBinding.typeRecycler.setSelectedPosition(position);
-        if (contentRow == 0) focusFirstCard(item);
-        else focusCategoryButton(item);
+        if (Setting.isHomeVodAutoLoad()) {
+            focusCategoryButton(item);
+        } else {
+            if (contentRow == 0) focusFirstCard(item);
+            else focusCategoryButton(item);
+        }
     }
 
     private Class getAdjacentCategory(Class item, boolean towardEnd) {
