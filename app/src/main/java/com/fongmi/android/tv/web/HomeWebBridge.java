@@ -10,6 +10,7 @@ import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.api.SiteApi;
 import com.fongmi.android.tv.api.config.VodConfig;
+import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.bean.Result;
 import com.fongmi.android.tv.bean.Site;
@@ -279,8 +280,30 @@ public class HomeWebBridge {
         String wall = wallPic(payload);
         String content = content(payload);
         final String playSiteKey = siteKey;
-        App.post(() -> controller.prepareNativePlayback(() -> VideoActivity.start(activity, playSiteKey, vodId, title, pic, null, wall, content)));
+        App.post(() -> controller.prepareNativePlayback(() -> {
+            History resume = findResumeHistory(playSiteKey, vodId);
+            if (resume != null) {
+                VideoActivity.startDirect(activity, playSiteKey, vodId, title, pic, null, null, null, null, resume);
+            } else {
+                VideoActivity.start(activity, playSiteKey, vodId, title, pic, null, wall, content);
+            }
+        }));
         return "{}";
+    }
+
+    /**
+     * WebHome 打开有观看历史的影片时按组合键(siteKey@@@vodId@@@cid)直取 History,走与
+     * 「最近观看」相同的续播直通(EXTRA_RESUME_FROM_HISTORY 携带完整历史,跳过重匹配)。
+     * 否则详情页靠 History.findPlayback 重匹配,isSeasonEligible 的季资格检查会把多季
+     * TMDB 剧的历史拒绝掉,「继续观看」回落到第 1 集。
+     */
+    private static History findResumeHistory(String siteKey, String vodId) {
+        if (TextUtils.isEmpty(siteKey) || TextUtils.isEmpty(vodId)) return null;
+        try {
+            return History.find(siteKey + AppDatabase.SYMBOL + vodId + AppDatabase.SYMBOL + VodConfig.getCid());
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private String playVodInline(JsonObject payload) {
