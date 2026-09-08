@@ -824,9 +824,9 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             }
 
             @Override
-            public void onItemLongClick(View anchor, Episode episode, int episodeNumber) {
+            public void onItemLongClick(View anchor, Episode episode, int episodeNumber, TmdbEpisode tmdbEpisode) {
                 anchor.setPressed(false);
-                showTmdbEpisodeDetail(episode, episodeNumber, binding.episodeContainer);
+                showTmdbEpisodeDetail(episode, episodeNumber, tmdbEpisode, binding.episodeContainer);
             }
         });
         episodeAdapter.setNativeEnhanced(true);
@@ -6111,7 +6111,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         view.setLayoutParams(marginParams);
     }
 
-    private void showTmdbEpisodeDetail(Episode episode, int episodeNumber, RecyclerView returnRecycler) {
+    private void showTmdbEpisodeDetail(Episode episode, int episodeNumber, TmdbEpisode boundTmdbEpisode, RecyclerView returnRecycler) {
         // 对话框关闭后完整重渲染剧集列表，防止焦点状态紊乱导致按钮失效
         android.content.DialogInterface.OnDismissListener dismissListener = d -> {
             if (binding == null || binding.episodeContainer == null || returnRecycler == null) return;
@@ -6129,10 +6129,23 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             com.fongmi.android.tv.ui.dialog.EpisodeDetailDialog.show(this, episode, null, null, null, dismissListener);
             return;
         }
-        // 剧集场景：原有逻辑
-        int detailSeasonNumber = tmdbEpisodeDataSeason(selectedFlag == null ? null : selectedFlag.getEpisodes());
-        if (matchedTmdbItem == null || !"tv".equalsIgnoreCase(matchedTmdbItem.getMediaType()) || detailSeasonNumber < 0 || episodeNumber <= 0 || !canMatchTmdb()) {
-            Notify.show(R.string.detail_tmdb_empty);
+        // 剧集场景：详情请求优先使用长按卡片绑定且已通过匹配校验的 TMDB 集。
+        // 手动选择季度时，同一线路可能是扁平集列表，卡片绑定对象才是可靠的请求上下文。
+        List<Episode> detailEpisodes = selectedFlag == null ? null : selectedFlag.getEpisodes();
+        int detailSeasonNumber = tmdbEpisodeDataSeason(detailEpisodes);
+        int detailEpisodeNumber = episodeNumber;
+        if (boundTmdbEpisode != null) {
+            if (boundTmdbEpisode.getSeasonNumber() >= 0) detailSeasonNumber = boundTmdbEpisode.getSeasonNumber();
+            if (boundTmdbEpisode.getNumber() > 0) detailEpisodeNumber = boundTmdbEpisode.getNumber();
+        }
+        // 卡片没有有效 TMDB 映射时也必须有反馈；EpisodeDetailDialog 会展示源集名称，
+        // 不能只弹 Notify 后结束，否则手动选季下超范围/不匹配的卡片看起来像长按失效。
+        if (boundTmdbEpisode == null) {
+            com.fongmi.android.tv.ui.dialog.EpisodeDetailDialog.show(this, episode, getSite(), null, null, dismissListener);
+            return;
+        }
+        if (matchedTmdbItem == null || !"tv".equalsIgnoreCase(matchedTmdbItem.getMediaType()) || detailSeasonNumber < 0 || detailEpisodeNumber <= 0 || !canMatchTmdb()) {
+            com.fongmi.android.tv.ui.dialog.EpisodeDetailDialog.show(this, episode, getSite(), null, null, dismissListener);
             return;
         }
         binding.loading.setVisibility(View.VISIBLE);
@@ -6140,12 +6153,13 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         int detailGeneration = ++tmdbEpisodeDetailGeneration;
         int displaySeasonNumber = detailSeasonNumber;
         int seasonNumber = detailSeasonNumber;
+        int requestEpisodeNumber = detailEpisodeNumber;
         TmdbItem item = matchedTmdbItem;
         JsonObject baseDetail = matchedTmdbDetail;
         TmdbConfig config = tmdbConfig;
         detailTasks.submit(Task.largeExecutor(), () -> {
             try {
-                JsonObject detail = tmdbService.episode(item, seasonNumber, episodeNumber, config, baseDetail);
+                JsonObject detail = tmdbService.episode(item, seasonNumber, requestEpisodeNumber, config, baseDetail);
                 List<String> photos = tmdbService.episodePhotos(detail, config);
                 List<TmdbPerson> guests = tmdbService.episodeGuests(detail, config);
                 runOnAliveUi(() -> {
@@ -6155,7 +6169,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
                         return;
                     }
                     binding.loading.setVisibility(View.GONE);
-                    if (displaySeasonNumber != selectedSeasonNumber) return;
+                    if (!isTmdbEpisodeDetailSeasonCurrent(displaySeasonNumber)) return;
                     // 复用 EpisodeDetailDialog，传入已拉取的 photos/guests 避免重复 API 请求
                     com.fongmi.android.tv.ui.dialog.EpisodeDetailDialog.show(this, episode, getSite(), photos, guests, dismissListener);
                 });
@@ -6167,11 +6181,19 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
                         return;
                     }
                     binding.loading.setVisibility(View.GONE);
-                    if (displaySeasonNumber != selectedSeasonNumber) return;
-                    Notify.show(TextUtils.isEmpty(e.getMessage()) ? getString(R.string.detail_tmdb_empty) : e.getMessage());
+                    if (!isTmdbEpisodeDetailSeasonCurrent(displaySeasonNumber)) return;
+                    // API 失败也保留详情弹窗，至少让用户看到源集名称，而不是把长按吞掉。
+                    com.fongmi.android.tv.ui.dialog.EpisodeDetailDialog.show(this, episode, getSite(), null, null, dismissListener);
                 });
             }
         });
+    }
+
+    private boolean isTmdbEpisodeDetailSeasonCurrent(int seasonNumber) {
+        if (seasonNumber < 0) return false;
+        if (seasonNumber == selectedSeasonNumber) return true;
+        List<Episode> episodes = selectedFlag == null ? null : selectedFlag.getEpisodes();
+        return seasonNumber == tmdbEpisodeDataSeason(episodes);
     }
 
     private void restoreEpisodeDetailFocus(RecyclerView recycler, Episode episode) {
@@ -8896,9 +8918,9 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             }
 
             @Override
-            public void onItemLongClick(View anchor, Episode episode, int episodeNumber) {
+            public void onItemLongClick(View anchor, Episode episode, int episodeNumber, TmdbEpisode tmdbEpisode) {
                 anchor.setPressed(false);
-                showTmdbEpisodeDetail(episode, episodeNumber, recycler);
+                showTmdbEpisodeDetail(episode, episodeNumber, tmdbEpisode, recycler);
             }
         });
         adapter.setLight(lightTheme);
