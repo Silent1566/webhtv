@@ -5,7 +5,9 @@ import com.fongmi.android.tv.player.audio.PlaybackMediaSignalHub;
 import com.fongmi.android.tv.subtitle.SpeechRecognitionFactory;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.Executor;
 
@@ -56,6 +58,10 @@ public final class SpeechAdSignalProvider implements AdAudioSignalProvider {
     private String ruleVersion = "";
     private Listener listener;
     private SpeechAdConfig config;
+    // SpeechAdMatcher is confined to the speech owner. The reference is swapped
+    // under the short Java-state lock when a config is installed; matching and
+    // timeline resets never run in that lock.
+    private SpeechAdMatcher speechMatcher;
     private HostPosition hostPosition;
     private SpeechRecognitionFactory.Session recognitionSession;
     private PlaybackMediaSignalHub.Registration registration;
@@ -68,6 +74,7 @@ public final class SpeechAdSignalProvider implements AdAudioSignalProvider {
     private boolean acceptScheduled;
     private boolean modelCheckScheduled;
     private int pendingRecognitionResults;
+    private boolean matcherResetScheduled;
     private long pendingActivationToken = -1L;
     private boolean enabled;
     private boolean closed;
@@ -199,6 +206,7 @@ public final class SpeechAdSignalProvider implements AdAudioSignalProvider {
                 hostPosition = null;
                 listener = null;
                 ruleVersion = "";
+                speechMatcher = null;
                 state = ProviderState.CLOSED;
             }
         }
@@ -211,8 +219,11 @@ public final class SpeechAdSignalProvider implements AdAudioSignalProvider {
         try {
             config = Objects.requireNonNull(configSource.snapshot(),
                     "speech config");
+            speechMatcher = config.rules().isEmpty()
+                    ? null : new SpeechAdMatcher(config.rules());
         } catch (RuntimeException error) {
             config = null;
+            speechMatcher = null;
             state = ProviderState.DEGRADED;
             diagnostics.recordQuietly(AdAudioDiagnostics.Code.SPEECH_START_FAILED);
             return providerError(ErrorCode.START_FAILED,
@@ -231,7 +242,7 @@ public final class SpeechAdSignalProvider implements AdAudioSignalProvider {
             state = ProviderState.DISABLED;
             return null;
         }
-        if (config.keywords().isEmpty()) {
+        if (!config.hasSpeechRules()) {
             deactivateResourcesLocked(false, false);
             state = ProviderState.IDLE;
             return null;
@@ -389,9 +400,16 @@ public final class SpeechAdSignalProvider implements AdAudioSignalProvider {
         ownerCommands.removeIf(command -> command instanceof ResetSessionCommand
                 || command instanceof RecognitionResultCommand || command instanceof RecognitionErrorCommand);
         pendingRecognitionResults = 0;
+        matcherResetScheduled = false;
         if (recognitionSession != null) {
             enqueueOwnerCommandLocked(new ResetSessionCommand(instanceToken, timelineToken), true);
         }
+    }
+
+    private void scheduleMatcherResetLocked() {
+        if (speechMatcher == null || matcherResetScheduled) return;
+        matcherResetScheduled = true;
+        enqueueOwnerCommandLocked(new ResetMatcherCommand(instanceToken, timelineToken), true);
     }
 
     private void dispatchOwner() {
@@ -695,10 +713,13 @@ public final class SpeechAdSignalProvider implements AdAudioSignalProvider {
         @Override
         public void run() {
             SpeechRecognitionFactory.Session session;
+            SpeechAdMatcher matcher;
             synchronized (SpeechAdSignalProvider.this) {
                 if (closed || token != instanceToken || timeline != timelineToken) return;
                 session = recognitionSession;
+                matcher = speechMatcher;
             }
+            if (matcher != null) matcher.reset(timeline);
             if (session == null) return;
             try {
                 session.reset();
@@ -713,6 +734,30 @@ public final class SpeechAdSignalProvider implements AdAudioSignalProvider {
                 }
                 diagnostics.recordQuietly(AdAudioDiagnostics.Code.MATCHER_ERROR);
             }
+        }
+    }
+
+    private final class ResetMatcherCommand implements OwnerCommand {
+        private final long token;
+        private final int timeline;
+
+        private ResetMatcherCommand(long token, int timeline) {
+            this.token = token;
+            this.timeline = timeline;
+        }
+
+        @Override
+        public void run() {
+            SpeechAdMatcher matcher;
+            synchronized (SpeechAdSignalProvider.this) {
+                if (closed || token != instanceToken || timeline != timelineToken) return;
+                ownerCommands.removeIf(command -> command instanceof RecognitionResultCommand
+                        || command instanceof RecognitionErrorCommand);
+                pendingRecognitionResults = 0;
+                matcherResetScheduled = false;
+                matcher = speechMatcher;
+            }
+            if (matcher != null) matcher.reset(timeline);
         }
     }
 
@@ -770,10 +815,12 @@ public final class SpeechAdSignalProvider implements AdAudioSignalProvider {
             }
             if (pendingRecognitionResults >= RECOGNITION_RESULT_CAPACITY) {
                 diagnostics.recordQuietly(AdAudioDiagnostics.Code.QUEUE_OVERFLOW);
+                scheduleMatcherResetLocked();
                 return;
             }
             if (text != null && text.length() > MAX_RESULT_CHARS) {
                 diagnostics.recordQuietly(AdAudioDiagnostics.Code.SPEECH_PCM_DROPPED);
+                scheduleMatcherResetLocked();
                 return;
             }
             pendingRecognitionResults++;
@@ -802,58 +849,113 @@ public final class SpeechAdSignalProvider implements AdAudioSignalProvider {
     private void processRecognitionResult(long token, String text, long startUs,
                                           long endUs, int callbackTimelineToken) {
         SpeechAdConfig currentConfig;
+        SpeechAdMatcher currentMatcher;
+        SessionContext currentContext;
+        String currentRuleVersion;
+        Listener currentListener;
         synchronized (this) {
             if (!isCurrentCallbackLocked(token, callbackTimelineToken)) {
                 diagnostics.recordQuietly(AdAudioDiagnostics.Code.SPEECH_STALE_CALLBACK);
                 return;
             }
             currentConfig = config;
+            currentMatcher = speechMatcher;
+            currentContext = context;
+            currentRuleVersion = ruleVersion;
+            currentListener = listener;
         }
-        String normalized = SpeechAdKeywordSet.normalize(text);
-        if (normalized.isEmpty()) {
+        if (text == null || SpeechAdKeywordSet.normalize(text).isEmpty()) {
             diagnostics.recordQuietly(AdAudioDiagnostics.Code.SPEECH_TEXT_EMPTY);
-            return;
         }
-        if (currentConfig == null || currentConfig.keywords().firstMatch(text).isEmpty()) return;
-        Listener currentListener;
-        AdAudioCandidate candidate;
+
+        List<AdAudioCandidate> candidates = new ArrayList<>();
+        if (currentMatcher != null) {
+            for (SpeechAdMatcher.Match match : currentMatcher.accept(
+                    text, startUs, endUs, callbackTimelineToken)) {
+                AdAudioCandidate candidate = compoundCandidate(
+                        currentContext, currentRuleVersion, match);
+                if (candidate != null) candidates.add(candidate);
+            }
+        }
+        if (currentConfig != null && !currentConfig.keywords().isEmpty()
+                && currentConfig.keywords().firstMatch(text).isPresent()) {
+            long startMs = microsecondsToMilliseconds(startUs);
+            long endMs = saturatedAdd(startMs,
+                    (long) currentConfig.skipSeconds() * 1_000L);
+            if (startMs >= 0L && endMs > startMs) {
+                AdAudioCandidate candidate = keywordCandidate(
+                        currentContext, currentRuleVersion, startMs, endMs);
+                if (candidate != null) candidates.add(candidate);
+            }
+        }
+        if (candidates.isEmpty()) return;
+
         synchronized (this) {
-            if (!isCurrentCallbackLocked(token, callbackTimelineToken) || currentConfig != config) return;
+            if (!isCurrentCallbackLocked(token, callbackTimelineToken)
+                    || currentConfig != config || currentContext != context
+                    || !currentRuleVersion.equals(ruleVersion)) return;
             HostPosition position = hostPosition;
             if (!isEligible(position)
                     || !matchesContext(position.sessionId(), position.generation())) {
                 diagnostics.recordQuietly(AdAudioDiagnostics.Code.CLOCK_UNAVAILABLE);
                 return;
             }
-            // Anchor on the capture timestamp the recognizer reported for this utterance.
-            // hostPosition is only republished on bind/refresh/state change, so during
-            // steady playback it is stale and would place the candidate at the position
-            // playback had when the keyword was said.
-            long startMs = microsecondsToMilliseconds(startUs);
-            if (startMs < 0L) {
-                diagnostics.recordQuietly(AdAudioDiagnostics.Code.CLOCK_UNAVAILABLE);
-                return;
+            // Legacy keywords retain their provider-level cooldown. V2 rules have
+            // independent cooldown state inside SpeechAdMatcher.
+            candidates.removeIf(candidate -> RULE_ID.equals(candidate.ruleId())
+                    && !acceptLegacyMatchLocked(candidate.startMs()));
+            if (candidates.isEmpty()) return;
+            for (AdAudioCandidate ignored : candidates) {
+                diagnostics.recordQuietly(AdAudioDiagnostics.Code.SPEECH_MATCHED);
             }
-            if (lastMatchPositionMs != Long.MIN_VALUE
-                    && startMs >= lastMatchPositionMs
-                    && startMs - lastMatchPositionMs < MATCH_COOLDOWN_MS) {
-                diagnostics.recordQuietly(AdAudioDiagnostics.Code.SPEECH_COOLDOWN);
-                return;
-            }
-            long endMs = saturatedAdd(startMs, (long) config.skipSeconds() * 1_000L);
-            try {
-                candidate = new AdAudioCandidate(
-                        context.sessionId(), context.generation(), RULE_ID, ruleVersion,
-                        startMs, endMs, true, 1.0d, ID);
-            } catch (RuntimeException error) {
-                diagnostics.recordQuietly(AdAudioDiagnostics.Code.MATCHER_ERROR);
-                return;
-            }
-            lastMatchPositionMs = startMs;
-            diagnostics.recordQuietly(AdAudioDiagnostics.Code.SPEECH_MATCHED);
-            currentListener = listener;
         }
-        notifyCandidate(currentListener, candidate);
+        for (AdAudioCandidate candidate : candidates) {
+            notifyCandidate(currentListener, candidate);
+        }
+    }
+
+    private boolean acceptLegacyMatchLocked(long startMs) {
+        if (lastMatchPositionMs != Long.MIN_VALUE
+                && startMs >= lastMatchPositionMs
+                && startMs - lastMatchPositionMs < MATCH_COOLDOWN_MS) {
+            diagnostics.recordQuietly(AdAudioDiagnostics.Code.SPEECH_COOLDOWN);
+            return false;
+        }
+        lastMatchPositionMs = startMs;
+        return true;
+    }
+
+    private AdAudioCandidate keywordCandidate(SessionContext currentContext,
+                                              String currentRuleVersion,
+                                              long startMs, long endMs) {
+        if (currentContext == null) return null;
+        try {
+            return new AdAudioCandidate(
+                    currentContext.sessionId(), currentContext.generation(), RULE_ID,
+                    currentRuleVersion, startMs, endMs, true, 1.0d, ID);
+        } catch (RuntimeException error) {
+            diagnostics.recordQuietly(AdAudioDiagnostics.Code.MATCHER_ERROR);
+            return null;
+        }
+    }
+
+    private AdAudioCandidate compoundCandidate(SessionContext currentContext,
+                                               String currentRuleVersion,
+                                               SpeechAdMatcher.Match match) {
+        if (currentContext == null) return null;
+        long startMs = Math.max(0L, match.firstStartUs() / 1_000L);
+        startMs = startMs > match.preRollMs()
+                ? startMs - match.preRollMs() : 0L;
+        long endMs = saturatedAdd(match.lastEndUs() / 1_000L, match.postRollMs());
+        if (endMs <= startMs) return null;
+        try {
+            return new AdAudioCandidate(
+                    currentContext.sessionId(), currentContext.generation(), match.ruleId(),
+                    currentRuleVersion, startMs, endMs, false, 1.0d, ID);
+        } catch (RuntimeException error) {
+            diagnostics.recordQuietly(AdAudioDiagnostics.Code.MATCHER_ERROR);
+            return null;
+        }
     }
 
     private void processRecognitionError(long token) {
@@ -900,8 +1002,10 @@ public final class SpeechAdSignalProvider implements AdAudioSignalProvider {
         mailbox.clear();
         ownerCommands.removeIf(command -> command instanceof ResetSessionCommand
                 || command instanceof AcceptNextPcmCommand || command instanceof RecognitionResultCommand
-                || command instanceof RecognitionErrorCommand);
+                || command instanceof RecognitionErrorCommand
+                || command instanceof ResetMatcherCommand);
         pendingRecognitionResults = 0;
+        matcherResetScheduled = false;
         acceptScheduled = false;
         if (recognitionSession != null) {
             enqueueOwnerCommandLocked(new ResetSessionCommand(
@@ -963,6 +1067,7 @@ public final class SpeechAdSignalProvider implements AdAudioSignalProvider {
         ownerCommands.removeIf(command -> !(command instanceof CloseSessionCommand)
                 && !(command instanceof CloseCaptureCommand));
         pendingRecognitionResults = 0;
+        matcherResetScheduled = false;
         modelCheckScheduled = false;
         acceptScheduled = false;
     }

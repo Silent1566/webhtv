@@ -379,6 +379,38 @@ public class AdAudioRuntimeControllerTest {
         assertEquals(0, ui.candidateShows);
         runtime.close();
     }
+
+    @Test
+    public void compoundRuleIsRoutedAndForcedToPromptUntilWordTimingIsVerified() {
+        PlaybackMediaSignalHub hub = new PlaybackMediaSignalHub(8);
+        hub.beginSession(0L);
+        FakePlaybackPort playback = new FakePlaybackPort(hub, true);
+        List<FakeSignalProvider> speeches = new ArrayList<>();
+        SpeechAdRule rule = SpeechAdRuleCodec.parse("广告>回来,30").rules().get(0);
+        AdAudioRuntimeController runtime = runtimeWithProviders(
+                hub, playback, emptySnapshot(),
+                ignored -> new NoopAdAudioSignalProvider("probe"), () -> {
+                    FakeSignalProvider provider = new FakeSignalProvider(
+                            SpeechAdSignalProvider.ID);
+                    speeches.add(provider);
+                    return provider;
+                });
+        FakeUiPort ui = new FakeUiPort();
+
+        runtime.setSpeechConfig(SpeechAdConfig.create(
+                true, "", new SpeechAdRuleSet(List.of(rule)), 15, "AUTO"));
+        runtime.start(false);
+        runtime.bindUi(ui);
+
+        assertEquals(1, speeches.size());
+        speeches.get(0).emit(rule.id(), 10_000L, 45_000L);
+
+        assertEquals(1, ui.candidateShows);
+        assertTrue(playback.seekTargets.isEmpty());
+        ui.actions.confirm();
+        assertEquals(List.of(45_000L), playback.seekTargets);
+        runtime.close();
+    }
     @Test
     public void rebindingTheSameUiKeepsTheRunningSpeechSession() {
         PlaybackMediaSignalHub hub = new PlaybackMediaSignalHub(8);

@@ -2,7 +2,7 @@
 
 > 任务：`AD-AUDIO-RULES-V2`
 >
-> 状态：Phase 1 已提交且通过 34 项 JVM 测试，尚未接线。Phase 2A 执行/生命周期隔离已通过最终 50 项 JVM 回归与 Leanback arm64 Debug 构建，实际实现和交付边界见第 15 节。Phase 2B/3/4 未实施，TV 性能与真实语音精度未验收，不代表整项升级完成。
+> 状态：Phase 1 已提交且通过 34 项 JVM 测试。Phase 2A 执行/生命周期隔离已通过最终 50 项 JVM 回归与 Leanback arm64 Debug 构建。Phase 2B 的复合规则、识别区间和路由代码已接线，当前仅产生带明确近似标记的确认候选；词级时间对齐、真实 TV 性能/精度、Phase 3/4 仍未完成，不代表整项升级完成。当前交付记录见第 16 节。
 >
 > 编写日期：2026-09-08（Asia/Shanghai）
 >
@@ -631,3 +631,64 @@ bash ./gradlew :app:testLeanbackArm64_v8aDebugUnitTest \
 - **未解决边界**：真实 TV/模型性能精度、实际设备端到端、同配置实现前 APK 增量基线；native 永不返回只能保留待关闭。2B/3/4 未实施，无安装/push/发布。
 - **回滚锚点**：2A annotated recovery tag 保留已验证实现；运行时回退基线 `411171eadfe07906b912210f5a669711f4476c11`，采用可逆 revert，不覆盖用户脏文件。
 - **唯一下一步**：取得 Phase 2B（词时间对齐与复合规则接线）的明确阶段批准；未批准前不修改 matcher/配置/路由，不把代码门槛冒充设备发布门槛。
+
+## 16. Phase 2B 复合规则接线（2026-09-08）
+
+### 16.1 实际实施范围
+
+本阶段严格沿用第 13.4 节的 WebHTV 适配路线，只完成 matcher/config/routing 与候选策略接线；不修改 UI、`SpeechAdSetting` 持久化入口、远程语音规则来源、Media3/原生依赖或播放器坐标转换。
+
+- `SpeechAdConfig` 增加可选不可变 `SpeechAdRuleSet`，保留旧四参数构造和 `create(enabled, keywords, ...)`，因此旧关键词配置、默认关闭和备份 key 语义不变。
+- `SpeechAdSignalProvider` 在单一 speech owner 上使用 `SpeechAdMatcher`；识别回调完整透传 `startUs/endUs`，复合规则跨结果命中时输出规则 ID、原始 capture 区间和前后窗口。Provider 不读取媒体 duration、不加 media anchor、不调用 `seekTo`。
+- 复合候选的边界仍是整个识别片段边界，`fullMatch=false` 表示其时间边界是近似的；现阶段不把 Sherpa 的 segment 终点冒充词级终点。
+- `AdAudioRuntimeController` 将复合规则 ID 纳入当前路由白名单，并将规则摘要并入有界 routing version；超长既有 source version 会先做固定 SHA-256 前缀收敛，避免破坏 mux/policy 的 128 字符合同。
+- `AdSkipPolicyController` 增加显式 prompt-only rule ID 集合。复合规则即使用户选择语音 AUTO，也只能进入确认路径；确认后仍由既有 `AdSkipCoordinator` 完成唯一的 capture→media 映射、duration/seekability/fresh-clock 校验和 seek。
+- 结果队列溢出或超长识别结果会丢弃当前文本连续性并重置 matcher；timeline reset、seek/source 生命周期和旧 callback 代际校验继续由 Provider/Hub 负责。
+
+### 16.2 验收边界与未完成项
+
+已覆盖的代码合同：
+
+- `*`、`>`、ASCII/中文动作窗口、跨识别片段、冷却和 matcher reset 由 Phase 1 测试继续覆盖；本阶段新增 Provider 端点传递、复合候选 capture 区间、timeline 隔离、规则配置摘要和 Runtime 白名单/确认模式测试。
+- 旧平面关键词仍使用 `SpeechAdKeywordSet` 的原有 ASCII 单词边界和 provider 冷却；复合规则使用独立 ID、独立 matcher 状态，不把两种协议合并。
+- 语音与指纹候选仍共享现有 multiplexer/policy/coordinator 状态机；不会绕过 Coordinator 直接 seek。Coordinator 在 prompt/seek/undo 状态中拒绝后续重复操作，因此同一时刻最多一次有效跳转。
+- 模型未就绪、识别异常、输入超限、队列溢出和无效时间继续 fail-open；不记录识别正文、规则正文、PCM、媒体 URL 或请求头。
+
+明确未宣称完成：
+
+- Sherpa 当前公开 Java API 未提供可泛化、已校准的字级起止范围；本阶段没有新增 token/timestamp 硬配，也没有把整个 segment 的近似终点开放给 AUTO。目标模型/设备的合法标注音频误差（建议最大额外误差 500 ms）仍待实测和批准。
+- 未实现 Phase 3 的内置/用户导入 UI、冲突展示、规则持久化和语音/指纹状态页面；未实现 Phase 4 的 TV 灰度、自动模式放量和设备指标验收。
+- 未安装 APK、未连接或修改设备、未 push、未发布；旧指纹远程规则协议和缓存链路未改。
+
+### 16.3 最终验证计划
+
+收尾验证已按计划各执行一次以下定向 JVM 回归和一次既有 Leanback arm64 Debug 构建；这证明代码/构建门槛，不替代真实 TV/模型验收：
+
+```bash
+bash ./gradlew :app:testLeanbackArm64_v8aDebugUnitTest \
+  --tests 'com.fongmi.android.tv.ad.audio.SpeechAdRuleCodecTest' \
+  --tests 'com.fongmi.android.tv.ad.audio.SpeechAdMatcherTest' \
+  --tests 'com.fongmi.android.tv.ad.audio.SpeechAdConfigTest' \
+  --tests 'com.fongmi.android.tv.ad.audio.SpeechAdSignalProviderTest' \
+  --tests 'com.fongmi.android.tv.ad.audio.AdAudioRuntimeControllerTest' \
+  --tests 'com.fongmi.android.tv.ad.audio.AdSkipPolicyControllerTest' \
+  --tests 'com.fongmi.android.tv.ad.audio.SpeechAdRuntimeEndToEndTest' \
+  --tests 'com.fongmi.android.tv.subtitle.RealtimeSubtitleRecognizerTest' \
+  --tests 'com.fongmi.android.tv.ad.audio.AdAudioDiagnosticsTest' \
+  --console=plain
+bash ./gradlew :app:assembleLeanbackArm64_v8aDebug --console=plain
+```
+
+结果：`BUILD SUCCESSFUL in 10s`；9 个测试类共 **106 tests，0 failures，0 errors，0 skipped**。分类计数为 `AdAudioDiagnosticsTest=3`、`AdAudioRuntimeControllerTest=21`、`AdSkipPolicyControllerTest=9`、`SpeechAdConfigTest=10`、`SpeechAdMatcherTest=16`、`SpeechAdRuleCodecTest=18`、`SpeechAdRuntimeEndToEndTest=1`、`SpeechAdSignalProviderTest=23`、`RealtimeSubtitleRecognizerTest=5`。完整日志：`/tmp/ad-audio-p2b-final-tests.log`；XML：`app/build/test-results/testLeanbackArm64_v8aDebugUnitTest/`。
+
+随后一次构建结果：`BUILD SUCCESSFUL in 47s`；日志：`/tmp/ad-audio-p2b-final-assemble.log`。APK 为 `app/build/outputs/apk/leanbackArm64_v8a/debug/app-leanback-arm64_v8a-debug.apk`，字节数 `188769225`，SHA-256 `0fc9c0ca0e315e57fef6c418f6b3e3d8f8a64cb4f4bc9b7890e31f2d9eea6bc4`。`git diff --check` 通过。上述 JVM/构建结果不替代真实 TV/模型验收；未安装 APK、未 push 或发布。
+
+### Recovery anchor
+
+- **目标/验收**：Phase 2B 复合语音规则接线完成；复合候选使用识别 `startUs/endUs`、保持 capture 坐标、进入规则白名单，并由显式 prompt-only 策略阻止未经词级校准的 AUTO。最终定向 JVM/构建尚未执行。
+- **工作区/定位**：分支 `dev2`；基线 `1e5642857f326e907f5164001d31d5ea84d3dacf`；guard `AD-AUDIO-RULES-V2-P2B`；当前任务改动以 guard scope/diff 为准，初始 protected 为空。
+- **当前文件/符号**：`SpeechAdConfig`、`SpeechAdSignalProvider.processRecognitionResult/ResetMatcherCommand`、`AdAudioRuntimeController.routingSnapshotLocked/installModeResolver`、`AdSkipPolicyController.setPromptOnlyRuleIds`，以及对应配置/Provider/Runtime 测试。
+- **已完成证据**：最终定向回归 106/0/0/0（tests/failures/errors/skipped），9 个测试 XML；Leanback arm64 Debug 构建 47 秒通过，APK 188769225 bytes，SHA-256 `0fc9c0ca0e315e57fef6c418f6b3e3d8f8a64cb4f4bc9b7890e31f2d9eea6bc4`；日志路径见第 16.3 节。
+- **未解决边界**：词级时间对齐、500 ms 误差门槛、真实 TV/模型性能、Phase 3/4；无安装/push/发布。
+- **回滚锚点**：Phase 2A annotated tag `recovery/AD-AUDIO-RULES-V2-P2A/20260908204153-1e5642857f32`；本阶段采用单 commit + `recovery/AD-AUDIO-RULES-V2-P2B/<timestamp>`，回滚用可逆 revert，不覆盖其他工作。
+- **唯一下一步**：用 `task_guard.sh finish` 原子提交本阶段代码、测试与设计记录，并创建 `recovery/AD-AUDIO-RULES-V2-P2B/<timestamp>` annotated 本地恢复标签；不把 JVM/构建通过写成 TV/模型验收通过。

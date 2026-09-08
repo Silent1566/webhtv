@@ -56,6 +56,58 @@ public class SpeechAdSignalProviderTest {
     }
 
     @Test
+    public void compoundRuleUsesRecognitionEndAndRemainsAnApproximateCandidate() {
+        SpeechAdConfig config = SpeechAdConfig.createWithRules(
+                true, "", "广告之后*>马上回来，[2,30]", 15, "AUTO");
+        Fixture fixture = new Fixture(config, Runnable::run, 8);
+        fixture.host(1_000L, 60_000L, true, false);
+        fixture.publish(new float[] {0.1f}, 16_000, 10_000L);
+        FakeSession recognizer = fixture.factory.current();
+
+        recognizer.emitAt("广告", 10_000_000L, 11_000_000L,
+                recognizer.lastTimelineToken);
+        recognizer.emitAt("之后", 12_000_000L, 13_000_000L,
+                recognizer.lastTimelineToken);
+        recognizer.emitAt("马上回来", 14_000_000L, 15_000_000L,
+                recognizer.lastTimelineToken);
+
+        assertEquals(1, fixture.emitted.size());
+        AdAudioSignalProvider.AdAudioCandidate candidate = fixture.emitted.get(0);
+        assertEquals(SpeechAdRuleCodec.parse("广告之后*>马上回来，[2,30]").rules().get(0).id(),
+                candidate.ruleId());
+        assertEquals(8_000L, candidate.startMs());
+        assertEquals(45_000L, candidate.endMs());
+        assertFalse(candidate.fullMatch());
+        assertEquals(1L, fixture.diagnostics.count(AdAudioDiagnostics.Code.SPEECH_MATCHED));
+        fixture.close();
+    }
+
+    @Test
+    public void compoundRuleResetsOnTimelineAndDoesNotJoinStaleText() {
+        SpeechAdConfig config = SpeechAdConfig.createWithRules(
+                true, "", "广告>回来,30", 15, "PROMPT");
+        Fixture fixture = new Fixture(config, Runnable::run, 8);
+        fixture.host(1_000L, 60_000L, true, false);
+        fixture.publish(new float[] {0.1f}, 16_000, 10_000L);
+        FakeSession recognizer = fixture.factory.current();
+        int staleTimeline = recognizer.lastTimelineToken;
+        recognizer.emitAt("广告", 10_000_000L, 11_000_000L, staleTimeline);
+
+        PlaybackMediaSignalHub.Session reset = fixture.hub.resetTimeline(
+                20_000L, PlaybackMediaSignalHub.ResetReason.SEEK);
+        fixture.provider.onHostPosition(host(reset, 20_000L, 60_000L, true, false));
+        recognizer.emitAt("回来", 12_000_000L, 13_000_000L, staleTimeline);
+        assertTrue(fixture.emitted.isEmpty());
+
+        fixture.hub.publishPcm(reset.frame(new float[] {0.1f}, 16_000, 20_000L));
+        int currentTimeline = recognizer.lastTimelineToken;
+        recognizer.emitAt("广告", 20_000_000L, 21_000_000L, currentTimeline);
+        recognizer.emitAt("回来", 22_000_000L, 23_000_000L, currentTimeline);
+        assertEquals(1, fixture.emitted.size());
+        fixture.close();
+    }
+
+    @Test
     public void providerDoesNotRunWhenDisabledModelKeywordsOrVodClockAreInvalid() {
         Fixture missingModel = new Fixture(false, config(true, "\u8d4c\u573a", 15), Runnable::run, 8);
         missingModel.host(1_000L, 20_000L, true, false);
@@ -639,6 +691,15 @@ public class SpeechAdSignalProviderTest {
                         Executor worker, int mailboxCapacity) {
             this.worker = worker;
             factory = new FakeRecognizerFactory(modelReady);
+            provider = new SpeechAdSignalProvider(
+                    hub, factory, () -> config, mailboxCapacity, worker, diagnostics);
+            provider.setEnabled(true);
+            provider.start(context(session), rules(), listener(emitted, errors, resets));
+        }
+
+        private Fixture(SpeechAdConfig config, Executor worker, int mailboxCapacity) {
+            this.worker = worker;
+            factory = new FakeRecognizerFactory(true);
             provider = new SpeechAdSignalProvider(
                     hub, factory, () -> config, mailboxCapacity, worker, diagnostics);
             provider.setEnabled(true);

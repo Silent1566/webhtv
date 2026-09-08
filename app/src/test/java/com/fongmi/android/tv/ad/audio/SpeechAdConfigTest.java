@@ -42,6 +42,29 @@ public class SpeechAdConfigTest {
     }
 
     @Test
+    public void compoundRulesAreOptionalAndHaveStableBoundedRoutingVersion() {
+        SpeechAdConfig first = SpeechAdConfig.createWithRules(
+                true, "", "广告之后*>马上回来，[2,30]", 15, "AUTO");
+        SpeechAdConfig second = SpeechAdConfig.createWithRules(
+                true, "", "广告之后*>马上回来，[2,30]", 15, "AUTO");
+
+        assertTrue(first.hasSpeechRules());
+        assertEquals(1, first.rules().rules().size());
+        assertEquals(first.rulesVersion(), second.rulesVersion());
+        assertTrue(first.rulesVersion().length() <= 16);
+        assertEquals(AdSkipPolicyController.Mode.AUTO, first.mode());
+    }
+
+    @Test
+    public void legacyConfigKeepsAnEmptyCompoundRuleSnapshot() {
+        SpeechAdConfig config = SpeechAdConfig.create(true, "赌场", 15, "PROMPT");
+
+        assertTrue(config.hasSpeechRules());
+        assertTrue(config.rules().isEmpty());
+        assertEquals("", config.rulesVersion());
+    }
+
+    @Test
     public void snapshotKeywordsAreImmutable() {
         SpeechAdConfig config = SpeechAdConfig.create(true, "赌场,棋牌", 15, "PROMPT");
         try {

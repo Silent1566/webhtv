@@ -4,6 +4,7 @@ import com.fongmi.android.tv.player.audio.PlaybackMediaClock;
 import com.fongmi.android.tv.player.audio.PlaybackMediaSignalHub;
 import com.fongmi.android.tv.subtitle.SpeechRecognitionFactory;
 
+import java.nio.charset.StandardCharsets;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
@@ -302,7 +303,7 @@ public final class AdAudioRuntimeController implements AutoCloseable {
 
     private void refreshLocked() {
         boolean fingerprintReady = enabled && !snapshot.hasError() && snapshot.hasRules();
-        boolean speechReady = speechConfig.enabled() && !speechConfig.keywords().isEmpty();
+        boolean speechReady = speechConfig.enabled() && speechConfig.hasSpeechRules();
         if (ui == null || (!fingerprintReady && !speechReady)) {
             // Transition-only: refreshLocked runs every 5s from the host position pump, and
             // an unsampled line here would churn the bounded debug-log ring.
@@ -416,7 +417,14 @@ public final class AdAudioRuntimeController implements AutoCloseable {
                     .map(AudioFingerprintRule::id)
                     .forEach(allowedRuleIds::add);
         }
-        if (speechReady) allowedRuleIds.add(SpeechAdSignalProvider.RULE_ID);
+        if (speechReady) {
+            if (!speechConfig.keywords().isEmpty()) {
+                allowedRuleIds.add(SpeechAdSignalProvider.RULE_ID);
+            }
+            speechConfig.rules().rules().stream()
+                    .map(SpeechAdRule::id)
+                    .forEach(allowedRuleIds::add);
+        }
         AdAudioDetectionMultiplexer nextMux = new AdAudioDetectionMultiplexer(
                 context, routingSnapshot.version(), Set.copyOf(allowedRuleIds),
                 RUNTIME_CANDIDATE_CAPACITY, output);
@@ -545,14 +553,47 @@ public final class AdAudioRuntimeController implements AutoCloseable {
     }
 
     private AdAudioRuleSnapshot routingSnapshotLocked() {
-        if (!snapshot.version().isEmpty()) return snapshot;
+        String version = snapshot.version().isEmpty()
+                ? "speech-runtime-v1" : snapshot.version();
+        if (!speechConfig.rules().isEmpty()) {
+            version = withSpeechRulesVersion(version, speechConfig.rulesVersion());
+        }
+        if (version.equals(snapshot.version())) return snapshot;
         return new AdAudioRuleSnapshot(
-                snapshot.sourceId(), "speech-runtime-v1", snapshot.ruleSet(),
+                snapshot.sourceId(), version, snapshot.ruleSet(),
                 snapshot.warnings(), snapshot.lastError(), snapshot.probeSidecar());
+    }
+
+    private static String withSpeechRulesVersion(String baseVersion, String rulesVersion) {
+        String suffix = ":speech-v2-" + rulesVersion;
+        if (baseVersion.length() + suffix.length() <= 128) {
+            return baseVersion + suffix;
+        }
+        // AdAudioDetectionMultiplexer and AdSkipPolicyController intentionally bound
+        // routing versions. Preserve a deterministic identity without allowing an
+        // unusually long external source version to break speech activation.
+        return "speech-base-" + sha256Prefix(baseVersion) + suffix;
+    }
+
+    private static String sha256Prefix(String value) {
+        try {
+            byte[] digest = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(value.getBytes(StandardCharsets.UTF_8));
+            StringBuilder result = new StringBuilder(16);
+            for (int i = 0; i < 8; i++) {
+                result.append(String.format("%02x", digest[i] & 0xff));
+            }
+            return result.toString();
+        } catch (java.security.NoSuchAlgorithmException error) {
+            throw new IllegalStateException("SHA-256 unavailable", error);
+        }
     }
 
     private void installModeResolver(AdSkipPolicyController target) {
         target.setMode(skipMode);
+        target.setPromptOnlyRuleIds(speechConfig.rules().rules().stream()
+                .map(SpeechAdRule::id)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet()));
         target.setModeResolver(providerId -> SpeechAdSignalProvider.ID.equals(providerId)
                 ? speechConfig.mode() : skipMode);
     }
