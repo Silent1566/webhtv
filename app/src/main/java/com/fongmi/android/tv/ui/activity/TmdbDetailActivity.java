@@ -6118,7 +6118,6 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private void showTmdbEpisodeDetail(Episode episode, int episodeNumber, TmdbEpisode boundTmdbEpisode, RecyclerView returnRecycler) {
         android.content.DialogInterface.OnDismissListener dismissListener = d -> {
             if (binding == null || returnRecycler == null) return;
-            View previousFocus = returnRecycler.getRootView().findFocus();
             returnRecycler.post(() -> {
                 if (binding == null || isFinishing() || isDestroyed() || !returnRecycler.isAttachedToWindow()) return;
                 rerenderEpisodeViewportOnly(false, true, true);
@@ -6130,8 +6129,6 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
                 // post/postOnAnimation 不保证刷新已布局；在真实布局后的 pre-draw 恢复精确卡片。
                 OneShotPreDrawListener.add(returnRecycler, () -> {
                     if (binding == null || isFinishing() || isDestroyed() || !returnRecycler.isShown()) return;
-                    View focus = returnRecycler.getRootView().findFocus();
-                    if (focus != null && focus != previousFocus && !isFocusInside(focus, returnRecycler)) return;
                     restoreEpisodeDetailFocus(returnRecycler, episode);
                 });
                 recoverEpisodeViewportIfDetached();
@@ -10152,17 +10149,32 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         RecyclerView.Adapter<?> adapter = recycler.getAdapter();
         if (adapter == null || adapter.getItemCount() == 0) return false;
         int target = Math.max(0, Math.min(position, adapter.getItemCount() - 1));
-        recycler.stopScroll();
-        RecyclerView.ViewHolder visibleHolder = recycler.findViewHolderForAdapterPosition(target);
-        if (visibleHolder != null) {
-            visibleHolder.itemView.requestFocus();
+        return focusTmdbRecyclerItem(recycler, target, 0);
+    }
+
+    private boolean focusTmdbRecyclerItem(RecyclerView recycler, int target, int attempt) {
+        if (binding == null || recycler == null || recycler.getVisibility() != View.VISIBLE) return false;
+        RecyclerView.Adapter<?> adapter = recycler.getAdapter();
+        if (adapter == null || adapter.getItemCount() == 0) return false;
+        int boundedTarget = Math.max(0, Math.min(target, adapter.getItemCount() - 1));
+        if (recycler.isComputingLayout()) {
+            if (attempt >= 6) return true;
+            recycler.postOnAnimation(() -> focusTmdbRecyclerItem(recycler, boundedTarget, attempt + 1));
             return true;
         }
-        recycler.scrollToPosition(target);
-        recycler.post(() -> {
-            RecyclerView.ViewHolder holder = recycler.findViewHolderForAdapterPosition(target);
-            if (holder != null) holder.itemView.requestFocus();
-        });
+        recycler.stopScroll();
+        RecyclerView.ViewHolder visibleHolder = recycler.findViewHolderForAdapterPosition(boundedTarget);
+        if (visibleHolder != null) {
+            boolean requested = visibleHolder.itemView.requestFocus();
+            if (!requested) requested = visibleHolder.itemView.requestFocusFromTouch();
+            if (requested && getCurrentFocus() == visibleHolder.itemView) return true;
+            if (attempt >= 6) return true;
+            recycler.postOnAnimation(() -> focusTmdbRecyclerItem(recycler, boundedTarget, attempt + 1));
+            return true;
+        }
+        if (attempt == 0) recycler.scrollToPosition(boundedTarget);
+        if (attempt >= 6) return true;
+        recycler.postOnAnimation(() -> focusTmdbRecyclerItem(recycler, boundedTarget, attempt + 1));
         return true;
     }
 
