@@ -117,11 +117,14 @@ public class VodActivity extends BaseActivity implements TypeAdapter.OnClickList
                 mBinding.recycler.setSelectedPosition(position);
                 if (mPendingCategoryFocus) {
                     mPendingCategoryFocus = false;
-                    getFragment().scrollContentToTop();
                     mBinding.recycler.post(() -> {
-                        if (mBinding.pager.getCurrentItem() != position) return;
+                        if (isFinishing() || isDestroyed() || mBinding.pager.getCurrentItem() != position) return;
+                        // A newly loaded page may have no cards yet; the host must reveal its header.
+                        mBinding.recycler.setVisibility(View.VISIBLE);
+                        mBinding.recycler.requestFocus();
+                        getFragment().scrollContentToTop();
                         mBinding.recycler.setSelectedPosition(position, holder -> {
-                            if (mBinding.pager.getCurrentItem() == position) holder.itemView.requestFocus();
+                            if (mBinding.pager.getCurrentItem() == position && mBinding.recycler.getSelectedPosition() == position) holder.itemView.requestFocus();
                         });
                     });
                     return;

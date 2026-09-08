@@ -284,14 +284,20 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
 
     private void focusCategoryButton(Class item) {
         showCategoryContent(item);
+        // Complete the switch before checking the new page; otherwise the posted callback can
+        // run while the target fragment is not added yet and drop the header/focus restoration.
+        getSupportFragmentManager().executePendingTransactions();
         mBinding.typeRecycler.post(() -> {
-            if (!isCurrentCategory(item)) return;
+            if (isFinishing() || isDestroyed() || !isCurrentCategory(item)) return;
             int position = mTypeAdapter.indexOf(item);
             if (position < 0 || mBinding.typeRecycler.getSelectedPosition() != position) return;
             mBinding.typeRecycler.setVisibility(View.VISIBLE);
             updateToolbarVisibility(true);
+            mFolder.scrollContentToTop();
             mBinding.typeRecycler.setSelectedPosition(position, holder -> {
-                if (isCurrentCategory(item)) holder.itemView.requestFocus();
+                if (isCurrentCategory(item) && mBinding.typeRecycler.getSelectedPosition() == position) {
+                    holder.itemView.requestFocus();
+                }
             });
         });
     }

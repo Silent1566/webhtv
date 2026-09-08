@@ -71,6 +71,20 @@ public class HomeCategoryNavigationSourceTest {
     }
 
     @Test
+    public void edgeSwitchCompletesCategoryBeforeRevealingHeaderAndRestoringFocus() throws Exception {
+        String home = homeActivity();
+        String edge = method(home, "public void onCategoryContentHorizontalEdge(Class item, int contentRow, boolean towardEnd)", "private Class getAdjacentCategory(Class item, boolean towardEnd)");
+        String focus = method(home, "private void focusCategoryButton(Class item)", "private void showHomeContent()");
+
+        assertTrue("edge navigation must use the adjacent category button path", edge.contains("focusCategoryButton(item);"));
+        assertTrue("the category transaction must complete before the callback checks the new page", focus.contains("getSupportFragmentManager().executePendingTransactions();"));
+        assertTrue("the callback must reject stale or unfinished category switches", focus.contains("!isCurrentCategory(item)"));
+        assertTrue("the type row must be shown before restoring button focus", focus.indexOf("mBinding.typeRecycler.setVisibility(View.VISIBLE);") < focus.indexOf("mBinding.typeRecycler.setSelectedPosition(position, holder ->"));
+        assertTrue("the switched category must explicitly return to its first row", focus.contains("mFolder.scrollContentToTop();"));
+        assertTrue("a stale holder callback must not steal focus", focus.contains("mBinding.typeRecycler.getSelectedPosition() == position"));
+    }
+
+    @Test
     public void firstCategoryContentRowMovesUpToSelectedCategoryHeader() throws Exception {
         String grid = read(source("leanback", "java", "com", "fongmi", "android", "tv", "ui", "custom", "CustomVerticalGridView.java"));
         String dispatch = method(grid, "public boolean dispatchKeyEvent(@NonNull KeyEvent event)", "private boolean focusHeader()");

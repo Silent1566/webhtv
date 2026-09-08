@@ -23,6 +23,23 @@ public class VodActivityCategoryEdgeTest {
         assertTrue("edge navigation must cancel a queued category pager update", source.contains("App.removeCallbacks(mRunnable);"));
     }
 
+    @Test
+    public void hiddenCategoryHeaderIsRevealedBeforeRestoringFocusAndScrolling() throws Exception {
+        String source = read("app/src/leanback/java/com/fongmi/android/tv/ui/activity/VodActivity.java");
+        int start = source.indexOf("if (mPendingCategoryFocus)");
+        int end = source.indexOf("return;", source.indexOf("});", start));
+        String restore = source.substring(start, end);
+        int post = restore.indexOf("mBinding.recycler.post(() -> {");
+        int show = restore.indexOf("mBinding.recycler.setVisibility(View.VISIBLE);");
+        int focus = restore.indexOf("mBinding.recycler.requestFocus();");
+        int top = restore.indexOf("getFragment().scrollContentToTop();");
+
+        assertTrue("the host must reveal the header even before page data arrives", post >= 0 && show > post);
+        assertTrue("the hidden category header cannot receive focus before it is shown", focus > show);
+        assertTrue("scrolling the new page must not retain focus on an old content row", top > focus);
+        assertTrue("a stale page callback must not focus a different category", restore.contains("mBinding.recycler.getSelectedPosition() == position"));
+    }
+
     private static String read(String path) throws Exception {
         Path direct = Path.of(path);
         if (Files.exists(direct)) return Files.readString(direct, StandardCharsets.UTF_8);
