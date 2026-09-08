@@ -30,3 +30,12 @@
 ## 下一步
 
 执行 `bash .codex/scripts/task_guard.sh finish`，随后推送 `dev1`、创建中文 PR 到 `beta`，最后 fetch 远端并核验 PR/分支状态。
+
+## 关闭证据
+
+- `task_guard.sh finish` 已创建提交：`e4b6e9e169ac155bb55540ed6de551c71d9287a0`。
+- 已创建并推送恢复标签：`recovery/beta-sync-review-dev1-20260908/20260908173812-e4b6e9e169ac`。
+- 已推送 `dev1` 至 `origin`；最终 `HEAD == origin/dev1 == e4b6e9e169ac155bb55540ed6de551c71d9287a0`。
+- 已创建中文 PR：[#238](https://github.com/Silent1566/webhtv/pull/238)，目标 `beta`，当前状态 `OPEN`，GitHub `mergeStateStatus=CLEAN`。
+- 已执行 `git fetch --prune origin` 和 `git pull --ff-only origin dev1`，结果为 `Already up to date`；工作树干净。
+- **当前状态：** 本任务代码与审查交付已完成；无后续动作。
