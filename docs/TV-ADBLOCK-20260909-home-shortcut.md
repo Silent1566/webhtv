@@ -1,5 +1,7 @@
 # TV-ADBLOCK-20260909：去广告总开关前置到首页
 
+> 历史纠正：2026-09-09 用户明确目标为“增强功能 → 站点注入”的总启用开关，不是去广告总开关。本记录对应的实现已由 `TV-CUSTOM-CSP-20260909` 纠正并 supersede；当前代码不再保留本记录中的去广告首页按钮。
+
 ## Recovery anchor
 
 - 目标：让 TV 用户从首页通过一个可聚焦的快捷按钮启用/禁用去广告总开关，避免进入设置页多层操作。
@@ -104,4 +106,4 @@
 - 最终验证（2026-09-09）：`bash .codex/scripts/task_guard.sh check` 通过；`:app:testLeanbackArm64_v8aDebugUnitTest --tests com.fongmi.android.tv.ui.bean.HomeButtonSourceTest` 通过；`:app:compileLeanbackArm64_v8aDebugJavaWithJavac` 通过；`git diff --check` 通过。
 - 构建过程只出现仓库既有资源警告（`values` 中未知 `g` 命名空间、既有非 positional string substitution、CXX 32-bit 提示），没有本任务新增错误。
 - 设备审计：ADB 当前仅连接四台 Android 9 tablet（SM-N9700、V1923A、HD1910、NX627J），因此没有把手机/平板运行结果冒充 TV 遥控器验收。
-- 状态：代码实现和定向验证完成；待原子提交与恢复 tag。
+- 状态：历史误判实现已提交；目标经用户澄清后由 `docs/TV-CUSTOM-CSP-20260909-home-shortcut.md` 纠正，不再作为当前产品行为依据。

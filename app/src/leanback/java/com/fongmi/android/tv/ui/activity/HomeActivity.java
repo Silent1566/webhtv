@@ -55,6 +55,7 @@ import com.fongmi.android.tv.service.DLNARendererService;
 import com.fongmi.android.tv.service.PlaybackService;
 import com.fongmi.android.tv.setting.AutoBackupPolicy;
 import com.fongmi.android.tv.setting.AppBranding;
+import com.fongmi.android.tv.setting.CustomCspSetting;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.adapter.BaseDiffCallback;
 import com.fongmi.android.tv.ui.adapter.TypeAdapter;
@@ -912,9 +913,31 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
         else if (item.getResId() == R.string.home_setting) SettingActivity.start(this);
         else if (item.getResId() == R.string.home_cast) PushActivity.start(this, 3);
         else if (item.getResId() == R.string.home_history_button) HistoryActivity.start(this);
-        else if (item.getResId() == R.string.home_adblock) {
-            Setting.putAdblock(!Setting.isAdblock());
-            setFunc();
+        else if (item.getResId() == R.string.home_custom_csp) toggleCustomCsp();
+    }
+
+    private void toggleCustomCsp() {
+        PermissionUtil.requestFile(this, granted -> {
+            if (!granted) {
+                Notify.show(R.string.setting_custom_csp_permission_required);
+                return;
+            }
+            if (isFinishing() || isDestroyed()) return;
+            try {
+                CustomCspSetting.toggleEnabled();
+                setFunc();
+                reloadCustomCspConfigs();
+            } catch (Throwable e) {
+                Notify.show(e.getMessage());
+            }
+        });
+    }
+
+    private void reloadCustomCspConfigs() {
+        reloadConfig();
+        if (LiveConfig.hasLoadedLives() || !LiveConfig.get().getConfig().isEmpty() || CustomCspSetting.hasLives()) {
+            LiveConfig.get().clear().config(LiveConfig.get().getConfig()).load(new Callback() {
+            });
         }
     }
 

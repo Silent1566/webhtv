@@ -9,9 +9,9 @@
     <string name="home_push">推送</string>
     <string name="home_cast">投屏</string>
     <string name="home_setting">設定</string>
-    <string name="home_adblock">去廣告</string>
-    <string name="home_adblock_on">去廣告：開</string>
-    <string name="home_adblock_off">去廣告：關</string>
+    <string name="home_custom_csp">站點注入</string>
+    <string name="home_custom_csp_on">站點注入：開</string>
+    <string name="home_custom_csp_off">站點注入：關</string>
     <string name="control_speed">倍速</string>
     <string name="control_scale">縮放</string>
     <string name="control_episode_column">長標題列數</string>
