@@ -20,7 +20,7 @@ public class SiteInjectHomeButtonSourceTest {
     }
 
     @Test
-    public void functionButtonShowsRegistryStateAndHomeTogglesIt() throws Exception {
+    public void functionButtonShowsRegistryStateAndHomeOpensTheEditor() throws Exception {
         String func = read("app/src/leanback/java/com/fongmi/android/tv/bean/Func.java");
         assertTrue(func.contains("CustomCspSetting.status()"));
         assertTrue(func.contains("R.string.home_custom_csp_on"));
@@ -29,18 +29,19 @@ public class SiteInjectHomeButtonSourceTest {
         assertTrue(func.contains("getText().equals(other.getText())"));
         assertTrue(!func.contains("home_adblock"));
 
-        String csp = read("app/src/main/java/com/fongmi/android/tv/setting/CustomCspSetting.java");
-        assertTrue(csp.contains("public static boolean toggleEnabled()"));
-        assertTrue(csp.contains("boolean enabled = !registry.isEnabled()"));
-        assertTrue(csp.contains("save(registry)"));
-
         String home = read("app/src/leanback/java/com/fongmi/android/tv/ui/activity/HomeActivity.java");
-        assertTrue(home.contains("else if (item.getResId() == R.string.home_custom_csp) toggleCustomCsp()"));
+        assertTrue(home.contains("else if (item.getResId() == R.string.home_custom_csp) openCustomCsp()"));
         assertTrue(home.contains("PermissionUtil.requestFile(this"));
-        assertTrue(home.contains("CustomCspSetting.toggleEnabled()"));
-        assertTrue(home.contains("reloadCustomCspConfigs()"));
-        assertTrue(home.contains("CustomCspSetting.hasLives()"));
+        assertTrue(home.contains("CustomCspDialog.show(this, this::setFunc)"));
+        assertTrue(home.contains("getSupportFragmentManager().isStateSaved()"));
         assertTrue(!home.contains("home_adblock"));
+
+        String dialog = read("app/src/main/java/com/fongmi/android/tv/ui/dialog/CustomCspDialog.java");
+        assertTrue(dialog.contains("public static void show(FragmentActivity activity, Runnable callback)"));
+        assertTrue(dialog.contains("CustomCspSetting.save(registry)"));
+
+        String csp = read("app/src/main/java/com/fongmi/android/tv/setting/CustomCspSetting.java");
+        assertTrue(!csp.contains("toggleEnabled()"));
     }
 
     @Test

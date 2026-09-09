@@ -64,6 +64,7 @@ import com.fongmi.android.tv.ui.helper.TouchOptimizationHelper;
 import com.fongmi.android.tv.ui.custom.CustomRowPresenter;
 import com.fongmi.android.tv.ui.custom.CustomSelector;
 import com.fongmi.android.tv.ui.custom.CustomTitleView;
+import com.fongmi.android.tv.ui.dialog.CustomCspDialog;
 import com.fongmi.android.tv.ui.dialog.HistoryDialog;
 import com.fongmi.android.tv.ui.dialog.ExitConfirmDialog;
 import com.fongmi.android.tv.ui.dialog.HomeMenuDialog;
@@ -913,32 +914,15 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
         else if (item.getResId() == R.string.home_setting) SettingActivity.start(this);
         else if (item.getResId() == R.string.home_cast) PushActivity.start(this, 3);
         else if (item.getResId() == R.string.home_history_button) HistoryActivity.start(this);
-        else if (item.getResId() == R.string.home_custom_csp) toggleCustomCsp();
+        else if (item.getResId() == R.string.home_custom_csp) openCustomCsp();
     }
 
-    private void toggleCustomCsp() {
+    private void openCustomCsp() {
         PermissionUtil.requestFile(this, granted -> {
-            if (!granted) {
-                Notify.show(R.string.setting_custom_csp_permission_required);
-                return;
-            }
-            if (isFinishing() || isDestroyed()) return;
-            try {
-                CustomCspSetting.toggleEnabled();
-                setFunc();
-                reloadCustomCspConfigs();
-            } catch (Throwable e) {
-                Notify.show(e.getMessage());
-            }
+            if (isFinishing() || isDestroyed() || getSupportFragmentManager().isStateSaved()) return;
+            if (granted) CustomCspDialog.show(this, this::setFunc);
+            else Notify.show(R.string.setting_custom_csp_permission_required);
         });
-    }
-
-    private void reloadCustomCspConfigs() {
-        reloadConfig();
-        if (LiveConfig.hasLoadedLives() || !LiveConfig.get().getConfig().isEmpty() || CustomCspSetting.hasLives()) {
-            LiveConfig.get().clear().config(LiveConfig.get().getConfig()).load(new Callback() {
-            });
-        }
     }
 
     @Override

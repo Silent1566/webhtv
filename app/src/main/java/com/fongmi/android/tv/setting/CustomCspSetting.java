@@ -299,15 +299,6 @@ public class CustomCspSetting {
         cleanupRemovedFiles(before, itemIds(registry));
     }
 
-    /** Toggles only the registry-level switch while preserving every injection item. */
-    public static boolean toggleEnabled() {
-        Registry registry = load();
-        boolean enabled = !registry.isEnabled();
-        registry.setEnabled(enabled);
-        save(registry);
-        return enabled;
-    }
-
     public static void writePage(String id, String code) {
         ensureFileAccess();
         File file = file(id, "index.html");
