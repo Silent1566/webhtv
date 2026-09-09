@@ -296,6 +296,29 @@ public class AdAudioRuntimeControllerTest {
     }
 
     @Test
+    public void speechSuppressionClosesOnlySpeechAndLeavesFingerprintRunning() {
+        PlaybackMediaSignalHub hub = new PlaybackMediaSignalHub(8);
+        hub.beginSession(0L);
+        FakePlaybackPort playback = new FakePlaybackPort(hub, true);
+        FakeSignalProvider probe = new FakeSignalProvider("probe");
+        FakeSignalProvider speech = new FakeSignalProvider(SpeechAdSignalProvider.ID);
+        AdAudioRuntimeController runtime = runtimeWithProviders(
+                hub, playback, snapshotForRuleWithSidecar("ad"),
+                ignored -> probe, () -> speech);
+
+        runtime.setSpeechConfig(SpeechAdConfig.create(true, "赌场", 15, "PROMPT"));
+        runtime.start(true);
+        runtime.bindUi(new FakeUiPort());
+        runtime.suppressSpeechForCurrentSession();
+
+        assertTrue(runtime.isSpeechSuppressed());
+        assertEquals(AdAudioSignalProvider.ProviderState.CLOSED, speech.state());
+        assertEquals(AdAudioSignalProvider.ProviderState.RUNNING, probe.state());
+        assertTrue(hub.isCaptureRequested(PlaybackMediaSignalHub.ConsumerKind.AD_AUDIO));
+        runtime.close();
+    }
+
+    @Test
     public void speechStartFailureDoesNotStopPcmOrProbe() {
         PlaybackMediaSignalHub hub = new PlaybackMediaSignalHub(8);
         hub.beginSession(0L);

@@ -62,6 +62,7 @@ public final class AdAudioRuntimeController implements AutoCloseable {
     private AdSkipPolicyController.Mode skipMode = AdSkipPolicyController.Mode.PROMPT;
     private SpeechAdConfig speechConfig = SpeechAdConfig.defaults();
     private boolean enabled;
+    private boolean speechSuppressed;
     private String lastRefreshLog = "";
     private long activeSessionId = Long.MIN_VALUE;
     private boolean closed;
@@ -186,6 +187,7 @@ public final class AdAudioRuntimeController implements AutoCloseable {
         loadRulesLocked();
         deactivateLocked();
         PlaybackMediaSignalHub.Session session = hub.session();
+        speechSuppressed = false;
         if (coordinator != null) coordinator.reset(session.id());
         refreshLocked();
     }
@@ -221,6 +223,9 @@ public final class AdAudioRuntimeController implements AutoCloseable {
 
     public synchronized void suspend() {
         if (closed) return;
+        // suspend() is called before a new media item starts. Suppression belongs to the
+        // previous playback session and must not silently carry into the next item.
+        speechSuppressed = false;
         deactivateLocked();
         PlaybackMediaSignalHub.Session session = hub.session();
         if (coordinator != null) coordinator.reset(session.id());
@@ -258,6 +263,23 @@ public final class AdAudioRuntimeController implements AutoCloseable {
         if (rebuild) reconfigureLocked();
     }
 
+    /** Suppresses only speech analysis until the next media session. */
+    public synchronized void suppressSpeechForCurrentSession() {
+        if (closed || speechSuppressed) return;
+        speechSuppressed = true;
+        diagnostics.record(AdAudioDiagnostics.Code.SPEECH_RUNTIME_SUPPRESSED);
+        deactivateSpeechLocked();
+        refreshLocked();
+    }
+
+    public synchronized boolean isSpeechSuppressed() {
+        return speechSuppressed;
+    }
+
+    public synchronized boolean isSpeechConfigured() {
+        return speechConfig.enabled() && speechConfig.hasSpeechRules();
+    }
+
     public AdAudioDiagnostics.Snapshot diagnostics() {
         return diagnostics.snapshot();
     }
@@ -265,6 +287,7 @@ public final class AdAudioRuntimeController implements AutoCloseable {
     public synchronized void stop() {
         if (closed) return;
         enabled = false;
+        speechSuppressed = false;
         deactivateLocked();
         if (coordinator != null) coordinator.close();
         coordinator = null;
@@ -303,7 +326,8 @@ public final class AdAudioRuntimeController implements AutoCloseable {
 
     private void refreshLocked() {
         boolean fingerprintReady = enabled && !snapshot.hasError() && snapshot.hasRules();
-        boolean speechReady = speechConfig.enabled() && speechConfig.hasSpeechRules();
+        boolean speechReady = !speechSuppressed
+                && speechConfig.enabled() && speechConfig.hasSpeechRules();
         if (ui == null || (!fingerprintReady && !speechReady)) {
             // Transition-only: refreshLocked runs every 5s from the host position pump, and
             // an unsampled line here would churn the bounded debug-log ring.
@@ -476,6 +500,12 @@ public final class AdAudioRuntimeController implements AutoCloseable {
         closeProvider(oldPcm);
         if (oldMux != null) oldMux.close();
         if (oldPolicy != null) oldPolicy.close();
+    }
+
+    private void deactivateSpeechLocked() {
+        AdAudioSignalProvider oldSpeech = speechProvider;
+        speechProvider = null;
+        closeProvider(oldSpeech);
     }
 
     private boolean isActiveLocked() {
@@ -660,6 +690,89 @@ public final class AdAudioRuntimeController implements AutoCloseable {
             return thread;
         });
         return new Workers(analysis, speech);
+    }
+
+    /** Pure-Java playback health gate used to disable speech work after confirmed degradation. */
+    public static final class SpeechAdPlaybackHealth {
+
+        public static final long SAMPLE_INTERVAL_MS = 5_000L;
+        public static final long MAX_SAMPLE_GAP_MS = 10_000L;
+        public static final int REQUIRED_DEGRADED_SAMPLES = 2;
+        public static final long DROPPED_FRAMES_PER_SECOND_THRESHOLD = 4L;
+
+        private long lastSampleAtMs = -1L;
+        private long lastDroppedFrames = -1L;
+        private long lastAudioUnderruns = -1L;
+        private long lastRebufferCount = -1L;
+        private int degradedSamples;
+        private boolean suppressed;
+
+        public synchronized Decision observe(long nowMs, long droppedFrames,
+                                             long audioUnderruns, long rebufferCount) {
+            long now = Math.max(0L, nowMs);
+            long dropped = Math.max(0L, droppedFrames);
+            long underruns = Math.max(0L, audioUnderruns);
+            long rebuffers = Math.max(0L, rebufferCount);
+            if (suppressed) return Decision.SUPPRESSED;
+            if (lastSampleAtMs >= 0L && now <= lastSampleAtMs) return Decision.HELD;
+            if (lastSampleAtMs >= 0L && now - lastSampleAtMs < SAMPLE_INTERVAL_MS) {
+                return Decision.HELD;
+            }
+            boolean gapTooLarge = lastSampleAtMs >= 0L
+                    && now - lastSampleAtMs > MAX_SAMPLE_GAP_MS;
+            long intervalMs = lastSampleAtMs < 0L ? 0L : now - lastSampleAtMs;
+            long droppedDelta = positiveDelta(dropped, lastDroppedFrames);
+            long underrunDelta = positiveDelta(underruns, lastAudioUnderruns);
+            long rebufferDelta = positiveDelta(rebuffers, lastRebufferCount);
+            lastSampleAtMs = now;
+            lastDroppedFrames = dropped;
+            lastAudioUnderruns = underruns;
+            lastRebufferCount = rebuffers;
+            if (gapTooLarge) {
+                degradedSamples = 0;
+                return Decision.OBSERVED;
+            }
+            long minimumDropped = intervalMs <= 0L
+                    || intervalMs > (Long.MAX_VALUE - 999L)
+                    / DROPPED_FRAMES_PER_SECOND_THRESHOLD
+                    ? Long.MAX_VALUE
+                    : (intervalMs * DROPPED_FRAMES_PER_SECOND_THRESHOLD + 999L) / 1_000L;
+            boolean droppedRate = droppedDelta >= minimumDropped;
+            boolean degraded = underrunDelta > 0L || rebufferDelta > 0L || droppedRate;
+            degradedSamples = degraded
+                    ? Math.min(REQUIRED_DEGRADED_SAMPLES, degradedSamples + 1) : 0;
+            if (degradedSamples >= REQUIRED_DEGRADED_SAMPLES) {
+                suppressed = true;
+                return Decision.SUPPRESS;
+            }
+            return degraded ? Decision.DEGRADED : Decision.OBSERVED;
+        }
+
+        public synchronized boolean isSuppressed() {
+            return suppressed;
+        }
+
+        public synchronized void reset() {
+            lastSampleAtMs = -1L;
+            lastDroppedFrames = -1L;
+            lastAudioUnderruns = -1L;
+            lastRebufferCount = -1L;
+            degradedSamples = 0;
+            suppressed = false;
+        }
+
+        private static long positiveDelta(long current, long previous) {
+            if (previous < 0L || current <= previous) return 0L;
+            return current - previous;
+        }
+
+        public enum Decision {
+            HELD,
+            OBSERVED,
+            DEGRADED,
+            SUPPRESS,
+            SUPPRESSED
+        }
     }
 
     private record Workers(ExecutorService analysis, ExecutorService speech) {

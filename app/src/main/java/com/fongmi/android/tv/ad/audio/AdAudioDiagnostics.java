@@ -31,7 +31,8 @@ public final class AdAudioDiagnostics {
         SPEECH_OWNER_REJECTED,
         SPEECH_ACCEPT_UNDER_10_MS,
         SPEECH_ACCEPT_UNDER_100_MS,
-        SPEECH_ACCEPT_OVER_100_MS
+        SPEECH_ACCEPT_OVER_100_MS,
+        SPEECH_RUNTIME_SUPPRESSED
     }
 
     private final EnumMap<Code, Long> counts = new EnumMap<>(Code.class);
