@@ -46,7 +46,7 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
     public interface Listener {
         void onItemClick(Episode item);
 
-        void onItemLongClick(View anchor, Episode item, int episodeNumber);
+        void onItemLongClick(View anchor, Episode item, int episodeNumber, TmdbEpisode tmdbEpisode);
     }
 
     private final Listener listener;
@@ -213,6 +213,7 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
         if (!TmdbEpisodeMatcher.shouldApply(episode, tmdbEpisode, episodeNumber)) {
             tmdbEpisode = null;
         }
+        TmdbEpisode boundTmdbEpisode = tmdbEpisode;
         // 匹配被拒时用文件自身集号（无有效集号则回退文件名），避免 position 回退值泄漏到标题
         int titleNumber = tmdbEpisode != null ? episodeNumber : episode.getNumber();
         String tmdbTitle = tmdbEpisode != null ? tmdbEpisode.getTitle() : "";
@@ -302,7 +303,7 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
         holder.binding.getRoot().setOnKeyListener(keyListener);
         holder.binding.getRoot().setOnClickListener(view -> listener.onItemClick(episode));
         holder.binding.getRoot().setOnLongClickListener(view -> {
-            listener.onItemLongClick(view, episode, episodeNumber);
+            listener.onItemLongClick(view, episode, episodeNumber, boundTmdbEpisode);
             return true;
         });
     }
