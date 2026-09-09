@@ -269,8 +269,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
         mBinding.typeRecycler.removeCallbacks(mTypeSwitch);
         int position = mTypeAdapter.indexOf(item);
         mBinding.typeRecycler.setSelectedPosition(position);
-        if (contentRow == 0) focusFirstCard(item);
-        else focusCategoryButton(item);
+        focusCategoryButton(item);
     }
 
     private Class getAdjacentCategory(Class item, boolean towardEnd) {
@@ -288,10 +287,23 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     }
 
     private void focusCategoryButton(Class item) {
-        mBinding.typeRecycler.setVisibility(View.VISIBLE);
-        updateToolbarVisibility(true);
-        mBinding.typeRecycler.requestFocus();
         showCategoryContent(item);
+        // Complete the switch before checking the new page; otherwise the posted callback can
+        // run while the target fragment is not added yet and drop the header/focus restoration.
+        getSupportFragmentManager().executePendingTransactions();
+        mBinding.typeRecycler.post(() -> {
+            if (isFinishing() || isDestroyed() || !isCurrentCategory(item)) return;
+            int position = mTypeAdapter.indexOf(item);
+            if (position < 0 || mBinding.typeRecycler.getSelectedPosition() != position) return;
+            mBinding.typeRecycler.setVisibility(View.VISIBLE);
+            updateToolbarVisibility(true);
+            mFolder.scrollContentToTop();
+            mBinding.typeRecycler.setSelectedPosition(position, holder -> {
+                if (isCurrentCategory(item) && mBinding.typeRecycler.getSelectedPosition() == position) {
+                    holder.itemView.requestFocus();
+                }
+            });
+        });
     }
 
     private void showHomeContent() {

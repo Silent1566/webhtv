@@ -28,6 +28,7 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewbinding.ViewBinding;
 
 import com.bumptech.glide.Glide;
@@ -132,6 +133,93 @@ public class TmdbPersonActivity extends BaseActivity {
         binding.filterDirector.setOnClickListener(view -> setFilter("director"));
         binding.filterMovie.setOnClickListener(view -> setFilter("movie"));
         binding.filterTv.setOnClickListener(view -> setFilter("tv"));
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        if (Util.isLeanback() && binding != null && event != null && event.getAction() == KeyEvent.ACTION_DOWN) {
+            View focus = getCurrentFocus();
+            if (focus != null && isFocusInside(binding.filterGroup, focus)) {
+                if (event.getKeyCode() == KeyEvent.KEYCODE_DPAD_LEFT) return moveFilterFocus(focus, true);
+                if (event.getKeyCode() == KeyEvent.KEYCODE_DPAD_RIGHT) return moveFilterFocus(focus, false);
+                if (event.getKeyCode() == KeyEvent.KEYCODE_DPAD_DOWN && focusFirstWork()) return true;
+            } else if (focus != null && isFirstWorkFocused(focus)
+                    && event.getKeyCode() == KeyEvent.KEYCODE_DPAD_UP && focusSelectedFilter()) {
+                return true;
+            }
+        }
+        return super.dispatchKeyEvent(event);
+    }
+
+    private boolean moveFilterFocus(View focus, boolean left) {
+        int index = binding.filterGroup.indexOfChild(focus);
+        if (index < 0) return false;
+        int targetIndex = index + (left ? -1 : 1);
+        if (targetIndex < 0 || targetIndex >= binding.filterGroup.getChildCount()) return true;
+        View target = binding.filterGroup.getChildAt(targetIndex);
+        if (target == null || !target.isFocusable()) return true;
+        target.requestFocus(left ? View.FOCUS_LEFT : View.FOCUS_RIGHT);
+        scrollFilterIntoView(target);
+        return true;
+    }
+
+    private boolean focusFirstWork() {
+        if (workAdapter.getItemCount() == 0) return false;
+        RecyclerView.LayoutManager layoutManager = binding.works.getLayoutManager();
+        View target = layoutManager == null ? null : layoutManager.findViewByPosition(0);
+        if (target != null) return target.requestFocus();
+        binding.works.scrollToPosition(0);
+        return binding.works.post(() -> {
+            RecyclerView.LayoutManager manager = binding.works.getLayoutManager();
+            View first = manager == null ? null : manager.findViewByPosition(0);
+            if (first != null) first.requestFocus();
+        });
+    }
+
+    private boolean isFirstWorkFocused(View focus) {
+        View item = focus;
+        while (item != null && item.getParent() instanceof View && item.getParent() != binding.works) {
+            item = (View) item.getParent();
+        }
+        return item != null && item.getParent() == binding.works && binding.works.getChildAdapterPosition(item) == 0;
+    }
+
+    private boolean focusSelectedFilter() {
+        View target = null;
+        for (int i = 0; i < binding.filterGroup.getChildCount(); i++) {
+            View child = binding.filterGroup.getChildAt(i);
+            if (child.getVisibility() == View.VISIBLE && filter.equals(filterKey(child))) {
+                target = child;
+                break;
+            }
+        }
+        if (target == null && binding.filterGroup.getChildCount() > 0) {
+            target = binding.filterGroup.getChildAt(0);
+        }
+        if (target == null || !target.isFocusable() || !target.requestFocus()) return false;
+        scrollFilterIntoView(target);
+        return true;
+    }
+
+    private boolean isFocusInside(ViewGroup parent, View focus) {
+        for (View current = focus; current != null; current = current.getParent() instanceof View ? (View) current.getParent() : null) {
+            if (current == parent) return true;
+        }
+        return false;
+    }
+
+    private String filterKey(View button) {
+        if (button == binding.filterAll) return "all";
+        if (button == binding.filterCast) return "cast";
+        if (button == binding.filterCrew) return "crew";
+        if (button == binding.filterDirector) return "director";
+        if (button == binding.filterMovie) return "movie";
+        if (button == binding.filterTv) return "tv";
+        return "";
+    }
+
+    private void scrollFilterIntoView(View child) {
+        binding.filterScroll.post(() -> binding.filterScroll.smoothScrollTo(Math.max(0, child.getLeft() - dp(12)), 0));
     }
 
     private void setInitialPerson() {
@@ -340,6 +428,14 @@ public class TmdbPersonActivity extends BaseActivity {
         for (int i = 0; i < count; i++) {
             View child = binding.filterGroup.getChildAt(i);
             if (child instanceof MaterialButton button) {
+                button.setFocusable(true);
+                button.setFocusableInTouchMode(false);
+                button.setNextFocusLeftId(i == 0 ? button.getId() : binding.filterGroup.getChildAt(i - 1).getId());
+                button.setNextFocusRightId(i == count - 1 ? button.getId() : binding.filterGroup.getChildAt(i + 1).getId());
+                button.setOnFocusChangeListener((view, focused) -> {
+                    updateFilters();
+                    if (focused) scrollFilterIntoView(view);
+                });
                 button.setMinWidth(0);
                 button.setMinimumWidth(0);
                 button.setInsetLeft(0);
@@ -496,13 +592,14 @@ public class TmdbPersonActivity extends BaseActivity {
 
     private void updateFilter(MaterialButton button, String value) {
         boolean selected = filter.equals(value);
+        boolean focused = button.hasFocus();
         int bg = selected ? (light ? 0xFFDBEAFE : 0xFF2F4F6F) : (light ? 0xFFF5F8FB : 0xFF1A2530);
         int fg = light ? 0xFF12202D : 0xFFFFFFFF;
-        int stroke = selected ? 0xFF6DA8E8 : (light ? 0x33424B57 : 0x33FFFFFF);
+        int stroke = focused ? FOCUS_STROKE : selected ? 0xFF6DA8E8 : (light ? 0x33424B57 : 0x33FFFFFF);
         button.setTextColor(fg);
         button.setBackgroundTintList(ColorStateList.valueOf(bg));
         button.setStrokeColor(ColorStateList.valueOf(stroke));
-        button.setStrokeWidth(selected ? 2 : 1);
+        button.setStrokeWidth(ResUtil.dp2px(focused ? FOCUS_STROKE_DP : selected ? 2 : 1));
     }
 
     private void setThemeColors() {

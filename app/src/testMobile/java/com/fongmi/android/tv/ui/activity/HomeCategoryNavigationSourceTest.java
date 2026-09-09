@@ -48,7 +48,7 @@ public class HomeCategoryNavigationSourceTest {
     }
 
     @Test
-    public void inlineCategoryEdgesSwitchCategoriesWithRowSpecificFocus() throws Exception {
+    public void inlineCategoryEdgesAlwaysFocusAdjacentCategoryButton() throws Exception {
         String home = homeActivity();
         String folder = read(source("leanback", "java", "com", "fongmi", "android", "tv", "ui", "fragment", "FolderFragment.java"));
         String type = read(source("leanback", "java", "com", "fongmi", "android", "tv", "ui", "fragment", "TypeFragment.java"));
@@ -65,9 +65,23 @@ public class HomeCategoryNavigationSourceTest {
         assertTrue("nested folder pages must not switch the top-level category", forwardEdge.contains("if (getChildFragmentManager().getBackStackEntryCount() > 0) return;"));
         assertTrue("right and left edges must select the adjacent category in opposite directions", adjacent.contains("int target = position + (towardEnd ? 1 : -1);"));
         assertTrue("the synthetic home item must not be treated as an adjacent category", adjacent.contains("candidate.isHome()"));
-        assertTrue("first-row edges must focus the adjacent category's first card", edge.contains("if (contentRow == 0)") && edge.contains("focusFirstCard(item);"));
-        assertTrue("lower-row edges must focus the adjacent category button", edge.contains("else focusCategoryButton(item);"));
+        assertTrue("every cross-category edge must return to the adjacent category button", edge.contains("focusCategoryButton(item);") && !edge.contains("focusFirstCard(item);"));
+        assertTrue("cross-category focus must not vary with default VOD loading", !edge.contains("Setting.isHomeVodAutoLoad()") && !edge.contains("contentRow == 0"));
         assertTrue("cached category pages must be visible before receiving the first-card request", adjacent.contains("getSupportFragmentManager().executePendingTransactions();") && adjacent.contains("mFolder.requestContentFocus(0);"));
+    }
+
+    @Test
+    public void edgeSwitchCompletesCategoryBeforeRevealingHeaderAndRestoringFocus() throws Exception {
+        String home = homeActivity();
+        String edge = method(home, "public void onCategoryContentHorizontalEdge(Class item, int contentRow, boolean towardEnd)", "private Class getAdjacentCategory(Class item, boolean towardEnd)");
+        String focus = method(home, "private void focusCategoryButton(Class item)", "private void showHomeContent()");
+
+        assertTrue("edge navigation must use the adjacent category button path", edge.contains("focusCategoryButton(item);"));
+        assertTrue("the category transaction must complete before the callback checks the new page", focus.contains("getSupportFragmentManager().executePendingTransactions();"));
+        assertTrue("the callback must reject stale or unfinished category switches", focus.contains("!isCurrentCategory(item)"));
+        assertTrue("the type row must be shown before restoring button focus", focus.indexOf("mBinding.typeRecycler.setVisibility(View.VISIBLE);") < focus.indexOf("mBinding.typeRecycler.setSelectedPosition(position, holder ->"));
+        assertTrue("the switched category must explicitly return to its first row", focus.contains("mFolder.scrollContentToTop();"));
+        assertTrue("a stale holder callback must not steal focus", focus.contains("mBinding.typeRecycler.getSelectedPosition() == position"));
     }
 
     @Test
