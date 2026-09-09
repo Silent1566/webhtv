@@ -239,6 +239,11 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
     }
 
     @Override
+    protected boolean shouldAutoPlay() {
+        return true;
+    }
+
+    @Override
     protected void onCreate(Bundle savedInstanceState) {
         requestOrientation("launch", getLaunchOrient());
         super.onCreate(savedInstanceState);
