@@ -912,6 +912,10 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
         else if (item.getResId() == R.string.home_setting) SettingActivity.start(this);
         else if (item.getResId() == R.string.home_cast) PushActivity.start(this, 3);
         else if (item.getResId() == R.string.home_history_button) HistoryActivity.start(this);
+        else if (item.getResId() == R.string.home_adblock) {
+            Setting.putAdblock(!Setting.isAdblock());
+            setFunc();
+        }
     }
 
     @Override

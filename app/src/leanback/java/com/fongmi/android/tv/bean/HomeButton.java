@@ -20,7 +20,7 @@ public class HomeButton implements Diffable<HomeButton> {
 
     private static final String KEY_BUTTON = "home_button";
     private static final String KEY_SORTED = "home_button_sorted";
-    private static final String ALL = "0,1,2,3,4,5,6,7";
+    private static final String ALL = "0,1,2,3,4,5,6,7,8";
     private static List<HomeButton> buttons;
 
     private final int id;
@@ -37,6 +37,7 @@ public class HomeButton implements Diffable<HomeButton> {
         buttons.add(new HomeButton(5, R.string.home_cast));
         buttons.add(new HomeButton(6, R.string.home_history_button));
         buttons.add(new HomeButton(7, R.string.home_setting));
+        buttons.add(new HomeButton(8, R.string.home_adblock));
         return buttons;
     }
 
@@ -110,6 +111,7 @@ public class HomeButton implements Diffable<HomeButton> {
         ids.add("4");
         if (!Setting.isHomeHistory()) ids.add("6");
         ids.add("7");
+        ids.add("8");
         return TextUtils.join(",", ids);
     }
 
