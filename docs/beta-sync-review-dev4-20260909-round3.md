@@ -7,6 +7,7 @@
 - **开始状态：** 2026-09-09 08:52 CST；当前分支 `dev4`，基线 `f5096d437576891ff387670593b72750163c4fc6`；开始前仅有上述一个预-existing dirty path。
 - **beta 状态：** 已执行 `git fetch origin beta`，目标 `origin/beta@242c089b06ccd330933533b856f14a9321921a11`；共同祖先 `0f37b489f7f35719cf572da32a11701f5445a6be`；`git merge --no-commit --no-ff origin/beta` 自动完成、无冲突。
 - **回滚：** 提交前使用 `git merge --abort`；提交后使用本任务生成的恢复 annotated tag 回退原子提交。
+- **实际收口：** 合并提交 `6fd26879a1c2ceba36344cc57d14d9c6ab04e1ab` 已创建恢复 tag `recovery/beta-sync-review-dev4-20260909-round3/20260909093714-6fd26879a1c2` 并推送；发现预-existing 的 `VodActivity.java.bak` 曾被错误纳入后，未改写已发布历史，使用修正提交 `41133f85db4062f4a72e353ce61774cb2850531f` 删除仓库中的误提交文件，并创建/推送恢复 tag `recovery/beta-sync-review-dev4-20260909-bak-correction/20260909095428-41133f85db40`。该 `.bak` 已恢复为本地未跟踪保护文件。
 
 ## 当前范围与证据
 
@@ -19,8 +20,9 @@
 - [x] fetch beta、启动 task guard、无冲突合并
 - [x] 保存完整差异并完成首轮静态评审
 - [x] 定向测试、Leanback/Mobile 编译与验证后复评
-- [ ] 原子提交与恢复 tag
-- [ ] 推送 dev4、中文 PR 到 beta、最后 fetch/pull 并核对状态
+- [x] 原子提交与恢复 tag（含误提交备份文件的修正提交）
+- [x] 推送 dev4、创建中文 PR 到 beta
+- [ ] 最后 fetch/pull 并核对状态
 
 ## 验证记录
 
@@ -52,4 +54,4 @@
 
 ## 下一动作
 
-执行 `bash .codex/scripts/task_guard.sh finish` 原子提交当前合并、测试与本文档并创建恢复 tag；随后推送 `dev4` 和该 tag，创建/更新指向 `beta` 的中文 PR，最后拉取远端最新代码并核对状态。
+PR 已创建：[#242](https://github.com/Silent1566/webhtv/pull/242)，标题为“合并 beta 最新代码并完成 dev4 复评”，目标 `beta`、来源 `dev4`，远端 head 为 `41133f85db4062f4a72e353ce61774cb2850531f`。唯一下一动作：推送本收口文档提交后，执行 `git fetch --prune origin beta dev4` 与 `git pull --ff-only origin dev4`，确认 `.bak` 仍为本地未跟踪文件且工作树无其他未预期改动。
