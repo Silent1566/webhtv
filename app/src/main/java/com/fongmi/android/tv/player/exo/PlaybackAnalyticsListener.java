@@ -35,6 +35,7 @@ public class PlaybackAnalyticsListener implements AnalyticsListener, VideoFrameM
             AudioOutputSnapshot.empty();
     private static volatile String playbackTraceId = PlaybackTrace.NONE;
     private static volatile long totalDroppedFrames;
+    private static volatile long totalAudioUnderruns;
     private static volatile long lastBandwidthLogMs;
     private static volatile long lastMediaEstimateLogMs;
     private static volatile boolean loading;
@@ -74,6 +75,11 @@ public class PlaybackAnalyticsListener implements AnalyticsListener, VideoFrameM
 
     public static AudioOutputSnapshot getAudioOutputSnapshot() {
         return audioOutputSnapshot;
+    }
+
+    /** Cumulative for the current Exo player session; reset with {@link #reset()}. */
+    public static long getAudioUnderrunCount() {
+        return totalAudioUnderruns;
     }
 
     public static void beginSession(String traceId) {
@@ -233,6 +239,7 @@ public class PlaybackAnalyticsListener implements AnalyticsListener, VideoFrameM
         snapshot = Snapshot.empty();
         audioOutputSnapshot = AudioOutputSnapshot.empty();
         totalDroppedFrames = 0;
+        totalAudioUnderruns = 0;
         lastBandwidthLogMs = 0;
         lastMediaEstimateLogMs = 0;
         loading = false;
@@ -472,6 +479,8 @@ public class PlaybackAnalyticsListener implements AnalyticsListener, VideoFrameM
 
     @Override
     public void onAudioUnderrun(EventTime eventTime, int bufferSize, long bufferSizeMs, long elapsedSinceLastFeedMs) {
+        totalAudioUnderruns = totalAudioUnderruns == Long.MAX_VALUE
+                ? Long.MAX_VALUE : totalAudioUnderruns + 1L;
         if (!SpiderDebug.isEnabled()) return;
         traceLog("audio underrun buffer=%d bufferMs=%d elapsedSinceFeedMs=%d", bufferSize, bufferSizeMs, elapsedSinceLastFeedMs);
         long now = nowElapsed();

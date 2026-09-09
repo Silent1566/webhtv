@@ -16,13 +16,24 @@ public class SpeechAdSettingSourceTest {
         String presenter = read("app/src/main/java/com/fongmi/android/tv/ui/dialog/AdSkipPromptPresenter.java");
         assertTrue(xml.contains("@+id/speechAdEnabled"));
         assertTrue(xml.contains("@+id/speechAdKeywords"));
+        assertTrue(xml.contains("@+id/speechAdRules"));
+        assertTrue(xml.contains("@+id/speechAdBuiltin"));
         assertTrue(xml.contains("@+id/speechAdSkipSeconds"));
         assertTrue(xml.contains("@+id/speechAdSkipMode"));
         assertTrue(java.contains("SpeechAdSetting.setEnabled"));
         assertTrue(java.contains("SpeechAdSetting.setKeywords"));
         assertTrue(java.contains("SpeechAdSetting.setSkipSeconds"));
         assertTrue(java.contains("SpeechAdSetting.setMode"));
+        assertTrue(java.contains("speechAdRulePicker"));
+        assertTrue(java.contains("new String[]{\"text/plain\", \"text/*\"}"));
+        assertTrue(java.contains("SpeechAdSetting.setRulesText"));
+        assertTrue(java.contains("SpeechAdSetting.clearRules"));
+        assertTrue(java.contains("SpeechAdSetting.setBuiltinEnabled"));
+        assertTrue(java.contains("if (success) notifyAdAudioRuntime()"));
+        assertTrue(java.contains("speech_ad_rules_view_builtin"));
         assertTrue(java.contains("reloadAdAudioSettings"));
+        assertTrue(isFocusable(xml, "speechAdRules"));
+        assertTrue(isFocusable(xml, "speechAdBuiltin"));
         assertTrue(presenter.contains("SpeechAdSignalProvider.RULE_ID"));
         assertTrue(presenter.contains("ad_audio_speech_candidate_message"));
         assertTrue(!presenter.contains("prompt.ruleId(), prompt.skipDurationSeconds()"));
@@ -34,17 +45,34 @@ public class SpeechAdSettingSourceTest {
         String xml = read("app/src/mobile/res/layout/fragment_setting_ad.xml");
         assertTrue(xml.contains("@+id/speechAdEnabled"));
         assertTrue(xml.contains("@+id/speechAdKeywords"));
+        assertTrue(xml.contains("@+id/speechAdRules"));
+        assertTrue(xml.contains("@+id/speechAdBuiltin"));
         assertTrue(xml.contains("@+id/speechAdSkipSeconds"));
         assertTrue(xml.contains("@+id/speechAdSkipMode"));
         assertTrue(xml.contains("@string/speech_ad_enabled"));
         assertTrue(xml.contains("@string/speech_ad_keywords"));
+        assertTrue(xml.contains("@string/speech_ad_rules"));
+        assertTrue(xml.contains("@string/speech_ad_builtin"));
         assertTrue(xml.contains("@string/speech_ad_skip_seconds"));
         assertTrue(xml.contains("@string/speech_ad_skip_mode"));
         assertTrue(java.contains("SpeechAdSetting.setEnabled"));
         assertTrue(java.contains("SpeechAdSetting.setKeywords"));
         assertTrue(java.contains("SpeechAdSetting.setSkipSeconds"));
         assertTrue(java.contains("SpeechAdSetting.setMode"));
+        assertTrue(java.contains("speechAdRulePicker"));
+        assertTrue(java.contains("new String[]{\"text/plain\", \"text/*\"}"));
+        assertTrue(java.contains("SpeechAdSetting.setRulesText"));
+        assertTrue(java.contains("SpeechAdSetting.clearRules"));
+        assertTrue(java.contains("SpeechAdSetting.setBuiltinEnabled"));
+        assertTrue(java.contains("if (success) notifyAdAudioRuntime()"));
         assertTrue(java.contains("reloadAdAudioSettings"));
+    }
+
+    private static boolean isFocusable(String xml, String id) {
+        int start = xml.indexOf("@+id/" + id);
+        int end = xml.indexOf("/>", start);
+        return start >= 0 && end > start
+                && xml.substring(start, end).contains("android:focusable=\"true\"");
     }
     private static String read(String path) throws Exception {
         Path direct = Path.of(path);
