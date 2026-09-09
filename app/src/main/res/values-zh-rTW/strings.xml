@@ -1258,7 +1258,7 @@
     <string name="player_preload_pause">暫停時繼續預載</string>
     <string name="player_preload_pause_wifi">僅 WiFi</string>
     <string name="player_preload_pause_always">始終</string>
-    <string name="player_auto_play">自動播放</string>
+    <string name="player_auto_play">點播自動播放</string>
     <string name="player_auto_change">自動換源</string>
     <string name="player_remember_brightness">記住播放亮度</string>
     <string name="player_failure_fallback">播放失敗回退</string>
