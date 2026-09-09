@@ -807,3 +807,37 @@ app/src/test/java/com/fongmi/android/tv/ui/activity/SpeechAdSettingSourceTest.ja
 - **已完成证据**：本节完成本地代码事实审查和官方 Android 存储/SAF/备份/TV 导航证据记录；未运行 Phase 3 代码测试或构建，也未修改 APK/设备。
 - **回滚锚点**：P2B recovery tag `recovery/AD-AUDIO-RULES-V2-P2B/20260908220006-db8e98432ecd`；本设计提交可单独 revert，不影响 P2B 已验证运行时。
 - **唯一下一步**：等待用户批准“按第 17 节开始实施 Phase 3”；若批准，先重新核对工作区并启动 `AD-AUDIO-RULES-V2-P3` 实现 guard，不重复 P2B 的 106 项测试或 47 秒构建。
+
+## 18. Phase 3 实施记录（2026-09-09）
+
+用户继续执行“按计划实施”的目标后，沿用 `dev2`、设计提交
+`da8d4d245f0866dd0ec879d4e076b8858e3027df` 启动 `AD-AUDIO-RULES-V2-P3`。
+初始工作区干净；本单元只修改第 17.5 节的 13 个实现/测试/资源路径及本文。
+此前第 17.6 节的“等待批准”是设计阶段的历史状态，不再是本阶段下一步。
+
+### 18.1 实现时的兼容与安全约束
+
+- 使用同一个 `SharedPreferences.Editor.apply()` 发布规范文本和来源，不分别写两个 key。
+  官方 `SharedPreferences.Editor` 的 `apply()` 合同（2026-09-09 复核）只保证内存更新和异步写盘，不提供写盘失败回执；不把 UI 的“已保存设置”描述成已通过断电持久性验收。来源：
+  `https://developer.android.com/reference/android/content/SharedPreferences.Editor`。
+- 同一主体的不同窗口生成不同 ID，所以只检查 ID 不足以满足第 5.4 节。
+  编辑、导入、打开内置库和恢复均在发布前检查主体/窗口冲突；明确指出冲突位置，
+  用户通过编辑保留一个窗口，或关闭内置库后使用自定义窗口。不得自动选最长窗口或同时启用两者。
+- 合并后的总量同样受 256 条/64 KiB 限制；超限整次拒绝，原设置不变。
+  原文为空的编辑是显式清空；空文件或只有注释的导入不是清空请求，应拒绝。
+- 缓存同配置的不可变规则快照，防止设置摘要反复解析/散列，或因新对象导致 Runtime 将相同配置当成替换配置。
+  内置资源只读一次；不改变 Provider、模型线程、唯一 seek authority 或复合规则 prompt-only 策略。
+- 从产品备份恢复的三项新配置按一个验证单元处理；错误类型、语法、超限和冲突不覆盖旧有效配置。
+  没有新 key 的旧完整备份仍按第 17.4 节恢复为新功能默认值。只清理这三项新配置，不修改无关恢复行为。
+- 外部提供者异常只转成固定错误，不把 URI、路径、正文或任意异常消息写到摘要/日志。
+  导入完成后成功才刷新 Runtime；页面退出不应阻止已经成功写入的配置通知现有播放器。
+
+### Recovery anchor（验证完成，待提交）
+
+- **目标**：第 17 节的本地语音规则设置、双端 UI、备份、定向回归和构建；全局 V2 目标仍包含未完成的真实模型/TV 验收，不缩减为本阶段。
+- **文件/状态**：`SpeechAdSetting`、`Backup`、双端 `SettingAd*` 与 layout、raw 规则、三组字符串和三份 P3 测试已完成；保留旧四个关键词 key，不自动迁移；新规则采用 64 KiB/256 条上限、严格 UTF-8、规范化存储、来源记录、内置开关、冲突拒绝和坏恢复值保护。导入失败不刷新 Runtime，成功导入即使页面退出也通知现有播放器；管理菜单包含编辑、导入、清空和查看内置规则。
+- **证据**：定向 `:app:testLeanbackArm64_v8aDebugUnitTest` 选择 `SpeechAdConfigTest`（13）、`SpeechAdRuleCodecTest`（18）、`SpeechAdKeywordSetTest`（9）、`BackupPreferenceFilterTest`（11）、`SpeechAdSettingSourceTest`（2），合计 **53 tests，0 failures，0 errors，0 skipped**；日志 `/tmp/ad-audio-p3-focused-tests-final.log`，XML 位于 `app/build/test-results/testLeanbackArm64_v8aDebugUnitTest/`。`bash ./gradlew :app:compileLeanbackArm64_v8aDebugJavaWithJavac --no-daemon --console=plain` 成功（19s，47 tasks up-to-date）；日志 `/tmp/ad-audio-p3-compile-final.log`。P2B 历史 106 项结果不作为 P3 证明。
+- **设备**：只读 `adb devices -l` 可见五个连接，尚未确认各自测试用途/TV 代表性；未安装、启动或改变设备应用。
+- **回滚**：基线 recovery tag `recovery/AD-AUDIO-RULES-V2-P3-DESIGN/20260908233846-da8d4d245f08`，本阶段最终采用原子 commit/tag，不 push。
+- **边界**：本阶段没有生成或安装 APK，没有执行真实 TV/D-pad 走查、模型/标注音频精度、启动/seek 性能或包大小/hash 验收；这些仍属于后续设备/Phase 4 工作。未修改 native、Media3、FFmpeg、JNI、远程规则协议或播放器核心。
+- **唯一下一步**：运行 `bash .codex/scripts/task_guard.sh finish --verified ... --commit-message ...` 原子提交本阶段并立即创建唯一 annotated recovery tag；不 push。
