@@ -354,3 +354,15 @@ TV-exo-preload: ... mime=application/x-mpegURL
 - 产物：`app/build/outputs/apk/mobileArm64_v8a/debug/app-mobile-arm64_v8a-debug.apk`，SHA-256 `da1514a4e826cd8a363051c615bb89ca44d49d861088dcf9acb3f7987ff0c46d`。
 - 代码处置：无需修改或回滚 seek 代码、Gradle 配置或依赖版本。
 - 下一动作：关闭资源恢复诊断单元并交付 APK。
+
+## Checkpoint 16：2026-09-09 TV Exo 加载圈状态闭环补强
+
+- 用户现象：TV 版 Exo 启播完成并正常播放后，加载圈偶现残留；拖拽进度后又偶现没有加载圈。
+- 上游复核：本地 `upstream/main` 指向 `fish2018/webhtv` 的 `784b90420d646eb6c7ddcc63ad622a92c65b02b4`；当前上游主线未包含可直接解决该 TV UI 状态竞态的更新。相关本地基线为 `a88a943fc472ce8e691b8d29a9d297033a0f479c`、`c07e2b27eddbbee3240ed25fd6e2c8e5a64c5c7e`、`eabd3fe86de55490167117916236209b863d6340`、`b3fab34cab38f89384b7e1065e27094f07b99ec1`；后续 `fc5b6ba029348c2c06214a80e4c080d6b210269a` 的合并树保留了 owner 约束，但 Leanback 未补齐晚绑定 READY 收口。
+- 根因闭环：TV 缺少 `onControllerReadyReconciled()` 实现时，控制器晚于播放器进入 READY 会错过 `onStateChanged(READY)`，加载圈没有收口；拖拽后 `mR3` 可能在播放器仍暴露旧 READY 状态时抢先收圈。
+- 实现范围：仅 `app/src/leanback/java/com/fongmi/android/tv/ui/activity/VideoActivity.java`；增加 Leanback 晚绑定 READY 收口；增加 seek pending 与 500 ms 最小可见窗口；`mR3`、READY 回调和 seek fallback 共用 `canHideSeekProgress()`，只有当前播放器有效、READY 且已不处于真实加载阻塞时才收圈；保留 owner、空播放器和生命周期保护。未改 Exo AAR、Media3、预载策略、缓冲阈值、decoder、DV/HDR、MPV、IJK、native 或 ABI。
+- 回归测试：新增 `VideoActivityLoadingProgressSourceTest`，覆盖 seek pending 顺序、mR3 抢先收圈防护、READY/加载状态门控、fallback 重试、显式隐藏清理和晚绑定 READY 收口；同步更新 `PlaybackOwnershipSourceTest` 的 TV 断言。
+- 验证：旧实现红灯记录 `/tmp/e-sp3-tv-loading-red.log`（6 项新增断言失败）；修复后聚焦 `VideoActivityLoadingProgressSourceTest` + `PlaybackOwnershipSourceTest` 共 21 项通过，Leanback Arm64 Java 编译同次任务 `BUILD SUCCESSFUL`，日志 `/tmp/e-sp3-tv-loading-green4.log`；`git diff --check` 通过。
+- 设备边界：当前 ADB 可见的是 `SM-N9700`、`V1923A`、`HD1910`、`NX627J` 四台设备，尚未取得用户可复现的同一 TV 片源/操作录屏或完成真实 TV 连续启播与拖拽 A/B；因此本 checkpoint 不宣称设备端问题已完全消失。
+- 回滚：回滚本次 TV UI 原子提交即可恢复原有加载圈逻辑；不触碰 E-SP3-A/B、Media3 产物或 native 资产。
+- 下一动作：在可复现该现象的 TV 设备上连续验证“启播 READY 后收圈”和“多次拖拽 seek 先显示、恢复后收圈”；若用户确认体验通过，再执行本任务 guard finish 创建原子提交与 recovery tag。
