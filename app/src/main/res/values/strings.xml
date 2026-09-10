@@ -1303,7 +1303,7 @@
     <string name="player_preload_pause">Continue preload while paused</string>
     <string name="player_preload_pause_wifi">Wi-Fi only</string>
     <string name="player_preload_pause_always">Always</string>
-    <string name="player_auto_play">Auto play</string>
+    <string name="player_auto_play">Auto play VOD</string>
     <string name="player_auto_change">Auto source change</string>
     <string name="player_remember_brightness">Remember playback brightness</string>
     <string name="player_failure_fallback">Failure fallback</string>

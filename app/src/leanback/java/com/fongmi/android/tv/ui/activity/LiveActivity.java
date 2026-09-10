@@ -82,6 +82,11 @@ public class LiveActivity extends PlaybackActivity implements GroupAdapter.OnCli
 
     private static final long PLAYBACK_END_RETRY_DELAY = 500;
 
+    @Override
+    protected boolean shouldAutoPlay() {
+        return true;
+    }
+
     private ActivityLiveBinding mBinding;
     private ChannelAdapter mChannelAdapter;
     private EpgDataAdapter mEpgDataAdapter;
