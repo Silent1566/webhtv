@@ -34,11 +34,12 @@ import org.greenrobot.eventbus.ThreadMode;
 
 import java.util.Optional;
 
-public class VodActivity extends BaseActivity implements TypeAdapter.OnClickListener, FolderFragment.FilterHost {
+public class VodActivity extends BaseActivity implements TypeAdapter.OnClickListener, FolderFragment.FilterHost, FolderFragment.CategoryEdgeHost {
 
     private ActivityVodBinding mBinding;
     private TypeAdapter mAdapter;
     private View mOldView;
+    private boolean mPendingCategoryFocus;
 
     public static void start(Activity activity, Result result) {
         start(activity, VodConfig.get().getHome().getKey(), result);
@@ -114,6 +115,20 @@ public class VodActivity extends BaseActivity implements TypeAdapter.OnClickList
             @Override
             public void onPageSelected(int position) {
                 mBinding.recycler.setSelectedPosition(position);
+                if (mPendingCategoryFocus) {
+                    mPendingCategoryFocus = false;
+                    mBinding.recycler.post(() -> {
+                        if (isFinishing() || isDestroyed() || mBinding.pager.getCurrentItem() != position) return;
+                        // A newly loaded page may have no cards yet; the host must reveal its header.
+                        mBinding.recycler.setVisibility(View.VISIBLE);
+                        mBinding.recycler.requestFocus();
+                        getFragment().scrollContentToTop();
+                        mBinding.recycler.setSelectedPosition(position, holder -> {
+                            if (mBinding.pager.getCurrentItem() == position && mBinding.recycler.getSelectedPosition() == position) holder.itemView.requestFocus();
+                        });
+                    });
+                    return;
+                }
                 mBinding.recycler.requestFocus();
             }
         });
@@ -188,6 +203,16 @@ public class VodActivity extends BaseActivity implements TypeAdapter.OnClickList
     @Override
     public void onRefresh(Class item) {
         getFragment().onRefresh();
+    }
+
+    @Override
+    public void onCategoryContentHorizontalEdge(Class item, int contentRow, boolean towardEnd) {
+        int position = mAdapter.indexOf(item);
+        int target = position + (towardEnd ? 1 : -1);
+        if (position != mBinding.pager.getCurrentItem() || contentRow < 0 || target < 0 || target >= mAdapter.getItemCount()) return;
+        App.removeCallbacks(mRunnable);
+        mPendingCategoryFocus = true;
+        mBinding.pager.setCurrentItem(target);
     }
 
     @Override

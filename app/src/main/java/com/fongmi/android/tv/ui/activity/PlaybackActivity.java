@@ -401,6 +401,10 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
         return PlayerSetting.isBackgroundOff();
     }
 
+    protected boolean shouldAutoPlay() {
+        return PlayerSetting.isAutoPlay();
+    }
+
     protected boolean seekTo(long deltaMs) {
         onSeekStarted();
         long targetMs = Math.max(0, player().getPosition() + deltaMs);
@@ -436,12 +440,12 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
             preparedPlaybackKey = null;
             pinnedPlaybackKey = key;
             attachSurface();
-            player().parse(key, result, useParse, metadata, PlayerSetting.isAutoPlay(), startPositionMs);
+            player().parse(key, result, useParse, metadata, shouldAutoPlay(), startPositionMs);
         } else {
             preparedPlaybackKey = null;
             pinnedPlaybackKey = key;
             attachSurface();
-            player().start(PlaySpec.from(result, key, metadata), timeout, PlayerSetting.isAutoPlay(), startPositionMs);
+            player().start(PlaySpec.from(result, key, metadata), timeout, shouldAutoPlay(), startPositionMs);
         }
         syncKeepScreenOn();
     }

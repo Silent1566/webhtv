@@ -3,6 +3,7 @@ package com.fongmi.android.tv.ad.audio;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Objects;
+import java.util.Set;
 
 public final class AdSkipPolicyController implements AutoCloseable {
 
@@ -38,6 +39,7 @@ public final class AdSkipPolicyController implements AutoCloseable {
     private String ruleVersion;
     private Mode mode = Mode.PROMPT;
     private ModeResolver modeResolver = ignored -> mode;
+    private Set<String> promptOnlyRuleIds = Set.of();
     private long prompted;
     private long automated;
     private long upgrades;
@@ -78,6 +80,18 @@ public final class AdSkipPolicyController implements AutoCloseable {
     public synchronized void setModeResolver(ModeResolver resolver) {
         if (closed) return;
         modeResolver = Objects.requireNonNull(resolver, "resolver");
+        modeSwitches++;
+    }
+
+    /**
+     * Rules whose time boundary is an utterance boundary rather than a verified
+     * word boundary must never take the automatic seek path. This is independent
+     * of the user's provider-wide speech mode and is intentionally a small,
+     * explicit policy contract rather than a provider-name convention.
+     */
+    public synchronized void setPromptOnlyRuleIds(Set<String> ruleIds) {
+        if (closed) return;
+        promptOnlyRuleIds = ruleIds == null ? Set.of() : Set.copyOf(ruleIds);
         modeSwitches++;
     }
 
@@ -153,6 +167,7 @@ public final class AdSkipPolicyController implements AutoCloseable {
     }
 
     private Mode resolvedMode(AdAudioSignalProvider.AdAudioCandidate candidate) {
+        if (promptOnlyRuleIds.contains(candidate.ruleId())) return Mode.PROMPT;
         Mode resolved;
         try {
             resolved = modeResolver.modeFor(candidate.providerId());

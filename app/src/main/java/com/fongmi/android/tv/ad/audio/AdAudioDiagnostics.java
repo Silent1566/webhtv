@@ -22,7 +22,17 @@ public final class AdAudioDiagnostics {
         SPEECH_TEXT_EMPTY,
         SPEECH_MATCHED,
         SPEECH_COOLDOWN,
-        SPEECH_STALE_CALLBACK
+        SPEECH_STALE_CALLBACK,
+        SPEECH_PCM_DROPPED,
+        SPEECH_PCM_QUEUE_PEAK,
+        SPEECH_RESET,
+        SPEECH_CLOSE_PENDING,
+        SPEECH_CLOSED,
+        SPEECH_OWNER_REJECTED,
+        SPEECH_ACCEPT_UNDER_10_MS,
+        SPEECH_ACCEPT_UNDER_100_MS,
+        SPEECH_ACCEPT_OVER_100_MS,
+        SPEECH_RUNTIME_SUPPRESSED
     }
 
     private final EnumMap<Code, Long> counts = new EnumMap<>(Code.class);
@@ -40,6 +50,23 @@ public final class AdAudioDiagnostics {
         // synchronously under a process-wide lock, and codes such as STALE_GENERATION or
         // QUEUE_OVERFLOW can fire once per PCM frame on the ExoPlayer audio thread.
         if (shouldLogCount(total)) log("%s n=%d", code, total);
+    }
+
+    /** In-memory only: safe while holding a short state lock or on an audio callback. */
+    synchronized void recordQuietly(Code code) {
+        counts.put(code, counts.getOrDefault(code, 0L) + 1L);
+        lastCode = code;
+    }
+
+    synchronized void recordSpeechQueueDepth(int depth) {
+        counts.put(Code.SPEECH_PCM_QUEUE_PEAK,
+                Math.max(counts.getOrDefault(Code.SPEECH_PCM_QUEUE_PEAK, 0L), depth));
+    }
+
+    void recordSpeechAcceptNanos(long nanos) {
+        recordQuietly(nanos < 10_000_000L ? Code.SPEECH_ACCEPT_UNDER_10_MS
+                : nanos < 100_000_000L ? Code.SPEECH_ACCEPT_UNDER_100_MS
+                : Code.SPEECH_ACCEPT_OVER_100_MS);
     }
 
     /** Logs the first few occurrences, then decays to one line per 100. */
