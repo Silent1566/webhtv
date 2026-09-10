@@ -115,6 +115,7 @@ import com.fongmi.android.tv.ui.custom.CustomSeekView;
 import com.fongmi.android.tv.ui.custom.PlayerOsdController;
 import com.fongmi.android.tv.ui.custom.SpaceItemDecoration;
 import com.fongmi.android.tv.ui.dialog.CodecCapabilityDialog;
+import com.fongmi.android.tv.ui.dialog.PlaybackSpeedDialog;
 import com.fongmi.android.tv.ui.dialog.ContentDialog;
 import com.fongmi.android.tv.ui.dialog.AdRuleEditDialog;
 import com.fongmi.android.tv.ui.dialog.DanmakuDialog;
@@ -4101,9 +4102,12 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     private void onSpeed() {
-        mBinding.control.action.speed.setText(player().addSpeed());
-        saveUserSpeed();
-        setR1Callback();
+        PlaybackSpeedDialog.show(this, player().getSpeed(), speed -> {
+            if (!isServiceReady() || !isOwner() || player().isEmpty()) return;
+            mBinding.control.action.speed.setText(player().setSpeed(speed));
+            saveUserSpeed();
+            setR1Callback();
+        });
     }
 
     private void onSpeedAdd() {

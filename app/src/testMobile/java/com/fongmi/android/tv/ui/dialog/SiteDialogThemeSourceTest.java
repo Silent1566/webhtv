@@ -15,7 +15,7 @@ public class SiteDialogThemeSourceTest {
         String dialog = read("app/src/mobile/java/com/fongmi/android/tv/ui/dialog/SiteDialog.java");
         assertFalse("site selection must not force the static light dialog theme", dialog.contains("ThemeOverlay_WebHTV_LightDialog"));
         assertTrue("site selection should use the theme-aware dialog base", dialog.contains("return builder().setView(getBinding().getRoot());"));
-        assertTrue(dialog.contains("SiteDialogTheme.resolve(binding.getRoot().getContext(), Setting.getDynamicColor())"));
+        assertTrue(dialog.contains("SiteDialogTheme.resolve(binding.getRoot().getContext(), ThemeController.resolve(binding.getRoot().getContext()))"));
         assertTrue(dialog.contains("binding.getRoot().setBackgroundColor(theme.surface())"));
         assertTrue(dialog.contains("binding.keyword.setTextColor(theme.onSurface())"));
         assertTrue(dialog.contains("binding.keyword.setHintTextColor(theme.onSurfaceVariant())"));
