@@ -887,7 +887,7 @@
                 android:clipToPadding="false"
                 android:paddingStart="24dp"
                 android:paddingEnd="24dp"
-                android:nestedScrollingEnabled="false"
+                android:nestedScrollingEnabled="false" android:nextFocusDown="@id/part"
                 android:visibility="gone"
                 tools:visibility="visible" />
 
@@ -1347,7 +1347,6 @@
             android:clipChildren="false"
             android:clipToPadding="false"
             android:paddingStart="24dp"
-            android:paddingEnd="24dp"
             android:visibility="gone" />
 
         <androidx.leanback.widget.HorizontalGridView
