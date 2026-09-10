@@ -55,6 +55,7 @@ import com.fongmi.android.tv.service.DLNARendererService;
 import com.fongmi.android.tv.service.PlaybackService;
 import com.fongmi.android.tv.setting.AutoBackupPolicy;
 import com.fongmi.android.tv.setting.AppBranding;
+import com.fongmi.android.tv.setting.CustomCspSetting;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.adapter.BaseDiffCallback;
 import com.fongmi.android.tv.ui.adapter.TypeAdapter;
@@ -63,6 +64,7 @@ import com.fongmi.android.tv.ui.helper.TouchOptimizationHelper;
 import com.fongmi.android.tv.ui.custom.CustomRowPresenter;
 import com.fongmi.android.tv.ui.custom.CustomSelector;
 import com.fongmi.android.tv.ui.custom.CustomTitleView;
+import com.fongmi.android.tv.ui.dialog.CustomCspDialog;
 import com.fongmi.android.tv.ui.dialog.HistoryDialog;
 import com.fongmi.android.tv.ui.dialog.ExitConfirmDialog;
 import com.fongmi.android.tv.ui.dialog.HomeMenuDialog;
@@ -912,6 +914,15 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
         else if (item.getResId() == R.string.home_setting) SettingActivity.start(this);
         else if (item.getResId() == R.string.home_cast) PushActivity.start(this, 3);
         else if (item.getResId() == R.string.home_history_button) HistoryActivity.start(this);
+        else if (item.getResId() == R.string.home_custom_csp) openCustomCsp();
+    }
+
+    private void openCustomCsp() {
+        PermissionUtil.requestFile(this, granted -> {
+            if (isFinishing() || isDestroyed() || getSupportFragmentManager().isStateSaved()) return;
+            if (granted) CustomCspDialog.show(this, this::setFunc);
+            else Notify.show(R.string.setting_custom_csp_permission_required);
+        });
     }
 
     @Override
