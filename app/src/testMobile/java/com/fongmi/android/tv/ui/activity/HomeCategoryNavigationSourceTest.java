@@ -67,7 +67,7 @@ public class HomeCategoryNavigationSourceTest {
         assertTrue("the synthetic home item must not be treated as an adjacent category", adjacent.contains("candidate.isHome()"));
         assertTrue("every cross-category edge must return to the adjacent category button", edge.contains("focusCategoryButton(item);") && !edge.contains("focusFirstCard(item);"));
         assertTrue("cross-category focus must not vary with default VOD loading", !edge.contains("Setting.isHomeVodAutoLoad()") && !edge.contains("contentRow == 0"));
-        assertTrue("cached category pages must be visible before receiving the first-card request", adjacent.contains("getSupportFragmentManager().executePendingTransactions();") && adjacent.contains("mFolder.requestContentFocus(0);"));
+        assertTrue("cached category pages must be visible before receiving the first-card request", adjacent.contains("getSupportFragmentManager().executePendingTransactions();") && adjacent.contains("mFolder.requestContentFocus(0, focusGeneration);"));
     }
 
     @Test
@@ -80,8 +80,30 @@ public class HomeCategoryNavigationSourceTest {
         assertTrue("the category transaction must complete before the callback checks the new page", focus.contains("getSupportFragmentManager().executePendingTransactions();"));
         assertTrue("the callback must reject stale or unfinished category switches", focus.contains("!isCurrentCategory(item)"));
         assertTrue("the type row must be shown before restoring button focus", focus.indexOf("mBinding.typeRecycler.setVisibility(View.VISIBLE);") < focus.indexOf("mBinding.typeRecycler.setSelectedPosition(position, holder ->"));
-        assertTrue("the switched category must explicitly return to its first row", focus.contains("mFolder.scrollContentToTop();"));
+        assertTrue("the switched category must explicitly return to its first row", focus.contains("mFolder.scrollContentToTop(generation);"));
         assertTrue("a stale holder callback must not steal focus", focus.contains("mBinding.typeRecycler.getSelectedPosition() == position"));
+    }
+
+    @Test
+    public void homeCategoryFocusCallbacksCarryGenerationAndCancelOnInvalidation() throws Exception {
+        String home = homeActivity();
+        String folder = read(source("leanback", "java", "com", "fongmi", "android", "tv", "ui", "fragment", "FolderFragment.java"));
+        String type = read(source("leanback", "java", "com", "fongmi", "android", "tv", "ui", "fragment", "TypeFragment.java"));
+        String focus = method(home, "private void focusCategoryButton(Class item)", "private void invalidatePendingFocusRequests()");
+        String invalidate = method(home, "private void invalidatePendingFocusRequests()", "private void showHomeContent()");
+        String pause = method(home, "protected void onPause()", "protected void onBackInvoked()");
+
+        assertTrue("home category focus must allocate a unique generation", focus.contains("final int generation = ++focusGeneration;"));
+        assertTrue("home category focus must reject stale callbacks", focus.contains("if (generation != focusGeneration) return;"));
+        assertTrue("home category focus must pass its generation to the folder", focus.contains("mFolder.scrollContentToTop(generation);"));
+        assertTrue("the holder callback must reject a stale generation", focus.contains("generation != focusGeneration"));
+        assertTrue("home invalidation must remove the exact pending runnable", invalidate.contains("removeCallbacks(mPendingCategoryFocus)"));
+        assertTrue("home invalidation must advance the generation", invalidate.contains("focusGeneration++"));
+        assertTrue("pause must invalidate pending home focus", pause.contains("invalidatePendingFocusRequests();"));
+        assertTrue("folder must expose generation-aware scrolling", folder.contains("public void scrollContentToTop(int generation)"));
+        assertTrue("folder must expose generation-aware content focus", folder.contains("public void requestContentFocus(int contentRow, int generation)"));
+        assertTrue("type scrolling must reject stale generations", type.contains("generation != scrollGeneration"));
+        assertTrue("type view destruction must invalidate scroll callbacks", type.contains("scrollGeneration++;"));
     }
 
     @Test

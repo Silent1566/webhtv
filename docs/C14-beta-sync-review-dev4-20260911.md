@@ -86,3 +86,14 @@
 - 合并未提交时：`git merge --abort`。
 - 合并提交后：使用本文记录的恢复标签，或 `git revert -m 1 <merge-commit>`；修复提交保持独立可回滚。
 - `build-tv-debug.sh` 始终保留为本地保护 dirty 文件，不纳入提交。
+
+## Follow-up：2026-09-11 12:17 后 origin/beta 最新增量
+
+- 最终拉取发现 `origin/beta` 已从 `1e7d79ef29fd7568f376fe571bde0bd4cd7c6838` 前进至 `dbff441aa8a4bb54883ae07f722e53071413dd99`，新增完整提交链：
+  - `68df13503c07b20e68cdac072fa381037f672461`：修复 TV 分类边界切换中的过期焦点回调；
+  - `2cf5a93087d695e7cdd36a045d9b8af15a7430c7`：dev2 合并 beta 并完成复评；
+  - `dbff441aa8a4bb54883ae07f722e53071413dd99`：合并 PR #249 到 beta。
+- 只读 `git merge-tree --write-tree cf2a4c915a836b52a6cd0d0ae9f20a7d9535ecf7 origin/beta` 成功，实际 `git merge --no-commit --no-ff origin/beta` 无冲突。
+- 新增 beta 最终树相对当前 `dev4` 仅增加 7 个 dev2 已评审路径：`HomeActivity.java`、`VodActivity.java`、`FolderFragment.java`、`TypeFragment.java`、`VodActivityCategoryEdgeTest.java`、`HomeCategoryNavigationSourceTest.java` 和 `docs/beta-sync-review-dev2-20260911.md`。
+- 这些路径由 `docs/beta-sync-review-dev2-20260911.md` 覆盖，记录了源码生命周期/焦点复评、Leanback 分类测试 3 项、Mobile 定向测试 77 项及 Mobile/Leanback Arm64 Java 编译通过；本次新增 beta 仅为该已评审提交链及其 PR merge，按“已有评审覆盖且无合并冲突”条件跳过重复构建和复评。
+- 当前后续单元状态：最新 beta 已合入暂存树，guard/diff-check 通过，待提交、推送和更新 PR。
