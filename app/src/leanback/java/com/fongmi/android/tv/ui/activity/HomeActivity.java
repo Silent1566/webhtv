@@ -135,6 +135,8 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     private boolean webConfirmKeyDown;
     private boolean webConfirmLongPress;
     private boolean mTypeSelectionFromTouch;
+    private int focusGeneration;
+    private Runnable mPendingCategoryFocus;
     private final Runnable mTypeSwitch = this::switchType;
     private final Runnable mWebConfirmLongPress = this::triggerWebFocusedLongPress;
     private final Runnable mDelayedInitConfig = this::initConfig;
@@ -214,7 +216,12 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
             syncWebOverlayLayout();
         });
         mBinding.typeRecycler.setOnFocusChangeListener((view, hasFocus) -> {
-            if (hasFocus && isCategoryVisible() && mFolder != null) mFolder.scrollContentToTop();
+            if (!hasFocus) {
+                invalidatePendingFocusRequests();
+                if (mFolder != null) mFolder.clearContentFocusRequest();
+            } else if (isCategoryVisible() && mFolder != null) {
+                mFolder.scrollContentToTop();
+            }
         });
         mBinding.recycler.addOnChildViewHolderSelectedListener(new OnChildViewHolderSelectedListener() {
             @Override
@@ -285,30 +292,47 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     private void focusFirstCard(Class item) {
         showCategoryContent(item);
         getSupportFragmentManager().executePendingTransactions();
-        if (mFolder != null && isCurrentCategory(item)) mFolder.requestContentFocus(0);
+        if (mFolder != null && isCurrentCategory(item)) mFolder.requestContentFocus(0, focusGeneration);
     }
 
     private void focusCategoryButton(Class item) {
+        if (item == null || getSupportFragmentManager().isStateSaved()) return;
         showCategoryContent(item);
         // Complete the switch before checking the new page; otherwise the posted callback can
         // run while the target fragment is not added yet and drop the header/focus restoration.
         getSupportFragmentManager().executePendingTransactions();
-        mBinding.typeRecycler.post(() -> {
-            if (isFinishing() || isDestroyed() || !isCurrentCategory(item)) return;
+        final int generation = ++focusGeneration;
+        mPendingCategoryFocus = () -> {
+            if (generation != focusGeneration) return;
+            mPendingCategoryFocus = null;
+            if (isFinishing() || isDestroyed() || !isCurrentCategory(item) || mFolder == null) return;
             int position = mTypeAdapter.indexOf(item);
             if (position < 0 || mBinding.typeRecycler.getSelectedPosition() != position) return;
             mBinding.typeRecycler.setVisibility(View.VISIBLE);
             updateToolbarVisibility(true);
-            mFolder.scrollContentToTop();
+            mBinding.typeRecycler.requestFocus();
+            mFolder.scrollContentToTop(generation);
             mBinding.typeRecycler.setSelectedPosition(position, holder -> {
+                if (generation != focusGeneration || !mBinding.typeRecycler.hasFocus()) return;
                 if (isCurrentCategory(item) && mBinding.typeRecycler.getSelectedPosition() == position) {
                     holder.itemView.requestFocus();
                 }
             });
-        });
+        };
+        mBinding.typeRecycler.post(mPendingCategoryFocus);
+    }
+
+    private void invalidatePendingFocusRequests() {
+        focusGeneration++;
+        if (mBinding != null && mPendingCategoryFocus != null) {
+            mBinding.typeRecycler.removeCallbacks(mPendingCategoryFocus);
+        }
+        if (mBinding != null) mBinding.typeRecycler.removeCallbacks(mTypeSwitch);
+        mPendingCategoryFocus = null;
     }
 
     private void showHomeContent() {
+        invalidatePendingFocusRequests();
         mCurrentType = null;
         mBinding.progressLayout.setVisibility(View.VISIBLE);
         mBinding.categoryContainer.setVisibility(View.GONE);
@@ -324,7 +348,14 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     }
 
     private void showCategoryContent(Class item, boolean toggleFilter) {
-        if (getSupportFragmentManager().isStateSaved()) return;
+        if (getSupportFragmentManager().isStateSaved()) {
+            invalidatePendingFocusRequests();
+            return;
+        }
+        final int generation = ++focusGeneration;
+        if (mBinding != null && mPendingCategoryFocus != null) mBinding.typeRecycler.removeCallbacks(mPendingCategoryFocus);
+        mPendingCategoryFocus = null;
+        if (mFolder != null) mFolder.clearContentFocusRequest();
         getSupportFragmentManager().executePendingTransactions();
         if (item == null || item.isHome()) {
             showHomeContent();
@@ -360,7 +391,8 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
         else transaction.add(R.id.categoryContainer, target, tag);
         target.setUserVisibleHint(true);
         transaction.runOnCommit(() -> {
-            target.scrollContentToTop();
+            if (generation != focusGeneration || target != mFolder || !isCurrentCategory(item)) return;
+            target.scrollContentToTop(generation);
             restoreTypeFocus(keepTypeFocus, item);
             if (toggleFilter && target == mFolder && isCurrentCategory(item)) updateFilter(item);
         });
@@ -386,6 +418,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     }
 
     private void clearCategoryContent() {
+        invalidatePendingFocusRequests();
         mBinding.typeRecycler.removeCallbacks(mTypeSwitch);
         mPendingTypePosition = -1;
         mCurrentType = null;
@@ -1184,7 +1217,12 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     }
 
     private boolean requestContentFocus() {
-        if (isCategoryVisible()) return mFolder != null && mFolder.requestContentFocus();
+        if (isCategoryVisible()) {
+            invalidatePendingFocusRequests();
+            if (mFolder == null) return false;
+            mFolder.clearContentFocusRequest();
+            return mFolder.requestContentFocus();
+        }
         if (mBinding.recycler.getVisibility() != View.VISIBLE || mBinding.recycler.getChildCount() == 0) return false;
         View child = mBinding.recycler.getFocusedChild();
         if (child == null) child = mBinding.recycler.getChildAt(0);
@@ -1204,6 +1242,8 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
 
     @Override
     protected void onPause() {
+        invalidatePendingFocusRequests();
+        if (mFolder != null) mFolder.clearContentFocusRequest();
         mBinding.typeRecycler.removeCallbacks(mTypeSwitch);
         cancelWebConfirmKey();
         if (mWeb != null) mWeb.onPause();
@@ -1271,6 +1311,8 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
 
     @Override
     protected void onDestroy() {
+        invalidatePendingFocusRequests();
+        if (mFolder != null) mFolder.clearContentFocusRequest();
         mBinding.typeRecycler.removeCallbacks(mTypeSwitch);
         cancelPendingStartupTasks();
         if (mWeb != null) mWeb.destroy();
