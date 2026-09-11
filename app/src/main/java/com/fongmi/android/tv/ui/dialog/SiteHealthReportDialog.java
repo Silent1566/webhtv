@@ -10,6 +10,7 @@ import android.view.Window;
 import android.view.WindowManager;
 import android.widget.ProgressBar;
 
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.widget.LinearLayoutCompat;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
@@ -313,28 +314,35 @@ public class SiteHealthReportDialog extends BaseAlertDialog {
     }
 
     private void confirmClearSite(SiteHealthStore.Row row) {
-        new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog)
-                .setTitle(R.string.site_health_clear_site_title)
-                .setMessage(getString(R.string.site_health_clear_site_message, row.siteName))
-                .setNegativeButton(R.string.dialog_negative, null)
-                .setPositiveButton(R.string.dialog_positive, (dialog, which) -> {
+        showClearConfirmation(
+                R.string.site_health_clear_site_title,
+                getString(R.string.site_health_clear_site_message, row.siteName),
+                () -> {
                     SiteHealthStore.clear(row.siteKey);
                     binding.root.post(this::refreshReport);
-                })
-                .show();
+                });
     }
 
     private void confirmClearAll() {
         if (report.isEmpty()) return;
-        new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog)
-                .setTitle(R.string.site_health_clear_all_title)
-                .setMessage(R.string.site_health_clear_all_message)
-                .setNegativeButton(R.string.dialog_negative, null)
-                .setPositiveButton(R.string.dialog_positive, (dialog, which) -> {
+        showClearConfirmation(
+                R.string.site_health_clear_all_title,
+                getString(R.string.site_health_clear_all_message),
+                () -> {
                     SiteHealthStore.clear();
                     binding.root.post(this::refreshReport);
-                })
-                .show();
+                });
+    }
+
+    private void showClearConfirmation(int titleRes, CharSequence message, Runnable action) {
+        AlertDialog dialog = new MaterialAlertDialogBuilder(requireActivity(), R.style.Theme_WebHTV_LightDialog)
+                .setTitle(titleRes)
+                .setMessage(message)
+                .setNegativeButton(R.string.dialog_negative, null)
+                .setPositiveButton(R.string.dialog_positive, (confirmation, which) -> action.run())
+                .create();
+        dialog.show();
+        LightDialog.apply(dialog);
     }
 
     private void addRecentError(LinearLayoutCompat block, int labelRes, SiteHealthStore.Stage stage) {
