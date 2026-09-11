@@ -14,13 +14,13 @@ import static org.junit.Assert.assertTrue;
 public class TmdbDetailActivityLayoutTest {
 
     @Test
-    public void cinemaEpisodeGridStartsAtTheSameLeftEdgeAsOtherDetailRails() throws Exception {
+    public void cinemaEpisodeGridStartsAtTheSameLogicalStartEdgeAsOtherDetailRails() throws Exception {
         String adapter = readJava("com", "fongmi", "android", "tv", "ui", "adapter", "TmdbEpisodeAdapter.java");
         String cardSize = javaBlockAt(adapter, "private void applyCardSize(");
 
-        assertTrue("the first episode card in every grid row must not keep the shared half-gap on its outer edge",
-                cardSize.contains("position % gridSpanCount == 0")
-                        && cardSize.contains("mode == Mode.GRID && !firstGridColumn ? gridSpacing / 2 : 0"));
+        assertTrue("the episode grid must align its logical start edge with the other detail rails while keeping a full gap after every card",
+                cardSize.contains("int marginStart = 0;")
+                        && cardSize.contains("int marginEnd = mode == Mode.GRID ? gridSpacing : dp(holder.itemView, 12);"));
     }
 
     @Test
