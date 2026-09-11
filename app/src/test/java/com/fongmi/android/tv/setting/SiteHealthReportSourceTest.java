@@ -63,11 +63,14 @@ public class SiteHealthReportSourceTest {
         assertTrue(reportSource.contains("binding.sortRecent.setOnClickListener"));
         assertTrue(reportSource.contains("binding.sortRate.setOnClickListener"));
         assertTrue(reportSource.contains("binding.sortSamples.setOnClickListener"));
+        assertTrue(reportSource.contains("binding.clearAll.setOnClickListener"));
         assertTrue(reportSource.contains("root.setOnClickListener"));
         assertTrue(reportSource.contains("reasonLabel("));
         assertTrue(reportSource.contains("recentErrors("));
         assertTrue(reportSource.contains("confirmClearSite("));
         assertTrue(reportSource.contains("SiteHealthStore.clear(row.siteKey)"));
+        assertTrue(reportSource.contains("confirmClearAll()"));
+        assertTrue(reportSource.contains("SiteHealthStore.clear()"));
         assertTrue(dialogLayout.contains("@+id/report"));
         assertTrue(dialogLayout.contains("@string/site_health_report_view"));
         assertTrue(reportLayout.contains("@+id/filterAll"));
@@ -77,12 +80,16 @@ public class SiteHealthReportSourceTest {
         assertTrue(reportLayout.contains("@+id/sortRecent"));
         assertTrue(reportLayout.contains("@+id/sortRate"));
         assertTrue(reportLayout.contains("@+id/sortSamples"));
+        assertTrue(reportLayout.contains("@+id/clearAll"));
         assertTrue(reportLayout.contains("@+id/rows"));
         assertTrue(strings.contains("name=\"site_health_report_title\""));
         assertTrue(strings.contains("name=\"site_health_filter_all\""));
         assertTrue(strings.contains("name=\"site_health_sort_failures\""));
         assertTrue(strings.contains("name=\"site_health_report_recent_errors\""));
         assertTrue(strings.contains("name=\"site_health_clear_site\""));
+        assertTrue(strings.contains("name=\"site_health_clear_all\""));
+        assertTrue(strings.contains("name=\"site_health_clear_all_title\""));
+        assertTrue(strings.contains("name=\"site_health_clear_all_message\""));
         assertTrue(strings.contains("name=\"site_health_reason_timeout\""));
         assertTrue(strings.contains("name=\"site_health_stage_parse\""));
     }

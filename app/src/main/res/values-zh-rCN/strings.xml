@@ -533,6 +533,9 @@
     <string name="site_health_clear_site">清空本站</string>
     <string name="site_health_clear_site_title">清空站点统计？</string>
     <string name="site_health_clear_site_message">清空“%1$s”的健康样本？</string>
+    <string name="site_health_clear_all">一键清空样本</string>
+    <string name="site_health_clear_all_title">清空全部站点健康样本？</string>
+    <string name="site_health_clear_all_message">将删除全部播放链路健康样本，且无法撤销。</string>
     <string name="site_health_stage_search">搜索</string>
     <string name="site_health_stage_detail">详情</string>
     <string name="site_health_stage_parse">解析</string>

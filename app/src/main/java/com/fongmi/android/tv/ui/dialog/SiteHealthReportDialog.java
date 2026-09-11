@@ -85,6 +85,7 @@ public class SiteHealthReportDialog extends BaseAlertDialog {
         binding.sortRecent.setOnClickListener(view -> setSort(Sort.RECENT));
         binding.sortRate.setOnClickListener(view -> setSort(Sort.RATE));
         binding.sortSamples.setOnClickListener(view -> setSort(Sort.SAMPLES));
+        binding.clearAll.setOnClickListener(view -> confirmClearAll());
         binding.close.setOnClickListener(view -> dismiss());
     }
 
@@ -123,6 +124,8 @@ public class SiteHealthReportDialog extends BaseAlertDialog {
     private void render() {
         while (binding.rows.getChildCount() > 1) binding.rows.removeViewAt(1);
         binding.summary.setText(summaryText(report.summary));
+        binding.clearAll.setEnabled(!report.isEmpty());
+        binding.clearAll.setAlpha(report.isEmpty() ? 0.5f : 1.0f);
         int visible = 0;
         for (SiteHealthStore.Row row : sortedRows()) {
             if (!matches(row)) continue;
@@ -311,6 +314,20 @@ public class SiteHealthReportDialog extends BaseAlertDialog {
                 .setNegativeButton(R.string.dialog_negative, null)
                 .setPositiveButton(R.string.dialog_positive, (dialog, which) -> {
                     SiteHealthStore.clear(row.siteKey);
+                    report = SiteHealthStore.report();
+                    render();
+                })
+                .show();
+    }
+
+    private void confirmClearAll() {
+        if (report.isEmpty()) return;
+        new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog)
+                .setTitle(R.string.site_health_clear_all_title)
+                .setMessage(R.string.site_health_clear_all_message)
+                .setNegativeButton(R.string.dialog_negative, null)
+                .setPositiveButton(R.string.dialog_positive, (dialog, which) -> {
+                    SiteHealthStore.clear();
                     report = SiteHealthStore.report();
                     render();
                 })
