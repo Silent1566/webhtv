@@ -9,6 +9,9 @@
     <string name="home_push">Push</string>
     <string name="home_cast">Cast</string>
     <string name="home_setting">Setting</string>
+    <string name="home_custom_csp">Site injection</string>
+    <string name="home_custom_csp_on">Site injection: On</string>
+    <string name="home_custom_csp_off">Site injection: Off</string>
     <string name="control_speed">Speed</string>
     <string name="control_scale">Scale</string>
     <string name="control_episode_column">Long title columns</string>
