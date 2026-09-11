@@ -258,8 +258,7 @@
                         android:layout_marginStart="12dp"
                         android:insetTop="0dp"
                         android:insetBottom="0dp"
-                        android:text="@string/dialog_tmdb_add"
-                        android:textAllCaps="false" />
+                        />
 
                 </androidx.appcompat.widget.LinearLayoutCompat>
 
@@ -313,8 +312,7 @@
                         android:layout_marginStart="12dp"
                         android:insetTop="0dp"
                         android:insetBottom="0dp"
-                        android:text="@string/dialog_tmdb_add"
-                        android:textAllCaps="false" />
+                        />
 
                 </androidx.appcompat.widget.LinearLayoutCompat>
 
@@ -331,8 +329,7 @@
                         android:layout_width="0dp"
                         android:layout_height="52dp"
                         android:layout_weight="1"
-                        android:text="@string/dialog_tmdb_site_manage"
-                        android:textAllCaps="false" />
+                        />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/resetDefault"
@@ -341,8 +338,7 @@
                         android:layout_height="52dp"
                         android:layout_marginStart="12dp"
                         android:layout_weight="1"
-                        android:text="@string/dialog_tmdb_reset_default"
-                        android:textAllCaps="false" />
+                        />
 
                 </androidx.appcompat.widget.LinearLayoutCompat>
 
