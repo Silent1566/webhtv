@@ -110,9 +110,9 @@ import com.fongmi.android.tv.playback.PlaybackOrientation;
 import com.fongmi.android.tv.playback.SubtitleRestoreCoordinator;
 import com.fongmi.android.tv.player.IntroSkipKinds;
 import com.fongmi.android.tv.player.IntroSkipPlayback;
+import com.fongmi.android.tv.player.PlaybackResourceClassifier;
 import com.fongmi.android.tv.player.PlayerManager;
 import com.fongmi.android.tv.player.PlayerHelper;
-import com.fongmi.android.tv.player.exo.MediaSourceFactory;
 import com.fongmi.android.tv.player.mpv.MpvConfigStore;
 import com.fongmi.android.tv.service.AiAdDetectionService;
 import com.fongmi.android.tv.service.AiEpisodeSeasonService;
@@ -8528,7 +8528,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
 
     private boolean isInlineAdFeedbackSupportedFormat() {
         return player() != null && !TextUtils.isEmpty(player().getUrl())
-                && MediaSourceFactory.isHlsUrl(player().getUrl());
+                && PlaybackResourceClassifier.isHlsUrl(player().getUrl());
     }
 
     private void submitInlineAdFeedback() {

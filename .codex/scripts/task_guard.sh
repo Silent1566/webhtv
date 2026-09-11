@@ -335,7 +335,7 @@ finish_task() {
     if [[ -e "$path" || -L "$path" ]]; then
       git add -A -- "$path"
     else
-      git add -u -- .
+      git update-index --remove -- "$path"
     fi
     task_change_count=$((task_change_count + 1))
   done < <(list_dirty)

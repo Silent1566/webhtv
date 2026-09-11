@@ -446,7 +446,7 @@ public class TmdbDetailActivityLayoutTest {
         assertTrue("detail inline playback must use the same HLS and AI availability gate as the native player",
                 source.contains("private boolean isInlineAdFeedbackEnabled()")
                         && source.contains("Setting.isAiConfigReady() && Setting.isAdblock() && Setting.isAiAdDetection()")
-                        && source.contains("MediaSourceFactory.isHlsUrl(player().getUrl())"));
+                        && source.contains("PlaybackResourceClassifier.isHlsUrl(player().getUrl())"));
         assertTrue("detail inline playback must submit AI analysis and save confirmed user rules",
                 source.contains("private void submitInlineAdFeedback()")
                         && source.contains("new AiAdDetectionService(config).analyze(request)")
