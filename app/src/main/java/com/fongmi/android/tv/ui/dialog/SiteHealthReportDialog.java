@@ -121,6 +121,11 @@ public class SiteHealthReportDialog extends BaseAlertDialog {
         button.setTypeface(Typeface.DEFAULT, selected ? Typeface.BOLD : Typeface.NORMAL);
     }
 
+    private void refreshReport() {
+        report = SiteHealthStore.report();
+        render();
+    }
+
     private void render() {
         while (binding.rows.getChildCount() > 1) binding.rows.removeViewAt(1);
         binding.summary.setText(summaryText(report.summary));
@@ -314,8 +319,7 @@ public class SiteHealthReportDialog extends BaseAlertDialog {
                 .setNegativeButton(R.string.dialog_negative, null)
                 .setPositiveButton(R.string.dialog_positive, (dialog, which) -> {
                     SiteHealthStore.clear(row.siteKey);
-                    report = SiteHealthStore.report();
-                    render();
+                    binding.root.post(this::refreshReport);
                 })
                 .show();
     }
@@ -328,8 +332,7 @@ public class SiteHealthReportDialog extends BaseAlertDialog {
                 .setNegativeButton(R.string.dialog_negative, null)
                 .setPositiveButton(R.string.dialog_positive, (dialog, which) -> {
                     SiteHealthStore.clear();
-                    report = SiteHealthStore.report();
-                    render();
+                    binding.root.post(this::refreshReport);
                 })
                 .show();
     }

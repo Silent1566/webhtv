@@ -71,6 +71,10 @@ public class SiteHealthReportSourceTest {
         assertTrue(reportSource.contains("SiteHealthStore.clear(row.siteKey)"));
         assertTrue(reportSource.contains("confirmClearAll()"));
         assertTrue(reportSource.contains("SiteHealthStore.clear()"));
+        String refreshBody = methodBody(reportSource, "private void refreshReport()");
+        assertTrue(refreshBody.indexOf("report = SiteHealthStore.report()") < refreshBody.indexOf("render()"));
+        assertTrue(methodBody(reportSource, "private void confirmClearSite(").contains("binding.root.post(this::refreshReport)"));
+        assertTrue(methodBody(reportSource, "private void confirmClearAll()").contains("binding.root.post(this::refreshReport)"));
         assertTrue(dialogLayout.contains("@+id/report"));
         assertTrue(dialogLayout.contains("@string/site_health_report_view"));
         assertTrue(reportLayout.contains("@+id/filterAll"));
