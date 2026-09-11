@@ -69,11 +69,29 @@ public class TmdbEpisodeAdapterTest {
         String nativeBody = nativeBranch >= 0 && nextBranch > nativeBranch ? source.substring(nativeBranch, nextBranch) : "";
 
         assertTrue("native-enhanced TMDB episode cards should bind the file-size badge instead of always hiding it",
-                nativeBody.contains("boolean showDate = !TextUtils.isEmpty(holder.binding.date.getText()) && mode == Mode.GRID;")
-                        && nativeBody.contains("bindFileSize(holder, nativeEnhancedFileSizeBadge(fileSize, cleanTitle), showDate);")
+                nativeBody.contains("boolean showMeta = !TextUtils.isEmpty(holder.binding.date.getText());")
+                        && nativeBody.contains("bindFileSize(holder, nativeEnhancedFileSizeBadge(fileSize, cleanTitle), showMeta);")
                         && source.contains("extractFileSize(episode.getRawDisplayName())")
                         && source.contains("withSourceFileSize(episode.getRawDisplayName(), title")
                         && !nativeBody.contains("holder.binding.fileSize.setVisibility(View.GONE);"));
+    }
+
+    @Test
+    public void nativeEnhancedListShowsDateRuntimeRatingAndFileSize() throws Exception {
+        String source = tmdbEpisodeAdapterSource();
+        int nativeBranch = source.indexOf("if (isNativeEnhanced())");
+        int nextBranch = source.indexOf("} else if (mode == Mode.GRID)", nativeBranch);
+        String nativeBody = nativeBranch >= 0 && nextBranch > nativeBranch ? source.substring(nativeBranch, nextBranch) : "";
+
+        assertTrue("native-enhanced list cards should expose all available episode metadata",
+                nativeBody.contains("boolean showMeta = !TextUtils.isEmpty(holder.binding.date.getText());")
+                        && nativeBody.contains("holder.binding.date.setVisibility(showMeta ? View.VISIBLE : View.GONE);")
+                        && nativeBody.contains("bindFileSize(holder, nativeEnhancedFileSizeBadge(fileSize, cleanTitle), showMeta);")
+                        && nativeBody.contains("holder.binding.badge.setText(nativeEnhancedScore(tmdbEpisode));")
+                        && nativeBody.contains("holder.binding.badge.setVisibility(TextUtils.isEmpty(holder.binding.badge.getText()) ? View.GONE : View.VISIBLE);")
+                        && nativeBody.contains("holder.binding.overview.setVisibility(TextUtils.isEmpty(overview) ? View.GONE : View.VISIBLE);")
+                        && !nativeBody.contains("boolean showMeta = !TextUtils.isEmpty(holder.binding.date.getText()) && mode == Mode.GRID;")
+                        && !nativeBody.contains("mode == Mode.GRID && !TextUtils.isEmpty(overview)"));
     }
 
     @Test
