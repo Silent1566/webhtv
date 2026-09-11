@@ -20,7 +20,6 @@ import androidx.viewbinding.ViewBinding;
 import com.fongmi.android.tv.Updater;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.setting.Setting;
-import com.fongmi.android.tv.theme.ThemeController;
 import com.fongmi.android.tv.ui.audio.AudioMiniPlayer;
 import com.fongmi.android.tv.ui.custom.CustomWallView;
 import com.fongmi.android.tv.utils.ResUtil;
@@ -44,19 +43,15 @@ public abstract class BaseActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        ThemeController.applyNightMode(this);
         enableEdgeToEdge();
         enableDynamicColor();
         super.onCreate(savedInstanceState);
         setContentView(getBinding().getRoot());
-        ThemeController.apply(this);
         audioMiniPlayer = new AudioMiniPlayer(this);
         EventBus.getDefault().register(this);
         initView(savedInstanceState);
         setBackCallback();
         initEvent();
-        // Some detail/player controls are inflated during initView; bind them after the Activity tree is complete.
-        ThemeController.apply(this);
     }
 
     @Override
@@ -134,7 +129,7 @@ public abstract class BaseActivity extends AppCompatActivity {
     }
 
     private void enableDynamicColor() {
-        int color = ThemeController.dynamicColor(this);
+        int color = Setting.getDynamicColor();
         if (color != 0) DynamicColors.applyToActivityIfAvailable(this, new DynamicColorsOptions.Builder().setContentBasedSource(color).build());
     }
 

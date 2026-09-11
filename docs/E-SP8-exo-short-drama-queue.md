@@ -405,3 +405,13 @@ startup／seek、重缓冲和稳定播放质量不得发生可重复的实质退
 - 尚未完成：E-SP8 实施 commit/tag 尚未生成；尚未在合并 beta 后复评 beta 新增提交与冲突组合结果；尚无真实设备连续切集／网络争用／字幕与弹幕时序证据。
 - rollback anchor：`655bf1a61e752dd5c6ccbbc3e92f92e2c6a35c02`；已另存当前 E-SP8 工作树临时补丁于 `/tmp/webhtv-esp8-before-beta-20260911/`，不纳入仓库。
 - **唯一下一步：用当前 guard finish 提交并标记已验证的 E-SP8 原子改动；随后以新的 beta-sync guard 合并 `origin/beta`，评审合并差异及已提交未推送提交。**
+
+## Recovery anchor（2026-09-11 23:22 Asia/Shanghai）
+
+- E-SP8 原子提交已完成：`2b22c5240d52a8c2054299326f44fee6743ab26f`，recovery tag 为 `recovery/E-SP8/20260911201514-2b22c5240d52`。
+- 当前合并任务为 `beta-sync-review-dev1-20260911`（`standard`），在 `dev1@2b22c5240d52a8c2054299326f44fee6743ab26f` 上无冲突合入 `origin/beta@be1b02e06b22a4fa2f08c791555536e3e6154c95`；冲突组合保留 beta 的 EXO 上游恢复/速度选择/HLS 分类改动，并保留 E-SP8 的媒体 ID、独立取址、header-cache namespace 与队列事务。
+- 合并后定向验证：Mobile/Leanback Arm64 Java 编译及播放器/EXO/UI-player Mobile 单测（1263 项）`BUILD SUCCESSFUL in 50s`；Mobile Arm64 Debug APK 组装 `BUILD SUCCESSFUL in 54s`；`git diff --cached --check` 与 task guard check 通过。
+- 设备启动证据：V1923A（API 28）安装并启动 Mobile Debug APK 成功，首页与短剧内容卡片可见、无应用 `FATAL EXCEPTION`。详情页尝试随后被外部 `pid 5484` 执行 force-stop 中断；没有可重复的短剧站源/自然连续切集链路，因此不将该运行记录提升为播放优化或正式放量验收。
+- 当前状态：**E-SP8 代码实现和合并后源码复评通过；实验默认策略及正式放量前的连续切集、网络争用、字幕/弹幕和 Leanback 实机验收仍保持未完成。**
+- 回滚：代码层面可使用已有 E-SP8 recovery tag；当前 beta 合并提交完成后另以本 task 的 recovery tag 回滚整合层。
+- **唯一下一步：完成 `beta-sync-review-dev1-20260911` 的 merge commit/tag，推送 `dev1` 并创建目标为 `beta` 的中文 PR。**

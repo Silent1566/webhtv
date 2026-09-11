@@ -35,6 +35,7 @@
 | 10 | `E6-1` | Exo | 有界缓存写入 correctness | **已实施并验证**：`0a8ed3b910679a08a7e41c735338c3804a2eb938` / `recovery/E6-1/20260827145043-0a8ed3b91067`；不引入并行预加载 | [E6-1-exo-smb-proxy-cache-correctness.md](E6-1-exo-smb-proxy-cache-correctness.md) |
 | 11 | `E7-1` | Exo | ISO reader safety | **已实施并验证**：`491a7def30484b0936426bbc57b09f5b6435ae80` / `recovery/E7-1/20260827160011-491a7def3048`；仅移植 IsoDataReader 安全修复 | [E7-1-exo-iso-reader-safety.md](E7-1-exo-iso-reader-safety.md) |
 | 12 | `E7-2` | Exo | ISO multi-extent reader/API | **已实施并编译验证**：`5f7d834bfdd00f215609df7b41c2ea7cadc2cd4f` / `recovery/E7-2-C3/20260827193629-5f7d834bfdd0`；按用户要求未跑测试/真实 split ISO | [E7-2-exo-iso-multi-extent-api.md](E7-2-exo-iso-multi-extent-api.md) |
+| 13 | `E-ROLLBACK-EXO` | Exo | 将 EXO 播放核心与直接测试恢复到 `fish2018/webhtv:main` 上游模式 | **已实施，双端定向编译/单测通过，待提交/tag** | [E-ROLLBACK-exo-upstream-mode.md](E-ROLLBACK-exo-upstream-mode.md) |
 | 13 | `P0` | MPV | native 基线、等价提交与运行验收 | **评估已完成：基线/ELF/资产校验通过；无代码，待 P1/P2 明确批准** | [P0-mpv-native-baseline.md](P0-mpv-native-baseline.md) |
 | 14 | `P1` | MPV | 格式与 shader correctness | **已实施并验证**：`a5971e3814d3b0826a5702d607dd6d1675b2ce53` / `recovery/P1-MPV-FORMAT-SHADER-CORRECTNESS/20260828184107-a5971e3814d3`；用户多原盘回归通过 | [P1-mpv-format-shader-correctness.md](P1-mpv-format-shader-correctness.md) |
 | 15 | `P2-1` | MPV | Vulkan generic UV | **已实施并验证**：`fe4184933fbb3a02bd1ff2ff794a277123c35bdc` / `recovery/P2-1-MPV-VULKAN-GENERIC-UV/20260829003632-fe4184933fbb`；双 ABI、ELF、APK 资产身份及 compute/fragment/legacy/stable/auto 真机路径通过 | [P2-1-mpv-vulkan-generic-uv.md](P2-1-mpv-vulkan-generic-uv.md) |
@@ -58,12 +59,14 @@
 | 31 | `C10` | 通用/播放器供应链 | 播放器 AAR、Maven sidecar、lock、MPV native override 和构建输入以上游为准 | **清理已验证，待提交**：正式发布输入及全部 MPV native override 已与 `fish2018/webtv:main@ec478b0b697422a7785171c7b51a35b7a526564e` 对齐；v556 残留已删除，双 ABI MPV ELF 门禁通过，详情见 [C10-binary-upstream-alignment.md](C10-binary-upstream-alignment.md) | [C10-binary-upstream-alignment.md](C10-binary-upstream-alignment.md) |
 | 32 | `C12` | 通用/上游应用同步 | 合并 `origin/beta` 在 C11 之后的触控优化、弹幕手动匹配记忆、TMDB 焦点、MPV duration 修复，并复审本地未推送广告规则批量导入/启停 | **实施中**：beta `cebe42b190d5d7f1306e4ea3d0b6d833112ad464`，本地基线 `60fc55e18cf755d25dc9c140908188fb21898c44`；当前无冲突合并树待复审 | [C12-beta-sync.md](C12-beta-sync.md) |
 | 33 | `C13` | 通用/上游应用同步 | `dev4` 合并 `origin/beta` 最新代码并复评手机版外观与语言入口及 beta 增量 | **已验证，待提交/推送/PR**：beta `cc88e278a8ddc2088a82a68dbf1671e419606a29`；无内容冲突；修复 `gradlew` 可执行位及两项陈旧测试断言；39 项聚焦测试与双端 Arm64 Java 编译通过 | [C13-beta-sync-review.md](C13-beta-sync-review.md) |
+| 34 | `C14` | 通用/上游应用同步 | `dev4` 合并 `origin/beta` 最新代码并复评 EXO 上游恢复提交及 beta 增量 | **已验证，待提交/推送/PR**：beta 最新 `dbff441aa8a4bb54883ae07f722e53071413dd99`；初始 `1e7d79ef29fd7568f376fe571bde0bd4cd7c6838` 已完成双端编译/聚焦复评，后续 dev2 三提交链已有独立评审且无冲突，已合入当前暂存树 | [C14-beta-sync-review-dev4-20260911.md](C14-beta-sync-review-dev4-20260911.md) |
+| 35 | `C15` | 通用/上游应用同步 | `dev1` 合并 `origin/beta` 最新代码并复评 E-SP8 短剧 Exo 队列及全部已提交未推送改动 | **合并后复评通过，待提交/推送/PR**：beta `be1b02e06b22a4fa2f08c791555536e3e6154c95`；保留既有 beta 评审覆盖并复核末端三提交及 E-SP8 冲突组合；双端 Arm64 Java 编译、1263 项播放器相关单测、Mobile Debug APK 组装和设备启动检查通过 | [C15-beta-sync-review-dev1-20260911.md](C15-beta-sync-review-dev1-20260911.md) |
 
 新增产品需求（不改变既有上游提交的实施顺序）：
 
 | 任务 ID | 类别 | 功能/能力 | 状态 | 唯一文档 |
 | --- | --- | --- | --- | --- |
-| `E-SP8` | Exo 性能/播放行为 | 基于现有短剧源设置的单实例队列连播、下一集预解析与受控预加载 | **2026-09-08 已批准按计划实施，进行中**；实验默认关闭，代码／双端设备对照与正式放量尚未完成；不变更依赖 | [E-SP8-exo-short-drama-queue.md](E-SP8-exo-short-drama-queue.md) |
+| `E-SP8` | Exo 性能/播放行为 | 基于现有短剧源设置的单实例队列连播、下一集预解析与受控预加载 | **代码实施及 beta 合并后复评通过**：`2b22c5240d52a8c2054299326f44fee6743ab26f` / `recovery/E-SP8/20260911201514-2b22c5240d52`；实验默认策略不变，连续切集双端设备验收与正式放量尚未完成；不变更依赖 | [E-SP8-exo-short-drama-queue.md](E-SP8-exo-short-drama-queue.md) |
 
 `C1` 是跨播放器真实输入验收维度，不单独形成代码任务或文档；它写入对应的 E/P 任务文档。`E-SP3` 已在 `fongmi-sync` 完成 App/Media3 合并，保留既有 `E4-J1`/`E6-1`/`E7-1`/`E7-2 + C3` 能力；`E9-3` 与已完成的 `P1` 现已共同进入集成树，后续按既定顺序处理 P2 阶段。
 
