@@ -1,34 +1,68 @@
 #!/usr/bin/env bash
-# 打包 Mobile Arm64_v8a Debug APK 并推送到 Android 模拟器/设备。
-# 用法:
-#   bash scripts/build_arm64_debug_install.sh [--serial 192.168.50.3:5555] [--adb /path/to/adb] [--skip-check]
-# 示例:
-#   bash scripts/build_arm64_debug_install.sh
-#   bash scripts/build_arm64_debug_install.sh --serial 192.168.50.3:5559
+# 打包指定 flavor (mobile/leanback) 的 Debug APK 并推送到 Android 模拟器/设备。
 #
-# 流程: 检查 Gradle 守护进程是否空闲 -> 打包 :app:assembleMobileArm64_v8aDebug
+# 用法:
+#   bash scripts/build_arm64_debug_install.sh [--flavor mobile|leanback]
+#                                            [--abi arm64-v8a|armeabi-v7a]
+#                                            [--serial 192.168.50.3:5555]
+#                                            [--adb /path/to/adb]
+#                                            [--skip-check]
+# 示例:
+#   bash scripts/build_arm64_debug_install.sh                      # 手机版 arm64
+#   bash scripts/build_arm64_debug_install.sh --flavor leanback    # TV/电脑版 arm64
+#   bash scripts/build_arm64_debug_install.sh --flavor leanback --serial 192.168.50.3:5559
+#
+# 流程: 检查 Gradle 守护进程是否空闲 -> gradlew assemble<Flavor><Abi>Debug
 #       -> adb 连接/安装 -> 校验模拟器上包存在。
+# 手机版 package 为 com.silent.android.webhtv，TV/电脑版(leanback) 同用该包名。
 
 set -euo pipefail
 
+FLAVOR="mobile"
+ABI="arm64-v8a"
 SERIAL="192.168.50.3:5555"
 ADB=""
 SKIP_IDLE_CHECK=0
 
 usage() {
-  sed -n '2,9p' "$0" | sed 's/^# //; s/^#$//'
+  sed -n '3,14p' "$0" | sed 's/^# //; s/^#$//'
   exit 0
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    -f|--flavor) FLAVOR="${2:?missing flavor}"; shift 2 ;;
+    -a|--abi) ABI="${2:?missing abi}"; shift 2 ;;
     -s|--serial) SERIAL="${2:?missing serial}"; shift 2 ;;
-    -a|--adb) ADB="${2:?missing adb path}"; shift 2 ;;
+    --adb) ADB="${2:?missing adb path}"; shift 2 ;;
     --skip-check) SKIP_IDLE_CHECK=1; shift ;;
     -h|--help) usage ;;
     *) echo "未知参数: $1" >&2; usage ;;
   esac
 done
+
+case "$FLAVOR" in
+  mobile|leanback) ;;
+  *) echo "❌ --flavor 只能是 mobile 或 leanback" >&2; usage ;;
+esac
+
+case "$ABI" in
+  arm64-v8a|armeabi-v7a) ;;
+  *) echo "❌ --abi 只能是 arm64-v8a 或 armeabi-v7a" >&2; usage ;;
+esac
+
+# 组装 Gradle flavor/ABI 名
+case "$FLAVOR" in
+  mobile)   FLAVOR_GRADLE="Mobile" ;;
+  leanback) FLAVOR_GRADLE="Leanback" ;;
+esac
+case "$ABI" in
+  arm64-v8a)   ABI_GRADLE="Arm64_v8a";   ABISUFFIX="arm64_v8a" ;;
+  armeabi-v7a) ABI_GRADLE="Armeabi_v7a"; ABISUFFIX="armeabi_v7a" ;;
+esac
+TASK=":app:assemble${FLAVOR_GRADLE}${ABI_GRADLE}Debug"
+APK="app/build/outputs/apk/${FLAVOR}${ABI_GRADLE}/debug/app-${FLAVOR}-${ABISUFFIX}-debug.apk"
+
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 cd "$ROOT_DIR"
@@ -50,6 +84,7 @@ if [[ -z "$ADB" ]]; then
   exit 1
 fi
 
+echo "==> 构建类型: ${FLAVOR}/${ABI} Debug"
 echo "==> adb: $ADB"
 echo "==> 设备: $SERIAL"
 
@@ -65,10 +100,9 @@ if [[ "$SKIP_IDLE_CHECK" -eq 0 ]]; then
   echo "==> Gradle 守护进程空闲，可以开始打包"
 fi
 
-echo "==> 开始打包 :app:assembleMobileArm64_v8aDebug ..."
-./gradlew :app:assembleMobileArm64_v8aDebug
+echo "==> 开始打包 $TASK ..."
+./gradlew "$TASK"
 
-APK="app/build/outputs/apk/mobileArm64_v8a/debug/app-mobile-arm64_v8a-debug.apk"
 if [[ ! -f "$APK" ]]; then
   echo "❌ 打包结束但未找到 APK: $APK" >&2
   exit 1
@@ -90,4 +124,4 @@ else
   exit 1
 fi
 
-echo "✅ 全部完成: 打包并安装到 $SERIAL"
+echo "✅ 全部完成: ${FLAVOR}/${ABI} Debug 打包并安装到 $SERIAL"
