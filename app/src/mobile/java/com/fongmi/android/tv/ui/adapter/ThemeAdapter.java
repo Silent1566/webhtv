@@ -15,18 +15,13 @@ import com.github.bassaer.library.MDColor;
 public class ThemeAdapter extends RecyclerView.Adapter<ThemeAdapter.ViewHolder> {
 
     private final OnClickListener listener;
-    private int selected;
+    private final int selected;
     private final int[] mItems;
 
     public ThemeAdapter(OnClickListener listener, int[] items, int selected) {
         this.listener = listener;
         this.selected = selected;
         this.mItems = items;
-    }
-
-    public void setSelected(int color) {
-        selected = color;
-        notifyDataSetChanged();
     }
 
     public interface OnClickListener {

@@ -16,14 +16,12 @@ import androidx.fragment.app.Fragment;
 
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.event.RefreshEvent;
-import com.fongmi.android.tv.theme.ThemeProfile;
-import com.fongmi.android.tv.theme.ThemeProfileStore;
 import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.google.android.material.textview.MaterialTextView;
 
-public final class AppearanceDialog extends DialogFragment {
+public final class AppearanceDialog extends DialogFragment implements ThemeDialog.Listener {
 
     private String[] uiScales;
     private String[] languages;
@@ -50,7 +48,7 @@ public final class AppearanceDialog extends DialogFragment {
         LinearLayout content = new LinearLayout(requireContext());
         content.setOrientation(LinearLayout.VERTICAL);
         uiScaleValue = addRow(content, R.string.setting_ui_scale, uiScales[Setting.getUiScaleIndex()], this::chooseUiScale);
-        themeValue = addRow(content, R.string.setting_theme_color, getThemeText(), view -> ThemeEditorDialog.show(this));
+        themeValue = addRow(content, R.string.setting_theme_color, getThemeText(), view -> ThemeDialog.show(this));
         imageSizeValue = addRow(content, R.string.setting_size, imageSizes[PlayerSetting.getSize()], this::chooseImageSize);
         languageValue = addRow(content, R.string.setting_language, languages[Setting.getLanguageIndex()], this::chooseLanguage);
         return content;
@@ -118,15 +116,21 @@ public final class AppearanceDialog extends DialogFragment {
         });
     }
 
+    @Override
+    public void setTheme(int color) {
+        themeValue.setText(themeText(color));
+        Setting.putThemeColor(color);
+        dismissAllowingStateLoss();
+        RefreshEvent.theme();
+    }
+
     private String getThemeText() {
-        ThemeProfile profile = ThemeProfileStore.load();
-        String background = profile.background == null ? ThemeProfile.BACKGROUND_WALLPAPER : profile.background.type;
-        int backgroundRes = ThemeProfile.BACKGROUND_SOLID.equals(background)
-                ? R.string.theme_background_solid
-                : ThemeProfile.BACKGROUND_TINTED_WALLPAPER.equals(background)
-                ? R.string.theme_background_tinted_wallpaper
-                : R.string.theme_background_wallpaper;
-        return profile.displayName() + " · " + getString(backgroundRes);
+        return themeText(Setting.getThemeColor());
+    }
+
+    private String themeText(int color) {
+        if (color == -1) return getString(R.string.setting_off);
+        return getString(color == 0 ? R.string.setting_auto : R.string.setting_custom);
     }
 
     private int dp(int value) {

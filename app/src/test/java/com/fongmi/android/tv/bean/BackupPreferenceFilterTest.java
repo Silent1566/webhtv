@@ -179,17 +179,6 @@ public class BackupPreferenceFilterTest {
     }
 
     @Test
-    public void themeProfilePreferencesFollowSettingsOption() {
-        SyncOptions settingsOnly = new SyncOptions().config(false).spider(false).webHome(false).settings(true);
-        SyncOptions webHomeOnly = new SyncOptions().config(false).spider(false).webHome(true).settings(false);
-
-        assertTrue(Backup.include("theme_profile_json", settingsOnly));
-        assertTrue(Backup.include("theme_profile_last_good", settingsOnly));
-        assertTrue(Backup.include("theme_profile_schema", settingsOnly));
-        assertFalse(Backup.include("theme_profile_json", webHomeOnly));
-    }
-
-    @Test
     public void updateDownloadSettingsFollowAppSettingsSync() {
         SyncOptions settings = new SyncOptions().config(false).spider(false).settings(true);
 
