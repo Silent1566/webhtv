@@ -48,9 +48,13 @@ public class SiteViewModel extends ViewModel {
     private final Map<TaskType, AtomicInteger> taskIds;
     private final List<Future<?>> searchFuture;
     private final ListeningExecutorService playerExecutor;
+    private final ListeningExecutorService isolatedPlayerExecutor;
     private final AtomicInteger searchEpoch;
     private final Object searchLock;
+    private final Object isolatedPlayerLock;
+    private final AtomicInteger isolatedPlayerId;
     private ListeningExecutorService searchExecutor;
+    private ListenableFuture<Result> isolatedPlayerFuture;
     private KaraokeResult karaokeResult;
     private int karaokeResultAction;
 
@@ -66,6 +70,11 @@ public class SiteViewModel extends ViewModel {
         // Player spiders can share a loopback proxy and may ignore interruption.
         // Keep resolutions serial so a canceled source fully exits before the next starts.
         playerExecutor = MoreExecutors.listeningDecorator(Executors.newSingleThreadExecutor());
+        // The queue resolver must not share the foreground PLAYER slot: a late next-item
+        // result must never replace or cancel the item the user explicitly selected.
+        isolatedPlayerExecutor = MoreExecutors.listeningDecorator(Executors.newSingleThreadExecutor());
+        isolatedPlayerLock = new Object();
+        isolatedPlayerId = new AtomicInteger(0);
         futures = new EnumMap<>(TaskType.class);
         taskIds = new EnumMap<>(TaskType.class);
         for (TaskType type : TaskType.values()) taskIds.put(type, new AtomicInteger(0));
@@ -156,6 +165,74 @@ public class SiteViewModel extends ViewModel {
         if (future != null) future.cancel(true);
         player.setValue(null);
         futures.remove(TaskType.PLAYER);
+    }
+
+    /**
+     * Resolves one future episode without touching the foreground PLAYER LiveData/future.
+     *
+     * <p>There is deliberately only one isolated request at a time.  Spider implementations
+     * may share a loopback proxy and may not stop immediately on interruption, so a dedicated
+     * serial executor gives cancellation a safe boundary without allowing it to interfere with
+     * the user's current selection.</p>
+     */
+    public ListenableFuture<Result> playerContentIsolated(
+            String key,
+            String flag,
+            String id,
+            int playerType,
+            Consumer<Result> onSuccess,
+            Consumer<Throwable> onError) {
+        int requestId = isolatedPlayerId.incrementAndGet();
+        cancelIsolatedFuture();
+        FluentFuture<Result> future = FluentFuture.from(isolatedPlayerExecutor.submit(
+                () -> SiteApi.playerContentIsolated(key, flag, id, playerType)))
+                .withTimeout(Constant.TIMEOUT_VOD, TimeUnit.MILLISECONDS, Task.scheduler());
+        synchronized (isolatedPlayerLock) {
+            isolatedPlayerFuture = future;
+        }
+        future.addCallback(Task.callback(
+                value -> App.post(() -> {
+                    if (!isCurrentIsolatedRequest(requestId, future)) return;
+                    if (onSuccess != null) onSuccess.accept(value);
+                    clearIsolatedFuture(requestId, future);
+                }),
+                error -> {
+                    if (error instanceof CancellationException) return;
+                    App.post(() -> {
+                        if (!isCurrentIsolatedRequest(requestId, future)) return;
+                        if (onError != null) onError.accept(error);
+                        clearIsolatedFuture(requestId, future);
+                    });
+                }
+        ), MoreExecutors.directExecutor());
+        return future;
+    }
+
+    /** Cancels only the outstanding next-item resolver, leaving the foreground PLAYER request intact. */
+    public void cancelPlayerContentIsolated() {
+        isolatedPlayerId.incrementAndGet();
+        cancelIsolatedFuture();
+    }
+
+    private void cancelIsolatedFuture() {
+        ListenableFuture<Result> future;
+        synchronized (isolatedPlayerLock) {
+            future = isolatedPlayerFuture;
+            isolatedPlayerFuture = null;
+        }
+        if (future != null) future.cancel(true);
+    }
+
+    private boolean isCurrentIsolatedRequest(int requestId, ListenableFuture<Result> future) {
+        synchronized (isolatedPlayerLock) {
+            return isolatedPlayerId.get() == requestId && isolatedPlayerFuture == future;
+        }
+    }
+
+    private void clearIsolatedFuture(int requestId, ListenableFuture<Result> future) {
+        synchronized (isolatedPlayerLock) {
+            if (isolatedPlayerId.get() == requestId && isolatedPlayerFuture == future) isolatedPlayerFuture = null;
+        }
     }
 
     public void searchContent(Site site, String keyword, boolean quick, String page) {
@@ -279,7 +356,9 @@ public class SiteViewModel extends ViewModel {
         super.onCleared();
         stopSearch();
         futures.values().forEach(future -> future.cancel(true));
+        cancelPlayerContentIsolated();
         playerExecutor.shutdownNow();
+        isolatedPlayerExecutor.shutdownNow();
     }
 
     private enum TaskType {RESULT, PLAYER, ACTION}

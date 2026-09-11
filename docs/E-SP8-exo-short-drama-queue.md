@@ -2,17 +2,19 @@
 
 ## 0. 状态与 Recovery anchor
 
-- 状态：**PROPOSED／设计已输出，未批准实施，未修改播放行为**。
+- 状态：**IMPLEMENTING／用户已批准按本计划实施；尚未完成代码、设备验收或正式放量**。
 - 日期：2026-09-08，Asia/Shanghai；本轮起始时间 20:58，预计 21:16 前完成文档。
 - 用户目标：减少短剧自动下一集的重新起播、转圈和画面中断；识别依据使用现有“短剧源设置”，而不是时长猜测。
-- 完成标准：形成一份可评审的设计，明确识别、准入、队列生命周期、预加载所有权、业务状态提交、失败回退、验证及回滚；本轮不交付 APK 或性能结果。
+- 完成标准：第 11 节四阶段实施及第 12 节验收；请求／解析隔离、单实例有界队列、双端业务事务、受控预载全部接通，定向测试和双端编译通过，真实设备对照证据齐备，原子提交及 annotated recovery tag。实验默认关闭，正式放量保留用户批准门槛；不得以 queue-only 或编译通过替代完整完成。
 - 本地基线：`dev1@ae64c42369a6b2ee660fee86cbe47c40382df667`；起始工作区干净，无受保护的既有脏文件。
-- 本轮 lane：`assessment`；task guard：`E-SP8-DESIGN`。
-- 本轮允许路径：本文件及 `docs/upstream-player-dependency-merge-assessment-2026-08-20.md`；禁止生产代码、依赖、构建脚本、AAR、native、设置值和运行行为变更。
+- 实施基线：`dev1@655bf1a61e752dd5c6ccbbc3e92f92e2c6a35c02`；2026-09-08 21:20 首次恢复，工作区干净，无受保护脏文件。前一设计 guard 已 finished，不存在遗留实施进程。
+- 本轮 lane：`upstream`；task guard：`E-SP8`（active）。
+- 本轮允许路径：第 11 节明确列出的 App 文件、对应测试、本文件及索引；实际封闭列表见 guard scope。不改依赖／lock／AAR／native／布局／其他页面，不自动切换分支。
 - 已完成证据：本地识别及切集调用链、请求头工厂、解析任务取消模型、预缓存保护、本地 AAR API／sources、官方播放列表与预加载资料、FongMi 对照源码、维护者讨论。
 - 尚未验证：真实连续切集、各类 LoadControl 的准入组合、Spider 取消／重入、网络争用、字幕／历史时序及设备性能。文档校验不能替代这些验证。
-- 回滚锚点：上述本地基线；本轮仅文档，不需要回滚播放器产物。
-- **下一步（唯一）：请用户审阅并明确批准 E-SP8 的首版范围；批准前不修改播放代码。**
+- 当前改动／验证：仅更新本文件和索引记录实施授权；生产代码尚未修改，未运行新测试或构建。
+- 回滚锚点：实施基线 `655bf1a61e752dd5c6ccbbc3e92f92e2c6a35c02`；后续只回滚 E-SP8 原子单元，不更换依赖产物。
+- **下一步（唯一）：实现并验证每项 HTTP 请求／缓存身份隔离及队列取消身份契约。**
 
 ## 1. 设计结论与非目标
 
@@ -281,9 +283,9 @@ player.setPreloadConfiguration(new ExoPlayer.PreloadConfiguration(5_000_000L));
 
 论文／算法 benchmark 不适用：本任务不发明解码、预测或调度算法，当前决策取决于既有 API、App 生命周期和设备对照结果。相关技术文章和现场线索已纳入；缺少本项目可比较性能数据，明确留待第 12 节，不能标注“实测无缝”或“最佳性能”。
 
-## 11. 拟实施范围与阶段（尚未授权）
+## 11. 实施范围与阶段（2026-09-08 已批准）
 
-设计建议仅增加一条 Exo 短剧路径。以下是**实施候选路径，不是本轮可编辑范围**；批准实施前再次核对实际分支与脏文件，不默认切换 `fongmi-sync` 或合并其他任务。
+仅增加一条 Exo 短剧路径。用户以“本文件按计划实施”批准以下实施范围；已再次核对实际分支与脏文件，保留 `dev1`，不默认切换 `fongmi-sync` 或合并其他任务。
 
 | 范围 | 最小职责 |
 | --- | --- |
@@ -381,3 +383,25 @@ startup／seek、重缓冲和稳定播放质量不得发生可重复的实质退
 本轮已做：只读源码及本地 AAR 字节码／sources 核对、固定上游参考快照、官方资料与维护者讨论阅读；未运行 Android 构建、单元测试或设备播放。文档归档采用一次组合检查：改动文件格式、相对路径／索引互链、来源 revision 格式、未授权状态声明、检查点脚本；具体通过证据写入 task guard 提交说明。
 
 本文件是 E-SP8 唯一任务记录。后续批准、实现、测试、修复、完整 commit／tag、放量和回滚都追加于此，不另建同任务的 plan／implementation／fix 文档。本轮文档提交与 annotated recovery tag 由 `E-SP8-DESIGN` task guard 生成；实际完整 ID 以该提交元数据及交付回执为准，不在提交前虚填自身 hash。
+
+## Recovery anchor（2026-09-09 10:08 Asia/Shanghai）
+
+- 目标：按本文件已批准范围完成 E-SP8 Exo 短剧队列连播；当前仍未完成，实验保持默认关闭。
+- lane/scope：`upstream` / `E-SP8`；仅修改本文件允许的 Exo、SiteViewModel、PlayerManager、两端 `VideoActivity`、队列协调器、测试及本任务索引。
+- branch/HEAD：`dev1` / `655bf1a61e752dd5c6ccbbc3e92f92e2c6a35c02`；设计 recovery tag 已存在：`recovery/E-SP8-DESIGN/20260908211614-655bf1a61e75`。
+- protected dirty paths：任务开始时为空；当前未提交任务改动均为 E-SP8 已声明路径，无预存脏文件混入。
+- 已完成证据：MediaSource 前台按请求 headers 建立独立工厂；cache namespace 为 header 的 SHA-256；`PreCacheHelper` 通过 scoped `Cache` 使用同一 namespace；`SiteViewModel` 已有独立串行下一集解析 executor/future/callback，绝不写入前台 `player` LiveData；`ShortDramaQueueCoordinator` 已实现 generation、顺/倒序、当前/下一项有界队列、一次性 AUTO transition、准入拒绝和过期回调丢弃；`PlayerEngine`／`ExoPlayerEngine`／`PlayerManager` 已增加默认 unsupported 的只追加、未来项移除及自然过渡上下文提交契约；`ShortDramaQueueCoordinatorTest`（5 项）与 `MediaSourceFactoryTest`（5 项）已通过 Mobile Arm64 定向单测；`git diff --check`、guard `check`、Mobile Arm64 Java 编译通过。
+- 未完成／风险：两端 `VideoActivity` 尚未接入协调器与独立解析；自然过渡后的历史、字幕、弹幕、外部播放状态事务尚未验证；受控 playlist preload 尚未接通；尚无 SiteViewModel 取消隔离测试、真实 Media3 fake timeline／bridge 测试、Leanback 编译或设备对照；尚未创建 E-SP8 实施 commit／最终 recovery tag。
+- rollback anchor：`655bf1a61e752dd5c6ccbbc3e92f92e2c6a35c02`；保持不改依赖／native／lock。
+- **唯一下一步：在 Mobile 与 Leanback `VideoActivity` 接入默认关闭的短剧 Exo 队列事务；先实现当前项首帧后的下一项独立解析、普通 HLS／MP4 入队、AUTO transition 身份校验与一次性业务提交，失败即回退旧路径。**
+
+## Recovery anchor（2026-09-11 20:14 Asia/Shanghai）
+
+- 目标：完成 E-SP8 当前实现的复评、修复、验证，并在合并 `origin/beta` 最新代码后继续复评；实验仍默认关闭。
+- lane/scope：`upstream` / `E-SP8`；当前 guard 仍绑定 `dev1@655bf1a61e752dd5c6ccbbc3e92f92e2c6a35c02`，未提交改动仅在既定 E-SP8 scope 内。
+- 远端基线核对：已 fetch `origin/beta`，当前头为 `be1b02e06b22a4fa2f08c791555536e3e6154c95`；尚未把该头写入本分支，避免在 E-SP8 guard 未关闭时污染其封闭 scope。
+- 复评发现及修复：自然媒体项过渡时，原实现先由 `PlayerManager.commitPlaylistTransition()` 替换当前 `PlaySpec`，再发送上一集停止事件，可能使停止记录读取下一集地址/位置；两端现已在 commit 前发送停止事件，并移除 commit 后的重复发送。
+- 已完成验证：`git diff --check` 通过；Mobile Arm64 定向 `ShortDramaQueueCoordinatorTest`、`MediaSourceFactoryTest`、`MediaSourceFactoryIsolationTest` 通过（2026-09-11 20:12，`BUILD SUCCESSFUL in 46s`）；Leanback Arm64 Java 编译通过（2026-09-11 20:14，`BUILD SUCCESSFUL in 40s`）。构建仅报告既有 CXX5202 32 位 native library warning。
+- 尚未完成：E-SP8 实施 commit/tag 尚未生成；尚未在合并 beta 后复评 beta 新增提交与冲突组合结果；尚无真实设备连续切集／网络争用／字幕与弹幕时序证据。
+- rollback anchor：`655bf1a61e752dd5c6ccbbc3e92f92e2c6a35c02`；已另存当前 E-SP8 工作树临时补丁于 `/tmp/webhtv-esp8-before-beta-20260911/`，不纳入仓库。
+- **唯一下一步：用当前 guard finish 提交并标记已验证的 E-SP8 原子改动；随后以新的 beta-sync guard 合并 `origin/beta`，评审合并差异及已提交未推送提交。**

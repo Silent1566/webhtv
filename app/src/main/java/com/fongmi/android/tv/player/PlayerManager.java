@@ -607,6 +607,32 @@ public class PlayerManager implements ParseCallback {
         return spec != null ? spec.getKey() : null;
     }
 
+    public boolean supportsPlaylistQueue() {
+        return engine != null && engine.supportsPlaylistQueue();
+    }
+
+    public boolean appendPlaylistItem(PlaySpec nextSpec, String mediaId) {
+        return engine != null && engine.appendPlaylistItem(nextSpec, mediaId);
+    }
+
+    public boolean removePlaylistItemsAfterCurrent() {
+        return engine != null && engine.removePlaylistItemsAfterCurrent();
+    }
+
+    public boolean setPlaylistPreloadDurationMs(long durationMs) {
+        return engine != null && engine.setPlaylistPreloadDurationMs(durationMs);
+    }
+
+    /** Commits a Media3 natural transition without replacing the active playlist/player. */
+    public boolean commitPlaylistTransition(PlaySpec nextSpec) {
+        if (engine == null || nextSpec == null) return false;
+        if (spec != null) nextSpec.setPlaybackTraceId(spec.getPlaybackTraceId());
+        if (!engine.commitPlaylistTransition(nextSpec)) return false;
+        spec = nextSpec;
+        bindPlaybackTrace();
+        return true;
+    }
+
     public List<Danmaku> getDanmakus() {
         return spec != null ? spec.getDanmakus() : null;
     }
