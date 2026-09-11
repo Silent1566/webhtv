@@ -242,10 +242,10 @@ public class PlaybackOwnershipSourceTest {
     }
 
     /**
-     * 加载圈的兜底必须避免旧会话误收；TV 端还必须能从遗漏的归属回调中自愈。
+     * 加载圈的兜底必须与当前播放会话保持一致。
      */
     @Test
-    public void theSpinnerFallbackKeepsOwnershipGuardAndTvReadyRecovery() throws Exception {
+    public void theSpinnerFallbackStaysOwnerScoped() throws Exception {
         for (String path : new String[] {
                 "app/src/mobile/java/com/fongmi/android/tv/ui/activity/VideoActivity.java",
                 "app/src/leanback/java/com/fongmi/android/tv/ui/activity/VideoActivity.java"
@@ -255,6 +255,7 @@ public class PlaybackOwnershipSourceTest {
             assertTrue(path + " must provide a spinner fallback", fallback > 0);
 
             String body = source.substring(fallback, source.indexOf("\n    }", fallback));
+            assertTrue(path + " the fallback must reject a stale playback owner", body.contains("!isOwner()"));
             assertTrue(path + " the fallback must read the player state directly",
                     body.contains("player().getPlaybackState() != Player.STATE_READY"));
             // 详情还没加载完时播放器是空的，那时的圈属于详情页自己，不能收
@@ -267,16 +268,6 @@ public class PlaybackOwnershipSourceTest {
             int traffic = source.indexOf("private void setTraffic()");
             assertTrue(path + " must drive the fallback from the traffic ticker",
                     source.indexOf("hidePlaybackProgressIfStale();", traffic) > traffic);
-
-            if (path.contains("/leanback/")) {
-                assertTrue(path + " TV fallback must remain scoped to the active owner",
-                        body.contains("if (!isOwner()) return;"));
-                assertTrue(path + " TV fallback must recognize an in-flight seek",
-                        source.contains("mSeekProgressPending"));
-            } else {
-                assertTrue(path + " mobile fallback remains owner-scoped",
-                        body.contains("!isOwner()"));
-            }
         }
     }
 

@@ -38,10 +38,8 @@ import com.github.catvod.net.OkHttp;
 import com.github.catvod.utils.Path;
 
 import java.io.File;
-import java.net.URI;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
-import java.util.Locale;
 import java.util.List;
 import java.util.Map;
 
@@ -300,26 +298,4 @@ public class MediaSourceFactory implements MediaSource.Factory {
         }
         return userAgent;
     }
-
-    public static boolean isHlsUrl(String url) {
-        String lower = url == null ? "" : url.toLowerCase(Locale.ROOT);
-        if (lower.contains("m3u8") || lower.contains("type=hls") || lower.contains("format=hls")) return true;
-        String path = getUrlPath(lower);
-        return path.endsWith("/live.php") || path.contains("/live/");
-    }
-
-    private static String getUrlPath(String url) {
-        try {
-            String path = URI.create(url).getPath();
-            if (path != null) return path;
-        } catch (IllegalArgumentException ignored) {
-        }
-        int end = url.length();
-        int query = url.indexOf('?');
-        int fragment = url.indexOf('#');
-        if (query >= 0) end = Math.min(end, query);
-        if (fragment >= 0) end = Math.min(end, fragment);
-        return url.substring(0, end);
-    }
-
 }
