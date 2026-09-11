@@ -14,6 +14,16 @@ import static org.junit.Assert.assertTrue;
 public class TmdbDetailActivityLayoutTest {
 
     @Test
+    public void cinemaEpisodeGridStartsAtTheSameLeftEdgeAsOtherDetailRails() throws Exception {
+        String adapter = readJava("com", "fongmi", "android", "tv", "ui", "adapter", "TmdbEpisodeAdapter.java");
+        String cardSize = javaBlockAt(adapter, "private void applyCardSize(");
+
+        assertTrue("the first episode card in every grid row must not keep the shared half-gap on its outer edge",
+                cardSize.contains("position % gridSpanCount == 0")
+                        && cardSize.contains("mode == Mode.GRID && !firstGridColumn ? gridSpacing / 2 : 0"));
+    }
+
+    @Test
     public void seasonSourceRoutesRefreshAndCarrySnapshotSelection() throws Exception {
         Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
         String source = Files.readString(sourcePath, StandardCharsets.UTF_8);

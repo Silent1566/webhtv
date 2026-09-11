@@ -331,7 +331,9 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
         params.height = height;
         if (params instanceof ViewGroup.MarginLayoutParams marginParams) {
             int gridSpacing = dp(holder.itemView, standardGridItem ? 8 : isNativeEnhanced() ? 12 : 8);
-            int marginStart = mode == Mode.GRID ? gridSpacing / 2 : 0;
+            int position = holder.getBindingAdapterPosition();
+            boolean firstGridColumn = mode == Mode.GRID && position >= 0 && position % gridSpanCount == 0;
+            int marginStart = mode == Mode.GRID && !firstGridColumn ? gridSpacing / 2 : 0;
             int marginEnd = mode == Mode.GRID ? gridSpacing - marginStart : dp(holder.itemView, 12);
             int bottomMargin = dp(holder.itemView, isNativeEnhanced() && mode == Mode.GRID && hasTmdbEpisodeData ? 16 : mode == Mode.GRID ? 10 : 0);
             layoutChanged |= marginParams.getMarginStart() != marginStart
