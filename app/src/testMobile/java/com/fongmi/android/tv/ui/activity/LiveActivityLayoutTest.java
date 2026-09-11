@@ -12,6 +12,21 @@ import static org.junit.Assert.assertTrue;
 public class LiveActivityLayoutTest {
 
     @Test
+    public void leanbackLiveControlsUseSharedOsdWithoutLegacyTopBar() throws Exception {
+        Path sourcePath = findLeanbackJavaPath().resolve(Path.of(
+                "com", "fongmi", "android", "tv", "ui", "activity", "LiveActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        String showControlBody = section(source, "private void showControl(View view)", "private void hideControl()");
+
+        assertFalse(sourcePath + " is missing showControl", showControlBody.isEmpty());
+        assertTrue("leanback live controls must hide the retired top bar before showing shared OSD",
+                showControlBody.contains("mBinding.widget.top.setVisibility(View.GONE);")
+                        && showControlBody.contains("mOsd.setControlsVisible(true);"));
+        assertFalse("leanback live controls must not show the retired top bar when all OSD options are off",
+                showControlBody.contains("mBinding.widget.top.setVisibility(View.VISIBLE);"));
+    }
+
+    @Test
     public void explicitLivePiPPreparesVideoBeforeEnteringSystemPiP() throws Exception {
         Path sourcePath = findMobileJavaPath().resolve(Path.of(
                 "com", "fongmi", "android", "tv", "ui", "activity", "LiveActivity.java"));
