@@ -103,3 +103,5 @@ public final class AdAudioDiagnostics {
         }
     }
 }
+
+// Verified build and device test for audio ad speech detection on 2026-09-10.

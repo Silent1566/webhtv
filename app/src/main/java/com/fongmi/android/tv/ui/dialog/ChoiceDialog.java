@@ -13,6 +13,7 @@ import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.LinearLayout;
@@ -272,7 +273,7 @@ public final class ChoiceDialog extends DialogFragment {
         for (int offset = 0; offset < list.getChildCount(); offset++) {
             View child = list.getChildAt((start + offset) % list.getChildCount());
             if (child.isEnabled() && child.isFocusable()) {
-                child.requestFocus();
+                requestItemFocus(list, child);
                 return;
             }
         }
@@ -329,9 +330,44 @@ public final class ChoiceDialog extends DialogFragment {
         if (!(listView instanceof ViewGroup list)) return false;
         for (int index = position + direction; index >= 0 && index < list.getChildCount(); index += direction) {
             View child = list.getChildAt(index);
-            if (child.isEnabled() && child.isFocusable() && child.requestFocus()) return true;
+            if (child.isEnabled() && child.isFocusable() && requestItemFocus(list, child)) return true;
         }
         return direction > 0 ? focusFirstAction(root) : true;
+    }
+
+    private boolean requestItemFocus(ViewGroup list, View child) {
+        if (!child.requestFocus()) return false;
+        ensureItemVisible(list, child);
+        return true;
+    }
+
+    private void ensureItemVisible(View child) {
+        ViewParent parent = child.getParent();
+        while (parent instanceof View) {
+            if (parent instanceof ViewGroup list && "choice_list".equals(list.getTag())) {
+                ensureItemVisible(list, child);
+                return;
+            }
+            parent = parent.getParent();
+        }
+    }
+
+    private void ensureItemVisible(ViewGroup list, View child) {
+        if (!(list.getParent() instanceof ScrollView scroll)) return;
+        int target = calculateItemScrollY(scroll.getScrollY(), scroll.getHeight(), list.getHeight(), child.getTop(), child.getBottom());
+        if (target != scroll.getScrollY()) scroll.scrollTo(0, target);
+    }
+
+    static int calculateItemScrollY(int currentScrollY, int viewportHeight, int contentHeight, int childTop, int childBottom) {
+        int current = Math.max(0, currentScrollY);
+        int viewport = Math.max(0, viewportHeight);
+        int content = Math.max(0, contentHeight);
+        int maxScroll = Math.max(0, content - viewport);
+        if (viewport == 0) return Math.min(current, maxScroll);
+        int target = current;
+        if (childTop < current) target = childTop;
+        else if (childBottom > current + viewport) target = childBottom - viewport;
+        return Math.max(0, Math.min(target, maxScroll));
     }
 
     private boolean focusFirstAction(View root) {
@@ -407,7 +443,10 @@ public final class ChoiceDialog extends DialogFragment {
         setItemEnabled(button, position);
         button.setText(itemText(position));
         styleItem(button, position);
-        button.setOnFocusChangeListener((view, hasFocus) -> styleItem(button, position));
+        button.setOnFocusChangeListener((view, hasFocus) -> {
+            styleItem(button, position);
+            if (hasFocus && Util.isLeanback()) button.post(() -> ensureItemVisible(button));
+        });
         button.setOnClickListener(view -> onItemClick(position));
         button.setOnKeyListener((view, keyCode, event) -> {
             if (!Util.isLeanback() || event == null || event.getAction() != KeyEvent.ACTION_DOWN) return false;

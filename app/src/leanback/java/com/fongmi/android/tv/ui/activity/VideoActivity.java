@@ -9,6 +9,7 @@ import android.media.AudioManager;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.SystemClock;
 import android.text.TextUtils;
 import android.text.style.ClickableSpan;
 import android.view.KeyEvent;
@@ -115,6 +116,7 @@ import com.fongmi.android.tv.ui.custom.CustomSeekView;
 import com.fongmi.android.tv.ui.custom.PlayerOsdController;
 import com.fongmi.android.tv.ui.custom.SpaceItemDecoration;
 import com.fongmi.android.tv.ui.dialog.CodecCapabilityDialog;
+import com.fongmi.android.tv.ui.dialog.PlaybackSpeedDialog;
 import com.fongmi.android.tv.ui.dialog.ContentDialog;
 import com.fongmi.android.tv.ui.dialog.AdRuleEditDialog;
 import com.fongmi.android.tv.ui.dialog.DanmakuDialog;
@@ -364,6 +366,8 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     private static final int TV_TOUCH_HORIZONTAL = 1;
     private static final int TV_TOUCH_VERTICAL = 2;
     private static final long TV_TOUCH_SEEK_SCALE = 50L;
+    private static final long SEEK_PROGRESS_MIN_VISIBLE_MS = 500L;
+    private static final long SEEK_PROGRESS_RETRY_MS = 200L;
 
     private CustomKeyDownVod mKeyDown;
     private AudioManager mTvAudioManager;
@@ -391,6 +395,8 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     private Runnable mR1;
     private Runnable mR2;
     private Runnable mSeekProgressFallback;
+    private boolean mSeekProgressPending;
+    private long mSeekProgressStartedAtMs;
     private Runnable mTmdbDetailTimeout;
     private Runnable mTmdbEpisodeTimeout;
     private final Runnable mPendingTmdbBind = this::flushPendingTmdbBind;
@@ -4101,9 +4107,12 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     private void onSpeed() {
-        mBinding.control.action.speed.setText(player().addSpeed());
-        saveUserSpeed();
-        setR1Callback();
+        PlaybackSpeedDialog.show(this, player().getSpeed(), speed -> {
+            if (!isServiceReady() || !isOwner() || player().isEmpty()) return;
+            mBinding.control.action.speed.setText(player().setSpeed(speed));
+            saveUserSpeed();
+            setR1Callback();
+        });
     }
 
     private void onSpeedAdd() {
@@ -4470,7 +4479,9 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
             return;
         }
 
-        if (mSeekProgressFallback != null) App.removeCallbacks(mSeekProgressFallback);
+        if (!mSeekProgressPending && mSeekProgressFallback != null) {
+            App.removeCallbacks(mSeekProgressFallback);
+        }
         mBinding.progress.getRoot().setVisibility(View.VISIBLE);
         App.post(mR3, 0);
         hideCenter();
@@ -4478,6 +4489,8 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     private void hideProgress() {
+        mSeekProgressPending = false;
+        mSeekProgressStartedAtMs = 0;
         if (mSeekProgressFallback != null) App.removeCallbacks(mSeekProgressFallback);
         mBinding.progress.getRoot().setVisibility(View.GONE);
         App.removeCallbacks(mR3);
@@ -5208,6 +5221,15 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     @Override
+    protected void onControllerReadyReconciled() {
+        if (canHideSeekProgress()) showPlaybackContent();
+        else {
+            showProgress();
+            scheduleSeekProgressFallback();
+        }
+    }
+
+    @Override
     protected void onPrepare() {
         android.util.Log.d("VideoActivity", "onPrepare: setting Clock callback");
         setPlayerKernel();
@@ -5293,9 +5315,14 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
                 showProgress();
                 break;
             case Player.STATE_READY:
+                if (canHideSeekProgress()) {
+                    showPlaybackContent();
+                } else {
+                    showProgress();
+                    scheduleSeekProgressFallback();
+                }
                 mKaraokeResultShown = false;
                 recordPlayHealth(true, "");
-                showPlaybackContent();
                 boolean pendingResumeSeekApplied = applyPendingResumeSeek();
                 refreshLyrics();
                 player().reset();
@@ -5333,18 +5360,45 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         applyResizeMode(getScale());
     }
 
+    private boolean canHideSeekProgress() {
+        if (!mSeekProgressPending) return true;
+        if (SystemClock.elapsedRealtime() - mSeekProgressStartedAtMs < SEEK_PROGRESS_MIN_VISIBLE_MS) return false;
+        return service() != null
+                && player() != null
+                && !player().isReleased()
+                && !player().isEmpty()
+                && player().getPlaybackState() == Player.STATE_READY
+                && (!player().isLoading() || player().isPlaying());
+    }
+
+    private void scheduleSeekProgressFallback() {
+        if (!mSeekProgressPending || mSeekProgressFallback == null) return;
+        App.removeCallbacks(mSeekProgressFallback);
+        long elapsed = SystemClock.elapsedRealtime() - mSeekProgressStartedAtMs;
+        long delay = elapsed < SEEK_PROGRESS_MIN_VISIBLE_MS
+                ? SEEK_PROGRESS_MIN_VISIBLE_MS - elapsed : SEEK_PROGRESS_RETRY_MS;
+        App.post(mSeekProgressFallback, Math.max(1L, delay));
+    }
+
     private void hideSeekProgressIfReady() {
-        if (service() == null || player() == null || player().isReleased() || player().isEmpty() || !isOwner() || player().getPlaybackState() != Player.STATE_READY) return;
+        if (!mSeekProgressPending) return;
+        if (service() == null || player() == null || player().isReleased() || player().isEmpty()) return;
+        if (!isOwner()) return;
+        if (!canHideSeekProgress()) {
+            scheduleSeekProgressFallback();
+            return;
+        }
+        mSeekProgressPending = false;
         showPlaybackContent();
     }
 
     /**
      * 加载圈的兜底收口。
      *
-     * <p>圈只在 {@code STATE_READY} 分支被收（onStateChanged），而那条回调受 isOwner() 把关。
-     * 归属判定一旦因任何原因失配，圈就永久留在屏上——画面在动、圈不走。这里不依赖归属，
-     * 直接读播放器状态：已在播且已 READY 就收圈。要求 {@code !isEmpty()}，避免详情尚未加载完
-     * （播放器还空着）时把详情页自己的加载态误收。
+     * <p>正常路径在 {@code STATE_READY} 分支收圈；这里保留 owner 校验，避免旧会话的播放器
+     * 状态收掉当前条目的加载态。控制器晚绑定导致正常 READY 回调已经错过时，由
+     * {@link #onControllerReadyReconciled()} 直接补发收口。要求 {@code !isEmpty()}，避免详情
+     * 尚未加载完（播放器还空着）时把详情页自己的加载态误收。
      *
      * <p>挂在 mR3（网速刷新，圈可见时每秒一跳）上，圈不可见时该循环本就已停，无额外开销。
      */
@@ -5353,14 +5407,17 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         if (service() == null || player() == null || player().isReleased() || player().isEmpty()) return;
         if (!isOwner()) return;
         if (player().getPlaybackState() != Player.STATE_READY) return;
+        if (!canHideSeekProgress()) return;
         showPlaybackContent();
     }
 
     @Override
     protected void onSeekStarted() {
-        showProgress();
         App.removeCallbacks(mSeekProgressFallback);
-        App.post(mSeekProgressFallback, 500);
+        mSeekProgressPending = true;
+        mSeekProgressStartedAtMs = SystemClock.elapsedRealtime();
+        showProgress();
+        if (mSeekProgressPending) App.post(mSeekProgressFallback, SEEK_PROGRESS_MIN_VISIBLE_MS);
     }
 
     @Override
