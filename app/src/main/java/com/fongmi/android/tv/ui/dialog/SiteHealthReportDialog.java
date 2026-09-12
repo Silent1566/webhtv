@@ -10,6 +10,7 @@ import android.view.Window;
 import android.view.WindowManager;
 import android.widget.ProgressBar;
 
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.widget.LinearLayoutCompat;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
@@ -85,6 +86,7 @@ public class SiteHealthReportDialog extends BaseAlertDialog {
         binding.sortRecent.setOnClickListener(view -> setSort(Sort.RECENT));
         binding.sortRate.setOnClickListener(view -> setSort(Sort.RATE));
         binding.sortSamples.setOnClickListener(view -> setSort(Sort.SAMPLES));
+        binding.clearAll.setOnClickListener(view -> confirmClearAll());
         binding.close.setOnClickListener(view -> dismiss());
     }
 
@@ -120,9 +122,16 @@ public class SiteHealthReportDialog extends BaseAlertDialog {
         button.setTypeface(Typeface.DEFAULT, selected ? Typeface.BOLD : Typeface.NORMAL);
     }
 
+    private void refreshReport() {
+        report = SiteHealthStore.report();
+        render();
+    }
+
     private void render() {
         while (binding.rows.getChildCount() > 1) binding.rows.removeViewAt(1);
         binding.summary.setText(summaryText(report.summary));
+        binding.clearAll.setEnabled(!report.isEmpty());
+        binding.clearAll.setAlpha(report.isEmpty() ? 0.5f : 1.0f);
         int visible = 0;
         for (SiteHealthStore.Row row : sortedRows()) {
             if (!matches(row)) continue;
@@ -305,16 +314,35 @@ public class SiteHealthReportDialog extends BaseAlertDialog {
     }
 
     private void confirmClearSite(SiteHealthStore.Row row) {
-        new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog)
-                .setTitle(R.string.site_health_clear_site_title)
-                .setMessage(getString(R.string.site_health_clear_site_message, row.siteName))
-                .setNegativeButton(R.string.dialog_negative, null)
-                .setPositiveButton(R.string.dialog_positive, (dialog, which) -> {
+        showClearConfirmation(
+                R.string.site_health_clear_site_title,
+                getString(R.string.site_health_clear_site_message, row.siteName),
+                () -> {
                     SiteHealthStore.clear(row.siteKey);
-                    report = SiteHealthStore.report();
-                    render();
-                })
-                .show();
+                    binding.root.post(this::refreshReport);
+                });
+    }
+
+    private void confirmClearAll() {
+        if (report.isEmpty()) return;
+        showClearConfirmation(
+                R.string.site_health_clear_all_title,
+                getString(R.string.site_health_clear_all_message),
+                () -> {
+                    SiteHealthStore.clear();
+                    binding.root.post(this::refreshReport);
+                });
+    }
+
+    private void showClearConfirmation(int titleRes, CharSequence message, Runnable action) {
+        AlertDialog dialog = new MaterialAlertDialogBuilder(requireActivity(), R.style.Theme_WebHTV_LightDialog)
+                .setTitle(titleRes)
+                .setMessage(message)
+                .setNegativeButton(R.string.dialog_negative, null)
+                .setPositiveButton(R.string.dialog_positive, (confirmation, which) -> action.run())
+                .create();
+        dialog.show();
+        LightDialog.apply(dialog);
     }
 
     private void addRecentError(LinearLayoutCompat block, int labelRes, SiteHealthStore.Stage stage) {

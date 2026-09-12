@@ -25,6 +25,25 @@ public class TmdbDetailActivityLayoutTest {
     }
 
     @Test
+    public void cinemaEpisodeGridStartsAtTheSameLogicalStartEdgeAsOtherDetailRails() throws Exception {
+        String adapter = readJava("com", "fongmi", "android", "tv", "ui", "adapter", "TmdbEpisodeAdapter.java");
+        String cardSize = javaBlockAt(adapter, "private void applyCardSize(");
+
+        assertTrue("the episode grid must align its logical start edge with the other detail rails while keeping a full gap after every card",
+                cardSize.contains("int marginStart = 0;")
+                        && cardSize.contains("int marginEnd = mode == Mode.GRID ? gridSpacing : dp(holder.itemView, 12);"));
+    }
+
+    @Test
+    public void cinemaPhotoRailMatchesItsCardHeightSoFollowingRailsKeepTheSharedSectionGap() throws Exception {
+        String source = readJava("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java");
+        String cinemaTemplate = javaBlockAt(source, "private void applyCinemaDetailTemplate()");
+
+        assertTrue("cinema still cards are 124dp high, so their rail must not reserve a larger empty bottom area before posters",
+                cinemaTemplate.contains("TmdbDetailLayoutUtils.setHeightDp(binding.episodePhotoList, 124);"));
+    }
+
+    @Test
     public void seasonSourceRoutesRefreshAndCarrySnapshotSelection() throws Exception {
         Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
         String source = Files.readString(sourcePath, StandardCharsets.UTF_8);

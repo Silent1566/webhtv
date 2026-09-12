@@ -69,11 +69,29 @@ public class TmdbEpisodeAdapterTest {
         String nativeBody = nativeBranch >= 0 && nextBranch > nativeBranch ? source.substring(nativeBranch, nextBranch) : "";
 
         assertTrue("native-enhanced TMDB episode cards should bind the file-size badge instead of always hiding it",
-                nativeBody.contains("boolean showDate = !TextUtils.isEmpty(holder.binding.date.getText()) && mode == Mode.GRID;")
-                        && nativeBody.contains("bindFileSize(holder, nativeEnhancedFileSizeBadge(fileSize, cleanTitle), showDate);")
+                nativeBody.contains("boolean showMeta = !TextUtils.isEmpty(holder.binding.date.getText());")
+                        && nativeBody.contains("bindFileSize(holder, nativeEnhancedFileSizeBadge(fileSize, cleanTitle), showMeta);")
                         && source.contains("extractFileSize(episode.getRawDisplayName())")
                         && source.contains("withSourceFileSize(episode.getRawDisplayName(), title")
                         && !nativeBody.contains("holder.binding.fileSize.setVisibility(View.GONE);"));
+    }
+
+    @Test
+    public void nativeEnhancedListShowsDateRuntimeRatingAndFileSize() throws Exception {
+        String source = tmdbEpisodeAdapterSource();
+        int nativeBranch = source.indexOf("if (isNativeEnhanced())");
+        int nextBranch = source.indexOf("} else if (mode == Mode.GRID)", nativeBranch);
+        String nativeBody = nativeBranch >= 0 && nextBranch > nativeBranch ? source.substring(nativeBranch, nextBranch) : "";
+
+        assertTrue("native-enhanced list cards should expose all available episode metadata",
+                nativeBody.contains("boolean showMeta = !TextUtils.isEmpty(holder.binding.date.getText());")
+                        && nativeBody.contains("holder.binding.date.setVisibility(showMeta ? View.VISIBLE : View.GONE);")
+                        && nativeBody.contains("bindFileSize(holder, nativeEnhancedFileSizeBadge(fileSize, cleanTitle), showMeta);")
+                        && nativeBody.contains("holder.binding.badge.setText(nativeEnhancedScore(tmdbEpisode));")
+                        && nativeBody.contains("holder.binding.badge.setVisibility(TextUtils.isEmpty(holder.binding.badge.getText()) ? View.GONE : View.VISIBLE);")
+                        && nativeBody.contains("holder.binding.overview.setVisibility(TextUtils.isEmpty(overview) ? View.GONE : View.VISIBLE);")
+                        && !nativeBody.contains("boolean showMeta = !TextUtils.isEmpty(holder.binding.date.getText()) && mode == Mode.GRID;")
+                        && !nativeBody.contains("mode == Mode.GRID && !TextUtils.isEmpty(overview)"));
     }
 
     @Test
@@ -97,17 +115,19 @@ public class TmdbEpisodeAdapterTest {
     }
 
     @Test
-    public void gridEpisodeCardsUseSymmetricHorizontalMargins() throws Exception {
+    public void gridEpisodeCardsAlignToStartWithoutChangingCardWidths() throws Exception {
         String source = tmdbEpisodeAdapterSource();
         int method = source.indexOf("private void applyCardSize(ViewHolder holder, boolean compact, boolean hasTmdbEpisodeData)");
         int methodEnd = source.indexOf("private boolean nativeEnhancedMobileGrid", method);
         String body = method >= 0 && methodEnd > method ? source.substring(method, methodEnd) : "";
 
-        assertTrue("grid episode cards must split their spacing between start and end so outer margins stay balanced",
+        assertTrue("grid cards must all share zero start margin and one end spacing so their widths and inner gaps stay consistent",
                 body.contains("int gridSpacing = dp(holder.itemView, standardGridItem ? 8 : isNativeEnhanced() ? 12 : 8);")
-                        && body.contains("int marginStart = mode == Mode.GRID ? gridSpacing / 2 : 0;")
+                        && body.contains("int marginStart = 0;")
+                        && body.contains("int marginEnd = mode == Mode.GRID ? gridSpacing : dp(holder.itemView, 12);")
                         && body.contains("marginParams.setMarginStart(marginStart);")
-                        && body.contains("marginParams.getMarginStart() != marginStart"));
+                        && body.contains("marginParams.getMarginStart() != marginStart")
+                        && !body.contains("getBindingAdapterPosition()"));
     }
 
     @Test

@@ -62,3 +62,16 @@
 2. 推送 `dev2` 和新恢复标签。
 3. 创建目标为 `beta` 的中文 PR。
 4. 再次拉取远端最新代码并核对分支、PR 和工��作树状态。
+
+## 后续拉取与最终复评（2026-09-11）
+
+- 2026-09-11 21:43 CST 已执行 `git fetch --prune origin beta`；当前 `origin/beta` 为完整提交 `be1b02e06b22a4fa2f08c791555536e3e6154c95`，没有发现新的远端 beta 提交。
+- 当前 `HEAD` 为完整提交 `3a2b9d39e8bd3314027e5ce8e709c17e75a21236`，其父提交正是 `origin/beta`；`git merge --ff-only origin/beta` 返回 `Already up to date`，无新增合�并、无冲突。
+- 复用本文件此前对 beta 增量的评审与验证记录：此前合并提交及其相关 beta 改动均已成为 `origin/beta` 的祖先。本次相对最新 beta 的唯一未合入提交是 `3a2b9d39e8bd3314027e5ce8e709c17e75a21236`（`修复电视直播屏显重影`），实际差异仅为：
+  - `app/src/leanback/java/com/fongmi/android/tv/ui/activity/LiveActivity.java`
+  - `app/src/testMobile/java/com/fongmi/android/tv/ui/activity/LiveActivityLayoutTest.java`
+- 最终复评�检查 `showControl`/`hideControl` 生命周期：控制栏显示前始终隐藏旧 `mBinding.widget.top`，再由共享 `PlayerOsdController` 显示标题、分辨率和时间；控制栏隐藏时同时隐藏旧栏并关闭共享 OSD；源码中没有其他路径重新显示该旧栏。未发现空指针、状态遗漏或与 beta 最终树的合并问题。
+- 定向验证已通过：
+  - `bash ./gradlew :app:testMobileArm64_v8aDebugUnitTest --tests com.fongmi.android.tv.ui.activity.LiveActivityLayoutTest :app:compileLeanbackArm64_v8aDebugJavaWithJavac --no-daemon --console=plain`：`BUILD SUCCESSFUL`，98 actionable tasks（7 executed、91 up-to-date）。
+  - `git diff --check origin/beta...HEAD`：通过。
+- 结论：本轮复评通过，无需新增修复；当前任务改动可提交并推送。
