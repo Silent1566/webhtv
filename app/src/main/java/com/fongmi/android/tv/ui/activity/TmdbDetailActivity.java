@@ -2032,8 +2032,10 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         binding.overview.setTextSize(compact ? 14.5f : 16f);
         binding.overview.setLineSpacing(ResUtil.dp2px(compact ? 4 : 3), 1f);
         TmdbDetailLayoutUtils.setHeightDp(binding.episodePhotoList, compact ? 128 : 160);
-        // 光影剧幕的大屏海报沿用卡片圆角，避免主题模板把海报显示成直角。
-        if (!compact) binding.posterList.setClipToOutline(true);
+        // 海报卡片本体为 148x222dp，列表额外保留焦点放大空间，确保完整显示四角圆角。
+        TmdbDetailLayoutUtils.setHeightDp(binding.posterList, 238);
+        binding.posterList.setClipToOutline(false);
+        binding.posterList.setClipChildren(false);
         TmdbDetailLayoutUtils.setHeightDp(binding.castList, compact ? 90 : 90);
         TmdbDetailLayoutUtils.setHeightDp(binding.creatorList, compact ? 90 : 90);
         TmdbDetailLayoutUtils.setHeightDp(binding.relatedList, compact ? 160 : 160);
