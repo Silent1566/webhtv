@@ -1703,6 +1703,9 @@ function setTitle(t){
 function renderContent(){
     restoreGen++;
     restoringPage = false;
+    lastAnchorIndex = 0;
+    pdfGen++;
+    pdfDoc = null; pdfAppendedCount = 0;
     novelAppendLoading = false;
     novelAppendIndex = DATA.current || 0;
     var r = $('reader');
@@ -2124,21 +2127,24 @@ $('comicSeek').addEventListener('input', function(){
     }
 });
 /* ===== PDF ===== */
-var pdfDoc = null, pdfPageIdx = 0, renderedPdfPages = {}, pdfRendering = false, pdfAppendedCount = 0;
+var pdfDoc = null, pdfPageIdx = 0, renderedPdfPages = {}, pdfRendering = false, pdfAppendedCount = 0, pdfGen = 0;
 function renderPdf(){
     var r = $('reader');
     r.innerHTML = '';
+    var gen = pdfGen;
     pdfDoc = null; pdfPageIdx = 0; renderedPdfPages = {}; pdfRendering = false; pdfAppendedCount = 0;
     if(!DATA.pdfFile){ r.innerHTML = '<div class="pdf-error">未找到 PDF 文件</div>'; return; }
     if(!window.pdfjsLib){ r.innerHTML = '<div class="pdf-error">PDF 组件加载失败</div>'; return; }
     showLoading(true);
     pdfjsLib.getDocument(DATA.pdfFile).promise.then(function(doc){
-        pdfDoc = doc;
         showLoading(false);
+        if(gen !== pdfGen) return;
+        pdfDoc = doc;
         renderPdfMore();
         reportProgress();
     }).catch(function(e){
         showLoading(false);
+        if(gen !== pdfGen) return;
         var d = document.createElement('div');
         d.className = 'pdf-error';
         d.textContent = 'PDF 加载失败：' + (e && e.message ? e.message : '未知错误');
@@ -2158,19 +2164,26 @@ function renderPdfMore(){
 function renderPdfPage(n){
     if(renderedPdfPages[n]) return;
     renderedPdfPages[n] = true;
+    var gen = pdfGen;
     var c = document.createElement('canvas');
     c.style.width = '100%'; c.style.height = 'auto';
     c.dataset.page = n;
     $('reader').appendChild(c);
+    function pageSettled(){
+        if(gen !== pdfGen) return;
+        pdfAppendedCount++;
+        updatePageInfo();
+        if(pdfDoc && pdfAppendedCount >= pdfDoc.numPages) appendChapterNav();
+    }
     pdfDoc.getPage(n).then(function(p){
-        var viewport = p.getViewport({scale:2});
-        c.width = viewport.width; c.height = viewport.height;
-        p.render({canvasContext:c.getContext('2d'), viewport:viewport}).promise.then(function(){
-            updatePageInfo();
-            pdfAppendedCount++;
-            if(pdfDoc && pdfAppendedCount >= pdfDoc.numPages) appendChapterNav();
-        });
-    });
+        try {
+            var viewport = p.getViewport({scale:2});
+            c.width = viewport.width; c.height = viewport.height;
+            p.render({canvasContext:c.getContext('2d'), viewport:viewport}).promise.then(pageSettled, pageSettled);
+        } catch(e){
+            pageSettled();
+        }
+    }, pageSettled);
 }
 function showLoading(v){ $('loadingOverlay').hidden = !v; }
 
@@ -2220,7 +2233,7 @@ function updatePageInfo(){
         $('seekPage').value = Math.round(currentPage / Math.max(1, pages.length - 1) * 100);
     } else {
         var total = anchorTotal();
-        var cur = currentAnchorIndex() + 1;
+        var cur = Math.min(total, effectiveAnchorIndex() + 1);
         if(total > 0){
             $('tvPageInfo').textContent = cur + '/' + total;
             var max = document.body.scrollHeight - window.innerHeight;
@@ -2255,22 +2268,47 @@ function anchorTotal(){
     if(DATA.kind === 3) return pdfDoc ? pdfDoc.numPages : anchorEls().length;
     return (DATA.images || []).length;
 }
+var lastAnchorIndex = 0;
 function currentAnchorIndex(){
     if(pageMode) return currentPage;
+    var scrolled = window.scrollY || window.pageYOffset || 0;
+    if(scrolled <= 0) return lastAnchorIndex = 0;
     var els = anchorEls();
     var threshold = DATA.kind === 1 ? 0 : window.innerHeight * 0.5;
-    var idx = 0;
+    var idx = 0, found = false;
     for(var i = 0; i < els.length; i++){
-        if(els[i].getBoundingClientRect().bottom > threshold){ idx = i; break; }
+        if(els[i].getBoundingClientRect().bottom > threshold){ idx = i; found = true; break; }
         idx = i;
     }
+    if(found || (anchorsSettled() && atDocumentEnd())) return lastAnchorIndex = idx;
+    return lastAnchorIndex;
+}
+function atDocumentEnd(){
+    return (window.scrollY || window.pageYOffset || 0) + window.innerHeight >= document.body.scrollHeight - 2;
+}
+function anchorsSettled(){
+    var total = anchorTotal();
+    var els = anchorEls();
+    if(total <= 0 || els.length < total) return false;
+    if(DATA.kind === 3) return pdfDoc != null && pdfAppendedCount >= pdfDoc.numPages;
+    if(DATA.kind === 1) return true;
+    for(var i = Math.max(0, total - 2); i < total; i++){
+        if(els[i].getBoundingClientRect().height <= 0) return false;
+    }
+    return true;
+}
+function effectiveAnchorIndex(){
+    var total = anchorTotal();
+    if(total <= 0) return 0;
+    var idx = Math.min(total - 1, currentAnchorIndex());
+    if(anchorsSettled() && atDocumentEnd()) return total - 1;
     return idx;
 }
 function reportProgress(){
     if(!window.AndroidReader || !AndroidReader.saveProgress) return;
     if(restoringPage || switchingChapter) return;
     var ch = (DATA.chapters || [])[DATA.current] || {};
-    try { AndroidReader.saveProgress(DATA.current|0, ch.url || '', ch.name || DATA.title || '', currentAnchorIndex(), anchorTotal()); } catch(e){}
+    try { AndroidReader.saveProgress(DATA.current|0, ch.url || '', ch.name || DATA.title || '', effectiveAnchorIndex(), anchorTotal()); } catch(e){}
 }
 function __restoreScroll(pos, total){
     var p = Number(pos) || 0;
@@ -2279,12 +2317,35 @@ function __restoreScroll(pos, total){
     restoreAnchor(Math.round(p));
 }
 function restoreScrollPercent(p){
-    var tries = 0;
+    restoringPage = true;
+    var gen = ++restoreGen;
+    var deadline = nowMs() + 60000;
+    var lastMax = null, stable = 0;
     (function seek(){
+        if(gen !== restoreGen) return;
         var max = document.body.scrollHeight - window.innerHeight;
-        if(max <= 0 && tries++ < 20){ setTimeout(seek, 100); return; }
-        window.scrollTo(0, max * p);
+        if(max <= 0 && nowMs() < deadline){ setTimeout(seek, 100); return; }
+        window.scrollTo(0, Math.max(0, max) * p);
+        var idx = effectiveAnchorIndex();
+        var settled = anchorsSettled();
+        if(!settled || lastMax === null || lastMax !== idx) stable = 0;
+        else stable++;
+        lastMax = idx;
+        if(!settled && nowMs() < deadline){
+            if(DATA.kind === 3) renderPdfMore();
+            else if(DATA.kind !== 1) loadMoreComic();
+            setTimeout(seek, 60);
+            return;
+        }
+        var ready = stable >= 3;
+        if(!ready && nowMs() < deadline){ setTimeout(seek, 100); return; }
+        restoringPage = false;
         updatePageInfo();
+        if(ready){
+            var total = anchorTotal();
+            var expected = Math.min(total - 1, Math.floor(p * total));
+            if(effectiveAnchorIndex() >= expected) reportProgress();
+        }
     })();
 }
 function restoreAnchor(index){
@@ -2300,7 +2361,7 @@ function restoreAnchor(index){
     }
     restoringPage = true;
     var gen = ++restoreGen;
-    var deadline = Date.now() + 60000;
+    var deadline = nowMs() + 60000;
     var lastTop = null, stable = 0;
     function pendingBefore(els, i){
         var n = 0;
@@ -2309,7 +2370,7 @@ function restoreAnchor(index){
     }
     (function seek(){
         if(gen !== restoreGen) return;
-        if(Date.now() > deadline){
+        if(nowMs() > deadline){
             restoringPage = false;
             updatePageInfo();
             reportProgress();
