@@ -41,6 +41,9 @@ public class FolderFragment extends BaseFragment {
     private FragmentFolderBinding mBinding;
     private Boolean pendingFilterVisible;
     private Integer pendingContentRow;
+    private boolean pendingScrollToTop;
+    private int focusGeneration;
+    private int scrollGeneration;
     private Class mType;
 
     public static FolderFragment newInstance(String key, Class type) {
@@ -98,6 +101,7 @@ public class FolderFragment extends BaseFragment {
         FragmentTransaction transaction = getChildFragmentManager().beginTransaction().replace(R.id.container, TypeFragment.newInstance(getKey(), mType.getTypeId(), mType.getStyle(), getExtend(), mType.isFolder(), getHistoryResumeCid(), getHistoryResumeKey(), getHistoryResumeTargetCid()));
         transaction.runOnCommit(this::applyPendingFilter);
         transaction.runOnCommit(this::applyPendingContentFocus);
+        transaction.runOnCommit(this::applyPendingScrollToTop);
         transaction.commit();
     }
 
@@ -149,7 +153,12 @@ public class FolderFragment extends BaseFragment {
     }
 
     public void requestContentFocus(int contentRow) {
+        requestContentFocus(contentRow, ++focusGeneration);
+    }
+
+    public void requestContentFocus(int contentRow, int generation) {
         pendingContentRow = Math.max(0, contentRow);
+        focusGeneration = generation;
         applyPendingContentFocus();
     }
 
@@ -157,12 +166,33 @@ public class FolderFragment extends BaseFragment {
         if (pendingContentRow == null) return;
         TypeFragment child = getChild();
         if (child == null) return;
-        child.requestContentFocus(pendingContentRow);
+        child.requestContentFocus(pendingContentRow, focusGeneration);
         pendingContentRow = null;
+    }
+
+    public void scrollContentToTop() {
+        scrollContentToTop(++scrollGeneration);
+    }
+
+    public void scrollContentToTop(int generation) {
+        pendingScrollToTop = true;
+        scrollGeneration = generation;
+        applyPendingScrollToTop();
+    }
+
+    private void applyPendingScrollToTop() {
+        if (!pendingScrollToTop) return;
+        TypeFragment child = getChild();
+        if (child == null) return;
+        child.scrollContentToTop(scrollGeneration);
+        pendingScrollToTop = false;
     }
 
     public void clearContentFocusRequest() {
         pendingContentRow = null;
+        pendingScrollToTop = false;
+        focusGeneration++;
+        scrollGeneration++;
         TypeFragment child = getChild();
         if (child != null) child.clearContentFocusRequest();
     }
@@ -182,6 +212,15 @@ public class FolderFragment extends BaseFragment {
     @Override
     public void setUserVisibleHint(boolean isVisibleToUser) {
         super.setUserVisibleHint(isVisibleToUser);
-        if (mBinding != null && !isVisibleToUser) Optional.ofNullable(getChild()).ifPresent(f -> f.setUserVisibleHint(false));
+        if (mBinding != null && !isVisibleToUser) {
+            clearContentFocusRequest();
+            Optional.ofNullable(getChild()).ifPresent(f -> f.setUserVisibleHint(false));
+        }
+    }
+
+    @Override
+    public void onDestroyView() {
+        clearContentFocusRequest();
+        super.onDestroyView();
     }
 }

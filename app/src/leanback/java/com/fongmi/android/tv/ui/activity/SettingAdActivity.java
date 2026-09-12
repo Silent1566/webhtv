@@ -53,6 +53,8 @@ public class SettingAdActivity extends BaseActivity {
     private volatile int probeRuleCount;
     private final ActivityResultLauncher<String[]> adAudioRulePicker =
             registerForActivityResult(new ActivityResultContracts.OpenDocument(), this::importAdAudioRules);
+    private final ActivityResultLauncher<String[]> speechAdRulePicker =
+            registerForActivityResult(new ActivityResultContracts.OpenDocument(), this::importSpeechAdRules);
 
     public static void start(Activity activity) {
         activity.startActivity(new Intent(activity, SettingAdActivity.class));
@@ -89,6 +91,8 @@ public class SettingAdActivity extends BaseActivity {
         mBinding.probeRuleRefresh.setOnClickListener(this::refreshProbeRules);
         mBinding.speechAdEnabled.setOnClickListener(this::toggleSpeechAdEnabled);
         mBinding.speechAdKeywords.setOnClickListener(this::editSpeechAdKeywords);
+        mBinding.speechAdRules.setOnClickListener(this::manageSpeechAdRules);
+        mBinding.speechAdBuiltin.setOnClickListener(this::toggleSpeechAdBuiltin);
         mBinding.speechAdSkipSeconds.setOnClickListener(this::editSpeechAdSkipSeconds);
         mBinding.speechAdSkipMode.setOnClickListener(this::selectSpeechAdSkipMode);
         mBinding.autoSkipIntroOutro.setOnClickListener(this::setAutoSkipIntroOutro);
@@ -126,8 +130,11 @@ public class SettingAdActivity extends BaseActivity {
         safeSet("probeRuleSource", mBinding.probeRuleSourceText, this::getProbeRuleSourceText);
         safeSet("probeRuleRefresh", mBinding.probeRuleRefreshText, this::getProbeRuleRefreshText);
         SpeechAdConfig speech = SpeechAdSetting.snapshot();
+        SpeechAdSetting.RuleSnapshot speechRules = SpeechAdSetting.ruleSnapshot();
         safeSet("speechAdEnabled", mBinding.speechAdEnabledText, () -> getSpeechAdEnabledText(speech));
         safeSet("speechAdKeywords", mBinding.speechAdKeywordsText, () -> getString(R.string.speech_ad_keyword_count, speech.keywords().values().size()));
+        safeSet("speechAdRules", mBinding.speechAdRulesText, () -> getSpeechAdRulesText(speechRules));
+        safeSet("speechAdBuiltin", mBinding.speechAdBuiltinText, () -> getSpeechAdBuiltinText(speechRules));
         safeSet("speechAdSkipSeconds", mBinding.speechAdSkipSecondsText, () -> getString(R.string.speech_ad_skip_seconds_value, speech.skipSeconds()));
         safeSet("speechAdSkipMode", mBinding.speechAdSkipModeText, () -> speech.mode() == AdSkipPolicyController.Mode.AUTO
                 ? getString(R.string.speech_ad_skip_mode_auto) : getString(R.string.speech_ad_skip_mode_prompt));
@@ -344,6 +351,145 @@ public class SettingAdActivity extends BaseActivity {
     private void toggleSpeechAdEnabled(View view) {
         SpeechAdSetting.setEnabled(!SpeechAdSetting.snapshot().enabled());
         notifyAdAudioRuntime();
+        setText();
+    }
+
+    private String getSpeechAdRulesText(SpeechAdSetting.RuleSnapshot snapshot) {
+        if (snapshot.hasError()) return getString(R.string.speech_ad_rules_error, snapshot.error());
+        if (snapshot.rules().isEmpty()) return getString(R.string.speech_ad_rules_none);
+        return getString(R.string.speech_ad_rules_summary,
+                snapshot.rules().rules().size(), getSpeechAdRuleSourceText(snapshot));
+    }
+
+    private String getSpeechAdBuiltinText(SpeechAdSetting.RuleSnapshot snapshot) {
+        int count = Math.max(snapshot.builtinRules().rules().size(), SpeechAdSetting.builtinRuleCount());
+        return getString(R.string.speech_ad_builtin_value,
+                getSwitch(snapshot.builtinEnabled()), count);
+    }
+
+    private String getSpeechAdRuleSourceText(SpeechAdSetting.RuleSnapshot snapshot) {
+        boolean hasCustom = !snapshot.customRules().isEmpty();
+        boolean hasBuiltin = snapshot.builtinEnabled() && !snapshot.builtinRules().isEmpty();
+        if (hasCustom && hasBuiltin) return getString(R.string.speech_ad_rules_source_combined);
+        if (hasBuiltin) return getString(R.string.speech_ad_rules_source_builtin);
+        if (snapshot.source() == SpeechAdSetting.RuleSource.IMPORTED) {
+            return getString(R.string.speech_ad_rules_source_imported);
+        }
+        if (snapshot.source() == SpeechAdSetting.RuleSource.USER) {
+            return getString(R.string.speech_ad_rules_source_user);
+        }
+        return getString(R.string.speech_ad_rules_source_none);
+    }
+
+    private void manageSpeechAdRules(View view) {
+        new MaterialAlertDialogBuilder(this, R.style.Theme_WebHTV_LightDialog)
+                .setTitle(R.string.speech_ad_rules_manage)
+                .setItems(new String[]{
+                        getString(R.string.speech_ad_rules_edit),
+                        getString(R.string.speech_ad_rules_import),
+                        getString(R.string.speech_ad_rules_clear),
+                        getString(R.string.speech_ad_rules_view_builtin)
+                }, (dialog, which) -> {
+                    if (which == 0) editSpeechAdRules();
+                    else if (which == 1) speechAdRulePicker.launch(new String[]{"text/plain", "text/*"});
+                    else if (which == 2) confirmClearSpeechAdRules();
+                    else showBuiltinSpeechAdRules();
+                })
+                .setNegativeButton(R.string.dialog_negative, null)
+        .show();
+    }
+
+    private void showBuiltinSpeechAdRules() {
+        try {
+            new MaterialAlertDialogBuilder(this, R.style.Theme_WebHTV_LightDialog)
+                    .setTitle(R.string.speech_ad_rules_view_builtin)
+                    .setMessage(SpeechAdSetting.builtinRulesText())
+                    .setPositiveButton(R.string.dialog_positive, null)
+                    .show();
+        } catch (RuntimeException error) {
+            Notify.show(getString(R.string.speech_ad_rules_error, SpeechAdSetting.safeError(error)));
+        }
+    }
+
+    private void editSpeechAdRules() {
+        EditText input = new EditText(this);
+        input.setGravity(Gravity.TOP | Gravity.START);
+        input.setMinLines(8);
+        input.setMaxLines(16);
+        input.setSingleLine(false);
+        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+        input.setText(SpeechAdSetting.customRulesText());
+        input.setSelection(input.length());
+        AlertDialog dialog = new MaterialAlertDialogBuilder(this, R.style.Theme_WebHTV_LightDialog)
+                .setTitle(R.string.speech_ad_rules_edit)
+                .setView(input)
+                .setNegativeButton(R.string.dialog_negative, null)
+                .setPositiveButton(R.string.dialog_positive, null)
+                .create();
+        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(button -> {
+            try {
+                String text = input.getText().toString();
+                if (text.trim().isEmpty()) SpeechAdSetting.clearRules();
+                else SpeechAdSetting.setRulesText(text, SpeechAdSetting.RuleSource.USER);
+                Notify.show(R.string.speech_ad_rules_saved);
+                notifyAdAudioRuntime();
+                setText();
+                dialog.dismiss();
+            } catch (RuntimeException error) {
+                input.setError(SpeechAdSetting.safeError(error));
+                input.requestFocus();
+            }
+        }));
+        dialog.show();
+        LightDialog.apply(dialog);
+    }
+
+    private void importSpeechAdRules(Uri uri) {
+        if (uri == null) return;
+        Task.execute(() -> {
+            boolean imported = false;
+            String message;
+            try {
+                SpeechAdSetting.importUri(getContentResolver(), uri);
+                imported = true;
+                message = getString(R.string.speech_ad_rules_imported,
+                        SpeechAdSetting.ruleSnapshot().customRules().rules().size());
+            } catch (Exception error) {
+                message = getString(R.string.speech_ad_rules_import_failed,
+                        SpeechAdSetting.safeError(error));
+            }
+            final boolean success = imported;
+            String result = message;
+            runOnUiThread(() -> {
+                if (success) notifyAdAudioRuntime();
+                if (!canSetText()) return;
+                Notify.show(result);
+                setText();
+            });
+        });
+    }
+
+    private void confirmClearSpeechAdRules() {
+        new MaterialAlertDialogBuilder(this, R.style.Theme_WebHTV_LightDialog)
+                .setTitle(R.string.speech_ad_rules_clear)
+                .setMessage(R.string.speech_ad_rules_clear_confirm)
+                .setPositiveButton(R.string.dialog_positive, (dialog, which) -> {
+                    SpeechAdSetting.clearRules();
+                    Notify.show(R.string.speech_ad_rules_clear_done);
+                    notifyAdAudioRuntime();
+                    setText();
+                })
+                .setNegativeButton(R.string.dialog_negative, null)
+                .show();
+    }
+
+    private void toggleSpeechAdBuiltin(View view) {
+        try {
+            SpeechAdSetting.setBuiltinEnabled(!SpeechAdSetting.isBuiltinEnabled());
+            notifyAdAudioRuntime();
+        } catch (RuntimeException error) {
+            Notify.show(getString(R.string.speech_ad_rules_error, SpeechAdSetting.safeError(error)));
+        }
         setText();
     }
 

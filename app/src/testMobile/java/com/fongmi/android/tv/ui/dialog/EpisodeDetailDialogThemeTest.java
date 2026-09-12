@@ -97,19 +97,37 @@ public class EpisodeDetailDialogThemeTest {
 
         String guestNavigation = source.substring(guestBranch, photoBranch);
         assertTrue("guest cards should move to photos when the photo grid has data",
-                guestNavigation.contains("photosGrid.requestFocus();"));
+                guestNavigation.contains("requestGridFocus(photosGrid)"));
         assertTrue("guest cards should fall back to the poster when photos are unavailable",
                 guestNavigation.contains("stillCard.requestFocus();"));
+
+        int focusHelper = source.indexOf("private static boolean requestGridFocus");
+        int focusHelperEnd = source.indexOf("private static boolean isSameOrDescendantOf", focusHelper);
+        String focusHelperBody = source.substring(focusHelper, focusHelperEnd);
         assertTrue("guest-to-photo navigation must check photo visibility",
-                guestNavigation.contains("photosGrid.getVisibility() == View.VISIBLE"));
+                focusHelperBody.contains("grid.getVisibility() != View.VISIBLE"));
         assertTrue("guest-to-photo navigation must check photo data",
-                guestNavigation.contains("photosGrid.getAdapter().getItemCount() > 0"));
+                focusHelperBody.contains("grid.getAdapter().getItemCount() == 0"));
 
         int guestsGrid = layout.indexOf("android:id=\"@+id/guestsGrid\"");
         int guestsEnd = layout.indexOf("/>", guestsGrid);
         assertTrue("guest grid should declare photos as its upward focus target",
                 guestsGrid >= 0 && guestsEnd > guestsGrid
                         && layout.substring(guestsGrid, guestsEnd).contains("android:nextFocusUp=\"@id/photosGrid\""));
+    }
+
+    @Test
+    public void tvEpisodePosterNavigatesDownToTheFirstAvailablePhotoCard() throws Exception {
+        String source = read(findLeanbackJavaPath().resolve(Path.of(
+                "com", "fongmi", "android", "tv", "ui", "dialog", "EpisodeDetailDialog.java")));
+        String layout = read(findLeanbackResPath().resolve(Path.of("layout", "dialog_episode_detail.xml")));
+
+        assertTrue("poster focus must be recognized even when a nested child owns focus",
+                source.contains("isSameOrDescendantOf(focus, stillCard)"));
+        assertTrue("down navigation must focus an actual grid card",
+                source.contains("grid.setSelectedPosition(position, holder -> holder.itemView.requestFocus());"));
+        assertTrue("poster must declare the photo grid as its downward focus target",
+                layout.contains("android:nextFocusDown=\"@id/photosGrid\""));
     }
 
     private static void assertThemeAppliedBeforeShow(String source, int start, int end, String label) {

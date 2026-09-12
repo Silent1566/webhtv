@@ -31,7 +31,6 @@ import com.fongmi.android.tv.bean.Track;
 import com.fongmi.android.tv.databinding.DialogTrackBinding;
 import com.fongmi.android.tv.player.PlayerHelper;
 import com.fongmi.android.tv.player.PlayerManager;
-import com.fongmi.android.tv.player.exo.TrackUtil;
 import com.fongmi.android.tv.service.AiSubtitleTranslationService;
 import com.fongmi.android.tv.setting.PlaybackPerformanceSetting;
 import com.fongmi.android.tv.setting.PlayerSetting;
@@ -615,8 +614,7 @@ public final class TrackDialog extends BaseBottomSheetDialog implements TrackAda
     }
 
     private Format activeVideoFormat(Tracks tracks) {
-        if (secondarySubtitle || type != C.TRACK_TYPE_VIDEO) return null;
-        return TrackUtil.uniqueActiveFormat(tracks, type, player.getVideoFormat());
+        return null;
     }
 
     private void addPendingSubtitleTrack(List<Track> items) {

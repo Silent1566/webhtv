@@ -59,6 +59,7 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
     private List<Filter> mFilters;
     private Integer pendingContentRow;
     private int contentFocusGeneration;
+    private int scrollGeneration;
     private boolean headerVisible;
     private boolean filterVisible;
 
@@ -318,6 +319,9 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
     public void onHiddenChanged(boolean hidden) {
         super.onHiddenChanged(hidden);
         if (hidden) {
+            scrollGeneration++;
+            contentFocusGeneration++;
+            pendingContentRow = null;
             mBinding.recycler.showHeader();
         } else {
             if (headerVisible) mBinding.recycler.showHeader();
@@ -344,15 +348,35 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
         return mBinding.recycler.requestFocus();
     }
 
+    public void scrollContentToTop() {
+        scrollContentToTop(++scrollGeneration);
+    }
+
+    public void scrollContentToTop(int generation) {
+        if (mBinding == null || mAdapter == null) return;
+        int target = filterVisible ? mFilters.size() : 0;
+        scrollGeneration = generation;
+        mBinding.recycler.post(() -> {
+            if (generation != scrollGeneration || mBinding == null || mAdapter == null || mAdapter.size() <= target || !isVisible() || getParentFragment() == null || !getParentFragment().isVisible()) return;
+            mBinding.recycler.showHeader();
+            mBinding.recycler.scrollToPosition(target);
+        });
+    }
+
     public void requestContentFocus(int contentRow) {
+        requestContentFocus(contentRow, contentFocusGeneration + 1);
+    }
+
+    public void requestContentFocus(int contentRow, int generation) {
         pendingContentRow = Math.max(0, contentRow);
-        contentFocusGeneration++;
+        contentFocusGeneration = generation;
         applyPendingContentFocus();
     }
 
     public void clearContentFocusRequest() {
         pendingContentRow = null;
         contentFocusGeneration++;
+        scrollGeneration++;
     }
 
     private void applyPendingContentFocus() {
@@ -380,6 +404,14 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
             }
         }
         holder.itemView.requestFocus();
+    }
+
+    @Override
+    public void onDestroyView() {
+        pendingContentRow = null;
+        contentFocusGeneration++;
+        scrollGeneration++;
+        super.onDestroyView();
     }
 
 }

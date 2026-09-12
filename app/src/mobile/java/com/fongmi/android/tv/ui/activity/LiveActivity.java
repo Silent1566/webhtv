@@ -81,6 +81,7 @@ import com.fongmi.android.tv.ui.custom.CustomKeyDown;
 import com.fongmi.android.tv.ui.custom.CustomSeekView;
 import com.fongmi.android.tv.ui.custom.PlayerOsdController;
 import com.fongmi.android.tv.ui.dialog.CastDialog;
+import com.fongmi.android.tv.ui.dialog.PlaybackSpeedDialog;
 import com.fongmi.android.tv.ui.dialog.HistoryDialog;
 import com.fongmi.android.tv.ui.dialog.InfoDialog;
 import com.fongmi.android.tv.ui.dialog.LiveControlDialog;
@@ -236,6 +237,11 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
         for (Fragment fragment : getSupportFragmentManager().getFragments()) {
             if (fragment instanceof LiveControlDialog dialog) dialog.setPlayer();
         }
+    }
+
+    @Override
+    protected boolean shouldAutoPlay() {
+        return true;
     }
 
     @Override
@@ -768,9 +774,12 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
 
     private void onSpeed() {
         if (!player().isVod()) return;
-        mBinding.control.action.speed.setText(player().addSpeed());
-        PlayerSetting.putDefaultSpeed(player().getSpeed());
-        setR1Callback();
+        PlaybackSpeedDialog.show(this, player().getSpeed(), speed -> {
+            if (!isServiceReady() || !isOwner() || !player().isVod()) return;
+            mBinding.control.action.speed.setText(player().setSpeed(speed));
+            PlayerSetting.putDefaultSpeed(player().getSpeed());
+            setR1Callback();
+        });
     }
 
     private boolean onSpeedLong() {

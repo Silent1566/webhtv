@@ -42,6 +42,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.core.widget.NestedScrollView;
+import androidx.core.view.OneShotPreDrawListener;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -109,9 +110,10 @@ import com.fongmi.android.tv.playback.PlaybackOrientation;
 import com.fongmi.android.tv.playback.SubtitleRestoreCoordinator;
 import com.fongmi.android.tv.player.IntroSkipKinds;
 import com.fongmi.android.tv.player.IntroSkipPlayback;
+import com.fongmi.android.tv.player.PlaybackResourceClassifier;
 import com.fongmi.android.tv.player.PlayerManager;
 import com.fongmi.android.tv.player.PlayerHelper;
-import com.fongmi.android.tv.player.exo.MediaSourceFactory;
+import com.fongmi.android.tv.player.mpv.MpvConfigStore;
 import com.fongmi.android.tv.service.AiAdDetectionService;
 import com.fongmi.android.tv.service.AiEpisodeSeasonService;
 import com.fongmi.android.tv.service.AiRecommendationService;
@@ -150,6 +152,7 @@ import com.fongmi.android.tv.ui.custom.EpisodeTitlePopup;
 import com.fongmi.android.tv.ui.custom.PlayerGesture;
 import com.fongmi.android.tv.ui.custom.PlayerOsdController;
 import com.fongmi.android.tv.ui.dialog.AdRulePreviewDialog;
+import com.fongmi.android.tv.ui.dialog.PlaybackSpeedDialog;
 import com.fongmi.android.tv.ui.dialog.CodecCapabilityDialog;
 import com.fongmi.android.tv.ui.dialog.DanmakuDialog;
 import com.fongmi.android.tv.ui.dialog.DisplayDialog;
@@ -415,6 +418,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private int mAdFeedbackGeneration;
     private int tmdbDialogGeneration;
     private AiEpisodeSeasonService aiSeasonService;
+    private final List<View> inlineCustomActionViews = new ArrayList<>();
+    private boolean inlineCustomButtonsInitialized;
     private AlertDialog aiSeasonLoadingDialog;
     private int tmdbApplyGeneration;
     private int tmdbEpisodeDetailGeneration;
@@ -821,9 +826,9 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             }
 
             @Override
-            public void onItemLongClick(View anchor, Episode episode, int episodeNumber) {
+            public void onItemLongClick(View anchor, Episode episode, int episodeNumber, TmdbEpisode tmdbEpisode) {
                 anchor.setPressed(false);
-                showTmdbEpisodeDetail(episode, episodeNumber, binding.episodeContainer);
+                showTmdbEpisodeDetail(episode, episodeNumber, tmdbEpisode, binding.episodeContainer);
             }
         });
         episodeAdapter.setNativeEnhanced(true);
@@ -1206,6 +1211,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         binding.playerSearch.setOnLongClickListener(view -> openGlobalSourceSearch());
         inlinePlayerUi.bindInlineActions();
         setupMobileInlineControl();
+        setupInlineCustomButtons();
         hideInlineControls();
         updateInlineButtons(false);
         focusInlinePlayerPanel();
@@ -1272,6 +1278,92 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         parse.setHasFixedSize(true);
         parse.setItemAnimator(null);
         parse.setAdapter(inlineParseAdapter = new InlineParseAdapter());
+    }
+
+    /**
+     * 影视原生模式和详情页使用不同的控制条。原生模式会在 VideoActivity
+     * 中创建 scripts 按钮，详情页此前只绑定了内置按钮，因此沉浸融合模式
+     * 虽然 MPV 已加载脚本桥接文件，却没有任何入口发送 script-message。
+     */
+    private void setupInlineCustomButtons() {
+        if (inlineCustomButtonsInitialized) return;
+        inlineCustomButtonsInitialized = true;
+        List<MpvConfigStore.CustomButton> buttons = MpvConfigStore.customButtons();
+        if (buttons.isEmpty()) return;
+
+        ViewGroup playerActions = (ViewGroup) binding.playerActionRow.getChildAt(0);
+        ViewGroup mobileActions = Util.isMobile() && detailActionRoot != null
+                ? detailActionRoot.findViewById(R.id.container) : null;
+        for (MpvConfigStore.CustomButton button : buttons) {
+            if (button == null || !button.enabled) continue;
+            addInlineCustomButton(playerActions, button);
+            if (mobileActions != null) addInlineCustomButton(mobileActions, button);
+        }
+        setupInlineCustomButtonFocus();
+        updateInlineCustomButtonVisibility();
+    }
+
+    private void addInlineCustomButton(ViewGroup container, MpvConfigStore.CustomButton button) {
+        TextView view = new TextView(this);
+        view.setId(View.generateViewId());
+        view.setTextSize(13);
+        view.setTextColor(Color.WHITE);
+        view.setGravity(Gravity.CENTER);
+        view.setMinHeight(ResUtil.dp2px(40));
+        view.setMinWidth(ResUtil.dp2px(56));
+        view.setPadding(ResUtil.dp2px(8), ResUtil.dp2px(4), ResUtil.dp2px(8), ResUtil.dp2px(4));
+        view.setBackgroundResource(R.drawable.selector_control_sheet_button);
+        view.setText(button.title);
+        view.setSingleLine(true);
+        view.setMaxWidth(ResUtil.dp2px(144));
+        view.setEllipsize(TextUtils.TruncateAt.END);
+        view.setContentDescription(button.title);
+        view.setOnClickListener(item -> dispatchInlineCustomButton(item, button.id, false));
+        view.setOnLongClickListener(item -> {
+            dispatchInlineCustomButton(item, button.id, true);
+            return true;
+        });
+        view.setFocusable(true);
+        if (Util.isLeanback()) view.setFocusableInTouchMode(true);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ResUtil.dp2px(40));
+        params.setMargins(ResUtil.dp2px(4), ResUtil.dp2px(2), ResUtil.dp2px(4), ResUtil.dp2px(2));
+        container.addView(view, params);
+        inlineCustomActionViews.add(view);
+    }
+
+    private void dispatchInlineCustomButton(View view, String id, boolean longPress) {
+        if (service() == null || player() == null || !player().isMpv()) return;
+        if (player().sendMpvCustomButton(id, longPress)) view.setSelected(!view.isSelected());
+        setInlineHideCallback();
+    }
+
+    private void updateInlineCustomButtonVisibility() {
+        boolean visible = service() != null && player() != null
+                && !player().isEmpty() && player().isMpv();
+        for (View view : inlineCustomActionViews) view.setVisibility(visible ? View.VISIBLE : View.GONE);
+    }
+
+    /**
+     * 自定义按钮不属于 PlayerButtonSetting 的固定按钮集合，不能依赖固定按钮的焦点链。
+     * 否则 TV 端最后一个内置按钮的右焦点仍然是 NO_ID，动态追加的按钮无法用方向键到达。
+     */
+    private void setupInlineCustomButtonFocus() {
+        if (Util.isMobile()) return;
+        ViewGroup container = (ViewGroup) binding.playerActionRow.getChildAt(0);
+        List<View> focusable = new ArrayList<>();
+        for (int i = 0; i < container.getChildCount(); i++) {
+            View view = container.getChildAt(i);
+            if (view.getVisibility() == View.VISIBLE && view.isEnabled() && view.isFocusable()) focusable.add(view);
+        }
+        for (int i = 0; i < focusable.size(); i++) {
+            View current = focusable.get(i);
+            View previous = focusable.get(i == 0 ? focusable.size() - 1 : i - 1);
+            View next = focusable.get(i == focusable.size() - 1 ? 0 : i + 1);
+            current.setNextFocusLeftId(previous.getId());
+            current.setNextFocusRightId(next.getId());
+            current.setNextFocusUpId(current.getId());
+        }
     }
 
     private void inflateMobileInlineControl() {
@@ -4567,7 +4659,10 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         if (rv.getVisibility() != View.VISIBLE) return;
         RecyclerView.Adapter<?> adapter = rv.getAdapter();
         if (adapter == null || adapter.getItemCount() == 0) return;
-        if (rv.getChildCount() > 0) return; // 已有子 View，未处于错位态
+        // 主选集卡片仍可见时，未消费的刷新也会使其 adapter position 持续为 NO_POSITION。
+        // 其它 TMDB 列表保持原有的无子 View 恢复条件。
+        boolean pendingEpisodeLayout = binding != null && rv == binding.episodeContainer && rv.hasPendingAdapterUpdates();
+        if (rv.getChildCount() > 0 && !pendingEpisodeLayout) return;
         if (rv.isComputingLayout()) {
             rv.post(() -> recoverRecyclerViewIfDetached(rv));
             return;
@@ -6021,15 +6116,23 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         view.setLayoutParams(marginParams);
     }
 
-    private void showTmdbEpisodeDetail(Episode episode, int episodeNumber, RecyclerView returnRecycler) {
-        // 对话框关闭后完整重渲染剧集列表，防止焦点状态紊乱导致按钮失效
+    private void showTmdbEpisodeDetail(Episode episode, int episodeNumber, TmdbEpisode boundTmdbEpisode, RecyclerView returnRecycler) {
         android.content.DialogInterface.OnDismissListener dismissListener = d -> {
-            if (binding == null || binding.episodeContainer == null || returnRecycler == null) return;
-            // RecyclerView 可能仍在恢复布局，下一帧再完整重渲染（参考原生增强的 render 机制）
-            binding.episodeContainer.post(() -> {
-                // 完整重建列表 + 分组按钮（类似原生增强 render[0].run()）
+            if (binding == null || returnRecycler == null) return;
+            returnRecycler.post(() -> {
+                if (binding == null || isFinishing() || isDestroyed() || !returnRecycler.isAttachedToWindow()) return;
                 rerenderEpisodeViewportOnly(false, true, true);
-                returnRecycler.post(() -> restoreEpisodeDetailFocus(returnRecycler, episode));
+                if (returnRecycler != binding.episodeContainer) {
+                    // 独立选集面板保留原有恢复路径。
+                    returnRecycler.post(() -> restoreEpisodeDetailFocus(returnRecycler, episode));
+                    return;
+                }
+                // post/postOnAnimation 不保证刷新已布局；在真实布局后的 pre-draw 恢复精确卡片。
+                OneShotPreDrawListener.add(returnRecycler, () -> {
+                    if (binding == null || isFinishing() || isDestroyed() || !returnRecycler.isShown()) return;
+                    restoreEpisodeDetailFocus(returnRecycler, episode);
+                });
+                recoverEpisodeViewportIfDetached();
             });
         };
 
@@ -6039,10 +6142,23 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             com.fongmi.android.tv.ui.dialog.EpisodeDetailDialog.show(this, episode, null, null, null, dismissListener);
             return;
         }
-        // 剧集场景：原有逻辑
-        int detailSeasonNumber = tmdbEpisodeDataSeason(selectedFlag == null ? null : selectedFlag.getEpisodes());
-        if (matchedTmdbItem == null || !"tv".equalsIgnoreCase(matchedTmdbItem.getMediaType()) || detailSeasonNumber < 0 || episodeNumber <= 0 || !canMatchTmdb()) {
-            Notify.show(R.string.detail_tmdb_empty);
+        // 剧集场景：详情请求优先使用长按卡片绑定且已通过匹配校验的 TMDB 集。
+        // 手动选择季度时，同一线路可能是扁平集列表，卡片绑定对象才是可靠的请求上下文。
+        List<Episode> detailEpisodes = selectedFlag == null ? null : selectedFlag.getEpisodes();
+        int detailSeasonNumber = tmdbEpisodeDataSeason(detailEpisodes);
+        int detailEpisodeNumber = episodeNumber;
+        if (boundTmdbEpisode != null) {
+            if (boundTmdbEpisode.getSeasonNumber() >= 0) detailSeasonNumber = boundTmdbEpisode.getSeasonNumber();
+            if (boundTmdbEpisode.getNumber() > 0) detailEpisodeNumber = boundTmdbEpisode.getNumber();
+        }
+        // 卡片没有有效 TMDB 映射时也必须有反馈；EpisodeDetailDialog 会展示源集名称，
+        // 不能只弹 Notify 后结束，否则手动选季下超范围/不匹配的卡片看起来像长按失效。
+        if (boundTmdbEpisode == null) {
+            com.fongmi.android.tv.ui.dialog.EpisodeDetailDialog.show(this, episode, getSite(), null, null, dismissListener);
+            return;
+        }
+        if (matchedTmdbItem == null || !"tv".equalsIgnoreCase(matchedTmdbItem.getMediaType()) || detailSeasonNumber < 0 || detailEpisodeNumber <= 0 || !canMatchTmdb()) {
+            com.fongmi.android.tv.ui.dialog.EpisodeDetailDialog.show(this, episode, getSite(), null, null, dismissListener);
             return;
         }
         binding.loading.setVisibility(View.VISIBLE);
@@ -6050,12 +6166,13 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         int detailGeneration = ++tmdbEpisodeDetailGeneration;
         int displaySeasonNumber = detailSeasonNumber;
         int seasonNumber = detailSeasonNumber;
+        int requestEpisodeNumber = detailEpisodeNumber;
         TmdbItem item = matchedTmdbItem;
         JsonObject baseDetail = matchedTmdbDetail;
         TmdbConfig config = tmdbConfig;
         detailTasks.submit(Task.largeExecutor(), () -> {
             try {
-                JsonObject detail = tmdbService.episode(item, seasonNumber, episodeNumber, config, baseDetail);
+                JsonObject detail = tmdbService.episode(item, seasonNumber, requestEpisodeNumber, config, baseDetail);
                 List<String> photos = tmdbService.episodePhotos(detail, config);
                 List<TmdbPerson> guests = tmdbService.episodeGuests(detail, config);
                 runOnAliveUi(() -> {
@@ -6065,7 +6182,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
                         return;
                     }
                     binding.loading.setVisibility(View.GONE);
-                    if (displaySeasonNumber != selectedSeasonNumber) return;
+                    if (!isTmdbEpisodeDetailSeasonCurrent(displaySeasonNumber)) return;
                     // 复用 EpisodeDetailDialog，传入已拉取的 photos/guests 避免重复 API 请求
                     com.fongmi.android.tv.ui.dialog.EpisodeDetailDialog.show(this, episode, getSite(), photos, guests, dismissListener);
                 });
@@ -6077,11 +6194,19 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
                         return;
                     }
                     binding.loading.setVisibility(View.GONE);
-                    if (displaySeasonNumber != selectedSeasonNumber) return;
-                    Notify.show(TextUtils.isEmpty(e.getMessage()) ? getString(R.string.detail_tmdb_empty) : e.getMessage());
+                    if (!isTmdbEpisodeDetailSeasonCurrent(displaySeasonNumber)) return;
+                    // API 失败也保留详情弹窗，至少让用户看到源集名称，而不是把长按吞掉。
+                    com.fongmi.android.tv.ui.dialog.EpisodeDetailDialog.show(this, episode, getSite(), null, null, dismissListener);
                 });
             }
         });
+    }
+
+    private boolean isTmdbEpisodeDetailSeasonCurrent(int seasonNumber) {
+        if (seasonNumber < 0) return false;
+        if (seasonNumber == selectedSeasonNumber) return true;
+        List<Episode> episodes = selectedFlag == null ? null : selectedFlag.getEpisodes();
+        return seasonNumber == tmdbEpisodeDataSeason(episodes);
     }
 
     private void restoreEpisodeDetailFocus(RecyclerView recycler, Episode episode) {
@@ -7272,9 +7397,11 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private void updateInlineButtons(boolean playing) {
         if (!isInlinePlayerMode() || inlineControlController == null) {
             setInlineDecodeText(getString(R.string.play_decode_idle));
+            updateInlineCustomButtonVisibility();
             return;
         }
         boolean hasPlayer = service() != null && !player().isEmpty();
+        updateInlineCustomButtonVisibility();
         setInlineSpeedText(service() == null || player().isEmpty() ? getString(R.string.play_speed) : player().getSpeedText());
         setInlineDecodeText(inlineDecodeText(hasPlayer));
         binding.playerExternal.setText(service() == null ? getString(R.string.play_exo) : player().getPlayerText());
@@ -7333,6 +7460,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         setInlineFullscreenIcon();
         updateMobileInlineButtons(playing, hasPlayer, episodeCount, hasTitle);
         applyInlinePlayerButtonSettings();
+        setupInlineCustomButtonFocus();
         updateInlineDisplayPanel();
         // 更新按钮颜色
         updateInlineButtonColors();
@@ -7930,8 +8058,11 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
 
     private void changeInlineSpeed() {
         if (service() == null || player().isEmpty()) return;
-        setInlineSpeedText(player().addSpeed());
-        if (history != null) history.setUserSpeed(player().getSpeed());
+        PlaybackSpeedDialog.show(this, player().getSpeed(), speed -> {
+            if (!isServiceReady() || !isOwner() || player().isEmpty()) return;
+            setInlineSpeed(speed);
+            if (history != null) history.setUserSpeed(player().getSpeed());
+        });
     }
 
     private void setInlineSpeed(float speed) {
@@ -8397,7 +8528,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
 
     private boolean isInlineAdFeedbackSupportedFormat() {
         return player() != null && !TextUtils.isEmpty(player().getUrl())
-                && MediaSourceFactory.isHlsUrl(player().getUrl());
+                && PlaybackResourceClassifier.isHlsUrl(player().getUrl());
     }
 
     private void submitInlineAdFeedback() {
@@ -8803,9 +8934,9 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             }
 
             @Override
-            public void onItemLongClick(View anchor, Episode episode, int episodeNumber) {
+            public void onItemLongClick(View anchor, Episode episode, int episodeNumber, TmdbEpisode tmdbEpisode) {
                 anchor.setPressed(false);
-                showTmdbEpisodeDetail(episode, episodeNumber, recycler);
+                showTmdbEpisodeDetail(episode, episodeNumber, tmdbEpisode, recycler);
             }
         });
         adapter.setLight(lightTheme);
@@ -10022,17 +10153,32 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         RecyclerView.Adapter<?> adapter = recycler.getAdapter();
         if (adapter == null || adapter.getItemCount() == 0) return false;
         int target = Math.max(0, Math.min(position, adapter.getItemCount() - 1));
-        recycler.stopScroll();
-        RecyclerView.ViewHolder visibleHolder = recycler.findViewHolderForAdapterPosition(target);
-        if (visibleHolder != null) {
-            visibleHolder.itemView.requestFocus();
+        return focusTmdbRecyclerItem(recycler, target, 0);
+    }
+
+    private boolean focusTmdbRecyclerItem(RecyclerView recycler, int target, int attempt) {
+        if (binding == null || recycler == null || recycler.getVisibility() != View.VISIBLE) return false;
+        RecyclerView.Adapter<?> adapter = recycler.getAdapter();
+        if (adapter == null || adapter.getItemCount() == 0) return false;
+        int boundedTarget = Math.max(0, Math.min(target, adapter.getItemCount() - 1));
+        if (recycler.isComputingLayout()) {
+            if (attempt >= 6) return true;
+            recycler.postOnAnimation(() -> focusTmdbRecyclerItem(recycler, boundedTarget, attempt + 1));
             return true;
         }
-        recycler.scrollToPosition(target);
-        recycler.post(() -> {
-            RecyclerView.ViewHolder holder = recycler.findViewHolderForAdapterPosition(target);
-            if (holder != null) holder.itemView.requestFocus();
-        });
+        recycler.stopScroll();
+        RecyclerView.ViewHolder visibleHolder = recycler.findViewHolderForAdapterPosition(boundedTarget);
+        if (visibleHolder != null) {
+            boolean requested = visibleHolder.itemView.requestFocus();
+            if (!requested) requested = visibleHolder.itemView.requestFocusFromTouch();
+            if (requested && getCurrentFocus() == visibleHolder.itemView) return true;
+            if (attempt >= 6) return true;
+            recycler.postOnAnimation(() -> focusTmdbRecyclerItem(recycler, boundedTarget, attempt + 1));
+            return true;
+        }
+        if (attempt == 0) recycler.scrollToPosition(boundedTarget);
+        if (attempt >= 6) return true;
+        recycler.postOnAnimation(() -> focusTmdbRecyclerItem(recycler, boundedTarget, attempt + 1));
         return true;
     }
 

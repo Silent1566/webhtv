@@ -252,7 +252,26 @@ public class PlayerPlaybackRegressionSourceTest {
                         && mobile.indexOf("player().seekTo(position);", setPosition) > mobile.indexOf("mInitialPlaybackPosition = C.TIME_UNSET;", setPosition)
                         && mobile.indexOf("player().seekTo(position);", setPosition) < setPositionEnd);
         assertTrue("the base activity must expose the position-aware start overload used by mobile",
-                startPlayerOverload >= 0 && playback.indexOf("player().start(PlaySpec.from(result, key, metadata), timeout, PlayerSetting.isAutoPlay(), startPositionMs);", startPlayerOverload) > startPlayerOverload);
+                startPlayerOverload >= 0 && playback.indexOf("player().start(PlaySpec.from(result, key, metadata), timeout, shouldAutoPlay(), startPositionMs);", startPlayerOverload) > startPlayerOverload);
+    }
+
+    @Test
+    public void livePlaybackAlwaysAutoplaysWhileVodUsesTheConfiguredPolicy() throws Exception {
+        String playback = readMainJava("com", "fongmi", "android", "tv", "ui", "activity", "PlaybackActivity.java");
+        String mobileLive = readMobileJava("com", "fongmi", "android", "tv", "ui", "activity", "LiveActivity.java");
+        String leanbackLive = readLeanbackJava("com", "fongmi", "android", "tv", "ui", "activity", "LiveActivity.java");
+
+        assertTrue("VOD playback must keep the user-configured autoplay policy",
+                playback.contains("protected boolean shouldAutoPlay() {\n        return PlayerSetting.isAutoPlay();\n    }")
+                        && playback.contains("player().parse(key, result, useParse, metadata, shouldAutoPlay(), startPositionMs);")
+                        && playback.contains("player().start(PlaySpec.from(result, key, metadata), timeout, shouldAutoPlay(), startPositionMs);"));
+        assertAlwaysAutoplay(mobileLive, "mobile live playback");
+        assertAlwaysAutoplay(leanbackLive, "leanback live playback");
+    }
+
+    private static void assertAlwaysAutoplay(String source, String owner) {
+        assertTrue(owner + " must override the VOD autoplay preference",
+                source.contains("@Override\n    protected boolean shouldAutoPlay() {\n        return true;\n    }"));
     }
 
     private static void assertFocusRefreshAfter(String source, String methodSignature, String visibilityMutation) {
