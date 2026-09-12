@@ -936,11 +936,17 @@ public class PlayerManager implements ParseCallback {
     }
 
     public int getRebufferCount() {
-        return playbackBufferingTracker.getRebufferCount();
+        long discCount = player instanceof MpvPlayer mpv ? mpv.getDiscRebufferCount() : 0;
+        return (int) Math.min(Integer.MAX_VALUE, playbackBufferingTracker.getRebufferCount() + discCount);
     }
 
     public long getRebufferTotalMs() {
-        return playbackBufferingTracker.getRebufferTotalMs();
+        return getRebufferTotalMs(SystemClock.elapsedRealtime());
+    }
+
+    private long getRebufferTotalMs(long nowMs) {
+        long discMs = player instanceof MpvPlayer mpv ? mpv.getDiscRebufferTotalMs(nowMs) : 0;
+        return playbackBufferingTracker.getRebufferTotalMs(nowMs) + discMs;
     }
 
     public boolean supportsSubtitleStyle() {
@@ -3814,7 +3820,7 @@ public void resetTrack(int type) {
         int rebufferCount = observation != null
                 && observation.rebufferCount().known()
                 ? Math.max(0, observation.rebufferCount().value())
-                : playbackBufferingTracker.getRebufferCount();
+                : getRebufferCount();
         boolean droppedFramesUsable = observation != null
                 && observation.droppedFrames().known();
         long droppedFrames = droppedFramesUsable
@@ -5326,6 +5332,7 @@ public void resetTrack(int type) {
         }
         if (!isMpv() || spec == null || TextUtils.isEmpty(spec.getUrl()) || !(engine instanceof MpvPlayerEngine mpv)) return;
         resetMpvOutputEvaluationState();
+        mpvSurfaceFallbackTried = false; // An explicit settings change permits a fresh attempt.
         mpvAutoVulkanPinnedForItem = false;
         mpvAutoVulkanDisabledForItem = false;
         mpv.setSurfaceDirectOverride(null);
@@ -5373,7 +5380,7 @@ public void resetTrack(int type) {
         App.removeCallbacks(runnable);
         Boolean effectiveSurfaceDirectOverride = surfaceDirectOverride;
         if (effectiveSurfaceDirectOverride == null
-                && mpvAutoGpuPinnedForSession
+                && (mpvAutoGpuPinnedForSession || mpvSurfaceFallbackTried)
                 && MpvPerformanceSetting.getOutputMode() == MpvPerformanceSetting.OUTPUT_AUTO) {
             effectiveSurfaceDirectOverride = false;
         }
@@ -5401,6 +5408,7 @@ public void resetTrack(int type) {
         // 也必须在下面算 externalSubtitleActive 之前，否则 MPV 的输出模式判定
         // 会漏掉这条刚挂上的字幕。
         restorePendingSubtitle();
+        mpvSurfaceFallbackTried = false;
         List<Track> persistedTracks = Track.find(getKey());
         Track persistedSubtitle = findRequestedSubtitle(persistedTracks);
         mpvExplicitSubtitlePreference = persistedSubtitle != null;
@@ -5463,6 +5471,7 @@ public void resetTrack(int type) {
 
     private void resetMpvOutputRuntime() {
         resetMpvOutputEvaluationState();
+        mpvSurfaceFallbackTried = false;
         mpvAutoGpuPinnedForSession = false;
         mpvAutoVulkanPinnedForItem = false;
         mpvAutoVulkanDisabledForItem = false;
@@ -5480,7 +5489,6 @@ public void resetTrack(int type) {
         mpvAutoOutputEvaluationScheduled = false;
         mpvAutoOutputProbeGaveUp = false;
         mpvAutoOutputProbeAttempts = 0;
-        mpvSurfaceFallbackTried = false;
         mpvVulkanFallbackTried = false;
         mpvCopyFallbackTried = false;
         mpvOutputEvaluationSeq++;
@@ -5578,6 +5586,7 @@ public void resetTrack(int type) {
                 dolbyVision ? videoDetails.dolbyVisionProfile() : C.INDEX_UNSET,
                 dv7Hdr10FallbackEnabled,
                 hevcHdr10Support);
+        decision = MpvAutoOutputPolicy.afterSurfaceFailure(decision, mpvSurfaceFallbackTried);
         int dolbyVisionProfile = dolbyVision
                 ? videoDetails.dolbyVisionProfile() : C.INDEX_UNSET;
         boolean currentlyVulkan = mpv.isVulkanRenderer();
@@ -7455,7 +7464,7 @@ public void resetTrack(int type) {
                         runtime.underrunCount(),
                         rebufferMetric.known()
                                 ? Math.max(0, rebufferMetric.value())
-                                : playbackBufferingTracker.getRebufferCount(),
+                                : getRebufferCount(),
                         buffering,
                         bufferedMetric.known(),
                         bufferedMetric.known()
@@ -7789,9 +7798,9 @@ public void resetTrack(int type) {
                 mediaBitrate,
                 renderedFrameRate,
                 droppedFrames,
-                PlaybackTelemetry.Metric.of(playbackBufferingTracker.getRebufferCount(),
+                PlaybackTelemetry.Metric.of(getRebufferCount(),
                         PlaybackAutoContext.ValueSource.PLAYER_MANAGER, PlaybackAutoContext.Confidence.HIGH),
-                PlaybackTelemetry.Metric.of(playbackBufferingTracker.getRebufferTotalMs(now),
+                PlaybackTelemetry.Metric.of(getRebufferTotalMs(now),
                         PlaybackAutoContext.ValueSource.PLAYER_MANAGER, PlaybackAutoContext.Confidence.HIGH),
                 firstFrame,
                 liveLag);

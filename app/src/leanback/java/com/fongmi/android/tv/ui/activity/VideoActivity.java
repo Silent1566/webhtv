@@ -37,6 +37,7 @@ import androidx.media3.common.MediaItem;
 import androidx.media3.common.MediaMetadata;
 import androidx.media3.common.Player;
 import androidx.media3.common.VideoSize;
+import androidx.media3.mpvplayer.MpvPlayer;
 import androidx.media3.ui.PlayerView;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -496,6 +497,8 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     private boolean playerKernelSwitchRefreshing;
     private int playerKernelSwitchRequestId;
     private int mPendingPlayerKernel = PlayerSetting.NONE;
+    private MpvPlayer mDiscMenuPlayer;
+    private final Runnable mDiscMenuStateListener = this::updateDiscMenuButton;
 
     private final ActivityResultLauncher<Intent> mLutDir = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
         if (result.getResultCode() != Activity.RESULT_OK || result.getData() == null || result.getData().getData() == null) return;
@@ -1446,197 +1449,6 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         mBinding.control.action.next.setOnClickListener(view -> checkNext());
         mBinding.control.action.prev.setOnClickListener(view -> checkPrev());
         mBinding.control.action.episodes.setOnClickListener(view -> onEpisodes());
-        mBinding.episodeReverse.setOnClickListener(view -> onRevSort());
-        mBinding.episodeViewMode.setOnClickListener(view -> toggleEpisodeViewMode());
-        mBinding.episodeFileName.setOnClickListener(view -> toggleEpisodeFileName());
-        mBinding.episodeReverse.setOnKeyListener((view, keyCode, event) -> onEpisodeHeaderToolKey(view, keyCode, event));
-        mBinding.episodeViewMode.setOnKeyListener((view, keyCode, event) -> onEpisodeHeaderToolKey(view, keyCode, event));
-        mBinding.episodeFileName.setOnKeyListener((view, keyCode, event) -> onEpisodeHeaderToolKey(view, keyCode, event));
-        mBinding.control.action.scale.setOnClickListener(guarded(this::onScale));
-        mBinding.control.action.actionQuality.setOnClickListener(guarded(this::onQuality));
-        mBinding.control.action.lut.setOnClickListener(guarded(this::onLut));
-        mBinding.control.action.speed.setOnClickListener(guarded(this::onSpeed));
-        mBinding.control.action.reset.setOnClickListener(guarded(this::onReset));
-        mBinding.control.action.title.setOnClickListener(guarded(this::onTitle));
-        mBinding.control.action.player.setOnClickListener(guarded(this::onPlayerKernel));
-        mBinding.control.action.player.setOnLongClickListener(view -> onPlayerKernelLong());
-        mBinding.control.action.decode.setOnClickListener(guarded(this::onDecode));
-        mBinding.control.action.playParams.setOnClickListener(guarded(this::onPlayParams));
-        mBinding.control.action.multiThreadProxy.setOnClickListener(guarded(this::onMultiThreadProxy));
-        mBinding.control.action.panDiagnostic.setOnClickListener(guarded(this::onPanDiagnostic));
-        mBinding.control.action.codecCapability.setOnClickListener(guarded(this::onCodecCapability));
-        mBinding.control.action.ending.setOnClickListener(guarded(this::onEnding));
-        mBinding.control.action.repeat.setOnClickListener(guarded(this::onRepeat));
-        mBinding.control.action.search.setOnClickListener(view -> onSearch());
-        mBinding.control.action.search.setOnLongClickListener(view -> {
-            onGlobalSearch();
-            return true;
-        });
-        mBinding.control.action.change2.setOnClickListener(view -> onChange());
-        mBinding.control.action.fullscreen.setOnClickListener(guarded(this::onFullscreen));
-        mBinding.control.action.danmaku.setOnClickListener(guarded(this::onDanmaku));
-        mBinding.control.action.danmaku.setOnLongClickListener(view -> onDanmakuToggle());
-        mBinding.control.action.adFeedback.setOnClickListener(view -> onAdFeedback());
-        mBinding.control.action.opening.setOnClickListener(guarded(this::onOpening));
-        if (mBinding.control.action.immersiveAudio != null) mBinding.control.action.immersiveAudio.setOnClickListener(view -> toggleImmersiveAudioMode());
-        if (mBinding.control.action.cast != null) mBinding.control.action.cast.setOnClickListener(view -> onCast());
-        if (mBinding.control.action.timer != null) mBinding.control.action.timer.setOnClickListener(view -> onTimer());
-        if (mBinding.audioPlay != null) mBinding.audioPlay.setOnClickListener(view -> checkPlay());
-        if (mBinding.audioNext != null) mBinding.audioNext.setOnClickListener(view -> checkNext());
-        if (mBinding.audioPrev != null) mBinding.audioPrev.setOnClickListener(view -> checkPrev());
-        if (mBinding.audioRepeatAction != null) mBinding.audioRepeatAction.setOnClickListener(view -> onRepeat());
-        if (mBinding.audioQueueAction != null) mBinding.audioQueueAction.setOnClickListener(view -> onAudioQueue());
-        if (mBinding.audioLyricsAction != null) mBinding.audioLyricsAction.setOnClickListener(view -> onLyricsSearch());
-        if (mBinding.audioKeepAction != null) mBinding.audioKeepAction.setOnClickListener(view -> onKeep());
-        if (mBinding.audioCastAction != null) mBinding.audioCastAction.setOnClickListener(view -> onCast());
-        if (mBinding.audioSettingAction != null) mBinding.audioSettingAction.setOnClickListener(view -> onSetting());
-        if (mBinding.audioKaraokeAction != null) mBinding.audioKaraokeAction.setOnClickListener(view -> onKaraokeMode());
-        if (mBinding.audioBackgroundAction != null) mBinding.audioBackgroundAction.setOnClickListener(view -> randomizeAudioBackgroundMix(false));
-        if (mBinding.audioMoreAction != null) mBinding.audioMoreAction.setOnClickListener(view -> onAudioMore());
-        if (mBinding.audioTrackAction != null) mBinding.audioTrackAction.setOnClickListener(view -> onTrack(C.TRACK_TYPE_AUDIO));
-        if (mBinding.audioSubtitleAction != null) mBinding.audioSubtitleAction.setOnClickListener(view -> onTrack(C.TRACK_TYPE_TEXT));
-        if (mBinding.audioStage != null) mBinding.audioStage.setOnClickListener(view -> focusAudioStageDefault());
-
-        mBinding.shortDisplay.setOnClickListener(view -> onShortDisplay());
-        mBinding.control.action.speed.setOnLongClickListener(view -> onSpeedLong());
-        mBinding.control.action.reset.setOnLongClickListener(view -> onResetToggle());
-        mBinding.control.action.ending.setOnLongClickListener(view -> onEndingReset());
-        mBinding.control.action.opening.setOnLongClickListener(view -> onOpeningReset());
-        setActionFocusScroll();
-        mBinding.video.setOnTouchListener(this::onVideoTouch);
-        mBinding.flag.addOnChildViewHolderSelectedListener(new OnChildViewHolderSelectedListener() {
-            @Override
-            public void onChildViewHolderSelected(@NonNull RecyclerView parent, @Nullable RecyclerView.ViewHolder child, int position, int subposition) {
-                if (mFlagAdapter.getItemCount() > 0) onItemClick(mFlagAdapter.get(position));
-            }
-        });
-        mBinding.episode.addOnChildViewHolderSelectedListener(new OnChildViewHolderSelectedListener() {
-            @Override
-            public void onChildViewHolderSelected(@NonNull RecyclerView parent, @Nullable RecyclerView.ViewHolder child, int position, int subposition) {
-                if (child != null && mBinding.video != mFocus1) mFocus1 = child.itemView;
-            }
-        });
-        mBinding.episode.setOnKeyListener((view, keyCode, event) -> onEpisodeKey(event));
-        mBinding.episodeGrid.setOnKeyListener((view, keyCode, event) -> onEpisodeKey(event));
-        mBinding.array.addOnChildViewHolderSelectedListener(new OnChildViewHolderSelectedListener() {
-            @Override
-            public void onChildViewHolderSelected(@NonNull RecyclerView parent, @Nullable RecyclerView.ViewHolder child, int position, int subposition) {
-                if (child != null) selectEpisodeSegment(position, false);
-            }
-        });
-        setupIntroSkipConfirmListener();
-    }
-
-    private void setupIntroSkipConfirmListener() {
-        mIntroSkipPlayback.setSkipConfirmListener((segment, action) -> {
-            if (mIntroSkipConfirmDialog != null && mIntroSkipConfirmDialog.isShowing()) return false;
-            mIntroSkipConfirmDialog = new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
-                .setTitle(R.string.intro_skip_confirm_title)
-                .setMessage(IntroSkipKinds.confirmMessage(segment))
-                .setPositiveButton(android.R.string.ok, (dialog, which) -> action.run())
-                .setNegativeButton(android.R.string.cancel, null)
-                .show();
-            mIntroSkipConfirmDialog.setOnDismissListener(dialog -> {
-                mIntroSkipPlayback.cancelConfirmation(segment);
-                if (mIntroSkipConfirmDialog == dialog) mIntroSkipConfirmDialog = null;
-            });
-            return true;
-        });
-        mIntroSkipPlayback.setSkipNoticeListener(IntroSkipKinds::notifySkipped);
-        mIntroSkipPlayback.setSkipConfirmDismisser(this::dismissIntroSkipConfirm);
-    }
-
-    private void dismissIntroSkipConfirm() {
-        if (mIntroSkipConfirmDialog == null) return;
-        try {
-            mIntroSkipConfirmDialog.dismiss();
-        } catch (Throwable ignored) {
-        }
-        mIntroSkipConfirmDialog = null;
-    }
-
-    private void setActionFocusScroll() {
-        HorizontalScrollView scroll = mBinding.control.action.getRoot();
-        if (scroll.getChildCount() == 0 || !(scroll.getChildAt(0) instanceof ViewGroup group)) return;
-        for (int i = 0; i < group.getChildCount(); i++) {
-            View child = group.getChildAt(i);
-            child.setOnFocusChangeListener((view, hasFocus) -> {
-                if (hasFocus) scroll.post(() -> scroll.smoothScrollTo(Math.max(0, view.getLeft() - ResUtil.dp2px(24)), 0));
-            });
-        }
-    }
-
-    private void setRecyclerView() {
-        mBinding.flag.setHorizontalSpacing(ResUtil.dp2px(8));
-        mBinding.flag.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
-        mBinding.flag.setAdapter(mFlagAdapter = new FlagAdapter(this));
-        mBinding.episode.setHorizontalSpacing(ResUtil.dp2px(8));
-        mBinding.episode.setVerticalSpacing(ResUtil.dp2px(8));
-        mBinding.episode.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
-        mBinding.episode.setAdapter(mEpisodeAdapter = new EpisodeAdapter(this, this::onEpisodeLongClick));
-        mEpisodeAdapter.setColumn(1); // 横向滚动，固定1列
-        int episodeGridSpan = getEpisodeGridSpanCount();
-        mBinding.episodeGrid.setItemAnimator(null);
-        mBinding.episodeGrid.setLayoutManager(new GridLayoutManager(this, episodeGridSpan));
-        mBinding.episodeGrid.setAdapter(mEpisodeGridAdapter = new EpisodeAdapter(this, this::onEpisodeLongClick));
-        mEpisodeGridAdapter.setGridMode(true);
-        mEpisodeGridAdapter.setVerticalGridMode(true);
-        mEpisodeGridAdapter.setColumn(episodeGridSpan);
-        mBinding.quality.setHorizontalSpacing(ResUtil.dp2px(8));
-        mBinding.quality.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
-        mBinding.quality.setAdapter(mQualityAdapter = new QualityAdapter(this));
-        mBinding.array.setHorizontalSpacing(ResUtil.dp2px(8));
-        mBinding.array.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
-        mBinding.array.setAdapter(mArrayAdapter = new ArrayAdapter(this));
-        mArrayAdapter.setOnKeyListener((view, keyCode, event) -> onArrayKey(event));
-        mBinding.array.setOnKeyListener((view, keyCode, event) -> onArrayKey(event));
-        mBinding.part.setHorizontalSpacing(ResUtil.dp2px(8));
-        mBinding.part.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
-        mBinding.part.setAdapter(mPartAdapter = new PartAdapter(item -> initSearch(item, false)));
-        mBinding.quick.setHorizontalSpacing(ResUtil.dp2px(8));
-        mBinding.quick.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
-        mBinding.quick.setAdapter(mQuickAdapter = new QuickAdapter(this));
-        mBinding.control.parse.setHorizontalSpacing(ResUtil.dp2px(8));
-        mBinding.control.parse.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
-        mBinding.control.parse.setAdapter(mParseAdapter = new ParseAdapter(this));
-        mParseAdapter.addAll(VodConfig.get().getParses());
-        // TMDB 相关 GridView 初始化
-        setupTmdbGridViews();
-    }
-
-    private void setupTmdbGridViews() {
-        mBinding.tmdbCast.setHorizontalSpacing(ResUtil.dp2px(12));
-        mBinding.tmdbCast.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
-        mBinding.tmdbPhotos.setHorizontalSpacing(ResUtil.dp2px(12));
-        mBinding.tmdbPhotos.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
-        mBinding.tmdbCrew.setHorizontalSpacing(ResUtil.dp2px(12));
-        mBinding.tmdbCrew.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
-        mBinding.tmdbRecommendations.setHorizontalSpacing(ResUtil.dp2px(12));
-        mBinding.tmdbRecommendations.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
-        mBinding.tmdbRelatedVideos.setHorizontalSpacing(ResUtil.dp2px(12));
-        mBinding.tmdbRelatedVideos.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
-        mBinding.tmdbPersonalTmdbRecommendations.setHorizontalSpacing(ResUtil.dp2px(12));
-        mBinding.tmdbPersonalTmdbRecommendations.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
-        mBinding.tmdbPersonalDoubanRecommendations.setHorizontalSpacing(ResUtil.dp2px(12));
-        mBinding.tmdbPersonalDoubanRecommendations.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
-        mBinding.tmdbPersonalAiRecommendations.setHorizontalSpacing(ResUtil.dp2px(12));
-        mBinding.tmdbPersonalAiRecommendations.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
-        attachRecommendationLazyLoader(mBinding.tmdbRecommendations, RecommendationRow.RECOMMENDATIONS);
-        attachRecommendationLazyLoader(mBinding.tmdbPersonalTmdbRecommendations, RecommendationRow.PERSONAL_TMDB);
-        attachRecommendationLazyLoader(mBinding.tmdbPersonalDoubanRecommendations, RecommendationRow.PERSONAL_DOUBAN);
-    }
-
-    private void setVideoView() {
-        mBinding.control.action.danmaku.setVisibility(DanmakuSetting.isLoad() ? View.VISIBLE : View.GONE);
-        mBinding.control.action.adFeedback.setVisibility(isAdFeedbackEnabled() ? View.VISIBLE : View.GONE);
-        applyDanmakuState();
-        mBinding.control.action.reset.setText(ResUtil.getStringArray(R.array.select_reset)[Setting.getReset()]);
-        setupActionButtons();
-        setPlayer();
-    }
-
-    private void setPlayer() {
-        mBinding.control.action.player.setText(service() == null ? ResUtil.getStringArray(R.array.select_player)[PlayerSetting.getActivePlayer()] : player().getPlayerText());
     }
 
     private void setupActionButtons() {
@@ -1675,11 +1487,79 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         setupCustomActionButtons();
         placePanDiagnosticAction();
         updatePanDiagnosticAction();
-        applyActionButtonVisibility();
+        updateDiscMenuButton();
     }
 
     private void addActionButton(String id, View view) {
         mActionButtons.put(id, view);
+    }
+
+    private void setRecyclerView() {
+        mBinding.flag.setHorizontalSpacing(ResUtil.dp2px(8));
+        mBinding.flag.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
+        mBinding.flag.setAdapter(mFlagAdapter = new FlagAdapter(this));
+        mBinding.episode.setHorizontalSpacing(ResUtil.dp2px(8));
+        mBinding.episode.setVerticalSpacing(ResUtil.dp2px(8));
+        mBinding.episode.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
+        mBinding.episode.setAdapter(mEpisodeAdapter = new EpisodeAdapter(this, this::onEpisodeLongClick));
+        mEpisodeAdapter.setColumn(1); // 横向滚动，固定1列
+        int episodeGridSpan = getEpisodeGridSpanCount();
+        mBinding.episodeGrid.setItemAnimator(null);
+        mBinding.episodeGrid.setLayoutManager(new GridLayoutManager(this, episodeGridSpan));
+        mBinding.episodeGrid.setAdapter(mEpisodeGridAdapter = new EpisodeAdapter(this, this::onEpisodeLongClick));
+        mEpisodeGridAdapter.setGridMode(true);
+        mEpisodeGridAdapter.setVerticalGridMode(true);
+        mEpisodeGridAdapter.setColumn(episodeGridSpan);
+        mBinding.quality.setHorizontalSpacing(ResUtil.dp2px(8));
+        mBinding.quality.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
+        mBinding.quality.setAdapter(mQualityAdapter = new QualityAdapter(this));
+        mBinding.array.setHorizontalSpacing(ResUtil.dp2px(8));
+        mBinding.array.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
+        mBinding.array.setAdapter(mArrayAdapter = new ArrayAdapter(this));
+        mArrayAdapter.setOnKeyListener((view, keyCode, event) -> onArrayKey(event));
+        mBinding.array.setOnKeyListener((view, keyCode, event) -> onArrayKey(event));
+        mBinding.part.setHorizontalSpacing(ResUtil.dp2px(8));
+        mBinding.part.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
+        mBinding.part.setAdapter(mPartAdapter = new PartAdapter(item -> initSearch(item, false)));
+        mBinding.quick.setHorizontalSpacing(ResUtil.dp2px(8));
+        mBinding.quick.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
+        mBinding.quick.setAdapter(mQuickAdapter = new QuickAdapter(this));
+        mBinding.control.parse.setHorizontalSpacing(ResUtil.dp2px(8));
+        mBinding.control.parse.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
+        mBinding.control.parse.setAdapter(mParseAdapter = new ParseAdapter(this));
+        mParseAdapter.addAll(VodConfig.get().getParses());
+        setupTmdbGridViews();
+    }
+
+    private void setupTmdbGridViews() {
+        mBinding.tmdbCast.setHorizontalSpacing(ResUtil.dp2px(12));
+        mBinding.tmdbCast.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
+        mBinding.tmdbPhotos.setHorizontalSpacing(ResUtil.dp2px(12));
+        mBinding.tmdbPhotos.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
+        mBinding.tmdbCrew.setHorizontalSpacing(ResUtil.dp2px(12));
+        mBinding.tmdbCrew.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
+        mBinding.tmdbRecommendations.setHorizontalSpacing(ResUtil.dp2px(12));
+        mBinding.tmdbRecommendations.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
+        mBinding.tmdbRelatedVideos.setHorizontalSpacing(ResUtil.dp2px(12));
+        mBinding.tmdbRelatedVideos.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
+        mBinding.tmdbPersonalTmdbRecommendations.setHorizontalSpacing(ResUtil.dp2px(12));
+        mBinding.tmdbPersonalTmdbRecommendations.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
+        mBinding.tmdbPersonalDoubanRecommendations.setHorizontalSpacing(ResUtil.dp2px(12));
+        mBinding.tmdbPersonalDoubanRecommendations.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
+        mBinding.tmdbPersonalAiRecommendations.setHorizontalSpacing(ResUtil.dp2px(12));
+        mBinding.tmdbPersonalAiRecommendations.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
+        attachRecommendationLazyLoader(mBinding.tmdbRecommendations, RecommendationRow.RECOMMENDATIONS);
+        attachRecommendationLazyLoader(mBinding.tmdbPersonalTmdbRecommendations, RecommendationRow.PERSONAL_TMDB);
+        attachRecommendationLazyLoader(mBinding.tmdbPersonalDoubanRecommendations, RecommendationRow.PERSONAL_DOUBAN);
+    }
+
+    private void setVideoView() {
+        mBinding.control.action.danmaku.setVisibility(DanmakuSetting.isLoad() ? View.VISIBLE : View.GONE);
+        mBinding.control.action.adFeedback.setVisibility(isAdFeedbackEnabled() ? View.VISIBLE : View.GONE);
+        applyDanmakuState();
+        mBinding.control.action.reset.setText(ResUtil.getStringArray(R.array.select_reset)[Setting.getReset()]);
+        setupActionButtons();
+        setPlayerButton();
     }
 
     private void setupCustomActionButtons() {
@@ -1693,7 +1573,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         List<MpvConfigStore.CustomButton> buttons = MpvConfigStore.customButtons();
         for (int index = 0; index < buttons.size(); index++) {
             MpvConfigStore.CustomButton button = buttons.get(index);
-            if (!button.enabled) continue;
+            if (!button.isButtonVisible()) continue;
             TextView view = new TextView(this);
             view.setTextSize(13);
             view.setTextColor(Color.WHITE);
@@ -1756,6 +1636,15 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         if (mCustomPortraitButtons != null) mCustomPortraitButtons.setVisibility(visible ? View.VISIBLE : View.GONE);
     }
 
+    private void applyActionButtonVisibility() {
+        if (mActionButtons != null) PlayerButtonSetting.applyVisibility(mActionButtons);
+        updateCustomButtonVisibility();
+        mBinding.control.action.cast.setVisibility(isFullscreen() ? View.GONE : View.VISIBLE);
+        updateImmersiveAudioAction();
+        updatePanDiagnosticAction();
+        updateDiscMenuButton();
+    }
+
     private void placePanDiagnosticAction() {
         ViewGroup container = mBinding.control.action.container;
         View diagnostic = mBinding.control.action.panDiagnostic;
@@ -1765,17 +1654,27 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         container.addView(diagnostic, Math.min(container.getChildCount(), container.indexOfChild(anchor) + 1));
     }
 
-    private void applyActionButtonVisibility() {
-        updateCustomButtonVisibility();
-        mBinding.control.action.cast.setVisibility(isFullscreen() ? View.GONE : View.VISIBLE);
-        updateImmersiveAudioAction();
-        updatePanDiagnosticAction();
-        if (mActionButtons != null) PlayerButtonSetting.applyVisibility(mActionButtons);
-    }
 
     private void updatePanDiagnosticAction() {
         if (mBinding == null) return;
         mBinding.control.action.panDiagnostic.setVisibility(isFullscreen() && canRunPanDiagnostic() ? View.VISIBLE : View.GONE);
+    }
+
+    private void setPlayerButton() {
+        mBinding.control.action.player.setText(service() == null ? ResUtil.getStringArray(R.array.select_player)[PlayerSetting.getActivePlayer()] : player().getPlayerText());
+    }
+
+    private void updateDiscMenuButton() {
+        MpvPlayer mpv = service() != null && isOwner()
+                && player().getPlayer() instanceof MpvPlayer active ? active : null;
+        if (mDiscMenuPlayer != mpv) {
+            if (mDiscMenuPlayer != null) mDiscMenuPlayer.removeDiscMenuStateListener(mDiscMenuStateListener);
+            mDiscMenuPlayer = mpv;
+            if (mpv != null) mpv.addDiscMenuStateListener(mDiscMenuStateListener);
+        }
+        boolean available = mpv != null && mpv.isDiscMenuAvailable();
+        if (!available && mBinding.control.action.discMenu.hasFocus()) mBinding.control.action.playParams.requestFocus();
+        mBinding.control.action.discMenu.setVisibility(available ? View.VISIBLE : View.GONE);
     }
 
     private boolean canRunPanDiagnostic() {
@@ -5205,7 +5104,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
             mHistory.setCreateTime(System.currentTimeMillis());
         }
         if (exit && service() != null) PlaybackEventCollector.get().onStop(player());
-        if (!mHistory.canSave()) return;
+        if (!canSavePlaybackHistory(mHistory)) return;
         History history = mHistory.copy();
         Task.execute(() -> {
             if (history.getDuration() > 0) history.merge().save();
@@ -5721,6 +5620,10 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         if (!isOwner() || mHistory == null) return;
         long position, duration;
         mHistory.setCreateTime(time);
+        if (hasDiscNavigationTimeline()) {
+            if (canSavePlaybackHistory(mHistory) && mHistory.canSync()) syncHistory();
+            return;
+        }
         updatePlaybackHistoryPosition();
         syncKaraokePosition();
         if (mLyrics != null) mLyrics.update(player());
@@ -5737,7 +5640,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     private void updatePlaybackHistoryPosition() {
-        if (mHistory == null || tmdbHistoryResumePending) return;
+        if (mHistory == null || hasDiscNavigationTimeline()) return;
         long position = player().getPosition();
         long duration = player().getDuration();
         if (position > 0) mHistory.setPosition(position);
@@ -7278,13 +7181,14 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     private void setPosition() {
-        pendingResumeSeekMs = C.TIME_UNSET;
-        if (mHistory == null) {
-            tmdbHistoryResumePending = false;
+        if (mHistory == null || hasDiscMenu()) return;
+        long position = resolveInitialPlaybackPosition();
+        if (position <= 0) return;
+        if (mInitialPlaybackPosition == position) {
+            SpiderDebug.log("video-flow", "skip duplicate restore seek position=%d key=%s", position, getHistoryKey());
             mInitialPlaybackPosition = C.TIME_UNSET;
             return;
         }
-        long position = resolveInitialPlaybackPosition();
         if (position == C.TIME_UNSET || position <= 0) {
             tmdbHistoryResumePending = false;
             mInitialPlaybackPosition = C.TIME_UNSET;
@@ -7636,7 +7540,16 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     @Override
+    protected boolean dispatchDiscMenuKey(KeyEvent event) {
+        // Let TV controls own DPAD/ENTER while visible, including the shared
+        // PlaybackActivity dispatch performed by super.dispatchKeyEvent().
+        if (isVisible(mBinding.control.getRoot()) || isVisible(mBinding.lutQuick)) return false;
+        return super.dispatchDiscMenuKey(event);
+    }
+
+    @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
+        if (dispatchDiscMenuKey(event)) return true;
         if (KeyUtil.isActionUp(event) && KeyUtil.isBackKey(event) && mBinding.lutQuick.hideIfVisible()) return true;
         if (mKeyDown.isChangingSpeed() && KeyUtil.isActionUp(event)) {
             mKeyDown.releaseSpeed();
@@ -8082,6 +7995,14 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         cancelTvTouch();
         mIntroSkipPlayback.reset();
         cancelAiSeasonAnalysis(false);
+        if (mDiscMenuPlayer != null) {
+            mDiscMenuPlayer.removeDiscMenuStateListener(mDiscMenuStateListener);
+            mDiscMenuPlayer = null;
+        }
+        if (mDiscMenuPlayer != null) {
+            mDiscMenuPlayer.removeDiscMenuStateListener(mDiscMenuStateListener);
+            mDiscMenuPlayer = null;
+        }
         mLyricsSearchSeq++;
         mLyricsRefreshSeq++;
         dismissLyricsResultDialog();

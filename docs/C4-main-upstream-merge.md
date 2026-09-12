@@ -180,3 +180,11 @@
 - Recovery tag：`recovery/C4/20260907105426-188553addf66`；`git merge-base --is-ancestor` 已确认本地基线和上游目标均为 HEAD 祖先，merge metadata 已清理。
 - 最终工作树仅保留任务开始前的 5 个受保护 `.bak` 未跟踪文件；其 SHA-256 与 guard 初始指纹一致。`docs/OCI1-oci-apk-update.md` 与 `docs/mobile-apk-link-push.md` 均保留。
 - 最终状态：完成（本地未推送）。连接设备播放、真实 OCI 下载/局域网 APK 推送和 native 重建不属于本轮验证范围，后续如需验收应另开任务。
+
+## 第三轮源码合并：2026-09-13 Asia/Shanghai
+
+- 目标：`fish2018/webhtv:main@fc62397591701b2232ae7de4f50a032bd7742064`；本地基线 `154e003520a751a19187057f103e1496c5197457`；三方合并基 `2b36396c0d76b312154d560c0c94e55909b951a2`。
+- 冲突：26 处，按“本地行为契约 + 上游新功能并集”解决；二进制/编译产物按用户要求直接覆盖更新，本地任务/评估文档保留。
+- 关键并集：播放器蓝光菜单、原盘导航、历史进度、MPV 渲染设置、短剧 dock/生命周期、Disc 菜单清理与 native patch 链；`.gitignore` 保留本地缓存目录。
+- 尚未完成：定向验证、guard finish 提交与 recovery tag。
+- 2026-09-13 05:44–06:13：修复 mobile/leanback 合并残留的结构、绑定、设置行、动作注册与初始续播冲突；恢复 mobile disc-menu 生命周期触发与 leanback `updateDiscMenuButton()`。mobile/leanback Java 编译和 8 个定向单测通过，`git diff --check` 通过。
