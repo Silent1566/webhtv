@@ -754,28 +754,6 @@ public class VideoActivityLayoutTest {
     }
 
     @Test
-    public void autoFfmpegFallbackResetRebuildsExoBeforeNextItem() throws Exception {
-        Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "player", "PlayerManager.java"));
-        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
-        String resetFallback = methodBody(source, "private void resetFfmpegModeFallback()", "static boolean shouldStopOnManualSwitchFailure");
-        String start = methodBody(source, "public void start(PlaySpec spec, long timeout, boolean playWhenReady)", "public void parse(String key, Result result, boolean useParse, MediaMetadata metadata)");
-        String parse = methodBody(source, "public void parse(String key, Result result, boolean useParse, MediaMetadata metadata, boolean playWhenReady)", "private void stopParse()");
-        String release = methodBody(source, "public void release()", "private void resetLutRuntimeState");
-
-        assertTrue("clearing an AUTO override must remember that the current EXO engine was built with a stale renderer mode",
-                resetFallback.contains("ffmpegModeEngineRefreshPending =")
-                        && resetFallback.contains("PlayerSetting.clearFFmpegModeOverride();"));
-        assertTrue("direct playback must refresh a stale AUTO-mode EXO engine before preparing the next item",
-                start.contains("refreshFfmpegModeEngineIfNeeded();")
-                        && start.indexOf("refreshFfmpegModeEngineIfNeeded();") < start.indexOf("setMediaItem(timeout);"));
-        assertTrue("parsed playback must also refresh a stale AUTO-mode EXO engine before starting parse work",
-                parse.contains("refreshFfmpegModeEngineIfNeeded();")
-                        && parse.indexOf("refreshFfmpegModeEngineIfNeeded();") < parse.indexOf("ParseJob.create(this).start(result, useParse);"));
-        assertTrue("destroying the manager must clear the process-wide AUTO override without scheduling another rebuild",
-                release.contains("clearFfmpegModeFallbackState();"));
-    }
-
-    @Test
     public void playbackSpeedInitializationUsesPersonalDefaultSpeed() throws Exception {
         String mobile = new String(Files.readAllBytes(findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"))), StandardCharsets.UTF_8);
         String leanback = new String(Files.readAllBytes(findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"))), StandardCharsets.UTF_8);

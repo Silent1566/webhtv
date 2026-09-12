@@ -64,6 +64,27 @@ public class PlayerManagerLifecycleSourceTest {
                 body.contains("!playbackBufferingTracker.isBuffering()"));
     }
 
+    @Test
+    public void exoBufferingStateArmsOnlyTheExoStallWatchdog() throws Exception {
+        String source = readPlayerManager();
+        int buffering = source.indexOf("} else if (state == Player.STATE_BUFFERING) {");
+        int nextBranch = source.indexOf("\n            } else {", buffering);
+        assertTrue("state listener must contain the buffering branch", buffering >= 0);
+        assertTrue("state listener buffering branch must have a closing boundary", nextBranch > buffering);
+        int arm = source.indexOf("armBufferingStallWatchdog();", buffering);
+        assertTrue("entering Exo BUFFERING must start the stall watchdog", arm > buffering && arm < nextBranch);
+        assertTrue("watchdog arming must be restricted to Exo playback",
+                source.contains("if (!isExo() || player == null || spec == null) return;"));
+        assertTrue("watchdog polling must stop for non-Exo playback",
+                source.contains("if (!isExo() || player == null || spec == null) {"));
+        int polling = source.indexOf("private void checkBufferingStall()");
+        int observe = source.indexOf("bufferingStallWatchdog.observe(", polling);
+        int timeout = source.indexOf("bufferingStallWatchdog.shouldTimeout(", polling);
+        assertTrue("buffering polling method must exist", polling >= 0);
+        assertTrue("a discontinuity must be observed before timeout is evaluated",
+                observe > polling && timeout > observe);
+    }
+
     private static String readPlayerManager() throws IOException {
         Path root = Path.of("").toAbsolutePath();
         Path source = root.resolve(Path.of(

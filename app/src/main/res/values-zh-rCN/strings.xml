@@ -1281,7 +1281,6 @@
     <string name="player_audio_decode">音频软解</string>
     <string name="player_audio_passthrough">音频直通</string>
     <string name="player_video_decode">视频软解</string>
-    <string name="player_ffmpeg_mode">FFmpeg模式</string>
     <string name="player_aac_track">AAC优先</string>
     <string name="player_music_notification">音乐后台通知</string>
     <string name="player_audio_book_notification">有声书后台通知</string>
