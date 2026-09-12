@@ -63,6 +63,7 @@ import com.fongmi.android.tv.player.audio.PlaybackMediaSessionController;
 import com.fongmi.android.tv.player.audio.PlaybackMediaSignalHub;
 import com.fongmi.android.tv.player.cache.PlaybackDiskBufferStore;
 import com.fongmi.android.tv.player.exo.TrackUtil;
+import com.fongmi.android.tv.player.exo.ExoBufferingStallWatchdog;
 import com.fongmi.android.tv.player.exo.ExoDecoderResourceRecoveryLimiter;
 import com.fongmi.android.tv.player.exo.ExoNetworkGuardBufferPolicy;
 import com.fongmi.android.tv.player.exo.ExoNetworkGuardController;
@@ -193,15 +194,19 @@ public class PlayerManager implements ParseCallback {
     private static final int MAX_AD_AUDIO_PIPELINE_REBUILDS = 2;
     private static final long MPV_FRAME_TIMING_LOG_INTERVAL_MS = 5000L;
     private static final long DISK_RANGE_GAP_TOLERANCE_MS = 2000L;
+    private static final long BUFFERING_STALL_POLL_INTERVAL_MS = 1000L;
     private static final long LUT_PREVIEW_FRAME_INTERVAL_MS = 16L;
     private static final float[] SPEED_PRESETS = new float[]{0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f, 2.5f, 3f, 5f};
     private static final DecimalFormat SPEED_FORMAT = new DecimalFormat("0.##x");
     private static final Pattern HTTP_STATUS = Pattern.compile("(?i)(?:response code|http status|http error)\\D+(\\d{3})");
 
     private final Runnable runnable;
+    private final Runnable bufferingStallRunnable;
     private final Runnable liveDanmakuMetricsRunnable;
     private final Runnable networkProtectionRunnable;
     private final Runnable playbackTelemetryRunnable;
+    private final ExoBufferingStallWatchdog bufferingStallWatchdog =
+            new ExoBufferingStallWatchdog();
     private final Callback callback;
     private final PlaybackMediaSignalHub mediaSignals = new PlaybackMediaSignalHub(8);
     private final PlaybackMediaClock mediaClock = new PlaybackMediaClock(500L);
@@ -355,6 +360,7 @@ public class PlayerManager implements ParseCallback {
                 playbackExperimentCoordinator.addListener(update ->
                         App.post(() -> onPlaybackExperimentPolicyChanged(update)));
         this.runnable = this::onPlaybackTimeout;
+        this.bufferingStallRunnable = this::checkBufferingStall;
         this.liveDanmakuMetricsRunnable = () -> logLiveDanmakuMetrics("periodic", true);
         this.networkProtectionRunnable = this::evaluateNetworkProtection;
         this.playbackTelemetryRunnable = this::publishPlaybackTelemetryTick;
@@ -435,6 +441,7 @@ public class PlayerManager implements ParseCallback {
         clearExoDecoderResourceRecovery(true);
         player.removeListener(listener);
         App.removeCallbacks(runnable);
+        cancelBufferingStallWatchdog();
         App.removeCallbacks(networkProtectionRunnable);
         App.removeCallbacks(playbackTelemetryRunnable);
         mpvResourceMemoryRegistration.close();
@@ -1766,6 +1773,8 @@ public class PlayerManager implements ParseCallback {
                     player.isPlaying());
         }
         player.seekTo(time);
+        cancelBufferingStallWatchdog();
+        armBufferingStallWatchdog();
     }
 
     public long getTextOffsetMs() {
@@ -1788,6 +1797,7 @@ public class PlayerManager implements ParseCallback {
 
     public void reset() {
         App.removeCallbacks(runnable);
+        cancelBufferingStallWatchdog();
         boolean activePlayback = player != null
                 && player.getPlaybackState() == Player.STATE_READY
                 && player.getPlayWhenReady();
@@ -8458,6 +8468,7 @@ public void resetTrack(int type) {
             if (SpiderDebug.isEnabled()) SpiderDebug.log("player", "state=%s spec=%s", stateName(state), debugSpec());
             publishPlaybackAutoContext(state != Player.STATE_IDLE);
             if (state == Player.STATE_READY) {
+                cancelBufferingStallWatchdog();
                 completeMpvDirectFirstFrame(state);
                 manualPlayerSwitchPending = false;
                 App.post(PlayerManager.this::refreshAdAudioRuntime);
@@ -8477,6 +8488,7 @@ public void resetTrack(int type) {
                 applyLutForCurrentItem();
                 scheduleNetworkProtection(0);
             } else if (state == Player.STATE_BUFFERING) {
+                armBufferingStallWatchdog();
                 App.removeCallbacks(networkProtectionRunnable);
                 // Do not reset/disrupt the network guard here. BUFFERING is transient and
                 // clearing its trend makes repeated stalls permanently outrun the 10 s
@@ -8484,6 +8496,7 @@ public void resetTrack(int type) {
                 // retained pre-stall trend plus the newly recorded rebuffer count.
                 networkProtectionReason = "buffering-hold";
             } else {
+                cancelBufferingStallWatchdog();
                 resetNetworkProtectionSession(state == Player.STATE_ENDED ? "ended" : "inactive");
             }
             recordBufferingState(state);
@@ -8657,7 +8670,64 @@ public void resetTrack(int type) {
         }
     };
 
+    private void armBufferingStallWatchdog() {
+        if (!isExo() || player == null || spec == null) return;
+        bufferingStallWatchdog.arm(
+                SystemClock.elapsedRealtime(),
+                Math.max(0, player.getCurrentPosition()),
+                nativeBufferedPosition());
+        App.post(bufferingStallRunnable, BUFFERING_STALL_POLL_INTERVAL_MS);
+    }
+
+    private void cancelBufferingStallWatchdog() {
+        bufferingStallWatchdog.reset();
+        App.removeCallbacks(bufferingStallRunnable);
+    }
+
+    private long nativeBufferedPosition() {
+        return player == null ? 0 : Math.max(0, player.getBufferedPosition());
+    }
+
+    private void checkBufferingStall() {
+        if (!isExo() || player == null || spec == null) {
+            cancelBufferingStallWatchdog();
+            return;
+        }
+        int state = player.getPlaybackState();
+        if (state == Player.STATE_READY || state == Player.STATE_ENDED || state == Player.STATE_IDLE) {
+            cancelBufferingStallWatchdog();
+            return;
+        }
+        long now = SystemClock.elapsedRealtime();
+        if (!player.getPlayWhenReady()) {
+            bufferingStallWatchdog.arm(now,
+                    Math.max(0, player.getCurrentPosition()), nativeBufferedPosition());
+            App.post(bufferingStallRunnable, BUFFERING_STALL_POLL_INTERVAL_MS);
+            return;
+        }
+        long position = Math.max(0, player.getCurrentPosition());
+        long buffered = nativeBufferedPosition();
+        bufferingStallWatchdog.observe(now, position, buffered);
+        if (bufferingStallWatchdog.shouldTimeout(now, position, buffered, player.isLoading())) {
+            onBufferingStall(position, buffered);
+            return;
+        }
+        App.post(bufferingStallRunnable, BUFFERING_STALL_POLL_INTERVAL_MS);
+    }
+
+    private void onBufferingStall(long positionMs, long bufferedPositionMs) {
+        cancelBufferingStallWatchdog();
+        PlaybackTrace.log("buffering-stall", playbackTrace.current(),
+                "stalled position=%d buffered=%d player=%d", positionMs, bufferedPositionMs, playerType);
+        PlaybackException e = new PlaybackException(
+                ResUtil.getString(R.string.error_play_timeout), null, PlaybackException.ERROR_CODE_TIMEOUT);
+        if (fallbackPlayback(e)) return;
+        finishPlaybackProfileAbSession("buffering-stall", SystemClock.elapsedRealtime());
+        callback.onError(ResUtil.getString(R.string.error_play_timeout));
+    }
+
     private void onPlaybackTimeout() {
+        cancelBufferingStallWatchdog();
         completeIjkBufferManagedReload(
                 false, "timeout", SystemClock.elapsedRealtime(), true);
         PlaybackException e = new PlaybackException(ResUtil.getString(R.string.error_play_timeout), null, PlaybackException.ERROR_CODE_TIMEOUT);
