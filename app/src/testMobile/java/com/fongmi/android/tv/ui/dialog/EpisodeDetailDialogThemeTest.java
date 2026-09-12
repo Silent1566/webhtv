@@ -96,6 +96,21 @@ public class EpisodeDetailDialogThemeTest {
     }
 
     @Test
+    public void mobileEpisodeDetailKeepsBottomGuestCardsInsideStableScrollBounds() throws Exception {
+        String dialog = read(findMobileJavaPath().resolve(Path.of(
+                "com", "fongmi", "android", "tv", "ui", "dialog", "EpisodeDetailDialog.java")));
+        String layout = read(findMainResPath().resolve(Path.of(
+                "layout", "dialog_episode_detail.xml")));
+
+        assertTrue("mobile detail must disable nested scrolling for its horizontal rails",
+                dialog.contains("view.setNestedScrollingEnabled(false);")
+                        && dialog.contains("view.setOverScrollMode(View.OVER_SCROLL_NEVER);"));
+        assertTrue("mobile detail must disable parent overscroll and leave a bottom safety inset",
+                layout.contains("android:overScrollMode=\"never\"")
+                        && layout.contains("android:paddingBottom=\"12dp\""));
+    }
+
+    @Test
     public void tvEpisodePhotosUseUnifiedYellowFocusStrokeWithoutGrayOverlay() throws Exception {
         String adapter = read(findLeanbackJavaPath().resolve(Path.of(
                 "com", "fongmi", "android", "tv", "ui", "adapter", "EpisodePhotoAdapter.java")));

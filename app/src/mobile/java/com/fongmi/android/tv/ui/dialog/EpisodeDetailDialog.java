@@ -302,6 +302,8 @@ public class EpisodeDetailDialog {
 
     private static void bindHorizontalList(RecyclerView view, int spacingDp) {
         view.setLayoutManager(new LinearLayoutManager(view.getContext(), LinearLayoutManager.HORIZONTAL, false));
+        view.setNestedScrollingEnabled(false);
+        view.setOverScrollMode(View.OVER_SCROLL_NEVER);
         view.addItemDecoration(new RecyclerView.ItemDecoration() {
             @Override
             public void getItemOffsets(@NonNull android.graphics.Rect outRect, @NonNull View child, RecyclerView parent, @NonNull RecyclerView.State state) {
