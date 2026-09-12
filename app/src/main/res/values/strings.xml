@@ -1284,7 +1284,6 @@
     <string name="player_audio_decode">Audio software decode</string>
     <string name="player_audio_passthrough">Audio passthrough</string>
     <string name="player_video_decode">Video software decode</string>
-    <string name="player_ffmpeg_mode">FFmpeg mode</string>
     <string name="player_aac_track">Prefer aac track</string>
     <string name="player_music_notification">Music background notification</string>
     <string name="player_audio_book_notification">Audiobook background notification</string>

@@ -93,14 +93,12 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
         mBinding.audioDecodeText.setText(getSwitch(PlayerSetting.isAudioPrefer()));
         mBinding.audioPassThroughText.setText(getSwitch(PlayerSetting.isAudioPassThrough()));
         mBinding.videoDecodeText.setText(getSwitch(PlayerSetting.isVideoPrefer()));
-        mBinding.ffmpegModeText.setText(getFFmpegModeText());
         mBinding.osdText.setText(getOsdText(osd = ResUtil.getStringArray(R.array.select_player_osd)));
         mBinding.kernelText.setText((kernel = ResUtil.getStringArray(R.array.select_player_kernel))[PlayerSetting.getPlayer()]);
         mpvRender = ResUtil.getStringArray(R.array.select_mpv_render);
         mBinding.scaleText.setText((scale = ResUtil.getStringArray(R.array.select_scale))[PlayerSetting.getScale()]);
         mBinding.lutText.setText(LutSetting.getSummary());
         setMpvRows();
-        setFfmpegModeVisibility();
         mBinding.renderText.setText((render = ResUtil.getStringArray(R.array.select_render))[PlayerSetting.getRender()]);
         mBinding.captionText.setText((caption = ResUtil.getStringArray(R.array.select_caption))[PlayerSetting.isCaption() ? 1 : 0]);
         hidePerformanceRows();
@@ -142,7 +140,6 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
         mBinding.audioDecode.setOnClickListener(this::setAudioDecode);
         mBinding.audioPassThrough.setOnClickListener(this::setAudioPassThrough);
         mBinding.videoDecode.setOnClickListener(this::setVideoDecode);
-        mBinding.ffmpegMode.setOnClickListener(this::setFfmpegMode);
     }
 
     private void setVisible() {
@@ -171,7 +168,6 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
             mBinding.kernelText.setText(kernel[index]);
             PlayerSetting.putPlayer(index);
             setMpvRows();
-            setFfmpegModeVisibility();
             setPerformanceText();
         });
     }
@@ -193,11 +189,6 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
         mBinding.mpvRender.setVisibility(visible ? View.VISIBLE : View.GONE);
         mBinding.mpvConfigText.setText(MpvConfigStore.summary());
         mBinding.mpvRenderText.setText(getMpvRenderText());
-    }
-
-    private void setFfmpegModeVisibility() {
-        boolean visible = PlayerSetting.getPlayer() == PlayerSetting.EXO;
-        mBinding.ffmpegMode.setVisibility(visible ? View.VISIBLE : View.GONE);
     }
 
     private void setMpvRender(View view) {
@@ -482,21 +473,6 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
         PlaybackPerformanceSetting.markCustom();
         mBinding.videoDecodeText.setText(getSwitch(PlayerSetting.isVideoPrefer()));
         setPerformanceText();
-    }
-
-    private void setFfmpegMode(View view) {
-        int mode = (PlayerSetting.getFFmpegMode() + 1) % 4;
-        PlayerSetting.putFFmpegMode(mode);
-        mBinding.ffmpegModeText.setText(getFFmpegModeText());
-    }
-
-    private String getFFmpegModeText() {
-        return switch (PlayerSetting.getFFmpegMode()) {
-            case PlayerSetting.FFMPEG_MODE_OFFICIAL -> "Official";
-            case PlayerSetting.FFMPEG_MODE_SIMPLE -> "Simple";
-            case PlayerSetting.FFMPEG_MODE_AUTO -> "自动";
-            default -> "NextLib";
-        };
     }
 
     private void onBackground(View view) {
