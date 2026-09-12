@@ -14,6 +14,17 @@ import static org.junit.Assert.assertTrue;
 public class TmdbDetailActivityLayoutTest {
 
     @Test
+    public void cinemaPosterRailLeavesRoomForTheFullRoundedPosterCard() throws Exception {
+        String source = readJava("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java");
+        String cinemaTemplate = javaBlockAt(source, "private void applyCinemaDetailTemplate()");
+
+        assertTrue("the poster rail must leave room for the full 222dp rounded card and focus scaling",
+                cinemaTemplate.contains("TmdbDetailLayoutUtils.setHeightDp(binding.posterList, 238);")
+                        && cinemaTemplate.contains("binding.posterList.setClipToOutline(false);")
+                        && cinemaTemplate.contains("binding.posterList.setClipChildren(false);"));
+    }
+
+    @Test
     public void cinemaEpisodeGridStartsAtTheSameLogicalStartEdgeAsOtherDetailRails() throws Exception {
         String adapter = readJava("com", "fongmi", "android", "tv", "ui", "adapter", "TmdbEpisodeAdapter.java");
         String cardSize = javaBlockAt(adapter, "private void applyCardSize(");

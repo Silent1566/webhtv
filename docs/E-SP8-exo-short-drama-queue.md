@@ -415,3 +415,11 @@ startup／seek、重缓冲和稳定播放质量不得发生可重复的实质退
 - 当前状态：**E-SP8 代码实现和合并后源码复评通过；实验默认策略及正式放量前的连续切集、网络争用、字幕/弹幕和 Leanback 实机验收仍保持未完成。**
 - 回滚：代码层面可使用已有 E-SP8 recovery tag；当前 beta 合并提交完成后另以本 task 的 recovery tag 回滚整合层。
 - **唯一下一步：完成 `beta-sync-review-dev1-20260911` 的 merge commit/tag，推送 `dev1` 并创建目标为 `beta` 的中文 PR。**
+
+## Recovery anchor（2026-09-12 01:00 Asia/Shanghai）
+
+- 现场根因：短剧队列资格错误使用 `isDomainEnabled(EXO)`，这会在稳定策略默认关闭内部实验时直接拒绝队列，因此用户无法看到下一集预解析、播放列表追加和受控预载。
+- 修复：新增生产自动优化动作 `EXO_SHORT_DRAMA_QUEUE`，Mobile 与 Leanback 改为通过 `isAllowed(EXO_SHORT_DRAMA_QUEUE)` 准入；安全条件、短剧源识别、Exo、预载设置、协议及恢复位置等既有门槛保持不变。
+- 非目标保持不变：不会把多个剧集文件合并成一个文件；增强路径仍使用两个独立 MediaItem 的有界播放列表。
+- 验证结果：`testMobileArm64_v8aDebugUnitTest` 中的 `PlaybackExperimentPolicyTest` 与 `ShortDramaQueueCoordinatorTest` 通过，Mobile 与 Leanback Arm64_v8a Debug Java 编译通过；Gradle 报告 `BUILD SUCCESSFUL in 20s`，仅有既有 CXX5202 与弃用 API 警告。
+- 唯一下一步：执行 task guard 检查并提交本次准入修复；真实设备连续切集、网络争用、字幕与弹幕时序仍须后续验收。

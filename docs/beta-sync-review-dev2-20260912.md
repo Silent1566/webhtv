@@ -3,15 +3,15 @@
 ## Recovery anchor
 
 - **目标：** 拉取远端最新 `beta`，合并到 `dev2`，评审 beta 增量及已提交未推送改动；发现问题时最小修复并验证、再次复评，最终提交、推送 `dev2`、创建中文 PR 到 `beta`，并再次拉取远端最新代码。
-- **任务守卫：** `beta-sync-review-dev2-20260912`，模式 `standard`；启动时工作树干净，无受保护的既有脏路径；范围为 `app`、`docs`。
-- **开始时间：** 2026-09-12 12:41 CST（Asia/Shanghai，UTC+08:00）。
-- **本地基线：** `dev2@8f8797462082f0667341cdf430bf1fa70a73d39f`，该提交为此前已提交但尚未推送的 TMDB 剧照栏间距修复。
-- **远端 beta：** 已执行 `git fetch origin beta`，目标为 `origin/beta@7c325e4a04891fc1df224d359039998500ec4235`。
-- **合并结果：** `git merge --no-ff --no-commit origin/beta` 自动完成，无冲突；当前合并结果已暂存，`MERGE_HEAD` 为 `7c325e4a04891fc1df224d359039998500ec4235`。
-- **当前文件/符号：** beta 增量位于 `app/src/main/res/layout/dialog_about.xml` 及 4 个 `about_primary_*` 资源；本地差异位于 `TmdbDetailActivity.applyCinemaDetailTemplate()` 与 `TmdbDetailActivityLayoutTest.cinemaPhotoRailMatchesItsCardHeightSoFollowingRailsKeepTheSharedSectionGap()`。
-- **已完成动作：** 首轮静态评审、无冲突检查、移动端资源处理和定向单测、Leanback 资源处理、验证后复评均通过；本轮没有发现需要修改的代码问题。
-- **未验证风险：** 未在真实电视设备上执行遥控器逐键焦点和视觉高亮验收；Leanback 已完成资源处理，但没有对应的 AboutDialog 运行时单测。该边界不影响源码/资源合并安全性判断。
-- **唯一下一动作：** 将本文档加入暂存区，调用 `task_guard.sh finish` 原子提交并创建恢复标签；随后推送分支与标签、创建中文 PR，最后重新拉取并核对远端状态。
+- **当前恢复锚点时间：** 2026-09-12 18:10 CST（Asia/Shanghai，UTC+08:00）。
+- **当前任务守卫：** `beta-sync-review-dev2-20260912-followup`，模式 `standard`；启动时工作树干净，无受保护的既有脏路径；范围为 `FFMPEG_MODE_SWITCH.md`、`app`、`docs`。
+- **本地基线：** `dev2@20dcf312452c7ae95bfe0fd9df85b15d5890bd50`，即此前已提交但尚未推送的缓冲卡死恢复改动。
+- **远端 beta：** 已执行 `git fetch origin beta dev2`，目标为 `origin/beta@07fb0b5e13ac56a5cf234fd684ed2932ead4b91c`。
+- **合并结果：** `git merge --no-ff --no-commit origin/beta` 自动完成，无冲突；当前合并结果仍未提交，`MERGE_HEAD` 为 `07fb0b5e13ac56a5cf234fd684ed2932ead4b91c`。
+- **当前有效本地差异：** 相对 `origin/beta` 仅为 `PlayerManager.java`、`ExoBufferingStallWatchdog.java`、`PlayerManagerLifecycleSourceTest.java` 和 `ExoBufferingStallWatchdogTest.java` 四个路径；beta 侧新增行为由此前 dev1/dev4 复评记录覆盖。
+- **已完成动作：** 发现并修复“普通 `STATE_BUFFERING` 未启动看门狗”、非 Exo 误接线，以及轮询先判断超时导致迟到回退 seek 误判三个问题；定向单测和验证后复评均通过。
+- **未验证风险：** 未在真实设备上执行网络断流、遥控器 seek、硬解码器切换和逐帧视觉验收；源码测试覆盖不等价于实机放量验证。
+- **唯一下一动作：** 将当前文档与合并树交给 `task_guard.sh finish` 原子提交并创建恢复标签；随后推送分支/标签、创建中文 PR 到 `beta`，最后拉取远端最新代码并核对状态。
 
 ## 合并范围与提交台账
 
@@ -112,3 +112,80 @@
 - [x] `task_guard.sh finish` 原子提交并创建恢复标签。
 - [x] 推送 `dev2`/恢复标签并创建中文 PR 到 `beta`。
 - [x] 最后拉取远端最新代码并核对交付状态。
+
+## 2026-09-12 后续 beta 合并与缓冲卡死复评（18:10 CST）
+
+### 合并基线与既有评审复用
+
+- 本轮先执行 `git fetch origin beta dev2`；远端 `origin/beta` 为完整提交 `07fb0b5e13ac56a5cf234fd684ed2932ead4b91c`，`origin/dev2` 为 `38ff48d8d12a49cb4edbd08514e6342aaf2099ac`。
+- 本地唯一未被 `origin/beta` 包含的生产提交为 `20dcf312452c7ae95bfe0fd9df85b15d5890bd50`（`fix(player): recover from buffering stalls`）；此前 TMDB、Exo 队列、关于页、分集详情及脚本改动均已进入 beta 或由既有 dev1/dev2/dev3/dev4 复评记录覆盖。
+- `git merge --no-ff --no-commit origin/beta` 无冲突，`git ls-files -u` 无输出。合并后相对 `origin/beta` 的初始有效差异为该提交的 3 个路径；修复后扩展为下列 4 个路径，未触及保护路径：
+  - `app/src/main/java/com/fongmi/android/tv/player/PlayerManager.java`
+  - `app/src/main/java/com/fongmi/android/tv/player/exo/ExoBufferingStallWatchdog.java`
+  - `app/src/test/java/com/fongmi/android/tv/player/PlayerManagerLifecycleSourceTest.java`
+  - `app/src/test/java/com/fongmi/android/tv/player/exo/ExoBufferingStallWatchdogTest.java`
+
+### beta 增量完整提交处置
+
+相对上次 dev2 复评基线 `7c325e4a04891fc1df224d359039998500ec4235`，本次 `origin/beta` 可达增量的完整提交均已核对；功能提交沿用已有复评，合并/文档提交不引入未覆盖生产行为：
+
+| 完整 commit | 处置 |
+| --- | --- |
+| `f32787745c0dd0b587c5ec91751deb5d519cf339` | 构建安装脚本；已由此前 beta 复评覆盖，当前树无 dev2 独有差异。 |
+| `4269dc5e83b2dafe29052b341a85f00ff17b0f5c` | 构建安装脚本 Leanback 参数；已由此前 beta 复评覆盖。 |
+| `2bc1244a09ca5d0bd9992a4c5e617346827fe8a9` | Exo 短剧队列稳定策略；已有 E-SP8/前轮复评覆盖。 |
+| `8f8797462082f0667341cdf430bf1fa70a73d39f` | TMDB 剧照栏；已由本任务前轮复评覆盖，并已进入 beta。 |
+| `42d6abe02e962e3d92e156ab7e5f994a7026b1f1` | TMDB 剧幕海报圆角；已有 beta 复评覆盖。 |
+| `b0f0343664502854ade683cdf0702d55a3ea32d3` | TMDB 剧幕海报完整显示；已有 beta 复评覆盖。 |
+| `4353f020eb541ee74a2be98f1b5ce20eef3f4021` | dev2 合并承载提交；不新增未评审生产路径。 |
+| `38ff48d8d12a49cb4edbd08514e6342aaf2099ac` | dev2 收口文档；无运行时代码。 |
+| `81435e97eafabd64727412169ead107687f7325c` | PR #258 合并承载提交；保留已评审最终树。 |
+| `667992b22e917735be5e5932ab33ac5293a4953c` | 分集客串演员圆角；由 `docs/beta-sync-review-dev4-20260912.md` 覆盖。 |
+| `f1c15ef025601ab3fb3cfb2316fdafb650bcbae1` | dev1 合并承载提交；由 dev1 复评记录覆盖。 |
+| `ccd608c503bed84711bb1bc75875c030b6be5ce5` | PR #259 合并承载提交；保留已评审最终树。 |
+| `c2dcf52b5676eef00026f55f013eb58ae522804f` | 移除废弃 Exo FFmpeg 模式设置；由 dev1 后续复评记录覆盖。 |
+| `6a002d29f74e2444c5372f53d361c67e018e0737` | 分集客串演员横向卡片；由 dev4 复评记录覆盖。 |
+| `d42f2de6c803fda57f169740cd55ac6efd1154c5` | dev1 收口文档；无额外未覆盖生产行为。 |
+| `b6b18ac1dd2f248c3001b1802ac285622620b6fa` | 移动端分集详情底部滚动；由 dev4 复评记录覆盖。 |
+| `cf8c95b1053bf89be975692fbd8765fd700d2799` | dev4 合并承载提交；无新的未评审生产路径。 |
+| `fe08b1c167618fa0d40148668a5e9e78a3a597e9` | dev4 复评文档；无运行时代码。 |
+| `4a669575963614565cbde6a1e85a813792b8ec0a` | PR #261 合并承载提交；保留已评审最终树。 |
+| `07fb0b5e13ac56a5cf234fd684ed2932ead4b91c` | PR #260 合并承载提交；保留 dev1 已复评最终树。 |
+
+### 首轮代码评审发现
+
+- `20dcf312452c7ae95bfe0fd9df85b15d5890bd50` 新增 `ExoBufferingStallWatchdog`，并在 `PlayerManager` 添加轮询与超时后的回退链。
+- **问题 1（功能缺口）：** 初始实现只在 `seekTo()` 中调用 `armBufferingStallWatchdog()`；正常进入 `Player.STATE_BUFFERING` 时没有启动轮询，因此普通缓冲卡死不会被检测。
+- **问题 2（作用域错误）：** 初始 `armBufferingStallWatchdog()`/`checkBufferingStall()` 没有限制 Exo，MPV/IJK 的 seek 或 buffering 状态也可能复用该 Exo 看门狗并错误进入回退链。
+- **问题 3（边界误判）：** 初始轮询先调用 `shouldTimeout()`，后调用 `observe()`；在已超过普通超时窗口后发生回退 seek 时，旧位置/缓冲基线可能先触发超时，来不及被识别为 discontinuity。
+
+### 修复与验证后复评
+
+- `onPlaybackStateChanged(STATE_BUFFERING)` 现在启动看门狗，`READY`/非活动状态及时取消；arm 和 polling 均限制为 Exo，保持 MPV/IJK 原有行为不变。
+- `checkBufferingStall()` 现在先 `observe()` 再 `shouldTimeout()`，使回退 seek/flush 先重建连续性基线，再进入超时判断。
+- `PlayerManagerLifecycleSourceTest` 增加状态接线、Exo 限制和 observe-before-timeout 契约断言；`ExoBufferingStallWatchdogTest` 增加超时窗口后回退 seek 回归用例。
+- 验证前内存：`free -h` 显示 `Mem available 1.9GiB`，满足至少 1.5 GiB；最终验证前再次显示 `Mem available 3.5GiB`，未发现活动构建任务。
+- 最终定向验证命令：
+
+  ```text
+  bash ./gradlew :app:testMobileArm64_v8aDebugUnitTest \
+    --tests 'com.fongmi.android.tv.player.exo.ExoBufferingStallWatchdogTest' \
+    --tests 'com.fongmi.android.tv.player.PlayerManagerLifecycleSourceTest' \
+    --no-daemon --max-workers=1 --console=plain
+  ```
+
+- 结果：`BUILD SUCCESSFUL in 40s`，87 个 actionable tasks（6 executed，81 up-to-date）；日志：`/tmp/beta-sync-review-dev2-20260912-followup-final.log`。
+- 最终静态复评：相对 `origin/beta` 仅保留上述 4 个路径；无冲突路径、无空白符错误；看门狗仅在 Exo buffering 期间运行，READY/结束/非活动均取消，暂停时按 tick 重置 episode，进度、loading 延迟、discontinuity、episode ceiling 和 fallback 入口均与测试/调用链一致。
+- **复评结论：通过，无剩余 P1/P2 问题。**
+
+### 当前状态与回滚
+
+- [x] fetch `origin/beta`/`origin/dev2` 并确认远端 head。
+- [x] 无冲突合并 `origin/beta@07fb0b5e13ac56a5cf234fd684ed2932ead4b91c`。
+- [x] 复用既有 dev1/dev4 评审覆盖 beta 增量，并评审 `20dcf312452c7ae95bfe0fd9df85b15d5890bd50`。
+- [x] 修复 3 个问题，完成定向单测，验证后再次复评通过。
+- [ ] `task_guard.sh finish` 原子提交并创建恢复标签。
+- [ ] 推送 `dev2`/恢复标签，创建目标为 `beta` 的中文 PR。
+- [ ] 最后拉取远端最新代码并核对分支、PR、工作树状态。
+
+**唯一下一动作：** 在当前合并树和本文档通过最终 task guard 后执行 `task_guard.sh finish`。

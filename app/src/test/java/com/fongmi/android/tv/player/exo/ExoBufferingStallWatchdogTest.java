@@ -102,6 +102,18 @@ public class ExoBufferingStallWatchdogTest {
     }
 
     @Test
+    public void aLateBackwardSeekIsRebasedBeforeTheTimeoutCheck() {
+        ExoBufferingStallWatchdog watchdog = new ExoBufferingStallWatchdog();
+        watchdog.arm(0, 300_000, 320_000);
+        long now = TIMEOUT + 1_000;
+        // This is the order used by PlayerManager's polling loop: observe the sample first,
+        // then evaluate it. A seek that arrives after the ordinary stall window must not be
+        // mistaken for a frozen session using the pre-seek baseline.
+        watchdog.observe(now, 60_000, 62_000);
+        assertFalse(watchdog.shouldTimeout(now, 60_000, 62_000, false));
+    }
+
+    @Test
     public void repeatingLargeRegressionCannotDeferTheTimeoutForever() {
         ExoBufferingStallWatchdog watchdog = new ExoBufferingStallWatchdog();
         watchdog.arm(0, 5_000, 9_000);
