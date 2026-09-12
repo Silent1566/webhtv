@@ -72,12 +72,14 @@
 ## Recovery anchor（2026-09-12 FFmpeg 模式清理后续）
 
 - 目标：移除 EXO 已不再消费的用户可选 FFmpeg 模式及其无效 AUTO 重建链；保留 `ExoUtil` 当前上游 `FfmpegRenderersFactory`、真实 FFmpeg 音视频 renderer 和普通解码/内核回退。
-- 当前分支/基线：`dev1` / `ccd608c503bed84711bb1bc75875c030b6be5ce5`。
+- 当前分支/实施基线：`dev1` / `ccd608c503bed84711bb1bc75875c030b6be5ce5`；实施提交为 `c2dcf52b5676eef00026f55f013eb58ae522804f`。
 - 保护 dirty 路径：无（启动本阶段任务守卫时工作树干净）。
 - 已完成编辑：删除 `PlayerSetting` FFmpeg 模式 API、`PlayerManager` AUTO 模式失败遍历和刷新状态、手机/TV 设置行及资源、备份字段、过时文档和对应契约测试；保留 `ExoUtil` 的 FFmpeg renderer 构造。
-- 未验证编辑：定向单测、Mobile/Leanback Java 编译、删除引用审计尚未执行。
-- 回滚锚点：本阶段原子提交对应的 `recovery/E-ROLLBACK-EXO/<timestamp>-<commit>` 标签。
-- 已完成验证：`git diff --check` 通过；全仓库已无 `ffmpeg_mode`、`FFMPEG_MODE_*`、`player_ffmpeg_mode`、`default_ffmpeg_mode` 或旧模式文档引用；`ExoUtil` 仍保留 `FfmpegRenderersFactory`、`CompatFfmpegAudioRenderer` 和 `FfmpegVideoRenderer`。
+- 未验证编辑：无。
+- 回滚锚点：`recovery/E-ROLLBACK-EXO/20260912151536-c2dcf52b5676`。
+- 已完成验证：`git diff --check`、运行时/API/UI/资源引用审计和修改后 XML 解析均通过；运行时代码与用户可见资源已无 `ffmpeg_mode`、`FFMPEG_MODE_*`、`player_ffmpeg_mode`、`default_ffmpeg_mode` 或 `ffmpegMode` 引用。历史 EXO 评估/审计文档仍保留当时的模式术语作为审计记录；`ExoUtil` 仍保留 `FfmpegRenderersFactory`、`CompatFfmpegAudioRenderer` 和 `FfmpegVideoRenderer`。
 - 2026-09-12：在确认没有实际 `GradleWrapperMain`/编译器任务后，Mobile/Leanback Java 编译均通过；首次包含整个 `VideoActivityLayoutTest` 的测试命令因既有的 `leanbackSpeedBoostReleaseIsGuarded`（`VideoActivityLayoutTest.java:815`）失败而结束，未扩大范围修复。
 - 2026-09-12：按本次改动收窄后的 Mobile/Leanback `PlayerManagerTest`、`PlayerDisplaySettingSyncTest`、`PlayerSettingTest` 均通过；日志为 `/tmp/e-rollback-exo-ffmpeg-mode-cleanup-20260912.log` 与 `/tmp/e-rollback-exo-ffmpeg-mode-cleanup-focused-tests-20260912.log`。
-- 唯一下一步：使用任务守卫 `finish` 原子提交本阶段并创建恢复标签。
+- 2026-09-12：当前提交相对 `origin/beta` 的全部差异完成首轮 adversarial 复评，未发现需要修复的源码问题；`origin/beta` 已是当前提交祖先，因此无需产生新的合并提交。
+- 2026-09-12：`dev1` 已推送至 `origin/dev1@c2dcf52b5676eef00026f55f013eb58ae522804f`，恢复标签已推送；已创建目标为 `beta` 的中文 PR #260（`EXO：移除已废弃的 FFmpeg 模式设置`）。
+- 当前状态：本阶段代码已提交、复评、推送并进入 PR；历史审计文档中的旧模式描述不属于运行时残留。

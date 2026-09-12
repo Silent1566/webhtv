@@ -127,7 +127,7 @@ bash ./gradlew \
 3. Mobile 159 项定向测试、Mobile/Leanback Arm64 Java 编译支持源码合并安全性；未发现需要二次修复的问题。
 4. 实机电视焦点、短剧连续切集及网络/字幕/弹幕时序仍明确列为未验证边界，不扩大“定向验证通过”的含义。
 
-当前结论：**代码复评通过，待完成最终文档校验、task guard 原子提交/recovery tag、推送、中文 PR 和远端最终拉取。**
+当前结论：**代码复评与交付通过；本轮新增的 EXO FFmpeg 模式清理改动已提交、推送，并创建中文 PR #260 到 `beta`。**
 
 ## 状态
 
@@ -136,8 +136,28 @@ bash ./gradlew \
 - [x] 复评 beta 增量和 dev1 已提交未推送改动。
 - [x] 确认没有并发打包任务并完成定向验证；命令过滤失败已分类为测试 source set 错误。
 - [x] 验证后再次复评最终暂存树，未发现需要修复的问题。
-- [ ] 完成最终文档校验并调用 `task_guard.sh finish` 原子提交、创建 recovery tag。
-- [ ] 推送 `dev1` 与 recovery tag，创建中文 PR 到 `beta`。
-- [ ] `git fetch --prune origin` 并拉取/核对远端最新代码、分支和 PR 状态。
+- [x] 完成最终文档校验；本轮新增 EXO 清理提交 `c2dcf52b5676eef00026f55f013eb58ae522804f` 已由 `E-ROLLBACK-EXO` 任务守卫原子提交并创建 recovery tag。
+- [x] 推送 `dev1` 与 recovery tag，创建中文 PR #260 到 `beta`。
+- [x] `git fetch --prune origin` 并核对远端最新代码、分支和 PR 状态：`origin/dev1` 与本地代码提交一致，`origin/beta` 为 `ccd608c503bed84711bb1bc75875c030b6be5ce5`，PR #260 状态为 OPEN、merge state 为 CLEAN。
 
-**唯一下一动作：** 执行最终静态/XML/守卫校验，随后调用 `task_guard.sh finish`。
+**唯一下一动作：** 完成当前文档闭合提交后再次拉取远端，确认文档闭合提交已推送；除此之外无剩余代码修复工作。
+
+## 2026-09-12 后续提交复评与交付记录
+
+### 新增提交范围
+
+- `c2dcf52b5676eef00026f55f013eb58ae522804f`：移除 EXO 已不再消费的 FFmpeg 模式设置、AUTO 模式失败遍历、手机/TV 设置入口、备份偏好键、过时说明文档及其专属契约测试；保留 `ExoUtil` 的 FFmpeg renderer 和普通解码/内核回退。
+- 该提交的父提交为 `ccd608c503bed84711bb1bc75875c030b6be5ce5`，即当前 `origin/beta`；因此本轮没有新的 beta 合并冲突。
+
+### 复评结论
+
+- 运行时状态、`PlayerSetting` API、`PlayerManager` 生命周期接线、Data Binding/UI 资源、备份偏好和测试删除均逐项检查，未发现 dangling reference、错误删除或影响其他播放器的改动。
+- `ExoUtil` 仍明确构造 `FfmpegRenderersFactory`，并保留 `CompatFfmpegAudioRenderer` 与 `FfmpegVideoRenderer`；移除的只是用户可选模式及其失效的 AUTO 重建链。
+- 历史 EXO 评估/审计文档中的旧模式术语按审计记录保留，不视为运行时或用户可见设置残留。
+- 首轮复评通过，无需修复，也不存在需要“修复后再次复评”的代码循环。
+
+### 交付证据
+
+- `origin/dev1@c2dcf52b5676eef00026f55f013eb58ae522804f` 已与本地提交一致。
+- recovery tag：`recovery/E-ROLLBACK-EXO/20260912151536-c2dcf52b5676`，已推送。
+- PR：#260，标题为“EXO：移除已废弃的 FFmpeg 模式设置”，目标分支为 `beta`，创建时状态为 OPEN、merge state 为 CLEAN。
