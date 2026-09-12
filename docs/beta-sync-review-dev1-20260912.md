@@ -212,3 +212,14 @@ bash ./gradlew \
 - [ ] 最后执行 `git pull --ff-only`，核对本地、远端分支和 PR 状态；若 beta 在此期间再次前进，按同一证据链继续处理新增提交。
 
 **唯一下一步：** 执行 `task_guard.sh finish`，随后推送分支/恢复标签并更新 PR。
+
+## 最终远端核对（2026-09-12）
+
+- [x] 本阶段任务守卫已生成原子提交 `60669a8bd7d6714bdc90528e2977cad35faf4526`，并创建恢复标签 `recovery/beta-sync-review-dev1-20260912-followup/20260912173956-60669b8bd7d6`。
+- [x] `dev1` 与 `origin/dev1` 已同步到 `60669a8bd7d6714bdc90528e2977cad35faf4526`；分支和恢复标签已推送。
+- [x] 现有 PR #260 已更新为中文说明，目标分支为 `beta`，并已于 2026-09-12 17:30 CST 合入，GitHub 合并提交为 `07fb0b5e13ac56a5cf234fd684ed2932ead4b91c`。
+- [x] 最后一次 `git pull --ff-only` 已执行并显示本地 `dev1` 已是最新；同时抓取到 `origin/beta@07fb0b5e13ac56a5cf234fd684ed2932ead4b91c`。
+- [x] 最新 beta 合并承载提交与当前 dev1 的产品代码树一致；`git diff HEAD origin/beta -- app scripts` 为空，剩余差异仅为本地复评记录文档，因此没有新的代码需要再次合并、修复或验证。
+- [x] 最终状态：PR 已合入 beta，`dev1` 工作树干净，当前无未提交或未推送的任务改动。
+
+**任务结论：** 本轮 beta 同步、全部改动复评、定向验证、原子提交、推送、中文 PR 和最终远端拉取均已完成；无遗留代码问题。
