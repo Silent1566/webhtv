@@ -14,6 +14,15 @@ import static org.junit.Assert.assertTrue;
 public class TmdbDetailActivityLayoutTest {
 
     @Test
+    public void cinemaPosterRailKeepsRoundedOutlineOnLargeScreens() throws Exception {
+        String source = readJava("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java");
+        String cinemaTemplate = javaBlockAt(source, "private void applyCinemaDetailTemplate()");
+
+        assertTrue("large-screen cinema posters must keep their rounded card outline",
+                cinemaTemplate.contains("if (!compact) binding.posterList.setClipToOutline(true);"));
+    }
+
+    @Test
     public void seasonSourceRoutesRefreshAndCarrySnapshotSelection() throws Exception {
         Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
         String source = Files.readString(sourcePath, StandardCharsets.UTF_8);
