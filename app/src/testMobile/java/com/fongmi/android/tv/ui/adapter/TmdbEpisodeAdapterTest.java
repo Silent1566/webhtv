@@ -97,17 +97,19 @@ public class TmdbEpisodeAdapterTest {
     }
 
     @Test
-    public void gridEpisodeCardsUseSymmetricHorizontalMargins() throws Exception {
+    public void gridEpisodeCardsAlignToStartWithoutChangingCardWidths() throws Exception {
         String source = tmdbEpisodeAdapterSource();
         int method = source.indexOf("private void applyCardSize(ViewHolder holder, boolean compact, boolean hasTmdbEpisodeData)");
         int methodEnd = source.indexOf("private boolean nativeEnhancedMobileGrid", method);
         String body = method >= 0 && methodEnd > method ? source.substring(method, methodEnd) : "";
 
-        assertTrue("grid episode cards must split their spacing between start and end so outer margins stay balanced",
+        assertTrue("grid cards must all share zero start margin and one end spacing so their widths and inner gaps stay consistent",
                 body.contains("int gridSpacing = dp(holder.itemView, standardGridItem ? 8 : isNativeEnhanced() ? 12 : 8);")
-                        && body.contains("int marginStart = mode == Mode.GRID ? gridSpacing / 2 : 0;")
+                        && body.contains("int marginStart = 0;")
+                        && body.contains("int marginEnd = mode == Mode.GRID ? gridSpacing : dp(holder.itemView, 12);")
                         && body.contains("marginParams.setMarginStart(marginStart);")
-                        && body.contains("marginParams.getMarginStart() != marginStart"));
+                        && body.contains("marginParams.getMarginStart() != marginStart")
+                        && !body.contains("getBindingAdapterPosition()"));
     }
 
     @Test
