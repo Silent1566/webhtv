@@ -393,6 +393,7 @@ public class EpisodeDetailDialog {
 
                             TmdbPersonAdapter guestAdapter = new TmdbPersonAdapter(person -> TmdbPersonDialog.show(activity, person, site));
                             guestAdapter.setLight(light);
+                            guestAdapter.setRoundedPhoto(Setting.isTmdbCinemaStyle());
                             guestAdapter.setItems(guests);
                             guestsGrid.setAdapter(guestAdapter);
                         }
@@ -449,6 +450,7 @@ public class EpisodeDetailDialog {
 
             TmdbPersonAdapter guestAdapter = new TmdbPersonAdapter(person -> TmdbPersonDialog.show(activity, person, null));
             guestAdapter.setLight(light);
+            guestAdapter.setRoundedPhoto(Setting.isTmdbCinemaStyle());
             guestAdapter.setItems(guests);
             guestsGrid.setAdapter(guestAdapter);
         } else {

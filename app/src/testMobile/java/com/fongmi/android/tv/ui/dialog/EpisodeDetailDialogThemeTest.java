@@ -64,6 +64,27 @@ public class EpisodeDetailDialogThemeTest {
     }
 
     @Test
+    public void cinemaEpisodeGuestCardsRoundPortraitsWithoutChangingTheirRailLayout() throws Exception {
+        String adapter = read(findMainJavaPath().resolve(Path.of(
+                "com", "fongmi", "android", "tv", "ui", "adapter", "TmdbPersonAdapter.java")));
+        String mobileDialog = read(findMobileJavaPath().resolve(Path.of(
+                "com", "fongmi", "android", "tv", "ui", "dialog", "EpisodeDetailDialog.java")));
+        String leanbackDialog = read(findLeanbackJavaPath().resolve(Path.of(
+                "com", "fongmi", "android", "tv", "ui", "dialog", "EpisodeDetailDialog.java")));
+
+        assertTrue("guest portraits need the same 14dp radius as their parent cards",
+                adapter.contains("private static final int PHOTO_CORNER_RADIUS_DP = 14;")
+                        && adapter.contains("outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), cornerRadius);"));
+        assertTrue("the portrait must use its own outline so the lower edge is clipped too",
+                adapter.contains("holder.binding.photo.setOutlineProvider(roundedPhoto ? ROUNDED_PHOTO_OUTLINE : ViewOutlineProvider.BACKGROUND);")
+                        && adapter.contains("holder.binding.photo.setClipToOutline(true);"));
+        assertTrue("mobile episode details must request rounded portraits only for the cinema-stage theme",
+                mobileDialog.contains("adapter.setRoundedPhoto(Setting.isTmdbCinemaStyle());"));
+        assertTrue("both TV episode-media paths must request the cinema-stage rounded portrait treatment",
+                countOccurrences(leanbackDialog, "guestAdapter.setRoundedPhoto(Setting.isTmdbCinemaStyle());") >= 2);
+    }
+
+    @Test
     public void tvEpisodePhotosUseUnifiedYellowFocusStrokeWithoutGrayOverlay() throws Exception {
         String adapter = read(findLeanbackJavaPath().resolve(Path.of(
                 "com", "fongmi", "android", "tv", "ui", "adapter", "EpisodePhotoAdapter.java")));
@@ -152,6 +173,18 @@ public class EpisodeDetailDialogThemeTest {
 
     private static String read(Path path) throws Exception {
         return new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
+    }
+
+    private static Path findMainJavaPath() {
+        Path moduleRelative = Path.of("src", "main", "java");
+        if (Files.exists(moduleRelative)) return moduleRelative;
+        return Path.of("app", "src", "main", "java");
+    }
+
+    private static Path findMobileJavaPath() {
+        Path moduleRelative = Path.of("src", "mobile", "java");
+        if (Files.exists(moduleRelative)) return moduleRelative;
+        return Path.of("app", "src", "mobile", "java");
     }
 
     private static Path findLeanbackJavaPath() {

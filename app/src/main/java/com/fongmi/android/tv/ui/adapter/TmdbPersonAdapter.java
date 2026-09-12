@@ -1,8 +1,10 @@
 package com.fongmi.android.tv.ui.adapter;
 
 import android.view.LayoutInflater;
+import android.graphics.Outline;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewOutlineProvider;
 import android.widget.LinearLayout;
 
 import androidx.annotation.NonNull;
@@ -18,6 +20,15 @@ import java.util.List;
 
 public class TmdbPersonAdapter extends RecyclerView.Adapter<TmdbPersonAdapter.ViewHolder> {
 
+    private static final int PHOTO_CORNER_RADIUS_DP = 14;
+    private static final ViewOutlineProvider ROUNDED_PHOTO_OUTLINE = new ViewOutlineProvider() {
+        @Override
+        public void getOutline(View view, Outline outline) {
+            float cornerRadius = PHOTO_CORNER_RADIUS_DP * view.getResources().getDisplayMetrics().density;
+            outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), cornerRadius);
+        }
+    };
+
     public interface Listener {
         void onItemClick(TmdbPerson item);
     }
@@ -26,6 +37,7 @@ public class TmdbPersonAdapter extends RecyclerView.Adapter<TmdbPersonAdapter.Vi
     private final List<TmdbPerson> items = new ArrayList<>();
     private boolean cinema;
     private boolean light;
+    private boolean roundedPhoto;
 
     public TmdbPersonAdapter(Listener listener) {
         this.listener = listener;
@@ -59,6 +71,13 @@ public class TmdbPersonAdapter extends RecyclerView.Adapter<TmdbPersonAdapter.Vi
 
     public void setLight(boolean light) {
         this.light = light;
+        notifyDataSetChanged();
+    }
+
+    /** Keeps the episode-detail portrait separate from its label with four matching rounded corners. */
+    public void setRoundedPhoto(boolean roundedPhoto) {
+        if (this.roundedPhoto == roundedPhoto) return;
+        this.roundedPhoto = roundedPhoto;
         notifyDataSetChanged();
     }
 
@@ -108,6 +127,7 @@ public class TmdbPersonAdapter extends RecyclerView.Adapter<TmdbPersonAdapter.Vi
         holder.binding.name.setTextSize(cinema ? 17f : 12f);
         holder.binding.subtitle.setTextSize(cinema ? 13f : 10f);
         holder.binding.subtitle.setMaxLines(cinema ? 1 : 2);
+        holder.binding.photo.setOutlineProvider(roundedPhoto ? ROUNDED_PHOTO_OUTLINE : ViewOutlineProvider.BACKGROUND);
         holder.binding.photo.setClipToOutline(true);
         if (cinema) holder.binding.photo.setBackgroundColor(TmdbCinemaTheme.palette(light).imagePlaceholder());
     }

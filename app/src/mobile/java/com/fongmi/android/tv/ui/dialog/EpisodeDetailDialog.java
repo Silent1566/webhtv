@@ -352,6 +352,7 @@ public class EpisodeDetailDialog {
             guestsList.setVisibility(View.VISIBLE);
             TmdbPersonAdapter adapter = new TmdbPersonAdapter(person -> TmdbPersonDialog.show(activity, person, null));
             adapter.setLight(light);
+            adapter.setRoundedPhoto(Setting.isTmdbCinemaStyle());
             adapter.setItems(guests);
             guestsList.setAdapter(adapter);
         }
