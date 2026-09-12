@@ -11,7 +11,8 @@
 - **当前有效本地差异：** 相对 `origin/beta` 仅为 `PlayerManager.java`、`ExoBufferingStallWatchdog.java`、`PlayerManagerLifecycleSourceTest.java` 和 `ExoBufferingStallWatchdogTest.java` 四个路径；beta 侧新增行为由此前 dev1/dev4 复评记录覆盖。
 - **已完成动作：** 发现并修复“普通 `STATE_BUFFERING` 未启动看门狗”、非 Exo 误接线，以及轮询先判断超时导致迟到回退 seek 误判三个问题；定向单测和验证后复评均通过。
 - **未验证风险：** 未在真实设备上执行网络断流、遥控器 seek、硬解码器切换和逐帧视觉验收；源码测试覆盖不等价于实机放量验证。
-- **唯一下一动作：** 将当前文档与合并树交给 `task_guard.sh finish` 原子提交并创建恢复标签；随后推送分支/标签、创建中文 PR 到 `beta`，最后拉取远端最新代码并核对状态。
+- **当前交付结果：** 已完成 task guard 原子提交、恢复标签、`dev2`/标签推送、中文 PR #262，以及最终远端拉取核对。
+- **唯一下一动作：** 无；本轮代码评审、修复、验证、提交、推送、PR 和最终同步均已闭合。
 
 ## 合并范围与提交台账
 
@@ -184,8 +185,15 @@
 - [x] 无冲突合并 `origin/beta@07fb0b5e13ac56a5cf234fd684ed2932ead4b91c`。
 - [x] 复用既有 dev1/dev4 评审覆盖 beta 增量，并评审 `20dcf312452c7ae95bfe0fd9df85b15d5890bd50`。
 - [x] 修复 3 个问题，完成定向单测，验证后再次复评通过。
-- [ ] `task_guard.sh finish` 原子提交并创建恢复标签。
-- [ ] 推送 `dev2`/恢复标签，创建目标为 `beta` 的中文 PR。
-- [ ] 最后拉取远端最新代码并核对分支、PR、工作树状态。
+- [x] `task_guard.sh finish` 原子提交并创建恢复标签。
+- [x] 推送 `dev2`/恢复标签，创建目标为 `beta` 的中文 PR。
+- [x] 最后拉取远端最新代码并核对分支、PR、工作树状态。
 
-**唯一下一动作：** 在当前合并树和本文档通过最终 task guard 后执行 `task_guard.sh finish`。
+### 交付记录
+
+- 原子提交：`00c171160ee0b310e3db3874500cdb7228236d45`（`merge: 合并 beta 最新代码并完成 dev2 缓冲卡死复评 (2026-09-12)`）。
+- 恢复标签：`recovery/beta-sync-review-dev2-20260912-followup/20260912181235-00c171160ee0`，已推送。
+- `dev2` 已推送，最终 `HEAD == origin/dev2 == 00c171160ee0b310e3db3874500cdb7228236d45`。
+- 中文 PR：[#262](https://github.com/Silent1566/webhtv/pull/262)，目标 `beta`，状态 `OPEN`、非草稿、`mergeStateStatus=CLEAN`；head 为 `dev2@00c171160ee0b310e3db3874500cdb7228236d45`，base 为 `beta@07fb0b5e13ac56a5cf234fd684ed2932ead4b91c`。
+- 最终执行 `git fetch --prune origin beta dev2 && git pull --ff-only origin dev2`，结果为 `Already up to date`；最终工作树干净。
+- **任务结论：通过并闭合，无剩余 P1/P2 问题。**
