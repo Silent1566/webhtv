@@ -33,6 +33,7 @@ import androidx.leanback.widget.VerticalGridView;
 import androidx.lifecycle.Observer;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.media3.common.C;
+import androidx.media3.common.MediaItem;
 import androidx.media3.common.MediaMetadata;
 import androidx.media3.common.Player;
 import androidx.media3.common.VideoSize;
@@ -80,6 +81,8 @@ import com.fongmi.android.tv.playback.HistoryResumePayload;
 import com.fongmi.android.tv.playback.SubtitleRestoreCoordinator;
 import com.fongmi.android.tv.player.IntroSkipKinds;
 import com.fongmi.android.tv.player.IntroSkipPlayback;
+import com.fongmi.android.tv.player.PlaybackAutoContext;
+import com.fongmi.android.tv.player.PlaybackExperimentPolicy;
 import com.fongmi.android.tv.player.PlaybackResourceClassifier;
 import com.fongmi.android.tv.player.PlayerHelper;
 import com.fongmi.android.tv.player.PlayerManager;
@@ -93,6 +96,8 @@ import com.fongmi.android.tv.service.PersonalRecommendationService;
 import com.fongmi.android.tv.setting.DanmakuSetting;
 import com.fongmi.android.tv.setting.PlayerButtonSetting;
 import com.fongmi.android.tv.setting.MultiThreadProxySetting;
+import com.fongmi.android.tv.setting.PlaybackExperimentSetting;
+import com.fongmi.android.tv.setting.PreloadSetting;
 import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.setting.SiteHealthStore;
@@ -143,6 +148,8 @@ import com.fongmi.android.tv.ui.helper.VodEventGuard;
 import com.fongmi.android.tv.ui.player.VodPlayerChrome;
 import com.fongmi.android.tv.ui.player.VodPlayerUiController;
 import com.fongmi.android.tv.ui.player.VodPlayerUiHost;
+import com.fongmi.android.tv.ui.player.ShortDramaQueueCoordinator;
+import com.fongmi.android.tv.player.engine.PlaySpec;
 import com.fongmi.android.tv.utils.ActivityLaunch;
 import com.fongmi.android.tv.utils.AudioUtil;
 import com.fongmi.android.tv.utils.BrightnessPolicy;
@@ -466,6 +473,16 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     private String playerContentFlag = "";
     private String playerContentEpisode = "";
     private Result mAppliedPlayerResult;
+    private final ShortDramaQueueCoordinator mShortDramaQueue = new ShortDramaQueueCoordinator();
+    private PlaySpec mShortDramaQueuedSpec;
+    private Result mShortDramaQueuedResult;
+    private Episode mShortDramaQueuedEpisode;
+    private boolean mShortDramaQueueSessionActive;
+    private boolean mShortDramaQueueFallbackUsed;
+    private boolean mShortDramaEndedFallbackScheduled;
+    private long mShortDramaTransitionPositionMs = C.TIME_UNSET;
+    private long mShortDramaTransitionDurationMs = C.TIME_UNSET;
+    private final Runnable mShortDramaEndedFallback = this::fallbackShortDramaQueued;
     private AudioPlaybackResolver.Resolved mImmersiveAudioResolved;
     private boolean mImmersiveAudioRequested;
     private String mContextWallUrl;
@@ -1298,6 +1315,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
 
     @Override
     protected void onNewIntent(Intent intent) {
+        invalidateShortDramaQueue("new-intent");
         String oldKey = getKey();
         String oldId = getId();
         super.onNewIntent(intent);
@@ -1318,6 +1336,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         resetPlaybackOwnership();
         if (mViewModel != null) mViewModel.cancelPlayerContent();
         invalidatePlayerContent();
+        mAppliedPlayerResult = null;
         playerKernelSwitchRequestId++;
         setAudioStageVisible(false);
         restoreImmersiveAudioRequest();
@@ -2904,6 +2923,289 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         playerContentEpisode = episode;
     }
 
+    private boolean isShortDramaSource() {
+        Site site = getSite();
+        return Setting.isShortDramaSiteEnabled(site == null ? getKey() : site.getKey(),
+                site == null ? "" : site.getName());
+    }
+
+    private boolean isShortDramaQueueEligible(Result result) {
+        if (!PlaybackExperimentSetting.isDomainEnabled(PlaybackExperimentPolicy.Domain.EXO)) return false;
+        if (!isShortDramaSource() || service() == null || player() == null || !player().isExo()
+                || !player().supportsPlaylistQueue() || !PreloadSetting.isPreload(PlayerSetting.EXO)) return false;
+        if (MultiThreadProxySetting.get().enabled() || player().isRepeatOne() || mHistory == null
+                || mHistory.getOpening() > 0 || mHistory.getEnding() > 0
+                || pendingResumeSeekMs != C.TIME_UNSET || tmdbHistoryResumePending
+                || isAudioOnly() || shouldUseImmersiveAudio()) return false;
+        Flag flag = getFlag();
+        if (flag == null || flag.getEpisodes().size() < 2 || result == null || result.hasMsg()
+                || result.getRealUrl().isEmpty() || result.getDrm() != null
+                || result.needParse() || result.shouldUseParse()) return false;
+        String url = result.getRealUrl();
+        if (com.fongmi.android.tv.player.exo.MediaSourceFactory.isConcatenatingUrl(url)) return false;
+        PlaybackResourceClassifier.Classification classification = PlaybackResourceClassifier.classifyRequest(
+                url, null, result.getFormat());
+        if (classification.streamKind() == PlaybackAutoContext.StreamKind.LIVE
+                || classification.streamKind() == PlaybackAutoContext.StreamKind.LOW_LATENCY_LIVE) return false;
+        return classification.protocol() == PlaybackAutoContext.Protocol.HLS
+                || classification.protocol() == PlaybackAutoContext.Protocol.PROGRESSIVE_HTTP;
+    }
+
+    private ShortDramaQueueCoordinator.Episode shortDramaEpisode(Episode episode, int index) {
+        return new ShortDramaQueueCoordinator.Episode("", episode == null ? "" : episode.getName(), index);
+    }
+
+    private ShortDramaQueueCoordinator.MediaKind shortDramaMediaKind(String url, String format) {
+        PlaybackResourceClassifier.Classification classification = PlaybackResourceClassifier.classifyRequest(url, null, format);
+        return classification.protocol() == PlaybackAutoContext.Protocol.HLS
+                ? ShortDramaQueueCoordinator.MediaKind.HLS
+                : ShortDramaQueueCoordinator.MediaKind.PROGRESSIVE_MP4;
+    }
+
+    private boolean hasShortDramaStoredPosition(Episode episode) {
+        if (episode == null || skipEpisodePositionCache()) return false;
+        EpisodePositionCache.EpisodePosition cached = EpisodePositionCache.get().get(
+                getKey(), getId(), getFlag().getFlag(), episodePositionCacheName(episode, currentSourceSeasonNumber()));
+        return cached != null && cached.position > 0;
+    }
+
+    private MediaMetadata buildShortDramaMetadata(Episode episode) {
+        String title = mHistory == null ? getName() : mHistory.getVodName();
+        String name = episode == null ? "" : episode.getName();
+        return PlayerManager.buildMetadata(title, name.isEmpty() || title.equals(name) ? "" : name,
+                mHistory == null ? "" : mHistory.getVodPic());
+    }
+
+    private void beginShortDramaQueue() {
+        Flag flag = getFlag();
+        List<Episode> items = flag == null ? List.of() : flag.getEpisodes();
+        Episode current = getEpisode();
+        if (flag == null || current == null || items.size() < 2 || !isShortDramaQueueEligible(mAppliedPlayerResult)) return;
+        int currentIndex = getSelectedEpisodePosition(items);
+        List<ShortDramaQueueCoordinator.Episode> descriptors = new ArrayList<>(items.size());
+        for (int i = 0; i < items.size(); i++) descriptors.add(shortDramaEpisode(items.get(i), i));
+        ShortDramaQueueCoordinator.Session session = new ShortDramaQueueCoordinator.Session(
+                getId(), getKey(), flag.getFlag(), getEpisodePlayFlag(flag, current), descriptors,
+                currentIndex, mHistory.isRevPlay());
+        ShortDramaQueueCoordinator.Snapshot snapshot = mShortDramaQueue.begin(session);
+        mShortDramaQueueFallbackUsed = false;
+        mShortDramaQueueSessionActive = true;
+        mShortDramaQueuedSpec = null;
+        mShortDramaQueuedResult = null;
+        mShortDramaQueuedEpisode = null;
+        mShortDramaTransitionPositionMs = C.TIME_UNSET;
+        mShortDramaTransitionDurationMs = C.TIME_UNSET;
+        resolveShortDramaNext(snapshot);
+    }
+
+    private void resolveShortDramaNext(ShortDramaQueueCoordinator.Snapshot snapshot) {
+        if (snapshot == null || snapshot.session() == null || snapshot.queued() != null || mViewModel == null) return;
+        ShortDramaQueueCoordinator.ResolveRequest request = snapshot.nextRequest();
+        if (request == null) return;
+        int index = request.episode().index();
+        List<Episode> items = getFlag() == null ? List.of() : getFlag().getEpisodes();
+        if (index < 0 || index >= items.size()) return;
+        Episode target = items.get(index);
+        if (hasShortDramaStoredPosition(target)) return;
+        String key = snapshot.session().siteKey();
+        String playFlag = snapshot.session().playFlag();
+        long generation = request.generation();
+        mViewModel.playerContentIsolated(key, playFlag, target.getUrl(), player().getPlayerType(),
+                result -> enqueueShortDramaResult(generation, request.episode(), target, result),
+                error -> {
+                    if (SpiderDebug.isEnabled()) SpiderDebug.log("short-drama-queue", "resolve failed generation=%d type=%s", generation, error == null ? "unknown" : error.getClass().getSimpleName());
+                });
+    }
+
+    private void enqueueShortDramaResult(long generation,
+                                         ShortDramaQueueCoordinator.Episode descriptor,
+                                         Episode target,
+                                         Result result) {
+        if (isFinishing() || isDestroyed() || target == null || !isShortDramaQueueEligible(mAppliedPlayerResult)) return;
+        if (result == null || result.hasMsg() || result.getRealUrl().isEmpty() || result.getDrm() != null
+                || result.needParse() || result.shouldUseParse()) return;
+        String url = result.getRealUrl();
+        boolean concatenated = com.fongmi.android.tv.player.exo.MediaSourceFactory.isConcatenatingUrl(url);
+        PlaybackResourceClassifier.Classification classification = PlaybackResourceClassifier.classifyRequest(
+                url, null, result.getFormat());
+        boolean live = classification.streamKind() == PlaybackAutoContext.StreamKind.LIVE
+                || classification.streamKind() == PlaybackAutoContext.StreamKind.LOW_LATENCY_LIVE;
+        boolean hls = classification.protocol() == PlaybackAutoContext.Protocol.HLS;
+        boolean progressive = classification.protocol() == PlaybackAutoContext.Protocol.PROGRESSIVE_HTTP;
+        ShortDramaQueueCoordinator.ResolvedItem resolved = new ShortDramaQueueCoordinator.ResolvedItem(
+                url, new HashMap<>(result.getHeader()), result.getFormat(),
+                hls ? ShortDramaQueueCoordinator.MediaKind.HLS : progressive ? ShortDramaQueueCoordinator.MediaKind.PROGRESSIVE_MP4 : null,
+                false, result.needParse() || result.shouldUseParse(), live, false, concatenated, false);
+        ShortDramaQueueCoordinator.QueueItem item = mShortDramaQueue.acceptResolved(generation, descriptor, resolved);
+        if (item == null || !resolved.isEligible()) return;
+        PlaySpec spec = PlaySpec.from(result, activePlaybackKey(), buildShortDramaMetadata(target)).checkUa();
+        spec.setHeaders(new HashMap<>(result.getHeader()));
+        if (!player().appendPlaylistItem(spec, item.mediaId())) {
+            invalidateShortDramaQueue("append-failed");
+            return;
+        }
+        mShortDramaQueuedSpec = spec;
+        mShortDramaQueuedResult = result;
+        mShortDramaQueuedEpisode = target;
+        player().setPlaylistPreloadDurationMs(5_000L);
+        if (SpiderDebug.isEnabled()) SpiderDebug.log("short-drama-queue", "append generation=%d index=%d kind=%s", generation, target.getIndex(), resolved.kind());
+    }
+
+    private void saveShortDramaEpisodeProgress(Episode episode) {
+        saveShortDramaEpisodeProgress(episode,
+                mHistory == null ? C.TIME_UNSET : mHistory.getPosition(),
+                mHistory == null ? C.TIME_UNSET : mHistory.getDuration());
+    }
+
+    private void saveShortDramaEpisodeProgress(Episode episode, long position, long duration) {
+        if (episode == null || mHistory == null || service() == null || !isOwner() || tmdbHistoryResumePending) return;
+        String cacheName = episodePositionCacheName(episode, currentSourceSeasonNumber());
+        if (!TextUtils.isEmpty(cacheName) && !skipEpisodePositionCache()) {
+            long savedPosition = position > 0 ? position : mHistory.getPosition();
+            long savedDuration = duration > 0 ? duration : mHistory.getDuration();
+            EpisodePositionCache.get().put(getKey(), getId(), getFlag().getFlag(), cacheName,
+                    savedPosition, savedDuration);
+        }
+    }
+
+    private void updateHistoryAfterShortDramaTransition(Episode item) {
+        if (mHistory == null || item == null || getFlag() == null) return;
+        Episode historyEpisode = withSourceSeasonEpisodeIdentity(item);
+        EpisodePositionCache.EpisodePosition cached = skipEpisodePositionCache() ? null : EpisodePositionCache.get().get(
+                getKey(), getId(), getFlag().getFlag(), episodePositionCacheName(item, currentSourceSeasonNumber()));
+        if (cached != null) {
+            mHistory.setPosition(cached.position);
+            mHistory.setDuration(cached.duration);
+        } else {
+            mHistory.setPosition(C.TIME_UNSET);
+            mHistory.setDuration(C.TIME_UNSET);
+        }
+        setHistoryFlag(getFlag());
+        mHistory.setVodRemarks(getHistoryEpisodeName(item));
+        mHistory.setEpisodeUrl(item.getUrl());
+        if (historyEpisode.getTmdbEpisode() != null) mHistory.setTmdbEpisodePosition(historyEpisode);
+        PlaybackEventCollector.get().updateHistory(mHistory);
+    }
+
+    private void commitShortDramaTransition(ShortDramaQueueCoordinator.Transition transition,
+                                            Episode current,
+                                            Result result,
+                                            PlaySpec spec) {
+        Episode previous = transition.previous() == null ? null : getEpisodeByIndex(transition.previous().index());
+        if (previous != null) saveShortDramaEpisodeProgress(previous,
+                mShortDramaTransitionPositionMs, mShortDramaTransitionDurationMs);
+        mShortDramaTransitionPositionMs = C.TIME_UNSET;
+        mShortDramaTransitionDurationMs = C.TIME_UNSET;
+        Flag flag = getFlag();
+        if (flag == null || current == null || result == null || spec == null) {
+            fallbackShortDramaQueued();
+            return;
+        }
+        mFlagAdapter.toggle(current);
+        setEpisodeAdapter(flag.getEpisodes());
+        applyAudioQueueMetadata(current);
+        mBinding.widget.title.setText(getPlaybackControlTitle(current));
+        mBinding.widget.title.setSelected(true);
+        mInlineLyrics = getEpisodeInlineLyrics(current);
+        applyPlaybackArtwork(current);
+        clearLyrics();
+        clearKaraokeState();
+        if (result.hasDesc()) {
+            setText(mBinding.content, 0, result.getDesc());
+            setPlaybackLyrics(result.getDesc());
+        }
+        mAppliedPlayerResult = result;
+        mQualityAdapter.addAll(result);
+        mQualityAdapter.setPosition(mQualityAdapter.getPosition());
+        setUseParse(false);
+        setQualityVisible(result.getUrl().isMulti());
+        updateHistoryAfterShortDramaTransition(current);
+        player().setMetadata(buildShortDramaMetadata(current));
+        List<Danmaku> siteDanmakus = result.getDanmaku();
+        player().setDanmaku(siteDanmakus.isEmpty() ? Danmaku.empty() : siteDanmakus.get(0));
+        subtitlePlaybackSession.onPlaybackStarted(this, result);
+        DanmakuApi.cancel();
+        if (DanmakuApi.canAutoSearch(siteDanmakus)) searchShortDramaDanmaku(current, siteDanmakus);
+        loadTmdbRelatedVideosForCurrentEpisode();
+        mShortDramaQueuedSpec = null;
+        mShortDramaQueuedResult = null;
+        mShortDramaQueuedEpisode = null;
+        mShortDramaEndedFallbackScheduled = false;
+        App.removeCallbacks(mShortDramaEndedFallback);
+        ShortDramaQueueCoordinator.Snapshot snapshot = mShortDramaQueue.snapshot();
+        resolveShortDramaNext(snapshot);
+    }
+
+    private void searchShortDramaDanmaku(Episode episode, List<Danmaku> siteDanmakus) {
+        String episodeUrl = episode == null ? "" : episode.getUrl();
+        DanmakuApi.search(MediaTitleRequest.builder()
+                .siteKey(getKey()).vodId(getId()).rawTitle(mHistory.getVodName())
+                .rawRemarks(mHistory.getVodRemarks()).episodeName(episode == null ? "" : episode.getName())
+                .tmdbId(danmakuTmdbId()).tmdbSeasonNumber(danmakuTmdbSeasonNumber())
+                .source(MediaTitleLearningExample.SOURCE_DANMAKU_AUTO).allowAi(true).build(), danmaku -> {
+            Episode active = getEpisode();
+            if (player() == null || active == null || !TextUtils.equals(active.getUrl(), episodeUrl)) return;
+            if (DanmakuSetting.isSpiderFirst() && !siteDanmakus.isEmpty()) player().addDanmaku(danmaku);
+            else player().setDanmaku(danmaku);
+        });
+    }
+
+    private Episode getEpisodeByIndex(int index) {
+        Flag flag = getFlag();
+        if (flag == null || index < 0 || index >= flag.getEpisodes().size()) return null;
+        return flag.getEpisodes().get(index);
+    }
+
+    private void onShortDramaMediaItemTransition(androidx.media3.common.MediaItem mediaItem, int reason) {
+        if (mediaItem == null || reason != Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) return;
+        ShortDramaQueueCoordinator.Snapshot snapshot = mShortDramaQueue.snapshot();
+        ShortDramaQueueCoordinator.Transition transition = mShortDramaQueue.onMediaItemTransition(
+                snapshot.generation(), mediaItem.mediaId, ShortDramaQueueCoordinator.TransitionReason.AUTO);
+        if (transition == null) return;
+        PlaySpec spec = mShortDramaQueuedSpec;
+        Result result = mShortDramaQueuedResult;
+        Episode current = mShortDramaQueuedEpisode;
+        // Commit changes the manager's current PlaySpec, so close the previous
+        // episode's playback event before switching to the queued item.
+        if (service() != null) PlaybackEventCollector.get().onStop(player());
+        if (spec == null || result == null || current == null || !player().commitPlaylistTransition(spec)) {
+            fallbackShortDramaQueued();
+            return;
+        }
+        commitShortDramaTransition(transition, current, result, spec);
+    }
+
+    private void invalidateShortDramaQueue(String reason) {
+        App.removeCallbacks(mShortDramaEndedFallback);
+        mShortDramaEndedFallbackScheduled = false;
+        if (mViewModel != null) mViewModel.cancelPlayerContentIsolated();
+        if (player() != null && player().isExo()) player().removePlaylistItemsAfterCurrent();
+        mShortDramaQueue.invalidate();
+        mShortDramaQueueSessionActive = false;
+        mShortDramaQueuedSpec = null;
+        mShortDramaQueuedResult = null;
+        mShortDramaQueuedEpisode = null;
+        mShortDramaTransitionPositionMs = C.TIME_UNSET;
+        mShortDramaTransitionDurationMs = C.TIME_UNSET;
+        if (SpiderDebug.isEnabled()) SpiderDebug.log("short-drama-queue", "invalidate reason=%s", reason);
+    }
+
+    private void fallbackShortDramaQueued() {
+        if (mShortDramaQueueFallbackUsed || mShortDramaQueuedEpisode == null) return;
+        mShortDramaQueueFallbackUsed = true;
+        Episode target = mShortDramaQueuedEpisode;
+        saveShortDramaEpisodeProgress(getEpisode());
+        invalidateShortDramaQueue("queue-fallback");
+        if (!isFinishing() && !isDestroyed() && target != null) onItemClick(target);
+    }
+
+    private void scheduleShortDramaEndedFallback() {
+        if (mShortDramaEndedFallbackScheduled) return;
+        mShortDramaEndedFallbackScheduled = true;
+        App.post(mShortDramaEndedFallback, 1_500L);
+    }
+
+
     private void invalidatePlayerContent() {
         playerContentGeneration++;
         playerContentRequestId++;
@@ -2972,6 +3274,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
 
     @Override
     public void onItemClick(Flag item) {
+        invalidateShortDramaQueue("line-switch");
         if (mFlagAdapter.getItemCount() == 0 || item == null) return;
         int position = mFlagAdapter.indexOf(item);
         Flag resolved = mFlagAdapter.get(position < 0 ? 0 : position);
@@ -3151,6 +3454,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     @Override
     public void onItemClick(Episode item) {
         if (shouldEnterFullscreen(item)) return;
+        invalidateShortDramaQueue("manual-episode");
         selectEpisode(item, true);
     }
 
@@ -3226,6 +3530,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
 
     @Override
     public void onItemClick(Result result) {
+        invalidateShortDramaQueue("quality");
         updateActionQuality(result);
         beginPlayHealth();
         // 切清晰度也会重建 spec，字幕列表跟着重置，所以这里同样要恢复一次。
@@ -3235,6 +3540,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     private void reverseEpisode(boolean scroll) {
+        invalidateShortDramaQueue("reverse-sort");
         mFlagAdapter.reverse();
         // 倒序只改变列表顺序；保留已经显示的工具栏，避免一次重绑期间 TMDB 状态短暂未就绪时闪退。
         setEpisodeAdapter(getFlag().getEpisodes(), scroll, false);
@@ -3450,6 +3756,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
 
     @Override
     public void onItemClick(Parse item) {
+        invalidateShortDramaQueue("parse");
         setParse(item);
         onRefresh();
     }
@@ -3889,6 +4196,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     private void onRepeat() {
+        invalidateShortDramaQueue("repeat");
         player().setRepeatOne(!player().isRepeatOne());
         mBinding.control.action.repeat.setSelected(player().isRepeatOne());
     }
@@ -3898,6 +4206,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     private void onMultiThreadProxySaved(boolean applyNow) {
+        invalidateShortDramaQueue("multi-thread-proxy");
         setPlayParamsState();
         if (applyNow && player() != null && !player().isEmpty()) player().reloadCurrentMediaItem();
     }
@@ -4146,6 +4455,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     private void onRefresh() {
+        invalidateShortDramaQueue("refresh");
         saveHistory();
         if (mViewModel != null) mViewModel.cancelPlayerContent();
         invalidatePlayerContent();
@@ -4247,6 +4557,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     private void onPlayerKernel() {
+        invalidateShortDramaQueue("kernel");
         if (playerKernelSwitchRefreshing) return;
         PlayerKernelDialog.show(this, player().getPlayerType(), this::switchPlayerKernel, this::onExternalPlayer);
     }
@@ -4324,6 +4635,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     private void onDecode() {
+        invalidateShortDramaQueue("decode");
         mClock.setCallback(null);
         player().toggleDecode();
         setDecode();
@@ -5261,6 +5573,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
 
     @Override
     protected void onError(String msg) {
+        invalidateShortDramaQueue("error");
         recordPlayHealth(false, msg);
         subtitlePlaybackSession.stop(this);
         Track.delete(player().getKey());
@@ -5308,10 +5621,34 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
                 requestIntroSkipPlan();
                 if (!pendingResumeSeekApplied) applyAutoIntroSkip();
                 setAdFeedbackVisible(); // 播放地址确定后按格式刷新"有广告"按钮
+                if (!mShortDramaQueueSessionActive) beginShortDramaQueue();
                 break;
             case Player.STATE_ENDED:
+                if (mShortDramaQueue.shouldSuppressLegacyAutoAdvance()) {
+                    scheduleShortDramaEndedFallback();
+                    break;
+                }
                 checkEnded(true);
                 break;
+        }
+    }
+
+    @Override
+    public void onMediaItemTransition(@Nullable MediaItem mediaItem, int reason) {
+        super.onMediaItemTransition(mediaItem, reason);
+        onShortDramaMediaItemTransition(mediaItem, reason);
+    }
+
+    @Override
+    protected void onPlayerPositionDiscontinuity(Player.PositionInfo oldPosition,
+                                                   Player.PositionInfo newPosition,
+                                                   int reason) {
+        if (reason == Player.DISCONTINUITY_REASON_AUTO_TRANSITION
+                && mShortDramaQueue.shouldSuppressLegacyAutoAdvance()) {
+            mShortDramaTransitionPositionMs = oldPosition == null
+                    ? C.TIME_UNSET : Math.max(0L, oldPosition.positionMs);
+            mShortDramaTransitionDurationMs = player() == null
+                    ? C.TIME_UNSET : player().getDuration();
         }
     }
 
@@ -7735,6 +8072,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
     @Override
     protected void onDestroy() {
+        invalidateShortDramaQueue("destroy");
         cancelTvTouch();
         mIntroSkipPlayback.reset();
         cancelAiSeasonAnalysis(false);
