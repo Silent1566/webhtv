@@ -95,12 +95,20 @@
 
 回滚方式：提交前执行 `git merge --abort`；提交后使用本任务创建的 annotated recovery tag，或对合并提交执行 `git revert -m 1 <merge-commit>`。
 
+## 关闭记录（2026-09-12 13:50 CST）
+
+- 原子合并提交：`4353f020eb541ee74a2be98f1b5ce20eef3f4021`（`merge: 合并 beta 最新代码并完成 dev2 复评 (2026-09-12)`）。
+- 原始任务恢复标签：`recovery/beta-sync-review-dev2-20260912/20260912134415-4353f020eb54`，已推送。
+- `dev2` 已推送至 `origin`；在首次 PR 创建失败后，使用显式 head `Silent1566:dev2` 成功创建中文 PR [#258](https://github.com/Silent1566/webhtv/pull/258)，目标分支为 `beta`。
+- 最终 `git fetch --prune origin && git pull --ff-only origin dev2` 返回 `Already up to date`；当时 `HEAD == origin/dev2 == 4353f020eb541ee74a2be98f1b5ce20eef3f4021`，`origin/beta == 7c325e4a04891fc1df224d359039998500ec4235`。
+- GitHub 最终核对：PR #258 为 `OPEN`、非草稿、`mergeStateStatus=CLEAN`，head 为 `dev2@4353f020eb541ee74a2be98f1b5ce20eef3f4021`，base 为 `beta@7c325e4a04891fc1df224d359039998500ec4235`；PR 包含本地 TMDB 修复和本次合并复评提交。
+
 ## 状态
 
 - [x] 拉取 `origin/beta` 最新代码并确认当前目标提交。
 - [x] 无冲突合并 beta。
 - [x] 评审 beta 增量和已提交未推送的本地 TMDB 改动。
 - [x] 完成移动端定向测试、Leanback 资源处理和验证后复评。
-- [ ] `task_guard.sh finish` 原子提交并创建恢复标签。
-- [ ] 推送 `dev2`/恢复标签并创建中文 PR 到 `beta`。
-- [ ] 最后拉取远端最新代码并核对交付状态。
+- [x] `task_guard.sh finish` 原子提交并创建恢复标签。
+- [x] 推送 `dev2`/恢复标签并创建中文 PR 到 `beta`。
+- [x] 最后拉取远端最新代码并核对交付状态。
