@@ -2930,7 +2930,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     private boolean isShortDramaQueueEligible(Result result) {
-        if (!PlaybackExperimentSetting.isDomainEnabled(PlaybackExperimentPolicy.Domain.EXO)) return false;
+        if (!PlaybackExperimentSetting.isAllowed(PlaybackExperimentPolicy.Action.EXO_SHORT_DRAMA_QUEUE)) return false;
         if (!isShortDramaSource() || service() == null || player() == null || !player().isExo()
                 || !player().supportsPlaylistQueue() || !PreloadSetting.isPreload(PlayerSetting.EXO)) return false;
         if (MultiThreadProxySetting.get().enabled() || player().isRepeatOne() || mHistory == null
