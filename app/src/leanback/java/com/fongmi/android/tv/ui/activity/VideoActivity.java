@@ -7180,6 +7180,9 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
 
     private void onIntroSkipPlanLoaded() {
         if (isFinishing() || isDestroyed() || player() == null || player().isReleased() || !isOwner()) return;
+        // 查询可能在 EXO 首次 prepare/恢复定位期间提前返回。此时 seek 会与起播定位、
+        // 去广告或播放器内部准备竞争，造成重复加载，严重时停在黑屏。统一等 READY 后再应用。
+        if (player().getPlaybackState() != Player.STATE_READY) return;
         setOpeningEndingText();
         applyAutoIntroSkip();
         preloadAdjacentIntroSkipPlans();
@@ -7552,7 +7555,10 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
-        if (!hasFocus) cancelTvTouch();
+        if (!hasFocus) {
+            cancelTvTouch();
+            mKeyDown.releaseSpeed();
+        }
         if (!hasFocus || mDialogReturnFocus == null) return;
         View target = mDialogReturnFocus;
         mDialogReturnFocus = null;

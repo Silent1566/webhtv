@@ -1327,6 +1327,24 @@ public class VideoActivityLayoutTest {
     }
 
     @Test
+    public void introSkipCallbackWaitsForReadyBeforeSeeking() throws Exception {
+        Path mobilePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        Path leanbackPath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        assertIntroSkipCallbackWaitsForReady(mobilePath);
+        assertIntroSkipCallbackWaitsForReady(leanbackPath);
+    }
+
+    private static void assertIntroSkipCallbackWaitsForReady(Path sourcePath) throws Exception {
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int method = source.indexOf("private void onIntroSkipPlanLoaded()");
+        int readyGuard = source.indexOf("player().getPlaybackState() != Player.STATE_READY", method);
+        int apply = source.indexOf("applyAutoIntroSkip();", method);
+        assertTrue(sourcePath + " is missing onIntroSkipPlanLoaded", method >= 0);
+        assertTrue("intro-skip callback must not seek while EXO is still preparing", readyGuard > method);
+        assertTrue("intro-skip callback must apply only after the READY guard", apply > readyGuard);
+    }
+
+    @Test
     public void mobileTmdbImageReadyRebindsDeferredSummaryAndRevealsDetailContent() throws Exception {
         Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
