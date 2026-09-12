@@ -193,7 +193,7 @@
 
 - 原子提交：`00c171160ee0b310e3db3874500cdb7228236d45`（`merge: 合并 beta 最新代码并完成 dev2 缓冲卡死复评 (2026-09-12)`）。
 - 恢复标签：`recovery/beta-sync-review-dev2-20260912-followup/20260912181235-00c171160ee0`，已推送。
-- `dev2` 已推送，最终 `HEAD == origin/dev2 == 00c171160ee0b310e3db3874500cdb7228236d45`。
+- 代码交付提交 `00c171160ee0b310e3db3874500cdb7228236d45` 与文档收口提交 `e47fa3dee3718b8295389daced540fae5edcd52d` 均已推送到 `dev2`。
 - 中文 PR：[#262](https://github.com/Silent1566/webhtv/pull/262)，目标 `beta`，状态 `OPEN`、非草稿、`mergeStateStatus=CLEAN`；head 为 `dev2@00c171160ee0b310e3db3874500cdb7228236d45`，base 为 `beta@07fb0b5e13ac56a5cf234fd684ed2932ead4b91c`。
-- 最终执行 `git fetch --prune origin beta dev2 && git pull --ff-only origin dev2`，结果为 `Already up to date`；最终工作树干净。
+- 最终执行 `git fetch --prune origin beta dev2 && git pull --ff-only origin dev2` 后应保持 `Already up to date`；最终工作树干净。
 - **任务结论：通过并闭合，无剩余 P1/P2 问题。**
