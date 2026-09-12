@@ -64,24 +64,35 @@ public class EpisodeDetailDialogThemeTest {
     }
 
     @Test
-    public void cinemaEpisodeGuestCardsRoundPortraitsWithoutChangingTheirRailLayout() throws Exception {
+    public void cinemaEpisodeGuestCardsReuseOuterHorizontalLayoutWithoutPhotoRounding() throws Exception {
         String adapter = read(findMainJavaPath().resolve(Path.of(
                 "com", "fongmi", "android", "tv", "ui", "adapter", "TmdbPersonAdapter.java")));
         String mobileDialog = read(findMobileJavaPath().resolve(Path.of(
                 "com", "fongmi", "android", "tv", "ui", "dialog", "EpisodeDetailDialog.java")));
         String leanbackDialog = read(findLeanbackJavaPath().resolve(Path.of(
                 "com", "fongmi", "android", "tv", "ui", "dialog", "EpisodeDetailDialog.java")));
+        String mobileLayout = read(findMainResPath().resolve(Path.of(
+                "layout", "dialog_episode_detail.xml")));
 
-        assertTrue("guest portraits need the same 14dp radius as their parent cards",
-                adapter.contains("private static final int PHOTO_CORNER_RADIUS_DP = 14;")
-                        && adapter.contains("outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), cornerRadius);"));
-        assertTrue("the portrait must use its own outline so the lower edge is clipped too",
-                adapter.contains("holder.binding.photo.setOutlineProvider(roundedPhoto ? ROUNDED_PHOTO_OUTLINE : ViewOutlineProvider.BACKGROUND);")
-                        && adapter.contains("holder.binding.photo.setClipToOutline(true);"));
-        assertTrue("mobile episode details must request rounded portraits only for the cinema-stage theme",
-                mobileDialog.contains("adapter.setRoundedPhoto(Setting.isTmdbCinemaStyle());"));
-        assertTrue("both TV episode-media paths must request the cinema-stage rounded portrait treatment",
-                countOccurrences(leanbackDialog, "guestAdapter.setRoundedPhoto(Setting.isTmdbCinemaStyle());") >= 2);
+        assertTrue("cinema guest cards must reuse the outer actor rail's horizontal card geometry",
+                adapter.contains("params.width = dp(holder.itemView, cinema ? 250 : 90);")
+                        && adapter.contains("holder.binding.content.setOrientation(cinema ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL);")
+                        && adapter.contains("photoParams.width = dp(holder.itemView, cinema ? 86 : 90);")
+                        && adapter.contains("photoParams.height = dp(holder.itemView, cinema ? 86 : 118);"));
+        assertFalse("guest photos must not receive an independent rounded outline",
+                adapter.contains("setRoundedPhoto") || adapter.contains("ROUNDED_PHOTO_OUTLINE")
+                        || adapter.contains("setOutlineProvider"));
+        assertTrue("mobile episode guest cards must switch to the outer actor rail layout only in cinema style",
+                mobileDialog.contains("adapter.setCinema(cinema);")
+                        && mobileDialog.contains("boolean cinema = Setting.isTmdbCinemaStyle();")
+                        && mobileDialog.contains("params.height = ResUtil.dp2px(104);"));
+        assertTrue("both TV episode-media paths must switch guest cards to the cinema layout",
+                countOccurrences(leanbackDialog, "guestAdapter.setCinema(cinema);") >= 2
+                        && leanbackDialog.contains("guestsGrid.setRowHeight(ResUtil.dp2px(cinema ? 90 : 154));")
+                        && leanbackDialog.contains("params.height = ResUtil.dp2px(104);"));
+        assertFalse("the mobile episode detail must not render a cancel button",
+                mobileLayout.contains("android:id=\"@+id/close\"")
+                        || mobileDialog.contains("R.id.close"));
     }
 
     @Test
@@ -185,6 +196,12 @@ public class EpisodeDetailDialogThemeTest {
         Path moduleRelative = Path.of("src", "mobile", "java");
         if (Files.exists(moduleRelative)) return moduleRelative;
         return Path.of("app", "src", "mobile", "java");
+    }
+
+    private static Path findMainResPath() {
+        Path moduleRelative = Path.of("src", "main", "res");
+        if (Files.exists(moduleRelative)) return moduleRelative;
+        return Path.of("app", "src", "main", "res");
     }
 
     private static Path findLeanbackJavaPath() {

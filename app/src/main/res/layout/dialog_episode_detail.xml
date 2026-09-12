@@ -132,17 +132,6 @@
                 </LinearLayout>
             </androidx.core.widget.NestedScrollView>
 
-            <!-- 关闭按钮 -->
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/close"
-                style="?attr/materialButtonOutlinedStyle"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:minHeight="48dp"
-                android:text="@string/dialog_negative"
-                android:textColor="#FFFFFF"
-                app:strokeColor="#4A4A4A" />
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 </FrameLayout>
