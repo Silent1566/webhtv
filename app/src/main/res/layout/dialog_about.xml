@@ -131,6 +131,7 @@
             android:layout_height="44dp"
             android:layout_marginTop="10dp"
             android:minHeight="44dp"
+            android:nextFocusUp="@id/checkUpdate"
             android:text="@string/about_acknowledge"
             android:textColor="@color/dialog_primary_button_text"
             android:textSize="14sp"
