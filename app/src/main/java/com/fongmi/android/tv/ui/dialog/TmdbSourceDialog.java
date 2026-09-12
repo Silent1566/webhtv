@@ -80,10 +80,18 @@ public class TmdbSourceDialog {
         omdbApiKeyInput = view.findViewById(R.id.omdbApiKeyInput);
         EditText ruleInput = view.findViewById(R.id.ruleInput);
         EditText disabledRuleInput = view.findViewById(R.id.disabledRuleInput);
-        View addBtn = view.findViewById(R.id.add);
-        View addDisabledBtn = view.findViewById(R.id.addDisabled);
-        View manageBtn = view.findViewById(R.id.manage);
-        View resetBtn = view.findViewById(R.id.resetDefault);
+        TextView addBtn = view.findViewById(R.id.add);
+        TextView addDisabledBtn = view.findViewById(R.id.addDisabled);
+        TextView manageBtn = view.findViewById(R.id.manage);
+        TextView resetBtn = view.findViewById(R.id.resetDefault);
+        addBtn.setText(R.string.dialog_tmdb_add);
+        addDisabledBtn.setText(R.string.dialog_tmdb_add);
+        manageBtn.setText(R.string.dialog_tmdb_site_manage);
+        resetBtn.setText(R.string.dialog_tmdb_reset_default);
+        addBtn.setAllCaps(false);
+        addDisabledBtn.setAllCaps(false);
+        manageBtn.setAllCaps(false);
+        resetBtn.setAllCaps(false);
 
         TmdbConfig config = TmdbConfig.objectFrom(Setting.getTmdbConfig());
         tempEnabledRules = new ArrayList<>(config.getEnabledSites());

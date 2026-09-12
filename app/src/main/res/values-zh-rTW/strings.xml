@@ -507,6 +507,9 @@
     <string name="site_health_clear_site">清空本站</string>
     <string name="site_health_clear_site_title">清空站點統計？</string>
     <string name="site_health_clear_site_message">清空「%1$s」的健康樣本？</string>
+    <string name="site_health_clear_all">一鍵清空樣本</string>
+    <string name="site_health_clear_all_title">清空全部站點健康樣本？</string>
+    <string name="site_health_clear_all_message">將刪除全部播放鏈路健康樣本，且無法撤銷。</string>
     <string name="site_health_stage_search">搜尋</string>
     <string name="site_health_stage_detail">詳情</string>
     <string name="site_health_stage_parse">解析</string>

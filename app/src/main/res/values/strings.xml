@@ -536,6 +536,9 @@
     <string name="site_health_clear_site">Clear this site</string>
     <string name="site_health_clear_site_title">Clear site health?</string>
     <string name="site_health_clear_site_message">Clear health samples for %1$s?</string>
+    <string name="site_health_clear_all">Clear all samples</string>
+    <string name="site_health_clear_all_title">Clear all site health samples?</string>
+    <string name="site_health_clear_all_message">This will delete all playback-chain health samples. This action cannot be undone.</string>
     <string name="site_health_stage_search">Search</string>
     <string name="site_health_stage_detail">Detail</string>
     <string name="site_health_stage_parse">Parse</string>
