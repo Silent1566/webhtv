@@ -115,6 +115,7 @@
                 android:layout_height="44dp"
                 android:layout_weight="1"
                 android:minHeight="44dp"
+                android:nextFocusUp="@id/checkUpdate"
                 android:text="@string/setting_github_proxy_short"
                 android:textColor="@color/dialog_tonal_button_text"
                 android:textSize="14sp"
