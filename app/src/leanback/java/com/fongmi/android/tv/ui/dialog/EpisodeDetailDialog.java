@@ -389,10 +389,13 @@ public class EpisodeDetailDialog {
                             guestsLabel.setVisibility(View.VISIBLE);
                             guestsGrid.setVisibility(View.VISIBLE);
                             guestsGrid.setHorizontalSpacing(ResUtil.dp2px(12));
-                            guestsGrid.setRowHeight(ResUtil.dp2px(154));
+                            boolean cinema = Setting.isTmdbCinemaStyle();
+                            guestsGrid.setRowHeight(ResUtil.dp2px(cinema ? 90 : 154));
+                            if (cinema) resizeGuestGrid(guestsGrid);
 
                             TmdbPersonAdapter guestAdapter = new TmdbPersonAdapter(person -> TmdbPersonDialog.show(activity, person, site));
                             guestAdapter.setLight(light);
+                            guestAdapter.setCinema(cinema);
                             guestAdapter.setItems(guests);
                             guestsGrid.setAdapter(guestAdapter);
                         }
@@ -445,16 +448,25 @@ public class EpisodeDetailDialog {
             guestsLabel.setVisibility(View.VISIBLE);
             guestsGrid.setVisibility(View.VISIBLE);
             guestsGrid.setHorizontalSpacing(ResUtil.dp2px(12));
-            guestsGrid.setRowHeight(ResUtil.dp2px(154));
+            boolean cinema = Setting.isTmdbCinemaStyle();
+            guestsGrid.setRowHeight(ResUtil.dp2px(cinema ? 90 : 154));
+            if (cinema) resizeGuestGrid(guestsGrid);
 
             TmdbPersonAdapter guestAdapter = new TmdbPersonAdapter(person -> TmdbPersonDialog.show(activity, person, null));
             guestAdapter.setLight(light);
+            guestAdapter.setCinema(cinema);
             guestAdapter.setItems(guests);
             guestsGrid.setAdapter(guestAdapter);
         } else {
             guestsLabel.setVisibility(View.GONE);
             guestsGrid.setVisibility(View.GONE);
         }
+    }
+
+    private static void resizeGuestGrid(androidx.leanback.widget.HorizontalGridView guestsGrid) {
+        ViewGroup.LayoutParams params = guestsGrid.getLayoutParams();
+        params.height = ResUtil.dp2px(104);
+        guestsGrid.setLayoutParams(params);
     }
 
     /**

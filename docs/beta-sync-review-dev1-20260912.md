@@ -161,3 +161,54 @@ bash ./gradlew \
 - `origin/dev1@c2dcf52b5676eef00026f55f013eb58ae522804f` 已与本地提交一致。
 - recovery tag：`recovery/E-ROLLBACK-EXO/20260912151536-c2dcf52b5676`，已推送。
 - PR：#260，标题为“EXO：移除已废弃的 FFmpeg 模式设置”，目标分支为 `beta`，创建时状态为 OPEN、merge state 为 CLEAN。
+
+## 2026-09-12 远端 beta 后续增量复评与交付记录
+
+### Recovery anchor
+
+- **目标：** 在 PR #260 仍未合入期间，重新拉取并合并远端 `beta` 后续最新代码，评审新增 beta 增量与 dev1 相对最新 beta 的全部有效改动；若发现问题则修复、验证并复评，随后更新 dev1、PR #260，最后再次拉取远端最新代码。
+- **任务守卫：** `beta-sync-review-dev1-20260912-followup`，模式 `standard`；启动时工作树干净，保护 0 个预先脏路径；范围为 `app`、`docs`、`scripts`。
+- **开始时间：** 2026-09-12 17:21 CST（Asia/Shanghai，UTC+08:00）。
+- **拉取到的 beta：** `origin/beta@4a669575963614565cbde6a1e85a813792b8ec0a`，为 PR #261“合并 dev4：统一分集客串演员卡片并稳定移动端滚动”的合并提交；其父级旧 beta 基线为 `ccd608c503bed84711bb1bc75875c030b6be5ce5`。
+- **合并结果：** 使用 `git merge --no-ff --no-commit origin/beta` 成功，无冲突；最终 merge commit 由本阶段任务守卫在交付时生成。
+- **当前相对最新 beta 的有效改动：** 仍只有 `c2dcf52b5676eef00026f55f013eb58ae522804f` 的 EXO FFmpeg 模式清理；beta 新增的分集详情改动已完整进入当前合并树，未覆盖或回退 dev1 的 EXO 清理。
+- **回滚：** 合并提交可使用 `git revert -m 1 0264c4b1e1837b956c023c1ac9450bad93160ee4`；EXO 清理继续使用 `recovery/E-ROLLBACK-EXO/20260912151536-c2dcf52b5676`。
+
+### 新增 beta 增量与复评范围
+
+- `667992b22e`、`6a002d29f7`、`b6b18ac1dd` 及其承载提交已在 dev4 任务文档中完成首轮评审、定向验证和验证后复评；本次合并无内容冲突，因此沿用该覆盖证据，并复核合并后的四个受影响路径：
+  - `app/src/leanback/java/com/fongmi/android/tv/ui/dialog/EpisodeDetailDialog.java`
+  - `app/src/main/res/layout/dialog_episode_detail.xml`
+  - `app/src/mobile/java/com/fongmi/android/tv/ui/dialog/EpisodeDetailDialog.java`
+  - `app/src/testMobile/java/com/fongmi/android/tv/ui/dialog/EpisodeDetailDialogThemeTest.java`
+- 复核结论：影院样式与非影院样式的客串卡片几何、TV 两条媒体绑定路径、移动端横向列表滚动边界、关闭按钮移除和 TV 遥控焦点路径均保持闭合；未发现合并覆盖、重复接线、dangling reference、兼容性或回归问题。
+- `git diff --check` 通过；限定在当前差异的冲突标记检查无新增冲突。全仓库资产中的等号分隔内容不作为冲突标记，未将其误报为代码冲突。
+
+### 本阶段验证与验证后复评
+
+- 执行构建前重新检查实际 `GradleWrapperMain`、`gradlew`、assemble/bundle、Kotlin、AAPT2、Ninja、CMake、NDK 和 make 进程；未发现并发实际构建或打包任务，仅有可复用的 Gradle daemon，因此无需排队。
+- 定向命令：
+
+  ```text
+  bash ./gradlew \
+    :app:testMobileArm64_v8aDebugUnitTest \
+    --tests 'com.fongmi.android.tv.ui.dialog.EpisodeDetailDialogThemeTest' \
+    :app:compileMobileArm64_v8aDebugJavaWithJavac \
+    :app:compileLeanbackArm64_v8aDebugJavaWithJavac \
+    --no-daemon --max-workers=1 --console=plain
+  ```
+
+- 结果：`BUILD SUCCESSFUL`，98 个 actionable tasks 中 20 个执行、78 个为最新状态；`EpisodeDetailDialogThemeTest` 通过，Mobile 与 Leanback Arm64 Java 编译通过。仅有项目既存的 32 位 native 库、弃用 API 和未检查操作警告。
+- 验证后第二轮复评：重新检查合并提交相对第一父提交的 5 个 beta 增量路径，以及当前相对 `origin/beta` 的 16 个 EXO 清理代码路径；未发现需要修复的问题。没有触发“修复后再次验证”的代码循环。
+- 未将本次结果扩大解释为真实电视遥控器逐键、网络站源、字幕/弹幕时序或硬件播放验收；这些仍是既有未验证边界。
+
+### 交付状态与唯一下一步
+
+- [x] 已将 `origin/beta@4a669575963614565cbde6a1e85a813792b8ec0a` 合入 `dev1`，无冲突。
+- [x] 已复评 beta 后续增量及 dev1 相对最新 beta 的全部有效代码改动。
+- [x] 定向测试与 Mobile/Leanback Arm64 Java 编译通过，验证后复评通过。
+- [ ] 使用本阶段任务守卫 `finish` 原子提交本记录并创建恢复标签。
+- [ ] 推送 `dev1` 和恢复标签，更新现有中文 PR #260（目标 `beta`）。
+- [ ] 最后执行 `git pull --ff-only`，核对本地、远端分支和 PR 状态；若 beta 在此期间再次前进，按同一证据链继续处理新增提交。
+
+**唯一下一步：** 执行 `task_guard.sh finish`，随后推送分支/恢复标签并更新 PR。
