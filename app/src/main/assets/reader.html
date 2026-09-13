@@ -2252,6 +2252,11 @@ var restoringPage = false;
 var restoreGen = 0;
 var switchingChapter = false;
 
+/** 单调毫秒时钟：不受系统时间校正影响，用于恢复定位的等待预算。 */
+function nowMs(){
+    return (window.performance && performance.now) ? performance.now() : Date.now();
+}
+
 function novelBlocks(){
     if(pageMode) return document.querySelectorAll('.page-viewport .page p');
     var els = document.querySelectorAll('#reader .novel-content > p');

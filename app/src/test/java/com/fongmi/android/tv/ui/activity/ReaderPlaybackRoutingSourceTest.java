@@ -363,6 +363,20 @@ public class ReaderPlaybackRoutingSourceTest {
     }
 
     /**
+     * 恢复定位依赖单调时钟，升级 reader.html 时不能把函数定义漏掉。
+     * 缺失时漫画重进会在 restoreAnchor 首行抛 ReferenceError，历史节点因此不生效。
+     */
+    @Test
+    public void readerDefinesTheMonotonicClockUsedByRestore() throws Exception {
+        String source = read("app/src/main/assets/reader.html");
+
+        assertTrue("the monotonic clock must exist",
+                source.contains("function nowMs(){\n    return (window.performance && performance.now) ? performance.now() : Date.now();"));
+        assertTrue("restore must use the monotonic clock",
+                source.contains("var deadline = nowMs() + 60000;"));
+    }
+
+    /**
      * 迟到的切章结果不能重新拉起已关闭的阅读器。
      *
      * 1500ms 静默期只挡得住紧随返回的那一拨回调；用户点了下一章又马上返回时，
