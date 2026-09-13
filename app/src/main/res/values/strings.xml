@@ -970,6 +970,7 @@
     <string name="sync_item_webhome">WebHome saved data</string>
     <string name="sync_item_search">Search records</string>
     <string name="sync_item_history">Watch history</string>
+    <string name="history_watched_time">Watched %1$s</string>
     <string name="sync_item_keep">Favorites</string>
     <string name="sync_item_settings">App settings</string>
     <string name="sync_item_remote_relay">Relay server config</string>
@@ -1171,6 +1172,18 @@
     <string name="player_mpv_config">MPV config manager</string>
     <string name="player_mpv_render">MPV renderer</string>
     <string name="mpv_render_native_unavailable">Unavailable</string>
+    <string name="player_bluray_menu">Blu-ray disc menu</string>
+    <string name="disc_menu_root">Top menu</string>
+    <string name="disc_menu_popup">Pop-up menu</string>
+    <string name="disc_menu_previous">Back</string>
+    <string name="disc_menu_up">Up</string>
+    <string name="disc_menu_down">Down</string>
+    <string name="disc_menu_left">Left</string>
+    <string name="disc_menu_right">Right</string>
+    <string name="disc_menu_open">Disc menu</string>
+    <string name="disc_menu_open_hint">Open the disc top menu. Long press for navigation controls.</string>
+    <string name="disc_menu_navigation">Menu navigation</string>
+    <string name="disc_menu_touch_hint">Tap the disc buttons directly, or select with these controls.</string>
     <string name="mpv_config_target">%1$s · %2$s</string>
     <string name="mpv_config_default">Default</string>
     <string name="mpv_config_local">Local mpv.conf</string>
@@ -1221,6 +1234,7 @@
     <string name="mpv_config_script_text_edit">Create from text</string>
     <string name="mpv_config_script_text_edit_desc">Open the text editor to enter and save the Lua script</string>
     <string name="mpv_config_script_settings_title">Script settings</string>
+    <string name="mpv_config_script_enabled">Enable script</string>
     <string name="mpv_config_script_settings_desc">Set the name, enabled state, and trigger</string>
     <string name="mpv_config_script_open_editor">Open editor</string>
     <string name="mpv_config_script_import_url">Import script from URL</string>

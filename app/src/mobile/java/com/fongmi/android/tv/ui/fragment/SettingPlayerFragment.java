@@ -118,6 +118,10 @@ public class SettingPlayerFragment extends BaseFragment implements UaListener, B
         mBinding.lut.setOnClickListener(this::onLut);
         mBinding.mpvConfig.setOnClickListener(view -> MpvConfigDialog.show(this, () -> mBinding.mpvConfigText.setText(MpvConfigStore.summary())));
         mBinding.mpvRender.setOnClickListener(this::onMpvRender);
+        mBinding.blurayMenu.setOnClickListener(view -> {
+            PlayerSetting.putBlurayMenu(!PlayerSetting.isBlurayMenu());
+            mBinding.blurayMenuText.setText(getSwitch(PlayerSetting.isBlurayMenu()));
+        });
         mBinding.osd.setOnClickListener(this::onOsd);
         mBinding.playerButtons.setOnClickListener(view -> PlayerButtonConfigDialog.show(this, this::setPlayerButtonsText));
         mBinding.padLive.setOnClickListener(this::setPadLiveMode);
@@ -186,14 +190,6 @@ public class SettingPlayerFragment extends BaseFragment implements UaListener, B
         LutDialog.show(this, () -> mBinding.lutText.setText(LutSetting.getSummary()));
     }
 
-    private void setMpvRows() {
-        boolean visible = PlayerSetting.getPlayer() == PlayerSetting.MPV;
-        mBinding.mpvConfig.setVisibility(visible ? View.VISIBLE : View.GONE);
-        mBinding.mpvRender.setVisibility(visible ? View.VISIBLE : View.GONE);
-        mBinding.mpvConfigText.setText(MpvConfigStore.summary());
-        mBinding.mpvRenderText.setText(getMpvRenderText());
-    }
-
     private void onMpvRender(View view) {
         ChoiceDialog.showSingle(this, R.string.player_mpv_render, mpvRender, PlayerSetting.getMpvRender(), which -> {
             PlayerSetting.putMpvRender(which);
@@ -208,6 +204,16 @@ public class SettingPlayerFragment extends BaseFragment implements UaListener, B
             text += " (" + getString(R.string.mpv_render_native_unavailable) + ")";
         }
         return text;
+    }
+
+    private void setMpvRows() {
+        boolean visible = PlayerSetting.getPlayer() == PlayerSetting.MPV;
+        mBinding.mpvConfig.setVisibility(visible ? View.VISIBLE : View.GONE);
+        mBinding.mpvRender.setVisibility(visible ? View.VISIBLE : View.GONE);
+        mBinding.blurayMenu.setVisibility(visible ? View.VISIBLE : View.GONE);
+        mBinding.mpvConfigText.setText(MpvConfigStore.summary());
+        mBinding.mpvRenderText.setText(getMpvRenderText());
+        mBinding.blurayMenuText.setText(getSwitch(PlayerSetting.isBlurayMenu()));
     }
 
     private void onOsd(View view) {

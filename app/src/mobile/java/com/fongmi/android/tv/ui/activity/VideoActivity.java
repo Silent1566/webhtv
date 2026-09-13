@@ -49,6 +49,7 @@ import androidx.media3.common.MediaItem;
 import androidx.media3.common.MediaMetadata;
 import androidx.media3.common.Player;
 import androidx.media3.common.VideoSize;
+import androidx.media3.mpvplayer.MpvPlayer;
 import androidx.media3.ui.PlayerView;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -442,6 +443,8 @@ private int mAudioBackgroundRandomNonce;
     private Runnable mSeekProgressFallback;
     private Runnable mTmdbDetailTimeout;
     private Clock mClock;
+    private MpvPlayer mDiscMenuPlayer;
+    private final Runnable mDiscMenuStateListener = this::updateDiscMenuTools;
     private PiP mPiP;
     private String mContextWallUrl;
     private String mContextWallLockedUrl;
@@ -1525,21 +1528,24 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         mBinding.control.action.audio.setOnClickListener(guardedView(this::onTrack));
         mBinding.control.action.video.setOnClickListener(guardedView(this::onTrack));
         mBinding.control.action.scale.setOnClickListener(guarded(this::onScale));
-        mBinding.control.action.actionQuality.setOnClickListener(guarded(this::onQuality));
         mBinding.control.action.lut.setOnClickListener(guarded(this::onLut));
+        mBinding.control.action.karaoke.setOnClickListener(view -> onKaraokeMode());
         mBinding.control.action.speed.setOnClickListener(guarded(this::onSpeed));
         mBinding.control.action.reset.setOnClickListener(guarded(this::onReset));
-        mBinding.control.action.title.setOnClickListener(guarded(this::onTitle));
-        mBinding.control.action.player.setOnClickListener(guarded(this::onPlayerKernel));
-        mBinding.control.action.player.setOnLongClickListener(view -> onPlayerKernelLong());
         mBinding.control.action.change2.setOnClickListener(view -> onChange());
-        mBinding.control.shortDramaChangeSource.setOnClickListener(view -> onChange());
-        mBinding.control.shortDramaQuality.setOnClickListener(guarded(this::onQuality));
-        mBinding.control.shortDramaEpisodes.setOnClickListener(guarded(this::onEpisodes));
-        mBinding.control.action.fullscreen.setOnClickListener(guarded(this::onFullscreen));
-        mBinding.control.action.playParams.setOnClickListener(guarded(this::onPlayParams));
-        mBinding.control.action.multiThreadProxy.setOnClickListener(guarded(this::onMultiThreadProxy));
-        mBinding.control.action.codecCapability.setOnClickListener(guarded(this::onCodecCapabilityPanel));
+        mBinding.control.action.title.setOnClickListener(guarded(this::onTitle));
+        mBinding.control.action.discMenu.setOnClickListener(view -> {
+            hideControl();
+            openDiscMenu();
+        });
+        mBinding.control.action.discMenu.setOnLongClickListener(view -> {
+            hideControl();
+            showDiscMenuControls();
+            return true;
+        });
+        mBinding.discTools.fullscreen.setOnClickListener(view -> onFullscreen());
+        mBinding.control.action.player.setOnClickListener(guarded(this::onPlayerKernel));
+        mBinding.control.action.player.setOnLongClickListener(view -> onChooseLong());
         mBinding.control.action.prev.setOnClickListener(view -> checkPrev());
         mBinding.control.action.next.setOnClickListener(view -> checkNext());
         mBinding.control.action.decode.setOnClickListener(guarded(this::onDecode));
@@ -1575,6 +1581,9 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         mBinding.video.setOnTouchListener((view, event) -> mKeyDown.onTouchEvent(event));
         // 控制层显示时会先于 video 容器接收事件，空白区域必须直接转发给手势检测器。
         mBinding.control.getRoot().setOnTouchListener(this::onPlayerControlTouch);
+        mBinding.video.setOnTouchListener((view, event) ->
+                (!isVisible(mBinding.control.getRoot()) && dispatchDiscMenuTouch(event))
+                        || mKeyDown.onTouchEvent(event));
         mBinding.control.action.getRoot().setOnTouchListener(this::onActionTouch);
         mBinding.swipeLayout.setOnRefreshListener(this::onSwipeRefresh);
     }
@@ -1825,6 +1834,8 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         addActionButton(PlayerButtonSetting.NEXT, mBinding.control.action.next);
         addActionButton(PlayerButtonSetting.EPISODES, mBinding.control.action.episodes);
         applyActionButtonSettings();
+        addActionButton(PlayerButtonSetting.CHANGE, mBinding.control.action.change2);
+        PlayerButtonSetting.applyOrder(mBinding.control.action.container, mActionButtons);
         setupCustomActionButtons();
         setPlayParamsState();
     }
@@ -1847,7 +1858,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         boolean landscape = isLand();
         for (int index = 0; index < buttons.size(); index++) {
             MpvConfigStore.CustomButton button = buttons.get(index);
-            if (!button.enabled) continue;
+            if (!button.isButtonVisible()) continue;
             TextView view = new TextView(this);
             view.setTextSize(13);
             view.setTextColor(Color.WHITE);
@@ -5415,6 +5426,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         mBinding.control.top.setVisibility(isLock() ? View.GONE : View.VISIBLE);
         syncShortDramaControlLayout(shortDrama);
         mBinding.control.getRoot().setVisibility(View.VISIBLE);
+        updateDiscMenuTools();
         updateCustomButtonVisibility();
         if (mOsd != null) mOsd.setControlsVisible(true);
         checkFullscreenImg();
@@ -5428,6 +5440,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
 
     private void hideControl() {
         mBinding.control.getRoot().setVisibility(View.GONE);
+        updateDiscMenuTools();
         updateCustomButtonVisibility();
         if (mOsd != null) mOsd.setControlsVisible(false);
         App.removeCallbacks(mR1);
@@ -5876,7 +5889,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
             mHistory.setCreateTime(System.currentTimeMillis());
         }
         if (exit && service() != null) PlaybackEventCollector.get().onStop(player());
-        if (!mHistory.canSave() && !hasPlayback) return;
+        if (!canSavePlaybackHistory(mHistory)) return;
         History history = mHistory.copy();
         Task.execute(() -> {
             history.save();
@@ -7566,6 +7579,10 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         if (!isOwner() || mHistory == null) return;
         long position, duration;
         mHistory.setCreateTime(time);
+        if (hasDiscNavigationTimeline()) {
+            if (canSavePlaybackHistory(mHistory) && mHistory.canSync()) syncHistory();
+            return;
+        }
         updatePlaybackHistoryPosition();
         syncCurrentAudioPlaylistMetadata();
         syncKaraokePosition();
@@ -7583,7 +7600,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
     }
 
     private void updatePlaybackHistoryPosition() {
-        if (mHistory == null || tmdbHistoryResumePending) return;
+        if (mHistory == null || hasDiscNavigationTimeline()) return;
         long position = player().getPosition();
         long duration = player().getDuration();
         if (position > 0) mHistory.setPosition(position);
@@ -7789,7 +7806,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         return mHistory == null ? PlayerSetting.getDefaultSpeed() : mHistory.getPlaybackSpeed(PlayerSetting.getDefaultSpeed());
     }
 
-private long resolveInitialPlaybackPosition() {
+    private long resolveInitialPlaybackPosition() {
         if (mHistory == null) return C.TIME_UNSET;
         if (mHistory.isNearEnding()) {
             SpiderDebug.log("video-flow", "reset near-end history position=%d duration=%d key=%s", mHistory.getPosition(), mHistory.getDuration(), getHistoryKey());
@@ -7841,10 +7858,29 @@ private void checkOrientation() {
     }
 
     private void setTrackVisible() {
+        mBinding.control.action.discMenu.setVisibility(hasDiscMenu() ? View.VISIBLE : View.GONE);
+        updateDiscMenuTools();
         mBinding.control.action.text.setVisibility(player().haveTrack(C.TRACK_TYPE_TEXT) || player().isVod() ? View.VISIBLE : View.GONE);
         mBinding.control.action.audio.setVisibility(player().haveTrack(C.TRACK_TYPE_AUDIO) ? View.VISIBLE : View.GONE);
         mBinding.control.action.video.setVisibility(player().haveTrack(C.TRACK_TYPE_VIDEO) ? View.VISIBLE : View.GONE);
         applyActionButtonVisibility();
+    }
+
+    private void updateDiscMenuTools() {
+        MpvPlayer mpv = service() != null && isOwner()
+                && player().getPlayer() instanceof MpvPlayer active ? active : null;
+        if (mDiscMenuPlayer != mpv) {
+            if (mDiscMenuPlayer != null) mDiscMenuPlayer.removeDiscMenuStateListener(mDiscMenuStateListener);
+            mDiscMenuPlayer = mpv;
+            if (mpv != null) mpv.addDiscMenuStateListener(mDiscMenuStateListener);
+        }
+        boolean visible = mpv != null && mpv.isDiscMenuActive() && !isLock() && !isInPictureInPictureMode()
+                && !mAudioStageVisible && !isVisible(mBinding.control.getRoot());
+        mBinding.discTools.getRoot().setVisibility(visible ? View.VISIBLE : View.GONE);
+        mBinding.discTools.fullscreen.setImageResource(isFullscreen()
+                ? R.drawable.ic_control_fullscreen_exit : R.drawable.ic_control_fullscreen);
+        mBinding.discTools.fullscreen.setContentDescription(getString(isFullscreen()
+                ? R.string.play_exit_fullscreen : R.string.play_fullscreen));
     }
 
     private void setTitleVisible() {
@@ -9409,6 +9445,7 @@ private void checkOrientation() {
             restoreContextWall();
             if (isStop()) finish();
         }
+        updateDiscMenuTools();
     }
 
     @Override
@@ -9442,6 +9479,7 @@ private void checkOrientation() {
             Util.hideSystemUI(this);
             if (isVisible(mBinding.control.getRoot())) showControl();
         }
+        updateDiscMenuTools();
     }
 
     private void syncFullscreenForOrientation(int orientation) {
@@ -9477,6 +9515,7 @@ private void checkOrientation() {
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
         if (isFullscreen() && hasFocus) Util.hideSystemUI(this);
+        updateDiscMenuTools();
     }
 
     @Override
@@ -9490,6 +9529,7 @@ private void checkOrientation() {
         if (service() != null) refreshLyrics();
         syncLyricsPlaybackState();
         syncKaraokePosition();
+        updateDiscMenuTools();
     }
 
     @Override
@@ -9500,6 +9540,7 @@ private void checkOrientation() {
         stopAudioCoverRotation();
         if (PlayerSetting.isBackgroundOff()) mClock.stop();
         if (!isAudioOnly()) setStop(true);
+        updateDiscMenuTools();
     }
 
     @Override
@@ -9535,6 +9576,10 @@ private void checkOrientation() {
     }
     @Override
     protected void onDestroy() {
+        if (mDiscMenuPlayer != null) {
+            mDiscMenuPlayer.removeDiscMenuStateListener(mDiscMenuStateListener);
+            mDiscMenuPlayer = null;
+        }
         invalidateShortDramaQueue("destroy");
         mIntroSkipPlayback.reset();
         cancelAiSeasonAnalysis(false);

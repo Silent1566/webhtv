@@ -27,6 +27,14 @@ scripts/build_mpv_native.sh
 
 ## 固定输入
 
+P9 2026-09-10 修复保留以下独立补丁（顺序由脚本锁定）：
+
+- `mpv-discnav-poll.patch` 接在原盘输入补丁之后，在demux线程处理纯导航事件；菜单动画不再依赖暂停时的媒体包需求。
+- `ffmpeg-mediacodec-output-serialization.patch` 接在硬件音频补丁之后，将每个decoder context的输出释放、serial检查、flush与stop串行化，沿用原引用计数生命周期。
+- `mpv-mediacodec-embed-reset.patch` 接在输出时序诊断补丁之后，在VO reset时丢弃待提交图像/旧PTS，保留硬件直出与双Surface。
+
+这些补丁不改变库版本或公开JNI API。重建必须覆盖两ABI的FFmpeg和MPV，再由`--stage-only --install`验证并安装整套产物；不能仅复制旧prefix声称已构建。已有同锁缓存可在完整补丁应用验证后，显式调用框架的`buildall.sh -n --arch <arm64|armv7l> ffmpeg`及`mpv`增量重编受影响组件，并保存实际编译与链接日志。JNI源/头未改时不重编`libplayer.so`。
+
 所有上游仓库、commit、tar 包 SHA-256、NDK 和 Meson/Ninja 版本统一记录在：
 
 ```text

@@ -186,6 +186,10 @@ verify_abi() {
   contains_string "$directory/libmpv.so" "mpv v$MPV_VERSION"
   contains_string "$directory/libmpv.so" "v$LIBPLACEBO_VERSION"
   contains_string "$directory/libmpv.so" "WebHTV stream_cb controls enabled"
+  contains_string "$directory/libmpv.so" "disc-menu-active"
+  contains_string "$directory/libmpv.so" "discnav"
+  contains_string "$directory/libmpv.so" "WebHTV event-only disc navigation polling enabled"
+  contains_string "$directory/libmpv.so" "WebHTV MediaCodec reset discards pending output"
   contains_string "$directory/libmpv.so" "Vulkan AImageReader backend:"
   contains_string "$directory/libmpv.so" "Using Vulkan YCbCr AHardwareBuffer sampling"
   contains_string "$directory/libmpv.so" "Vulkan AImageReader sync-fd:"
@@ -215,6 +219,7 @@ verify_abi() {
   contains_string "$directory/libmvformat.so" "MMT protocol over TLV packets"
   contains_string "$directory/libmvformat.so" "WebHTV proxy range offset accepted"
   contains_string "$directory/libmvcodec.so" "failing hardware decode so the player can fall back"
+  contains_string "$directory/libmvcodec.so" "WebHTV MediaCodec output release/flush serialization enabled"
   contains_string "$directory/libmvcodec.so" "WebHTV hardware audio MediaCodec decoder:"
   contains_string "$directory/libmpv.so" "No usable fontconfig configuration file found, using fallback."
   if [ -n "$CURL_VERSION" ]; then
