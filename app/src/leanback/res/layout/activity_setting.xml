@@ -538,7 +538,7 @@
                 android:focusableInTouchMode="true"
                 android:nextFocusLeft="@id/incognito"
                 android:nextFocusRight="@id/doh"
-                android:nextFocusUp="@id/appearance"
+                android:nextFocusUp="@id/restore"
                 android:nextFocusDown="@id/restore"
                 android:orientation="horizontal">
 
