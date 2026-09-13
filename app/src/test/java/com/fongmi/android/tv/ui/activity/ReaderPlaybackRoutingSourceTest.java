@@ -377,6 +377,23 @@ public class ReaderPlaybackRoutingSourceTest {
     }
 
     /**
+     * 小说分页模式只显示当前子分页，不能把文档到底误判成章节最后一页。
+     */
+    @Test
+    public void pagedNovelProgressMustUseCurrentSubPage() throws Exception {
+        String source = read("app/src/main/assets/reader.html");
+
+        int effective = source.indexOf("function effectiveAnchorIndex()");
+        int pageGuard = source.indexOf("if(pageMode) return idx;", effective);
+        int documentEnd = source.indexOf("if(anchorsSettled() && atDocumentEnd()) return total - 1;", effective);
+
+        assertTrue("paged novels must bypass the document-end completion shortcut",
+                effective >= 0 && pageGuard > effective && documentEnd > pageGuard);
+        assertTrue("paged novel progress must still be saved through the effective anchor",
+                source.contains("AndroidReader.saveProgress(DATA.current|0, ch.url || '', ch.name || DATA.title || '', effectiveAnchorIndex(), anchorTotal());"));
+    }
+
+    /**
      * 迟到的切章结果不能重新拉起已关闭的阅读器。
      *
      * 1500ms 静默期只挡得住紧随返回的那一拨回调；用户点了下一章又马上返回时，

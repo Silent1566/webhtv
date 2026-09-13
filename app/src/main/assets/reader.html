@@ -2308,6 +2308,9 @@ function effectiveAnchorIndex(){
     var total = anchorTotal();
     if(total <= 0) return 0;
     var idx = Math.min(total - 1, currentAnchorIndex());
+    // 分页模式只有当前子分页可见，文档末尾不是“读到最后一页”。
+    // 直接沿用 currentPage，避免隐藏页导致 atDocumentEnd() 把进度强行写成末页。
+    if(pageMode) return idx;
     if(anchorsSettled() && atDocumentEnd()) return total - 1;
     return idx;
 }
