@@ -1694,6 +1694,7 @@ public final class MpvPlayer extends SimpleBasePlayer implements MPVLib.EventObs
         observe("eof-reached", MPVLib.MpvFormat.MPV_FORMAT_FLAG);
         observe("idle-active", MPVLib.MpvFormat.MPV_FORMAT_FLAG);
         observe("sub-visibility", MPVLib.MpvFormat.MPV_FORMAT_FLAG);
+        observe("disc-menu-active", MPVLib.MpvFormat.MPV_FORMAT_FLAG);
         observe("path", MPVLib.MpvFormat.MPV_FORMAT_STRING);
         observe("file-format", MPVLib.MpvFormat.MPV_FORMAT_STRING);
         observe("video-codec", MPVLib.MpvFormat.MPV_FORMAT_STRING);
