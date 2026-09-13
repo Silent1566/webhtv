@@ -101,7 +101,7 @@ if [[ "$SKIP_IDLE_CHECK" -eq 0 ]]; then
 fi
 
 echo "==> 开始打包 $TASK ..."
-./gradlew "$TASK"
+./gradlew "$TASK" --no-daemon
 
 if [[ ! -f "$APK" ]]; then
   echo "❌ 打包结束但未找到 APK: $APK" >&2
