@@ -135,6 +135,23 @@
             android:textSize="14sp"
             tools:text="第01集. 海边散步" />
 
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/historyProgress"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:ellipsize="marquee"
+            android:gravity="center"
+            android:includeFontPadding="false"
+            android:marqueeRepeatLimit="marquee_forever"
+            android:scrollHorizontally="true"
+            android:singleLine="true"
+            android:textColor="@color/white_70"
+            android:textSize="12sp"
+            android:visibility="gone"
+            tools:text="已看 12:34"
+            tools:visibility="visible" />
+
     </LinearLayout>
 
 </RelativeLayout>

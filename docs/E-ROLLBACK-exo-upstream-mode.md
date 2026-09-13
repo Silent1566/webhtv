@@ -68,3 +68,18 @@
 - 2026-09-11：任务守卫检查和 `git diff --check` 通过；在确认没有其他构建任务后，`./gradlew --no-daemon --max-workers=1 --console=plain -Dorg.gradle.jvmargs='-Xmx1536m -XX:MaxMetaspaceSize=384m -Dfile.encoding=UTF-8' :app:compileMobileArm64_v8aDebugJavaWithJavac :app:compileLeanbackArm64_v8aDebugJavaWithJavac` 通过。
 - 2026-09-11：同一构建槽位确认后，Mobile 目标测试类（`PlaybackResourceClassifierTest`、`ExoAutomaticVideoConstraintPolicyTest`、`ExoLoadControlPolicyTest`、`PreloadLifecycleTrackerTest`、`TrackUtilTest`、`PlaybackOwnershipSourceTest`、`TmdbDetailActivityLayoutTest`）和 Leanback 目标测试类（前六项）分别运行一次，均 `BUILD SUCCESSFUL`；日志分别保留于 `/tmp/e-rollback-exo-focused-mobile-20260911.log` 与 `/tmp/e-rollback-exo-focused-leanback-20260911.log`。
 - 2026-09-11：首次 `task_guard.sh finish` 暴露删除路径收口缺陷：已暂存删除且工作树不存在的路径不能继续使用 `git add -u`/`git add -A` pathspec；将 guard 分支改为逐路径执行 `git update-index --remove -- "$path"`，仍不触碰保护 dirty 路径。
+
+## Recovery anchor（2026-09-12 FFmpeg 模式清理后续）
+
+- 目标：移除 EXO 已不再消费的用户可选 FFmpeg 模式及其无效 AUTO 重建链；保留 `ExoUtil` 当前上游 `FfmpegRenderersFactory`、真实 FFmpeg 音视频 renderer 和普通解码/内核回退。
+- 当前分支/实施基线：`dev1` / `ccd608c503bed84711bb1bc75875c030b6be5ce5`；实施提交为 `c2dcf52b5676eef00026f55f013eb58ae522804f`。
+- 保护 dirty 路径：无（启动本阶段任务守卫时工作树干净）。
+- 已完成编辑：删除 `PlayerSetting` FFmpeg 模式 API、`PlayerManager` AUTO 模式失败遍历和刷新状态、手机/TV 设置行及资源、备份字段、过时文档和对应契约测试；保留 `ExoUtil` 的 FFmpeg renderer 构造。
+- 未验证编辑：无。
+- 回滚锚点：`recovery/E-ROLLBACK-EXO/20260912151536-c2dcf52b5676`。
+- 已完成验证：`git diff --check`、运行时/API/UI/资源引用审计和修改后 XML 解析均通过；运行时代码与用户可见资源已无 `ffmpeg_mode`、`FFMPEG_MODE_*`、`player_ffmpeg_mode`、`default_ffmpeg_mode` 或 `ffmpegMode` 引用。历史 EXO 评估/审计文档仍保留当时的模式术语作为审计记录；`ExoUtil` 仍保留 `FfmpegRenderersFactory`、`CompatFfmpegAudioRenderer` 和 `FfmpegVideoRenderer`。
+- 2026-09-12：在确认没有实际 `GradleWrapperMain`/编译器任务后，Mobile/Leanback Java 编译均通过；首次包含整个 `VideoActivityLayoutTest` 的测试命令因既有的 `leanbackSpeedBoostReleaseIsGuarded`（`VideoActivityLayoutTest.java:815`）失败而结束，未扩大范围修复。
+- 2026-09-12：按本次改动收窄后的 Mobile/Leanback `PlayerManagerTest`、`PlayerDisplaySettingSyncTest`、`PlayerSettingTest` 均通过；日志为 `/tmp/e-rollback-exo-ffmpeg-mode-cleanup-20260912.log` 与 `/tmp/e-rollback-exo-ffmpeg-mode-cleanup-focused-tests-20260912.log`。
+- 2026-09-12：当前提交相对 `origin/beta` 的全部差异完成首轮 adversarial 复评，未发现需要修复的源码问题；`origin/beta` 已是当前提交祖先，因此无需产生新的合并提交。
+- 2026-09-12：`dev1` 已推送至 `origin/dev1@c2dcf52b5676eef00026f55f013eb58ae522804f`，恢复标签已推送；已创建目标为 `beta` 的中文 PR #260（`EXO：移除已废弃的 FFmpeg 模式设置`）。
+- 当前状态：本阶段代码已提交、复评、推送并进入 PR；历史审计文档中的旧模式描述不属于运行时残留。

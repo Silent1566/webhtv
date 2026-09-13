@@ -2,7 +2,6 @@ package com.fongmi.android.tv.ui.dialog;
 
 import android.app.Activity;
 import android.app.Dialog;
-import android.content.res.ColorStateList;
 import android.content.res.Configuration;
 import android.text.TextUtils;
 import android.view.LayoutInflater;
@@ -31,7 +30,6 @@ import com.fongmi.android.tv.ui.adapter.EpisodeStillAdapter;
 import com.fongmi.android.tv.ui.adapter.TmdbPersonAdapter;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.Task;
-import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.gson.JsonObject;
@@ -93,7 +91,6 @@ public class EpisodeDetailDialog {
 
         Dialog dialog = new Dialog(activity, android.R.style.Theme_Black_NoTitleBar_Fullscreen);
         dialog.setContentView(view);
-        view.findViewById(R.id.close).setOnClickListener(v -> dialog.dismiss());
         if (dismissListener != null) dialog.setOnDismissListener(dismissListener);
         dialog.show();
         applyWindowSize(dialog);
@@ -171,7 +168,6 @@ public class EpisodeDetailDialog {
 
         Dialog dialog = new Dialog(activity, android.R.style.Theme_Black_NoTitleBar_Fullscreen);
         dialog.setContentView(view);
-        view.findViewById(R.id.close).setOnClickListener(v -> dialog.dismiss());
         if (dismissListener != null) dialog.setOnDismissListener(dismissListener);
         dialog.show();
         applyWindowSize(dialog);
@@ -281,7 +277,6 @@ public class EpisodeDetailDialog {
         TextView overview = view.findViewById(R.id.overview);
         TextView photoTitle = view.findViewById(R.id.photoTitle);
         TextView guestsTitle = view.findViewById(R.id.guestsTitle);
-        MaterialButton close = view.findViewById(R.id.close);
 
         int overlay = light ? 0x99F4F7FA : 0xB3000000;
         int panelColor = light ? 0xFFF4F7FA : 0xFF2A2A2A;
@@ -290,7 +285,6 @@ public class EpisodeDetailDialog {
         int secondary = light ? 0x9912202D : 0xFFAAAAAA;
         int body = light ? 0xCC12202D : 0xFFDDDDDD;
         int stroke = light ? 0x33424B57 : 0xFF4A4A4A;
-        int control = light ? 0xFFE7EDF3 : 0xFF2A2A2A;
 
         if (root != null) root.setBackgroundColor(overlay);
         if (panel != null) {
@@ -304,14 +298,12 @@ public class EpisodeDetailDialog {
         overview.setTextColor(body);
         photoTitle.setTextColor(primary);
         guestsTitle.setTextColor(primary);
-        close.setTextColor(primary);
-        close.setStrokeColor(ColorStateList.valueOf(stroke));
-        close.setBackgroundTintList(ColorStateList.valueOf(control));
-        close.setRippleColor(ColorStateList.valueOf(light ? 0x1F12202D : 0x33FFFFFF));
     }
 
     private static void bindHorizontalList(RecyclerView view, int spacingDp) {
         view.setLayoutManager(new LinearLayoutManager(view.getContext(), LinearLayoutManager.HORIZONTAL, false));
+        view.setNestedScrollingEnabled(false);
+        view.setOverScrollMode(View.OVER_SCROLL_NEVER);
         view.addItemDecoration(new RecyclerView.ItemDecoration() {
             @Override
             public void getItemOffsets(@NonNull android.graphics.Rect outRect, @NonNull View child, RecyclerView parent, @NonNull RecyclerView.State state) {
@@ -352,6 +344,13 @@ public class EpisodeDetailDialog {
             guestsList.setVisibility(View.VISIBLE);
             TmdbPersonAdapter adapter = new TmdbPersonAdapter(person -> TmdbPersonDialog.show(activity, person, null));
             adapter.setLight(light);
+            boolean cinema = Setting.isTmdbCinemaStyle();
+            adapter.setCinema(cinema);
+            if (cinema) {
+                ViewGroup.LayoutParams params = guestsList.getLayoutParams();
+                params.height = ResUtil.dp2px(104);
+                guestsList.setLayoutParams(params);
+            }
             adapter.setItems(guests);
             guestsList.setAdapter(adapter);
         }

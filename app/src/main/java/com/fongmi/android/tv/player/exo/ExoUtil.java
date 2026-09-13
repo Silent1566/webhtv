@@ -902,8 +902,6 @@ public class ExoUtil {
             MediaCodecSelector videoCodecSelector = getVideoCodecSelector(mediaCodecSelector);
             try {
                 ExoDv5GpuRenderer dv5Renderer = ExoDv5GpuRendererFactory.create(
-                        PlaybackExperimentSetting.isDomainEnabled(
-                                PlaybackExperimentPolicy.Domain.EXO),
                         context,
                         getCodecAdapterFactory(),
                         videoCodecSelector,

@@ -754,28 +754,6 @@ public class VideoActivityLayoutTest {
     }
 
     @Test
-    public void autoFfmpegFallbackResetRebuildsExoBeforeNextItem() throws Exception {
-        Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "player", "PlayerManager.java"));
-        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
-        String resetFallback = methodBody(source, "private void resetFfmpegModeFallback()", "static boolean shouldStopOnManualSwitchFailure");
-        String start = methodBody(source, "public void start(PlaySpec spec, long timeout, boolean playWhenReady)", "public void parse(String key, Result result, boolean useParse, MediaMetadata metadata)");
-        String parse = methodBody(source, "public void parse(String key, Result result, boolean useParse, MediaMetadata metadata, boolean playWhenReady)", "private void stopParse()");
-        String release = methodBody(source, "public void release()", "private void resetLutRuntimeState");
-
-        assertTrue("clearing an AUTO override must remember that the current EXO engine was built with a stale renderer mode",
-                resetFallback.contains("ffmpegModeEngineRefreshPending =")
-                        && resetFallback.contains("PlayerSetting.clearFFmpegModeOverride();"));
-        assertTrue("direct playback must refresh a stale AUTO-mode EXO engine before preparing the next item",
-                start.contains("refreshFfmpegModeEngineIfNeeded();")
-                        && start.indexOf("refreshFfmpegModeEngineIfNeeded();") < start.indexOf("setMediaItem(timeout);"));
-        assertTrue("parsed playback must also refresh a stale AUTO-mode EXO engine before starting parse work",
-                parse.contains("refreshFfmpegModeEngineIfNeeded();")
-                        && parse.indexOf("refreshFfmpegModeEngineIfNeeded();") < parse.indexOf("ParseJob.create(this).start(result, useParse);"));
-        assertTrue("destroying the manager must clear the process-wide AUTO override without scheduling another rebuild",
-                release.contains("clearFfmpegModeFallbackState();"));
-    }
-
-    @Test
     public void playbackSpeedInitializationUsesPersonalDefaultSpeed() throws Exception {
         String mobile = new String(Files.readAllBytes(findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"))), StandardCharsets.UTF_8);
         String leanback = new String(Files.readAllBytes(findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"))), StandardCharsets.UTF_8);
@@ -1324,6 +1302,24 @@ public class VideoActivityLayoutTest {
         assertTrue("TV pending resume seek must not skip short-drama readiness", shortDrama > reset);
         assertTrue("TV pending resume seek must not skip intro-skip planning", introSkip > shortDrama);
         assertTrue("TV auto intro skip should wait for the deferred seek to settle", autoSkipGuard > introSkip);
+    }
+
+    @Test
+    public void introSkipCallbackWaitsForReadyBeforeSeeking() throws Exception {
+        Path mobilePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        Path leanbackPath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        assertIntroSkipCallbackWaitsForReady(mobilePath);
+        assertIntroSkipCallbackWaitsForReady(leanbackPath);
+    }
+
+    private static void assertIntroSkipCallbackWaitsForReady(Path sourcePath) throws Exception {
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int method = source.indexOf("private void onIntroSkipPlanLoaded()");
+        int readyGuard = source.indexOf("player().getPlaybackState() != Player.STATE_READY", method);
+        int apply = source.indexOf("applyAutoIntroSkip();", method);
+        assertTrue(sourcePath + " is missing onIntroSkipPlanLoaded", method >= 0);
+        assertTrue("intro-skip callback must not seek while EXO is still preparing", readyGuard > method);
+        assertTrue("intro-skip callback must apply only after the READY guard", apply > readyGuard);
     }
 
     @Test
