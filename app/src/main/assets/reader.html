@@ -1950,6 +1950,7 @@ function comicShowPage(i){
         if(i - 1 >= 0 && comicImages[i-1]) comicImages[i-1].src = DATA.images[i-1];
     }
     updateComicInfo();
+    reportProgress();
 }
 
 function bindComicTouch(stage){
@@ -2251,6 +2252,11 @@ var restoringPage = false;
 var restoreGen = 0;
 var switchingChapter = false;
 
+/** 单调毫秒时钟：不受系统时间校正影响，用于恢复定位的等待预算。 */
+function nowMs(){
+    return (window.performance && performance.now) ? performance.now() : Date.now();
+}
+
 function novelBlocks(){
     if(pageMode) return document.querySelectorAll('.page-viewport .page p');
     var els = document.querySelectorAll('#reader .novel-content > p');
@@ -2271,6 +2277,7 @@ function anchorTotal(){
 var lastAnchorIndex = 0;
 function currentAnchorIndex(){
     if(pageMode) return currentPage;
+    if(DATA.kind === 2 && comicMode === 'h') return comicCur;
     var scrolled = window.scrollY || window.pageYOffset || 0;
     if(scrolled <= 0) return lastAnchorIndex = 0;
     var els = anchorEls();
@@ -2301,12 +2308,20 @@ function effectiveAnchorIndex(){
     var total = anchorTotal();
     if(total <= 0) return 0;
     var idx = Math.min(total - 1, currentAnchorIndex());
+    // 分页模式只有当前子分页可见，文档末尾不是“读到最后一页”。
+    // 直接沿用 currentPage，避免隐藏页导致 atDocumentEnd() 把进度强行写成末页。
+    if(pageMode) return idx;
     if(anchorsSettled() && atDocumentEnd()) return total - 1;
     return idx;
 }
 function reportProgress(){
     if(!window.AndroidReader || !AndroidReader.saveProgress) return;
     if(restoringPage || switchingChapter) return;
+    if(DATA.kind === 2 && comicMode === 'h') {
+        var ch = (DATA.chapters || [])[DATA.current] || {};
+        try { AndroidReader.saveProgress(DATA.current|0, ch.url || '', ch.name || DATA.title || '', comicCur, comicTotal); } catch(e){}
+        return;
+    }
     var ch = (DATA.chapters || [])[DATA.current] || {};
     try { AndroidReader.saveProgress(DATA.current|0, ch.url || '', ch.name || DATA.title || '', effectiveAnchorIndex(), anchorTotal()); } catch(e){}
 }
@@ -2357,6 +2372,10 @@ function restoreAnchor(index){
         restoringPage = false;
         updatePageInfo();
         reportProgress();
+        return;
+    }
+    if(DATA.kind === 2 && comicMode === 'h'){
+        comicShowPage(Math.max(0, Math.min(comicTotal - 1, Math.round(index || 0))));
         return;
     }
     restoringPage = true;
