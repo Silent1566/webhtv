@@ -344,6 +344,25 @@ public class ReaderPlaybackRoutingSourceTest {
     }
 
     /**
+     * 漫画横向翻页不是滚动文档：#reader 里只有当前页一张图，
+     * 通用滚动锚点会把每一页都算成第 0 页，翻页也不上报，导致历史节点丢失。
+     */
+    @Test
+    public void horizontalComicProgressUsesItsOwnPageState() throws Exception {
+        String source = read("app/src/main/assets/reader.html");
+
+        assertTrue("horizontal comics must read the active page instead of scroll anchors",
+                source.contains("if(DATA.kind === 2 && comicMode === 'h') return comicCur;"));
+        assertTrue("horizontal comics must save their page and total explicitly",
+                source.contains("AndroidReader.saveProgress(DATA.current|0, ch.url || '', ch.name || DATA.title || '', comicCur, comicTotal);"));
+        assertTrue("page flips must report progress immediately",
+                source.contains("comicShowPage(i){\n    comicCur = i;")
+                        && source.contains("updateComicInfo();\n    reportProgress();"));
+        assertTrue("restore must use comic page state, not the scroll restoration loop",
+                source.contains("comicShowPage(Math.max(0, Math.min(comicTotal - 1, Math.round(index || 0))));"));
+    }
+
+    /**
      * 迟到的切章结果不能重新拉起已关闭的阅读器。
      *
      * 1500ms 静默期只挡得住紧随返回的那一拨回调；用户点了下一章又马上返回时，

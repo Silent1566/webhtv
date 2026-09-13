@@ -1950,6 +1950,7 @@ function comicShowPage(i){
         if(i - 1 >= 0 && comicImages[i-1]) comicImages[i-1].src = DATA.images[i-1];
     }
     updateComicInfo();
+    reportProgress();
 }
 
 function bindComicTouch(stage){
@@ -2271,6 +2272,7 @@ function anchorTotal(){
 var lastAnchorIndex = 0;
 function currentAnchorIndex(){
     if(pageMode) return currentPage;
+    if(DATA.kind === 2 && comicMode === 'h') return comicCur;
     var scrolled = window.scrollY || window.pageYOffset || 0;
     if(scrolled <= 0) return lastAnchorIndex = 0;
     var els = anchorEls();
@@ -2307,6 +2309,11 @@ function effectiveAnchorIndex(){
 function reportProgress(){
     if(!window.AndroidReader || !AndroidReader.saveProgress) return;
     if(restoringPage || switchingChapter) return;
+    if(DATA.kind === 2 && comicMode === 'h') {
+        var ch = (DATA.chapters || [])[DATA.current] || {};
+        try { AndroidReader.saveProgress(DATA.current|0, ch.url || '', ch.name || DATA.title || '', comicCur, comicTotal); } catch(e){}
+        return;
+    }
     var ch = (DATA.chapters || [])[DATA.current] || {};
     try { AndroidReader.saveProgress(DATA.current|0, ch.url || '', ch.name || DATA.title || '', effectiveAnchorIndex(), anchorTotal()); } catch(e){}
 }
@@ -2357,6 +2364,10 @@ function restoreAnchor(index){
         restoringPage = false;
         updatePageInfo();
         reportProgress();
+        return;
+    }
+    if(DATA.kind === 2 && comicMode === 'h'){
+        comicShowPage(Math.max(0, Math.min(comicTotal - 1, Math.round(index || 0))));
         return;
     }
     restoringPage = true;
