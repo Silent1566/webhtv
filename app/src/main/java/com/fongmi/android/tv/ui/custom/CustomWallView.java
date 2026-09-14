@@ -28,6 +28,9 @@ import com.fongmi.android.tv.databinding.ViewWallBinding;
 import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.setting.Setting;
+import com.fongmi.android.tv.theme.ThemeController;
+import com.fongmi.android.tv.theme.ThemeResolver;
+import com.fongmi.android.tv.theme.ThemeProfileStore;
 import com.fongmi.android.tv.utils.FileUtil;
 import com.github.catvod.crawler.SpiderDebug;
 
@@ -80,8 +83,10 @@ public class CustomWallView extends FrameLayout implements DefaultLifecycleObser
             observerAdded = true;
         }
         removeCallbacks(refreshRunnable);
-        if (loadedPlaceholder && isStaticBuiltInWall()) theme();
-        else post(refreshRunnable);
+        if (loadedPlaceholder && isStaticBuiltInWall()) {
+            theme();
+            applyThemeScrim();
+        } else post(refreshRunnable);
     }
 
     @Override
@@ -101,6 +106,7 @@ public class CustomWallView extends FrameLayout implements DefaultLifecycleObser
         stop();
         load();
         theme();
+        applyThemeScrim();
         SpiderDebug.log("startup", "wall refresh cost=%sms", System.currentTimeMillis() - start);
     }
 
@@ -135,6 +141,14 @@ public class CustomWallView extends FrameLayout implements DefaultLifecycleObser
         else if (WallMotionPolicy.isVideoMotion(motionEnabled, type)) loadVideo(FileUtil.getWall(wall));
         else if (WallMotionPolicy.isGifMotion(motionEnabled, type)) loadGif(FileUtil.getWall(wall));
         else loadImage();
+    }
+
+    private void applyThemeScrim() {
+        if (binding == null || binding.themeScrim == null) return;
+        boolean dark = (getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK)
+                == android.content.res.Configuration.UI_MODE_NIGHT_YES;
+        binding.themeScrim.setBackgroundColor(ThemeController.wallpaperScrim(
+                ThemeResolver.resolve(ThemeProfileStore.load(), dark, Setting.getWallColor())));
     }
 
     private void theme() {
