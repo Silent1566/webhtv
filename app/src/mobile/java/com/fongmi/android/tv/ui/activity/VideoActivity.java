@@ -1578,7 +1578,6 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         mBinding.control.action.reset.setOnLongClickListener(view -> onResetToggle());
         mBinding.control.action.ending.setOnLongClickListener(view -> onEndingReset());
         mBinding.control.action.opening.setOnLongClickListener(view -> onOpeningReset());
-        mBinding.video.setOnTouchListener((view, event) -> mKeyDown.onTouchEvent(event));
         // 控制层显示时会先于 video 容器接收事件，空白区域必须直接转发给手势检测器。
         mBinding.control.getRoot().setOnTouchListener(this::onPlayerControlTouch);
         mBinding.video.setOnTouchListener((view, event) ->
@@ -1978,6 +1977,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
 
     private void applyActionButtonVisibility() {
         if (mActionButtons != null) PlayerButtonSetting.applyVisibility(mActionButtons);
+        updateDiscMenuTools();
         updateCustomButtonVisibility();
     }
 
@@ -5449,6 +5449,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
 
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
+        if (dispatchDiscMenuKey(event)) return true;
         if (isVisible(mBinding.control.getRoot()) && PlayerControlFocusHelper.handleKey(mBinding.control.getRoot(), mBinding.control.play, event)) return true;
         return super.dispatchKeyEvent(event);
     }
@@ -5788,11 +5789,11 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
     }
 
     /**
-     * 原生增强把详情与播放放在同一页：进入即揭开页面骨架，加载态只由播放器窗口内那一层表达，
-     * 不再让详情区整块转圈与播放器转圈同屏叠出两层「加载中」。
+     * 原生增强以及从独立 TMDB 详情页直达播放时都立即揭开页面骨架，
+     * 加载态只由播放器窗口内那一层表达，避免整页先显示主题色遮盖层。
      */
     private boolean shouldRevealShellWhileLoading() {
-        return Setting.isOriginalEnhancedDetailPage();
+        return Setting.isOriginalEnhancedDetailPage() || getIntent().hasExtra(EXTRA_TMDB_DETAIL_THEME);
     }
 
     private boolean canRevealPlaybackContent() {
@@ -5889,7 +5890,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
             mHistory.setCreateTime(System.currentTimeMillis());
         }
         if (exit && service() != null) PlaybackEventCollector.get().onStop(player());
-        if (!canSavePlaybackHistory(mHistory)) return;
+        if (!mHistory.canSave() && !hasPlayback) return;
         History history = mHistory.copy();
         Task.execute(() -> {
             history.save();
@@ -7600,7 +7601,8 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
     }
 
     private void updatePlaybackHistoryPosition() {
-        if (mHistory == null || hasDiscNavigationTimeline()) return;
+        if (mHistory == null || tmdbHistoryResumePending) return;
+        if (hasDiscNavigationTimeline()) return;
         long position = player().getPosition();
         long duration = player().getDuration();
         if (position > 0) mHistory.setPosition(position);
@@ -7772,6 +7774,11 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
     private void setPosition() {
         pendingResumeSeekMs = C.TIME_UNSET;
         if (mHistory == null) {
+            tmdbHistoryResumePending = false;
+            mInitialPlaybackPosition = C.TIME_UNSET;
+            return;
+        }
+        if (hasDiscMenu()) {
             tmdbHistoryResumePending = false;
             mInitialPlaybackPosition = C.TIME_UNSET;
             return;

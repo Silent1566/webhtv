@@ -1545,7 +1545,7 @@ public final class MpvPlayer extends SimpleBasePlayer implements MPVLib.EventObs
         setOption("hwdec", config.hwdec());
         setOption("hwdec-codecs", "h264,hevc,mpeg4,mpeg2video,vp8,vp9,av1");
         setOption("ao", config.ao());
-        setOption("ad", MpvAudioDecoderPolicy.hardwareFirstDecoderList());
+        setOption("ad", MpvAudioDecoderPolicy.decoderList(config.audioSpdif()));
         if (!TextUtils.isEmpty(config.audioSpdif())) setOption("audio-spdif", config.audioSpdif());
         setOption("audio-set-media-role", "yes");
         setOption("tls-verify", config.tlsVerify() ? "yes" : "no");
@@ -2031,16 +2031,16 @@ public final class MpvPlayer extends SimpleBasePlayer implements MPVLib.EventObs
             case "chapter-list" -> {
                 if (!shouldDeferStartupMetadataRefresh()) handleChapterListProperty(value);
             }
-            case "chapter-list/count" -> {
-                observeChapterProperties((int) Math.max(0, longValue(value, 0)));
-                if (!shouldDeferStartupMetadataRefresh()) scheduleChapterRefresh();
-            }
             case "disc-menu-active" -> {
                 setDiscMenuActive(Boolean.TRUE.equals(value));
                 Log.d(TAG, "disc menu active=" + discMenuActive + " available=" + discMenuAvailable);
                 PlaybackTrace.log("mpv", playbackTraceId, "disc menu active=%s available=%s",
                         discMenuActive, discMenuAvailable);
                 if (discMenuActive) requestIsoOsdSurface();
+            }
+            case "chapter-list/count" -> {
+                observeChapterProperties((int) Math.max(0, longValue(value, 0)));
+                if (!shouldDeferStartupMetadataRefresh()) scheduleChapterRefresh();
             }
             default -> {
                 if (property.startsWith("track-list/")) scheduleTrackRefresh(property);

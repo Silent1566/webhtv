@@ -1166,9 +1166,6 @@
     <string name="player_kernel_external">外调</string>
     <string name="player_scale">缩放比例</string>
     <string name="player_lut">LUT 调色</string>
-    <string name="player_mpv_config">MPV 配置管理</string>
-    <string name="player_mpv_render">MPV 渲染后端</string>
-    <string name="mpv_render_native_unavailable">当前不可用</string>
     <string name="player_bluray_menu">蓝光原盘菜单</string>
     <string name="disc_menu_root">主菜单</string>
     <string name="disc_menu_popup">弹出菜单</string>
@@ -1181,6 +1178,9 @@
     <string name="disc_menu_open_hint">打开原盘主菜单；长按打开菜单导航</string>
     <string name="disc_menu_navigation">菜单导航</string>
     <string name="disc_menu_touch_hint">可直接点击画面中的菜单按钮，也可使用方向键选择</string>
+    <string name="player_mpv_config">MPV 配置管理</string>
+    <string name="player_mpv_render">MPV 渲染后端</string>
+    <string name="mpv_render_native_unavailable">当前不可用</string>
     <string name="mpv_config_target">%1$s · %2$s</string>
     <string name="mpv_config_default">默认</string>
     <string name="mpv_config_local">本地 mpv.conf</string>

@@ -4948,3 +4948,56 @@ C3 的触发来源主要是 media `990abc2368fd74779f525ee345734470659f3d53`（`
 - beta：`IntroSkipServiceTest` 22 项与 `VideoActivityLayoutTest` 153 项共 175 项通过，失败/错误/跳过均为 0；片段身份、速度键释放和移动详情页外层滚动改动未发现需阻断提交的问题。
 - 结论：允许提交并推送当前合并树；C9 仍需保留真实设备播放和 OEM 行为作为后续补验，不把 Java/单测结果扩大为设备端完全验收。
 - 下一动作：task guard finish 创建两父合并提交和本地 annotated recovery tag，然后推送当前 `dev4` 与该新 tag。
+
+## 检查点 59：2026-09-12 C4 dev1 增量同步 fish2018/main
+
+### 59.1 冻结源与关系
+
+- 仓库：`https://github.com/fish2018/webhtv.git`；GitHub API 核对 `main` 为 `fc62397591701b2232ae7de4f50a032bd7742064`。
+- 本地 `upstream/main` 已指向同一完整 commit；一次 `git fetch upstream --prune` 因 GnuTLS 握手异常失败，故本轮不把失败的网络传输当作源内容，使用 API 与本地 ref 双重一致的冻结源。
+- C4 上一轮上游目标：`784b90420d646eb6c7ddcc63ad622a92c65b02b4`；本地实施基线：`dev1@da34bfc400ccff4c07287ef1e3cfa61327aaee39`。两者没有可用共同祖先（上游历史为 grafted 独立根），因此不能用普通 merge 直接生成有效三方索引；本轮按冻结基线对上游净变更做等价文件级三方合并，并在收口时保留上游目标作为 provenance parent。
+
+### 59.2 本轮完整上游 commit ledger 与处置
+
+| # | 完整 commit | 功能区域 | 处置 |
+| ---: | --- | --- | --- |
+| 1 | `2b36396c0d76b312154d560c0c94e55909b951a2` | MPV HDMV Blu-ray 菜单导航基础能力 | 纳入；新增 App 菜单策略、ISO/菜单接线与 native patch/test 资产，保留本地 MPV 生命周期和输出策略 |
+| 2 | `0c16bd37c05828014d382aa3ccfcd1e08b30b3fe` | MPV Blu-ray patch 可应用性修复 | 纳入；直接采用上游 patch 内容 |
+| 3 | `831b70433e3dbdfd6f119c6036a3c8cf22d85ae4` | MPV HDMV native 资产打包 | 纳入；18 个 `.so` 中属于本提交链的上游版本按用户规则直接覆盖，后续提交版本继续覆盖到最终目标 |
+| 4 | `55a6365a9ff8c1a096ceb4275d50b95c1ed5f488` | Blu-ray 缓冲/音频 underrun 与双 ABI 资产 | 纳入；Java 及脚本三方处理，native 资产直接采用最终上游文件 |
+| 5 | `f4e4f9e16fb6b99bf72f8a19a5cb184a488e0580` | ISO visit/饥饿跟踪 | 纳入；保留本地缓存、取消和生命周期保护 |
+| 6 | `5b774430f155039d843f2e6a79aefc7df9f918cc` | HDMV authored return 路由 | 纳入；patch 与 App 逻辑按三方结果合并 |
+| 7 | `4ded105fa7ea0e7aacd19a256919bd44d643ce96` | 任务文档正常跟踪规则 | 纳入；不删除本地任务文档 |
+| 8 | `310f8feef5c0a05e5dae6c0a063453113214ea2c` | 合并 Blu-ray 菜单背景的 authored return | 纳入；保留本地播放器改动 |
+| 9 | `1ec569658157d1a9323b5c2ef00cb3468b876fca` | ISO cache 分页渐进加载 | 纳入；ISO Java/ native 相关路径按三方结果合并 |
+| 10 | `d4657ae879c32f2f93f30dd832735a02d0999487` | 光盘菜单响应性与 TV 输出回退 | 纳入；保留本地输出失败回退状态机 |
+| 11 | `881c8bca2e6831d6a7d32f67c22c64ce37541e0b` | 历史卡片显示观看时间 | 纳入；在本地 playback/progress/marquee 合同上补入 `historyProgress` |
+| 12 | `55612b3571222e7c5f91eb9713f5e98bc0dc173c` | 观看时间位置调整 | 纳入；布局与本地 playback 标签组合 |
+| 13 | `c4b042bc5441b9e168293f7cadae5798c4608da5` | 观看时间位于文件名上方 | 纳入；布局按现有资源结构适配 |
+| 14 | `48dfa4d67a433390e9959b934b87331a78f11436` | 观看时间/文件名标签顺序 | 纳入；保留本地名称/备注跑马灯行为 |
+| 15 | `aa676a941ee101cbb40c9641840e3b638b81c3d4` | 子菜单触摸路由到父菜单 | 纳入；App/native patch/test 全部保留 |
+| 16 | `1ce8df96075f703a16cecfa077fd715c66b90279` | MPV script 按钮执行时机可见性 | 纳入；保留现有脚本配置兼容和测试 |
+| 17 | `f27805e30212e7f34410f20bb6f8979f44203c79` | MPV 独立 script enable 开关 | 纳入；配置模型、UI、资源和测试三方合并 |
+| 18 | `969261479167bca3f8f16f11551de7dcc9290112` | Mobile 播放器 source switch 接线 | 纳入；去重现有 `change2` binding，避免 Data Binding 重复 ID |
+| 19 | `d546c11ca875f31970e2389114020189ad032c08` | Exo DV5 GPU 映射默认准入 | 纳入；只合并既有 Exo renderer 默认策略，不改 ABI/native |
+| 20 | `fc62397591701b2232ae7de4f50a032bd7742064` | 115 过期分享状态优先于 metadata | 纳入；服务逻辑、缓存命名空间和测试保留 |
+
+### 59.3 用户覆盖策略实施结果
+
+- 二进制：最终 18 个 MPV `.so` 路径逐文件使用 `upstream/main` 内容，hash 校验通过；没有上游新增 `.aar`、`.jar` 或 `.apk` 需要覆盖，本轮未重新编译 native。
+- Java/Python：上游净变更包含 Java 文件，不包含 Python 文件；Java 采用基于旧目标的三方合并，冲突处保留 WebHTV 本地播放器、TMDB、生命周期、诊断和 UI 行为，并补入 Blu-ray 菜单、历史观看时间、脚本开关、DV5 默认映射和 115 状态修复。
+- XML/资源/patch/脚本：按代码契约组合；修复上游与本地已有 `change2` 的重复 Data Binding ID，保留全部上游菜单资源和本地既有控制入口。
+- 任务文档：保留 `docs/` 及任务文档，不接受上游删除本地评估资料的行为。
+
+### 59.4 验证与边界
+
+- 通过：18 路二进制 hash 对齐 `upstream/main`；`bash scripts/verify_mpv_native_assets.sh --require-elf`；`git diff --check`；无 `<<<<<<<`/`|||||||`/`>>>>>>>` 冲突标记。
+- 通过：Mobile/Leanback Arm64 Java 编译和受影响 JVM 单测，Gradle `BUILD SUCCESSFUL`。
+- 未执行：APK 打包、安装、连接设备播放、native 重建和 Blu-ray 实盘回归；因此不把 Java/ELF 校验扩大为设备播放完全验收。APK 打包前已观察可用内存达到约 1.7 GiB，但本轮没有执行 APK 打包。
+- 远端：不 push 分支或 tag。
+
+### 59.5 当前恢复锚点
+
+- 当前 HEAD 为 merge commit `65facf4bcbed78e702a1ec0fd86c50778fcf639f`，第一父提交 `da34bfc400ccff4c07287ef1e3cfa61327aaee39`，第二父提交 `fc62397591701b2232ae7de4f50a032bd7742064`；上游目标已是 HEAD 祖先。
+- Recovery tag：`recovery/merge-upstream-binary-override-java-merge/20260913015933-65facf4bcbed`。
+- 当前状态：完成（本地未推送）；工作树收口后不再重复构建、测试或扩展研究。

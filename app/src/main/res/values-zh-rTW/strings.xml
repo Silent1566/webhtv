@@ -1124,9 +1124,6 @@
     <string name="player_kernel_external">外調</string>
     <string name="player_scale">縮放比例</string>
     <string name="player_lut">LUT 調色</string>
-    <string name="player_mpv_config">MPV 設定管理</string>
-    <string name="player_mpv_render">MPV 渲染後端</string>
-    <string name="mpv_render_native_unavailable">目前不可用</string>
     <string name="player_bluray_menu">藍光原盤選單</string>
     <string name="disc_menu_root">主選單</string>
     <string name="disc_menu_popup">彈出選單</string>
@@ -1139,6 +1136,9 @@
     <string name="disc_menu_open_hint">開啟原碟主選單；長按開啟選單導覽</string>
     <string name="disc_menu_navigation">選單導覽</string>
     <string name="disc_menu_touch_hint">可直接點選畫面中的選單按鈕，也可使用方向鍵選擇</string>
+    <string name="player_mpv_config">MPV 設定管理</string>
+    <string name="player_mpv_render">MPV 渲染後端</string>
+    <string name="mpv_render_native_unavailable">目前不可用</string>
     <string name="mpv_config_target">%1$s · %2$s</string>
     <string name="mpv_config_default">預設</string>
     <string name="mpv_config_local">本機 mpv.conf</string>

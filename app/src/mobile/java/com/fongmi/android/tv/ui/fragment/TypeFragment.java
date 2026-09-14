@@ -215,7 +215,7 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
     @Override
     public void onItemClick(Vod item) {
         if (item.isAction()) {
-            mViewModel.action(getKey(), item.getAction());
+            com.fongmi.android.tv.content.ActionCardHelper.handleAction(requireActivity(), getKey(), item.getAction());
         } else if (item.isFolder()) {
             getParent().openFolder(item.getId(), mExtends);
         } else {

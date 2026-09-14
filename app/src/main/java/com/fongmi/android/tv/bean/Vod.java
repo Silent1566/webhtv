@@ -224,7 +224,10 @@ public class Vod implements Parcelable, Diffable<Vod> {
     }
 
     public String getAction() {
-        return TextUtils.isEmpty(action) ? "" : action;
+        // 兼容动作卡协议：部分源将动作 JSON 放在 vod_id，并用 vod_tag=action 标记。
+        if (!TextUtils.isEmpty(action)) return action;
+        if ("action".equals(getTag()) && !TextUtils.isEmpty(getId()) && getId().trim().startsWith("{")) return getId();
+        return "";
     }
 
     public Cate getCate() {

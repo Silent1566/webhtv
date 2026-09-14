@@ -124,6 +124,7 @@ public class App extends Application implements Application.ActivityLifecycleCal
         // 猫源动作项排最前：它的判定最便宜（只比字符串），且命中就该直接开网页，
         // 不该让音频/阅读器 handler 先按站点规则把它认走
         com.fongmi.android.tv.content.ContentDispatcher.registerHandler(new com.fongmi.android.tv.content.CatActionContentHandler());
+        com.fongmi.android.tv.content.ContentDispatcher.registerHandler(new com.fongmi.android.tv.content.GameContentHandler());
         com.fongmi.android.tv.content.ContentDispatcher.registerHandler(new com.fongmi.android.tv.content.AudioContentHandler());
         com.fongmi.android.tv.content.ContentDispatcher.registerHandler(new com.fongmi.android.tv.content.ReaderContentHandler());
         registerReaderFallback();

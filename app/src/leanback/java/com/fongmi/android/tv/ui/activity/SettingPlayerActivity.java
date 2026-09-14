@@ -112,11 +112,11 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
         mBinding.scale.setOnClickListener(this::setScale);
         mBinding.lut.setOnClickListener(this::onLut);
         mBinding.mpvConfig.setOnClickListener(view -> MpvConfigDialog.show(this, () -> mBinding.mpvConfigText.setText(MpvConfigStore.summary())));
-        mBinding.mpvRender.setOnClickListener(this::setMpvRender);
         mBinding.blurayMenu.setOnClickListener(view -> {
             PlayerSetting.putBlurayMenu(!PlayerSetting.isBlurayMenu());
             mBinding.blurayMenuText.setText(getSwitch(PlayerSetting.isBlurayMenu()));
         });
+        mBinding.mpvRender.setOnClickListener(this::setMpvRender);
         mBinding.osd.setOnClickListener(this::onOsd);
         mBinding.playerButtons.setOnClickListener(view -> PlayerButtonConfigDialog.show(this, this::setPlayerButtonsText));
         mBinding.speed.setOnClickListener(this::onSpeed);
@@ -190,11 +190,11 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
     private void setMpvRows() {
         boolean visible = PlayerSetting.getPlayer() == PlayerSetting.MPV;
         mBinding.mpvConfig.setVisibility(visible ? View.VISIBLE : View.GONE);
-        mBinding.mpvRender.setVisibility(visible ? View.VISIBLE : View.GONE);
         mBinding.blurayMenu.setVisibility(visible ? View.VISIBLE : View.GONE);
+        mBinding.mpvRender.setVisibility(visible ? View.VISIBLE : View.GONE);
         mBinding.mpvConfigText.setText(MpvConfigStore.summary());
-        mBinding.mpvRenderText.setText(getMpvRenderText());
         mBinding.blurayMenuText.setText(getSwitch(PlayerSetting.isBlurayMenu()));
+        mBinding.mpvRenderText.setText(getMpvRenderText());
     }
 
     private void setMpvRender(View view) {

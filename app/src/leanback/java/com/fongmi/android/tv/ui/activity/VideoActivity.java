@@ -1568,6 +1568,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         });
         mIntroSkipPlayback.setSkipNoticeListener(IntroSkipKinds::notifySkipped);
         mIntroSkipPlayback.setSkipConfirmDismisser(this::dismissIntroSkipConfirm);
+
     }
 
     private void dismissIntroSkipConfirm() {
@@ -1612,7 +1613,6 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         addActionButton(PlayerButtonSetting.REPEAT, mBinding.control.action.repeat);
         PlayerButtonSetting.applyOrder(mBinding.control.action.container, mActionButtons);
         setupCustomActionButtons();
-        placePanDiagnosticAction();
         updatePanDiagnosticAction();
         updateDiscMenuButton();
     }
@@ -1645,6 +1645,12 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         mBinding.array.setAdapter(mArrayAdapter = new ArrayAdapter(this));
         mArrayAdapter.setOnKeyListener((view, keyCode, event) -> onArrayKey(event));
         mBinding.array.setOnKeyListener((view, keyCode, event) -> onArrayKey(event));
+        mBinding.array.addOnChildViewHolderSelectedListener(new OnChildViewHolderSelectedListener() {
+            @Override
+            public void onChildViewHolderSelected(@NonNull RecyclerView parent, @Nullable RecyclerView.ViewHolder child, int position, int subposition) {
+                if (child != null) selectEpisodeSegment(position, false);
+            }
+        });
         mBinding.part.setHorizontalSpacing(ResUtil.dp2px(8));
         mBinding.part.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
         mBinding.part.setAdapter(mPartAdapter = new PartAdapter(item -> initSearch(item, false)));
@@ -1764,23 +1770,13 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     private void applyActionButtonVisibility() {
-        if (mActionButtons != null) PlayerButtonSetting.applyVisibility(mActionButtons);
         updateCustomButtonVisibility();
         mBinding.control.action.cast.setVisibility(isFullscreen() ? View.GONE : View.VISIBLE);
         updateImmersiveAudioAction();
         updatePanDiagnosticAction();
         updateDiscMenuButton();
+        if (mActionButtons != null) PlayerButtonSetting.applyVisibility(mActionButtons);
     }
-
-    private void placePanDiagnosticAction() {
-        ViewGroup container = mBinding.control.action.container;
-        View diagnostic = mBinding.control.action.panDiagnostic;
-        View anchor = mBinding.control.action.playParams;
-        if (diagnostic.getParent() != container || anchor.getParent() != container) return;
-        container.removeView(diagnostic);
-        container.addView(diagnostic, Math.min(container.getChildCount(), container.indexOfChild(anchor) + 1));
-    }
-
 
     private void updatePanDiagnosticAction() {
         if (mBinding == null) return;
@@ -3326,6 +3322,8 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     private void setEpisodeAdapter(List<Episode> items, boolean scrollToCurrent) {
+        mBinding.control.action.episodes.setVisibility(items.size() < 2 ? View.GONE : View.VISIBLE);
+        applyActionButtonVisibility();
         setEpisodeAdapter(items, scrollToCurrent, true);
     }
 
@@ -5767,7 +5765,8 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
     }
 
     private void updatePlaybackHistoryPosition() {
-        if (mHistory == null || hasDiscNavigationTimeline()) return;
+        if (mHistory == null || tmdbHistoryResumePending) return;
+        if (hasDiscNavigationTimeline()) return;
         long position = player().getPosition();
         long duration = player().getDuration();
         if (position > 0) mHistory.setPosition(position);
