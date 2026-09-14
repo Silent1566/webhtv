@@ -765,3 +765,27 @@ bash ./gradlew :app:testMobileArm64_v8aDebugUnitTest \
 - 回滚：撤销阶段 D 提交即可回到阶段 C；profile schema、`theme_profile_json`、`theme_profile_last_good`、旧 `theme_color` 镜像和播放器路径保持兼容。
 - 剩余：阶段 E 的 leanback 完整焦点主题、TV 语义资源完整迁移，以及受签名/哈希保护的静态主题索引、预览图、版本回滚和缓存。
 - 下一步：建立 `THEME-COLOR-E-20260908` 独立 guard；不把 TV/社区索引与阶段 D 的 mobile 导入导出混写。
+
+## 17. 实施记录：主题色彩总开关（2026-09-14）
+
+### 已实现
+
+- 新增 `theme_color_enabled` 本地偏好开关，默认关闭；该键不加入备份白名单，避免导入/导出兼容性扩散。
+- 开关关闭时 `ThemeController` 完全回退到既有原生主题：夜间模式强制跟随系统，`resolve()` 返回无操作静态 tokens，动态色返回 `0`，壁纸 scrim 返回透明，mobile/leanback 的 Activity 树应用为空操作。
+- 开关关闭时 `AppearanceDialog` 摘要显示既有 `setting_off` 文案；主题编辑器仍可打开，但草稿只在开关开启并点击“应用”后影响运行时。
+- 开关开启时保持 `0503f8e3cf` 引入的主题配色行为不变；`BaseActivity` 调用点与播放器契约保持原样。
+
+### 验证
+
+```text
+./gradlew :app:testMobileArm64_v8aDebugUnitTest --tests 'com.fongmi.android.tv.theme.*' --no-daemon --console=plain
+
+./gradlew :app:compileMobileArm64_v8aDebugJavaWithJavac :app:compileLeanbackArm64_v8aDebugJavaWithJavac --no-daemon --console=plain
+```
+
+结果：先以新增开关契约测试确认 RED，实现后 35 项主题测试通过；mobile 与 leanback Java 编译通过。未进行连接设备、视觉截图或全量 assemble 验收。
+
+### 回滚与剩余范围
+
+- 回滚：撤销本任务提交即可回到无总开关的主题系统状态；`theme_color`、`theme_profile_json`、壁纸和播放器路径保持兼容。
+- 剩余：如有需要，后续可为开关增加设置页专用交互；本任务不改 ThemeEditorDialog 与字符串资源。

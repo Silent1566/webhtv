@@ -46,6 +46,45 @@ public class ThemeControllerSourceTest {
     }
 
     @Test
+    public void themeColorMasterSwitchDefaultsOffAndShortCircuitsRuntime() throws Exception {
+        String setting = read("app/src/main/java/com/fongmi/android/tv/setting/Setting.java");
+        String controller = read("app/src/main/java/com/fongmi/android/tv/theme/ThemeController.java");
+        String wall = read("app/src/main/java/com/fongmi/android/tv/ui/custom/CustomWallView.java");
+        String mobileAppearance = read("app/src/mobile/java/com/fongmi/android/tv/ui/dialog/AppearanceDialog.java");
+        String leanbackAppearance = read("app/src/leanback/java/com/fongmi/android/tv/ui/dialog/AppearanceDialog.java");
+
+        assertTrue(setting.contains("public static boolean isThemeColorEnabled()"));
+        assertTrue(setting.contains("Prefers.getBoolean(\"theme_color_enabled\")"));
+        assertTrue(setting.contains("public static void putThemeColorEnabled(boolean enabled)"));
+        assertTrue(setting.contains("Prefers.put(\"theme_color_enabled\", enabled)"));
+
+        assertTrue(controller.contains("public static void applyNightMode(Context context) {\n"
+                + "        if (!Setting.isThemeColorEnabled()) {"));
+        assertTrue(controller.contains("AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM;"));
+        assertTrue(controller.contains("public static ThemeTokens resolve(Context context) {\n"
+                + "        if (!Setting.isThemeColorEnabled()) return disabledTokens();"));
+        assertTrue(controller.contains("public static int dynamicColor(Context context) {\n"
+                + "        if (!Setting.isThemeColorEnabled()) return 0;"));
+        assertTrue(controller.contains("public static void apply(Activity activity) {\n"
+                + "        if (!Setting.isThemeColorEnabled()) return;"));
+        assertTrue(controller.contains("public static void applyLeanback(Activity activity) {\n"
+                + "        if (!Setting.isThemeColorEnabled()) return;"));
+        assertTrue(controller.contains("public static void apply(View root, ThemeTokens tokens) {\n"
+                + "        if (!Setting.isThemeColorEnabled() || root == null || tokens == null) return;"));
+        assertTrue(controller.contains("public static void applyLeanback(View root, ThemeTokens tokens) {\n"
+                + "        if (!Setting.isThemeColorEnabled() || root == null || tokens == null) return;"));
+        assertTrue(controller.contains("public static int wallpaperScrim(ThemeTokens tokens) {\n"
+                + "        if (!Setting.isThemeColorEnabled()) return 0;"));
+
+        assertTrue(wall.contains("private void applyThemeScrim() {\n"
+                + "        if (!Setting.isThemeColorEnabled()) return;"));
+        assertTrue(mobileAppearance.contains("private String getThemeText() {\n"
+                + "        if (!Setting.isThemeColorEnabled()) return getString(R.string.setting_off);"));
+        assertTrue(leanbackAppearance.contains("private String getThemeText() {\n"
+                + "        if (!Setting.isThemeColorEnabled()) return getString(R.string.setting_off);"));
+    }
+
+    @Test
     public void playerControlRootsAreExplicitForMobileLayouts() throws Exception {
         for (String file : new String[]{
                 "app/src/mobile/res/layout/view_control_vod.xml",

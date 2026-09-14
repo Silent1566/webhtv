@@ -119,6 +119,7 @@ public final class AppearanceDialog extends DialogFragment {
     }
 
     private String getThemeText() {
+        if (!Setting.isThemeColorEnabled()) return getString(R.string.setting_off);
         ThemeProfile profile = ThemeProfileStore.load();
         String background = profile.background == null ? ThemeProfile.BACKGROUND_WALLPAPER : profile.background.type;
         int backgroundRes = ThemeProfile.BACKGROUND_SOLID.equals(background)

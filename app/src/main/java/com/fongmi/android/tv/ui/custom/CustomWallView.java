@@ -144,6 +144,7 @@ public class CustomWallView extends FrameLayout implements DefaultLifecycleObser
     }
 
     private void applyThemeScrim() {
+        if (!Setting.isThemeColorEnabled()) return;
         if (binding == null || binding.themeScrim == null) return;
         boolean dark = (getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK)
                 == android.content.res.Configuration.UI_MODE_NIGHT_YES;

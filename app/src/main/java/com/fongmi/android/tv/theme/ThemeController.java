@@ -53,6 +53,12 @@ public final class ThemeController {
     }
 
     public static void applyNightMode(Context context) {
+        if (!Setting.isThemeColorEnabled()) {
+            if (AppCompatDelegate.getDefaultNightMode() != AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM) {
+                AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM);
+            }
+            return;
+        }
         ThemeProfile profile = ThemeProfileStore.load();
         int mode = ThemeProfile.MODE_DARK.equals(profile.mode)
                 ? AppCompatDelegate.MODE_NIGHT_YES
@@ -63,6 +69,7 @@ public final class ThemeController {
     }
 
     public static ThemeTokens resolve(Context context) {
+        if (!Setting.isThemeColorEnabled()) return disabledTokens();
         boolean systemDark = (context.getResources().getConfiguration().uiMode
                 & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
         return ThemeResolver.resolve(ThemeProfileStore.load(), systemDark, Setting.getWallColor());
@@ -70,22 +77,25 @@ public final class ThemeController {
 
     /** Returns zero when the profile deliberately disables content-based dynamic color. */
     public static int dynamicColor(Context context) {
+        if (!Setting.isThemeColorEnabled()) return 0;
         ThemeProfile profile = ThemeProfileStore.load();
         if (ThemeProfile.SEED_NONE.equals(profile.seedSource)) return 0;
         return resolve(context).primary();
     }
 
     public static void apply(Activity activity) {
+        if (!Setting.isThemeColorEnabled()) return;
         apply(activity.getWindow().getDecorView(), resolve(activity));
     }
 
     /** Applies stateful colors to leanback selectors without touching player surfaces. */
     public static void applyLeanback(Activity activity) {
+        if (!Setting.isThemeColorEnabled()) return;
         applyLeanback(activity.getWindow().getDecorView(), resolve(activity));
     }
 
     public static void apply(View root, ThemeTokens tokens) {
-        if (root == null || tokens == null) return;
+        if (!Setting.isThemeColorEnabled() || root == null || tokens == null) return;
         if (ThemeProfile.BACKGROUND_SOLID.equals(ThemeProfileStore.load().background.type)) {
             root.setBackgroundColor(tokens.appBackground());
         }
@@ -93,7 +103,7 @@ public final class ThemeController {
     }
 
     public static void applyLeanback(View root, ThemeTokens tokens) {
-        if (root == null || tokens == null) return;
+        if (!Setting.isThemeColorEnabled() || root == null || tokens == null) return;
         applyLeanbackView(root, tokens);
     }
 
@@ -103,6 +113,7 @@ public final class ThemeController {
      * remain unchanged.
      */
     public static int wallpaperScrim(ThemeTokens tokens) {
+        if (!Setting.isThemeColorEnabled()) return 0;
         if (ThemeProfile.BACKGROUND_SOLID.equals(tokens.backgroundType())) return tokens.appBackground();
         float alpha = ThemeProfile.BACKGROUND_TINTED_WALLPAPER.equals(tokens.backgroundType())
                 ? tokens.scrimAlpha()
@@ -110,6 +121,11 @@ public final class ThemeController {
         int channel = Math.round(255f * Math.max(0f, Math.min(0.85f, alpha)));
         int tint = ThemeProfile.MODE_DARK.equals(tokens.mode()) ? Color.BLACK : tokens.primary();
         return (channel << 24) | (tint & 0x00FFFFFF);
+    }
+
+    private static ThemeTokens disabledTokens() {
+        return new ThemeTokens(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                ThemeProfile.MODE_SYSTEM, ThemeProfile.BACKGROUND_WALLPAPER, 0f);
     }
 
     private static void applyView(View view, ThemeTokens tokens) {
