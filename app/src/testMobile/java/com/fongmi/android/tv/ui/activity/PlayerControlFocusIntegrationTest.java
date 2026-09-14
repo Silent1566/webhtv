@@ -201,6 +201,42 @@ public class PlayerControlFocusIntegrationTest {
         assertControlFocusTrap(leanbackPath, leanback, "getFocus2()");
     }
 
+    @Test
+    public void leanbackPlaybackControlButtonsKeepConfirmActionsWired() throws Exception {
+        Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int initEvent = source.indexOf("protected void initEvent() {");
+        String body = enclosingMethodBody(source, initEvent);
+
+        assertTrue("leanback initEvent must contain the complete control button wiring", initEvent >= 0);
+        String[] wiredControls = {
+                "scale.setOnClickListener(guarded(this::onScale))",
+                "actionQuality.setOnClickListener(guarded(this::onQuality))",
+                "lut.setOnClickListener(guarded(this::onLut))",
+                "speed.setOnClickListener(guarded(this::onSpeed))",
+                "reset.setOnClickListener(guarded(this::onReset))",
+                "title.setOnClickListener(guarded(this::onTitle))",
+                "player.setOnClickListener(guarded(this::onPlayerKernel))",
+                "decode.setOnClickListener(guarded(this::onDecode))",
+                "playParams.setOnClickListener(guarded(this::onPlayParams))",
+                "multiThreadProxy.setOnClickListener(guarded(this::onMultiThreadProxy))",
+                "panDiagnostic.setOnClickListener(guarded(this::onPanDiagnostic))",
+                "codecCapability.setOnClickListener(guarded(this::onCodecCapability))",
+                "ending.setOnClickListener(guarded(this::onEnding))",
+                "repeat.setOnClickListener(guarded(this::onRepeat))",
+                "search.setOnClickListener(view -> onSearch())",
+                "change2.setOnClickListener(view -> onChange())",
+                "fullscreen.setOnClickListener(guarded(this::onFullscreen))",
+                "danmaku.setOnClickListener(guarded(this::onDanmaku))",
+                "adFeedback.setOnClickListener(view -> onAdFeedback())",
+                "opening.setOnClickListener(guarded(this::onOpening))",
+                "discMenu.setOnClickListener(view -> {"
+        };
+        for (String control : wiredControls) {
+            assertTrue(sourcePath + " is missing confirm action wiring: " + control, body.contains(control));
+        }
+    }
+
     private static void assertControlFocusTrap(Path sourcePath, String source, String defaultFocus) {
         int show = source.indexOf("private void showControl");
         int dispatch = source.indexOf("public boolean dispatchKeyEvent(KeyEvent event)");

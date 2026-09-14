@@ -1449,8 +1449,135 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         mBinding.control.action.next.setOnClickListener(view -> checkNext());
         mBinding.control.action.prev.setOnClickListener(view -> checkPrev());
         mBinding.control.action.episodes.setOnClickListener(view -> onEpisodes());
+        mBinding.episodeReverse.setOnClickListener(view -> onRevSort());
+        mBinding.episodeViewMode.setOnClickListener(view -> toggleEpisodeViewMode());
+        mBinding.episodeFileName.setOnClickListener(view -> toggleEpisodeFileName());
+        mBinding.episodeReverse.setOnKeyListener((view, keyCode, event) -> onEpisodeHeaderToolKey(view, keyCode, event));
+        mBinding.episodeViewMode.setOnKeyListener((view, keyCode, event) -> onEpisodeHeaderToolKey(view, keyCode, event));
+        mBinding.episodeFileName.setOnKeyListener((view, keyCode, event) -> onEpisodeHeaderToolKey(view, keyCode, event));
+        mBinding.control.action.scale.setOnClickListener(guarded(this::onScale));
+        mBinding.control.action.actionQuality.setOnClickListener(guarded(this::onQuality));
+        mBinding.control.action.lut.setOnClickListener(guarded(this::onLut));
+        mBinding.control.action.speed.setOnClickListener(guarded(this::onSpeed));
+        mBinding.control.action.reset.setOnClickListener(guarded(this::onReset));
+        mBinding.control.action.title.setOnClickListener(guarded(this::onTitle));
+        mBinding.control.action.player.setOnClickListener(guarded(this::onPlayerKernel));
+        mBinding.control.action.player.setOnLongClickListener(view -> onPlayerKernelLong());
+        mBinding.control.action.decode.setOnClickListener(guarded(this::onDecode));
+        mBinding.control.action.playParams.setOnClickListener(guarded(this::onPlayParams));
+        mBinding.control.action.multiThreadProxy.setOnClickListener(guarded(this::onMultiThreadProxy));
+        mBinding.control.action.panDiagnostic.setOnClickListener(guarded(this::onPanDiagnostic));
+        mBinding.control.action.codecCapability.setOnClickListener(guarded(this::onCodecCapability));
+        mBinding.control.action.ending.setOnClickListener(guarded(this::onEnding));
+        mBinding.control.action.repeat.setOnClickListener(guarded(this::onRepeat));
+        mBinding.control.action.search.setOnClickListener(view -> onSearch());
+        mBinding.control.action.search.setOnLongClickListener(view -> {
+            onGlobalSearch();
+            return true;
+        });
+        mBinding.control.action.change2.setOnClickListener(view -> onChange());
+        mBinding.control.action.fullscreen.setOnClickListener(guarded(this::onFullscreen));
+        mBinding.control.action.danmaku.setOnClickListener(guarded(this::onDanmaku));
+        mBinding.control.action.danmaku.setOnLongClickListener(view -> onDanmakuToggle());
+        mBinding.control.action.adFeedback.setOnClickListener(view -> onAdFeedback());
+        mBinding.control.action.opening.setOnClickListener(guarded(this::onOpening));
+        mBinding.control.action.discMenu.setOnClickListener(view -> {
+            hideControl();
+            openDiscMenu();
+        });
+        mBinding.control.action.discMenu.setOnLongClickListener(view -> {
+            hideControl();
+            showDiscMenuControls();
+            return true;
+        });
+        if (mBinding.control.action.immersiveAudio != null) mBinding.control.action.immersiveAudio.setOnClickListener(view -> toggleImmersiveAudioMode());
+        if (mBinding.control.action.cast != null) mBinding.control.action.cast.setOnClickListener(view -> onCast());
+        if (mBinding.control.action.timer != null) mBinding.control.action.timer.setOnClickListener(view -> onTimer());
+        if (mBinding.audioPlay != null) mBinding.audioPlay.setOnClickListener(view -> checkPlay());
+        if (mBinding.audioNext != null) mBinding.audioNext.setOnClickListener(view -> checkNext());
+        if (mBinding.audioPrev != null) mBinding.audioPrev.setOnClickListener(view -> checkPrev());
+        if (mBinding.audioRepeatAction != null) mBinding.audioRepeatAction.setOnClickListener(view -> onRepeat());
+        if (mBinding.audioQueueAction != null) mBinding.audioQueueAction.setOnClickListener(view -> onAudioQueue());
+        if (mBinding.audioLyricsAction != null) mBinding.audioLyricsAction.setOnClickListener(view -> onLyricsSearch());
+        if (mBinding.audioKeepAction != null) mBinding.audioKeepAction.setOnClickListener(view -> onKeep());
+        if (mBinding.audioCastAction != null) mBinding.audioCastAction.setOnClickListener(view -> onCast());
+        if (mBinding.audioSettingAction != null) mBinding.audioSettingAction.setOnClickListener(view -> onSetting());
+        if (mBinding.audioKaraokeAction != null) mBinding.audioKaraokeAction.setOnClickListener(view -> onKaraokeMode());
+        if (mBinding.audioBackgroundAction != null) mBinding.audioBackgroundAction.setOnClickListener(view -> randomizeAudioBackgroundMix(false));
+        if (mBinding.audioMoreAction != null) mBinding.audioMoreAction.setOnClickListener(view -> onAudioMore());
+        if (mBinding.audioTrackAction != null) mBinding.audioTrackAction.setOnClickListener(view -> onTrack(C.TRACK_TYPE_AUDIO));
+        if (mBinding.audioSubtitleAction != null) mBinding.audioSubtitleAction.setOnClickListener(view -> onTrack(C.TRACK_TYPE_TEXT));
+        if (mBinding.audioStage != null) mBinding.audioStage.setOnClickListener(view -> focusAudioStageDefault());
+
+        mBinding.shortDisplay.setOnClickListener(view -> onShortDisplay());
+        mBinding.control.action.speed.setOnLongClickListener(view -> onSpeedLong());
+        mBinding.control.action.reset.setOnLongClickListener(view -> onResetToggle());
+        mBinding.control.action.ending.setOnLongClickListener(view -> onEndingReset());
+        mBinding.control.action.opening.setOnLongClickListener(view -> onOpeningReset());
+        setActionFocusScroll();
+        mBinding.video.setOnTouchListener(this::onVideoTouch);
+        mBinding.flag.addOnChildViewHolderSelectedListener(new OnChildViewHolderSelectedListener() {
+            @Override
+            public void onChildViewHolderSelected(@NonNull RecyclerView parent, @Nullable RecyclerView.ViewHolder child, int position, int subposition) {
+                if (mFlagAdapter.getItemCount() > 0) onItemClick(mFlagAdapter.get(position));
+            }
+        });
+        mBinding.episode.addOnChildViewHolderSelectedListener(new OnChildViewHolderSelectedListener() {
+            @Override
+            public void onChildViewHolderSelected(@NonNull RecyclerView parent, @Nullable RecyclerView.ViewHolder child, int position, int subposition) {
+                if (child != null && mBinding.video != mFocus1) mFocus1 = child.itemView;
+            }
+        });
+        mBinding.episode.setOnKeyListener((view, keyCode, event) -> onEpisodeKey(event));
+        mBinding.episodeGrid.setOnKeyListener((view, keyCode, event) -> onEpisodeKey(event));
+        mBinding.array.addOnChildViewHolderSelectedListener(new OnChildViewHolderSelectedListener() {
+            @Override
+            public void onChildViewHolderSelected(@NonNull RecyclerView parent, @Nullable RecyclerView.ViewHolder child, int position, int subposition) {
+                if (child != null) selectEpisodeSegment(position, false);
+            }
+        });
+        setupIntroSkipConfirmListener();
     }
 
+    private void setActionFocusScroll() {
+        HorizontalScrollView scroll = mBinding.control.action.getRoot();
+        if (scroll.getChildCount() == 0 || !(scroll.getChildAt(0) instanceof ViewGroup group)) return;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            View child = group.getChildAt(i);
+            child.setOnFocusChangeListener((view, hasFocus) -> {
+                if (hasFocus) scroll.post(() -> scroll.smoothScrollTo(Math.max(0, view.getLeft() - ResUtil.dp2px(24)), 0));
+            });
+        }
+    }
+
+
+    private void setupIntroSkipConfirmListener() {
+        mIntroSkipPlayback.setSkipConfirmListener((segment, action) -> {
+            if (mIntroSkipConfirmDialog != null && mIntroSkipConfirmDialog.isShowing()) return false;
+            mIntroSkipConfirmDialog = new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.intro_skip_confirm_title)
+                .setMessage(IntroSkipKinds.confirmMessage(segment))
+                .setPositiveButton(android.R.string.ok, (dialog, which) -> action.run())
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+            mIntroSkipConfirmDialog.setOnDismissListener(dialog -> {
+                mIntroSkipPlayback.cancelConfirmation(segment);
+                if (mIntroSkipConfirmDialog == dialog) mIntroSkipConfirmDialog = null;
+            });
+            return true;
+        });
+        mIntroSkipPlayback.setSkipNoticeListener(IntroSkipKinds::notifySkipped);
+        mIntroSkipPlayback.setSkipConfirmDismisser(this::dismissIntroSkipConfirm);
+    }
+
+    private void dismissIntroSkipConfirm() {
+        if (mIntroSkipConfirmDialog == null) return;
+        try {
+            mIntroSkipConfirmDialog.dismiss();
+        } catch (Throwable ignored) {
+        }
+        mIntroSkipConfirmDialog = null;
+    }
     private void setupActionButtons() {
         mActionButtons = new HashMap<>();
         addActionButton(PlayerButtonSetting.NEXT, mBinding.control.action.next);
