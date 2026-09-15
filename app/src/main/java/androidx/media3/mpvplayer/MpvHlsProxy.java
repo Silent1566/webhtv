@@ -4,8 +4,12 @@ import android.os.SystemClock;
 import android.text.TextUtils;
 
 import androidx.annotation.Nullable;
+import com.fongmi.android.tv.App;
+import com.fongmi.android.tv.api.config.AdBlockStatsStore;
 import com.fongmi.android.tv.api.config.HlsRuleConfig;
+import com.fongmi.android.tv.utils.HlsAdblockNotice;
 import com.fongmi.android.tv.utils.HlsAdblockPipeline;
+import com.fongmi.android.tv.utils.Notify;
 
 import com.fongmi.android.tv.player.PlaybackAutoContext;
 import com.fongmi.android.tv.player.PlaybackRouteRegistry;
@@ -799,6 +803,7 @@ public final class MpvHlsProxy extends NanoHTTPD {
         if (HlsAdblockPipeline.isCoreM3u8Proxy(url)) return text;
         try {
             HlsAdblockPipeline.Outcome outcome = HlsAdblockPipeline.apply(url, text, HlsRuleConfig.getRules(), true);
+            recordAndNotifyAdblock(url, outcome);
             if (!TextUtils.equals(outcome.manifest(), text)) {
                 if (kernel == PlayerSetting.MPV) {
                     SpiderDebug.log(TAG,
@@ -814,6 +819,20 @@ public final class MpvHlsProxy extends NanoHTTPD {
             SpiderDebug.log(TAG, "adblock ignored session=%d errorType=%s", session, e.getClass().getSimpleName());
             return text;
         }
+    }
+
+    private void recordAndNotifyAdblock(String url, HlsAdblockPipeline.Outcome outcome) {
+        if (!outcome.structured() && !outcome.legacy()) return;
+        okhttp3.HttpUrl parsed = okhttp3.HttpUrl.parse(url);
+        if (parsed == null) return;
+        long fallbackCount = outcome.legacy() ? 1 : 0;
+        AdBlockStatsStore.recordBlocks(parsed.host(), outcome.ruleCounts(), fallbackCount);
+        if (!HlsAdblockNotice.shouldNotify(url, System.currentTimeMillis())) return;
+        int removed = outcome.removedSegments() > 0 ? outcome.removedSegments() : (int) fallbackCount;
+        String message = outcome.structured() && outcome.removedDurationSec() > 0
+                ? String.format(Locale.US, "已跳过 %d 个广告片段（%.1f 秒）", removed, outcome.removedDurationSec())
+                : "已跳过 " + removed + " 个广告片段";
+        App.post(() -> Notify.show(message));
     }
 
     private String rewritePlaylist(String playlistUrl, String text, int session, @Nullable HlsPlaylistRewriter.Variant inheritedVariant) {

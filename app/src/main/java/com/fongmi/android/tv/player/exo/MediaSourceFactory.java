@@ -269,7 +269,8 @@ public class MediaSourceFactory implements MediaSource.Factory {
             DataSource.Factory cacheDataSource = getCacheDataSource(
                     new DefaultDataSource.Factory(App.get(), getHttpDataSourceFactory()),
                     Map.of());
-            DataSource.Factory trackedDataSource = new PlaybackBytePositionDataSource.Factory(cacheDataSource);
+            DataSource.Factory adblockDataSource = new ExoHlsAdblockDataSource.Factory(cacheDataSource);
+            DataSource.Factory trackedDataSource = new PlaybackBytePositionDataSource.Factory(adblockDataSource);
             dataSourceFactory = new PriorityTaskDataSource.Factory(trackedDataSource, PLAYBACK_PRIORITY_MANAGER, C.PRIORITY_PLAYBACK, false);
         }
         return dataSourceFactory;
@@ -279,7 +280,8 @@ public class MediaSourceFactory implements MediaSource.Factory {
         OkHttpDataSource.Factory httpFactory = createHttpDataSourceFactory(OkHttp.player(), headers);
         DataSource.Factory upstreamFactory = new DefaultDataSource.Factory(App.get(), httpFactory);
         DataSource.Factory cacheDataSource = getCacheDataSource(upstreamFactory, headers);
-        DataSource.Factory trackedDataSource = new PlaybackBytePositionDataSource.Factory(cacheDataSource);
+        DataSource.Factory adblockDataSource = new ExoHlsAdblockDataSource.Factory(cacheDataSource);
+        DataSource.Factory trackedDataSource = new PlaybackBytePositionDataSource.Factory(adblockDataSource);
         return new PriorityTaskDataSource.Factory(
                 trackedDataSource, PLAYBACK_PRIORITY_MANAGER, C.PRIORITY_PLAYBACK, false);
     }

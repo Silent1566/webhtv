@@ -4,8 +4,10 @@ import java.net.URI;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.regex.Pattern;
 
 /** Pure manifest-text cleaner. Network fetching and URI proxy rewriting stay outside this class. */
@@ -33,13 +35,16 @@ public final class HlsManifestCleaner {
             int segmentCount = 0;
             int removedCount = 0;
             double removedDurationSec = 0;
+            Map<String, Long> ruleCounts = new LinkedHashMap<>();
             for (Node node : nodes) {
                 if (!(node instanceof Segment segment)) continue;
                 segmentCount++;
-                if (matches(baseUrl, segment, rules)) {
+                Rule matchedRule = matchRule(baseUrl, segment, rules);
+                if (matchedRule != null) {
                     segment.removed = true;
                     removedCount++;
                     removedDurationSec += segment.durationSec;
+                    ruleCounts.merge(matchedRule.id, 1L, Long::sum);
                 }
             }
             if (removedCount == 0) return Result.unchanged(manifest);
@@ -65,7 +70,7 @@ public final class HlsManifestCleaner {
                 if (discontinuitySequenceIncrement > 0 && !manifest.contains("#EXT-X-DISCONTINUITY-SEQUENCE:")) return Result.fallback(manifest);
             }
             return new Result(render(nodes, manifest.endsWith("\n"), mediaSequenceIncrement, discontinuitySequenceIncrement),
-                    true, false, removedCount, removedDurationSec);
+                    true, false, removedCount, removedDurationSec, Collections.unmodifiableMap(ruleCounts));
         } catch (RuntimeException e) {
             return Result.fallback(manifest);
         }
@@ -130,7 +135,7 @@ public final class HlsManifestCleaner {
         pending.clear();
     }
 
-    private static boolean matches(String baseUrl, Segment segment, List<Rule> rules) {
+    private static Rule matchRule(String baseUrl, Segment segment, List<Rule> rules) {
         URI base = URI.create(baseUrl);
         URI resolved = base.resolve(segment.uri);
         String url = resolved.toString();
@@ -146,9 +151,9 @@ public final class HlsManifestCleaner {
             if (rule.hasDurationRange() && segment.durationSec >= rule.minDuration && segment.durationSec <= rule.maxDuration) signals++;
             if (rule.requireDiscontinuity && segment.discontinuityBefore) signals++;
             if (rule.requireCrossDomain && !host.isEmpty() && !baseHost.isEmpty() && !host.equals(baseHost)) signals++;
-            if (signals >= rule.minimumSignals) return true;
+            if (signals >= rule.minimumSignals) return rule;
         }
-        return false;
+        return null;
     }
 
     private static boolean matchesHost(String host, List<String> suffixes) {
@@ -245,12 +250,14 @@ public final class HlsManifestCleaner {
         }
     }
 
-    public record Result(String manifest, boolean changed, boolean fallback, int removedSegments, double removedDurationSec) {
-        private static Result unchanged(String manifest) { return new Result(manifest, false, false, 0, 0); }
-        private static Result fallback(String manifest) { return new Result(manifest, false, true, 0, 0); }
+    public record Result(String manifest, boolean changed, boolean fallback, int removedSegments,
+                         double removedDurationSec, Map<String, Long> ruleCounts) {
+        private static Result unchanged(String manifest) { return new Result(manifest, false, false, 0, 0, Map.of()); }
+        private static Result fallback(String manifest) { return new Result(manifest, false, true, 0, 0, Map.of()); }
     }
 
     public static final class Rule {
+        private final String id;
         private final List<String> hostSuffixes;
         private final List<String> playlistHostSuffixes;
         private final List<Pattern> playlistHostPatterns;
@@ -262,6 +269,7 @@ public final class HlsManifestCleaner {
         private final boolean requireCrossDomain;
 
         private Rule(Builder builder) {
+            this.id = builder.id;
             this.hostSuffixes = List.copyOf(builder.hostSuffixes);
             this.playlistHostSuffixes = List.copyOf(builder.playlistHostSuffixes);
             this.playlistHostPatterns = compilePatterns(builder.playlistHostPatterns);
@@ -294,6 +302,7 @@ public final class HlsManifestCleaner {
         public static Builder builder() { return new Builder(); }
 
         public static final class Builder {
+            private String id = "unnamed";
             private List<String> hostSuffixes = List.of();
             private List<String> playlistHostSuffixes = List.of();
             private List<String> playlistHostPatterns = List.of();
@@ -304,6 +313,7 @@ public final class HlsManifestCleaner {
             private boolean requireDiscontinuity;
             private boolean requireCrossDomain;
 
+            public Builder id(String value) { id = value == null || value.isBlank() ? "unnamed" : value; return this; }
             public Builder hostSuffixes(List<String> values) { hostSuffixes = values == null ? List.of() : values; return this; }
             public Builder playlistHostSuffixes(List<String> values) { playlistHostSuffixes = values == null ? List.of() : values; return this; }
             public Builder playlistHostPatterns(List<String> values) { playlistHostPatterns = values == null ? List.of() : values; return this; }

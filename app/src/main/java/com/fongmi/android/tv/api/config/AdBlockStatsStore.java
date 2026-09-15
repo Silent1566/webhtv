@@ -81,6 +81,27 @@ public class AdBlockStatsStore {
         });
     }
 
+    /** Records a complete HLS-cleaning result atomically on the existing stats executor. */
+    public static void recordBlocks(String siteKey, Map<String, Long> ruleCounts, long fallbackCount) {
+        executor.execute(() -> {
+            AdBlockStats stats = load();
+            long total = Math.max(0, fallbackCount);
+            if (ruleCounts != null) {
+                for (Map.Entry<String, Long> entry : ruleCounts.entrySet()) {
+                    long count = entry.getValue() == null ? 0 : Math.max(0, entry.getValue());
+                    total += count;
+                    for (long i = 0; i < count; i++) stats.incrementRuleCount(entry.getKey());
+                }
+            }
+            for (long i = 0; i < fallbackCount; i++) stats.incrementRuleCount("hls.legacy-fallback");
+            for (long i = 0; i < total; i++) {
+                stats.incrementTotalBlocked();
+                if (!TextUtils.isEmpty(siteKey)) stats.incrementSiteBlocked(siteKey);
+            }
+            save(stats);
+        });
+    }
+
     /**
      * 记录一次 AI 反馈
      */
@@ -156,6 +177,20 @@ public class AdBlockStatsStore {
      * 填充规则信息（名称、来源）
      */
     private static void fillRuleInfo(RuleHitRecord record, String ruleId) {
+        if ("hls.legacy-fallback".equals(ruleId)) {
+            record.setRuleName("内置兜底规则");
+            record.setRuleSource("HLS");
+            return;
+        }
+
+        for (HlsRuleConfig.Entry entry : HlsRuleConfig.getEntries()) {
+            if (ruleId.equals(entry.id())) {
+                record.setRuleName(TextUtils.isEmpty(entry.name()) ? entry.id() : entry.name());
+                record.setRuleSource("HLS");
+                return;
+            }
+        }
+
         // 查找用户自定义规则（用户规则以 UUID 作为 id）
         List<UserAdRule> userRules = UserAdRuleStore.load();
         for (UserAdRule rule : userRules) {

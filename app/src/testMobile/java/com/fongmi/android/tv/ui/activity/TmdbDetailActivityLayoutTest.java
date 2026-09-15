@@ -3650,4 +3650,14 @@ public class TmdbDetailActivityLayoutTest {
         // 子串匹配 "methodName(args)" 天然忽略它 —— 无需正则、无需截断。
         return source.contains(methodName + argsAndRest);
     }
+
+    @Test
+    public void inlineBackStopsPlaybackBeforeFinishingDetail() throws Exception {
+        String source = readJava("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java");
+        String body = javaBlockAt(source, "private void onInlineBack()");
+        int stop = body.indexOf("stopPlayback();");
+        int finish = body.indexOf("finish();");
+        assertTrue("leaving inline detail must stop playback before finish", stop >= 0 && finish > stop);
+    }
+
 }

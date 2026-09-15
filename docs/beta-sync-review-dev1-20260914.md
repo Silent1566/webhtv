@@ -82,3 +82,7 @@
 - `FfmpegVc1SupportTest` 两个失败仍为既有 NextLib FFmpeg Java 接线/依赖产物问题，与最新 beta 三个提交无路径或代码关系，不在本 PR 扩大修复。
 - 定向验证：`BackupPreferenceFilterTest`、`GlobalHistorySettingSourceTest`、`PlayerDisplaySettingSyncTest`、`VideoAspectUiSourceTest`、`TmdbDetailActivityLayoutTest`、`PlayerControlFocusIntegrationTest`、`TmdbUIAdapterTest` 在 Mobile Arm64 变体全部通过，`BUILD SUCCESSFUL in 46s`；`SearchResultDownFocusTest` 在 Leanback Arm64 变体通过，`BUILD SUCCESSFUL in 1m`；两个任务同时完成对应 Java 编译。
 - 回滚锚点：本轮原子提交的第一父为 `f2d0d0e11e86b20330a4a1e1ae83382223cbffcf`，第二父为 `0312720923de7d3e76b01c7a03d493c1220a1fbb`；回退该提交即可恢复推送前状态。
+
+## 2026-09-15 详情直放播放回归修正（迁移到独立记录）
+
+- 本节是迁移占位，避免跨任务复评文档记录本回归；正式恢复锚点和验证证据见 `docs/fix-detail-direct-play-mode-20260915.md`。

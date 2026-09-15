@@ -3,7 +3,9 @@ package com.fongmi.android.tv.utils;
 import org.junit.Test;
 
 import java.util.List;
+import java.util.Map;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -34,5 +36,26 @@ public class HlsAdblockPipelineTest {
 
         assertTrue(outcome.structured());
         assertFalse(outcome.manifest().contains("ad.ts"));
+    }
+
+    @Test
+    public void exposesStructuredRuleCounts() {
+        String manifest = "#EXTM3U\n"
+                + "#EXTINF:7.0,\nhttps://ads.example.com/ad.ts\n"
+                + "#EXTINF:8.0,\nmain-1.ts\n"
+                + "#EXTINF:8.0,\nmain-2.ts\n"
+                + "#EXTINF:8.0,\nmain-3.ts\n"
+                + "#EXT-X-ENDLIST\n";
+        HlsManifestCleaner.Rule rule = HlsManifestCleaner.Rule.builder()
+                .id("rule-one")
+                .hostSuffixes(List.of("ads.example.com"))
+                .minimumSignals(1)
+                .build();
+
+        HlsAdblockPipeline.Outcome outcome = HlsAdblockPipeline.apply(
+                "https://video.example.com/index.m3u8", manifest, List.of(rule), true);
+
+        assertTrue(outcome.structured());
+        assertEquals(Map.of("rule-one", 1L), outcome.ruleCounts());
     }
 }

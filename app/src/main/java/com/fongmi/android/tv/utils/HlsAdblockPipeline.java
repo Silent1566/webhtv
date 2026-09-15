@@ -4,6 +4,7 @@ import androidx.media3.exoplayer.hls.playlist.HlsAdsParser;
 
 import java.net.URI;
 import java.util.List;
+import java.util.Map;
 
 public final class HlsAdblockPipeline {
 
@@ -12,7 +13,7 @@ public final class HlsAdblockPipeline {
     public static Outcome apply(String url, String manifest, List<HlsManifestCleaner.Rule> rules, boolean legacyFallback) {
         HlsManifestCleaner.Result clean = HlsManifestCleaner.clean(url, manifest, rules);
         if (clean.changed()) {
-            return new Outcome(clean.manifest(), true, false, clean.removedSegments(), clean.removedDurationSec());
+            return new Outcome(clean.manifest(), true, false, clean.removedSegments(), clean.removedDurationSec(), clean.ruleCounts());
         }
         if (!legacyFallback || clean.fallback() || manifest == null || !manifest.contains("#EXT-X-ENDLIST")) {
             return new Outcome(manifest, false, false, 0, 0);
@@ -36,5 +37,10 @@ public final class HlsAdblockPipeline {
         }
     }
 
-    public record Outcome(String manifest, boolean structured, boolean legacy, int removedSegments, double removedDurationSec) {}
+    public record Outcome(String manifest, boolean structured, boolean legacy, int removedSegments,
+                          double removedDurationSec, Map<String, Long> ruleCounts) {
+        public Outcome(String manifest, boolean structured, boolean legacy, int removedSegments, double removedDurationSec) {
+            this(manifest, structured, legacy, removedSegments, removedDurationSec, Map.of());
+        }
+    }
 }

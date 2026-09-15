@@ -106,4 +106,67 @@ public class DetailModeControllerTest {
         assertTrue("initPage should not set detailActions visibility based on mode (delegated to Controller)",
                 !initPageBody.contains("binding.detailActions.setVisibility(isFusionMode()"));
     }
+
+    @Test
+    public void playerDetailMode_keepsFullscreenInlinePlayback() throws Exception {
+        Path activityPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
+        String source = Files.readString(activityPath, StandardCharsets.UTF_8);
+        String onPlayBody = methodBody(source, "private void onPlay()");
+        String detailModeBody = methodBody(source, "private int getDetailMode()");
+
+        // 详情直放必须进入内嵌全屏播放器，不能因为播放载入界面误判成融合模式。
+        assertTrue("detail-player mode must keep fullscreen inline playback",
+                onPlayBody.contains("if (isFusionMode()) playInline();")
+                        && onPlayBody.contains("else if (isPlayerMode()) playDetailFullscreen();"));
+        assertTrue("detail-player mode must restore the selected mode when no intent mode marker exists",
+                detailModeBody.contains("return Setting.getDetailOpenMode();")
+                        && !detailModeBody.contains("getIntent().getBooleanExtra(\"fusion\", false) ? Setting.DETAIL_OPEN_FUSION : Setting.DETAIL_OPEN_ENHANCED"));
+    }
+
+    @Test
+    public void playerDetailMode_entersFullscreenBeforeAsyncPlayerLoad() throws Exception {
+        Path activityPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
+        String source = Files.readString(activityPath, StandardCharsets.UTF_8);
+        String playBody = methodBody(source, "private void playDetailFullscreen()");
+        int enterFullscreen = playBody.indexOf("enterInlineFullscreen();");
+        int startPlayback = playBody.indexOf("if (!current) playInline();");
+
+        // 详情直放点击后必须先铺满全屏播放器，再异步解析；不能先显示沉浸融合详情页。
+        assertTrue("detail-player playback must enter fullscreen before async player loading",
+                enterFullscreen >= 0 && startPlayback > enterFullscreen);
+        assertTrue("detail-player must not defer fullscreen until the first frame",
+                !playBody.contains("detailPlayerFullscreenPending"));
+    }
+
+    @Test
+    public void playerDetailMode_doesNotClearPlayerAfterEnteringFullscreen() throws Exception {
+        Path activityPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
+        String source = Files.readString(activityPath, StandardCharsets.UTF_8);
+        String playBody = methodBody(source, "private void playDetailFullscreen()");
+        String inlineBody = methodBody(source, "private void playInline(long resumePosition, String failedUrl, String failureMessage)");
+
+        assertTrue("detail-player startup must enter fullscreen before resolving playback",
+                playBody.contains("enterInlineFullscreen();")
+                        && !inlineBody.contains("stopInlinePlayerForReload();"));
+    }
+
+    @Test
+    public void playerDetailMode_waitsForExplicitPlaybackAction() throws Exception {
+        Path activityPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
+        String source = Files.readString(activityPath, StandardCharsets.UTF_8);
+        String autoPlayBody = methodBody(source, "private void maybeAutoPlayInline()");
+
+        // 详情直放只定义点击播放后的全屏行为，进入详情页本身不能触发播放。
+        assertTrue("detail-player mode must wait for an explicit playback action",
+                !autoPlayBody.contains("isPlayerMode()")
+                        && autoPlayBody.contains("binding.playerPanel.post(this::onPlay);"));
+    }
+
+    private String methodBody(String source, String signature) {
+        int start = source.indexOf(signature);
+        assertTrue(signature + " is missing from TmdbDetailActivity", start >= 0);
+        int end = source.indexOf("\n    private void ", start + signature.length());
+        if (end < 0) end = source.length();
+        return source.substring(start, end);
+    }
 }
