@@ -874,6 +874,14 @@ public class Setting {
         Prefers.put("theme_color", color);
     }
 
+    public static boolean isThemeColorEnabled() {
+        return Prefers.getBoolean("theme_color_enabled");
+    }
+
+    public static void putThemeColorEnabled(boolean enabled) {
+        Prefers.put("theme_color_enabled", enabled);
+    }
+
     public static int getWallColor() {
         return Prefers.getInt("wall_color", 0);
     }

@@ -24,6 +24,8 @@ import com.fongmi.android.tv.Updater;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.server.process.ApkUrlPush;
 import com.fongmi.android.tv.setting.Setting;
+import com.fongmi.android.tv.theme.ThemeController;
+import com.fongmi.android.tv.theme.ThemeTokens;
 import com.fongmi.android.tv.ui.custom.CustomWallView;
 import com.fongmi.android.tv.ui.helper.TouchOptimizationHelper;
 import com.fongmi.android.tv.utils.Util;
@@ -49,14 +51,20 @@ public abstract class BaseActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        ThemeController.applyNightMode(this);
         super.onCreate(savedInstanceState);
         registerFragmentLifecycleCallbacks();
         setContentView(getBinding().getRoot());
+        ThemeController.apply(this);
+        ThemeController.applyLeanback(this);
         EventBus.getDefault().register(this);
         initView(savedInstanceState);
         Util.hideSystemUI(this);
         setBackCallback();
         initEvent();
+        // Some detail/player controls are inflated during initView; bind them after the Activity tree is complete.
+        ThemeController.apply(this);
+        ThemeController.applyLeanback(this);
     }
 
     @Override
@@ -202,7 +210,12 @@ public abstract class BaseActivity extends AppCompatActivity {
                 if (!(fragment instanceof DialogFragment dialog) || dialog.getDialog() == null) return;
                 Window window = dialog.getDialog().getWindow();
                 if (window == null) return;
-                window.getDecorView().post(() -> TouchOptimizationHelper.sync(window.getDecorView()));
+                window.getDecorView().post(() -> {
+                    ThemeTokens tokens = ThemeController.resolve(BaseActivity.this);
+                    ThemeController.apply(window.getDecorView(), tokens);
+                    ThemeController.applyLeanback(window.getDecorView(), tokens);
+                    TouchOptimizationHelper.sync(window.getDecorView());
+                });
             }
         }, true);
     }
