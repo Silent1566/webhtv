@@ -120,12 +120,13 @@ public final class ThemeEditorDialog extends BaseAlertDialog {
     }
 
     private void selectPreset(int color) {
-        ThemeProfile.ColorSet colors = draft.colorsFor(systemDark());
-        colors.primary = ThemeColorUtil.format(color);
-        draft.seedSource = ThemeProfile.SEED_CUSTOM;
-        draft.seedColor = colors.primary;
+        setHighlightColor(ThemeColorUtil.format(color));
         presetAdapter.setSelected(color);
         render();
+    }
+
+    private void setHighlightColor(String color) {
+        draft.colorsFor(systemDark()).primary = color;
     }
 
     private void editColor(int label, String token) {
@@ -133,7 +134,7 @@ public final class ThemeEditorDialog extends BaseAlertDialog {
         String current = value(token, colors);
         ThemeColorPickerDialog.show(this, getString(label), current, color -> {
             ThemeProfile.ColorSet target = draft.colorsFor(systemDark());
-            if ("primary".equals(token)) target.primary = color;
+            if ("primary".equals(token)) setHighlightColor(color);
             else if ("appBackground".equals(token)) {
                 target.appBackground = color;
                 if (ThemeProfile.BACKGROUND_SOLID.equals(draft.background.type)) draft.background.color = color;
