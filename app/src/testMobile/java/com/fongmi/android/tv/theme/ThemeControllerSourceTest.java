@@ -25,16 +25,16 @@ public class ThemeControllerSourceTest {
     }
 
     @Test
-    public void bottomNavigationUsesSemanticCheckedAndUncheckedColorsForIconsAndText() throws Exception {
+    public void bottomNavigationKeepsDefaultUncheckedStyleAndOnlyHighlightsSelection() throws Exception {
         String source = read("app/src/main/java/com/fongmi/android/tv/theme/ThemeController.java");
 
+        assertTrue(source.contains("navigation.setBackgroundTintList(null)"));
         assertTrue(source.contains("ColorStateList navigationColors = new ColorStateList("));
         assertTrue(source.contains("new int[][]{{android.R.attr.state_checked}, {}}"));
-        assertTrue(source.contains("int navigationForeground = ThemeColorUtil.ensureContrast("));
-        assertTrue(source.contains("tokens.onSurface(), tokens.surface(), 4.5"));
-        assertTrue(source.contains("new int[]{tokens.primary(), navigationForeground}"));
+        assertTrue(source.contains("new int[]{tokens.primary(), Color.WHITE}"));
         assertTrue(source.contains("navigation.setItemIconTintList(navigationColors)"));
         assertTrue(source.contains("navigation.setItemTextColor(navigationColors)"));
+        assertTrue(source.contains("navigation.setItemTextColor(navigationColors);\n            return;"));
     }
 
     @Test
