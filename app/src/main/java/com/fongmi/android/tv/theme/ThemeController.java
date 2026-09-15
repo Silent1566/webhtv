@@ -169,9 +169,11 @@ public final class ThemeController {
             toolbar.setBackgroundTintList(ColorStateList.valueOf(tokens.surface()));
         } else if (view instanceof BottomNavigationView navigation) {
             navigation.setBackgroundTintList(ColorStateList.valueOf(tokens.surface()));
-            navigation.setItemIconTintList(new ColorStateList(
+            ColorStateList navigationColors = new ColorStateList(
                     new int[][]{{android.R.attr.state_checked}, {}},
-                    new int[]{tokens.primary(), tokens.onSurfaceVariant()}));
+                    new int[]{tokens.primary(), tokens.onSurface()});
+            navigation.setItemIconTintList(navigationColors);
+            navigation.setItemTextColor(navigationColors);
         } else if (view instanceof TabLayout tabs) {
             tabs.setSelectedTabIndicatorColor(tokens.primary());
             tabs.setTabTextColors(tokens.onSurfaceVariant(), tokens.primary());

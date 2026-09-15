@@ -25,6 +25,17 @@ public class ThemeControllerSourceTest {
     }
 
     @Test
+    public void bottomNavigationUsesSemanticCheckedAndUncheckedColorsForIconsAndText() throws Exception {
+        String source = read("app/src/main/java/com/fongmi/android/tv/theme/ThemeController.java");
+
+        assertTrue(source.contains("ColorStateList navigationColors = new ColorStateList("));
+        assertTrue(source.contains("new int[][]{{android.R.attr.state_checked}, {}}"));
+        assertTrue(source.contains("new int[]{tokens.primary(), tokens.onSurface()}"));
+        assertTrue(source.contains("navigation.setItemIconTintList(navigationColors)"));
+        assertTrue(source.contains("navigation.setItemTextColor(navigationColors)"));
+    }
+
+    @Test
     public void bothActivityTargetsBindAfterDynamicChildrenAreInflated() throws Exception {
         String mobile = read("app/src/mobile/java/com/fongmi/android/tv/ui/base/BaseActivity.java");
         String leanback = read("app/src/leanback/java/com/fongmi/android/tv/ui/base/BaseActivity.java");
