@@ -30,7 +30,9 @@ public class ThemeControllerSourceTest {
 
         assertTrue(source.contains("ColorStateList navigationColors = new ColorStateList("));
         assertTrue(source.contains("new int[][]{{android.R.attr.state_checked}, {}}"));
-        assertTrue(source.contains("new int[]{tokens.primary(), tokens.onSurface()}"));
+        assertTrue(source.contains("int navigationForeground = ThemeColorUtil.ensureContrast("));
+        assertTrue(source.contains("tokens.onSurface(), tokens.surface(), 4.5"));
+        assertTrue(source.contains("new int[]{tokens.primary(), navigationForeground}"));
         assertTrue(source.contains("navigation.setItemIconTintList(navigationColors)"));
         assertTrue(source.contains("navigation.setItemTextColor(navigationColors)"));
     }
