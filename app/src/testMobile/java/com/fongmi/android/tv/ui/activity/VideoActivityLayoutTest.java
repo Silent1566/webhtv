@@ -1453,10 +1453,12 @@ public class VideoActivityLayoutTest {
         String arrayAdapter = new String(Files.readAllBytes(arrayAdapterPath), StandardCharsets.UTF_8);
         Path segmentSelectorPath = findLeanbackResPath().resolve(Path.of("drawable", "selector_video_item.xml"));
         String segmentSelector = new String(Files.readAllBytes(segmentSelectorPath), StandardCharsets.UTF_8);
-        assertTrue("original detail modes must keep the active episode range highlighted after focus moves to an episode", source.contains("mArrayAdapter.setSelectedPosition(position);")
+        assertTrue("original detail modes must keep the active episode range highlighted after focus moves to an episode", source.contains("selectEpisodeSegmentPosition(position);")
+                && source.contains("private void selectEpisodeSegmentPosition(int position)")
+                && source.contains("mArrayAdapter.setSelectedPosition(position);")
                 && arrayAdapter.contains("setActivated(position == selectedPosition)")
                 && segmentSelector.contains("android:state_activated=\"true\"")
-                && segmentSelector.contains("#2CC56F"));
+                && segmentSelector.contains("android:color=\"?attr/colorPrimary\""));
     }
 
     @Test
