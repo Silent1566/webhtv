@@ -20,6 +20,13 @@
             android:layout_height="wrap_content"
             android:layout_marginBottom="16dp" />
 
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/themeEnabled"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            android:text="@string/theme_enabled" />
+
         <com.google.android.material.textview.MaterialTextView
             android:id="@+id/validation"
             android:layout_width="match_parent"

@@ -60,6 +60,7 @@ public final class ThemeEditorDialog extends BaseAlertDialog {
     @Override
     protected void initView() {
         draft = ThemeProfileStore.load().copy();
+        binding.themeEnabled.setChecked(Setting.isThemeColorEnabled());
         presetAdapter = new ThemeAdapter(this::selectPreset, PRESETS, selectedPrimary());
         binding.palette.setLayoutManager(new LinearLayoutManager(requireContext(), LinearLayoutManager.HORIZONTAL, false));
         binding.palette.setAdapter(presetAdapter);
@@ -169,6 +170,7 @@ public final class ThemeEditorDialog extends BaseAlertDialog {
             Toast.makeText(requireContext(), getString(R.string.theme_apply_failed, result.error()), Toast.LENGTH_LONG).show();
             return;
         }
+        Setting.putThemeColorEnabled(binding.themeEnabled.isChecked());
         RefreshEvent.theme();
         dismiss();
     }

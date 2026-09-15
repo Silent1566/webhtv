@@ -85,6 +85,17 @@ public class ThemeControllerSourceTest {
     }
 
     @Test
+    public void mobileThemeEditorShowsAndPersistsMasterSwitch() throws Exception {
+        String layout = read("app/src/mobile/res/layout/dialog_theme_editor.xml");
+        String editor = read("app/src/mobile/java/com/fongmi/android/tv/ui/dialog/ThemeEditorDialog.java");
+
+        assertTrue(layout.contains("@+id/themeEnabled"));
+        assertTrue(layout.contains("@string/theme_enabled"));
+        assertTrue(editor.contains("binding.themeEnabled.setChecked(Setting.isThemeColorEnabled())"));
+        assertTrue(editor.contains("Setting.putThemeColorEnabled(binding.themeEnabled.isChecked())"));
+    }
+
+    @Test
     public void playerControlRootsAreExplicitForMobileLayouts() throws Exception {
         for (String file : new String[]{
                 "app/src/mobile/res/layout/view_control_vod.xml",

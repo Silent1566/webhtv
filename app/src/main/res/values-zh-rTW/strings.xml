@@ -844,6 +844,7 @@
     <string name="setting_short_drama_source">短劇源配置</string>
     <string name="setting_theme_color">主題色彩</string>
     <string name="theme_editor_title">主題色彩</string>
+    <string name="theme_enabled">開啟主題色彩</string>
     <string name="theme_editor_preview">即時預覽</string>
     <string name="theme_background">背景模式</string>
     <string name="theme_background_wallpaper">桌布</string>
