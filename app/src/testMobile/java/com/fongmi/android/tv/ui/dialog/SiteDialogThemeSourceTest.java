@@ -41,6 +41,13 @@ public class SiteDialogThemeSourceTest {
     }
 
     @Test
+    public void zeroTokensFallBackToCurrentThemeInsteadOfTransparentSurface() throws Exception {
+        String theme = read("app/src/mobile/java/com/fongmi/android/tv/ui/helper/SiteDialogTheme.java");
+        assertTrue(theme.contains("public static SiteDialogTheme resolve(Context context, ThemeTokens tokens) {\n"
+                + "        if (tokens.primary() == 0) return resolve(context, 0);"));
+    }
+
+    @Test
     public void controlsDoNotUseTheLegacyFixedLightPalette() throws Exception {
         String site = read("app/src/mobile/java/com/fongmi/android/tv/ui/adapter/SiteAdapter.java");
         String group = read("app/src/mobile/java/com/fongmi/android/tv/ui/adapter/SiteGroupAdapter.java");

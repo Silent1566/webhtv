@@ -16,6 +16,7 @@ public record SiteDialogTheme(int surface, int onSurface, int onSurfaceVariant,
                               ColorStateList buttonText, ColorStateList buttonStroke) {
 
     public static SiteDialogTheme resolve(Context context, ThemeTokens tokens) {
+        if (tokens.primary() == 0) return resolve(context, 0);
         int surface = tokens.surfaceElevated();
         int primary = tokens.primary();
         int onPrimary = tokens.onPrimary();
