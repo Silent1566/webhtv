@@ -38,6 +38,7 @@ public final class ThemeEditorDialog extends BaseAlertDialog {
             0xFF43A047, 0xFF7CB342, 0xFFFB8C00, 0xFFE53935, 0xFFD81B60,
             0xFF8E24AA, 0xFF6D4C41
     };
+    private static final int DEFAULT_PRESET = PRESETS[0];
 
     private DialogThemeEditorBinding binding;
     private ThemeProfile draft;
@@ -120,7 +121,8 @@ public final class ThemeEditorDialog extends BaseAlertDialog {
     }
 
     private void selectPreset(int color) {
-        setHighlightColor(ThemeColorUtil.format(color));
+        if (color == DEFAULT_PRESET) draft.colorsFor(systemDark()).primary = null;
+        else setHighlightColor(ThemeColorUtil.format(color));
         presetAdapter.setSelected(color);
         render();
     }

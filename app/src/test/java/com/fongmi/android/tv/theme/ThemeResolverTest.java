@@ -59,6 +59,17 @@ public class ThemeResolverTest {
     }
 
     @Test
+    public void mobileDefaultPresetClearsExplicitPrimary() throws Exception {
+        Path root = Files.exists(Path.of("app")) ? Path.of("") : Path.of("..");
+        String editor = new String(Files.readAllBytes(root.resolve(
+                "app/src/mobile/java/com/fongmi/android/tv/ui/dialog/ThemeEditorDialog.java")), StandardCharsets.UTF_8);
+
+        assertTrue(editor.contains("private static final int DEFAULT_PRESET = PRESETS[0];"));
+        assertTrue(editor.contains("if (color == DEFAULT_PRESET) draft.colorsFor(systemDark()).primary = null;"));
+        assertTrue(editor.contains("else setHighlightColor(ThemeColorUtil.format(color));"));
+    }
+
+    @Test
     public void systemAndWallpaperSeedAffectResolvedModeAndAccent() {
         ThemeProfile profile = ThemeProfileStore.migrateLegacy(0);
         ThemeTokens dark = ThemeResolver.resolve(profile, true, 0xFF00897B);
