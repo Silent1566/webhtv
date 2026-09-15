@@ -6,6 +6,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 /** Contract checks for the low-API stage-C binding path. */
@@ -59,22 +60,26 @@ public class ThemeControllerSourceTest {
         assertTrue(setting.contains("Prefers.put(\"theme_color_enabled\", enabled)"));
 
         assertTrue(controller.contains("public static void applyNightMode(Context context) {\n"
-                + "        if (!Setting.isThemeColorEnabled()) {"));
+                + "        if (!isCustomThemeEnabled()) {"));
         assertTrue(controller.contains("AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM;"));
+        assertTrue(controller.contains("private static boolean isCustomThemeEnabled()"));
+        assertTrue(controller.contains("if (!Setting.isThemeColorEnabled()) return false;"));
+        assertTrue(controller.contains("ThemeProfile.SEED_NONE.equals(profile.seedSource)"));
+        assertTrue(controller.contains("return !isEmpty(profile.colors == null ? null : profile.colors.light)"));
         assertTrue(controller.contains("public static ThemeTokens resolve(Context context) {\n"
-                + "        if (!Setting.isThemeColorEnabled()) return disabledTokens();"));
+                + "        if (!isCustomThemeEnabled()) return disabledTokens();"));
         assertTrue(controller.contains("public static int dynamicColor(Context context) {\n"
-                + "        if (!Setting.isThemeColorEnabled()) return 0;"));
+                + "        if (!isCustomThemeEnabled()) return 0;"));
         assertTrue(controller.contains("public static void apply(Activity activity) {\n"
-                + "        if (!Setting.isThemeColorEnabled()) return;"));
+                + "        if (!isCustomThemeEnabled()) return;"));
         assertTrue(controller.contains("public static void applyLeanback(Activity activity) {\n"
-                + "        if (!Setting.isThemeColorEnabled()) return;"));
+                + "        if (!isCustomThemeEnabled()) return;"));
         assertTrue(controller.contains("public static void apply(View root, ThemeTokens tokens) {\n"
-                + "        if (!Setting.isThemeColorEnabled() || root == null || tokens == null) return;"));
+                + "        if (!isCustomThemeEnabled() || root == null || tokens == null) return;"));
         assertTrue(controller.contains("public static void applyLeanback(View root, ThemeTokens tokens) {\n"
-                + "        if (!Setting.isThemeColorEnabled() || root == null || tokens == null) return;"));
+                + "        if (!isCustomThemeEnabled() || root == null || tokens == null) return;"));
         assertTrue(controller.contains("public static int wallpaperScrim(ThemeTokens tokens) {\n"
-                + "        if (!Setting.isThemeColorEnabled()) return 0;"));
+                + "        if (!isCustomThemeEnabled()) return 0;"));
 
         assertTrue(wall.contains("private void applyThemeScrim() {\n"
                 + "        if (!Setting.isThemeColorEnabled()) return;"));
@@ -92,7 +97,7 @@ public class ThemeControllerSourceTest {
         assertTrue(layout.contains("@+id/themeEnabled"));
         assertTrue(layout.contains("@string/theme_enabled"));
         assertTrue(editor.contains("binding.themeEnabled.setChecked(Setting.isThemeColorEnabled())"));
-        assertTrue(editor.contains("binding.themeEnabled.setChecked(false)"));
+        assertFalse(editor.contains("binding.themeEnabled.setChecked(false)"));
         assertTrue(editor.contains("Setting.putThemeColorEnabled(binding.themeEnabled.isChecked())"));
         assertTrue(editor.contains("binding.primaryRow.setOnClickListener"));
         assertTrue(editor.contains("binding.backgroundRow.setOnClickListener"));

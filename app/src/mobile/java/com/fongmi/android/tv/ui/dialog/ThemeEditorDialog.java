@@ -82,7 +82,6 @@ public final class ThemeEditorDialog extends BaseAlertDialog {
             render();
         });
         binding.reset.setOnClickListener(view -> {
-            binding.themeEnabled.setChecked(false);
             draft = ThemeProfile.defaultProfile();
             presetAdapter.setSelected(selectedPrimary());
             render();

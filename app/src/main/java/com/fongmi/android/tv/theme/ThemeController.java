@@ -53,7 +53,7 @@ public final class ThemeController {
     }
 
     public static void applyNightMode(Context context) {
-        if (!Setting.isThemeColorEnabled()) {
+        if (!isCustomThemeEnabled()) {
             if (AppCompatDelegate.getDefaultNightMode() != AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM) {
                 AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM);
             }
@@ -69,7 +69,7 @@ public final class ThemeController {
     }
 
     public static ThemeTokens resolve(Context context) {
-        if (!Setting.isThemeColorEnabled()) return disabledTokens();
+        if (!isCustomThemeEnabled()) return disabledTokens();
         boolean systemDark = (context.getResources().getConfiguration().uiMode
                 & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
         return ThemeResolver.resolve(ThemeProfileStore.load(), systemDark, Setting.getWallColor());
@@ -77,25 +77,25 @@ public final class ThemeController {
 
     /** Returns zero when the profile deliberately disables content-based dynamic color. */
     public static int dynamicColor(Context context) {
-        if (!Setting.isThemeColorEnabled()) return 0;
+        if (!isCustomThemeEnabled()) return 0;
         ThemeProfile profile = ThemeProfileStore.load();
         if (ThemeProfile.SEED_NONE.equals(profile.seedSource)) return 0;
         return resolve(context).primary();
     }
 
     public static void apply(Activity activity) {
-        if (!Setting.isThemeColorEnabled()) return;
+        if (!isCustomThemeEnabled()) return;
         apply(activity.getWindow().getDecorView(), resolve(activity));
     }
 
     /** Applies stateful colors to leanback selectors without touching player surfaces. */
     public static void applyLeanback(Activity activity) {
-        if (!Setting.isThemeColorEnabled()) return;
+        if (!isCustomThemeEnabled()) return;
         applyLeanback(activity.getWindow().getDecorView(), resolve(activity));
     }
 
     public static void apply(View root, ThemeTokens tokens) {
-        if (!Setting.isThemeColorEnabled() || root == null || tokens == null) return;
+        if (!isCustomThemeEnabled() || root == null || tokens == null) return;
         if (ThemeProfile.BACKGROUND_SOLID.equals(ThemeProfileStore.load().background.type)) {
             root.setBackgroundColor(tokens.appBackground());
         }
@@ -103,7 +103,7 @@ public final class ThemeController {
     }
 
     public static void applyLeanback(View root, ThemeTokens tokens) {
-        if (!Setting.isThemeColorEnabled() || root == null || tokens == null) return;
+        if (!isCustomThemeEnabled() || root == null || tokens == null) return;
         applyLeanbackView(root, tokens);
     }
 
@@ -113,7 +113,7 @@ public final class ThemeController {
      * remain unchanged.
      */
     public static int wallpaperScrim(ThemeTokens tokens) {
-        if (!Setting.isThemeColorEnabled()) return 0;
+        if (!isCustomThemeEnabled()) return 0;
         if (ThemeProfile.BACKGROUND_SOLID.equals(tokens.backgroundType())) return tokens.appBackground();
         float alpha = ThemeProfile.BACKGROUND_TINTED_WALLPAPER.equals(tokens.backgroundType())
                 ? tokens.scrimAlpha()
@@ -121,6 +121,35 @@ public final class ThemeController {
         int channel = Math.round(255f * Math.max(0f, Math.min(0.85f, alpha)));
         int tint = ThemeProfile.MODE_DARK.equals(tokens.mode()) ? Color.BLACK : tokens.primary();
         return (channel << 24) | (tint & 0x00FFFFFF);
+    }
+
+    private static boolean isCustomThemeEnabled() {
+        if (!Setting.isThemeColorEnabled()) return false;
+        ThemeProfile profile = ThemeProfileStore.load();
+        if (!ThemeProfile.MODE_SYSTEM.equals(profile.mode)) return true;
+        if (profile.background == null
+                || !ThemeProfile.BACKGROUND_WALLPAPER.equals(profile.background.type)
+                || profile.background.color != null
+                || profile.background.scrimAlpha != 0f) return true;
+        if (!ThemeProfile.SEED_NONE.equals(profile.seedSource) || profile.seedColor != null) return true;
+        return !isEmpty(profile.colors == null ? null : profile.colors.light)
+                || !isEmpty(profile.colors == null ? null : profile.colors.dark);
+    }
+
+    private static boolean isEmpty(ThemeProfile.ColorSet colors) {
+        if (colors == null) return true;
+        return colors.primary == null
+                && colors.onPrimary == null
+                && colors.primaryContainer == null
+                && colors.onPrimaryContainer == null
+                && colors.appBackground == null
+                && colors.surface == null
+                && colors.surfaceElevated == null
+                && colors.onSurface == null
+                && colors.onSurfaceVariant == null
+                && colors.outline == null
+                && colors.focus == null
+                && colors.error == null;
     }
 
     private static ThemeTokens disabledTokens() {
