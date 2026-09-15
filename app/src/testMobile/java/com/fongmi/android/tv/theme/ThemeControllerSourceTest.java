@@ -92,7 +92,16 @@ public class ThemeControllerSourceTest {
         assertTrue(layout.contains("@+id/themeEnabled"));
         assertTrue(layout.contains("@string/theme_enabled"));
         assertTrue(editor.contains("binding.themeEnabled.setChecked(Setting.isThemeColorEnabled())"));
+        assertTrue(editor.contains("binding.themeEnabled.setChecked(false)"));
         assertTrue(editor.contains("Setting.putThemeColorEnabled(binding.themeEnabled.isChecked())"));
+        assertTrue(editor.contains("binding.primaryRow.setOnClickListener"));
+        assertTrue(editor.contains("binding.backgroundRow.setOnClickListener"));
+        assertTrue(editor.contains("binding.surfaceRow.setOnClickListener"));
+
+        String picker = read("app/src/mobile/java/com/fongmi/android/tv/ui/dialog/ThemeColorPickerDialog.java");
+        assertTrue(picker.contains("createPresetPalette()"));
+        assertTrue(picker.contains("binding.getRoot().addView(createPresetPalette(), 1)"));
+        assertTrue(picker.contains("binding.input.setText(ThemeColorUtil.format(color))"));
     }
 
     @Test

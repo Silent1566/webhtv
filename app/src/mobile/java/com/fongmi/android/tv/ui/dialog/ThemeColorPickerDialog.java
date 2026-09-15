@@ -1,8 +1,11 @@
 package com.fongmi.android.tv.ui.dialog;
 
+import android.graphics.drawable.GradientDrawable;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.View;
+import android.widget.HorizontalScrollView;
+import android.widget.LinearLayout;
 
 import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
@@ -18,6 +21,11 @@ public final class ThemeColorPickerDialog extends BaseAlertDialog {
 
     private static final String ARG_LABEL = "label";
     private static final String ARG_COLOR = "color";
+    private static final int[] PRESETS = {
+            0xFF6750A4, 0xFF3949AB, 0xFF1E88E5, 0xFF00ACC1, 0xFF00897B,
+            0xFF43A047, 0xFFFB8C00, 0xFFE53935, 0xFFD81B60, 0xFF6D4C41,
+            0xFF111827, 0xFFF8FAFC, 0xFFFFFFFF
+    };
     private DialogThemeColorPickerBinding binding;
     private OnColorSelectedListener listener;
 
@@ -46,6 +54,7 @@ public final class ThemeColorPickerDialog extends BaseAlertDialog {
         binding.input.setText(requireArguments().getString(ARG_COLOR, "#6750A4"));
         binding.buttonCancel.setOnClickListener(view -> dismiss());
         binding.buttonApply.setOnClickListener(view -> apply());
+        binding.getRoot().addView(createPresetPalette(), 1);
         binding.input.addTextChangedListener(new TextWatcher() {
             @Override
             public void beforeTextChanged(CharSequence s, int start, int count, int after) {
@@ -61,6 +70,34 @@ public final class ThemeColorPickerDialog extends BaseAlertDialog {
             }
         });
         render(binding.input.getText() == null ? "" : binding.input.getText().toString());
+    }
+
+    private View createPresetPalette() {
+        float density = getResources().getDisplayMetrics().density;
+        int size = Math.round(44 * density);
+        int margin = Math.round(4 * density);
+        LinearLayout colors = new LinearLayout(requireContext());
+        colors.setOrientation(LinearLayout.HORIZONTAL);
+        for (int color : PRESETS) {
+            View swatch = new View(requireContext());
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(size, size);
+            params.setMargins(margin, margin, margin, margin);
+            swatch.setLayoutParams(params);
+            swatch.setContentDescription(ThemeColorUtil.format(color));
+            swatch.setClickable(true);
+            swatch.setFocusable(true);
+            GradientDrawable background = new GradientDrawable();
+            background.setShape(GradientDrawable.OVAL);
+            background.setColor(color);
+            background.setStroke(Math.max(1, Math.round(density)), 0x55000000);
+            swatch.setBackground(background);
+            swatch.setOnClickListener(view -> binding.input.setText(ThemeColorUtil.format(color)));
+            colors.addView(swatch);
+        }
+        HorizontalScrollView palette = new HorizontalScrollView(requireContext());
+        palette.setHorizontalScrollBarEnabled(false);
+        palette.addView(colors);
+        return palette;
     }
 
     private void render(String raw) {
