@@ -8,6 +8,8 @@ import com.google.gson.JsonParser;
 
 import org.junit.Test;
 
+import java.io.File;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -21,12 +23,60 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 public class PersonalRecommendationServiceTest {
+
+    @Test
+    public void resultCache_readsAndWritesFilteredPage() throws Exception {
+        File directory = java.nio.file.Files.createTempDirectory("personal-rec-cache").toFile();
+        PersonalRecommendationCache cache = new PersonalRecommendationCache(directory);
+        TmdbItem item = new TmdbItem(1, "movie", "测试影片", "2024", "", "", "");
+        PersonalRecommendationService.RecommendationPage page = new PersonalRecommendationService.RecommendationPage(
+                List.of(item), 0, PersonalRecommendationService.DEFAULT_PAGE_SIZE, true, "seed-a|feedback:");
+
+        cache.write("tmdb", "key-a", "seed-a|feedback:", page);
+
+        PersonalRecommendationService.RecommendationPage loaded = cache.read("tmdb", "key-a", "seed-a|feedback:");
+        assertNotNull(loaded);
+        assertEquals(1, loaded.getItems().size());
+        assertEquals("测试影片", loaded.getItems().get(0).getTitle());
+        assertEquals("seed-a|feedback:", loaded.getHistoryFingerprint());
+        assertTrue(loaded.hasMore());
+    }
+
+    @Test
+    public void resultCache_rejectsFingerprintChangeAndCorruptPayload() throws Exception {
+        File directory = java.nio.file.Files.createTempDirectory("personal-rec-cache").toFile();
+        PersonalRecommendationCache cache = new PersonalRecommendationCache(directory);
+        TmdbItem item = new TmdbItem(1, "movie", "测试影片", "2024", "", "", "");
+        PersonalRecommendationService.RecommendationPage page = new PersonalRecommendationService.RecommendationPage(
+                List.of(item), 0, PersonalRecommendationService.DEFAULT_PAGE_SIZE, false, "seed-a|feedback:");
+
+        cache.write("douban", "key-a", "seed-a|feedback:", page);
+        assertNull(cache.read("douban", "key-a", "seed-b|feedback:"));
+
+        java.nio.file.Files.write(
+                new File(directory, "douban_" + "corrupt" + ".json").toPath(),
+                "{broken".getBytes(StandardCharsets.UTF_8));
+        assertNull(cache.read("douban", "corrupt", "seed-b|feedback:"));
+    }
+
+    @Test
+    public void resultCache_ignoresEmptyPage() throws Exception {
+        File directory = java.nio.file.Files.createTempDirectory("personal-rec-cache").toFile();
+        PersonalRecommendationCache cache = new PersonalRecommendationCache(directory);
+        PersonalRecommendationService.RecommendationPage empty = PersonalRecommendationService.RecommendationPage.empty("seed-a|feedback:");
+
+        cache.write("tmdb", "empty", "seed-a|feedback:", empty);
+
+        assertEquals(0, directory.listFiles(File::isFile).length);
+        assertNull(cache.read("tmdb", "empty", "seed-a|feedback:"));
+    }
 
     @Test
     public void enrichTmdbRatings_addsDoubanRatingWithoutDroppingTmdbMetadata() {

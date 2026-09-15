@@ -2186,8 +2186,9 @@ public class VideoActivityLayoutTest {
         assertTrue("original enhanced entry must reveal the initial preview shell", body.contains("hasInitialPreview()) showInitialPreview();"));
         assertTrue("the full-screen TMDB loading overlay must be suppressed while the shell is revealed",
                 overlay.contains("!shouldRevealShellWhileLoading()"));
-        assertTrue("shell reveal must be scoped to the original enhanced detail page",
-                shell.contains("Setting.isOriginalEnhancedDetailPage()"));
+        assertTrue("shell reveal must be scoped to the original enhanced or direct-native detail page",
+                shell.contains("Setting.isOriginalEnhancedDetailPage()")
+                        && shell.contains("Setting.isDirectDetailPage()"));
         assertTrue("shell reveal must show content instead of leaving the page on progress",
                 reveal.contains("mBinding.progressLayout.showContent();"));
         assertTrue("shell reveal must pre-suppress the source text that TMDB later overwrites",
@@ -2223,8 +2224,9 @@ public class VideoActivityLayoutTest {
 
         assertTrue("the detail area must stop waiting for TMDB before revealing in original enhanced mode",
                 waitReveal.contains("isTmdbDetailEnrichmentPending() && !shouldRevealShellWhileLoading()"));
-        assertTrue("shell reveal must be scoped to the original enhanced detail page",
-                shell.contains("Setting.isOriginalEnhancedDetailPage()"));
+        assertTrue("shell reveal must be scoped to the original enhanced or direct-native detail page",
+                shell.contains("Setting.isOriginalEnhancedDetailPage()")
+                        && shell.contains("Setting.isDirectDetailPage()"));
         assertTrue("source text must still wait for TMDB enrichment so the revealed shell does not swap text",
                 text.contains("if (isTmdbDetailEnrichmentPending()) {"));
     }

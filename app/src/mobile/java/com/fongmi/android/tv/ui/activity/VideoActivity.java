@@ -5793,7 +5793,8 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
      * 加载态只由播放器窗口内那一层表达，避免整页先显示主题色遮盖层。
      */
     private boolean shouldRevealShellWhileLoading() {
-        return Setting.isOriginalEnhancedDetailPage() || getIntent().hasExtra(EXTRA_TMDB_DETAIL_THEME);
+        // 影视原生与原生增强一样由播放器窗口表达加载态，避免进场后整页再转一次。
+        return Setting.isOriginalEnhancedDetailPage() || Setting.isDirectDetailPage() || getIntent().hasExtra(EXTRA_TMDB_DETAIL_THEME);
     }
 
     private boolean canRevealPlaybackContent() {

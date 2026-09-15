@@ -1443,7 +1443,7 @@ public class TmdbUIAdapter {
             PersonalRecommendationService.RecommendationPages pages = PersonalRecommendationService.RecommendationPages.empty();
             PersonalRecommendationService service = new PersonalRecommendationService(tmdbService, tmdbConfig);
             try {
-                pages = service.loadPage(vod, item, detail, 0, PersonalRecommendationService.DEFAULT_PAGE_SIZE);
+                pages = service.loadIndependentPages(vod, item, detail, 0, PersonalRecommendationService.DEFAULT_PAGE_SIZE);
             } catch (Throwable e) {
                 SpiderDebug.log("tmdb", "initial personal recommendations failed error=%s", e.getMessage());
             }
@@ -1458,7 +1458,7 @@ public class TmdbUIAdapter {
                 personalDoubanRecommendations = personalDoubanPage.getItems();
                 if (vod != null && (!personalTmdbRecommendations.isEmpty() || !personalDoubanRecommendations.isEmpty())) notifyVodChanged(vod, generation, RefreshEvent.Type.VOD_PERSONAL);
             });
-            service.enrichTmdbPageRatingsAsync(loadedPages.getTmdb(), enriched -> applyPersonalTmdbRatingEnrichment(enriched, generation, vod));
+            service.enrichTmdbPageRatingsAsync(loadedPages.getTmdb(), enriched -> applyPersonalTmdbRatingEnrichment(enriched, generation, vod, item, service));
         });
         loadPersonalAiRecommendationsAsync(vod, item, generation);
     }
@@ -2341,7 +2341,7 @@ public class TmdbUIAdapter {
                 if (callback != null) callback.onLoaded(hasChanged);
                 if (hasAiChanged) loadPersonalAiRecommendationsAsync(vod, tmdbItem, generation);
             });
-            if (hasChanged) service.enrichTmdbPageRatingsAsync(loadedPages.getTmdb(), enriched -> applyPersonalTmdbRatingEnrichment(enriched, generation, vod));
+            if (hasChanged) service.enrichTmdbPageRatingsAsync(loadedPages.getTmdb(), enriched -> applyPersonalTmdbRatingEnrichment(enriched, generation, vod, tmdbItem, service));
         });
     }
 
@@ -2380,7 +2380,7 @@ public class TmdbUIAdapter {
                     if (callback != null) callback.onLoaded(changed);
                 }
             });
-            if (tmdb) service.enrichTmdbPageRatingsAsync(loadedPage, enriched -> applyPersonalTmdbRatingEnrichment(enriched, generation, vod));
+            if (tmdb) service.enrichTmdbPageRatingsAsync(loadedPage, enriched -> applyPersonalTmdbRatingEnrichment(enriched, generation, vod, tmdbItem, service));
         });
     }
 
@@ -2391,10 +2391,13 @@ public class TmdbUIAdapter {
         });
     }
 
-    private void applyPersonalTmdbRatingEnrichment(PersonalRecommendationService.RecommendationPage enriched, int generation, Vod eventVod) {
+    private void applyPersonalTmdbRatingEnrichment(
+            PersonalRecommendationService.RecommendationPage enriched, int generation, Vod eventVod,
+            TmdbItem currentItem, PersonalRecommendationService service) {
         activity.runOnUiThread(() -> {
             if (!isCurrentGeneration(generation) || enriched == null || !mergeRecommendationRatings(personalTmdbRecommendations, enriched.getItems())) return;
             if (personalTmdbPage != null) personalTmdbPage = personalTmdbPage.withItems(personalTmdbRecommendations);
+            if (service != null) service.writeCachedTmdbPage(eventVod, currentItem, personalTmdbPage);
             if (eventVod != null) notifyVodChanged(eventVod, generation, RefreshEvent.Type.VOD_PERSONAL);
         });
     }

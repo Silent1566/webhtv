@@ -55,6 +55,7 @@
 
     <style name="Theme.WebHTV.LightDialog" parent="Theme.Material3.Light.Dialog.Alert">
         <item name="android:windowNoTitle">true</item>
+        <item name="alertDialogStyle">@style/MaterialAlertDialog.WebHTV.Rounded</item>
         <item name="android:windowBackground">?attr/colorSurfaceContainer</item>
         <item name="android:colorBackground">?attr/colorSurfaceContainer</item>
         <item name="android:textColorPrimary">#202124</item>
@@ -72,6 +73,7 @@
     </style>
 
     <style name="ThemeOverlay.WebHTV.LightDialog" parent="ThemeOverlay.Material3.MaterialAlertDialog">
+        <item name="alertDialogStyle">@style/MaterialAlertDialog.WebHTV.Rounded</item>
         <item name="android:colorBackground">?attr/colorSurfaceContainer</item>
         <item name="android:textColorPrimary">#202124</item>
         <item name="android:textColorSecondary">#5F6368</item>
@@ -99,6 +101,17 @@
         绝大多数电视命中），InsetDrawable 经 getPadding() 变成 DecorView 的上下 padding，
         而弹窗高度是我们自己算好写死的，于是内容底部被裁掉约 240px。
     -->
+    <style name="MaterialAlertDialog.WebHTV.Rounded" parent="MaterialAlertDialog.Material3">
+        <item name="backgroundTint">?attr/colorSurfaceContainer</item>
+        <item name="shapeAppearance">@style/ShapeAppearance.WebHTV.Dialog</item>
+        <item name="shapeAppearanceOverlay">@style/ShapeAppearance.WebHTV.Dialog</item>
+    </style>
+
+    <style name="ShapeAppearance.WebHTV.Dialog" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">22dp</item>
+    </style>
+
     <style name="MaterialAlertDialog.WebHTV.NoInset" parent="MaterialAlertDialog.Material3">
         <item name="backgroundInsetStart">0dp</item>
         <item name="backgroundInsetTop">0dp</item>
