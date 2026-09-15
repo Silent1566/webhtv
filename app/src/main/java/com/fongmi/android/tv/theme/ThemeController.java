@@ -216,10 +216,13 @@ public final class ThemeController {
 
     private static void applyButton(MaterialButton button, ThemeTokens tokens) {
         String name = resourceName(button);
+        boolean primary = name.contains("apply") || name.contains("confirm") || name.contains("save")
+                || name.contains("submit") || name.contains("positive");
         boolean secondary = name.contains("cancel") || name.contains("reset") || name.contains("close")
                 || name.contains("outline") || name.contains("more");
-        int background = secondary ? tokens.surfaceElevated() : tokens.primary();
-        int foreground = secondary ? tokens.primary() : tokens.onPrimary();
+        if (!primary && !secondary) return;
+        int background = primary ? tokens.primary() : tokens.surfaceElevated();
+        int foreground = primary ? tokens.onPrimary() : tokens.primary();
         button.setBackgroundTintList(ColorStateList.valueOf(background));
         button.setTextColor(foreground);
         button.setIconTint(ColorStateList.valueOf(foreground));

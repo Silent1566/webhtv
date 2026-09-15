@@ -110,6 +110,16 @@ public class ThemeControllerSourceTest {
     }
 
     @Test
+    public void customAccentOnlyFillsExplicitPrimaryButtons() throws Exception {
+        String controller = read("app/src/main/java/com/fongmi/android/tv/theme/ThemeController.java");
+
+        assertTrue(controller.contains("boolean primary = name.contains(\"apply\")"));
+        assertTrue(controller.contains("if (!primary && !secondary) return;"));
+        assertTrue(controller.contains("int background = primary ? tokens.primary() : tokens.surfaceElevated();"));
+        assertTrue(controller.contains("int foreground = primary ? tokens.onPrimary() : tokens.primary();"));
+    }
+
+    @Test
     public void playerControlRootsAreExplicitForMobileLayouts() throws Exception {
         for (String file : new String[]{
                 "app/src/mobile/res/layout/view_control_vod.xml",
