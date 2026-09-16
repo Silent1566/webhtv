@@ -3937,6 +3937,16 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         return true;
     }
 
+    @Override
+    protected boolean applyGlobalTheme() {
+        return !isCinemaMode();
+    }
+
+    @Override
+    protected boolean preserveDetailThemeState() {
+        return isCinemaMode();
+    }
+
     private ThemeColors currentThemeColors() {
         ThemeColors colors = lightTheme ? ThemeColors.light() : ThemeColors.dark();
         return isCinemaMode() ? ThemeColors.cinema(lightTheme) : colors;

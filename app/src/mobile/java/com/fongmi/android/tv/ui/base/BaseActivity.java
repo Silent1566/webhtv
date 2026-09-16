@@ -49,14 +49,14 @@ public abstract class BaseActivity extends AppCompatActivity {
         enableDynamicColor();
         super.onCreate(savedInstanceState);
         setContentView(getBinding().getRoot());
-        ThemeController.apply(this);
+        if (applyGlobalTheme()) ThemeController.apply(this);
         audioMiniPlayer = new AudioMiniPlayer(this);
         EventBus.getDefault().register(this);
         initView(savedInstanceState);
         setBackCallback();
         initEvent();
         // Some detail/player controls are inflated during initView; bind them after the Activity tree is complete.
-        ThemeController.apply(this);
+        if (applyGlobalTheme()) ThemeController.apply(this);
     }
 
     @Override
@@ -140,7 +140,17 @@ public abstract class BaseActivity extends AppCompatActivity {
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onSubscribe(Object o) {
-        if (o instanceof RefreshEvent event && (event.getType() == RefreshEvent.Type.LANGUAGE || event.getType() == RefreshEvent.Type.THEME)) recreate();
+        if (!(o instanceof RefreshEvent event)) return;
+        if (event.getType() == RefreshEvent.Type.THEME && preserveDetailThemeState()) return;
+        if (event.getType() == RefreshEvent.Type.LANGUAGE || event.getType() == RefreshEvent.Type.THEME) recreate();
+    }
+
+    protected boolean applyGlobalTheme() {
+        return true;
+    }
+
+    protected boolean preserveDetailThemeState() {
+        return false;
     }
 
     protected void onBackInvoked() {

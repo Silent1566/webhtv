@@ -103,6 +103,32 @@ public class ThemeControllerSourceTest {
     }
 
     @Test
+    public void colorfulDetailOwnsItsBackgroundInsteadOfGlobalThemeTraversal() throws Exception {
+        String base = read("app/src/mobile/java/com/fongmi/android/tv/ui/base/BaseActivity.java");
+        String detail = read("app/src/main/java/com/fongmi/android/tv/ui/activity/TmdbDetailActivity.java");
+
+        assertTrue(base.contains("if (applyGlobalTheme()) ThemeController.apply(this);"));
+        assertTrue(base.contains("protected boolean applyGlobalTheme()"));
+        assertTrue(detail.contains("protected boolean applyGlobalTheme()"));
+        assertTrue(detail.contains("return !isCinemaMode();"));
+        assertTrue(detail.contains("return isCinemaMode() ? ThemeColors.cinema(lightTheme) : colors;"));
+    }
+
+    @Test
+    public void highlightColorRefreshDoesNotRecreateColorfulDetailActivity() throws Exception {
+        String editor = read("app/src/mobile/java/com/fongmi/android/tv/ui/dialog/ThemeEditorDialog.java");
+        String base = read("app/src/mobile/java/com/fongmi/android/tv/ui/base/BaseActivity.java");
+        String detail = read("app/src/main/java/com/fongmi/android/tv/ui/activity/TmdbDetailActivity.java");
+
+        assertTrue(editor.contains("setHighlightColor(color)"));
+        assertTrue(editor.contains("RefreshEvent.theme()"));
+        assertTrue(detail.contains("return isCinemaMode() ? ThemeColors.cinema(lightTheme) : colors;"));
+        assertTrue(base.contains("if (event.getType() == RefreshEvent.Type.THEME && preserveDetailThemeState()) return;"));
+        assertTrue(base.contains("protected boolean preserveDetailThemeState()"));
+        assertTrue(detail.contains("protected boolean preserveDetailThemeState()"));
+    }
+
+    @Test
     public void mobileThemeEditorShowsAndPersistsMasterSwitch() throws Exception {
         String layout = read("app/src/mobile/res/layout/dialog_theme_editor.xml");
         String editor = read("app/src/mobile/java/com/fongmi/android/tv/ui/dialog/ThemeEditorDialog.java");
