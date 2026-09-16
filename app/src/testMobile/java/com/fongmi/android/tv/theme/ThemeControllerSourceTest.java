@@ -103,6 +103,14 @@ public class ThemeControllerSourceTest {
     }
 
     @Test
+    public void tmdbInlinePlayerUsesBlackShutterWhileVideoIsUnavailable() throws Exception {
+        String layout = read("app/src/main/res/layout/activity_tmdb_detail.xml");
+
+        assertTrue(layout.contains("app:shutter_background_color=\"@android:color/black\""));
+        assertTrue(layout.contains("app:surface_type=\"none\""));
+    }
+
+    @Test
     public void colorfulDetailOwnsItsBackgroundInsteadOfGlobalThemeTraversal() throws Exception {
         String base = read("app/src/mobile/java/com/fongmi/android/tv/ui/base/BaseActivity.java");
         String detail = read("app/src/main/java/com/fongmi/android/tv/ui/activity/TmdbDetailActivity.java");
