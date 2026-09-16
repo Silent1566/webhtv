@@ -103,6 +103,22 @@ public class ThemeControllerSourceTest {
     }
 
     @Test
+    public void videoActivityPlayersUseBlackShutterAcrossMobileLayouts() throws Exception {
+        String[] layouts = {
+                "app/src/mobile/res/layout/activity_video.xml",
+                "app/src/mobile/res/layout-land/activity_video.xml",
+                "app/src/mobile/res/layout-sw600dp/activity_video.xml",
+                "app/src/mobile/res/layout-sw600dp-land/activity_video.xml"
+        };
+
+        for (String path : layouts) {
+            String layout = read(path);
+            assertTrue(path, layout.contains("app:shutter_background_color=\"@android:color/black\""));
+            assertTrue(path, layout.contains("app:surface_type=\"none\""));
+        }
+    }
+
+    @Test
     public void tmdbInlinePlayerUsesBlackShutterWhileVideoIsUnavailable() throws Exception {
         String layout = read("app/src/main/res/layout/activity_tmdb_detail.xml");
 
