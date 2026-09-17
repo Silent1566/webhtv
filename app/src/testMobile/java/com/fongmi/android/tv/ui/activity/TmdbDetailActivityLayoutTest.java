@@ -55,6 +55,23 @@ public class TmdbDetailActivityLayoutTest {
     }
 
     @Test
+    public void directPlayClearThemeUsesCompactSharedTmdbSectionGap() throws Exception {
+        String source = readJava("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java");
+        String refresh = javaBlockAt(source, "private void bindTmdbSection()");
+
+        assertTrue("direct-play clear theme must compact every populated TMDB rail gap while other themes retain the standard spacing",
+                refresh.contains("int sectionGapDp = modeController.isPlayerMode() && !modeController.isCinemaStyle() ? 12 : 20;")
+                        && refresh.contains("binding.posterTitle, hasPhotos ? sectionGapDp : 0")
+                        && refresh.contains("binding.relatedVideoTitle, hasPhotos || hasPosters ? sectionGapDp : 0")
+                        && refresh.contains("binding.castTitle, hasPhotos || hasPosters || hasRelatedVideos ? sectionGapDp : 0")
+                        && refresh.contains("binding.creatorTitle, hasPhotos || hasPosters || hasRelatedVideos || hasCast ? sectionGapDp : 0")
+                        && refresh.contains("binding.relatedTitle, hasPhotos || hasPosters || hasRelatedVideos || hasCast || hasCreators ? sectionGapDp : 0")
+                        && refresh.contains("binding.personalTmdbTitle, hasPhotos || hasPosters || hasCast || hasCreators || hasRelated || hasRelatedVideos ? sectionGapDp : 0")
+                        && refresh.contains("binding.personalDoubanTitle, hasPhotos || hasPosters || hasCast || hasCreators || hasRelated || hasRelatedVideos || hasPersonalTmdb ? sectionGapDp : 0")
+                        && refresh.contains("binding.personalAiTitle, hasPhotos || hasPosters || hasCast || hasCreators || hasRelated || hasRelatedVideos || hasPersonalTmdb || hasPersonalDouban ? sectionGapDp : 0"));
+    }
+
+    @Test
     public void seasonSourceRoutesRefreshAndCarrySnapshotSelection() throws Exception {
         Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
         String source = Files.readString(sourcePath, StandardCharsets.UTF_8);

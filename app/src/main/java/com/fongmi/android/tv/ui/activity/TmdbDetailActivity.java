@@ -5952,49 +5952,50 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         episodePhotoAdapter.setItems(tmdbEpisodePhotos);
         episodePhotoAdapter.rebindAttached(binding.episodePhotoList);
 
-        setTopMargin(binding.posterTitle, hasPhotos ? 20 : 0);
+        int sectionGapDp = modeController.isPlayerMode() && !modeController.isCinemaStyle() ? 12 : 20;
+        setTopMargin(binding.posterTitle, hasPhotos ? sectionGapDp : 0);
         binding.posterTitle.setVisibility(hasPosters ? View.VISIBLE : View.GONE);
         binding.posterList.setVisibility(hasPosters ? View.VISIBLE : View.GONE);
         posterAdapter.setItems(detailTmdbPosters);
         posterAdapter.rebindAttached(binding.posterList);
 
-        setTopMargin(binding.relatedVideoTitle, hasPhotos || hasPosters ? 20 : 0);
+        setTopMargin(binding.relatedVideoTitle, hasPhotos || hasPosters ? sectionGapDp : 0);
         binding.relatedVideoTitle.setVisibility(hasRelatedVideos ? View.VISIBLE : View.GONE);
         binding.relatedVideoList.setVisibility(hasRelatedVideos ? View.VISIBLE : View.GONE);
         relatedVideoAdapter.setItems(relatedVideoItems);
         relatedVideoAdapter.rebindAttached(binding.relatedVideoList);
 
-        setTopMargin(binding.castTitle, hasPhotos || hasPosters || hasRelatedVideos ? 20 : 0);
+        setTopMargin(binding.castTitle, hasPhotos || hasPosters || hasRelatedVideos ? sectionGapDp : 0);
         binding.castTitle.setVisibility(hasCast ? View.VISIBLE : View.GONE);
         binding.castList.setVisibility(hasCast ? View.VISIBLE : View.GONE);
         castAdapter.setItems(castItems);
         castAdapter.rebindAttached(binding.castList);
 
-        setTopMargin(binding.creatorTitle, hasPhotos || hasPosters || hasRelatedVideos || hasCast ? 20 : 0);
+        setTopMargin(binding.creatorTitle, hasPhotos || hasPosters || hasRelatedVideos || hasCast ? sectionGapDp : 0);
         binding.creatorTitle.setVisibility(hasCreators ? View.VISIBLE : View.GONE);
         binding.creatorList.setVisibility(hasCreators ? View.VISIBLE : View.GONE);
         creatorAdapter.setItems(creatorItems);
         creatorAdapter.rebindAttached(binding.creatorList);
 
-        setTopMargin(binding.relatedTitle, hasPhotos || hasPosters || hasRelatedVideos || hasCast || hasCreators ? 20 : 0);
+        setTopMargin(binding.relatedTitle, hasPhotos || hasPosters || hasRelatedVideos || hasCast || hasCreators ? sectionGapDp : 0);
         binding.relatedTitle.setVisibility(hasRelated ? View.VISIBLE : View.GONE);
         binding.relatedList.setVisibility(hasRelated ? View.VISIBLE : View.GONE);
         relatedAdapter.setItems(relatedItems);
         relatedAdapter.rebindAttached(binding.relatedList);
 
-        setTopMargin(binding.personalTmdbTitle, hasPhotos || hasPosters || hasCast || hasCreators || hasRelated || hasRelatedVideos ? 20 : 0);
+        setTopMargin(binding.personalTmdbTitle, hasPhotos || hasPosters || hasCast || hasCreators || hasRelated || hasRelatedVideos ? sectionGapDp : 0);
         binding.personalTmdbTitle.setVisibility(hasPersonalTmdb ? View.VISIBLE : View.GONE);
         binding.personalTmdbList.setVisibility(hasPersonalTmdb ? View.VISIBLE : View.GONE);
         personalTmdbAdapter.setItems(personalTmdbItems);
         personalTmdbAdapter.rebindAttached(binding.personalTmdbList);
 
-        setTopMargin(binding.personalDoubanTitle, hasPhotos || hasPosters || hasCast || hasCreators || hasRelated || hasRelatedVideos || hasPersonalTmdb ? 20 : 0);
+        setTopMargin(binding.personalDoubanTitle, hasPhotos || hasPosters || hasCast || hasCreators || hasRelated || hasRelatedVideos || hasPersonalTmdb ? sectionGapDp : 0);
         binding.personalDoubanTitle.setVisibility(hasPersonalDouban ? View.VISIBLE : View.GONE);
         binding.personalDoubanList.setVisibility(hasPersonalDouban ? View.VISIBLE : View.GONE);
         personalDoubanAdapter.setItems(personalDoubanItems);
         personalDoubanAdapter.rebindAttached(binding.personalDoubanList);
 
-        setTopMargin(binding.personalAiTitle, hasPhotos || hasPosters || hasCast || hasCreators || hasRelated || hasRelatedVideos || hasPersonalTmdb || hasPersonalDouban ? 20 : 0);
+        setTopMargin(binding.personalAiTitle, hasPhotos || hasPosters || hasCast || hasCreators || hasRelated || hasRelatedVideos || hasPersonalTmdb || hasPersonalDouban ? sectionGapDp : 0);
         binding.personalAiTitle.setVisibility(hasPersonalAi ? View.VISIBLE : View.GONE);
         binding.personalAiList.setVisibility(hasPersonalAi ? View.VISIBLE : View.GONE);
         personalAiAdapter.setItems(personalAiItems);
