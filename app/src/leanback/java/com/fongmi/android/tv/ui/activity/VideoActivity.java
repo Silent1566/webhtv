@@ -1357,6 +1357,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         initTmdbMode();
         super.initView(savedInstanceState);
         SpiderDebug.log("video-flow", "initView after playback cost=%dms", System.currentTimeMillis() - start);
+        applyPlaybackOverlay();
         mFrameParams = mBinding.video.getLayoutParams();
         mPlayerUi = new VodPlayerUiController(new VodPlayerUiHost() {
             @Override
@@ -1400,6 +1401,10 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         setViewModel();
         checkId();
         SpiderDebug.log("video-flow", "initView end cost=%dms sinceLaunch=%dms", System.currentTimeMillis() - start, getLaunchCost(System.currentTimeMillis()));
+    }
+
+    private void applyPlaybackOverlay() {
+        mBinding.control.getRoot().setBackgroundResource(Setting.isPlaybackOverlayEnabled() ? R.drawable.shape_controller_scrim : R.color.transparent);
     }
 
     /**
@@ -1546,7 +1551,7 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
                 .setTitle(R.string.intro_skip_confirm_title)
                 .setMessage(IntroSkipKinds.confirmMessage(segment))
                 .setPositiveButton(android.R.string.ok, (dialog, which) -> action.run())
-                .setNegativeButton(android.R.string.cancel, null)
+                .setNegativeButton(android.R.string.cancel, (dialog, which) -> mIntroSkipPlayback.declineConfirmation(segment))
                 .show();
             mIntroSkipConfirmDialog.setOnDismissListener(dialog -> {
                 mIntroSkipPlayback.cancelConfirmation(segment);
@@ -5273,7 +5278,8 @@ private long mInitialPlaybackPosition = C.TIME_UNSET;
         }
 
         if (!sameEpisode && !tmdbHistoryResumePending) {
-            // 从缓存中恢复新集的播放位置
+            // updatePlaybackHistoryPosition() 刚把旧集进度写回 History；切换新集前必须先覆盖，
+            // 否则新集没有独立缓存时会继承旧集进度并从错误位置开始播放。
             EpisodePositionCache.EpisodePosition cached = skipEpisodePositionCache() ? null : EpisodePositionCache.get().get(
                 getKey(),
                 getId(),

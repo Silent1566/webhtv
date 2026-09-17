@@ -3,13 +3,14 @@ package com.fongmi.android.tv.ui.detail;
 import android.view.View;
 
 import com.fongmi.android.tv.databinding.ActivityTmdbDetailBinding;
+import com.fongmi.android.tv.setting.PlayerSetting;
 
 /**
  * 沉浸融合模式 Controller。
  * <p>
  * 特点：
  * - 显示内联播放器
- * - 不自动播放
+ * - 按“点播自动播放”设置决定是否自动播放
  * - 特殊按钮布局（fusionActions 可见，detailActions 隐藏）
  * - heroSpacer 隐藏
  */
@@ -31,7 +32,7 @@ public class FusionDetailController extends BaseTmdbDetailModeController {
 
     @Override
     protected boolean autoPlay() {
-        return false; // 融合模式不自动播放
+        return PlayerSetting.isAutoPlay();
     }
 
     @Override
@@ -58,4 +59,9 @@ public class FusionDetailController extends BaseTmdbDetailModeController {
         // TODO: 融合模式特有的播放开始逻辑
         // 目前留空，等 Phase 2 迁移具体逻辑
     }
+    @Override
+    public void play() {
+        host.playInline();
+    }
+
 }

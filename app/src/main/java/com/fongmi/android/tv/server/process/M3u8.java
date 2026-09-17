@@ -91,8 +91,14 @@ public class M3u8 implements Process {
             if (!upstream.isSuccessful()) return error(status(upstream.code()), "Playlist HTTP " + upstream.code());
             String text = body.string();
             if (!looksLikePlaylist(text)) return Nano.error(Response.Status.BAD_REQUEST, "Invalid playlist");
+            List<HlsManifestCleaner.Rule> rules = List.of();
+            boolean legacyFallback = false;
+            if (Setting.isAdblock()) {
+                rules = hlsRules();
+                legacyFallback = !rules.isEmpty() && HlsRuleConfig.isLegacyFallbackEnabled();
+            }
             HlsAdblockPipeline.Outcome clean = Setting.isAdblock()
-                    ? HlsAdblockPipeline.apply(upstream.request().url().toString(), text, hlsRules(), true)
+                    ? HlsAdblockPipeline.apply(upstream.request().url().toString(), text, rules, legacyFallback)
                     : new HlsAdblockPipeline.Outcome(text, false, false, 0, 0);
             recordAndNotify(upstream.request().url(), clean);
             String rewritten = rewrite(upstream.request().url(), clean.manifest());
@@ -105,8 +111,9 @@ public class M3u8 implements Process {
 
     private void recordAndNotify(HttpUrl url, HlsAdblockPipeline.Outcome clean) {
         if (!clean.structured() && !clean.legacy()) return;
-        long fallbackCount = clean.legacy() ? 1 : 0;
-        AdBlockStatsStore.recordBlocks(url.host(), clean.ruleCounts(), fallbackCount);
+        long fallbackCount = clean.legacy() ? Math.max(1, clean.removedSegments()) : 0;
+        AdBlockStatsStore.recordBlocks(url.host(), "HLS", clean.ruleCounts(), fallbackCount,
+                url.host(), clean.removedDurationSec(), clean.removedSegmentDetails());
         if (!HlsAdblockNotice.shouldNotify(url.toString(), System.currentTimeMillis())) return;
         int removed = clean.removedSegments() > 0 ? clean.removedSegments() : (int) fallbackCount;
         String message = clean.structured() && clean.removedDurationSec() > 0

@@ -71,7 +71,11 @@ public class AdRuleAdapter extends RecyclerView.Adapter<AdRuleAdapter.ViewHolder
         public String getSummary(Context context) {
             if (type == RuleType.USER_RULE) return userRule.getSummary();
             if (type == RuleType.HLS_RULE) {
-                String status = hlsRule.valid()
+                if (HlsRuleConfig.LEGACY_FALLBACK_KEY.equals(hlsRule.id())) {
+                String status = context.getString(isEnabled() ? R.string.ad_rule_hls_enabled : R.string.ad_rule_hls_disabled);
+                return HlsRuleConfig.LEGACY_FALLBACK_SUMMARY + " · " + status;
+            }
+            String status = hlsRule.valid()
                         ? context.getString(isEnabled() ? R.string.ad_rule_hls_enabled : R.string.ad_rule_hls_disabled)
                         : context.getString(R.string.ad_rule_hls_invalid, hlsRule.error());
                 return context.getString(R.string.ad_rule_hls_builtin_summary, hlsRule.version(), status);

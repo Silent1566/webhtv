@@ -301,6 +301,11 @@ public class AdRuleManageDialog extends BaseAlertDialog implements AdRuleAdapter
         String status = item.valid()
                 ? getString(item.enabled() ? R.string.ad_rule_hls_enabled : R.string.ad_rule_hls_disabled)
                 : getString(R.string.ad_rule_hls_invalid, item.error());
+        if (HlsRuleConfig.LEGACY_FALLBACK_KEY.equals(item.id())) {
+            return getString(R.string.ad_rule_hls_builtin_summary, item.version(), status)
+                    + "\n\n规则 ID\n" + item.id()
+                    + "\n\n具体判断规则\n" + HlsRuleConfig.LEGACY_FALLBACK_DETAIL;
+        }
         HlsAdRule rule = BuiltinHlsRuleLoader.getRules().stream().filter(value -> item.id().equals(value.getId())).findFirst().orElse(null);
         if (rule == null) return getString(R.string.ad_rule_hls_builtin_summary, item.version(), status) + "\n\n规则 ID\n" + item.id();
         JsonObject json = App.gson().toJsonTree(rule).getAsJsonObject();

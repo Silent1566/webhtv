@@ -56,6 +56,7 @@ import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.BuildConfig;
 import com.fongmi.android.tv.bean.Drm;
 import com.fongmi.android.tv.bean.Sub;
+import com.fongmi.android.tv.api.config.HlsRuleConfig;
 import com.fongmi.android.tv.player.PlayerHelper;
 import com.fongmi.android.tv.player.PlaybackAutoContext;
 import com.fongmi.android.tv.player.PlaybackAutoContextStore;
@@ -238,7 +239,8 @@ public class ExoUtil {
         builder.setDrmConfiguration(buildDrmConfig(spec.getDrm()));
         builder.setRequestMetadata(buildRequestMetadata(spec));
         builder.setMediaMetadata(spec.getMetadata());
-        builder.setAdblock(Setting.isAdblock());
+        builder.setAdblock(Setting.isAdblock() && !HlsRuleConfig.getRules().isEmpty()
+                && HlsRuleConfig.isLegacyFallbackEnabled());
         builder.setMimeType(spec.getFormat());
         builder.setImageDurationMs(15000);
         builder.setMediaId(mediaId == null || mediaId.isEmpty() ? spec.getKey() : mediaId);

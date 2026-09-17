@@ -1068,6 +1068,32 @@
 
         </LinearLayout>
 
+        <FrameLayout
+            android:id="@+id/playerLoading"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone">
+
+            <com.google.android.material.progressindicator.CircularProgressIndicator
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:indeterminate="true"
+                app:indicatorColor="@color/white" />
+
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/playerLoadingTraffic"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:layout_marginTop="44dp"
+                android:fontFeatureSettings="tnum"
+                android:textColor="@color/white"
+                android:textSize="16sp"
+                android:visibility="gone" />
+
+        </FrameLayout>
+
         <TextView
             android:id="@+id/playerDisplayTraffic"
             style="@style/Shadow"

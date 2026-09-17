@@ -133,6 +133,14 @@ public class IntroSkipPlayback {
         if (isConfirmationPending(segment)) pendingConfirmationId = "";
     }
 
+    /** 用户明确拒绝本段后，本集内不再重复询问；下一集 reset 后恢复。 */
+    public void declineConfirmation(Segment segment) {
+        String id = id(segment);
+        if (id.isEmpty()) return;
+        skipped.add(id);
+        if (id.equals(pendingConfirmationId)) pendingConfirmationId = "";
+    }
+
     /** 只有实际执行了跳转/换集后才把片段记为已处理。 */
     public void completeConfirmation(Segment segment) {
         String id = id(segment);

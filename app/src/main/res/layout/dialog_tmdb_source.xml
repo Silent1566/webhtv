@@ -332,6 +332,15 @@
                         />
 
                     <com.google.android.material.button.MaterialButton
+                        android:id="@+id/testConfig"
+                        style="@style/Widget.WebHTV.LightDialog.Button.Tonal"
+                        android:layout_width="0dp"
+                        android:layout_height="52dp"
+                        android:layout_marginStart="12dp"
+                        android:layout_weight="1"
+                        />
+
+                    <com.google.android.material.button.MaterialButton
                         android:id="@+id/resetDefault"
                         style="@style/Widget.WebHTV.LightDialog.Button.Tonal"
                         android:layout_width="0dp"

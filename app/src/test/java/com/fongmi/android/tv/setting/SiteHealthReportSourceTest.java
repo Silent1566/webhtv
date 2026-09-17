@@ -29,6 +29,9 @@ public class SiteHealthReportSourceTest {
         assertTrue(source.contains("detailReasons"));
         assertTrue(source.contains("parseReasons"));
         assertTrue(source.contains("playReasons"));
+        assertTrue(source.contains("AdBlockStatsStore.getStats()"));
+        assertTrue(source.contains("public final long adBlockedTotal"));
+        assertTrue(source.contains("public final Map<String, Long> adBlockedByPipeline"));
 
         String score = methodBody(source, "private double score()");
         assertFalse("Sort score should not depend on parse metrics in the report-only slice", score.contains("parseSuccess"));
@@ -112,6 +115,19 @@ public class SiteHealthReportSourceTest {
         assertTrue(strings.contains("name=\"site_health_clear_all_message\""));
         assertTrue(strings.contains("name=\"site_health_reason_timeout\""));
         assertTrue(strings.contains("name=\"site_health_stage_parse\""));
+    }
+
+    @Test
+    public void healthReportExposesSiteRuleAndPipelineAdDimensions() throws Exception {
+        String store = read(mainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "setting", "SiteHealthStore.java")));
+        String dialog = read(mainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "dialog", "SiteHealthReportDialog.java")));
+
+        assertTrue(store.contains("public final Map<String, Long> adBlockedBySite;"));
+        assertTrue(store.contains("public final Map<String, Long> adBlockedByRule;"));
+        assertTrue(store.contains("public final Map<String, Long> adBlockedByPipeline;"));
+        assertTrue(dialog.contains("R.string.ad_site_rank"));
+        assertTrue(dialog.contains("R.string.ad_rule_rank"));
+        assertTrue(dialog.contains("R.string.ad_pipeline_rank"));
     }
 
     private static String methodBody(String source, String signature) {

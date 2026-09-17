@@ -5,6 +5,9 @@ import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
+import java.util.List;
+import java.util.Map;
+
 public class ExoHlsAdblockDataSourceTest {
 
     @Test
@@ -13,6 +16,19 @@ public class ExoHlsAdblockDataSourceTest {
         assertTrue(ExoHlsAdblockDataSource.isManifestUrl("https://example.test/live/playlist.m3u8?token=1"));
         assertFalse(ExoHlsAdblockDataSource.isManifestUrl("https://example.test/live/segment.ts"));
         assertFalse(ExoHlsAdblockDataSource.isManifestUrl("https://example.test/live/key.bin"));
+    }
+
+    @Test
+    public void identifiesExtensionlessHlsManifestFromResponseContentType() {
+        assertTrue(ExoHlsAdblockDataSource.isManifestRequest(
+                "https://example.test/playback/token",
+                Map.of("Content-Type", List.of("application/vnd.apple.mpegurl; charset=utf-8"))));
+        assertTrue(ExoHlsAdblockDataSource.isManifestRequest(
+                "https://example.test/playback/token",
+                Map.of("content-type", List.of("application/x-mpegURL"))));
+        assertFalse(ExoHlsAdblockDataSource.isManifestRequest(
+                "https://example.test/live/segment.ts",
+                Map.of("Content-Type", List.of("video/mp2t"))));
     }
 
     @Test

@@ -2598,12 +2598,17 @@
     <string name="ad_block_total">總攔截次數</string>
     <string name="ad_feedback_count">AI 反饋次數</string>
     <string name="ad_ai_success_rate">AI 分析成功率</string>
-    <string name="ad_site_rank">站點攔截排行</string>
-    <string name="ad_rule_rank">規則命中排行</string>
+    <string name="ad_site_rank">站點</string>
+    <string name="ad_rule_rank">規則</string>
+    <string name="ad_pipeline_rank">播放鏈路</string>
     <string name="ad_stats_reset">重置統計</string>
     <string name="ad_stats_reset_confirm">確定重置所有統計數據嗎？</string>
     <string name="ad_stats_empty">暫無統計數據</string>
-    <string name="ad_stats_overview">統計概覽</string>
+    <string name="ad_stats_overview">概覽</string>
+    <string name="ad_site_overview">站點統計概覽</string>
+    <string name="ad_site_count">涉及站點數</string>
+    <string name="ad_top_site">攔截最多站點</string>
+    <string name="ad_top_site_share">攔截佔比</string>
     <string name="ad_stats_times">次</string>
     <string name="ad_stats_percent">%.1f%%</string>
     <string name="ad_stats_site_name">站點</string>
@@ -2740,4 +2745,13 @@
     <string name="setting_ad_probe_revision">revision %1$d · %2$d 條規則</string>
     <string name="setting_ad_probe_never">尚未拉取</string>
     <string name="setting_ad_probe_url_invalid">規則源必須以 https:// 開頭</string>
-    <string name="setting_ad_probe_source_disabled">請先填寫社群規則源位址</string></resources>
+    <string name="setting_ad_probe_source_disabled">請先填寫社群規則源位址</string>
+    <string name="dialog_tmdb_test_config">測試配置</string>
+    <string name="dialog_tmdb_test_result_title">配置測試結果</string>
+    <string name="dialog_tmdb_test_api_success">TMDB API：連線成功並傳回有效資料（%1$d 毫秒）</string>
+    <string name="dialog_tmdb_test_api_failed">TMDB API：測試失敗（%1$s，%2$d 毫秒）</string>
+    <string name="dialog_tmdb_test_image_success">圖片網域：連線成功並傳回有效圖片（%1$d 毫秒）</string>
+    <string name="dialog_tmdb_test_image_failed">圖片網域：測試失敗（%1$s，%2$d 毫秒）</string>
+    <string name="dialog_tmdb_test_omdb_success">OMDb API：連線成功並傳回有效資料（%1$d 毫秒）</string>
+    <string name="dialog_tmdb_test_omdb_failed">OMDb API：測試失敗（%1$s，%2$d 毫秒）</string>
+</resources>

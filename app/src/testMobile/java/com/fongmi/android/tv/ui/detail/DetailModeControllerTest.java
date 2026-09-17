@@ -74,6 +74,19 @@ public class DetailModeControllerTest {
     }
 
     @Test
+    public void playerDetailController_bindsPlaybackServiceWithoutAutoPlay() throws Exception {
+        Path controllerPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "detail", "PlayerDetailController.java"));
+        String source = Files.readString(controllerPath, StandardCharsets.UTF_8);
+
+        assertTrue("detail direct-play must bind PlaybackService before the explicit play click",
+                source.contains("public boolean shouldBindPlaybackService()")
+                        && source.contains("return true;"));
+        assertTrue("binding PlaybackService must not enable automatic playback",
+                source.contains("protected boolean autoPlay()")
+                        && source.contains("return false; // 详情直放必须由用户点击播放"));
+    }
+
+    @Test
     public void tmdbDetailActivity_delegatesToModeController() throws Exception {
         Path activityPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
         String source = new String(Files.readAllBytes(activityPath), StandardCharsets.UTF_8);
@@ -130,37 +143,41 @@ public class DetailModeControllerTest {
 
         // 详情直放必须进入内嵌全屏播放器，不能因为播放载入界面误判成融合模式。
         assertTrue("detail-player mode must keep fullscreen inline playback",
-                onPlayBody.contains("if (modeController.isFusionMode()) playInline();")
-                        && onPlayBody.contains("else if (modeController.isPlayerMode()) playDetailFullscreen();"));
+                onPlayBody.contains("modeController.play();")
+                        && !onPlayBody.contains("isFusionMode()")
+                        && !onPlayBody.contains("isPlayerMode()"));
         assertTrue("detail-player mode must restore the selected mode when no intent mode marker exists",
                 detailModeBody.contains("return Setting.getDetailOpenMode();")
                         && !detailModeBody.contains("getIntent().getBooleanExtra(\"fusion\", false) ? Setting.DETAIL_OPEN_FUSION : Setting.DETAIL_OPEN_ENHANCED"));
     }
 
     @Test
-    public void playerDetailMode_entersFullscreenBeforeAsyncPlayerLoad() throws Exception {
+    public void playerDetailMode_entersFullscreenBeforeStartingPlayback() throws Exception {
         Path activityPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
         String source = Files.readString(activityPath, StandardCharsets.UTF_8);
         String playBody = methodBody(source, "private void playDetailFullscreen()");
+
         int enterFullscreen = playBody.indexOf("enterInlineFullscreen();");
         int startPlayback = playBody.indexOf("if (!current) playInline();");
-
-        // 详情直放点击后必须先铺满全屏播放器，再异步解析；不能先显示沉浸融合详情页。
-        assertTrue("detail-player playback must enter fullscreen before async player loading",
+        assertTrue("new detail-player playback must enter fullscreen before playback starts",
                 enterFullscreen >= 0 && startPlayback > enterFullscreen);
-        assertTrue("detail-player must not defer fullscreen until the first frame",
-                !playBody.contains("detailPlayerFullscreenPending"));
+        assertTrue("detail-player must not retain a first-frame pending transition",
+                playBody.contains("detailPlayerFullscreenPending = false;")
+                        && !playBody.contains("detailPlayerFullscreenPending = !current;"));
     }
 
     @Test
-    public void playerDetailMode_doesNotClearPlayerAfterEnteringFullscreen() throws Exception {
+    public void playerDetailMode_reusesCurrentPlaybackWithoutReloading() throws Exception {
         Path activityPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
         String source = Files.readString(activityPath, StandardCharsets.UTF_8);
         String playBody = methodBody(source, "private void playDetailFullscreen()");
         String inlineBody = methodBody(source, "private void playInline(long resumePosition, String failedUrl, String failureMessage)");
 
-        assertTrue("detail-player startup must enter fullscreen before resolving playback",
-                playBody.contains("enterInlineFullscreen();")
+        int enterFullscreen = playBody.indexOf("enterInlineFullscreen();");
+        int startPlayback = playBody.indexOf("if (!current) playInline();");
+        assertTrue("current playback may enter fullscreen immediately while new playback resolves once",
+                enterFullscreen >= 0
+                        && startPlayback > enterFullscreen
                         && !inlineBody.contains("stopInlinePlayerForReload();"));
     }
 
@@ -171,9 +188,22 @@ public class DetailModeControllerTest {
         String autoPlayBody = methodBody(source, "private void maybeAutoPlayInline()");
 
         // 详情直放只定义点击播放后的全屏行为，进入详情页本身不能触发播放。
-        assertTrue("detail-player mode must wait for an explicit playback action",
-                !autoPlayBody.contains("isPlayerMode()")
+        assertTrue("auto playback eligibility must be delegated to the active mode controller",
+                autoPlayBody.contains("modeController.shouldAutoPlay()")
+                        && !autoPlayBody.contains("isFusionMode()")
+                        && !autoPlayBody.contains("isAutoPlayMode()")
                         && autoPlayBody.contains("binding.playerPanel.post(this::onPlay);"));
+    }
+
+    @Test
+    public void playbackHistoryPublishing_isDelegatedToModeController() throws Exception {
+        Path activityPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
+        String source = Files.readString(activityPath, StandardCharsets.UTF_8);
+        String body = methodBody(source, "private void updateInlineHistory(Episode item)");
+
+        assertTrue("history publishing eligibility must be delegated to the active mode controller",
+                body.contains("modeController.shouldPublishPlaybackHistory()")
+                        && !body.contains("isFusionMode() || isPlayerMode()"));
     }
 
     private String methodBody(String source, String signature) {

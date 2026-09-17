@@ -9,7 +9,7 @@ import com.fongmi.android.tv.databinding.ActivityTmdbDetailBinding;
  * <p>
  * 特点：
  * - 不显示内联播放器（初始）
- * - 自动播放（进入后立即全屏播放）
+ * - 由用户点击播放后进入全屏
  * - detailActions 可见，fusionActions 隐藏
  * - heroSpacer 可见
  */
@@ -31,7 +31,7 @@ public class PlayerDetailController extends BaseTmdbDetailModeController {
 
     @Override
     protected boolean autoPlay() {
-        return true; // 详情直放模式自动播放
+        return false; // 详情直放必须由用户点击播放
     }
 
     @Override
@@ -40,13 +40,29 @@ public class PlayerDetailController extends BaseTmdbDetailModeController {
     }
 
     @Override
+    public boolean shouldBindPlaybackService() {
+        return true;
+    }
+
+
+    @Override
+    public void onExitFullscreen() {
+        host.closeDetailFullscreenPlayer();
+    }
+
+    @Override
     public void applyInitialLayout() {
         ActivityTmdbDetailBinding binding = (ActivityTmdbDetailBinding) host.binding();
 
-        // 详情直放模式布局设置（与炫彩详情类似，但后续会自动触发播放）
+        // 详情直放模式布局设置，等待用户点击播放
         binding.playerPanel.setVisibility(View.GONE);
         binding.heroSpacer.setVisibility(View.VISIBLE);
         binding.fusionActions.setVisibility(View.GONE);
         binding.detailActions.setVisibility(View.VISIBLE);
     }
+    @Override
+    public void play() {
+        host.playDetailFullscreen();
+    }
+
 }

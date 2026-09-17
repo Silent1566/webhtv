@@ -26,6 +26,23 @@ public class IntroSkipPlaybackStateTest {
     }
 
     @Test
+    public void decliningConfirmationHandlesSegmentUntilReset() {
+        IntroSkipPlayback playback = new IntroSkipPlayback();
+        Segment segment = segment();
+
+        assertTrue(playback.beginConfirmation(segment));
+        playback.declineConfirmation(segment);
+
+        assertTrue(playback.isSegmentHandled(segment));
+        assertFalse(playback.isConfirmationPending(segment));
+        assertFalse("本集内拒绝后不能再次询问同一片段", playback.beginConfirmation(segment));
+
+        playback.reset();
+        assertFalse(playback.isSegmentHandled(segment));
+        assertTrue("换集 reset 后应允许再次询问", playback.beginConfirmation(segment));
+    }
+
+    @Test
     public void completingConfirmationMarksOnlyThatStableSegmentHandled() {
         IntroSkipPlayback playback = new IntroSkipPlayback();
         Segment segment = segment();

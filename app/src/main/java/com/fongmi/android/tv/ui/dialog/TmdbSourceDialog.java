@@ -17,7 +17,9 @@ import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.bean.TmdbConfig;
+import com.fongmi.android.tv.service.TmdbConfigTestService;
 import com.fongmi.android.tv.setting.Setting;
+import com.fongmi.android.tv.utils.Task;
 import com.google.android.material.chip.Chip;
 import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
@@ -83,14 +85,17 @@ public class TmdbSourceDialog {
         TextView addBtn = view.findViewById(R.id.add);
         TextView addDisabledBtn = view.findViewById(R.id.addDisabled);
         TextView manageBtn = view.findViewById(R.id.manage);
+        TextView testBtn = view.findViewById(R.id.testConfig);
         TextView resetBtn = view.findViewById(R.id.resetDefault);
         addBtn.setText(R.string.dialog_tmdb_add);
         addDisabledBtn.setText(R.string.dialog_tmdb_add);
         manageBtn.setText(R.string.dialog_tmdb_site_manage);
+        testBtn.setText(R.string.dialog_tmdb_test_config);
         resetBtn.setText(R.string.dialog_tmdb_reset_default);
         addBtn.setAllCaps(false);
         addDisabledBtn.setAllCaps(false);
         manageBtn.setAllCaps(false);
+        testBtn.setAllCaps(false);
         resetBtn.setAllCaps(false);
 
         TmdbConfig config = TmdbConfig.objectFrom(Setting.getTmdbConfig());
@@ -121,6 +126,7 @@ public class TmdbSourceDialog {
             return false;
         });
         manageBtn.setOnClickListener(v -> showSiteManage());
+        testBtn.setOnClickListener(v -> testConfig(testBtn));
         resetBtn.setOnClickListener(v -> resetToDefault());
 
         dialog = builder
@@ -135,11 +141,50 @@ public class TmdbSourceDialog {
         LightDialog.apply(dialog);
     }
 
+    private void testConfig(View testButton) {
+        String credential = inputText(apiKeyInput);
+        String apiHost = inputText(apiHostInput);
+        String imageHost = inputText(imageHostInput);
+        String omdbApiKey = inputText(omdbApiKeyInput);
+        AlertDialog sourceDialog = dialog;
+        testButton.setEnabled(false);
+        Task.execute(() -> {
+            TmdbConfigTestService.Result result = TmdbConfigTestService.test(credential, apiHost, imageHost, omdbApiKey);
+            activity.runOnUiThread(() -> {
+                testButton.setEnabled(true);
+                if (activity.isFinishing() || activity.isDestroyed() || sourceDialog == null
+                        || dialog != sourceDialog || !sourceDialog.isShowing()) return;
+                String apiResult = resultText(result.api, R.string.dialog_tmdb_test_api_success, R.string.dialog_tmdb_test_api_failed);
+                String imageResult = resultText(result.image, R.string.dialog_tmdb_test_image_success, R.string.dialog_tmdb_test_image_failed);
+                String omdbResult = resultText(result.omdb, R.string.dialog_tmdb_test_omdb_success, R.string.dialog_tmdb_test_omdb_failed);
+                new MaterialAlertDialogBuilder(dialogContext, R.style.Theme_WebHTV_LightDialog)
+                        .setTitle(R.string.dialog_tmdb_test_result_title)
+                        .setMessage(apiResult + "\n" + imageResult + "\n" + omdbResult)
+                        .setPositiveButton(R.string.dialog_positive, null)
+                        .show();
+            });
+        });
+    }
+
+    private String resultText(TmdbConfigTestService.Check check, int successText, int failureText) {
+        return check.success
+                ? activity.getString(successText, check.latencyMillis)
+                : activity.getString(failureText, check.message, check.latencyMillis);
+    }
+
+    private static String inputText(EditText input) {
+        return input.getText() == null ? "" : input.getText().toString().trim();
+    }
+
     private MaterialAlertDialogBuilder builder() {
         return new MaterialAlertDialogBuilder(activity, R.style.Theme_WebHTV_LightDialog);
     }
 
     private void wireConfigDialogFocus(AlertDialog dialog, EditText ruleInput, View addBtn, EditText disabledRuleInput, View addDisabledBtn, View manageBtn, View resetBtn) {
+        wireConfigDialogFocus(dialog, ruleInput, addBtn, disabledRuleInput, addDisabledBtn, manageBtn, dialog.findViewById(R.id.testConfig), resetBtn);
+    }
+
+    private void wireConfigDialogFocus(AlertDialog dialog, EditText ruleInput, View addBtn, EditText disabledRuleInput, View addDisabledBtn, View manageBtn, View testBtn, View resetBtn) {
         View positive = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
         View negative = dialog.getButton(AlertDialog.BUTTON_NEGATIVE);
         wireTextDpadFocus(apiKeyInput, null, languageInput, null, null);
@@ -150,11 +195,12 @@ public class TmdbSourceDialog {
         wireTextDpadFocus(ruleInput, omdbApiKeyInput, disabledRuleInput, null, addBtn);
         wireDpadFocus(addBtn, omdbApiKeyInput, addDisabledBtn, ruleInput, null);
         wireTextDpadFocus(disabledRuleInput, ruleInput, manageBtn, null, addDisabledBtn);
-        wireDpadFocus(addDisabledBtn, addBtn, resetBtn, disabledRuleInput, null);
-        wireDpadFocus(manageBtn, disabledRuleInput, positive, null, resetBtn);
-        wireDpadFocus(resetBtn, addDisabledBtn, positive, manageBtn, null);
+        wireDpadFocus(addDisabledBtn, addBtn, testBtn, disabledRuleInput, null);
+        wireDpadFocus(manageBtn, disabledRuleInput, positive, null, testBtn);
+        wireDpadFocus(testBtn, addDisabledBtn, positive, manageBtn, resetBtn);
+        wireDpadFocus(resetBtn, addDisabledBtn, positive, testBtn, null);
         wireDpadFocus(negative, manageBtn, null, null, positive);
-        wireDpadFocus(positive, resetBtn, null, negative, null);
+        wireDpadFocus(positive, testBtn, null, negative, null);
     }
 
     private static void wireDpadFocus(View view, View up, View down, View left, View right) {

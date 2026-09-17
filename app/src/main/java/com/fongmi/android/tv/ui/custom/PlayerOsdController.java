@@ -170,6 +170,10 @@ public class PlayerOsdController {
         return diagnosticsVisible;
     }
 
+    public String sampleSpeedText() {
+        return lastSpeedText;
+    }
+
     public void setDiagnosticsVisible(boolean visible) {
         boolean next = visible && PlayerSetting.isOsdDiagnostics();
         if (diagnosticsVisible == next) return;

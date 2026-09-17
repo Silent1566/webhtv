@@ -46,6 +46,9 @@ public interface TmdbDetailModeController {
      */
     void onPlaybackStarted();
 
+    /** Launch playback using this mode's presentation. */
+    void play();
+
     /**
      * 是否显示内联播放器。
      * <p>
@@ -59,11 +62,6 @@ public interface TmdbDetailModeController {
      * 仅详情直放模式返回 true。
      */
     boolean shouldAutoPlay();
-
-    /** Whether this mode owns a playback service connection. */
-    default boolean usesPlaybackService() {
-        return shouldShowInlinePlayer() || shouldAutoPlay();
-    }
 
     /** Whether this mode uses the cinema presentation style. */
     default boolean isCinemaStyle() {
@@ -80,12 +78,21 @@ public interface TmdbDetailModeController {
         return false;
     }
 
+    /** Whether this mode owns an in-process playback service connection. */
+    boolean shouldBindPlaybackService();
+
+    /** Whether this mode publishes selected playback history to the in-process collector. */
+    boolean shouldPublishPlaybackHistory();
+
     /**
      * 处理返回键。
      * <p>
      * @return true 表示已处理，Activity 不再处理；false 表示未处理，交给 Activity
      */
     boolean handleBack();
+
+    /** Called after the shared fullscreen layout has been exited. */
+    void onExitFullscreen();
 
     /**
      * 释放资源。

@@ -371,10 +371,13 @@ public class AdRuleManageDialog extends BaseAlertDialog implements AdRuleAdapter
         String status = current.valid()
                 ? getString(current.enabled() ? R.string.ad_rule_hls_enabled : R.string.ad_rule_hls_disabled)
                 : getString(R.string.ad_rule_hls_invalid, current.error());
+        String details = HlsRuleConfig.LEGACY_FALLBACK_KEY.equals(current.id())
+                ? "具体判断规则\n" + HlsRuleConfig.LEGACY_FALLBACK_DETAIL
+                : getString(R.string.ad_rule_detail_json) + "\n" + current.detail();
         String content = getString(R.string.ad_rule_hls_builtin_summary, current.version(), status)
                 + "\n" + getString(R.string.ad_rule_detail_id, current.id())
                 + "\n" + getString(R.string.ad_rule_detail_source, current.source())
-                + "\n\n" + getString(R.string.ad_rule_detail_json) + "\n" + current.detail();
+                + "\n\n" + details;
         showTextDetail(name, content, null);
     }
 

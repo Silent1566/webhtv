@@ -9,6 +9,7 @@ import com.fongmi.android.tv.api.config.AdBlockStatsStore;
 import com.fongmi.android.tv.api.config.HlsRuleConfig;
 import com.fongmi.android.tv.utils.HlsAdblockNotice;
 import com.fongmi.android.tv.utils.HlsAdblockPipeline;
+import com.fongmi.android.tv.utils.HlsManifestCleaner;
 import com.fongmi.android.tv.utils.Notify;
 
 import com.fongmi.android.tv.player.PlaybackAutoContext;
@@ -802,8 +803,9 @@ public final class MpvHlsProxy extends NanoHTTPD {
         if (!Setting.isAdblock() || !isVodPlaylist(text)) return text;
         if (HlsAdblockPipeline.isCoreM3u8Proxy(url)) return text;
         try {
-            HlsAdblockPipeline.Outcome outcome = HlsAdblockPipeline.apply(url, text, HlsRuleConfig.getRules(), true);
-            recordAndNotifyAdblock(url, outcome);
+            List<HlsManifestCleaner.Rule> rules = HlsRuleConfig.getRules();
+            boolean legacyFallback = !rules.isEmpty() && HlsRuleConfig.isLegacyFallbackEnabled();
+            HlsAdblockPipeline.Outcome outcome = HlsAdblockPipeline.apply(url, text, rules, legacyFallback);
             if (!TextUtils.equals(outcome.manifest(), text)) {
                 if (kernel == PlayerSetting.MPV) {
                     SpiderDebug.log(TAG,
@@ -814,6 +816,7 @@ public final class MpvHlsProxy extends NanoHTTPD {
                 SpiderDebug.log(TAG, "adblock filtered session=%d bytes=%d->%d structured=%s legacy=%s url=%s",
                         session, text.length(), outcome.manifest().length(), outcome.structured(), outcome.legacy(), shortUrl(url));
             }
+            recordAndNotifyAdblock(url, outcome);
             return outcome.manifest();
         } catch (Throwable e) {
             SpiderDebug.log(TAG, "adblock ignored session=%d errorType=%s", session, e.getClass().getSimpleName());
@@ -825,8 +828,10 @@ public final class MpvHlsProxy extends NanoHTTPD {
         if (!outcome.structured() && !outcome.legacy()) return;
         okhttp3.HttpUrl parsed = okhttp3.HttpUrl.parse(url);
         if (parsed == null) return;
-        long fallbackCount = outcome.legacy() ? 1 : 0;
-        AdBlockStatsStore.recordBlocks(parsed.host(), outcome.ruleCounts(), fallbackCount);
+        long fallbackCount = outcome.legacy() ? Math.max(1, outcome.removedSegments()) : 0;
+        String pipeline = kernel == PlayerSetting.IJK ? "IJK" : "MPV";
+        AdBlockStatsStore.recordBlocks(parsed.host(), pipeline, outcome.ruleCounts(), fallbackCount,
+                parsed.host(), outcome.removedDurationSec(), outcome.removedSegmentDetails());
         if (!HlsAdblockNotice.shouldNotify(url, System.currentTimeMillis())) return;
         int removed = outcome.removedSegments() > 0 ? outcome.removedSegments() : (int) fallbackCount;
         String message = outcome.structured() && outcome.removedDurationSec() > 0

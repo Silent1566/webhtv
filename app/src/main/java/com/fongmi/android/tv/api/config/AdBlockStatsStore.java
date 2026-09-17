@@ -7,6 +7,9 @@ import com.fongmi.android.tv.bean.AdBlockStats;
 import com.fongmi.android.tv.bean.Rule;
 import com.fongmi.android.tv.bean.RuleHitRecord;
 import com.fongmi.android.tv.bean.UserAdRule;
+import com.fongmi.android.tv.bean.Site;
+import com.fongmi.android.tv.playback.PlaybackRuntime;
+import com.fongmi.android.tv.utils.HlsManifestCleaner;
 import com.fongmi.android.tv.utils.RuleIdUtil;
 import com.github.catvod.crawler.SpiderDebug;
 import com.github.catvod.utils.Prefers;
@@ -68,39 +71,98 @@ public class AdBlockStatsStore {
      * 记录一次拦截
      */
     public static void recordBlock(String siteKey, String ruleId) {
+        recordBlock(siteKey, "OTHER", ruleId);
+    }
+
+    public static void recordBlock(String siteKey, String pipeline, String ruleId) {
+        recordBlock(siteKey, pipeline, ruleId, "", 0);
+    }
+
+    public static void recordBlock(String siteKeyOrDomain, String pipeline, String ruleId,
+                                   String adDomain, double segmentDurationSeconds) {
+        SiteIdentity identity = resolveSiteIdentity(siteKeyOrDomain, adDomain);
         executor.execute(() -> {
             AdBlockStats stats = load();
-            stats.incrementTotalBlocked();
-            if (!TextUtils.isEmpty(siteKey)) {
-                stats.incrementSiteBlocked(siteKey);
-            }
-            if (!TextUtils.isEmpty(ruleId)) {
-                stats.incrementRuleCount(ruleId);
-            }
+            stats.incrementBlocks(identity.siteKey(), pipeline, ruleId, 1);
+            stats.recordBlockLog(System.currentTimeMillis(), identity.siteKey(), identity.siteName(),
+                    identity.siteDomain(), pipeline, adDomain, ruleId, 0, segmentDurationSeconds);
             save(stats);
         });
     }
 
     /** Records a complete HLS-cleaning result atomically on the existing stats executor. */
     public static void recordBlocks(String siteKey, Map<String, Long> ruleCounts, long fallbackCount) {
+        recordBlocks(siteKey, "HLS", ruleCounts, fallbackCount);
+    }
+
+    public static void recordBlocks(String siteKey, String pipeline, Map<String, Long> ruleCounts, long fallbackCount) {
+        recordBlocks(siteKey, pipeline, ruleCounts, fallbackCount, siteKey, 0);
+    }
+
+    public static void recordBlocks(String sourceName, String pipeline, Map<String, Long> ruleCounts,
+                                    long fallbackCount, String adDomain, double totalDurationSeconds) {
+        recordBlocks(sourceName, pipeline, ruleCounts, fallbackCount, adDomain,
+                totalDurationSeconds, List.of());
+    }
+
+    public static void recordBlocks(String siteKeyOrDomain, String pipeline, Map<String, Long> ruleCounts,
+                                    long fallbackCount, String siteDomain, double totalDurationSeconds,
+                                    List<HlsManifestCleaner.RemovedSegment> removedSegments) {
+        SiteIdentity identity = resolveSiteIdentity(siteKeyOrDomain, siteDomain);
         executor.execute(() -> {
             AdBlockStats stats = load();
-            long total = Math.max(0, fallbackCount);
+            Map<String, Long> detailedCounts = new HashMap<>();
             if (ruleCounts != null) {
                 for (Map.Entry<String, Long> entry : ruleCounts.entrySet()) {
                     long count = entry.getValue() == null ? 0 : Math.max(0, entry.getValue());
-                    total += count;
-                    for (long i = 0; i < count; i++) stats.incrementRuleCount(entry.getKey());
+                    stats.incrementBlocks(identity.siteKey(), pipeline, entry.getKey(), count);
+                    if (count > 0) detailedCounts.put(entry.getKey(), count);
                 }
             }
-            for (long i = 0; i < fallbackCount; i++) stats.incrementRuleCount("hls.legacy-fallback");
-            for (long i = 0; i < total; i++) {
-                stats.incrementTotalBlocked();
-                if (!TextUtils.isEmpty(siteKey)) stats.incrementSiteBlocked(siteKey);
+            long safeFallbackCount = Math.max(0, fallbackCount);
+            stats.incrementBlocks(identity.siteKey(), pipeline, "hls.legacy-fallback", safeFallbackCount);
+            if (safeFallbackCount > 0) detailedCounts.put("hls.legacy-fallback", safeFallbackCount);
+
+            long blockedAt = System.currentTimeMillis();
+            if (removedSegments != null && !removedSegments.isEmpty()) {
+                for (HlsManifestCleaner.RemovedSegment segment : removedSegments) {
+                    stats.recordBlockLog(blockedAt, identity.siteKey(), identity.siteName(), identity.siteDomain(),
+                            pipeline, segment.adDomain(), segment.ruleId(), segment.startSeconds(), segment.durationSec());
+                }
+            } else {
+                stats.recordBlockLogs(blockedAt, identity.siteKey(), identity.siteName(), identity.siteDomain(),
+                        pipeline, siteDomain, detailedCounts, totalDurationSeconds);
             }
             save(stats);
         });
     }
+
+    private static SiteIdentity resolveSiteIdentity(String siteKeyOrDomain, String siteDomain) {
+        if (!TextUtils.isEmpty(siteKeyOrDomain)) {
+            try {
+                Site site = VodConfig.get().getSite(siteKeyOrDomain);
+                if (site != null && !site.isEmpty()) {
+                    return new SiteIdentity(site.getKey(), site.getDisplayName(), siteDomain);
+                }
+            } catch (Throwable ignored) {
+            }
+        }
+        PlaybackRuntime.SiteIdentity current = PlaybackRuntime.currentSiteIdentity(siteDomain);
+        if (!TextUtils.isEmpty(current.siteKey())) {
+            return new SiteIdentity(current.siteKey(), current.siteName(), current.siteDomain());
+        }
+        String fallbackKey = TextUtils.isEmpty(siteKeyOrDomain) ? siteDomain : siteKeyOrDomain;
+        String fallbackName = TextUtils.isEmpty(fallbackKey) ? current.siteName() : fallbackKey;
+        return new SiteIdentity(fallbackKey, fallbackName, current.siteDomain());
+    }
+
+    public static String getRuleDisplayName(String ruleId) {
+        RuleHitRecord record = new RuleHitRecord();
+        fillRuleInfo(record, ruleId);
+        return TextUtils.isEmpty(record.getRuleName()) ? ruleId : record.getRuleName();
+    }
+
+    private record SiteIdentity(String siteKey, String siteName, String siteDomain) {}
 
     /**
      * 记录一次 AI 反馈
@@ -178,7 +240,7 @@ public class AdBlockStatsStore {
      */
     private static void fillRuleInfo(RuleHitRecord record, String ruleId) {
         if ("hls.legacy-fallback".equals(ruleId)) {
-            record.setRuleName("内置兜底规则");
+            record.setRuleName("内置兜底规则（HLS 路径/文件名少数派、不连续短块）");
             record.setRuleSource("HLS");
             return;
         }

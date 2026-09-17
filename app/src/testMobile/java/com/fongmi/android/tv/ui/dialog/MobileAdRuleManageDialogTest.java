@@ -31,6 +31,16 @@ public class MobileAdRuleManageDialogTest {
     }
 
     @Test
+    public void legacyFallbackShowsConcreteCriteriaAndRemainsToggleable() throws Exception {
+        String dialog = read("app/src/mobile/java/com/fongmi/android/tv/ui/dialog/AdRuleManageDialog.java");
+        String adapter = read("app/src/mobile/java/com/fongmi/android/tv/ui/adapter/AdRuleAdapter.java");
+
+        assertTrue(dialog.contains("HlsRuleConfig.LEGACY_FALLBACK_DETAIL"));
+        assertTrue(adapter.contains("HlsRuleConfig.LEGACY_FALLBACK_SUMMARY"));
+        assertTrue(adapter.contains("listener.onHlsToggleClick"));
+    }
+
+    @Test
     public void mobileRuleRowsUseReadableTouchFriendlyCards() throws Exception {
         String layout = read("app/src/mobile/res/layout/adapter_ad_rule.xml");
 

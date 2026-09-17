@@ -177,7 +177,7 @@ public class SiteHealthStore {
                 rows.add(Row.from(siteKey, displayName(siteKey, names), health));
             }
             rows.sort((a, b) -> Long.compare(b.updatedAt, a.updatedAt));
-            return new Report(cid, rows);
+            return new Report(cid, rows, AdBlockStatsStore.getStats());
         }
     }
 
@@ -327,11 +327,19 @@ public class SiteHealthStore {
         public final Summary summary;
         public final List<Row> rows;
         public final String cid;
+        public final long adBlockedTotal;
+        public final Map<String, Long> adBlockedBySite;
+        public final Map<String, Long> adBlockedByRule;
+        public final Map<String, Long> adBlockedByPipeline;
 
-        private Report(String cid, List<Row> rows) {
+        private Report(String cid, List<Row> rows, com.fongmi.android.tv.bean.AdBlockStats adStats) {
             this.cid = cid;
             this.rows = Collections.unmodifiableList(rows);
             this.summary = Summary.from(rows);
+            this.adBlockedTotal = adStats.getTotalBlocked();
+            this.adBlockedBySite = Collections.unmodifiableMap(new LinkedHashMap<>(adStats.getSiteBlocked()));
+            this.adBlockedByRule = Collections.unmodifiableMap(new LinkedHashMap<>(adStats.getRuleCounts()));
+            this.adBlockedByPipeline = Collections.unmodifiableMap(new LinkedHashMap<>(adStats.getPipelineCounts()));
         }
 
         public boolean isEmpty() {

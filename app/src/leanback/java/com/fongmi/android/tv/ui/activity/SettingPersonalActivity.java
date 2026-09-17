@@ -69,6 +69,7 @@ public class SettingPersonalActivity extends BaseActivity {
         mBinding.fullscreenMenuKey.setOnClickListener(this::setFullscreenMenuKey);
         mBinding.homeMenuKey.setOnClickListener(this::setHomeMenuKey);
         mBinding.playBackToDetail.setOnClickListener(this::setPlayBackToDetail);
+        mBinding.playbackOverlay.setOnClickListener(this::setPlaybackOverlay);
         mBinding.episodeHistory.setOnClickListener(this::setEpisodeHistory);
         mBinding.globalHistory.setOnClickListener(this::setGlobalHistory);
         mBinding.interfaceFailover.setOnClickListener(this::setInterfaceFailover);
@@ -98,6 +99,7 @@ public class SettingPersonalActivity extends BaseActivity {
         mBinding.fullscreenMenuKeyText.setText((fullscreenMenuKey = getResources().getStringArray(R.array.select_fullscreen_menu_key))[Setting.getFullscreenMenuKey()]);
         mBinding.homeMenuKeyText.setText((homeMenuKey = getResources().getStringArray(R.array.select_home_menu_key))[Setting.getHomeMenuKey()]);
         mBinding.playBackToDetailText.setText(getSwitch(Setting.isPlayBackToDetail()));
+        mBinding.playbackOverlayText.setText(getSwitch(Setting.isPlaybackOverlayEnabled()));
         mBinding.episodeHistoryText.setText(getSwitch(Setting.isEpisodeHistory()));
         mBinding.globalHistoryText.setText((globalHistoryMode = getResources().getStringArray(R.array.select_global_history_mode))[Setting.getGlobalHistoryMode()]);
         mBinding.interfaceFailoverText.setText((interfaceFailoverMode = getResources().getStringArray(R.array.select_interface_failover_mode))[Setting.getInterfaceFailoverMode()]);
@@ -166,6 +168,11 @@ public class SettingPersonalActivity extends BaseActivity {
 
     private void setHomeMenuKey(View view) {
         HomeMenuKeyDialog.show(this, this::setText);
+    }
+
+    private void setPlaybackOverlay(View view) {
+        Setting.putPlaybackOverlayEnabled(!Setting.isPlaybackOverlayEnabled());
+        setText();
     }
 
     private void setPlayBackToDetail(View view) {

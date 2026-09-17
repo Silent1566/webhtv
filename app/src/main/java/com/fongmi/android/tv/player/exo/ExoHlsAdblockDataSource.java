@@ -14,6 +14,7 @@ import com.fongmi.android.tv.utils.HlsAdblockNotice;
 import com.fongmi.android.tv.utils.HlsAdblockPipeline;
 import com.fongmi.android.tv.utils.HlsManifestCleaner;
 import com.fongmi.android.tv.api.config.HlsRuleConfig;
+import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.utils.Notify;
 import com.github.catvod.crawler.SpiderDebug;
 
@@ -42,13 +43,19 @@ final class ExoHlsAdblockDataSource implements DataSource {
 
     @Override
     public long open(DataSpec dataSpec) throws IOException {
-        if (!isManifestUrl(dataSpec.uri.toString())) return upstream.open(dataSpec);
-        upstream.open(dataSpec);
+        long upstreamLength = upstream.open(dataSpec);
+        if (!isManifestRequest(dataSpec.uri.toString(), upstream.getResponseHeaders())) return upstreamLength;
         try {
             byte[] original = readAll();
             String text = new String(original, StandardCharsets.UTF_8);
+            List<HlsManifestCleaner.Rule> rules = List.of();
+            boolean legacyFallback = false;
+            if (Setting.isAdblock()) {
+                rules = HlsRuleConfig.getRules();
+                legacyFallback = !rules.isEmpty() && HlsRuleConfig.isLegacyFallbackEnabled();
+            }
             HlsAdblockPipeline.Outcome outcome = HlsAdblockPipeline.apply(
-                    dataSpec.uri.toString(), text, HlsRuleConfig.getRules(), true);
+                    dataSpec.uri.toString(), text, rules, legacyFallback);
             manifest = outcome.manifest().getBytes(StandardCharsets.UTF_8);
             position = 0;
             recordAndNotify(dataSpec.uri, outcome);
@@ -102,6 +109,26 @@ final class ExoHlsAdblockDataSource implements DataSource {
         return url.substring(0, end).toLowerCase(Locale.ROOT).endsWith(".m3u8");
     }
 
+    static boolean isManifestRequest(String url, Map<String, List<String>> responseHeaders) {
+        if (isManifestUrl(url) || responseHeaders == null) return isManifestUrl(url);
+        for (Map.Entry<String, List<String>> header : responseHeaders.entrySet()) {
+            if (header.getKey() == null || !"content-type".equalsIgnoreCase(header.getKey())) continue;
+            for (String value : header.getValue()) {
+                if (isHlsContentType(value)) return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isHlsContentType(String value) {
+        if (value == null) return false;
+        String type = value.toLowerCase(Locale.ROOT);
+        return type.contains("application/vnd.apple.mpegurl")
+                || type.contains("application/x-mpegurl")
+                || type.contains("audio/mpegurl")
+                || type.contains("audio/x-mpegurl");
+    }
+
     static Result cleanForTest(String url, String manifest) {
         HlsManifestCleaner.Rule rule = HlsManifestCleaner.Rule.builder()
                 .id("test-ad-path")
@@ -124,8 +151,9 @@ final class ExoHlsAdblockDataSource implements DataSource {
 
     private static void recordAndNotify(Uri uri, HlsAdblockPipeline.Outcome outcome) {
         if (!outcome.structured() && !outcome.legacy()) return;
-        long fallbackCount = outcome.legacy() ? 1 : 0;
-        AdBlockStatsStore.recordBlocks(uri.getHost(), outcome.ruleCounts(), fallbackCount);
+        long fallbackCount = outcome.legacy() ? Math.max(1, outcome.removedSegments()) : 0;
+        AdBlockStatsStore.recordBlocks(uri.getHost(), "EXO", outcome.ruleCounts(), fallbackCount,
+                uri.getHost(), outcome.removedDurationSec(), outcome.removedSegmentDetails());
         if (!HlsAdblockNotice.shouldNotify(uri.toString(), System.currentTimeMillis())) return;
         String message = notice(outcome);
         App.post(() -> Notify.show(message));

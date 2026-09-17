@@ -36,6 +36,11 @@ public abstract class BaseTmdbDetailModeController implements TmdbDetailModeCont
     }
 
     @Override
+    public void play() {
+        host.playDefaultPlayback();
+    }
+
+    @Override
     public boolean shouldShowInlinePlayer() {
         return showInlinePlayer();
     }
@@ -46,8 +51,23 @@ public abstract class BaseTmdbDetailModeController implements TmdbDetailModeCont
     }
 
     @Override
+    public boolean shouldBindPlaybackService() {
+        return shouldShowInlinePlayer() || shouldAutoPlay();
+    }
+
+    @Override
+    public boolean shouldPublishPlaybackHistory() {
+        return shouldBindPlaybackService();
+    }
+
+    @Override
     public boolean handleBack() {
         return false; // 默认不处理，交给 Activity
+    }
+
+    @Override
+    public void onExitFullscreen() {
+        // Most modes keep the embedded player after leaving fullscreen.
     }
 
     @Override

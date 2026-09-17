@@ -74,6 +74,10 @@ public class AdRuleAdapter extends RecyclerView.Adapter<AdRuleAdapter.ViewHolder
                 // 默认规则摘要: 域名 N · URL规则 N · 白名单 N
                 return source + " · 域名 " + defaultRule.getHosts().size() + " · URL规则 " + defaultRule.getRegex().size() + " · 白名单 " + defaultRule.getExclude().size();
             }
+            if (HlsRuleConfig.LEGACY_FALLBACK_KEY.equals(hlsRule.id())) {
+                String status = context.getString(isEnabled() ? R.string.ad_rule_hls_enabled : R.string.ad_rule_hls_disabled);
+                return HlsRuleConfig.LEGACY_FALLBACK_SUMMARY + " · " + status;
+            }
             String status = hlsRule.valid()
                     ? context.getString(isEnabled() ? R.string.ad_rule_hls_enabled : R.string.ad_rule_hls_disabled)
                     : context.getString(R.string.ad_rule_hls_invalid, hlsRule.error());

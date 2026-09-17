@@ -56,6 +56,16 @@ public class AdRuleManageDialogLayoutTest {
     }
 
     @Test
+    public void leanbackLegacyFallbackShowsConcreteCriteriaAndRemainsToggleable() throws Exception {
+        String dialog = read(projectRoot().resolve("app/src/leanback/java/com/fongmi/android/tv/ui/dialog/AdRuleManageDialog.java"));
+        String adapter = read(projectRoot().resolve("app/src/leanback/java/com/fongmi/android/tv/ui/adapter/AdRuleAdapter.java"));
+
+        assertTrue(dialog.contains("HlsRuleConfig.LEGACY_FALLBACK_DETAIL"));
+        assertTrue(adapter.contains("HlsRuleConfig.LEGACY_FALLBACK_SUMMARY"));
+        assertTrue(adapter.contains("listener.onHlsToggleClick"));
+    }
+
+    @Test
     public void leanbackRuleEditorAndPreviewUseLightDialogPalette() throws Exception {
         String edit = read(projectRoot().resolve("app/src/leanback/res/layout/dialog_ad_rule_edit.xml"));
         String preview = read(projectRoot().resolve("app/src/leanback/res/layout/dialog_ad_rule_preview.xml"));
