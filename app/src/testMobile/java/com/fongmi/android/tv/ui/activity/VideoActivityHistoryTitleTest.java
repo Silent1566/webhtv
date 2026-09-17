@@ -90,8 +90,8 @@ public class VideoActivityHistoryTitleTest {
                 initHistory.contains("vod.getFlags(), matchedTmdbItem"));
         assertTrue("fusion/player/colorful modes must update the TMDB-formatted history title before branching",
                 onPlay.contains("updateInlineHistory(selectedEpisode);"));
-        assertTrue("fusion mode must keep inline playback", onPlay.contains("if (isFusionMode()) playInline();"));
-        assertTrue("player-detail mode must keep fullscreen inline playback", onPlay.contains("else if (isPlayerMode()) playDetailFullscreen();"));
+        assertTrue("fusion mode must keep inline playback", onPlay.contains("if (modeController.isFusionMode()) playInline();"));
+        assertTrue("player-detail mode must keep fullscreen inline playback", onPlay.contains("else if (modeController.isPlayerMode()) playDetailFullscreen();"));
         assertTrue("colorful detail mode must keep the external VideoActivity path", onPlay.contains("else playDefaultPlayback();"));
         assertTrue("inline modes must store the formatted scraped episode title",
                 inlineHistory.contains("history.setVodRemarks(historyEpisodeTitle(item));"));

@@ -612,7 +612,7 @@ public class TmdbDetailActivityLayoutTest {
 
         assertTrue("detail page must decide whether its mode owns an inline player", method >= 0);
         assertTrue("colorful detail must leave PlaybackService ownership to each standalone VideoActivity",
-                body.contains("return isFusionMode() || isPlayerMode();"));
+                body.contains("return modeController != null ? modeController.usesPlaybackService() : rawFusionMode() || rawPlayerMode();"));
     }
 
     @Test
@@ -2876,14 +2876,14 @@ public class TmdbDetailActivityLayoutTest {
                 pipBody.contains("restoreInlinePlayerPanelAfterOverlay();")
                         && !pipBody.contains("inlinePiPParent.addView(binding.playerPanel"));
         assertTrue("detail-player fullscreen Back must close playback back to the detail page on TV and mobile, while fusion keeps embedded exit",
-                backFromFullscreenBody.contains("if (isPlayerMode())")
+                backFromFullscreenBody.contains("if (modeController.isPlayerMode())")
                         && backFromFullscreenBody.indexOf("exitInlineFullscreen();") < backFromFullscreenBody.indexOf("closeDetailFullscreenPlayer();")
                         && backFromFullscreenBody.contains("return;")
-                        && !backFromFullscreenBody.contains("Util.isLeanback() && isPlayerMode()")
+                        && !backFromFullscreenBody.contains("Util.isLeanback() && modeController.isPlayerMode()")
                         && !backFromFullscreenBody.contains("finishPlaybackToHome();")
                         && !backFromFullscreenBody.contains("Setting.isPlayBackToDetail()")
                         && focusBody.contains("if (!isInlinePlayerMode()) return;")
-                        && !focusBody.contains("if (!isFusionMode()) return;"));
+                        && !focusBody.contains("if (!modeController.isFusionMode()) return;"));
         assertTrue("leanback fullscreen Back should hide visible controls before exiting fullscreen",
                 keyBody.indexOf("KeyUtil.isBackKey(event) && Util.isLeanback() && inlineFullscreen") >= 0
                         && keyBody.indexOf("KeyUtil.isBackKey(event) && isInlineControlsVisible()") < keyBody.indexOf("KeyUtil.isBackKey(event) && Util.isLeanback() && inlineFullscreen")
@@ -3080,7 +3080,7 @@ public class TmdbDetailActivityLayoutTest {
         String startBody = source.substring(start, source.indexOf("private void searchInlineDanmaku", start));
 
         assertTrue("current inline episode clicks must reuse playback before fusion reloads",
-                onPlayBody.indexOf("enterInlineFullscreenIfCurrentInlinePlayback(selectedEpisode)") < onPlayBody.indexOf("if (isFusionMode()) playInline();"));
+                onPlayBody.indexOf("enterInlineFullscreenIfCurrentInlinePlayback(selectedEpisode)") < onPlayBody.indexOf("if (modeController.isFusionMode()) playInline();"));
         assertTrue("detail-player fullscreen entry must not reload the already playing episode",
                 detailBody.contains("boolean current = isCurrentInlinePlayback(selectedEpisode);")
                         && detailBody.contains("if (!current) playInline();"));
