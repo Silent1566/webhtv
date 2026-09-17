@@ -1410,6 +1410,11 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
     }
 
     @Override
+    protected boolean applyGlobalTheme() {
+        return false;
+    }
+
+    @Override
     protected void initView(Bundle savedInstanceState) {
         mTmdbDetailTimeout = this::showTmdbDetailFallback;
         super.initView(savedInstanceState);

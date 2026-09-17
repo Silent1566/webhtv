@@ -194,6 +194,14 @@ public class ThemeControllerSourceTest {
     }
 
     @Test
+    public void videoActivityPreservesPlayerOwnedColors() throws Exception {
+        String activity = read("app/src/mobile/java/com/fongmi/android/tv/ui/activity/VideoActivity.java");
+
+        assertTrue(activity.contains("protected boolean applyGlobalTheme()"));
+        assertTrue(activity.contains("protected boolean applyGlobalTheme() {\n        return false;"));
+    }
+
+    @Test
     public void playerControlRootsAreExplicitForMobileLayouts() throws Exception {
         for (String file : new String[]{
                 "app/src/mobile/res/layout/view_control_vod.xml",
