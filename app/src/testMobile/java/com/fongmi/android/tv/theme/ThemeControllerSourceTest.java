@@ -134,8 +134,8 @@ public class ThemeControllerSourceTest {
         assertTrue(base.contains("if (applyGlobalTheme()) ThemeController.apply(this);"));
         assertTrue(base.contains("protected boolean applyGlobalTheme()"));
         assertTrue(detail.contains("protected boolean applyGlobalTheme()"));
-        assertTrue(detail.contains("return !modeController.isCinemaStyle();"));
-        assertTrue(detail.contains("return modeController.isCinemaStyle() ? ThemeColors.cinema(lightTheme) : colors;"));
+        assertTrue(detail.contains("return !isCinemaStyle();"));
+        assertTrue(detail.contains("return isCinemaStyle() ? ThemeColors.cinema(lightTheme) : colors;"));
     }
 
     @Test
@@ -146,7 +146,7 @@ public class ThemeControllerSourceTest {
 
         assertTrue(editor.contains("setHighlightColor(color)"));
         assertTrue(editor.contains("RefreshEvent.theme()"));
-        assertTrue(detail.contains("return modeController.isCinemaStyle() ? ThemeColors.cinema(lightTheme) : colors;"));
+        assertTrue(detail.contains("return isCinemaStyle() ? ThemeColors.cinema(lightTheme) : colors;"));
         assertTrue(base.contains("if (event.getType() == RefreshEvent.Type.THEME && preserveDetailThemeState()) return;"));
         assertTrue(base.contains("protected boolean preserveDetailThemeState()"));
         assertTrue(detail.contains("protected boolean preserveDetailThemeState()"));

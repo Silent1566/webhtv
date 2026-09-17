@@ -3937,19 +3937,27 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         return true;
     }
 
+    private boolean isCinemaStyle() {
+        return modeController != null ? modeController.isCinemaStyle() : rawCinemaMode();
+    }
+
+    private boolean rawCinemaMode() {
+        return getIntent().getIntExtra("detail_mode", Setting.getDetailOpenMode()) == Setting.DETAIL_OPEN_CINEMA || Setting.isTmdbCinemaStyle();
+    }
+
     @Override
     protected boolean applyGlobalTheme() {
-        return !modeController.isCinemaStyle();
+        return !isCinemaStyle();
     }
 
     @Override
     protected boolean preserveDetailThemeState() {
-        return modeController.isCinemaStyle();
+        return isCinemaStyle();
     }
 
     private ThemeColors currentThemeColors() {
         ThemeColors colors = lightTheme ? ThemeColors.light() : ThemeColors.dark();
-        return modeController.isCinemaStyle() ? ThemeColors.cinema(lightTheme) : colors;
+        return isCinemaStyle() ? ThemeColors.cinema(lightTheme) : colors;
     }
 
     private void refreshBackdropSurface() {
