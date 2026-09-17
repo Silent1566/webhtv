@@ -173,6 +173,17 @@ public class ThemeControllerSourceTest {
     }
 
     @Test
+    public void highlightOnlyProfilePreservesExistingSurfacesAndText() throws Exception {
+        String controller = read("app/src/main/java/com/fongmi/android/tv/theme/ThemeController.java");
+
+        assertTrue(controller.contains("if (isHighlightOnly(profile))"));
+        assertTrue(controller.contains("applyHighlightView(root, tokens)"));
+        assertTrue(controller.contains("private static boolean hasOnlyPrimary"));
+        assertTrue(controller.contains("current.getDefaultColor()"));
+        assertFalse(controller.contains("applyHighlightView(root, tokens);\n        root.setBackgroundColor"));
+    }
+
+    @Test
     public void customAccentOnlyFillsExplicitPrimaryButtons() throws Exception {
         String controller = read("app/src/main/java/com/fongmi/android/tv/theme/ThemeController.java");
 

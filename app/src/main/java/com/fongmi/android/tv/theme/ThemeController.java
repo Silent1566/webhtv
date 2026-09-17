@@ -96,7 +96,12 @@ public final class ThemeController {
 
     public static void apply(View root, ThemeTokens tokens) {
         if (!isCustomThemeEnabled() || root == null || tokens == null) return;
-        if (ThemeProfile.BACKGROUND_SOLID.equals(ThemeProfileStore.load().background.type)) {
+        ThemeProfile profile = ThemeProfileStore.load();
+        if (isHighlightOnly(profile)) {
+            applyHighlightView(root, tokens);
+            return;
+        }
+        if (ThemeProfile.BACKGROUND_SOLID.equals(profile.background.type)) {
             root.setBackgroundColor(tokens.appBackground());
         }
         applyView(root, tokens);
@@ -136,6 +141,26 @@ public final class ThemeController {
                 || !isEmpty(profile.colors == null ? null : profile.colors.dark);
     }
 
+    private static boolean isHighlightOnly(ThemeProfile profile) {
+        if (profile == null || !ThemeProfile.MODE_SYSTEM.equals(profile.mode)) return false;
+        if (profile.background == null
+                || !ThemeProfile.BACKGROUND_WALLPAPER.equals(profile.background.type)
+                || profile.background.color != null
+                || profile.background.scrimAlpha != 0f) return false;
+        if (!ThemeProfile.SEED_NONE.equals(profile.seedSource) || profile.seedColor != null) return false;
+        return hasOnlyPrimary(profile.colors == null ? null : profile.colors.light)
+                && isEmpty(profile.colors == null ? null : profile.colors.dark)
+                || hasOnlyPrimary(profile.colors == null ? null : profile.colors.dark)
+                && isEmpty(profile.colors == null ? null : profile.colors.light);
+    }
+
+    private static boolean hasOnlyPrimary(ThemeProfile.ColorSet colors) {
+        if (colors == null || colors.primary == null) return false;
+        ThemeProfile.ColorSet copy = colors.copy();
+        copy.primary = null;
+        return isEmpty(copy);
+    }
+
     private static boolean isEmpty(ThemeProfile.ColorSet colors) {
         if (colors == null) return true;
         return colors.primary == null
@@ -155,6 +180,39 @@ public final class ThemeController {
     private static ThemeTokens disabledTokens() {
         return new ThemeTokens(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                 ThemeProfile.MODE_SYSTEM, ThemeProfile.BACKGROUND_WALLPAPER, 0f);
+    }
+
+    private static void applyHighlightView(View view, ThemeTokens tokens) {
+        if (view == null) return;
+        if (isPlayerRoot(view)) {
+            applyPlayerControls(view, tokens);
+            return;
+        }
+        if (view instanceof BottomNavigationView navigation) {
+            ColorStateList currentIcons = navigation.getItemIconTintList();
+            ColorStateList currentText = navigation.getItemTextColor();
+            navigation.setItemIconTintList(highlightColors(tokens.primary(), currentIcons));
+            navigation.setItemTextColor(highlightColors(tokens.primary(), currentText));
+        } else if (view instanceof TabLayout tabs) {
+            tabs.setSelectedTabIndicatorColor(tokens.primary());
+            tabs.setTabTextColors(tabs.getTabTextColors().getDefaultColor(), tokens.primary());
+        } else if (view instanceof FloatingActionButton fab) {
+            fab.setBackgroundTintList(ColorStateList.valueOf(tokens.primaryContainer()));
+            fab.setImageTintList(ColorStateList.valueOf(tokens.onPrimaryContainer()));
+        } else if (view instanceof MaterialButton button) {
+            applyButton(button, tokens);
+        } else if (view instanceof ImageView image && isSemanticIcon(image)) {
+            image.setImageTintList(controlIconColors(tokens));
+        }
+        if (view instanceof ViewGroup group) {
+            for (int i = 0; i < group.getChildCount(); i++) applyHighlightView(group.getChildAt(i), tokens);
+        }
+    }
+
+    private static ColorStateList highlightColors(int selected, ColorStateList current) {
+        int normal = current == null ? Color.WHITE : current.getDefaultColor();
+        return new ColorStateList(new int[][]{{android.R.attr.state_checked}, {}},
+                new int[]{selected, normal});
     }
 
     private static void applyView(View view, ThemeTokens tokens) {
