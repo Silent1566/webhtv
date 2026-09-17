@@ -667,10 +667,10 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         tmdbConfig = TmdbConfig.objectFrom(Setting.getTmdbConfig());
         initialTmdbItem = getIntentTmdbItem();
         detailThemeMode = Setting.getTmdbDetailTheme();
+        initModeController();
         applyDetailEdgeToEdge();
         applySystemBarInsets();
         initPage();
-        initModeController();
         setLoadingOnlyBeforeDefaultPlayback(shouldUseLoadingOnlyBeforeDefaultPlayback());
         loadContent(null);
     }

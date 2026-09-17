@@ -108,6 +108,20 @@ public class DetailModeControllerTest {
     }
 
     @Test
+    public void modeController_isInitializedBeforeModeDependentViewSetup() throws Exception {
+        Path activityPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
+        String source = Files.readString(activityPath, StandardCharsets.UTF_8);
+        String initViewBody = methodBody(source, "protected void initView(Bundle savedInstanceState)");
+
+        int controller = initViewBody.indexOf("initModeController();");
+        int edgeToEdge = initViewBody.indexOf("applyDetailEdgeToEdge();");
+        int insets = initViewBody.indexOf("applySystemBarInsets();");
+        int page = initViewBody.indexOf("initPage();");
+        assertTrue("mode controller must exist before mode-dependent setup",
+                controller >= 0 && edgeToEdge > controller && insets > controller && page > controller);
+    }
+
+    @Test
     public void playerDetailMode_keepsFullscreenInlinePlayback() throws Exception {
         Path activityPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
         String source = Files.readString(activityPath, StandardCharsets.UTF_8);
