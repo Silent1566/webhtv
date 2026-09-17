@@ -20,6 +20,11 @@ public class PlayerDetailController extends BaseTmdbDetailModeController {
     }
 
     @Override
+    public boolean isPlayerMode() {
+        return true;
+    }
+
+    @Override
     protected boolean showInlinePlayer() {
         return false;
     }

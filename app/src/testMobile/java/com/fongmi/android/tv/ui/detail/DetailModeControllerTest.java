@@ -116,8 +116,8 @@ public class DetailModeControllerTest {
 
         // 详情直放必须进入内嵌全屏播放器，不能因为播放载入界面误判成融合模式。
         assertTrue("detail-player mode must keep fullscreen inline playback",
-                onPlayBody.contains("if (isFusionMode()) playInline();")
-                        && onPlayBody.contains("else if (isPlayerMode()) playDetailFullscreen();"));
+                onPlayBody.contains("if (modeController.isFusionMode()) playInline();")
+                        && onPlayBody.contains("else if (modeController.isPlayerMode()) playDetailFullscreen();"));
         assertTrue("detail-player mode must restore the selected mode when no intent mode marker exists",
                 detailModeBody.contains("return Setting.getDetailOpenMode();")
                         && !detailModeBody.contains("getIntent().getBooleanExtra(\"fusion\", false) ? Setting.DETAIL_OPEN_FUSION : Setting.DETAIL_OPEN_ENHANCED"));
