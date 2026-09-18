@@ -15,8 +15,8 @@ public class SiteDialogThemeSourceTest {
         String dialog = read("app/src/mobile/java/com/fongmi/android/tv/ui/dialog/SiteDialog.java");
         assertFalse("site selection must not force the static light dialog theme", dialog.contains("ThemeOverlay_WebHTV_LightDialog"));
         assertTrue("site selection should use the theme-aware dialog base", dialog.contains("return builder().setView(getBinding().getRoot());"));
-        assertTrue(dialog.contains("SiteDialogTheme.resolve(binding.getRoot().getContext(), Setting.getDynamicColor())"));
-        assertTrue(dialog.contains("binding.getRoot().setBackgroundResource(R.drawable.shape_site_dialog)"));
+        assertTrue(dialog.contains("SiteDialogTheme.resolve(binding.getRoot().getContext(), ThemeController.resolve(binding.getRoot().getContext()))"));
+        assertTrue(dialog.contains("binding.getRoot().setBackgroundColor(theme.surface())"));
         assertTrue(dialog.contains("binding.keyword.setTextColor(theme.onSurface())"));
         assertTrue(dialog.contains("binding.keyword.setHintTextColor(theme.onSurfaceVariant())"));
         assertTrue(dialog.contains("TextViewCompat.setCompoundDrawableTintList(binding.keyword, theme.accent())"));
@@ -38,6 +38,13 @@ public class SiteDialogThemeSourceTest {
         assertTrue("selected foreground/background must be paired", theme.contains("states(onPrimary, onContainer, onSurface)"));
         assertTrue(theme.contains("states(primary, container, surface)"));
         assertTrue("no seed keeps the current theme", theme.contains("color(context, androidx.appcompat.R.attr.colorPrimary)"));
+    }
+
+    @Test
+    public void zeroTokensFallBackToCurrentThemeInsteadOfTransparentSurface() throws Exception {
+        String theme = read("app/src/mobile/java/com/fongmi/android/tv/ui/helper/SiteDialogTheme.java");
+        assertTrue(theme.contains("public static SiteDialogTheme resolve(Context context, ThemeTokens tokens) {\n"
+                + "        if (tokens.primary() == 0) return resolve(context, 0);"));
     }
 
     @Test
