@@ -46,8 +46,16 @@ public class FollowingUiSourceTest {
         int end = activity.indexOf("public void onFollowNextSeason", method);
         String body = activity.substring(method, end);
 
-        assertTrue(body.contains("VideoActivity.startFromHistory(this, history)"));
+        assertTrue(body.contains("VideoActivity.startFromFollowingHistory(this, history)"));
+        assertFalse(body.contains("VideoActivity.startFromHistory(this, history)"));
         assertFalse(body.contains("TmdbDetailActivity.startFromHistory(this, history)"));
+
+        String tv = read("app/src/leanback/java/com/fongmi/android/tv/ui/activity/VideoActivity.java");
+        int route = tv.indexOf("public static void startFromFollowingHistory(Activity activity, History item)");
+        int routeEnd = tv.indexOf("public static void startFromHistory(Activity activity, History item)", route);
+        String routeBody = tv.substring(route, routeEnd);
+        assertTrue(routeBody.contains("startDirect(activity, item.getSiteKey(), item.getVodId()"));
+        assertFalse(routeBody.contains("TmdbDetailActivity.startFromHistory"));
     }
 
     @Test
