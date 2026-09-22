@@ -40,6 +40,17 @@ public class FollowingUiSourceTest {
     }
 
     @Test
+    public void followingContinueUsesFlavorPlaybackRouterToPreserveSourceBinding() throws Exception {
+        String activity = read("app/src/main/java/com/fongmi/android/tv/ui/activity/FollowingActivity.java");
+        int method = activity.indexOf("public void onContinue(Following item, FollowingSource source)");
+        int end = activity.indexOf("public void onFollowNextSeason", method);
+        String body = activity.substring(method, end);
+
+        assertTrue(body.contains("VideoActivity.startFromHistory(this, history)"));
+        assertFalse(body.contains("TmdbDetailActivity.startFromHistory(this, history)"));
+    }
+
+    @Test
     public void followingScreenExposesOfficialSourceAndUserStatesSeparately() throws Exception {
         String adapter = read("app/src/main/java/com/fongmi/android/tv/ui/adapter/FollowingAdapter.java");
         assertTrue(adapter.contains("following_official"));
