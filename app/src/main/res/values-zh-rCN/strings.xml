@@ -2702,7 +2702,7 @@
     <string name="ad_audio_skipped_title">已跳过广告</string>
     <string name="ad_audio_skipped_message">可在 %1$d 秒内撤销。</string>
     <string name="ad_audio_undo">撤销</string>
-    <string name="setting_ad_audio_title">音频指纹去广告（实验）</string>
+    <string name="setting_ad_audio_title">音频指纹去广告（实验性：开启后可能导致播放失败或掉帧）</string>
     <string name="setting_ad_audio_no_rules">无规则</string>
     <string name="setting_ad_audio_rule_error">规则错误</string>
     <string name="setting_ad_audio_rule_count">规则 %1$d · %2$s</string>
@@ -2712,7 +2712,7 @@
     <string name="setting_ad_audio_imported">已导入 %1$d 条规则 · %2$s</string>
     <string name="setting_ad_audio_import_failed">规则导入失败，已保留原规则。</string>
     <string name="setting_ad_audio_clear_done">已清除音频指纹规则</string>
-    <string name="speech_ad_enabled">语音广告识别</string>
+    <string name="speech_ad_enabled">语音广告识别（实验性：开启后可能导致播放失败或掉帧）</string>
     <string name="speech_ad_keywords">广告关键词</string>
     <string name="speech_ad_keyword_count">%1$d 个关键词</string>
     <string name="speech_ad_rules">语音规则</string>
