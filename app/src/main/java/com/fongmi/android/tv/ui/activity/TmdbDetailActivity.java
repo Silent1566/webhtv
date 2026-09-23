@@ -167,6 +167,7 @@ import com.fongmi.android.tv.ui.custom.EpisodeTitlePopup;
 import com.fongmi.android.tv.ui.custom.PlayerGesture;
 import com.fongmi.android.tv.ui.custom.PlayerOsdController;
 import com.fongmi.android.tv.ui.dialog.AdRulePreviewDialog;
+import com.fongmi.android.tv.ui.dialog.ChoiceDialog;
 import com.fongmi.android.tv.ui.dialog.PlaybackSpeedDialog;
 import com.fongmi.android.tv.ui.dialog.CodecCapabilityDialog;
 import com.fongmi.android.tv.ui.dialog.DanmakuDialog;
@@ -4382,16 +4383,34 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
 
     private void openExternalLink(String url) {
         if (TextUtils.isEmpty(url)) return;
-        if (Util.isLeanback() && WebViewUtil.support()) {
-            try {
-                startActivity(CatWebActivity.browserIntent(this, url,
-                        getString(R.string.tmdb_external_links_label),
-                        getString(R.string.detail_external_opening)));
-                return;
-            } catch (Throwable ignored) {
-                // WebView 容器临时起不来时仍回退到系统浏览器，避免链接完全不可达。
-            }
+        if (Util.isLeanback()) {
+            ChoiceDialog.showSingle(this, R.string.detail_external_open_title,
+                    new CharSequence[]{getString(R.string.detail_external_open_builtin), getString(R.string.detail_external_open_external)},
+                    -1, which -> {
+                        if (which == 0) openExternalLinkBuiltIn(url);
+                        else openExternalLinkExternal(url);
+                    });
+            return;
         }
+        openExternalLinkExternal(url);
+    }
+
+    private void openExternalLinkBuiltIn(String url) {
+        if (!WebViewUtil.support()) {
+            openExternalLinkExternal(url);
+            return;
+        }
+        try {
+            startActivity(CatWebActivity.browserIntent(this, url,
+                    getString(R.string.tmdb_external_links_label),
+                    getString(R.string.detail_external_opening)));
+        } catch (Throwable ignored) {
+            // WebView 容器临时起不来时仍回退到系统浏览器，避免链接完全不可达。
+            openExternalLinkExternal(url);
+        }
+    }
+
+    private void openExternalLinkExternal(String url) {
         try {
             startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
         } catch (Throwable e) {

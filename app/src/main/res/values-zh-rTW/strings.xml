@@ -1919,6 +1919,9 @@
     <string name="detail_image_save_failed">圖片儲存失敗</string>
     <string name="detail_external_open_failed">無法開啟外部連結</string>
     <string name="detail_external_opening">正在開啟外部頁面</string>
+    <string name="detail_external_open_title">開啟外部連結</string>
+    <string name="detail_external_open_builtin">內置瀏覽器</string>
+    <string name="detail_external_open_external">系統或外部瀏覽器</string>
     <string name="detail_image_permission_denied">儲存權限被拒絕</string>
 
     <string name="detail_tmdb_photos">劇照</string>

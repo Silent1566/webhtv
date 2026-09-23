@@ -40,6 +40,8 @@ import java.io.File;
  */
 public class CatWebActivity extends AppCompatActivity {
 
+    private static final String DESKTOP_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+
     /** 不带 TV- 前缀：SpiderDebug 自己会加，与 cat-msg / cat-source 保持一致。 */
     private static final String TAG = "cat-web";
     private static final String EXTRA_URL = "url";
@@ -114,17 +116,20 @@ public class CatWebActivity extends AppCompatActivity {
         WebSettings s = webView.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
-        s.setUseWideViewPort(true);
-        s.setLoadWithOverviewMode(true);
         s.setSupportZoom(true);
         s.setBuiltInZoomControls(true);
         s.setDisplayZoomControls(false);
+        s.setUserAgentString(DESKTOP_UA);
+        s.setUseWideViewPort(true);
+        s.setLoadWithOverviewMode(true);
+        s.setTextZoom(100);
         s.setAllowFileAccess(false);
         s.setAllowContentAccess(false);
         s.setCacheMode(WebSettings.LOAD_DEFAULT);
         // TV 上没有触摸，靠 D-pad 移动焦点；这两项让 WebView 参与焦点链
         webView.setFocusable(true);
         webView.setFocusableInTouchMode(true);
+        webView.setInitialScale(100);
         webView.setBackgroundColor(0xFF101216);
         webView.setWebChromeClient(new WebChromeClient() {
             @Override

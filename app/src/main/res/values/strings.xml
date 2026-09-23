@@ -2114,6 +2114,9 @@
     <string name="detail_image_save_failed">Image save failed</string>
     <string name="detail_external_open_failed">Unable to open external link</string>
     <string name="detail_external_opening">Opening external page</string>
+    <string name="detail_external_open_title">Open external link</string>
+    <string name="detail_external_open_builtin">Built-in browser</string>
+    <string name="detail_external_open_external">System or external browser</string>
     <string name="detail_image_permission_denied">Storage permission denied</string>
 
     <string name="detail_tmdb_photos">Stills</string>
