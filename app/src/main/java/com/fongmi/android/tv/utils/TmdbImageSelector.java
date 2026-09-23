@@ -118,7 +118,7 @@ public class TmdbImageSelector {
     private static String image(String base, String path) {
         if (isEmpty(path)) return "";
         String normalizedBase = originalBase(base);
-        return normalizedBase + (path.startsWith("/") ? path : "/" + path);
+        return TmdbProxy.imageUrl(normalizedBase, path);
     }
 
     private static String originalBase(String base) {

@@ -261,6 +261,7 @@
     <string name="dialog_delete_global_history">Delete history from all VOD configurations?</string>
     <string name="config_delete_title">Delete source?</string>
     <string name="config_delete_message">Delete “%1$s”? Related playback history may also be lost. This cannot be undone.</string>
+    <string name="config_current_delete_message">This interface is currently in use. Switch to another interface before deleting it.</string>
     <string name="setting_home_history">Home recent history</string>
     <string name="setting_personal_recommendation">Personal recommendations</string>
     <string name="setting_recommendation_feedback">Not interested management</string>
@@ -1528,6 +1529,7 @@
     <string name="dialog_config_choose_failed">Could not read the selected item, please pick the package folder or zip again</string>
     <string name="dialog_config_name">Please enter the name…</string>
     <string name="dialog_config_url">Please enter the url…</string>
+    <string name="dialog_config_addresses">Backup addresses, one per line…</string>
 
     <!-- Error -->
     <string name="error_config_get">Configuration get failed</string>
@@ -2003,9 +2005,17 @@
     <string name="dialog_tmdb_api_key_tip">Get your free API key at: https://www.themoviedb.org/settings/api</string>
     <string name="dialog_tmdb_language_label">TMDB language</string>
     <string name="dialog_tmdb_language_hint">For example zh-CN</string>
-    <string name="dialog_tmdb_api_host_label">API host</string>
-    <string name="dialog_tmdb_api_host_hint">For example https://api.tmdb.org</string>
-    <string name="dialog_tmdb_image_host_label">Image host</string>
+    <string name="dialog_tmdb_api_host_label">TMDB API route</string>
+    <string name="dialog_tmdb_image_itv666">itv666 image mirror</string>
+    <string name="dialog_tmdb_image_direct">Official images (direct)</string>
+    <string name="dialog_tmdb_api_itv666">itv666 API mirror</string>
+    <string name="dialog_tmdb_api_direct">Official API (direct)</string>
+    <string name="dialog_tmdb_api_auto">Auto (latency priority, failover)</string>
+    <string name="dialog_tmdb_image_auto">Auto (latency priority, failover)</string>
+    <string name="dialog_tmdb_image_wsrv">wsrv.nl image proxy</string>
+    <string name="dialog_tmdb_api_host_hint">https://api.tmdb.org or choose a built-in mirror</string>
+    <string name="dialog_tmdb_proxy_host_help">API and image routes can be selected independently. Auto ranks the verified routes by latency and switches after failure; itv666 and wsrv.nl are included, and custom endpoints are supported.</string>
+    <string name="dialog_tmdb_image_host_label">TMDB image route</string>
     <string name="dialog_tmdb_image_host_hint">For example https://images.tmdb.org</string>
     <string name="dialog_tmdb_section_data">Data source</string>
     <string name="dialog_tmdb_section_ratings">Ratings</string>

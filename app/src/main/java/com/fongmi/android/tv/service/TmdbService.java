@@ -12,6 +12,7 @@ import com.fongmi.android.tv.bean.TmdbItem;
 import com.fongmi.android.tv.bean.TmdbPerson;
 import com.fongmi.android.tv.bean.TmdbVideo;
 import com.fongmi.android.tv.utils.TmdbImageSelector;
+import com.fongmi.android.tv.utils.TmdbProxy;
 import com.github.catvod.crawler.SpiderDebug;
 import com.github.catvod.utils.Path;
 import com.google.gson.JsonArray;
@@ -592,7 +593,7 @@ public class TmdbService {
 
     public String image(String base, String path) {
         if (TextUtils.isEmpty(path)) return "";
-        return base + (path.startsWith("/") ? path : "/" + path);
+        return TmdbProxy.imageUrl(base, path);
     }
 
     private String searchUrl(String keyword, TmdbConfig config) {
@@ -661,13 +662,36 @@ public class TmdbService {
 
     private Response execute(String url, TmdbConfig config) throws Exception {
         throwIfAuthBlocked(config);
-        Request.Builder builder = new Request.Builder().url(url);
-        if (!TextUtils.isEmpty(config.getAccessToken())) builder.header("Authorization", "Bearer " + config.getAccessToken());
-        try {
-            return com.github.catvod.net.OkHttp.client().newCall(builder.build()).execute();
-        } catch (Exception e) {
-            throw new IOException(redactMessage(e.getMessage()));
+        String currentBase = config.getApiBase();
+        List<String> candidates = config.getApiCandidates();
+        Exception last = null;
+        for (String candidate : candidates) {
+            String requestUrl = url;
+            if (config.isApiAuto() && url.startsWith(currentBase)) {
+                requestUrl = candidate + url.substring(currentBase.length());
+            }
+            long started = System.nanoTime();
+            try {
+                Request.Builder builder = new Request.Builder().url(requestUrl);
+                if (!TextUtils.isEmpty(config.getAccessToken())) builder.header("Authorization", "Bearer " + config.getAccessToken());
+                Response response = com.github.catvod.net.OkHttp.client().newCall(builder.build()).execute();
+                if (response.isSuccessful() || !config.isApiAuto() || response.code() == 401 || response.code() == 403 || candidate.equals(candidates.get(candidates.size() - 1))) {
+                    if (response.isSuccessful() && config.isApiAuto()) {
+                        TmdbProxy.RouteSelector.success(TmdbProxy.RouteSelector.Kind.API, candidate,
+                                TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started));
+                    }
+                    return response;
+                }
+                TmdbProxy.RouteSelector.failure(TmdbProxy.RouteSelector.Kind.API, candidate);
+                response.close();
+            } catch (Exception e) {
+                last = e;
+                if (!config.isApiAuto() || candidate.equals(candidates.get(candidates.size() - 1))) break;
+                TmdbProxy.RouteSelector.failure(TmdbProxy.RouteSelector.Kind.API, candidate);
+            }
         }
+        if (last != null) throw new IOException(redactMessage(last.getMessage()), last);
+        throw new IOException("TMDB request failed on all automatic routes");
     }
 
     public static String redactMessage(String message) {

@@ -1450,6 +1450,7 @@
     <string name="dialog_config_choose_failed">讀不到所選內容，請重新選擇包目錄或 zip</string>
     <string name="dialog_config_name">請輸入名稱…</string>
     <string name="dialog_config_url">請輸入網址…</string>
+    <string name="dialog_config_addresses">備用網址，每行一個…</string>
 
     <!-- Error -->
     <string name="error_config_get">配置取得失敗</string>
@@ -1831,9 +1832,17 @@
     <string name="dialog_tmdb_api_key_tip">免費獲取 API Key: https://www.themoviedb.org/settings/api</string>
     <string name="dialog_tmdb_language_label">TMDB 語言</string>
     <string name="dialog_tmdb_language_hint">例如 zh-CN</string>
-    <string name="dialog_tmdb_api_host_label">API 域名</string>
-    <string name="dialog_tmdb_api_host_hint">例如 https://api.tmdb.org</string>
-    <string name="dialog_tmdb_image_host_label">圖片域名</string>
+    <string name="dialog_tmdb_api_host_label">TMDB API 線路</string>
+    <string name="dialog_tmdb_image_itv666">itv666 圖片代理</string>
+    <string name="dialog_tmdb_image_direct">官方圖片（直連）</string>
+    <string name="dialog_tmdb_api_itv666">itv666 API 代理</string>
+    <string name="dialog_tmdb_api_direct">官方 API（直連）</string>
+    <string name="dialog_tmdb_api_auto">自動（低延遲優先，失敗切換）</string>
+    <string name="dialog_tmdb_image_auto">自動（低延遲優先，失敗切換）</string>
+    <string name="dialog_tmdb_image_wsrv">wsrv.nl 圖片代理</string>
+    <string name="dialog_tmdb_api_host_hint">預設 https://api.tmdb.org，可選擇內建代理或輸入自訂位址</string>
+    <string name="dialog_tmdb_proxy_host_help">API 和圖片線路可以分別選擇。自動模式會按已驗證線路的延遲排序，失敗時切換；已加入 itv666 和 wsrv.nl，也支援輸入自訂位址。</string>
+    <string name="dialog_tmdb_image_host_label">TMDB 圖片線路</string>
     <string name="dialog_tmdb_image_host_hint">例如 https://images.tmdb.org</string>
     <string name="dialog_tmdb_section_data">數據源</string>
     <string name="dialog_tmdb_section_ratings">評分擴展</string>
@@ -2447,6 +2456,7 @@
     <string name="dialog_delete_global_history">確定刪除所有點播設定的歷史記錄嗎？</string>
     <string name="config_delete_title">刪除播放源？</string>
     <string name="config_delete_message">確定刪除「%1$s」嗎？相關播放歷史也可能遺失，此操作無法復原。</string>
+    <string name="config_current_delete_message">目前接口正在使用中，請先切換到其他接口再刪除。</string>
     <string name="setting_home_history">首頁最近觀看</string>
     <string name="site_health_report_ad_blocked">播放 %1$d 次 / 廣告攔截 %2$d 次</string>
     <string name="setting_custom_csp_sort">排序</string>

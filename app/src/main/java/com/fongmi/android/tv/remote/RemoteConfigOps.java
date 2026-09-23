@@ -8,9 +8,11 @@ import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.api.config.WallConfig;
 import com.fongmi.android.tv.bean.Config;
 import com.fongmi.android.tv.bean.Site;
+import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.remote.RemoteModels.RemoteCommandResult;
 import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
 import java.util.ArrayList;
@@ -32,17 +34,21 @@ public final class RemoteConfigOps {
         int type = number(payload, "type", 0);
         String url = string(payload, "url");
         String name = string(payload, "name");
+        String interfaceKey = string(payload, "interfaceKey");
         if (TextUtils.isEmpty(url)) return RemoteCommandResult.failure("Missing config url");
-        Config.find(url, type).name(name).save();
+        Config config = TextUtils.isEmpty(interfaceKey)
+                ? Config.find(url, type)
+                : AppDatabase.get().getConfigDao().findByInterfaceKey(interfaceKey, type);
+        if (config == null) config = Config.create(type);
+        config.interfaceKey(interfaceKey).mergeUrls(urls(payload)).url(url).name(name).save();
         return RemoteCommandResult.success("Config saved", data());
     }
 
     public static RemoteCommandResult use(JsonObject payload) {
         int type = number(payload, "type", 0);
         String url = string(payload, "url");
-        if (TextUtils.isEmpty(url)) return RemoteCommandResult.failure("Missing config url");
-        Config config = Config.find(url, type);
-        if (config.isEmpty()) return RemoteCommandResult.failure("Config not found");
+        Config config = findConfig(payload, type);
+        if (config == null || config.isEmpty()) return RemoteCommandResult.failure("Config not found");
         App.post(() -> {
             if (type == 1) LiveConfig.load(config, new Callback());
             else if (type == 2) WallConfig.load(config, new Callback());
@@ -53,10 +59,20 @@ public final class RemoteConfigOps {
 
     public static RemoteCommandResult delete(JsonObject payload) {
         int type = number(payload, "type", 0);
-        String url = string(payload, "url");
-        if (TextUtils.isEmpty(url)) return RemoteCommandResult.failure("Missing config url");
-        Config.find(url, type).delete();
+        Config config = findConfig(payload, type);
+        if (config == null || config.isEmpty()) return RemoteCommandResult.failure("Config not found");
+        config.delete();
         return RemoteCommandResult.success("Config deleted", data());
+    }
+
+    private static Config findConfig(JsonObject payload, int type) {
+        String interfaceKey = string(payload, "interfaceKey");
+        if (!TextUtils.isEmpty(interfaceKey)) {
+            Config config = AppDatabase.get().getConfigDao().findByInterfaceKey(interfaceKey, type);
+            if (config != null) return config;
+        }
+        String url = string(payload, "url");
+        return TextUtils.isEmpty(url) ? null : AppDatabase.get().getConfigDao().find(url, type);
     }
 
     public static RemoteCommandResult sites(JsonObject payload) {
@@ -96,7 +112,7 @@ public final class RemoteConfigOps {
     }
 
     private static void addItem(JsonArray items, List<String> keys, Config config, boolean forceActive) {
-        String key = config.getType() + "|" + config.getUrl();
+        String key = config.getType() + "|" + config.ensureInterfaceKey();
         if (keys.contains(key)) return;
         keys.add(key);
         items.add(item(config, forceActive));
@@ -108,6 +124,8 @@ public final class RemoteConfigOps {
         item.addProperty("typeName", typeName(config.getType()));
         item.addProperty("name", config.getName());
         item.addProperty("url", config.getUrl());
+        item.addProperty("interfaceKey", config.ensureInterfaceKey());
+        item.add("urls", App.gson().toJsonTree(config.getUrls()));
         item.addProperty("desc", config.getDesc());
         item.addProperty("time", config.getTime());
         item.addProperty("active", forceActive || isCurrent(config));
@@ -204,6 +222,15 @@ public final class RemoteConfigOps {
     private static String string(JsonObject object, String key) {
         if (object == null || !object.has(key) || object.get(key).isJsonNull()) return "";
         return object.get(key).getAsString().trim();
+    }
+
+    private static List<String> urls(JsonObject object) {
+        List<String> result = new ArrayList<>();
+        if (object == null || !object.has("urls") || !object.get("urls").isJsonArray()) return result;
+        for (JsonElement item : object.getAsJsonArray("urls")) {
+            if (item != null && item.isJsonPrimitive() && item.getAsJsonPrimitive().isString()) result.add(item.getAsString());
+        }
+        return result;
     }
 
     private static int number(JsonObject object, String key, int fallback) {

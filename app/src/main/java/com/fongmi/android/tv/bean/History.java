@@ -131,8 +131,9 @@ public class History implements Diffable<History> {
     private String subtitleSource;
     private transient long updateTime;
     private transient String playbackSourceKey;
-    @Ignore
-    private transient String sourceBindingKey;
+    @SerializedName("sourceBindingKey")
+    @ColumnInfo(defaultValue = "")
+    private String sourceBindingKey;
     @Ignore
     private transient String displayIdentity;
 

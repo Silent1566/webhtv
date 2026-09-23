@@ -27,6 +27,21 @@ public class TmdbSourceDialogInflationContractTest {
         assertTrue(source.contains("resetBtn.setText(R.string.dialog_tmdb_reset_default)"));
     }
 
+    @Test
+    public void apiAndImageRoutesUseSeparateDropdownInputs() throws Exception {
+        String layout = read(sourcePath().resolve(Path.of("..", "..", "main", "res", "layout", "dialog_tmdb_source.xml")));
+        String source = read(sourcePath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "dialog", "TmdbSourceDialog.java")));
+        assertTrue(layout.contains("@+id/apiHostInput"));
+        assertTrue(layout.contains("@+id/imageHostInput"));
+        assertTrue(layout.contains("MaterialAutoCompleteTextView"));
+        assertTrue(layout.contains("TextInputLayout"));
+        assertFalse(layout.contains("@+id/proxyHostInput"));
+        assertTrue(source.contains("apiHostInput.setSimpleItems(apiOptionLabels())"));
+        assertTrue(source.contains("imageHostInput.setSimpleItems(imageOptionLabels())"));
+        assertTrue(source.contains("apiDisplayFor(config)"));
+        assertTrue(source.contains("imageDisplayFor(config)"));
+    }
+
     private static String buttonBlock(String layout, String id) {
         String marker = "android:id=\"@+id/" + id + "\"";
         int idStart = layout.indexOf(marker);

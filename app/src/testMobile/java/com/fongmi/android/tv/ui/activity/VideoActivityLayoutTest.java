@@ -3452,7 +3452,8 @@ public class VideoActivityLayoutTest {
             assertTrue(sourcePath + " must persist the identity-first adapter index with quarterly progress",
                     body.contains("mFlagAdapter.indexOf(flag)")
                             && body.contains("TmdbUIAdapter.flagKey(flag, index)")
-                            && body.contains("mHistory.setSourceBindingKey(flagKey)"));
+                            && body.contains("mHistory.setSourceBindingKey(flagKey)")
+                            && body.contains("syncHistory()"));
             assertTrue(sourcePath + " must recover the stable index before the TMDB adapter is bound",
                     body.contains("TmdbUIAdapter.flagIndex(mVod.getFlags(), flag)"));
         }

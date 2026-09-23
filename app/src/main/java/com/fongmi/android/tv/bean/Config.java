@@ -16,10 +16,12 @@ import com.google.gson.annotations.SerializedName;
 import com.google.gson.reflect.TypeToken;
 
 import java.lang.reflect.Type;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.UUID;
 
-@Entity(indices = @Index(value = {"url", "type"}, unique = true))
+@Entity(indices = {@Index(value = {"url", "type"}), @Index(value = {"interfaceKey", "type"}, unique = true)})
 public class Config {
 
     @PrimaryKey(autoGenerate = true)
@@ -31,6 +33,10 @@ public class Config {
     private long time;
     @SerializedName("url")
     private String url;
+    @SerializedName("interfaceKey")
+    private String interfaceKey;
+    @SerializedName("urlsJson")
+    private String urlsJson;
     @SerializedName("json")
     private String json;
     @SerializedName("name")
@@ -154,6 +160,69 @@ public class Config {
         this.url = url;
     }
 
+    public List<String> getUrls() {
+        List<String> urls;
+        try {
+            Type listType = TypeToken.getParameterized(List.class, String.class).getType();
+            urls = App.gson().fromJson(urlsJson, listType);
+        } catch (Exception e) {
+            urls = null;
+        }
+        if (urls == null) urls = new ArrayList<>();
+        List<String> result = new ArrayList<>();
+        addUrl(result, url);
+        for (String item : urls) addUrl(result, item);
+        return result;
+    }
+
+    public Config urls(List<String> urls) {
+        List<String> result = new ArrayList<>();
+        if (urls != null) for (String item : urls) addUrl(result, item);
+        setUrl(result.isEmpty() ? "" : result.get(0));
+        setUrlsJson(App.gson().toJson(result));
+        return this;
+    }
+
+    public Config mergeUrls(List<String> urls) {
+        List<String> result = getUrls();
+        if (urls != null) for (String item : urls) addUrl(result, item);
+        return urls(result);
+    }
+
+    public Config replaceUrl(String oldUrl, String newUrl) {
+        List<String> result = getUrls();
+        result.remove(oldUrl);
+        result.remove(newUrl);
+        if (!TextUtils.isEmpty(newUrl)) result.add(0, newUrl.trim());
+        return urls(result);
+    }
+
+    private static void addUrl(List<String> urls, String value) {
+        value = value == null ? "" : value.trim();
+        if (!TextUtils.isEmpty(value) && !urls.contains(value)) urls.add(value);
+    }
+
+    public String getInterfaceKey() {
+        return interfaceKey;
+    }
+
+    public void setInterfaceKey(String interfaceKey) {
+        this.interfaceKey = interfaceKey;
+    }
+
+    public String getUrlsJson() {
+        return urlsJson;
+    }
+
+    public void setUrlsJson(String urlsJson) {
+        this.urlsJson = urlsJson;
+    }
+
+    public String ensureInterfaceKey() {
+        if (TextUtils.isEmpty(interfaceKey)) interfaceKey = UUID.randomUUID().toString();
+        return interfaceKey;
+    }
+
     public String getJson() {
         return json;
     }
@@ -224,7 +293,20 @@ public class Config {
     }
 
     public Config url(String url) {
+        String oldUrl = getUrl();
+        if (!TextUtils.isEmpty(oldUrl) && !TextUtils.equals(oldUrl, url)) return replaceUrl(oldUrl, url);
         setUrl(url);
+        if (!TextUtils.isEmpty(url) && TextUtils.isEmpty(urlsJson)) urlsJson = App.gson().toJson(Collections.singletonList(url));
+        return this;
+    }
+
+    public Config interfaceKey(String interfaceKey) {
+        if (!TextUtils.isEmpty(interfaceKey)) setInterfaceKey(interfaceKey.trim());
+        return this;
+    }
+
+    public Config urlsJson(String urlsJson) {
+        setUrlsJson(urlsJson);
         return this;
     }
 
@@ -250,12 +332,14 @@ public class Config {
 
     public Config insert() {
         if (isEmpty()) return this;
+        ensureInterfaceKey();
         setId(Math.toIntExact(AppDatabase.get().getConfigDao().insert(this)));
         return this;
     }
 
     public Config save() {
         if (isEmpty()) return this;
+        ensureInterfaceKey();
         AppDatabase.get().getConfigDao().insertOrUpdate(this);
         return this;
     }

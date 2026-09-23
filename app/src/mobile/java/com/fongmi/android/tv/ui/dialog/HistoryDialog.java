@@ -6,6 +6,7 @@ import android.graphics.drawable.ColorDrawable;
 import android.view.Gravity;
 import android.view.Window;
 import android.view.WindowManager;
+import android.view.View;
 
 import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
@@ -23,6 +24,7 @@ import com.fongmi.android.tv.databinding.DialogHistoryBinding;
 import com.fongmi.android.tv.impl.ConfigListener;
 import com.fongmi.android.tv.ui.adapter.ConfigAdapter;
 import com.fongmi.android.tv.ui.custom.SpaceItemDecoration;
+import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
@@ -35,6 +37,7 @@ public class HistoryDialog extends BaseAlertDialog implements ConfigAdapter.OnCl
 
     private int type;
     private boolean readOnly;
+    private boolean manage;
 
     public static HistoryDialog create() {
         return new HistoryDialog();
@@ -57,6 +60,11 @@ public class HistoryDialog extends BaseAlertDialog implements ConfigAdapter.OnCl
 
     public HistoryDialog readOnly() {
         readOnly = true;
+        return this;
+    }
+
+    public HistoryDialog manage() {
+        manage = true;
         return this;
     }
 
@@ -95,8 +103,20 @@ public class HistoryDialog extends BaseAlertDialog implements ConfigAdapter.OnCl
         binding.recycler.setHasFixedSize(false);
         if (isFull()) binding.recycler.setMaxHeight(ResUtil.dp2px(264));
         binding.recycler.addItemDecoration(new SpaceItemDecoration(1, 8));
-        binding.recycler.setAdapter(adapter.readOnly(readOnly).addAll(type, getConfig()));
+        binding.recycler.setAdapter(adapter.readOnly(readOnly).protectCurrent(manage).addAll(type, getConfig()));
+        binding.add.setVisibility(manage ? View.VISIBLE : View.GONE);
+        binding.add.setOnClickListener(v -> onAdd());
         if (type == 0 && !readOnly) attachSortHelper();
+    }
+
+    private void onAdd() {
+        ConfigDialog dialog = ConfigDialog.create();
+        if (type == 0) dialog.vod();
+        else if (type == 1) dialog.live();
+        else dialog.wall();
+        if (getParentFragment() != null) dialog.show(getParentFragment());
+        else dialog.show(requireActivity());
+        dismiss();
     }
 
     private void attachSortHelper() {
@@ -133,7 +153,22 @@ public class HistoryDialog extends BaseAlertDialog implements ConfigAdapter.OnCl
     }
 
     @Override
+    public void onEditClick(Config item) {
+        ConfigDialog dialog = ConfigDialog.create().target(item).edit();
+        if (type == 0) dialog.vod();
+        else if (type == 1) dialog.live();
+        else dialog.wall();
+        if (getParentFragment() != null) dialog.show(getParentFragment());
+        else dialog.show(requireActivity().getSupportFragmentManager(), null);
+        dismiss();
+    }
+
+    @Override
     public void onDeleteClick(Config item) {
+        if (adapter.isProtectedCurrent(item)) {
+            Notify.show(R.string.config_current_delete_message);
+            return;
+        }
         new MaterialAlertDialogBuilder(requireContext())
                 .setTitle(R.string.config_delete_title)
                 .setMessage(getString(R.string.config_delete_message, item.getDesc()))
@@ -147,7 +182,7 @@ public class HistoryDialog extends BaseAlertDialog implements ConfigAdapter.OnCl
     @Override
     public void onStart() {
         super.onStart();
-        if (adapter.getItemCount() == 0) dismiss();
+        if (adapter.getItemCount() == 0 && !manage) dismiss();
         else configureWindow();
     }
 

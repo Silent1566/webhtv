@@ -1,5 +1,7 @@
 package com.fongmi.android.tv.bean;
 
+import android.text.TextUtils;
+
 import com.fongmi.android.tv.api.loader.BaseLoader;
 
 import android.content.SharedPreferences;
@@ -183,7 +185,14 @@ public class Backup {
         Map<Integer, Integer> cids = new HashMap<>();
         for (Config item : getConfig()) {
             int source = item.getId();
-            Config current = AppDatabase.get().getConfigDao().find(item.getUrl(), item.getType());
+            Config current = TextUtils.isEmpty(item.getInterfaceKey()) ? null
+                    : AppDatabase.get().getConfigDao().findByInterfaceKey(item.getInterfaceKey(), item.getType());
+            if (current == null) current = AppDatabase.get().getConfigDao().find(item.getUrl(), item.getType());
+            if (current != null) {
+                item.interfaceKey(current.getInterfaceKey()).mergeUrls(current.getUrls());
+            } else {
+                item.ensureInterfaceKey();
+            }
             item.setId(current == null ? 0 : current.getId());
             long id = AppDatabase.get().getConfigDao().insert(item);
             if (id == -1) AppDatabase.get().getConfigDao().update(item);

@@ -1162,6 +1162,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
                 ? com.fongmi.android.tv.ui.helper.TmdbUIAdapter.flagKey(flag, index)
                 : mTmdbUIAdapter == null ? "" : mTmdbUIAdapter.activeFlagKey(flag);
         mHistory.setSourceBindingKey(flagKey);
+        syncHistory();
     }
 
     private Flag resolveHistoryPlaybackFlag(List<Flag> flags) {

@@ -1,5 +1,6 @@
 package com.fongmi.android.tv.ui.helper;
 
+import com.fongmi.android.tv.utils.TmdbProxy;
 import androidx.annotation.Nullable;
 
 import com.fongmi.android.tv.bean.TmdbConfig;
@@ -383,7 +384,7 @@ public final class TmdbSourceAdapter {
         if (normalized.isEmpty()) return "";
         if (!normalized.startsWith("/")) return normalized;
         String normalizedBase = base == null ? "" : base.trim();
-        return normalizedBase.isEmpty() ? normalized : normalizedBase + normalized;
+        return normalizedBase.isEmpty() ? normalized : TmdbProxy.imageUrl(normalizedBase, normalized);
     }
 
     private static String subtitle(String date, double vote) {

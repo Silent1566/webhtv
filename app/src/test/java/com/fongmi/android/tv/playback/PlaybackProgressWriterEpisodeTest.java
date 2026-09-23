@@ -25,6 +25,18 @@ public class PlaybackProgressWriterEpisodeTest {
         assertFalse(PlaybackProgressWriter.isSameEpisode(local, input));
     }
 
+    @Test
+    public void sourceBindingIsCopiedIntoPersistedHistory() {
+        History history = new History();
+        PlaybackProgressInput input = new PlaybackProgressInput();
+        input.sourceBindingKey = "stable-interface-key";
+
+        PlaybackProgressWriter.applySourceBindingKey(history, input);
+
+        assertTrue("stable-interface-key".equals(history.getSourceBindingKey()));
+        assertTrue("stable-interface-key".equals(history.copy().getSourceBindingKey()));
+    }
+
     private static History history(String remarks, String url, int season, int episode) {
         History history = new History();
         history.setVodRemarks(remarks);
