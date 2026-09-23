@@ -41,7 +41,6 @@ import java.util.concurrent.Executors;
 public final class ActionCardHelper {
 
     private static final ExecutorService executor = Executors.newFixedThreadPool(2);
-    private static Handler main;
 
     /** 点击动作卡片入口：siteKey 为站点 key，actionJson 为卡片 vod_id JSON 或原生 action 字段内容。 */
     public static void handleAction(Activity activity, String siteKey, String actionJson) {
@@ -75,13 +74,8 @@ public final class ActionCardHelper {
     private static void submit(Activity activity, String siteKey, String actionJson) {
         executor.execute(() -> {
             String resp = callSpider(siteKey, actionJson);
-            mainHandler().post(() -> dispatch(activity, siteKey, resp));
+            new Handler(Looper.getMainLooper()).post(() -> dispatch(activity, siteKey, resp));
         });
-    }
-
-    private static Handler mainHandler() {
-        if (main == null) main = new Handler(Looper.getMainLooper());
-        return main;
     }
 
     /** 补全协议头：裸域名（如 baidu.com）按 https:// 处理，对齐 py 端 _open_url_action。 */
@@ -96,16 +90,16 @@ public final class ActionCardHelper {
     private static String callSpider(String siteKey, String actionJson) {
         try {
             Site site = VodConfig.get().getSite(siteKey);
-            if (site == null) return "";
+            if (site == null) return error("站点不存在");
             if (site.getType() == 3) return site.recent().spider().action(actionJson);
             if (site.getType() == 4) return OkHttp.string(actionJson);
+            return error("站点不支持动作");
         } catch (Throwable e) {
             return error(e.getMessage());
         }
-        return "";
     }
 
-    private static String error(String message) {
+    static String error(String message) {
         JsonObject obj = new JsonObject();
         obj.addProperty("msg", TextUtils.isEmpty(message) ? "动作执行失败" : message);
         return obj.toString();
