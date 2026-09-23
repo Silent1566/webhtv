@@ -740,6 +740,11 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         start(activity, key, id, name, pic, mark, false, tmdbItem);
     }
 
+    /** 追更页通过 flavor 专用入口调用；普通历史记录仍使用原有模式路由。 */
+    public static void startFromFollowingHistory(Activity activity, History item) {
+        startFromHistory(activity, item);
+    }
+
     public static void startFromHistory(Activity activity, History item) {
         if (shouldOpenLegacyTmdbDetail(item.getSiteKey(), item.getVodId())) {
             TmdbDetailActivity.startFromHistory(activity, item);
