@@ -180,6 +180,7 @@ import com.fongmi.android.tv.ui.dialog.ChoiceDialog;
 import com.fongmi.android.tv.ui.dialog.TmdbSearchDialog;
 import com.fongmi.android.tv.ui.dialog.TrackDialog;
 import com.fongmi.android.tv.ui.novel.NovelRouter;
+import com.fongmi.android.tv.ui.web.CatWebActivity;
 import com.fongmi.android.tv.ui.helper.DetailThemeVisibility;
 import com.fongmi.android.tv.ui.helper.EpisodeRangePolicy;
 import com.fongmi.android.tv.ui.helper.EpisodeCardImagePolicy;
@@ -224,6 +225,7 @@ import com.fongmi.android.tv.utils.TmdbImageSelector;
 import com.fongmi.android.tv.utils.TmdbImageSaver;
 import com.fongmi.android.tv.utils.Traffic;
 import com.fongmi.android.tv.utils.Util;
+import com.fongmi.android.tv.utils.WebViewUtil;
 import com.fongmi.android.tv.utils.Clock;
 import com.fongmi.android.tv.utils.FileChooser;
 import com.fongmi.android.tv.player.lut.LutPreset;
@@ -4379,10 +4381,21 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private void openExternalLink(String url) {
+        if (TextUtils.isEmpty(url)) return;
+        if (Util.isLeanback() && WebViewUtil.support()) {
+            try {
+                startActivity(CatWebActivity.browserIntent(this, url,
+                        getString(R.string.tmdb_external_links_label),
+                        getString(R.string.detail_external_opening)));
+                return;
+            } catch (Throwable ignored) {
+                // WebView 容器临时起不来时仍回退到系统浏览器，避免链接完全不可达。
+            }
+        }
         try {
-            startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)));
+            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
         } catch (Throwable e) {
-            Notify.show("无法打开链接");
+            Notify.show(R.string.detail_external_open_failed);
         }
     }
 

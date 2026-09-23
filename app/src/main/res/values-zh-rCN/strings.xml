@@ -2077,6 +2077,7 @@
     <string name="detail_image_save_success">已保存至：%1$s</string>
     <string name="detail_image_save_failed">图片保存失败</string>
     <string name="detail_external_open_failed">无法打开外部链接</string>
+    <string name="detail_external_opening">正在打开外部页面</string>
     <string name="detail_image_permission_denied">存储权限被拒绝</string>
 
     <string name="detail_tmdb_photos">剧照</string>

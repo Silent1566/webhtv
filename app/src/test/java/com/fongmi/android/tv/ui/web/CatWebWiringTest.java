@@ -233,6 +233,22 @@ public class CatWebWiringTest {
     }
 
     @Test
+    public void tmdbExternalLinksPreferInAppBrowserOnTv() throws IOException {
+        String source = read("com/fongmi/android/tv/ui/activity/TmdbDetailActivity.java");
+        int method = source.indexOf("private void openExternalLink(String url)");
+        int nextMethod = source.indexOf("private void addRatingChip(String key", method);
+        String body = method >= 0 && nextMethod > method ? source.substring(method, nextMethod) : "";
+
+        assertTrue("TMDB 外链必须区分 TV 场景", method >= 0 && body.contains("Util.isLeanback()"));
+        assertTrue("TV 端必须先走内置 WebView", body.contains("WebViewUtil.support()")
+                && body.contains("CatWebActivity.browserIntent("));
+        assertTrue("内置页启动失败后仍要保留系统浏览器兜底",
+                body.indexOf("Intent.ACTION_VIEW") > body.indexOf("CatWebActivity.browserIntent("));
+        assertTrue("外部链接失败提示必须使用本地化资源",
+                body.contains("R.string.detail_external_open_failed"));
+    }
+
+    @Test
     public void bothFlavorsYieldDetailToWebview() throws IOException {
         for (String flavor : new String[]{"leanback", "mobile"}) {
             String source = readFlavor(flavor, "com/fongmi/android/tv/ui/activity/VideoActivity.java");

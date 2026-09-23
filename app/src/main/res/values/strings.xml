@@ -2113,6 +2113,7 @@
     <string name="detail_image_save_success">Saved to: %1$s</string>
     <string name="detail_image_save_failed">Image save failed</string>
     <string name="detail_external_open_failed">Unable to open external link</string>
+    <string name="detail_external_opening">Opening external page</string>
     <string name="detail_image_permission_denied">Storage permission denied</string>
 
     <string name="detail_tmdb_photos">Stills</string>

@@ -43,6 +43,8 @@ public class CatWebActivity extends AppCompatActivity {
     /** 不带 TV- 前缀：SpiderDebug 自己会加，与 cat-msg / cat-source 保持一致。 */
     private static final String TAG = "cat-web";
     private static final String EXTRA_URL = "url";
+    private static final String EXTRA_TITLE = "title";
+    private static final String EXTRA_LOADING_TEXT = "loadingText";
 
     private WebView webView;
     private ProgressBar progress;
@@ -55,7 +57,18 @@ public class CatWebActivity extends AppCompatActivity {
     private ValueCallback<Uri[]> chooser;
 
     public static Intent intent(Context context, String url) {
-        return new Intent(context, CatWebActivity.class).putExtra(EXTRA_URL, url);
+        return intent(context, url, "", "");
+    }
+
+    public static Intent browserIntent(Context context, String url, String title, String loadingText) {
+        return intent(context, url, title, loadingText);
+    }
+
+    private static Intent intent(Context context, String url, String title, String loadingText) {
+        return new Intent(context, CatWebActivity.class)
+                .putExtra(EXTRA_URL, url)
+                .putExtra(EXTRA_TITLE, title)
+                .putExtra(EXTRA_LOADING_TEXT, loadingText);
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -69,6 +82,8 @@ public class CatWebActivity extends AppCompatActivity {
             finish();
             return;
         }
+        String title = getIntent().getStringExtra(EXTRA_TITLE);
+        if (!TextUtils.isEmpty(title)) setTitle(title);
 
         // Android 13+ 手势返回与系统返回键都先让 WebView 回退，退到底再关页面
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
@@ -82,7 +97,8 @@ public class CatWebActivity extends AppCompatActivity {
         webView = findViewById(R.id.web_view);
         progress = findViewById(R.id.progress);
         loading = findViewById(R.id.loading);
-        ((TextView) findViewById(R.id.loading_text)).setText(R.string.cat_web_opening);
+        String loadingText = getIntent().getStringExtra(EXTRA_LOADING_TEXT);
+        ((TextView) findViewById(R.id.loading_text)).setText(TextUtils.isEmpty(loadingText) ? getString(R.string.cat_web_opening) : loadingText);
         ((TextView) findViewById(R.id.address)).setText(url);
 
         configure();
