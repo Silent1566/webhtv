@@ -417,7 +417,7 @@ public class FollowingActivity extends AppCompatActivity implements FollowingAda
             App.post(() -> {
                 if (isFinishing() || isDestroyed()) return;
                 if (history != null) {
-                    TmdbDetailActivity.startFromHistory(this, history);
+                    VideoActivity.startFromFollowingHistory(this, history);
                     return;
                 }
                 FollowingSource target = preferred(item, source);
