@@ -267,6 +267,11 @@ public class CatWebWiringTest {
                         && body.contains("s.setTextZoom(100)"));
         assertTrue("内置浏览器必须把初始缩放固定在 100%，避免 WebView 自动放大破坏布局",
                 body.contains("webView.setInitialScale(100)"));
+        assertTrue("内置浏览器必须按 WebView 能力关闭系统算法深色化，避免浅色网页的加载框变成黑底灰字",
+                body.contains("WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)")
+                        && body.contains("WebSettingsCompat.setAlgorithmicDarkeningAllowed(s, false)")
+                        && body.contains("WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK)")
+                        && body.contains("WebSettingsCompat.setForceDark(s, WebSettingsCompat.FORCE_DARK_OFF)"));
     }
 
     @Test

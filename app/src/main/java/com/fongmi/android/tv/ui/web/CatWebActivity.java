@@ -20,6 +20,8 @@ import androidx.activity.OnBackPressedCallback;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.webkit.WebSettingsCompat;
+import androidx.webkit.WebViewFeature;
 
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.utils.FileChooser;
@@ -123,6 +125,13 @@ public class CatWebActivity extends AppCompatActivity {
         s.setUseWideViewPort(true);
         s.setLoadWithOverviewMode(true);
         s.setTextZoom(100);
+        // 外部站点自带浅色主题时，系统算法深色化会把加载框变成黑底灰字。
+        // 内置页只负责承载网页，不强制替站点换肤。
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
+            WebSettingsCompat.setAlgorithmicDarkeningAllowed(s, false);
+        } else if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK)) {
+            WebSettingsCompat.setForceDark(s, WebSettingsCompat.FORCE_DARK_OFF);
+        }
         s.setAllowFileAccess(false);
         s.setAllowContentAccess(false);
         s.setCacheMode(WebSettings.LOAD_DEFAULT);
