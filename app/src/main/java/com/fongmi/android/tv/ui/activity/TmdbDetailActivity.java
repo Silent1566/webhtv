@@ -929,6 +929,11 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         binding.relatedList.setAdapter(relatedAdapter);
         binding.relatedVideoList.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
         binding.relatedVideoList.setNestedScrollingEnabled(false);
+        // 相关视频卡片本体 276x156dp，焦点放大 1.04 倍后每侧横向多出约 5.5dp、纵向约 3.1dp。
+        // 与 posterList 相同的既有做法：关闭自身裁剪并按四周预留内边距，保证放大后描边完整。
+        binding.relatedVideoList.setClipToOutline(false);
+        binding.relatedVideoList.setClipChildren(false);
+        binding.relatedVideoList.setPaddingRelative(ResUtil.dp2px(8), ResUtil.dp2px(6), ResUtil.dp2px(8), ResUtil.dp2px(6));
         binding.relatedVideoList.setAdapter(relatedVideoAdapter);
         binding.personalTmdbList.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
         binding.personalTmdbList.setNestedScrollingEnabled(false);
@@ -2119,7 +2124,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         TmdbDetailLayoutUtils.setHeightDp(binding.castList, compact ? 90 : 90);
         TmdbDetailLayoutUtils.setHeightDp(binding.creatorList, compact ? 90 : 90);
         TmdbDetailLayoutUtils.setHeightDp(binding.relatedList, compact ? 160 : 160);
-        TmdbDetailLayoutUtils.setHeightDp(binding.relatedVideoList, compact ? 128 : 160);
+        TmdbDetailLayoutUtils.setHeightDp(binding.relatedVideoList, compact ? 128 : 168);
         TmdbDetailLayoutUtils.setHeightDp(binding.personalTmdbList, compact ? 160 : 160);
         TmdbDetailLayoutUtils.setHeightDp(binding.personalDoubanList, compact ? 160 : 160);
         TmdbDetailLayoutUtils.setHeightDp(binding.personalAiList, compact ? 160 : 160);
