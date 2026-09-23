@@ -766,11 +766,9 @@ private boolean runtimeSourceOnly;
         start(activity, key, id, name, pic, mark, false, false, tmdbItem);
     }
 
-    /** 追更续播必须固定走当前 TV 播放页，不能因全局详情模式再次跳转 TMDB 搜源。 */
+    /** 追更页通过 flavor 专用入口调用，并遵循当前详情页模式。 */
     public static void startFromFollowingHistory(Activity activity, History item) {
-        if (item == null) return;
-        startDirect(activity, item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic(), item.getVodRemarks(),
-                item.getVodFlag(), item.getVodRemarks(), item.getEpisodeUrl(), item);
+        startFromHistory(activity, item);
     }
 
     public static void startFromHistory(Activity activity, History item) {

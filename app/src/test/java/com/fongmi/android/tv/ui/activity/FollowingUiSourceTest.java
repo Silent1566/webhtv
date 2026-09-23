@@ -5,6 +5,7 @@ import org.junit.Test;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertFalse;
@@ -50,12 +51,15 @@ public class FollowingUiSourceTest {
         assertFalse(body.contains("VideoActivity.startFromHistory(this, history)"));
         assertFalse(body.contains("TmdbDetailActivity.startFromHistory(this, history)"));
 
-        String tv = read("app/src/leanback/java/com/fongmi/android/tv/ui/activity/VideoActivity.java");
-        int route = tv.indexOf("public static void startFromFollowingHistory(Activity activity, History item)");
-        int routeEnd = tv.indexOf("public static void startFromHistory(Activity activity, History item)", route);
-        String routeBody = tv.substring(route, routeEnd);
-        assertTrue(routeBody.contains("startDirect(activity, item.getSiteKey(), item.getVodId()"));
-        assertFalse(routeBody.contains("TmdbDetailActivity.startFromHistory"));
+        for (String path : List.of(
+                "app/src/leanback/java/com/fongmi/android/tv/ui/activity/VideoActivity.java",
+                "app/src/mobile/java/com/fongmi/android/tv/ui/activity/VideoActivity.java")) {
+            String video = read(path);
+            int route = video.indexOf("public static void startFromFollowingHistory(Activity activity, History item)");
+            int routeEnd = video.indexOf("public static void startFromHistory(Activity activity, History item)", route);
+            String routeBody = video.substring(route, routeEnd);
+            assertTrue(routeBody.contains("startFromHistory(activity, item)"));
+        }
     }
 
     @Test
