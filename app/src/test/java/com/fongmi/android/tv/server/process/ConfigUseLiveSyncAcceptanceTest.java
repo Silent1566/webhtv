@@ -17,6 +17,7 @@ public class ConfigUseLiveSyncAcceptanceTest {
         String remote = read("app/src/main/java/com/fongmi/android/tv/remote/RemoteConfigOps.java");
         String setting = read("app/src/leanback/java/com/fongmi/android/tv/ui/activity/SettingActivity.java");
         String settingFragment = read("app/src/mobile/java/com/fongmi/android/tv/ui/fragment/SettingFragment.java");
+        String home = read("app/src/leanback/java/com/fongmi/android/tv/ui/activity/HomeActivity.java");
 
         assertTrue(manage.contains("default -> {\n                VodConfig.load(config, new Callback());\n                loadMatchingLiveConfig(config);"));
         assertTrue(manage.contains("Config liveConfig = AppDatabase.get().getConfigDao().find(config.getUrl(), 1);"));
@@ -28,6 +29,8 @@ public class ConfigUseLiveSyncAcceptanceTest {
         assertTrue(setting.contains("Config liveConfig = AppDatabase.get().getConfigDao().find(config.getUrl(), 1);"));
         assertTrue(settingFragment.contains("loadMatchingLiveConfig(config);"));
         assertTrue(settingFragment.contains("Config liveConfig = AppDatabase.get().getConfigDao().find(config.getUrl(), 1);"));
+        assertTrue(home.contains("loadVodConfig(config);"));
+        assertTrue(home.contains("Config liveConfig = AppDatabase.get().getConfigDao().find(config.getUrl(), 1);"));
         assertFalse(manage.contains("default -> VodConfig.load(config, new Callback());"));
     }
 

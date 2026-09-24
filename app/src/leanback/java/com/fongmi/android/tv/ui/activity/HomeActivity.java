@@ -1152,10 +1152,16 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     public void setConfig(Config config) {
         if (config.getType() != 0) return;
         if (config.getUrl().startsWith("file")) {
-            PermissionUtil.requestFile(this, allGranted -> VodConfig.load(config, getCallback()));
+            PermissionUtil.requestFile(this, allGranted -> loadVodConfig(config));
         } else {
-            VodConfig.load(config, getCallback());
+            loadVodConfig(config);
         }
+    }
+
+    private void loadVodConfig(Config config) {
+        VodConfig.load(config, getCallback());
+        Config liveConfig = AppDatabase.get().getConfigDao().find(config.getUrl(), 1);
+        if (liveConfig != null) LiveConfig.load(liveConfig, new Callback());
     }
 
     @Override
