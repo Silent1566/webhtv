@@ -423,7 +423,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     private void clearCategoryContent() {
         invalidatePendingFocusRequests();
         mBinding.typeRecycler.removeCallbacks(mTypeSwitch);
-        mPendingTypePosition = -1;
+        clearStaleSiteTypes();
         mCurrentType = null;
         mFolder = null;
         mBinding.progressLayout.setVisibility(View.VISIBLE);
@@ -437,6 +437,14 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
             transaction.remove(fragment);
         }
         if (transaction != null) transaction.commit();
+    }
+
+    private void clearStaleSiteTypes() {
+        // Site switching starts asynchronously. Remove the old type row immediately so stale
+        // category buttons cannot be mistaken for the newly selected site during loading.
+        mTypeAdapter.addAll(java.util.Collections.emptyList());
+        mPendingTypePosition = -1;
+        mBinding.typeRecycler.setVisibility(View.GONE);
     }
 
     private void updateToolbarVisibility(boolean visible) {
