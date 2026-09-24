@@ -32,6 +32,7 @@ import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.databinding.DialogConfigBinding;
 import com.fongmi.android.tv.event.ServerEvent;
 import com.fongmi.android.tv.impl.ConfigListener;
+import com.fongmi.android.tv.playback.PlaybackIdentityResolver;
 import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.ui.custom.CustomTextListener;
 import com.fongmi.android.tv.utils.FileChooser;
@@ -225,6 +226,7 @@ public class ConfigDialog extends BaseAlertDialog {
             return;
         }
         ((ConfigListener) requireActivity()).setConfig(config);
+        PlaybackIdentityResolver.resolveSaved(config);
         dismiss();
     }
 
