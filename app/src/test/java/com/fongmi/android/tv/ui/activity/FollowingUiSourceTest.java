@@ -30,6 +30,29 @@ public class FollowingUiSourceTest {
     }
 
     @Test
+    public void mobileFollowingHeaderWrapsControlsAndKeepsSummaryVisible() throws Exception {
+        String layout = read("app/src/mobile/res/layout/activity_following.xml");
+
+        assertTrue(layout.contains("com.google.android.flexbox.FlexboxLayout"));
+        assertTrue(layout.contains("android:id=\"@+id/actions\""));
+        assertTrue(layout.contains("app:flexWrap=\"wrap\""));
+        assertTrue(layout.contains("android:id=\"@+id/summary\""));
+        assertTrue(layout.contains("android:layout_width=\"match_parent\"\n            android:layout_height=\"wrap_content\"\n            android:layout_marginTop=\"6dp\""));
+    }
+
+    @Test
+    public void mobileFollowingCardWrapsAllActionsInsteadOfClippingThem() throws Exception {
+        String layout = read("app/src/mobile/res/layout/item_following.xml");
+
+        assertTrue(layout.contains("com.google.android.flexbox.FlexboxLayout"));
+        assertTrue(layout.contains("app:flexWrap=\"wrap\""));
+        assertFalse(layout.contains("HorizontalScrollView"));
+        for (String id : List.of("continuePlay", "check", "read", "notify", "sourceChange", "delete")) {
+            assertTrue(layout.contains("android:id=\"@+id/" + id + "\""));
+        }
+    }
+
+    @Test
     public void mobileBottomNavigationPlacesFollowingBetweenLiveAndSettings() throws Exception {
         String menu = read("app/src/mobile/res/menu/menu_nav.xml");
         String mobile = read("app/src/mobile/java/com/fongmi/android/tv/ui/activity/HomeActivity.java");
