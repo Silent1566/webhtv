@@ -42,8 +42,18 @@ public class TmdbSourceDialogInflationContractTest {
         assertTrue(source.contains("wireTextDpadFocus(imageHostInput, apiHostInput, omdbApiKeyInput, null, null)"));
         assertTrue(source.contains("showRoutePicker(input, labels, title)"));
         assertTrue(source.contains(".setSingleChoiceItems(labels, checked"));
+        int show = source.indexOf("private void showRoutePicker");
+        assertTrue("route picker should clear focus callbacks before showing",
+                source.indexOf("clearRouteFocusPickers();", show) > show
+                        && source.indexOf("String current = inputText(input);", show)
+                        > source.indexOf("clearRouteFocusPickers();", show));
         assertTrue(source.contains("input.setText(labels[which], false)"));
-        assertTrue(source.contains("KeyEvent.KEYCODE_DPAD_CENTER"));
+        assertTrue(source.contains("input.setKeyListener(null)"));
+        assertTrue(source.contains("input.setAdapter(null)"));
+        assertTrue(source.contains("input.post(routeFocusPicker)"));
+        assertTrue(source.contains("input.hasFocus() && !activity.isFinishing() && !activity.isDestroyed()"));
+        assertTrue(source.contains("clearRouteFocusPickers()"));
+        assertTrue(source.contains("keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER"));
         assertTrue(source.contains("apiDisplayFor(config)"));
         assertTrue(source.contains("imageDisplayFor(config)"));
     }

@@ -56,6 +56,7 @@ public class TmdbSourceDialog {
     private List<String> tempEnabledRules;
     private List<String> tempDisabledSites;
     private List<String> tempAllowedSites;
+    private Runnable routeFocusPicker;
 
     public static TmdbSourceDialog create(FragmentActivity activity) {
         return new TmdbSourceDialog(activity);
@@ -138,11 +139,24 @@ public class TmdbSourceDialog {
                 .setView(view)
                 .setPositiveButton(R.string.dialog_positive, (d, w) -> onSave())
                 .setNegativeButton(R.string.dialog_negative, null)
-                .setOnDismissListener(d -> { if (onDismiss != null) onDismiss.run(); })
+                .setOnDismissListener(d -> {
+                    clearRouteFocusPickers();
+                    if (onDismiss != null) onDismiss.run();
+                })
                 .create();
         dialog.show();
         wireConfigDialogFocus(dialog, ruleInput, addBtn, disabledRuleInput, addDisabledBtn, manageBtn, resetBtn);
         LightDialog.apply(dialog);
+    }
+
+    private void clearRouteFocusPickers() {
+        clearRouteFocusPicker(apiHostInput);
+        clearRouteFocusPicker(imageHostInput);
+    }
+
+    private void clearRouteFocusPicker(MaterialAutoCompleteTextView input) {
+        if (input == null || routeFocusPicker == null) return;
+        input.removeCallbacks(routeFocusPicker);
     }
 
     private void testConfig(View testButton) {
@@ -181,11 +195,23 @@ public class TmdbSourceDialog {
     }
 
     private void setupRouteDropdown(MaterialAutoCompleteTextView input, String[] labels, String title) {
-        input.setSimpleItems(labels);
+        input.setKeyListener(null);
+        input.setAdapter(null);
         input.setOnClickListener(v -> showRoutePicker(input, labels, title));
+        input.setOnFocusChangeListener((v, hasFocus) -> {
+            if (!hasFocus) return;
+            input.removeCallbacks(routeFocusPicker);
+            routeFocusPicker = () -> {
+                if (input.hasFocus() && !activity.isFinishing() && !activity.isDestroyed()) {
+                    showRoutePicker(input, labels, title);
+                }
+            };
+            input.post(routeFocusPicker);
+        });
         input.setOnKeyListener((v, keyCode, event) -> {
             if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
             if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+                input.removeCallbacks(routeFocusPicker);
                 showRoutePicker(input, labels, title);
                 return true;
             }
@@ -194,6 +220,7 @@ public class TmdbSourceDialog {
     }
 
     private void showRoutePicker(MaterialAutoCompleteTextView input, String[] labels, String title) {
+        clearRouteFocusPickers();
         String current = inputText(input);
         int checked = -1;
         for (int i = 0; i < labels.length; i++) if (labels[i].equals(current)) checked = i;
