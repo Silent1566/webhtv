@@ -36,8 +36,12 @@ public class TmdbSourceDialogInflationContractTest {
         assertTrue(layout.contains("MaterialAutoCompleteTextView"));
         assertTrue(layout.contains("TextInputLayout"));
         assertFalse(layout.contains("@+id/proxyHostInput"));
-        assertTrue(source.contains("apiHostInput.setSimpleItems(apiOptionLabels())"));
-        assertTrue(source.contains("imageHostInput.setSimpleItems(imageOptionLabels())"));
+        assertTrue(source.contains("setupRouteDropdown(apiHostInput, apiOptionLabels())"));
+        assertTrue(source.contains("setupRouteDropdown(imageHostInput, imageOptionLabels())"));
+        assertTrue(source.contains("wireRouteDpadFocus(apiHostInput, languageInput, imageHostInput)"));
+        assertTrue(source.contains("wireRouteDpadFocus(imageHostInput, apiHostInput, omdbApiKeyInput)"));
+        assertTrue(source.contains("input.setText(labels[position], false)"));
+        assertTrue(source.contains("KeyEvent.KEYCODE_DPAD_CENTER"));
         assertTrue(source.contains("apiDisplayFor(config)"));
         assertTrue(source.contains("imageDisplayFor(config)"));
     }
