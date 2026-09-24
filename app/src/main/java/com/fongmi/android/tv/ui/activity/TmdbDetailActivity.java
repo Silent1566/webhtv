@@ -5239,11 +5239,11 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     /**
-     * 安装卡片行的焦点滚动校正。
+     * 安装焦点滚动校正。
      *
-     * 系统默认的焦点滚动只按未放大的卡片外框把行顶贴到屏幕顶端，
-     * 既会把行上方的分区标题切掉一半，也会让下一个分区标题在底部露出一小条。
-     * 这里在每次焦点变化后按卡片行 + 分区标题重新校正一次。
+     * 系统默认的焦点滚动会把内容贴到可视区边缘：卡片行会把行上方的分区标题切掉一半、
+     * 让下一个分区标题在底部露出一小条；按钮则整块贴住屏幕顶端，缺少呼吸空间。
+     * 这里在每次焦点变化后统一校正一次。
      */
     private void installCardRowFocusMargin() {
         if (binding == null) return;
@@ -5251,8 +5251,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         cardRowFocusMarginListener = (previousFocus, newFocus) -> {
             if (binding == null || newFocus == null) return;
             // 系统默认的焦点滚动可能使用平滑滚动，需等滚动稳定后再校正一次。
-            binding.scroll.post(() -> ensureCardRowVisibleWithMargin(newFocus));
-            binding.scroll.postDelayed(() -> ensureCardRowVisibleWithMargin(newFocus), 260);
+            binding.scroll.post(() -> ensureFocusVisibleWithMargin(newFocus));
+            binding.scroll.postDelayed(() -> ensureFocusVisibleWithMargin(newFocus), 260);
         };
         binding.scroll.getViewTreeObserver().addOnGlobalFocusChangeListener(cardRowFocusMarginListener);
     }
@@ -5307,6 +5307,64 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             if (isLaidOutVisible(title)) return title;
         }
         return isLaidOutVisible(binding.externalLinksTitle) ? binding.externalLinksTitle : null;
+    }
+
+    /** 焦点变化后的统一校正入口：卡片行走专用逻辑，其余按钮/控件走通用留白。 */
+    private void ensureFocusVisibleWithMargin(View focused) {
+        if (binding == null || focused == null || !focused.isShown()) return;
+        if (focusedCardRowIndex(focused) >= 0) {
+            ensureCardRowVisibleWithMargin(focused);
+            return;
+        }
+        ensureButtonVisibleWithMargin(focused);
+    }
+
+    /** 该 View 是否位于 binding.scroll 之内。 */
+    private boolean isInsideDetailScroll(View view) {
+        for (View current = view; current != null; ) {
+            if (current == binding.scroll) return true;
+            Object parent = current.getParent();
+            current = parent instanceof View ? (View) parent : null;
+        }
+        return false;
+    }
+
+    /**
+     * 该 View 是否是横向列表（RecyclerView）里的条目。
+     * 这类条目有各自的滚动/对齐逻辑，这里不再叠加通用留白，避免相互打架。
+     */
+    private boolean isInsideRecyclerRow(View view) {
+        for (View current = view; current != null; ) {
+            if (current == binding.scroll) return false;
+            if (current instanceof RecyclerView) return true;
+            Object parent = current.getParent();
+            current = parent instanceof View ? (View) parent : null;
+        }
+        return false;
+    }
+
+    /**
+     * 按钮/控件获得焦点时保留上下间距。
+     *
+     * 与卡片行同理：系统默认的焦点滚动会把按钮贴到屏幕顶端（实测「继续播放」的 y=0），
+     * 视觉上过于拥挤。这里保证按钮至少离可视区上下边缘各留一段间距。
+     */
+    private void ensureButtonVisibleWithMargin(View focused) {
+        if (binding == null || focused == null || !focused.isShown()) return;
+        if (focused == binding.scroll) return;
+        if (!isInsideDetailScroll(focused) || isInsideRecyclerRow(focused)) return;
+        if (focused.getHeight() == 0 || binding.scroll.getHeight() == 0) return;
+        int[] loc = new int[2];
+        binding.scroll.getLocationOnScreen(loc);
+        int viewTop = loc[1];
+        int viewBottom = viewTop + binding.scroll.getHeight();
+        focused.getLocationOnScreen(loc);
+        int top = loc[1];
+        int bottom = top + focused.getHeight();
+        int topMargin = ResUtil.dp2px(CARD_ROW_TOP_MARGIN_DP);
+        int bottomMargin = ResUtil.dp2px(CARD_ROW_BOTTOM_MARGIN_DP);
+        if (top < viewTop + topMargin) binding.scroll.scrollBy(0, top - (viewTop + topMargin));
+        else if (bottom > viewBottom - bottomMargin) binding.scroll.scrollBy(0, bottom - (viewBottom - bottomMargin));
     }
 
     /**
