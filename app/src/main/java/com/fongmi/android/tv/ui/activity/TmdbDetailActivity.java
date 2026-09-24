@@ -27,6 +27,7 @@ import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
@@ -287,6 +288,10 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private static final int SHORT_DRAMA_SCALE = 0;
     private static final int SHORT_DRAMA_FRAME_WIDTH = 9;
     private static final int SHORT_DRAMA_FRAME_HEIGHT = 16;
+    /** 卡片行获得焦点时，分区标题上方保留的留白（标题需完整可见）。 */
+    private static final int CARD_ROW_TOP_MARGIN_DP = 12;
+    /** 卡片行获得焦点时，行底与可视区底部之间保留的留白。 */
+    private static final int CARD_ROW_BOTTOM_MARGIN_DP = 16;
     private static final int INLINE_SIDE_CONTROL_MARGIN_DP = 4;
     private static final int INLINE_SIDE_CONTROL_FULLSCREEN_MARGIN_DP = 48;
     private static final long INLINE_CONTROLS_HIDE_DELAY_MS = TimeUnit.SECONDS.toMillis(10);
@@ -344,6 +349,9 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private ActivityTmdbDetailBinding binding;
     @androidx.annotation.Keep
     private ActivityTmdbDetailBinding mBinding;
+    private ViewTreeObserver.OnGlobalFocusChangeListener cardRowFocusMarginListener;
+    private final List<View> cardRowOrder = new ArrayList<>();
+    private final List<View> cardRowTitleOrder = new ArrayList<>();
     private TmdbDetailModeController modeController;
     private Vod vod;
     private String sourceVodName;
@@ -868,6 +876,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         binding.headerBar.setVisibility(Util.isMobile() ? View.VISIBLE : View.GONE);
         updateDetailThemeButtonVisibility();
         applyDetailTemplate();
+        installCardRowFocusMargin();
         initFusionPlayer();
         binding.episodeEmpty.setText(R.string.detail_source_episode_empty);
         bindInitialArtwork();
@@ -930,6 +939,11 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         binding.relatedList.setAdapter(relatedAdapter);
         binding.relatedVideoList.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
         binding.relatedVideoList.setNestedScrollingEnabled(false);
+        // 相关视频卡片本体 276x156dp，焦点放大 1.04 倍后每侧横向多出约 5.5dp、纵向约 3.1dp。
+        // 与 posterList 相同的既有做法：关闭自身裁剪并按四周预留内边距，保证放大后描边完整。
+        binding.relatedVideoList.setClipToOutline(false);
+        binding.relatedVideoList.setClipChildren(false);
+        binding.relatedVideoList.setPaddingRelative(ResUtil.dp2px(8), ResUtil.dp2px(6), ResUtil.dp2px(8), ResUtil.dp2px(6));
         binding.relatedVideoList.setAdapter(relatedVideoAdapter);
         binding.personalTmdbList.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
         binding.personalTmdbList.setNestedScrollingEnabled(false);
@@ -2120,7 +2134,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         TmdbDetailLayoutUtils.setHeightDp(binding.castList, compact ? 90 : 90);
         TmdbDetailLayoutUtils.setHeightDp(binding.creatorList, compact ? 90 : 90);
         TmdbDetailLayoutUtils.setHeightDp(binding.relatedList, compact ? 160 : 160);
-        TmdbDetailLayoutUtils.setHeightDp(binding.relatedVideoList, compact ? 128 : 160);
+        TmdbDetailLayoutUtils.setHeightDp(binding.relatedVideoList, compact ? 128 : 168);
         TmdbDetailLayoutUtils.setHeightDp(binding.personalTmdbList, compact ? 160 : 160);
         TmdbDetailLayoutUtils.setHeightDp(binding.personalDoubanList, compact ? 160 : 160);
         TmdbDetailLayoutUtils.setHeightDp(binding.personalAiList, compact ? 160 : 160);
@@ -5235,11 +5249,13 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
                 || focusTmdbRecycler(binding.relatedList)
                 || focusTmdbRecycler(binding.creatorList)
                 || focusTmdbRecycler(binding.castList)
+                || focusTmdbRecycler(binding.relatedVideoList)
                 || focusTmdbRecycler(binding.episodePhotoList);
     }
 
     private boolean focusFirstVisibleTmdbRow() {
         return focusTmdbRecycler(binding.episodePhotoList)
+                || focusTmdbRecycler(binding.relatedVideoList)
                 || focusTmdbRecycler(binding.castList)
                 || focusTmdbRecycler(binding.creatorList)
                 || focusTmdbRecycler(binding.relatedList)
@@ -5270,6 +5286,187 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             });
         });
         return true;
+    }
+
+    /**
+     * 安装焦点滚动校正。
+     *
+     * 系统默认的焦点滚动会把内容贴到可视区边缘：卡片行会把行上方的分区标题切掉一半、
+     * 让下一个分区标题在底部露出一小条；按钮则整块贴住屏幕顶端，缺少呼吸空间。
+     * 这里在每次焦点变化后统一校正一次。
+     */
+    private void installCardRowFocusMargin() {
+        if (binding == null) return;
+        buildCardRowIndex();
+        cardRowFocusMarginListener = (previousFocus, newFocus) -> {
+            if (binding == null || newFocus == null) return;
+            // 系统默认的焦点滚动可能使用平滑滚动，需等滚动稳定后再校正一次。
+            binding.scroll.post(() -> ensureFocusVisibleWithMargin(newFocus));
+            binding.scroll.postDelayed(() -> ensureFocusVisibleWithMargin(newFocus), 260);
+        };
+        binding.scroll.getViewTreeObserver().addOnGlobalFocusChangeListener(cardRowFocusMarginListener);
+    }
+
+    private void removeCardRowFocusMargin() {
+        if (binding == null || cardRowFocusMarginListener == null) return;
+        ViewTreeObserver observer = binding.scroll.getViewTreeObserver();
+        if (observer.isAlive()) observer.removeOnGlobalFocusChangeListener(cardRowFocusMarginListener);
+        cardRowFocusMarginListener = null;
+    }
+
+    /** 按页面自上而下的顺序登记卡片行及其分区标题。 */
+    private void buildCardRowIndex() {
+        cardRowOrder.clear();
+        cardRowTitleOrder.clear();
+        addCardRow(binding.episodePhotoList, binding.episodePhotoTitle);
+        addCardRow(binding.posterList, binding.posterTitle);
+        addCardRow(binding.relatedVideoList, binding.relatedVideoTitle);
+        addCardRow(binding.castList, binding.castTitle);
+        addCardRow(binding.creatorList, binding.creatorTitle);
+        addCardRow(binding.relatedList, binding.relatedTitle);
+        addCardRow(binding.personalTmdbList, binding.personalTmdbTitle);
+        addCardRow(binding.personalDoubanList, binding.personalDoubanTitle);
+        addCardRow(binding.personalAiList, binding.personalAiTitle);
+    }
+
+    private void addCardRow(View row, View title) {
+        if (row == null) return;
+        cardRowOrder.add(row);
+        cardRowTitleOrder.add(title);
+    }
+
+    private boolean isLaidOutVisible(View view) {
+        return view != null && view.getVisibility() == View.VISIBLE && view.getHeight() > 0 && view.isShown();
+    }
+
+    /** 返回焦点所在卡片行在 {@link #cardRowOrder} 中的下标，找不到返回 -1。 */
+    private int focusedCardRowIndex(View focused) {
+        for (View current = focused; current != null; ) {
+            int index = cardRowOrder.indexOf(current);
+            if (index >= 0) return index;
+            Object parent = current.getParent();
+            current = parent instanceof View ? (View) parent : null;
+        }
+        return -1;
+    }
+
+    /** 该行之后第一个可见的分区标题（用于避免其只露出一部分）。 */
+    private View nextVisibleSectionTitle(int rowIndex) {
+        for (int i = rowIndex + 1; i < cardRowTitleOrder.size(); i++) {
+            View title = cardRowTitleOrder.get(i);
+            if (isLaidOutVisible(title)) return title;
+        }
+        return isLaidOutVisible(binding.externalLinksTitle) ? binding.externalLinksTitle : null;
+    }
+
+    /** 焦点变化后的统一校正入口：卡片行走专用逻辑，其余按钮/控件走通用留白。 */
+    private void ensureFocusVisibleWithMargin(View focused) {
+        if (binding == null || focused == null || !focused.isShown()) return;
+        if (focusedCardRowIndex(focused) >= 0) {
+            ensureCardRowVisibleWithMargin(focused);
+            return;
+        }
+        ensureButtonVisibleWithMargin(focused);
+    }
+
+    /** 该 View 是否位于 binding.scroll 之内。 */
+    private boolean isInsideDetailScroll(View view) {
+        for (View current = view; current != null; ) {
+            if (current == binding.scroll) return true;
+            Object parent = current.getParent();
+            current = parent instanceof View ? (View) parent : null;
+        }
+        return false;
+    }
+
+    /**
+     * 该 View 是否是横向列表（RecyclerView）里的条目。
+     * 这类条目有各自的滚动/对齐逻辑，这里不再叠加通用留白，避免相互打架。
+     */
+    private boolean isInsideRecyclerRow(View view) {
+        for (View current = view; current != null; ) {
+            if (current == binding.scroll) return false;
+            if (current instanceof RecyclerView) return true;
+            Object parent = current.getParent();
+            current = parent instanceof View ? (View) parent : null;
+        }
+        return false;
+    }
+
+    /**
+     * 按钮/控件获得焦点时保留上下间距。
+     *
+     * 与卡片行同理：系统默认的焦点滚动会把按钮贴到屏幕顶端（实测「继续播放」的 y=0），
+     * 视觉上过于拥挤。这里保证按钮至少离可视区上下边缘各留一段间距。
+     */
+    private void ensureButtonVisibleWithMargin(View focused) {
+        if (binding == null || focused == null || !focused.isShown()) return;
+        if (focused == binding.scroll) return;
+        if (!isInsideDetailScroll(focused) || isInsideRecyclerRow(focused)) return;
+        if (focused.getHeight() == 0 || binding.scroll.getHeight() == 0) return;
+        int[] loc = new int[2];
+        binding.scroll.getLocationOnScreen(loc);
+        int viewTop = loc[1];
+        int viewBottom = viewTop + binding.scroll.getHeight();
+        focused.getLocationOnScreen(loc);
+        int top = loc[1];
+        int bottom = top + focused.getHeight();
+        int topMargin = ResUtil.dp2px(CARD_ROW_TOP_MARGIN_DP);
+        int bottomMargin = ResUtil.dp2px(CARD_ROW_BOTTOM_MARGIN_DP);
+        if (top < viewTop + topMargin) binding.scroll.scrollBy(0, top - (viewTop + topMargin));
+        else if (bottom > viewBottom - bottomMargin) binding.scroll.scrollBy(0, bottom - (viewBottom - bottomMargin));
+    }
+
+    /**
+     * 让获得焦点的卡片行连同它的分区标题一起舒服地落在可视区内。
+     *
+     * 1) 顶部：锚定到分区标题（而不是行本身），标题完整显示，不再被切掉一半；
+     *    同时兼容卡片焦点放大 1.04 倍后描边外溢的情况。
+     * 2) 底部：行底留出间距，并且不让下一个分区标题只露出一小条——
+     *    要么完整显示，要么完全移出可视区。
+     */
+    private void ensureCardRowVisibleWithMargin(View focused) {
+        if (binding == null || focused == null || !focused.isShown()) return;
+        if (cardRowOrder.isEmpty()) buildCardRowIndex();
+        int index = focusedCardRowIndex(focused);
+        if (index < 0) return;
+        View row = cardRowOrder.get(index);
+        if (row.getHeight() == 0 || binding.scroll.getHeight() == 0) return;
+
+        int[] loc = new int[2];
+        binding.scroll.getLocationOnScreen(loc);
+        int viewTop = loc[1];
+        int viewBottom = viewTop + binding.scroll.getHeight();
+
+        row.getLocationOnScreen(loc);
+        int rowTop = loc[1];
+        int rowBottom = rowTop + row.getHeight();
+
+        int topMargin = ResUtil.dp2px(CARD_ROW_TOP_MARGIN_DP);
+        int bottomMargin = ResUtil.dp2px(CARD_ROW_BOTTOM_MARGIN_DP);
+
+        int anchorTop = rowTop;
+        View title = index < cardRowTitleOrder.size() ? cardRowTitleOrder.get(index) : null;
+        if (isLaidOutVisible(title)) {
+            title.getLocationOnScreen(loc);
+            anchorTop = Math.min(anchorTop, loc[1]);
+        }
+
+        if (anchorTop < viewTop + topMargin) {
+            binding.scroll.scrollBy(0, anchorTop - (viewTop + topMargin));
+        } else if (rowBottom > viewBottom - bottomMargin) {
+            binding.scroll.scrollBy(0, rowBottom - (viewBottom - bottomMargin));
+        }
+
+        View next = nextVisibleSectionTitle(index);
+        if (!isLaidOutVisible(next)) return;
+        next.getLocationOnScreen(loc);
+        int nextTop = loc[1];
+        if (nextTop >= viewBottom || nextTop + next.getHeight() <= viewBottom) return;
+        // 下一个标题正卡在底边：把内容整体下移，让它完全移出可视区；
+        // 但保证本行标题不会被顶出屏幕顶部。
+        int delta = Math.min(nextTop - viewBottom, anchorTop - (viewTop + topMargin));
+        binding.scroll.scrollBy(0, delta);
     }
 
     private void scrollDetailChildIntoViewNow(View child, int topPaddingDp) {
@@ -10980,6 +11177,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         App.removeCallbacks(inlineHideControls);
         App.removeCallbacks(inlineKeySeekEnd);
         EpisodeTitlePopup.dismiss();
+        removeCardRowFocusMargin();
         saveInlineHistory();
         stopInlinePlaybackSync();
         // 确保内嵌播放退出时停止播放，避免声音继续（与 VideoActivity 保持一致）
