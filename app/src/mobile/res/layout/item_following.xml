@@ -125,6 +125,8 @@
                         style="@style/Widget.Material3.Button.TonalButton"
                         android:layout_width="wrap_content"
                         android:layout_height="38dp"
+                        android:layout_marginEnd="6dp"
+                        android:layout_marginBottom="6dp"
                         android:focusable="true"
                         android:focusableInTouchMode="false"
                         android:minWidth="72dp"

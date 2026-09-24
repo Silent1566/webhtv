@@ -47,7 +47,7 @@ public class FollowingUiSourceTest {
         assertTrue(layout.contains("com.google.android.flexbox.FlexboxLayout"));
         assertTrue(layout.contains("app:flexWrap=\"wrap\""));
         assertFalse(layout.contains("HorizontalScrollView"));
-        for (String id : List.of("continuePlay", "check", "read", "notify", "sourceChange", "delete")) {
+        for (String id : List.of("nextSeason", "continuePlay", "check", "read", "notify", "sourceChange", "delete")) {
             assertTrue(layout.contains("android:id=\"@+id/" + id + "\""));
         }
     }
