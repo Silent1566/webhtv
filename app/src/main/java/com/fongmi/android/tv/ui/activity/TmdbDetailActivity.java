@@ -5249,11 +5249,13 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
                 || focusTmdbRecycler(binding.relatedList)
                 || focusTmdbRecycler(binding.creatorList)
                 || focusTmdbRecycler(binding.castList)
+                || focusTmdbRecycler(binding.relatedVideoList)
                 || focusTmdbRecycler(binding.episodePhotoList);
     }
 
     private boolean focusFirstVisibleTmdbRow() {
         return focusTmdbRecycler(binding.episodePhotoList)
+                || focusTmdbRecycler(binding.relatedVideoList)
                 || focusTmdbRecycler(binding.castList)
                 || focusTmdbRecycler(binding.creatorList)
                 || focusTmdbRecycler(binding.relatedList)
