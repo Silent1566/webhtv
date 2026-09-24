@@ -1,6 +1,6 @@
 # 观影记录同步稳定身份与主备地址匹配设计
 
-> **文档状态：** 设计基线，尚未实现。
+> **文档状态：** 阶段性实现（规范、服务端身份解析与 Android 接线已完成；Go/Rust 仅完成源码接线，未在当前环境编译）。
 > **目标：** 指导 WebHTV 客户端、内置远端服务端和兼容迁移的完整实现，并作为提交前、灰度期间和发布后的验收依据。
 > **适用版本：** 当前 `5.6.0` 测试版及后续版本。
 > **最后更新：** 2026-09-24（Asia/Shanghai）
@@ -9,9 +9,9 @@
 
 - **目标：** 在不废弃现有 `interfaceKey` 稳定身份规则的前提下，实现两台设备分别手动新增同一主备接口时自动匹配，并找回旧版 URL 哈希空间中的观影记录。
 - **验收核心：** 地址匹配只负责发现身份；正式同步始终使用稳定 `interfaceKey`；精确地址命中可自动采用已有身份，只有裸域名命中不能静默合并；旧数据、删除墓碑、游标和冲突均不能丢失或串线。
-- **当前状态：** 仅完成设计，尚未修改客户端、服务端、数据库、协议或部署产物。
+- **当前状态：** 已完成协议 v1 规范化 fixture、三套 JS 服务端身份解析/别名路由、Cloudflare Durable Object registry、Go/Rust 源码接线、Android 47→48 迁移、canonical/legacy 读取和 Mobile/Leanback 配置入口接线；Go/Rust 因当前环境无工具链未编译，设备端与完整验收矩阵仍未完成。
 - **当前相关源码：** `app/src/main/java/com/fongmi/android/tv/playback/PlaybackConfigIdentity.java`、`PlaybackRemoteSyncer.java`、`PlaybackRecord.java`、`RemoteSyncConfig.java`、`app/src/main/java/com/fongmi/android/tv/bean/Config.java`、`serverless/*/playback-sync*`。
-- **下一动作：** 先按本文完成协议/规范化测试向量和服务端身份解析，再实现客户端迁移与 UI 冲突确认；未通过本文第 16 节全部验收项前不得宣称兼容完成。
+- **下一动作：** 在安装 Go/Rust 工具链后分别运行 `go test ./...` 与 `cargo test`，补齐 Rust/Go 共享 fixture；随后编译 Leanback、执行 Android 单元测试和测试包覆盖安装验证。未通过本文第 14 节全部验收项前不得宣称兼容完成。
 
 ---
 
@@ -1265,6 +1265,33 @@ cd serverless/webhtv-remote-rust && cargo test
 8. 未产生正式包，只有测试包。
 
 ---
+
+## 实施进度记录（2026-09-24）
+
+已实现：
+
+- `serverless/playback-identity-fixtures/identity.js`：CanonicalUrlV1、strict/endpoint/host/legacy SHA-256、Token+configType registry、CAS resolve、adopt/confirm/conflict、legacy space merge。
+- Vercel/Deno/Cloudflare：`/api/playback/identity/resolve` 与 `/playback/identity/resolve`，canonical alias 读写路由，status 能力声明；三套 JS 回归测试和共享 identity fixture 通过。
+- Go/Rust：身份 registry、resolve 路由、类型隔离、alias space routing、持久化字段已接线；当前机器无 `go/gofmt/cargo/rustc`，只能保留未编译风险。
+- Android：`Config` 新增 legacy/address/state 字段；Room 47→48 迁移；规范化 key；`PlaybackIdentityResolver`；同步器 canonical/legacy pull、cursor reset；远程配置与备份入口接线；Mobile Arm64 Java 编译通过。
+- `app/schemas/.../48.json` 由 Room processor 生成，identity hash 为 `bbde8a33386ce26c0e0897467faa465d`。
+
+已验证：
+
+- `node --check`：共享 identity、Vercel、Deno、Cloudflare 通过。
+- `node --test serverless/playback-identity-fixtures/identity.test.js`：2/2 通过。
+- Vercel/Deno：4/4 通过；Cloudflare：6/6 通过。
+- `bash ./gradlew :app:compileMobileArm64_v8aDebugJavaWithJavac --no-daemon`：通过；`compileLeanbackArm64_v8aDebugJavaWithJavac`：通过；带 `--rerun-tasks` 生成 48 schema 也通过。
+- `:app:testMobileArm64_v8aDebugUnitTest --tests StableInterfaceIdentityAcceptanceTest`：通过；`:app:testLeanbackArm64_v8aDebugUnitTest`：通过。Mobile 全量曾有一个无关的 `TmdbDetailActivityLayoutTest` 失败，未修改其范围。
+- `scripts/build_arm64_debug_install.sh --flavor mobile --abi arm64-v8a --serial 192.168.50.3:5555`：测试包构建、覆盖安装、启动进程/前台 Activity 健康检查通过；安装后已 force-stop，未卸载。
+
+未完成/限制：
+
+- 已执行 Leanback 编译、Mobile/Leanback 定向单元测试、测试包覆盖安装和单设备启动健康检查；尚未执行需要第二设备的跨设备场景，本任务没有卸载或使用第二模拟器。
+- Go/Rust 没有本地工具链，不能把源码审阅当作编译/测试证据；五种服务端一致性、Go/Rust 编译和完整 ID-01 至 ID-24 仍未闭合。
+- UI 目前保存后异步 resolve，冲突/confirm 状态记录到同步配置和日志，完整候选/合并确认对话框与 dry-run 计数仍待后续阶段。
+
+Recovery anchor：完成上述阶段性实现后，下一步只做工具链可用性恢复及 Go/Rust 编译验证；若工具链不可用，应保留当前代码、记录阻塞，不得宣称第 14 节 ID-01 至 ID-24 全部通过。
 
 ## 16. 实施顺序与完成定义
 

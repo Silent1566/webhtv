@@ -192,7 +192,7 @@ public class Backup {
                     : AppDatabase.get().getConfigDao().findByInterfaceKey(item.getInterfaceKey(), item.getType());
             if (current == null) current = AppDatabase.get().getConfigDao().find(item.getUrl(), item.getType());
             if (current != null) {
-                item.interfaceKey(current.getInterfaceKey()).mergeUrls(current.getUrls());
+                item.interfaceKey(current.getInterfaceKey()).mergeUrls(current.getUrls()).addLegacyConfigKeys(current.getLegacyConfigKeys()).addAddressMatchAliases(current.getAddressMatchAliases());
             } else {
                 item.ensureInterfaceKey();
             }
@@ -200,6 +200,7 @@ public class Backup {
             long id = AppDatabase.get().getConfigDao().insert(item);
             if (id == -1) AppDatabase.get().getConfigDao().update(item);
             else item.setId(Math.toIntExact(id));
+            com.fongmi.android.tv.playback.PlaybackIdentityResolver.resolveSaved(item);
             if (source > 0) cids.put(source, item.getId());
         }
         return cids;

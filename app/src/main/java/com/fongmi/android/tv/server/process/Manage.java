@@ -353,6 +353,7 @@ public class Manage implements Process {
                     : AppDatabase.get().getConfigDao().findByInterfaceKey(interfaceKey, type);
             if (config == null) config = Config.create(type);
             config.interfaceKey(interfaceKey).url(url).name(name).save();
+            com.fongmi.android.tv.playback.PlaybackIdentityResolver.resolveSaved(config);
         }
         JsonObject object = new JsonObject();
         JsonArray items = new JsonArray();
@@ -403,6 +404,9 @@ public class Manage implements Process {
         item.addProperty("url", config.getUrl());
         item.addProperty("interfaceKey", config.ensureInterfaceKey());
         item.add("urls", App.gson().toJsonTree(config.getUrls()));
+        item.add("legacyConfigKeys", App.gson().toJsonTree(config.getLegacyConfigKeys()));
+        item.add("addressMatchAliases", App.gson().toJsonTree(config.getAddressMatchAliases()));
+        item.addProperty("identityResolutionState", config.getIdentityResolutionState());
         item.addProperty("desc", config.getDesc());
         item.addProperty("time", config.getTime());
         item.addProperty("active", forceActive || isCurrentConfig(config));
