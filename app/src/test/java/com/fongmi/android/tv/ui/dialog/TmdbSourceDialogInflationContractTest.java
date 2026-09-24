@@ -36,11 +36,13 @@ public class TmdbSourceDialogInflationContractTest {
         assertTrue(layout.contains("MaterialAutoCompleteTextView"));
         assertTrue(layout.contains("TextInputLayout"));
         assertFalse(layout.contains("@+id/proxyHostInput"));
-        assertTrue(source.contains("setupRouteDropdown(apiHostInput, apiOptionLabels())"));
-        assertTrue(source.contains("setupRouteDropdown(imageHostInput, imageOptionLabels())"));
-        assertTrue(source.contains("wireRouteDpadFocus(apiHostInput, languageInput, imageHostInput)"));
-        assertTrue(source.contains("wireRouteDpadFocus(imageHostInput, apiHostInput, omdbApiKeyInput)"));
-        assertTrue(source.contains("input.setText(labels[position], false)"));
+        assertTrue(source.contains("setupRouteDropdown(apiHostInput, apiOptionLabels(), activity.getString(R.string.dialog_tmdb_api_host_label))"));
+        assertTrue(source.contains("setupRouteDropdown(imageHostInput, imageOptionLabels(), activity.getString(R.string.dialog_tmdb_image_host_label))"));
+        assertTrue(source.contains("wireTextDpadFocus(apiHostInput, languageInput, imageHostInput, null, null)"));
+        assertTrue(source.contains("wireTextDpadFocus(imageHostInput, apiHostInput, omdbApiKeyInput, null, null)"));
+        assertTrue(source.contains("showRoutePicker(input, labels, title)"));
+        assertTrue(source.contains(".setSingleChoiceItems(labels, checked"));
+        assertTrue(source.contains("input.setText(labels[which], false)"));
         assertTrue(source.contains("KeyEvent.KEYCODE_DPAD_CENTER"));
         assertTrue(source.contains("apiDisplayFor(config)"));
         assertTrue(source.contains("imageDisplayFor(config)"));
