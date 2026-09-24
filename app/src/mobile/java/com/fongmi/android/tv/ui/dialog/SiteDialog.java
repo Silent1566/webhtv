@@ -28,7 +28,6 @@ import com.fongmi.android.tv.impl.SiteListener;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.setting.SiteBlockSetting;
 import com.fongmi.android.tv.setting.SiteGroupOrderStore;
-import com.fongmi.android.tv.theme.ThemeController;
 import com.fongmi.android.tv.ui.adapter.SiteAdapter;
 import com.fongmi.android.tv.ui.adapter.SiteGroupAdapter;
 import com.fongmi.android.tv.ui.custom.CustomTextListener;
@@ -87,8 +86,8 @@ public class SiteDialog extends BaseAlertDialog implements SiteAdapter.OnClickLi
 
     @Override
     protected void initView() {
-        SiteDialogTheme theme = SiteDialogTheme.resolve(binding.getRoot().getContext(), ThemeController.resolve(binding.getRoot().getContext()));
-        binding.getRoot().setBackgroundColor(theme.surface());
+        SiteDialogTheme theme = SiteDialogTheme.resolve(binding.getRoot().getContext(), Setting.getDynamicColor());
+        binding.getRoot().setBackgroundResource(R.drawable.shape_site_dialog);
         binding.keyword.setTextColor(theme.onSurface());
         binding.keyword.setHintTextColor(theme.onSurfaceVariant());
         TextViewCompat.setCompoundDrawableTintList(binding.keyword, theme.accent());

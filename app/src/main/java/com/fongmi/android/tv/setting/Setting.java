@@ -898,14 +898,6 @@ public class Setting {
         Prefers.put("theme_color", color);
     }
 
-    public static boolean isThemeColorEnabled() {
-        return Prefers.getBoolean("theme_color_enabled");
-    }
-
-    public static void putThemeColorEnabled(boolean enabled) {
-        Prefers.put("theme_color_enabled", enabled);
-    }
-
     public static int getWallColor() {
         return Prefers.getInt("wall_color", 0);
     }
@@ -1338,18 +1330,11 @@ public class Setting {
     }
 
     public static int getGlobalHistoryMode() {
-        // A legacy boolean default may have been copied into this key during
-        // backup restore. Treat only that sentinel as AUTO, then persist the
-        // normalized enum; an explicit OFF is stored as -1 and survives restarts.
-        int mode = Prefers.getInt("global_history_mode", GLOBAL_HISTORY_OFF);
-        if (mode == GLOBAL_HISTORY_OFF && Prefers.getBoolean("global_history_mode", false)) mode = GLOBAL_HISTORY_AUTO;
-        else if (mode != GLOBAL_HISTORY_AUTO && mode != GLOBAL_HISTORY_SEARCH) mode = GLOBAL_HISTORY_OFF;
-        return clampGlobalHistoryMode(mode);
+        return clampGlobalHistoryMode(Prefers.getInt("global_history_mode", GLOBAL_HISTORY_OFF));
     }
 
     public static void putGlobalHistoryMode(int mode) {
-        mode = clampGlobalHistoryMode(mode);
-        Prefers.put("global_history_mode", mode == GLOBAL_HISTORY_OFF ? -1 : mode);
+        Prefers.put("global_history_mode", clampGlobalHistoryMode(mode));
     }
 
     public static int getInterfaceFailoverMode() {
