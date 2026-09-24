@@ -22,6 +22,14 @@ public class GlobalHistorySettingSourceTest {
     }
 
     @Test
+    public void explicitGlobalHistoryOffIsPersistedDistinctly() throws Exception {
+        String source = read("app/src/main/java/com/fongmi/android/tv/setting/Setting.java");
+
+        assertTrue(source.contains("mode == GLOBAL_HISTORY_OFF ? -1 : mode"));
+        assertTrue(source.contains("mode != GLOBAL_HISTORY_AUTO && mode != GLOBAL_HISTORY_SEARCH"));
+    }
+
+    @Test
     public void bothPersonalSettingScreensExposeGlobalHistoryMode() throws Exception {
         String mobile = read("app/src/mobile/java/com/fongmi/android/tv/ui/fragment/SettingPersonalFragment.java");
         String leanback = read("app/src/leanback/java/com/fongmi/android/tv/ui/activity/SettingPersonalActivity.java");

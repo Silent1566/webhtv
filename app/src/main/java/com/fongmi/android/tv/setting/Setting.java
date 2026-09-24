@@ -1338,11 +1338,18 @@ public class Setting {
     }
 
     public static int getGlobalHistoryMode() {
-        return clampGlobalHistoryMode(Prefers.getInt("global_history_mode", GLOBAL_HISTORY_OFF));
+        // A legacy boolean default may have been copied into this key during
+        // backup restore. Treat only that sentinel as AUTO, then persist the
+        // normalized enum; an explicit OFF is stored as -1 and survives restarts.
+        int mode = Prefers.getInt("global_history_mode", GLOBAL_HISTORY_OFF);
+        if (mode == GLOBAL_HISTORY_OFF && Prefers.getBoolean("global_history_mode", false)) mode = GLOBAL_HISTORY_AUTO;
+        else if (mode != GLOBAL_HISTORY_AUTO && mode != GLOBAL_HISTORY_SEARCH) mode = GLOBAL_HISTORY_OFF;
+        return clampGlobalHistoryMode(mode);
     }
 
     public static void putGlobalHistoryMode(int mode) {
-        Prefers.put("global_history_mode", clampGlobalHistoryMode(mode));
+        mode = clampGlobalHistoryMode(mode);
+        Prefers.put("global_history_mode", mode == GLOBAL_HISTORY_OFF ? -1 : mode);
     }
 
     public static int getInterfaceFailoverMode() {
