@@ -2017,9 +2017,17 @@ public void resetTrack(int type) {
      * 因为调用方紧接着就会 start/parse 新地址；只换引擎并记下本次会话内核。
      */
     public void preparePlayer(int type) {
+        preparePlayer(type, false);
+    }
+
+    /**
+     * 自动线路回退需要丢弃失败现场的 renderer/Surface 状态。
+     * force 只允许错误恢复路径使用；普通起播保持“同核心不重建”的原有行为。
+     */
+    public void preparePlayer(int type, boolean force) {
         int next = resolveAvailablePlayer(PlayerSetting.sanitizePlayer(type));
         PlayerSetting.putActivePlayer(next);
-        if (engine == null || player == null || next == playerType) return;
+        if (engine == null || player == null || (next == playerType && !force)) return;
         int decode = engine.getDecode();
         resetPlayerFallback();
         manualPlayerSwitchPending = false;
@@ -2035,7 +2043,7 @@ public void resetTrack(int type) {
         if (SpiderDebug.isEnabled()) SpiderDebug.log("player", "prepare player type=%d decode=%d", next, decode);
         engine = buildEngine(playerType, sanitizeDecode(decode));
         player = engine.getPlayer();
-        callback.onPlayerRebuild(player, false);
+        callback.onPlayerRebuild(player, force);
     }
 
     public void switchPlayer(int type, PlaySpec freshSpec, long position, float speed, boolean repeat) {

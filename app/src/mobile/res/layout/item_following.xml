@@ -111,25 +111,22 @@
                 android:visibility="gone"
                 tools:text="检查失败" />
 
-            <HorizontalScrollView
+            <com.google.android.flexbox.FlexboxLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
                 android:focusable="false"
                 android:descendantFocusability="afterDescendants"
-                android:layout_marginTop="8dp"
-                android:fillViewport="false"
-                android:scrollbars="none">
-
-                <LinearLayout
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal">
+                app:alignItems="flex_start"
+                app:flexWrap="wrap">
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/nextSeason"
                         style="@style/Widget.Material3.Button.TonalButton"
                         android:layout_width="wrap_content"
                         android:layout_height="38dp"
+                        android:layout_marginEnd="6dp"
+                        android:layout_marginBottom="6dp"
                         android:focusable="true"
                         android:focusableInTouchMode="false"
                         android:minWidth="72dp"
@@ -146,7 +143,8 @@
                         android:layout_height="38dp"
                         android:focusable="true"
                         android:focusableInTouchMode="false"
-                        android:layout_marginStart="6dp"
+                        android:layout_marginEnd="6dp"
+                        android:layout_marginBottom="6dp"
                         android:minWidth="70dp"
                         android:text="@string/following_continue"
                         android:textSize="12sp"
@@ -160,7 +158,8 @@
                         android:layout_height="38dp"
                         android:focusable="true"
                         android:focusableInTouchMode="false"
-                        android:layout_marginStart="6dp"
+                        android:layout_marginEnd="6dp"
+                        android:layout_marginBottom="6dp"
                         android:minWidth="62dp"
                         android:text="@string/following_check"
                         android:textSize="12sp"
@@ -174,13 +173,13 @@
                         android:layout_height="38dp"
                         android:focusable="true"
                         android:focusableInTouchMode="false"
-                        android:layout_marginStart="6dp"
-                        android:paddingStart="12dp"
-                        android:paddingEnd="12dp"
+                        android:layout_marginEnd="6dp"
+                        android:layout_marginBottom="6dp"
+                        android:minWidth="58dp"
                         android:text="@string/following_read"
                         android:textSize="12sp"
-                        android:textColor="@color/following_button_secondary_text"
-                        app:backgroundTint="@color/following_button_secondary_bg"/>
+                        app:backgroundTint="@color/following_button_secondary_bg"
+                        android:textColor="@color/following_button_secondary_text"/>
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/notify"
@@ -189,7 +188,8 @@
                         android:layout_height="38dp"
                         android:focusable="true"
                         android:focusableInTouchMode="false"
-                        android:layout_marginStart="6dp"
+                        android:layout_marginEnd="6dp"
+                        android:layout_marginBottom="6dp"
                         android:minWidth="62dp"
                         android:text="@string/following_notify_on"
                         android:textSize="12sp"
@@ -203,7 +203,8 @@
                         android:layout_height="38dp"
                         android:focusable="true"
                         android:focusableInTouchMode="false"
-                        android:layout_marginStart="6dp"
+                        android:layout_marginEnd="6dp"
+                        android:layout_marginBottom="6dp"
                         android:minWidth="58dp"
                         android:text="@string/following_change_source"
                         android:textSize="12sp"
@@ -217,14 +218,14 @@
                         android:layout_height="38dp"
                         android:focusable="true"
                         android:focusableInTouchMode="false"
-                        android:layout_marginStart="6dp"
+                        android:layout_marginEnd="6dp"
+                        android:layout_marginBottom="6dp"
                         android:minWidth="58dp"
                         android:text="@string/following_cancel"
                         android:textSize="12sp"
                         app:backgroundTint="@color/following_button_danger_bg"
                         android:textColor="@color/following_button_danger_text"/>
-                </LinearLayout>
-            </HorizontalScrollView>
+            </com.google.android.flexbox.FlexboxLayout>
         </LinearLayout>
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

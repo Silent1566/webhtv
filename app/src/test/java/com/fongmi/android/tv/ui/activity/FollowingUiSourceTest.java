@@ -30,6 +30,29 @@ public class FollowingUiSourceTest {
     }
 
     @Test
+    public void mobileFollowingHeaderWrapsControlsAndKeepsSummaryVisible() throws Exception {
+        String layout = read("app/src/mobile/res/layout/activity_following.xml");
+
+        assertTrue(layout.contains("com.google.android.flexbox.FlexboxLayout"));
+        assertTrue(layout.contains("android:id=\"@+id/actions\""));
+        assertTrue(layout.contains("app:flexWrap=\"wrap\""));
+        assertTrue(layout.contains("android:id=\"@+id/summary\""));
+        assertTrue(layout.contains("android:layout_width=\"match_parent\"\n            android:layout_height=\"wrap_content\"\n            android:layout_marginTop=\"6dp\""));
+    }
+
+    @Test
+    public void mobileFollowingCardWrapsAllActionsInsteadOfClippingThem() throws Exception {
+        String layout = read("app/src/mobile/res/layout/item_following.xml");
+
+        assertTrue(layout.contains("com.google.android.flexbox.FlexboxLayout"));
+        assertTrue(layout.contains("app:flexWrap=\"wrap\""));
+        assertFalse(layout.contains("HorizontalScrollView"));
+        for (String id : List.of("nextSeason", "continuePlay", "check", "read", "notify", "sourceChange", "delete")) {
+            assertTrue(layout.contains("android:id=\"@+id/" + id + "\""));
+        }
+    }
+
+    @Test
     public void mobileBottomNavigationPlacesFollowingBetweenLiveAndSettings() throws Exception {
         String menu = read("app/src/mobile/res/menu/menu_nav.xml");
         String mobile = read("app/src/mobile/java/com/fongmi/android/tv/ui/activity/HomeActivity.java");
@@ -150,6 +173,33 @@ public class FollowingUiSourceTest {
     }
 
     @Test
+    public void followingReadStateIsManualAndSupportsMarkAllRead() throws Exception {
+        String activity = read("app/src/main/java/com/fongmi/android/tv/ui/activity/FollowingActivity.java");
+        String adapter = read("app/src/main/java/com/fongmi/android/tv/ui/adapter/FollowingAdapter.java");
+        String leanbackLayout = read("app/src/leanback/res/layout/activity_following.xml");
+        String mobileLayout = read("app/src/mobile/res/layout/activity_following.xml");
+        String strings = read("app/src/main/res/values-zh-rCN/strings.xml");
+
+        assertFalse(activity.contains("VISIBLE_READ_DELAY_MS"));
+        assertFalse(activity.contains("markVisibleReadNow"));
+        assertFalse(activity.contains("addOnScrollListener(new RecyclerView.OnScrollListener()"));
+        assertTrue(activity.contains("binding.readAll.setOnClickListener(view -> markAllRead())"));
+        assertTrue(activity.contains("adapter.markReadLocally(keys)"));
+        assertTrue(activity.contains("FollowingPlaybackBridge.markReadAllAsync(keys"));
+        assertTrue(adapter.contains("getItems()"));
+        assertTrue(leanbackLayout.contains("@+id/readAll"));
+        assertTrue(mobileLayout.contains("@+id/readAll"));
+        int checkId = leanbackLayout.indexOf("android:id=\"@+id/check\"");
+        int readAllId = leanbackLayout.indexOf("android:id=\"@+id/readAll\"", checkId);
+        int filterId = leanbackLayout.indexOf("android:id=\"@+id/filter\"", readAllId);
+        assertTrue(leanbackLayout.substring(checkId, readAllId).contains("android:nextFocusRight=\"@id/readAll\""));
+        assertTrue(leanbackLayout.substring(readAllId, filterId).contains("android:nextFocusLeft=\"@id/check\""));
+        assertTrue(leanbackLayout.substring(readAllId, filterId).contains("android:nextFocusRight=\"@id/filter\""));
+        assertTrue(leanbackLayout.substring(filterId).contains("android:nextFocusLeft=\"@id/readAll\""));
+        assertTrue(strings.contains("<string name=\"following_read_all\">全部已读</string>"));
+    }
+
+    @Test
     public void detailAndPlaybackScreensWireFollowingActionsOffTheMainThread() throws Exception {
         String detail = read("app/src/main/java/com/fongmi/android/tv/ui/activity/TmdbDetailActivity.java");
         String store = read("app/src/main/java/com/fongmi/android/tv/following/FollowingStore.java");
@@ -185,8 +235,8 @@ public class FollowingUiSourceTest {
         assertTrue(followingActivity.contains("FollowingPlaybackBridge.deleteAsync"));
         assertFalse(followingActivity.contains("FollowingStore.delete(item.identityKey)"));
         assertTrue(followingActivity.contains("Task.execute(() -> {\n            List<Following> items = FollowingStore.list();"));
-        assertTrue(followingActivity.contains("VISIBLE_READ_DELAY_MS"));
-        assertTrue(followingActivity.contains("markVisibleReadNow()"));
+        assertFalse(followingActivity.contains("VISIBLE_READ_DELAY_MS"));
+        assertFalse(followingActivity.contains("markVisibleReadNow()"));
         assertTrue(followingAdapter.contains("item.hasUpdate && item.unwatchedCount > 0"));
         assertTrue(followingAdapter.contains("markReadLocally"));
         assertTrue(strings.contains("<string name=\"following_read\">标记已读</string>"));

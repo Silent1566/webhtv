@@ -5774,6 +5774,10 @@ private boolean runtimeSourceOnly;
         player().resetTrack();
         player().reset();
         player().stop();
+        // Automatic line fallback continues in the same failed playback session.
+        // Keep the remembered kernel, but recreate its engine so the next line cannot
+        // inherit a decoder/Surface failure that audio-only playback can survive.
+        player().preparePlayer(applyHistoryPlayerKernel(), true);
         showError(msg);
         startFlow();
     }
