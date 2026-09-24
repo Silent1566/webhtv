@@ -143,6 +143,7 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
         switch (config.getType()) {
             case 0:
                 VodConfig.load(config, getCallback());
+                loadMatchingLiveConfig(config);
                 break;
             case 1:
                 LiveConfig.load(config, getCallback());
@@ -152,6 +153,12 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
                 WallConfig.load(config, getCallback());
                 break;
         }
+    }
+
+    private void loadMatchingLiveConfig(Config config) {
+        Config liveConfig = AppDatabase.get().getConfigDao().find(config.getUrl(), 1);
+        if (liveConfig == null) return;
+        LiveConfig.load(liveConfig, new Callback());
     }
 
     private Callback getCallback() {

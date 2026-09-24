@@ -15,6 +15,7 @@ public class ConfigUseLiveSyncAcceptanceTest {
     public void switchingVodAlsoSwitchsItsMatchingLiveConfig() throws Exception {
         String manage = read("app/src/main/java/com/fongmi/android/tv/server/process/Manage.java");
         String remote = read("app/src/main/java/com/fongmi/android/tv/remote/RemoteConfigOps.java");
+        String setting = read("app/src/leanback/java/com/fongmi/android/tv/ui/activity/SettingActivity.java");
 
         assertTrue(manage.contains("default -> {\n                VodConfig.load(config, new Callback());\n                loadMatchingLiveConfig(config);"));
         assertTrue(manage.contains("Config liveConfig = AppDatabase.get().getConfigDao().find(config.getUrl(), 1);"));
@@ -22,6 +23,8 @@ public class ConfigUseLiveSyncAcceptanceTest {
         assertTrue(remote.contains("Config liveConfig = type == 0 ? matchingLiveConfig(config) : null;"));
         assertTrue(remote.contains("if (liveConfig != null) LiveConfig.load(liveConfig, new Callback());"));
         assertTrue(remote.contains("Config liveConfig = AppDatabase.get().getConfigDao().find(config.getUrl(), 1);"));
+        assertTrue(setting.contains("loadMatchingLiveConfig(config);"));
+        assertTrue(setting.contains("Config liveConfig = AppDatabase.get().getConfigDao().find(config.getUrl(), 1);"));
         assertFalse(manage.contains("default -> VodConfig.load(config, new Callback());"));
     }
 
