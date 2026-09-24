@@ -130,6 +130,7 @@ public final class AppearanceDialog extends DialogFragment implements ThemeDialo
     }
 
     private String getThemeText() {
+        if (!Setting.isThemeColorEnabled()) return getString(R.string.setting_off);
         return themeText(Setting.getThemeColor());
     }
 

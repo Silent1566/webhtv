@@ -78,7 +78,7 @@ public class TmdbDetailActivityLayoutTest {
         String refresh = javaBlockAt(source, "private void bindTmdbSection()");
 
         assertTrue("direct-play clear theme must compact every populated TMDB rail gap while other themes retain the standard spacing",
-                refresh.contains("int sectionGapDp = isPlayerMode() && !isCinemaMode() ? 12 : 20;")
+                refresh.contains("int sectionGapDp = modeController.isPlayerMode() && !modeController.isCinemaStyle() ? 12 : 20;")
                         && refresh.contains("binding.posterTitle, hasPhotos ? sectionGapDp : 0")
                         && refresh.contains("binding.relatedVideoTitle, hasPhotos || hasPosters ? sectionGapDp : 0")
                         && refresh.contains("binding.castTitle, hasPhotos || hasPosters || hasRelatedVideos ? sectionGapDp : 0")
@@ -2929,11 +2929,11 @@ public class TmdbDetailActivityLayoutTest {
                         && !backFromFullscreenBody.contains("if (isPlayerMode())")
                         && backFromFullscreenBody.indexOf("exitInlineFullscreen();") < backFromFullscreenBody.indexOf("modeController.onExitFullscreen()")
                         && backFromFullscreenBody.contains("return;")
-                        && !backFromFullscreenBody.contains("Util.isLeanback() && isPlayerMode()")
+                        && !backFromFullscreenBody.contains("Util.isLeanback() && modeController.isPlayerMode()")
                         && !backFromFullscreenBody.contains("finishPlaybackToHome();")
                         && !backFromFullscreenBody.contains("Setting.isPlayBackToDetail()")
                         && focusBody.contains("if (!isInlinePlayerMode()) return;")
-                        && !focusBody.contains("if (!isFusionMode()) return;"));
+                        && !focusBody.contains("if (!modeController.isFusionMode()) return;"));
         assertTrue("leanback fullscreen Back should hide visible controls before exiting fullscreen",
                 keyBody.indexOf("KeyUtil.isBackKey(event) && Util.isLeanback() && inlineFullscreen") >= 0
                         && keyBody.indexOf("KeyUtil.isBackKey(event) && isInlineControlsVisible()") < keyBody.indexOf("KeyUtil.isBackKey(event) && Util.isLeanback() && inlineFullscreen")
