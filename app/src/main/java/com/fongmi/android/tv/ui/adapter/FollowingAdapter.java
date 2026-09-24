@@ -138,6 +138,10 @@ public class FollowingAdapter extends RecyclerView.Adapter<FollowingAdapter.Hold
         return position >= 0 && position < items.size() ? items.get(position) : null;
     }
 
+    public List<Row> getItems() {
+        return new ArrayList<>(items);
+    }
+
     public void markReadLocally(Collection<String> identityKeys) {
         if (identityKeys == null || identityKeys.isEmpty()) return;
         for (int i = 0; i < items.size(); i++) {
