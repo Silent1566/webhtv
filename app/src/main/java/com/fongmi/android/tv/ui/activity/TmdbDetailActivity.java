@@ -5300,9 +5300,9 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         buildCardRowIndex();
         cardRowFocusMarginListener = (previousFocus, newFocus) -> {
             if (binding == null || newFocus == null) return;
-            // 系统默认的焦点滚动可能使用平滑滚动，需等滚动稳定后再校正一次。
-            binding.scroll.post(() -> ensureFocusVisibleWithMargin(newFocus));
-            binding.scroll.postDelayed(() -> ensureFocusVisibleWithMargin(newFocus), 260);
+            // 系统默认的焦点滚动可能在下一帧完成；使用动画帧而非固定延时，避免视觉闪烁。
+            binding.scroll.postOnAnimation(() -> ensureFocusVisibleWithMargin(newFocus));
+            binding.scroll.postOnAnimationDelayed(() -> ensureFocusVisibleWithMargin(newFocus), 260);
         };
         binding.scroll.getViewTreeObserver().addOnGlobalFocusChangeListener(cardRowFocusMarginListener);
     }
