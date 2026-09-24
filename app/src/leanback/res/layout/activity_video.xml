@@ -1198,7 +1198,9 @@
             android:nextFocusDown="@id/tmdbCrew"
             android:nextFocusUp="@id/tmdbPosters"
             android:paddingStart="24dp"
+            android:paddingTop="6dp"
             android:paddingEnd="24dp"
+            android:paddingBottom="6dp"
             android:visibility="gone" />
 
 

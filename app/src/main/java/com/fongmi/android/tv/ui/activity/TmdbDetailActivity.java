@@ -27,6 +27,7 @@ import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
@@ -180,6 +181,7 @@ import com.fongmi.android.tv.ui.dialog.ChoiceDialog;
 import com.fongmi.android.tv.ui.dialog.TmdbSearchDialog;
 import com.fongmi.android.tv.ui.dialog.TrackDialog;
 import com.fongmi.android.tv.ui.novel.NovelRouter;
+import com.fongmi.android.tv.ui.web.CatWebActivity;
 import com.fongmi.android.tv.ui.helper.DetailThemeVisibility;
 import com.fongmi.android.tv.ui.helper.EpisodeRangePolicy;
 import com.fongmi.android.tv.ui.helper.EpisodeCardImagePolicy;
@@ -224,11 +226,11 @@ import com.fongmi.android.tv.utils.TmdbImageSelector;
 import com.fongmi.android.tv.utils.TmdbImageSaver;
 import com.fongmi.android.tv.utils.Traffic;
 import com.fongmi.android.tv.utils.Util;
+import com.fongmi.android.tv.utils.WebViewUtil;
 import com.fongmi.android.tv.utils.Clock;
 import com.fongmi.android.tv.utils.FileChooser;
 import com.fongmi.android.tv.player.lut.LutPreset;
 import com.fongmi.android.tv.player.lut.LutStore;
-import com.fongmi.android.tv.player.PlayerManager;
 import com.fongmi.android.tv.web.WebHomeInlineVodStore;
 import com.google.android.flexbox.FlexboxLayout;
 import com.google.android.material.button.MaterialButton;
@@ -286,6 +288,10 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private static final int SHORT_DRAMA_SCALE = 0;
     private static final int SHORT_DRAMA_FRAME_WIDTH = 9;
     private static final int SHORT_DRAMA_FRAME_HEIGHT = 16;
+    /** 卡片行获得焦点时，分区标题上方保留的留白（标题需完整可见）。 */
+    private static final int CARD_ROW_TOP_MARGIN_DP = 12;
+    /** 卡片行获得焦点时，行底与可视区底部之间保留的留白。 */
+    private static final int CARD_ROW_BOTTOM_MARGIN_DP = 16;
     private static final int INLINE_SIDE_CONTROL_MARGIN_DP = 4;
     private static final int INLINE_SIDE_CONTROL_FULLSCREEN_MARGIN_DP = 48;
     private static final long INLINE_CONTROLS_HIDE_DELAY_MS = TimeUnit.SECONDS.toMillis(10);
@@ -343,6 +349,9 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private ActivityTmdbDetailBinding binding;
     @androidx.annotation.Keep
     private ActivityTmdbDetailBinding mBinding;
+    private ViewTreeObserver.OnGlobalFocusChangeListener cardRowFocusMarginListener;
+    private final List<View> cardRowOrder = new ArrayList<>();
+    private final List<View> cardRowTitleOrder = new ArrayList<>();
     private TmdbDetailModeController modeController;
     private Vod vod;
     private String sourceVodName;
@@ -851,7 +860,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         setupOverviewInteraction();
         if (Util.isMobile()) binding.headerTitle.setText("");
         else binding.headerTitle.setText(detailModeTitle());
-        binding.headerTitle.setVisibility(Util.isMobile() || !isCinemaMode() ? View.VISIBLE : View.INVISIBLE);
+        binding.headerTitle.setVisibility(Util.isMobile() || !modeController.isCinemaStyle() ? View.VISIBLE : View.INVISIBLE);
         binding.title.setText(getNameText());
         binding.subtitle.setText("");
         binding.sourceValue.setText(getString(R.string.detail_source_current, getKeyText()));
@@ -867,6 +876,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         binding.headerBar.setVisibility(Util.isMobile() ? View.VISIBLE : View.GONE);
         updateDetailThemeButtonVisibility();
         applyDetailTemplate();
+        installCardRowFocusMargin();
         initFusionPlayer();
         binding.episodeEmpty.setText(R.string.detail_source_episode_empty);
         bindInitialArtwork();
@@ -900,12 +910,12 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         personalDoubanAdapter.setOnItemLongClickListener(item -> onRecommendationLongClick(item, "douban"));
         personalAiAdapter.setOnItemLongClickListener(item -> onRecommendationLongClick(item, "ai"));
         personalAiAdapter.setOnItemFocusListener(this::showAiRecommendationReason);
-        castAdapter.setCinema(isCinemaMode());
-        creatorAdapter.setCinema(isCinemaMode());
-        relatedAdapter.setCinema(isCinemaMode());
-        personalTmdbAdapter.setCinema(isCinemaMode());
-        personalDoubanAdapter.setCinema(isCinemaMode());
-        personalAiAdapter.setCinema(isCinemaMode());
+        castAdapter.setCinema(modeController.isCinemaStyle());
+        creatorAdapter.setCinema(modeController.isCinemaStyle());
+        relatedAdapter.setCinema(modeController.isCinemaStyle());
+        personalTmdbAdapter.setCinema(modeController.isCinemaStyle());
+        personalDoubanAdapter.setCinema(modeController.isCinemaStyle());
+        personalAiAdapter.setCinema(modeController.isCinemaStyle());
         setDetailAdaptersLight(resolveLightTheme());
         updateEpisodeLayoutManager();
         binding.episodeContainer.setItemAnimator(null);
@@ -929,6 +939,11 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         binding.relatedList.setAdapter(relatedAdapter);
         binding.relatedVideoList.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
         binding.relatedVideoList.setNestedScrollingEnabled(false);
+        // 相关视频卡片本体 276x156dp，焦点放大 1.04 倍后每侧横向多出约 5.5dp、纵向约 3.1dp。
+        // 与 posterList 相同的既有做法：关闭自身裁剪并按四周预留内边距，保证放大后描边完整。
+        binding.relatedVideoList.setClipToOutline(false);
+        binding.relatedVideoList.setClipChildren(false);
+        binding.relatedVideoList.setPaddingRelative(ResUtil.dp2px(8), ResUtil.dp2px(6), ResUtil.dp2px(8), ResUtil.dp2px(6));
         binding.relatedVideoList.setAdapter(relatedVideoAdapter);
         binding.personalTmdbList.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
         binding.personalTmdbList.setNestedScrollingEnabled(false);
@@ -976,9 +991,9 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             }
         };
 
-        if (isFusionMode()) {
+        if (rawFusionMode()) {
             modeController = new FusionDetailController(host);
-        } else if (isPlayerMode()) {
+        } else if (rawPlayerMode()) {
             modeController = new PlayerDetailController(host);
         } else {
             modeController = new EnhancedDetailController(host);
@@ -1018,7 +1033,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
                     binding.headerBar.getPaddingRight(),
                     binding.headerBar.getPaddingBottom()
             );
-            if (!isCinemaMode()) TmdbDetailLayoutUtils.setHeightDp(binding.heroSpacer, defaultHeroSpacerHeightDp());
+            if (!modeController.isCinemaStyle()) TmdbDetailLayoutUtils.setHeightDp(binding.heroSpacer, defaultHeroSpacerHeightDp());
             return insets;
         });
         ViewCompat.requestApplyInsets(binding.root);
@@ -1035,7 +1050,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             window.setNavigationBarContrastEnforced(false);
         }
         WindowInsetsControllerCompat insets = WindowCompat.getInsetsController(window, window.getDecorView());
-        boolean lightBars = lightTheme && !isFusionMode();
+        boolean lightBars = lightTheme && !modeController.shouldShowInlinePlayer();
         insets.setAppearanceLightStatusBars(lightBars);
         insets.setAppearanceLightNavigationBars(lightBars);
     }
@@ -1896,7 +1911,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         applyBackdropSurface(colors);
         binding.backdropFill.setAlpha(backdropSlideAlpha());
         binding.backdrop.setAlpha(backdropSlideAlpha());
-        binding.backdropShade.setBackground(isCinemaMode() ? cinemaBackdropShade() : TmdbDetailLayoutUtils.colorDrawable(colors.backdropShade));
+        binding.backdropShade.setBackground(modeController.isCinemaStyle() ? cinemaBackdropShade() : TmdbDetailLayoutUtils.colorDrawable(colors.backdropShade));
         setCard(binding.contentPanel, colors.panel, colors.line);
         setPlayerCard(colors);
         setCard(binding.tmdbPanel, colors.panel, colors.line);
@@ -1929,8 +1944,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         binding.overviewToggle.setTextColor(colors.accent);
         binding.episodeEmpty.setTextColor(colors.secondary);
         binding.tmdbStatus.setTextColor(colors.secondary);
-        binding.personalAiReason.setTextColor(isCinemaMode() ? 0xE6FFFFFF : colors.secondary);
-        if (isCinemaMode()) binding.personalAiReason.setShadowLayer(3f, 0f, 1.5f, 0xCC000000);
+        binding.personalAiReason.setTextColor(modeController.isCinemaStyle() ? 0xE6FFFFFF : colors.secondary);
+        if (modeController.isCinemaStyle()) binding.personalAiReason.setShadowLayer(3f, 0f, 1.5f, 0xCC000000);
         else binding.personalAiReason.setShadowLayer(0f, 0f, 0f, 0x00000000);
         tintTmdbSectionTitles(colors);
         styleSourceValue();
@@ -1948,7 +1963,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         if (episodePhotoAdapter != null) episodePhotoAdapter.setLight(lightTheme);
         if (posterAdapter != null) posterAdapter.setLight(lightTheme);
         setDetailAdaptersLight(lightTheme);
-        if (isCinemaMode()) scheduleBackdropSlide(BACKDROP_SLIDE_DELAY_MS);
+        if (modeController.isCinemaStyle()) scheduleBackdropSlide(BACKDROP_SLIDE_DELAY_MS);
     }
 
     private void styleSourceValue() {
@@ -1984,10 +1999,10 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
                 binding.personalAiTitle,
                 binding.externalLinksTitle
         };
-        int color = isCinemaMode() ? 0xFFFFFFFF : colors.primary;
+        int color = modeController.isCinemaStyle() ? 0xFFFFFFFF : colors.primary;
         for (TextView title : titles) {
             title.setTextColor(color);
-            if (isCinemaMode()) title.setShadowLayer(3f, 0f, 1.5f, 0xCC000000);
+            if (modeController.isCinemaStyle()) title.setShadowLayer(3f, 0f, 1.5f, 0xCC000000);
             else title.setShadowLayer(0f, 0f, 0f, 0x00000000);
         }
         updateTmdbSeasonActionVisibility();
@@ -1999,7 +2014,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         boolean pictureInPicture = isInPictureInPictureMode();
         boolean showMobileButton = DetailThemeVisibility.showMobileThemeButton(mobile, inlineFullscreen, inlinePiPLayout, pictureInPicture);
         boolean showLargeScreenButton = DetailThemeVisibility.showLargeScreenThemeButton(mobile, inlineFullscreen, inlinePiPLayout, pictureInPicture);
-        boolean fusionMode = isFusionMode();
+        boolean fusionMode = modeController.isFusionMode();
         boolean playbackPage = isAutoPlayMode() || detailPlayerActive;
         // 手机版也使用底部一排的主题按钮（themeModeDetail），不再使用右上角浮动按钮（themeModeTop）
         binding.themeModeTop.setVisibility(View.GONE);
@@ -2009,7 +2024,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private void applyTemplateCardChrome(ThemeColors colors) {
-        if (isCinemaMode()) {
+        if (modeController.isCinemaStyle()) {
             binding.contentPanel.setCardBackgroundColor(0x00000000);
             binding.contentPanel.setStrokeWidth(0);
             binding.tmdbPanel.setCardBackgroundColor(0x00000000);
@@ -2025,7 +2040,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private void applyDetailTemplate() {
-        if (isCinemaMode()) applyCinemaDetailTemplate();
+        if (modeController.isCinemaStyle()) applyCinemaDetailTemplate();
         else applyDefaultDetailTemplate();
     }
 
@@ -2035,7 +2050,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         TmdbDetailLayoutUtils.setWidthMatch(binding.contentPanel);
         TmdbDetailLayoutUtils.setWidthMatch(binding.tmdbSection);
         TmdbDetailLayoutUtils.setMarginsDp(binding.contentPanel, 16, 0, 16, 0);
-        TmdbDetailLayoutUtils.setMarginsDp(binding.playerPanel, 16, isFusionMode() ? 22 : 14, 16, isFusionMode() ? 20 : 16);
+        TmdbDetailLayoutUtils.setMarginsDp(binding.playerPanel, 16, modeController.isFusionMode() ? 22 : 14, 16, modeController.isFusionMode() ? 20 : 16);
         TmdbDetailLayoutUtils.setMarginsDp(binding.tmdbSection, 16, 16, 16, 0);
         binding.contentPanel.setRadius(ResUtil.dp2px(20));
         binding.tmdbPanel.setRadius(ResUtil.dp2px(20));
@@ -2069,7 +2084,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private int defaultHeroSpacerHeightDp() {
-        if (isFusionMode()) return 0;
+        if (modeController.isFusionMode()) return 0;
         if (!Util.isMobile()) return 102;
         int insetDp = Math.round(statusBarInsetTop / getResources().getDisplayMetrics().density);
         return Math.max(72, 102 - Math.min(insetDp, 30));
@@ -2119,7 +2134,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         TmdbDetailLayoutUtils.setHeightDp(binding.castList, compact ? 90 : 90);
         TmdbDetailLayoutUtils.setHeightDp(binding.creatorList, compact ? 90 : 90);
         TmdbDetailLayoutUtils.setHeightDp(binding.relatedList, compact ? 160 : 160);
-        TmdbDetailLayoutUtils.setHeightDp(binding.relatedVideoList, compact ? 128 : 160);
+        TmdbDetailLayoutUtils.setHeightDp(binding.relatedVideoList, compact ? 128 : 168);
         TmdbDetailLayoutUtils.setHeightDp(binding.personalTmdbList, compact ? 160 : 160);
         TmdbDetailLayoutUtils.setHeightDp(binding.personalDoubanList, compact ? 160 : 160);
         TmdbDetailLayoutUtils.setHeightDp(binding.personalAiList, compact ? 160 : 160);
@@ -2244,7 +2259,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private boolean isLeanbackInlinePlayerPanel() {
-        return Util.isLeanback() && (isFusionMode() || isPlayerMode());
+        return Util.isLeanback() && (modeController.isFusionMode() || modeController.isPlayerMode());
     }
 
     private void setupPlayerPanelFocusLayer() {
@@ -4104,7 +4119,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private float backdropSlideAlpha() {
-        return isCinemaMode() && !lightTheme ? 0.9f : 1f;
+        return modeController.isCinemaStyle() && !lightTheme ? 0.9f : 1f;
     }
 
     private int nextBackdropSlideIndex() {
@@ -4167,9 +4182,27 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         return true;
     }
 
+    private boolean isCinemaStyle() {
+        return modeController != null ? modeController.isCinemaStyle() : rawCinemaMode();
+    }
+
+    private boolean rawCinemaMode() {
+        return getIntent().getIntExtra("detail_mode", Setting.getDetailOpenMode()) == Setting.DETAIL_OPEN_CINEMA || Setting.isTmdbCinemaStyle();
+    }
+
+    @Override
+    protected boolean applyGlobalTheme() {
+        return !isCinemaStyle();
+    }
+
+    @Override
+    protected boolean preserveDetailThemeState() {
+        return isCinemaStyle();
+    }
+
     private ThemeColors currentThemeColors() {
         ThemeColors colors = lightTheme ? ThemeColors.light() : ThemeColors.dark();
-        return isCinemaMode() ? ThemeColors.cinema(lightTheme) : colors;
+        return isCinemaStyle() ? ThemeColors.cinema(lightTheme) : colors;
     }
 
     private void refreshBackdropSurface() {
@@ -4189,7 +4222,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private int backdropFallbackBackground(ThemeColors colors) {
-        return isPlayerMode() ? 0xFF0F141A : colors.background;
+        return modeController.isPlayerMode() ? 0xFF0F141A : colors.background;
     }
 
     private String episodeFallbackStillUrl() {
@@ -4367,7 +4400,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         if (!(view instanceof LinearLayout row)) return;
         boolean focused = row.hasFocus();
         GradientDrawable background = new GradientDrawable();
-        background.setColor(isCinemaMode() ? TmdbCinemaTheme.palette(lightTheme).ratingChip() : colors.chip);
+        background.setColor(modeController.isCinemaStyle() ? TmdbCinemaTheme.palette(lightTheme).ratingChip() : colors.chip);
         background.setCornerRadius(ResUtil.dp2px(10));
         background.setStroke(ResUtil.dp2px(focused ? FOCUS_STROKE_DP : CHIP_STROKE_DP), focused ? FOCUS_STROKE : colors.line);
         row.setBackground(background);
@@ -4379,10 +4412,39 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private void openExternalLink(String url) {
+        if (TextUtils.isEmpty(url)) return;
+        if (Util.isLeanback()) {
+            ChoiceDialog.showSingle(this, R.string.detail_external_open_title,
+                    new CharSequence[]{getString(R.string.detail_external_open_builtin), getString(R.string.detail_external_open_external)},
+                    -1, which -> {
+                        if (which == 0) openExternalLinkBuiltIn(url);
+                        else openExternalLinkExternal(url);
+                    });
+            return;
+        }
+        openExternalLinkExternal(url);
+    }
+
+    private void openExternalLinkBuiltIn(String url) {
+        if (!WebViewUtil.support()) {
+            openExternalLinkExternal(url);
+            return;
+        }
         try {
-            startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)));
+            startActivity(CatWebActivity.browserIntent(this, url,
+                    getString(R.string.tmdb_external_links_label),
+                    getString(R.string.detail_external_opening)));
+        } catch (Throwable ignored) {
+            // WebView 容器临时起不来时仍回退到系统浏览器，避免链接完全不可达。
+            openExternalLinkExternal(url);
+        }
+    }
+
+    private void openExternalLinkExternal(String url) {
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
         } catch (Throwable e) {
-            Notify.show("无法打开链接");
+            Notify.show(R.string.detail_external_open_failed);
         }
     }
 
@@ -4432,7 +4494,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private int ratingChipBackground(ThemeColors colors) {
-        return isCinemaMode() ? TmdbCinemaTheme.palette(true).ratingChip() : colors.chip;
+        return modeController.isCinemaStyle() ? TmdbCinemaTheme.palette(true).ratingChip() : colors.chip;
     }
 
     private int readableDetailRatingColor(int color) {
@@ -4669,7 +4731,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
                 renderFlagSelection();
                 renderEpisodes();
                 refreshSeasonSourceRoutes();
-                if (isFusionMode()) onPlay();
+                if (modeController.isFusionMode()) onPlay();
             });
             binding.flagContainer.addView(button);
         }
@@ -5187,11 +5249,13 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
                 || focusTmdbRecycler(binding.relatedList)
                 || focusTmdbRecycler(binding.creatorList)
                 || focusTmdbRecycler(binding.castList)
+                || focusTmdbRecycler(binding.relatedVideoList)
                 || focusTmdbRecycler(binding.episodePhotoList);
     }
 
     private boolean focusFirstVisibleTmdbRow() {
         return focusTmdbRecycler(binding.episodePhotoList)
+                || focusTmdbRecycler(binding.relatedVideoList)
                 || focusTmdbRecycler(binding.castList)
                 || focusTmdbRecycler(binding.creatorList)
                 || focusTmdbRecycler(binding.relatedList)
@@ -5222,6 +5286,187 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             });
         });
         return true;
+    }
+
+    /**
+     * 安装焦点滚动校正。
+     *
+     * 系统默认的焦点滚动会把内容贴到可视区边缘：卡片行会把行上方的分区标题切掉一半、
+     * 让下一个分区标题在底部露出一小条；按钮则整块贴住屏幕顶端，缺少呼吸空间。
+     * 这里在每次焦点变化后统一校正一次。
+     */
+    private void installCardRowFocusMargin() {
+        if (binding == null) return;
+        buildCardRowIndex();
+        cardRowFocusMarginListener = (previousFocus, newFocus) -> {
+            if (binding == null || newFocus == null) return;
+            // 系统默认的焦点滚动可能使用平滑滚动，需等滚动稳定后再校正一次。
+            binding.scroll.post(() -> ensureFocusVisibleWithMargin(newFocus));
+            binding.scroll.postDelayed(() -> ensureFocusVisibleWithMargin(newFocus), 260);
+        };
+        binding.scroll.getViewTreeObserver().addOnGlobalFocusChangeListener(cardRowFocusMarginListener);
+    }
+
+    private void removeCardRowFocusMargin() {
+        if (binding == null || cardRowFocusMarginListener == null) return;
+        ViewTreeObserver observer = binding.scroll.getViewTreeObserver();
+        if (observer.isAlive()) observer.removeOnGlobalFocusChangeListener(cardRowFocusMarginListener);
+        cardRowFocusMarginListener = null;
+    }
+
+    /** 按页面自上而下的顺序登记卡片行及其分区标题。 */
+    private void buildCardRowIndex() {
+        cardRowOrder.clear();
+        cardRowTitleOrder.clear();
+        addCardRow(binding.episodePhotoList, binding.episodePhotoTitle);
+        addCardRow(binding.posterList, binding.posterTitle);
+        addCardRow(binding.relatedVideoList, binding.relatedVideoTitle);
+        addCardRow(binding.castList, binding.castTitle);
+        addCardRow(binding.creatorList, binding.creatorTitle);
+        addCardRow(binding.relatedList, binding.relatedTitle);
+        addCardRow(binding.personalTmdbList, binding.personalTmdbTitle);
+        addCardRow(binding.personalDoubanList, binding.personalDoubanTitle);
+        addCardRow(binding.personalAiList, binding.personalAiTitle);
+    }
+
+    private void addCardRow(View row, View title) {
+        if (row == null) return;
+        cardRowOrder.add(row);
+        cardRowTitleOrder.add(title);
+    }
+
+    private boolean isLaidOutVisible(View view) {
+        return view != null && view.getVisibility() == View.VISIBLE && view.getHeight() > 0 && view.isShown();
+    }
+
+    /** 返回焦点所在卡片行在 {@link #cardRowOrder} 中的下标，找不到返回 -1。 */
+    private int focusedCardRowIndex(View focused) {
+        for (View current = focused; current != null; ) {
+            int index = cardRowOrder.indexOf(current);
+            if (index >= 0) return index;
+            Object parent = current.getParent();
+            current = parent instanceof View ? (View) parent : null;
+        }
+        return -1;
+    }
+
+    /** 该行之后第一个可见的分区标题（用于避免其只露出一部分）。 */
+    private View nextVisibleSectionTitle(int rowIndex) {
+        for (int i = rowIndex + 1; i < cardRowTitleOrder.size(); i++) {
+            View title = cardRowTitleOrder.get(i);
+            if (isLaidOutVisible(title)) return title;
+        }
+        return isLaidOutVisible(binding.externalLinksTitle) ? binding.externalLinksTitle : null;
+    }
+
+    /** 焦点变化后的统一校正入口：卡片行走专用逻辑，其余按钮/控件走通用留白。 */
+    private void ensureFocusVisibleWithMargin(View focused) {
+        if (binding == null || focused == null || !focused.isShown()) return;
+        if (focusedCardRowIndex(focused) >= 0) {
+            ensureCardRowVisibleWithMargin(focused);
+            return;
+        }
+        ensureButtonVisibleWithMargin(focused);
+    }
+
+    /** 该 View 是否位于 binding.scroll 之内。 */
+    private boolean isInsideDetailScroll(View view) {
+        for (View current = view; current != null; ) {
+            if (current == binding.scroll) return true;
+            Object parent = current.getParent();
+            current = parent instanceof View ? (View) parent : null;
+        }
+        return false;
+    }
+
+    /**
+     * 该 View 是否是横向列表（RecyclerView）里的条目。
+     * 这类条目有各自的滚动/对齐逻辑，这里不再叠加通用留白，避免相互打架。
+     */
+    private boolean isInsideRecyclerRow(View view) {
+        for (View current = view; current != null; ) {
+            if (current == binding.scroll) return false;
+            if (current instanceof RecyclerView) return true;
+            Object parent = current.getParent();
+            current = parent instanceof View ? (View) parent : null;
+        }
+        return false;
+    }
+
+    /**
+     * 按钮/控件获得焦点时保留上下间距。
+     *
+     * 与卡片行同理：系统默认的焦点滚动会把按钮贴到屏幕顶端（实测「继续播放」的 y=0），
+     * 视觉上过于拥挤。这里保证按钮至少离可视区上下边缘各留一段间距。
+     */
+    private void ensureButtonVisibleWithMargin(View focused) {
+        if (binding == null || focused == null || !focused.isShown()) return;
+        if (focused == binding.scroll) return;
+        if (!isInsideDetailScroll(focused) || isInsideRecyclerRow(focused)) return;
+        if (focused.getHeight() == 0 || binding.scroll.getHeight() == 0) return;
+        int[] loc = new int[2];
+        binding.scroll.getLocationOnScreen(loc);
+        int viewTop = loc[1];
+        int viewBottom = viewTop + binding.scroll.getHeight();
+        focused.getLocationOnScreen(loc);
+        int top = loc[1];
+        int bottom = top + focused.getHeight();
+        int topMargin = ResUtil.dp2px(CARD_ROW_TOP_MARGIN_DP);
+        int bottomMargin = ResUtil.dp2px(CARD_ROW_BOTTOM_MARGIN_DP);
+        if (top < viewTop + topMargin) binding.scroll.scrollBy(0, top - (viewTop + topMargin));
+        else if (bottom > viewBottom - bottomMargin) binding.scroll.scrollBy(0, bottom - (viewBottom - bottomMargin));
+    }
+
+    /**
+     * 让获得焦点的卡片行连同它的分区标题一起舒服地落在可视区内。
+     *
+     * 1) 顶部：锚定到分区标题（而不是行本身），标题完整显示，不再被切掉一半；
+     *    同时兼容卡片焦点放大 1.04 倍后描边外溢的情况。
+     * 2) 底部：行底留出间距，并且不让下一个分区标题只露出一小条——
+     *    要么完整显示，要么完全移出可视区。
+     */
+    private void ensureCardRowVisibleWithMargin(View focused) {
+        if (binding == null || focused == null || !focused.isShown()) return;
+        if (cardRowOrder.isEmpty()) buildCardRowIndex();
+        int index = focusedCardRowIndex(focused);
+        if (index < 0) return;
+        View row = cardRowOrder.get(index);
+        if (row.getHeight() == 0 || binding.scroll.getHeight() == 0) return;
+
+        int[] loc = new int[2];
+        binding.scroll.getLocationOnScreen(loc);
+        int viewTop = loc[1];
+        int viewBottom = viewTop + binding.scroll.getHeight();
+
+        row.getLocationOnScreen(loc);
+        int rowTop = loc[1];
+        int rowBottom = rowTop + row.getHeight();
+
+        int topMargin = ResUtil.dp2px(CARD_ROW_TOP_MARGIN_DP);
+        int bottomMargin = ResUtil.dp2px(CARD_ROW_BOTTOM_MARGIN_DP);
+
+        int anchorTop = rowTop;
+        View title = index < cardRowTitleOrder.size() ? cardRowTitleOrder.get(index) : null;
+        if (isLaidOutVisible(title)) {
+            title.getLocationOnScreen(loc);
+            anchorTop = Math.min(anchorTop, loc[1]);
+        }
+
+        if (anchorTop < viewTop + topMargin) {
+            binding.scroll.scrollBy(0, anchorTop - (viewTop + topMargin));
+        } else if (rowBottom > viewBottom - bottomMargin) {
+            binding.scroll.scrollBy(0, rowBottom - (viewBottom - bottomMargin));
+        }
+
+        View next = nextVisibleSectionTitle(index);
+        if (!isLaidOutVisible(next)) return;
+        next.getLocationOnScreen(loc);
+        int nextTop = loc[1];
+        if (nextTop >= viewBottom || nextTop + next.getHeight() <= viewBottom) return;
+        // 下一个标题正卡在底边：把内容整体下移，让它完全移出可视区；
+        // 但保证本行标题不会被顶出屏幕顶部。
+        int delta = Math.min(nextTop - viewBottom, anchorTop - (viewTop + topMargin));
+        binding.scroll.scrollBy(0, delta);
     }
 
     private void scrollDetailChildIntoViewNow(View child, int topPaddingDp) {
@@ -6152,7 +6397,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         episodePhotoAdapter.setItems(tmdbEpisodePhotos);
         episodePhotoAdapter.rebindAttached(binding.episodePhotoList);
 
-        int sectionGapDp = isPlayerMode() && !isCinemaMode() ? 12 : 20;
+        int sectionGapDp = modeController.isPlayerMode() && !modeController.isCinemaStyle() ? 12 : 20;
         setTopMargin(binding.posterTitle, hasPhotos ? sectionGapDp : 0);
         binding.posterTitle.setVisibility(hasPosters ? View.VISIBLE : View.GONE);
         binding.posterList.setVisibility(hasPosters ? View.VISIBLE : View.GONE);
@@ -7214,20 +7459,16 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         return coalesce(matchedTmdbItem == null ? "" : matchedTmdbItem.getPosterUrl(), matchedTmdbItem == null ? "" : matchedTmdbItem.getBackdropUrl(), vod == null ? "" : vod.getPic(), getPicText());
     }
 
-    private boolean isFusionMode() {
+    private boolean rawFusionMode() {
         return getDetailMode() == Setting.DETAIL_OPEN_FUSION || getIntent().getBooleanExtra("fusion", false);
     }
 
-    private boolean isPlayerMode() {
+    private boolean rawPlayerMode() {
         return getDetailMode() == Setting.DETAIL_OPEN_PLAYER;
     }
 
-    private boolean isCinemaMode() {
-        return getIntent().getIntExtra("detail_mode", Setting.getDetailOpenMode()) == Setting.DETAIL_OPEN_CINEMA || Setting.isTmdbCinemaStyle();
-    }
-
     private int getDetailMode() {
-        // 返回原始模式，不做 normalize，否则 isPlayerMode() 永远返回 false
+        // 返回原始模式，不做 normalize，否则 modeController.isPlayerMode() 永远返回 false
         if (getIntent().hasExtra("detail_mode")) return getIntent().getIntExtra("detail_mode", Setting.DETAIL_OPEN_ENHANCED);
         // 详情直放没有内嵌播放界面；若既无 detail_mode 也无 fusion 标记，只能按当前设置还原，
         // 不能把无标记默认成炫彩详情，否则点击播放会误走融合内嵌播放。
@@ -7235,8 +7476,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private int detailModeTitle() {
-        if (isFusionMode()) return R.string.setting_detail_open_fusion;
-        if (isPlayerMode()) return R.string.setting_detail_open_player;
+        if (modeController.isFusionMode()) return R.string.setting_detail_open_fusion;
+        if (modeController.isPlayerMode()) return R.string.setting_detail_open_player;
         return R.string.setting_detail_open_enhanced;
     }
 
@@ -7245,7 +7486,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private boolean shouldUseLoadingOnlyBeforeDefaultPlayback() {
-        return isAutoPlayMode() && !isFusionMode() && !isPlayerMode();
+        return isAutoPlayMode() && !modeController.isFusionMode() && !modeController.isPlayerMode();
     }
 
     private void setLoadingOnlyBeforeDefaultPlayback(boolean loadingOnly) {
@@ -7258,7 +7499,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private boolean isInlinePlayerMode() {
-        return isFusionMode() || detailPlayerActive;
+        return modeController.isFusionMode() || detailPlayerActive;
     }
 
     private boolean isCurrentInlinePlayback(Episode episode) {
@@ -7550,7 +7791,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private boolean suppressInlineDisplayForLeanbackFusionExit() {
-        if (!Util.isLeanback() || !isFusionMode()) return false;
+        if (!Util.isLeanback() || !modeController.isFusionMode()) return false;
         inlineDisplaySuppressUntil = Math.max(inlineDisplaySuppressUntil, SystemClock.uptimeMillis() + LEANBACK_FUSION_EXIT_DISPLAY_SUPPRESS_MS);
         hideInlineDisplayPanel();
         return true;
@@ -9786,7 +10027,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
 
     private boolean shouldShowDetailFullscreenControlsOnReady() {
         // 详情直放模式:只在首次准备完成时显示控制栏,快进/后退导致的 STATE_READY 不显示
-        return detailPlayerActive && !isFusionMode() && inlineFullscreen && !isLock() && !inlineFirstReady;
+        return detailPlayerActive && !modeController.isFusionMode() && inlineFullscreen && !isLock() && !inlineFirstReady;
     }
 
     private void applyInlineShortDramaMode() {
@@ -9911,8 +10152,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private void applyInlinePlayerEmbeddedLayout() {
         if (binding == null) return;
         // 融合模式上下 margin (22dp/20dp) 比普通模式 (14dp/16dp) 略大
-        int topMarginDp = isFusionMode() ? 22 : 14;
-        int bottomMarginDp = isFusionMode() ? 20 : 16;
+        int topMarginDp = modeController.isFusionMode() ? 22 : 14;
+        int bottomMarginDp = modeController.isFusionMode() ? 20 : 16;
         // TV 版左右贴边（margin=0），mobile 版左右留白 16dp
         int horizontalMarginDp = Util.isLeanback() ? 0 : 16;
         FrameLayout.LayoutParams params;
@@ -9954,8 +10195,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         ViewGroup.LayoutParams sp = binding.playerPanelSpacer.getLayoutParams();
         if (sp == null) return;
         int target = ResUtil.dp2px(252);
-        int topMargin = ResUtil.dp2px(isFusionMode() ? 22 : 14);
-        int bottomMargin = ResUtil.dp2px(isFusionMode() ? 20 : 16);
+        int topMargin = ResUtil.dp2px(modeController.isFusionMode() ? 22 : 14);
+        int bottomMargin = ResUtil.dp2px(modeController.isFusionMode() ? 20 : 16);
         boolean changed = sp.height != target;
         if (sp instanceof ViewGroup.MarginLayoutParams marginParams) {
             if (marginParams.topMargin != topMargin || marginParams.bottomMargin != bottomMargin) {
@@ -10701,7 +10942,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     @Override
     protected void onFirstFrameRendered() {
         recordInlinePlayHealth(true, "");
-        if (!detailPlayerFullscreenPending || !isPlayerMode() || !inlineStarted || !isOwner()) return;
+        if (!detailPlayerFullscreenPending || !modeController.isPlayerMode() || !inlineStarted || !isOwner()) return;
         revealDetailPlayerFullscreen();
     }
 
@@ -10936,6 +11177,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         App.removeCallbacks(inlineHideControls);
         App.removeCallbacks(inlineKeySeekEnd);
         EpisodeTitlePopup.dismiss();
+        removeCardRowFocusMargin();
         saveInlineHistory();
         stopInlinePlaybackSync();
         // 确保内嵌播放退出时停止播放，避免声音继续（与 VideoActivity 保持一致）
@@ -11787,7 +12029,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private void openMatchedDetail(Site site, Vod match, TmdbItem item) {
-        if (isFusionMode()) {
+        if (modeController.isFusionMode()) {
             switchSourceDetail(site, match, item, "");
             return;
         }
@@ -11834,7 +12076,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         TmdbBundle reusableBundle = canReuseTmdbBundle(item) ? activeTmdbBundle : null;
         Intent intent = new Intent(getIntent());
         intent.putExtra("detail_mode", getDetailMode());
-        intent.putExtra("fusion", isFusionMode());
+        intent.putExtra("fusion", modeController.isFusionMode());
         intent.putExtra("key", site.getKey());
         intent.putExtra("id", match.getId());
         intent.putExtra("name", match.getName());

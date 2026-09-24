@@ -99,8 +99,11 @@ fingerprint_path() {
 }
 
 read_state() {
-  [[ -f "$state_dir/$1" ]] || fail_usage "no active task guard state ($1 missing)"
-  sed -n '1p' "$state_dir/$1"
+  if [[ -f "$state_dir/$1" ]]; then
+    sed -n '1p' "$state_dir/$1"
+  else
+    return 1
+  fi
 }
 
 write_state() {
@@ -202,6 +205,7 @@ start_task() {
     *) fail_usage "unknown mode: $mode" ;;
   esac
 
+  mkdir -p "$state_dir"
   if [[ -d "$state_dir" && -f "$state_dir/status" ]]; then
     local previous_status
     previous_status="$(sed -n '1p' "$state_dir/status")"
@@ -312,6 +316,8 @@ create_recovery_tag() {
   write_state tag_elapsed_seconds "$tag_elapsed"
   write_state recovery_tag "$tag"
   write_state status finished
+  mkdir -p "$state_root"
+  mv "$state_dir" "$state_root/finished-$(TZ=Asia/Shanghai date +%Y%m%d%H%M%S)-$(read_state id)"
   if ((tag_elapsed > 5)); then
     printf 'WARN: recovery tag phase took %ss (target <=5s); tag already created, continue without repeated validation\n' "$tag_elapsed" >&2
   fi
@@ -330,7 +336,10 @@ finish_task() {
   done
   [[ -n "$verified" && -n "$commit_message" ]] || fail_usage "verification evidence and commit message are required"
 
-  if [[ "$(read_state status)" == "commit_needs_tag" ]]; then
+  local committed_head
+  committed_head="$(read_state committed_head 2>/dev/null || true)"
+  if [[ "$(read_state status)" == "commit_needs_tag" ]] ||
+     { [[ -n "$committed_head" ]] && [[ "$(git rev-parse HEAD)" == "$committed_head" ]]; }; then
     create_recovery_tag "$(read_state committed_head)" "$(read_state verification)"
     return
   fi
