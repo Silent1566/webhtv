@@ -36,7 +36,7 @@ public class FollowingSchedulePolicyTest {
     @Test
     public void foregroundUsesShortIntervalWithoutChangingEndedAndPlannedPolicy() {
         long now = 1_000_000;
-        assertEquals(FollowingSchedulePolicy.FOREGROUND_INTERVAL,
+        assertEquals(now + FollowingSchedulePolicy.FOREGROUND_INTERVAL,
                 FollowingSchedulePolicy.nextCheckAt(now, FollowingMetadataSnapshot.RETURNING, 0, true));
         assertEquals(now + FollowingSchedulePolicy.FOREGROUND_INTERVAL,
                 FollowingSchedulePolicy.nextCheckAt(now, FollowingMetadataSnapshot.UNKNOWN, 0, true));
@@ -44,6 +44,14 @@ public class FollowingSchedulePolicyTest {
                 FollowingSchedulePolicy.nextCheckAt(now, FollowingMetadataSnapshot.PLANNED, 0, true));
         assertEquals(now + TimeUnit.DAYS.toMillis(7),
                 FollowingSchedulePolicy.nextCheckAt(now, FollowingMetadataSnapshot.ENDED, 0, true));
+    }
+
+    @Test
+    public void foregroundReturningWithNextAirStillChecksWithinCadence() {
+        long now = 1_000_000;
+        long check = FollowingSchedulePolicy.nextCheckAt(now, FollowingMetadataSnapshot.RETURNING,
+                now + TimeUnit.DAYS.toMillis(3), true);
+        assertEquals(now + FollowingSchedulePolicy.FOREGROUND_INTERVAL, check);
     }
 
     @Test

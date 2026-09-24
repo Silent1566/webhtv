@@ -3,9 +3,9 @@
 ## Recovery anchor
 
 - 目标：用户在 App 前台使用时缩短追更元数据检查间隔，提高更新发现时效；后台不引入常驻强后台，也不提高 WorkManager 6 小时兜底任务频率。
-- 验收：前台常规追更项在成功检查后下一次检查不超过 15 分钟；后台成功检查仍为 6 小时；已完结/取消和 Planned 的低频语义不被全局缩短；自动请求保持 30 分钟 TMDB 缓存，手动检查仍强制刷新；聚焦单测覆盖策略和调度入口。
-- 当前状态：设计中，尚未修改代码。
-- 下一步：完成策略和前台状态最小实现。
+- 验收：前台常规追更项在成功检查后下一次检查不超过 15 分钟；后台成功检查仍为 6 小时；已完结/取消和 Planned 的低频语义不被全局缩短；自动请求保持 30 分钟 TMDB 缓存，手动检查仍强制刷新；聚焦单测覆盖策略，代码评审覆盖调度入口。
+- 当前状态：实现已通过定向验证和第二轮代码复评，待原子提交、推送和 PR。
+- 下一步：完成 task guard 原子提交、推送 `dev4` 并创建到 `beta` 的中文 PR。
 
 ## 决策与设计记录（2026-09-24）
 
@@ -27,7 +27,7 @@
 
 ### 决策
 
-采用方案 3，保持全局 WorkManager 6 小时任务不变。前台判定使用 `ActivityLifecycleCallbacks` 的 started/stopped 计数，不依赖网络探测或系统 API。为了不破坏低频语义，`ENDED/CANCELED` 仍保持 7 天；`PLANNED` 仍保持 1 天；`RETURNING/UNKNOWN/无状态` 在前台使用 15 分钟，后台保持 6 小时。到期批处理从前台最多 20、后台最多 5，控制请求数量。新增一个前台专用一次性 Work 名称，避免和现有 `KEEP` 的 due-now 任务冲突。
+采用方案 3，保持全局 WorkManager 6 小时任务不变。前台判定使用 `ActivityLifecycleCallbacks` 的 started/stopped 计数，不依赖网络探测或系统 API。为了不破坏低频语义，`ENDED/CANCELED` 仍保持 7 天；`PLANNED` 仍保持 1 天；`RETURNING/UNKNOWN/无状态` 在前台使用 15 分钟，后台保持 6 小时；前台 `RETURNING` 的 `nextAirAt` 约束也被 15 分钟时效上限覆盖。到期批处理从前台最多 20、后台最多 5，控制请求数量。复用现有共享 due-now 任务和逐项 one-shot 任务；逐项任务已有唯一名称，前台批量入口不改全局周期。
 
 ### 兼容与回滚
 
@@ -39,13 +39,13 @@
 
 - 2026-09-24：`App` 使用 `ActivityLifecycleCallbacks` 的 started/stopped 计数提供前台状态。
 - 2026-09-24：`FollowingSchedulePolicy` 新增前台 15 分钟常规间隔；保持 `PLANNED` 24 小时、`ENDED/CANCELED` 7 天、后台 6 小时。
-- 2026-09-24：`FollowingUpdateCoordinator` 前台批量提升到 20，后台保持 5；前台自动检查刷新 TMDB 追更缓存，手动行为不变。
+- 2026-09-24：`FollowingUpdateCoordinator` 前台批量提升到 20，后台保持 5；自动检查保持 30 分钟 TMDB 缓存，手动行为仍强制刷新。
 - 2026-09-24：未修改 WorkManager 6 小时全局周期、数据库 schema、通知逻辑或来源站探测策略。
 
 ## 验证记录
 
 - 通过：`git diff --check`。
-- 通过：`bash ./gradlew :app:testMobileArm64_v8aDebugUnitTest --tests 'com.fongmi.android.tv.following.FollowingSchedulePolicyTest' --stacktrace`，5 tests completed，0 failures/errors。
+- 通过：`bash ./gradlew :app:testMobileArm64_v8aDebugUnitTest --tests 'com.fongmi.android.tv.following.FollowingSchedulePolicyTest' :app:compileLeanbackArm64_v8aDebugJavaWithJavac --stacktrace`，6 tests completed，0 failures/errors，`BUILD SUCCESSFUL`。
 - 通过：`bash ./gradlew :app:compileLeanbackArm64_v8aDebugJavaWithJavac :app:compileMobileArm64_v8aDebugJavaWithJavac --stacktrace`，`BUILD SUCCESSFUL`。
 - 边界：未打包 APK、未连接设备验证前台生命周期实机场景；本改动不涉及 native、ABI、依赖和数据库 schema。
 

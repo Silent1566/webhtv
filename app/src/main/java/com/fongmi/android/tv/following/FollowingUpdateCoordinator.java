@@ -38,7 +38,7 @@ public class FollowingUpdateCoordinator {
     }
 
     boolean check(Following item, boolean manual) {
-        return check(item, manual, manual);
+        return check(item, manual, App.isForeground());
     }
 
     boolean check(Following item, boolean manual, boolean foreground) {
@@ -51,7 +51,7 @@ public class FollowingUpdateCoordinator {
             Throwable metadataError = null;
             if (item.tmdbId > 0) {
                 try {
-                    metadata = metadataClient.fetch(item, manual || foreground);
+                    metadata = metadataClient.fetch(item, manual);
                 } catch (Throwable error) {
                     // TMDB is the preferred official provider, but an unavailable/rate-limited
                     // provider must not make the whole record fail when the bound source is

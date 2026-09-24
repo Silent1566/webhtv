@@ -24,7 +24,7 @@ public final class FollowingSchedulePolicy {
         String normalized = FollowingMetadataSnapshot.normalizeStatus(status);
         long nextAirCheckAt = nextAirCheckAt(now, nextAirAt);
         if (FollowingMetadataSnapshot.RETURNING.equals(normalized)) {
-            long interval = foreground ? FOREGROUND_INTERVAL : PERIODIC_INTERVAL;
+            long interval = now + (foreground ? FOREGROUND_INTERVAL : PERIODIC_INTERVAL);
             return nextAirCheckAt > 0 ? Math.min(interval, nextAirCheckAt) : interval;
         }
         if (FollowingMetadataSnapshot.PLANNED.equals(normalized)) {
