@@ -372,9 +372,18 @@ public class Manage implements Process {
         switch (type) {
             case 1 -> LiveConfig.load(config, new Callback());
             case 2 -> WallConfig.load(config, new Callback());
-            default -> VodConfig.load(config, new Callback());
+            default -> {
+                VodConfig.load(config, new Callback());
+                loadMatchingLiveConfig(config);
+            }
         }
         return configs(java.util.Collections.emptyMap());
+    }
+
+    private void loadMatchingLiveConfig(Config config) {
+        Config liveConfig = AppDatabase.get().getConfigDao().find(config.getUrl(), 1);
+        if (liveConfig == null) return;
+        LiveConfig.load(liveConfig, new Callback());
     }
 
     private Response configDelete(Map<String, String> params) {

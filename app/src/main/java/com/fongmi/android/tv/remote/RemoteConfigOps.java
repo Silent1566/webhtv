@@ -49,12 +49,21 @@ public final class RemoteConfigOps {
         String url = string(payload, "url");
         Config config = findConfig(payload, type);
         if (config == null || config.isEmpty()) return RemoteCommandResult.failure("Config not found");
+        Config liveConfig = type == 0 ? matchingLiveConfig(config) : null;
         App.post(() -> {
             if (type == 1) LiveConfig.load(config, new Callback());
             else if (type == 2) WallConfig.load(config, new Callback());
-            else VodConfig.load(config, new Callback());
+            else {
+                VodConfig.load(config, new Callback());
+                if (liveConfig != null) LiveConfig.load(liveConfig, new Callback());
+            }
         });
         return RemoteCommandResult.success("Config switched", data());
+    }
+
+    private static Config matchingLiveConfig(Config config) {
+        Config liveConfig = AppDatabase.get().getConfigDao().find(config.getUrl(), 1);
+        return liveConfig;
     }
 
     public static RemoteCommandResult delete(JsonObject payload) {
