@@ -2711,7 +2711,7 @@
     <string name="ad_audio_skipped_title">Advertisement skipped</string>
     <string name="ad_audio_skipped_message">You can undo within %1$d seconds.</string>
     <string name="ad_audio_undo">Undo</string>
-    <string name="setting_ad_audio_title">Audio fingerprint ad skipping (experimental)</string>
+    <string name="setting_ad_audio_title">Audio fingerprint ad skipping (experimental; may cause playback failure or frame drops)</string>
     <string name="setting_ad_audio_no_rules">No rules</string>
     <string name="setting_ad_audio_rule_error">Rule error</string>
     <string name="setting_ad_audio_rule_count">Rules %1$d · %2$s</string>
@@ -2721,7 +2721,7 @@
     <string name="setting_ad_audio_imported">Imported %1$d rules · %2$s</string>
     <string name="setting_ad_audio_import_failed">Rule import failed; the previous rules were kept.</string>
     <string name="setting_ad_audio_clear_done">Audio fingerprint rules cleared</string>
-    <string name="speech_ad_enabled">Speech ad recognition</string>
+    <string name="speech_ad_enabled">Speech ad recognition (experimental; may cause playback failure or frame drops)</string>
     <string name="speech_ad_keywords">Ad keywords</string>
     <string name="speech_ad_keyword_count">%1$d keywords</string>
     <string name="speech_ad_rules">Speech rules</string>

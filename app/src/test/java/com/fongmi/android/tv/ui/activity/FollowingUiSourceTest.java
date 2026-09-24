@@ -13,6 +13,23 @@ import static org.junit.Assert.assertFalse;
 public class FollowingUiSourceTest {
 
     @Test
+    public void followingTvHeaderScrollsWithContent() throws Exception {
+        String layout = read("app/src/leanback/res/layout/activity_following.xml");
+
+        assertTrue(layout.contains("androidx.core.widget.NestedScrollView"));
+        assertTrue(layout.contains("android:nestedScrollingEnabled=\"false\""));
+        assertTrue(layout.contains("android:layout_height=\"wrap_content\""));
+    }
+
+    @Test
+    public void followingPageKeepsTvSafeTopInset() throws Exception {
+        String layout = read("app/src/main/res/layout/activity_following.xml");
+
+        assertTrue(layout.contains("android:paddingTop=\"28dp\""));
+        assertFalse(layout.contains("android:paddingTop=\"12dp\""));
+    }
+
+    @Test
     public void mobileBottomNavigationPlacesFollowingBetweenLiveAndSettings() throws Exception {
         String menu = read("app/src/mobile/res/menu/menu_nav.xml");
         String mobile = read("app/src/mobile/java/com/fongmi/android/tv/ui/activity/HomeActivity.java");

@@ -2648,7 +2648,7 @@
     <string name="ad_audio_skipped_title">已略過廣告</string>
     <string name="ad_audio_skipped_message">可在 %1$d 秒內復原。</string>
     <string name="ad_audio_undo">復原</string>
-    <string name="setting_ad_audio_title">音訊指紋去廣告（實驗）</string>
+    <string name="setting_ad_audio_title">音訊指紋去廣告（實驗性：開啟後可能導致播放失敗或掉幀）</string>
     <string name="setting_ad_audio_no_rules">無規則</string>
     <string name="setting_ad_audio_rule_error">規則錯誤</string>
     <string name="setting_ad_audio_rule_count">規則 %1$d · %2$s</string>
@@ -2658,7 +2658,7 @@
     <string name="setting_ad_audio_imported">已匯入 %1$d 條規則 · %2$s</string>
     <string name="setting_ad_audio_import_failed">規則匯入失敗，已保留原規則。</string>
     <string name="setting_ad_audio_clear_done">已清除音訊指紋規則</string>
-    <string name="speech_ad_enabled">語音廣告識別</string>
+    <string name="speech_ad_enabled">語音廣告識別（實驗性：開啟後可能導致播放失敗或掉幀）</string>
     <string name="speech_ad_keywords">廣告關鍵詞</string>
     <string name="speech_ad_keyword_count">%1$d 個關鍵詞</string>
     <string name="speech_ad_rules">語音規則</string>
