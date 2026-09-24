@@ -56,6 +56,7 @@ public class TmdbSourceDialog {
     private List<String> tempEnabledRules;
     private List<String> tempDisabledSites;
     private List<String> tempAllowedSites;
+    private Runnable routeFocusPicker;
 
     public static TmdbSourceDialog create(FragmentActivity activity) {
         return new TmdbSourceDialog(activity);
@@ -80,11 +81,9 @@ public class TmdbSourceDialog {
         apiKeyInput = view.findViewById(R.id.apiKeyInput);
         languageInput = view.findViewById(R.id.languageInput);
         apiHostInput = view.findViewById(R.id.apiHostInput);
-        apiHostInput.setSimpleItems(apiOptionLabels());
-        apiHostInput.setOnClickListener(v -> apiHostInput.showDropDown());
+        setupRouteDropdown(apiHostInput, apiOptionLabels(), activity.getString(R.string.dialog_tmdb_api_host_label));
         imageHostInput = view.findViewById(R.id.imageHostInput);
-        imageHostInput.setSimpleItems(imageOptionLabels());
-        imageHostInput.setOnClickListener(v -> imageHostInput.showDropDown());
+        setupRouteDropdown(imageHostInput, imageOptionLabels(), activity.getString(R.string.dialog_tmdb_image_host_label));
         omdbApiKeyInput = view.findViewById(R.id.omdbApiKeyInput);
         EditText ruleInput = view.findViewById(R.id.ruleInput);
         EditText disabledRuleInput = view.findViewById(R.id.disabledRuleInput);
@@ -140,11 +139,24 @@ public class TmdbSourceDialog {
                 .setView(view)
                 .setPositiveButton(R.string.dialog_positive, (d, w) -> onSave())
                 .setNegativeButton(R.string.dialog_negative, null)
-                .setOnDismissListener(d -> { if (onDismiss != null) onDismiss.run(); })
+                .setOnDismissListener(d -> {
+                    clearRouteFocusPickers();
+                    if (onDismiss != null) onDismiss.run();
+                })
                 .create();
         dialog.show();
         wireConfigDialogFocus(dialog, ruleInput, addBtn, disabledRuleInput, addDisabledBtn, manageBtn, resetBtn);
         LightDialog.apply(dialog);
+    }
+
+    private void clearRouteFocusPickers() {
+        clearRouteFocusPicker(apiHostInput);
+        clearRouteFocusPicker(imageHostInput);
+    }
+
+    private void clearRouteFocusPicker(MaterialAutoCompleteTextView input) {
+        if (input == null || routeFocusPicker == null) return;
+        input.removeCallbacks(routeFocusPicker);
     }
 
     private void testConfig(View testButton) {
@@ -180,6 +192,61 @@ public class TmdbSourceDialog {
 
     private static String inputText(EditText input) {
         return input.getText() == null ? "" : input.getText().toString().trim();
+    }
+
+    private void setupRouteDropdown(MaterialAutoCompleteTextView input, String[] labels, String title) {
+        input.setKeyListener(null);
+        input.setAdapter(null);
+        input.setOnClickListener(v -> showRoutePicker(input, labels, title));
+        input.setOnFocusChangeListener((v, hasFocus) -> {
+            if (!hasFocus) return;
+            input.removeCallbacks(routeFocusPicker);
+            routeFocusPicker = () -> {
+                if (input.hasFocus() && !activity.isFinishing() && !activity.isDestroyed()) {
+                    showRoutePicker(input, labels, title);
+                }
+            };
+            input.post(routeFocusPicker);
+        });
+        input.setOnKeyListener((v, keyCode, event) -> {
+            if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+            if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+                input.removeCallbacks(routeFocusPicker);
+                showRoutePicker(input, labels, title);
+                return true;
+            }
+            return false;
+        });
+    }
+
+    private void wireRouteDpadFocus(MaterialAutoCompleteTextView input, String[] labels, String title, View up, View down) {
+        input.setOnKeyListener((v, keyCode, event) -> {
+            if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+            if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+                input.removeCallbacks(routeFocusPicker);
+                showRoutePicker(input, labels, title);
+                return true;
+            }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_UP && up != null) return requestFocus(up);
+            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN && down != null) return requestFocus(down);
+            return false;
+        });
+    }
+
+    private void showRoutePicker(MaterialAutoCompleteTextView input, String[] labels, String title) {
+        clearRouteFocusPickers();
+        String current = inputText(input);
+        int checked = -1;
+        for (int i = 0; i < labels.length; i++) if (labels[i].equals(current)) checked = i;
+        AlertDialog picker = new MaterialAlertDialogBuilder(dialogContext, R.style.Theme_WebHTV_LightDialog)
+                .setTitle(title)
+                .setSingleChoiceItems(labels, checked, (dialog, which) -> {
+                    input.setText(labels[which], false);
+                    dialog.dismiss();
+                })
+                .setNegativeButton(R.string.dialog_negative, null)
+                .show();
+        LightDialog.apply(picker);
     }
 
     private String[] apiOptionLabels() {
@@ -265,8 +332,10 @@ public class TmdbSourceDialog {
         View negative = dialog.getButton(AlertDialog.BUTTON_NEGATIVE);
         wireTextDpadFocus(apiKeyInput, null, languageInput, null, null);
         wireTextDpadFocus(languageInput, apiKeyInput, apiHostInput, null, null);
-        wireTextDpadFocus(apiHostInput, languageInput, imageHostInput, null, null);
-        wireTextDpadFocus(imageHostInput, apiHostInput, omdbApiKeyInput, null, null);
+        wireRouteDpadFocus(apiHostInput, apiOptionLabels(),
+                activity.getString(R.string.dialog_tmdb_api_host_label), languageInput, imageHostInput);
+        wireRouteDpadFocus(imageHostInput, imageOptionLabels(),
+                activity.getString(R.string.dialog_tmdb_image_host_label), apiHostInput, omdbApiKeyInput);
         wireTextDpadFocus(omdbApiKeyInput, imageHostInput, ruleInput, null, null);
         wireTextDpadFocus(ruleInput, omdbApiKeyInput, disabledRuleInput, null, addBtn);
         wireDpadFocus(addBtn, omdbApiKeyInput, addDisabledBtn, ruleInput, null);
