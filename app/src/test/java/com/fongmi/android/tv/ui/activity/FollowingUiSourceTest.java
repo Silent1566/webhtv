@@ -189,6 +189,12 @@ public class FollowingUiSourceTest {
         assertTrue(adapter.contains("getItems()"));
         assertTrue(leanbackLayout.contains("@+id/readAll"));
         assertTrue(mobileLayout.contains("@+id/readAll"));
+        int checkId = leanbackLayout.indexOf("android:id=\"@+id/check\"");
+        int readAllId = leanbackLayout.indexOf("android:id=\"@+id/readAll\"", checkId);
+        int filterId = leanbackLayout.indexOf("android:id=\"@+id/filter\"", readAllId);
+        assertTrue(leanbackLayout.substring(checkId, readAllId).contains("android:nextFocusRight=\"@id/readAll\""));
+        assertTrue(leanbackLayout.substring(readAllId, filterId).contains("android:nextFocusRight=\"@id/filter\""));
+        assertTrue(leanbackLayout.substring(filterId).contains("android:nextFocusLeft=\"@id/readAll\""));
         assertTrue(strings.contains("<string name=\"following_read_all\">全部已读</string>"));
     }
 
