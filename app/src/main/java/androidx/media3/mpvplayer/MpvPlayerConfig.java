@@ -27,6 +27,7 @@ public final class MpvPlayerConfig {
     private final String gpuApi;
     private final String ao;
     private final String audioSpdif;
+    private final boolean multichannelPcm;
     private final String logLevel;
     private final boolean openglEs;
     private final boolean tlsVerify;
@@ -41,6 +42,7 @@ public final class MpvPlayerConfig {
     private final boolean automaticCacheTime;
     private final boolean automaticHlsVariant;
     private final boolean deferStartupTrackRefresh;
+    private final boolean restoreFelAutomaticSubtitles;
     private final Map<String, String> extraOptions;
 
     private MpvPlayerConfig(Builder builder) {
@@ -55,6 +57,7 @@ public final class MpvPlayerConfig {
         gpuApi = builder.gpuApi;
         ao = builder.ao;
         audioSpdif = builder.audioSpdif;
+        multichannelPcm = builder.multichannelPcm;
         logLevel = builder.logLevel;
         openglEs = builder.openglEs;
         tlsVerify = builder.tlsVerify;
@@ -69,6 +72,7 @@ public final class MpvPlayerConfig {
         automaticCacheTime = builder.automaticCacheTime;
         automaticHlsVariant = builder.automaticHlsVariant;
         deferStartupTrackRefresh = builder.deferStartupTrackRefresh;
+        restoreFelAutomaticSubtitles = builder.restoreFelAutomaticSubtitles;
         extraOptions = Collections.unmodifiableMap(new LinkedHashMap<>(builder.extraOptions));
     }
 
@@ -120,6 +124,10 @@ public final class MpvPlayerConfig {
 
     public String audioSpdif() {
         return audioSpdif;
+    }
+
+    public boolean multichannelPcm() {
+        return multichannelPcm;
     }
 
     public String logLevel() {
@@ -178,6 +186,10 @@ public final class MpvPlayerConfig {
         return deferStartupTrackRefresh;
     }
 
+    public boolean restoreFelAutomaticSubtitles() {
+        return restoreFelAutomaticSubtitles;
+    }
+
     public Map<String, String> extraOptions() {
         return extraOptions;
     }
@@ -196,6 +208,7 @@ public final class MpvPlayerConfig {
         private String gpuApi = "";
         private String ao = "audiotrack,opensles";
         private String audioSpdif = "";
+        private boolean multichannelPcm;
         private String logLevel = "all=v";
         private boolean openglEs = true;
         private boolean tlsVerify = true;
@@ -210,6 +223,7 @@ public final class MpvPlayerConfig {
         private boolean automaticCacheTime;
         private boolean automaticHlsVariant;
         private boolean deferStartupTrackRefresh;
+        private boolean restoreFelAutomaticSubtitles;
 
         private Builder(Context context) {
             Context app = context.getApplicationContext();
@@ -278,6 +292,11 @@ public final class MpvPlayerConfig {
             return this;
         }
 
+        public Builder multichannelPcm(boolean multichannelPcm) {
+            this.multichannelPcm = multichannelPcm;
+            return this;
+        }
+
         public Builder logLevel(String logLevel) {
             this.logLevel = logLevel;
             return this;
@@ -340,6 +359,11 @@ public final class MpvPlayerConfig {
 
         public Builder deferStartupTrackRefresh(boolean deferStartupTrackRefresh) {
             this.deferStartupTrackRefresh = deferStartupTrackRefresh;
+            return this;
+        }
+
+        public Builder restoreFelAutomaticSubtitles(boolean restore) {
+            restoreFelAutomaticSubtitles = restore;
             return this;
         }
 

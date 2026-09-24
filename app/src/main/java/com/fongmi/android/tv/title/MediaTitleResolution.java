@@ -25,7 +25,13 @@ public final class MediaTitleResolution {
     private List<String> aliases = new ArrayList<>();
     private List<MediaTitleCandidate> candidates = new ArrayList<>();
     private float confidence;
+    private float contextConfidence;
+    private int contextGroupSize;
     private String source;
+    private String ruleSource;
+    private String aiReasonCode;
+    private String confidenceBreakdown;
+    private String degradationReason;
     private boolean needsVerification;
 
     public String getRawTitle() {
@@ -130,12 +136,61 @@ public final class MediaTitleResolution {
         this.confidence = Float.isNaN(confidence) || confidence < 0f ? 0f : Math.min(1f, confidence);
     }
 
+    public float getContextConfidence() {
+        if (Float.isNaN(contextConfidence) || contextConfidence < 0f) return 0f;
+        return Math.min(1f, contextConfidence);
+    }
+
+    public void setContextConfidence(float contextConfidence) {
+        this.contextConfidence = Float.isNaN(contextConfidence) || contextConfidence < 0f ? 0f : Math.min(1f, contextConfidence);
+    }
+
+    public int getContextGroupSize() {
+        return Math.max(0, contextGroupSize);
+    }
+
+    public void setContextGroupSize(int contextGroupSize) {
+        this.contextGroupSize = Math.max(0, contextGroupSize);
+    }
+
     public String getSource() {
         return clean(source);
     }
 
     public void setSource(String source) {
         this.source = clean(source);
+    }
+
+    public String getRuleSource() {
+        return clean(ruleSource);
+    }
+
+    public void setRuleSource(String ruleSource) {
+        this.ruleSource = clean(ruleSource);
+    }
+
+    public String getAiReasonCode() {
+        return clean(aiReasonCode);
+    }
+
+    public void setAiReasonCode(String aiReasonCode) {
+        this.aiReasonCode = clean(aiReasonCode);
+    }
+
+    public String getConfidenceBreakdown() {
+        return clean(confidenceBreakdown);
+    }
+
+    public void setConfidenceBreakdown(String confidenceBreakdown) {
+        this.confidenceBreakdown = clean(confidenceBreakdown);
+    }
+
+    public String getDegradationReason() {
+        return clean(degradationReason);
+    }
+
+    public void setDegradationReason(String degradationReason) {
+        this.degradationReason = clean(degradationReason);
     }
 
     public boolean isNeedsVerification() {

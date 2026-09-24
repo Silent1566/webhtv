@@ -57,6 +57,26 @@ public class BackupPreferenceFilterTest {
     }
 
     @Test
+    public void speechAdRulePreferencesFollowSettingsOption() {
+        SyncOptions settingsOnly = new SyncOptions().config(false).spider(false)
+                .webHome(false).settings(true);
+        SyncOptions configOnly = new SyncOptions().config(true).spider(false)
+                .webHome(false).settings(false);
+        SyncOptions spiderOnly = new SyncOptions().config(false).spider(true)
+                .webHome(false).settings(false);
+        SyncOptions everything = new SyncOptions().config(true).spider(true)
+                .webHome(true).settings(true);
+
+        for (String key : new String[]{
+                "speech_ad_rules_v1", "speech_ad_rules_source", "speech_ad_builtin_enabled"}) {
+            assertTrue(key, Backup.include(key, settingsOnly));
+            assertTrue(key, Backup.include(key, everything));
+            assertFalse(key, Backup.include(key, configOnly));
+            assertFalse(key, Backup.include(key, spiderOnly));
+        }
+    }
+
+    @Test
     public void playbackOverlayFollowsSettingsOption() {
         SyncOptions settingsOnly = new SyncOptions().config(false).spider(false).webHome(false).settings(true);
         SyncOptions spiderOnly = new SyncOptions().config(false).spider(true).webHome(false).settings(false);
@@ -159,9 +179,22 @@ public class BackupPreferenceFilterTest {
     }
 
     @Test
+    public void themeProfilePreferencesFollowSettingsOption() {
+        SyncOptions settingsOnly = new SyncOptions().config(false).spider(false).webHome(false).settings(true);
+        SyncOptions webHomeOnly = new SyncOptions().config(false).spider(false).webHome(true).settings(false);
+
+        assertTrue(Backup.include("theme_profile_json", settingsOnly));
+        assertTrue(Backup.include("theme_profile_last_good", settingsOnly));
+        assertTrue(Backup.include("theme_profile_schema", settingsOnly));
+        assertFalse(Backup.include("theme_profile_json", webHomeOnly));
+    }
+
+    @Test
     public void updateDownloadSettingsFollowAppSettingsSync() {
         SyncOptions settings = new SyncOptions().config(false).spider(false).settings(true);
 
+        assertTrue(Backup.include("interface_failover_mode", settings));
+        assertTrue(Backup.include("interface_order_vod", settings));
         assertTrue(Backup.include("update_source", settings));
         // 旧键仍要备份：恢复到新版后 Setting.migrateLegacyGithubProxy() 靠它们把
         // 用户当年的代理选择迁成 github_proxy 多源列表，剔掉就等于丢弃而非迁移。

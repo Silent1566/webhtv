@@ -87,9 +87,9 @@ public final class LabActions {
     }
 
     private static void startInstallWithDialog(FragmentActivity activity, LabModels.Item item, DoneCallback done) {
-        LabModels.Download download = pickDownload(item);
+        LabModels.Download download = LabEnv.findDownload(item);
         if (download == null) {
-            Notify.show("当前架构不支持: " + LabEnv.arch());
+            Notify.show(LabEnv.downloadError(item));
             return;
         }
         View root = activity.getLayoutInflater().inflate(R.layout.dialog_lab_download, null, false);
@@ -212,15 +212,6 @@ public final class LabActions {
         dialog.setCancelable(true);
         android.widget.Button close = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
         if (close != null) close.setVisibility(View.VISIBLE);
-    }
-
-    private static LabModels.Download pickDownload(LabModels.Item item) {
-        if (item.downloads == null || item.downloads.isEmpty()) return null;
-        String arch = LabEnv.arch();
-        for (LabModels.Download download : item.downloads) {
-            if (arch.equals(download.arch)) return download;
-        }
-        return item.downloads.get(0);
     }
 
     private static void startInstall(FragmentActivity activity, LabModels.Item item, DoneCallback done) {

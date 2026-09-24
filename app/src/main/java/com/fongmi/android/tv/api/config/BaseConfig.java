@@ -94,10 +94,19 @@ abstract class BaseConfig {
 
     public void load(Callback callback) {
         beforeLoad();
+        Config loadingConfig = getConfig();
         int id = taskId.incrementAndGet();
         if (future != null && !future.isDone()) future.cancel(true);
-        future = Task.submit(() -> loadConfig(id, config, callback));
+        future = Task.submit(() -> loadConfig(id, loadingConfig, callback));
         callback.start();
+    }
+
+    protected void cancelLoad(boolean interrupt) {
+        taskId.incrementAndGet();
+        if (interrupt) {
+            if (future != null && !future.isDone()) future.cancel(true);
+            OkHttp.cancel(getTag());
+        }
     }
 
     protected void loadConfig(int id, Config config, Callback callback) {
@@ -116,6 +125,7 @@ abstract class BaseConfig {
             if (isCanceled(e)) return;
             if (taskId.get() != id) return;
             if (TextUtils.isEmpty(config.getUrl())) App.post(() -> callback.error(""));
+            else if (this instanceof VodConfig) ((VodConfig) this).onConfigFailure(config, callback, e);
             else App.post(() -> callback.error(Notify.getError(R.string.error_config_get, e)));
         } finally {
             if (taskId.get() == id) postEvent();

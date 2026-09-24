@@ -4,7 +4,7 @@ import android.text.TextUtils;
 import android.util.Log;
 
 import com.fongmi.android.tv.App;
-import com.fongmi.android.tv.setting.Setting;
+import com.fongmi.android.tv.subtitle.source.SubtitleSourceEnvironment;
 import com.fongmi.android.tv.subtitle.SubtitleTitleParser;
 import com.fongmi.android.tv.subtitle.cache.SubtitleAssetStore;
 import com.fongmi.android.tv.subtitle.model.SubtitleAsset;
@@ -55,7 +55,7 @@ public final class AssrtSubtitleProvider implements SubtitleProvider {
 
     @Override
     public boolean isEnabled() {
-        boolean enabled = !TextUtils.isEmpty(Setting.getSubtitleAssrtToken());
+        boolean enabled = !TextUtils.isEmpty(SubtitleSourceEnvironment.resolveToken("assrt", "ASSRT_TOKEN"));
         if (!enabled) Log.w(TAG, "assrt disabled reason=empty_token");
         return enabled;
     }
@@ -65,7 +65,7 @@ public final class AssrtSubtitleProvider implements SubtitleProvider {
         List<SubtitleCandidate> items = new ArrayList<>();
         if (!isEnabled() || query == null || TextUtils.isEmpty(query.getText())) return items;
         Log.i(TAG, "assrt search request q=" + query.getText());
-        String url = API_BASE + "/sub/search?token=" + encode(Setting.getSubtitleAssrtToken()) + "&q=" + encode(query.getText()) + "&is_file=1&cnt=15";
+        String url = API_BASE + "/sub/search?token=" + encode(SubtitleSourceEnvironment.resolveToken("assrt", "ASSRT_TOKEN")) + "&q=" + encode(query.getText()) + "&is_file=1&cnt=15";
         try (Response response = OkHttp.client().newCall(new Request.Builder().url(url).get().build()).execute()) {
             if (!response.isSuccessful() || response.body() == null) {
                 Log.w(TAG, "assrt search http_failed code=" + response.code() + " q=" + query.getText());
@@ -110,7 +110,7 @@ public final class AssrtSubtitleProvider implements SubtitleProvider {
         String id = safeString(payload, "id");
         if (TextUtils.isEmpty(id)) id = candidate.getCandidateId();
         Log.i(TAG, "assrt detail request id=" + id);
-        String url = API_BASE + "/sub/detail?token=" + encode(Setting.getSubtitleAssrtToken()) + "&id=" + encode(id);
+        String url = API_BASE + "/sub/detail?token=" + encode(SubtitleSourceEnvironment.resolveToken("assrt", "ASSRT_TOKEN")) + "&id=" + encode(id);
         try (Response response = OkHttp.client().newCall(new Request.Builder().url(url).get().build()).execute()) {
             if (!response.isSuccessful() || response.body() == null) {
                 Log.w(TAG, "assrt detail http_failed code=" + response.code() + " id=" + id);

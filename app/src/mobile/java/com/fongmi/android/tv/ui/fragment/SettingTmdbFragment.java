@@ -16,7 +16,6 @@ import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.base.BaseFragment;
 import com.fongmi.android.tv.ui.dialog.LightDialog;
 import com.fongmi.android.tv.ui.dialog.TmdbSourceDialog;
-import com.fongmi.android.tv.utils.Notify;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 public class SettingTmdbFragment extends BaseFragment {
@@ -95,15 +94,6 @@ public class SettingTmdbFragment extends BaseFragment {
     private void setDetailOpenMode(View view) {
         AlertDialog alert = new MaterialAlertDialogBuilder(requireActivity(), R.style.Theme_WebHTV_LightDialog).setTitle(R.string.setting_detail_open_mode).setNegativeButton(R.string.dialog_negative, null).setSingleChoiceItems(getDetailOpenModes(), getDetailOpenModeIndex(), (dialog, which) -> {
             int mode = DETAIL_OPEN_MODES[which];
-            if (Setting.isTmdbMode(mode) && !Setting.isTmdbReady()) {
-                dialog.dismiss();
-                Notify.show(R.string.detail_tmdb_need_key);
-                TmdbSourceDialog.create(requireActivity()).onDismiss(() -> {
-                    if (Setting.isTmdbReady()) Setting.putDetailOpenMode(mode);
-                    setText();
-                }).show();
-                return;
-            }
             Setting.putDetailOpenMode(mode);
             setText();
             dialog.dismiss();

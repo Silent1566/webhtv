@@ -257,6 +257,9 @@
     <string name="history_record_missing">历史记录已不存在</string>
     <string name="history_config_changed">点播配置已切换，请重新操作</string>
     <string name="dialog_delete_global_history">确定删除所有点播配置的历史记录吗？</string>
+    <string name="config_delete_title">删除播放源？</string>
+    <string name="config_delete_message">确定删除“%1$s”吗？相关播放历史也可能丢失，此操作无法撤销。</string>
+    <string name="config_current_delete_message">当前接口正在使用中，请先切换到其他接口再删除。</string>
     <string name="setting_home_history">首页最近观看</string>
     <string name="setting_personal_recommendation">个性推荐</string>
     <string name="setting_recommendation_feedback">不感兴趣管理</string>
@@ -533,6 +536,11 @@
     <string name="site_health_clear_site">清空本站</string>
     <string name="site_health_clear_site_title">清空站点统计？</string>
     <string name="site_health_clear_site_message">清空“%1$s”的健康样本？</string>
+    <string name="site_health_clear_all">一键清空样本</string>
+    <string name="site_health_clear_all_title">清空全部站点健康样本？</string>
+    <string name="site_health_clear_all_message">将删除全部播放链路健康样本，且无法撤销。</string>
+    <string name="site_health_stage_home">首页</string>
+    <string name="site_health_stage_category">分类</string>
     <string name="site_health_stage_search">搜索</string>
     <string name="site_health_stage_detail">详情</string>
     <string name="site_health_stage_parse">解析</string>
@@ -882,6 +890,50 @@
     <string name="site_name_reset_message">将清除当前接口的全部自定义名称和分组。</string>
     <string name="setting_short_drama_source">短剧源配置</string>
     <string name="setting_theme_color">主题色彩</string>
+    <string name="theme_editor_title">主题配色</string>
+    <string name="theme_enabled">开启主题配色</string>
+    <string name="theme_editor_preview">实时预览</string>
+    <string name="theme_background">背景模式</string>
+    <string name="theme_background_wallpaper">壁纸</string>
+    <string name="theme_background_tinted_wallpaper">着色壁纸</string>
+    <string name="theme_background_solid">纯色</string>
+    <string name="theme_mode">明暗模式</string>
+    <string name="theme_mode_system">跟随系统</string>
+    <string name="theme_mode_light">浅色</string>
+    <string name="theme_mode_dark">深色</string>
+    <string name="theme_palette">高亮色预设</string>
+    <string name="theme_core_colors">核心颜色</string>
+    <string name="theme_color_primary">高亮色</string>
+    <string name="theme_color_background">App 背景色</string>
+    <string name="theme_color_surface">内容表面色</string>
+    <string name="theme_color_edit">编辑颜色</string>
+    <string name="theme_hex_hint">HEX 颜色</string>
+    <string name="theme_color_invalid">请输入不透明的 #RGB 或 #RRGGBB 颜色</string>
+    <string name="theme_color_contrast_unknown">输入有效颜色后计算对比度。</string>
+    <string name="theme_color_contrast">建议前景色 %1$s · 对比度 %2$.2f:1</string>
+    <string name="theme_reset">重置</string>
+    <string name="theme_cancel">取消</string>
+    <string name="theme_apply">应用</string>
+    <string name="theme_apply_failed">应用失败，主题未改变：%1$s</string>
+    <string name="theme_import_title">导入主题</string>
+    <string name="theme_import_input_hint">粘贴 JSON 或 HTTPS 链接</string>
+    <string name="theme_import_file">打开 JSON</string>
+    <string name="theme_import_community">TweakCN 社区</string>
+    <string name="theme_import_preview_action">预览导入</string>
+    <string name="theme_import_use">使用主题</string>
+    <string name="theme_import_empty">请先粘贴主题 JSON 或 HTTPS 链接。</string>
+    <string name="theme_import_failed">主题导入失败。</string>
+    <string name="theme_import_no_warnings">没有不支持的主题 token。</string>
+    <string name="theme_import_warnings">已忽略项目：\n%1$s</string>
+    <string name="theme_import_preview">预览：%1$s</string>
+    <string name="theme_import_source_paste">粘贴的 JSON</string>
+    <string name="theme_import_source_file">选择的文件</string>
+    <string name="theme_import_browser_unavailable">没有可打开社区链接的浏览器。</string>
+    <string name="theme_export">导出</string>
+    <string name="theme_share">分享</string>
+    <string name="theme_exported">主题已导出。</string>
+    <string name="theme_export_failed">主题导出失败。</string>
+    <string name="theme_export_unavailable">没有可分享主题的应用。</string>
     <string name="setting_appearance">外观与语言</string>
     <string name="setting_appearance_summary">4 项</string>
     <string name="setting_auto">自动</string>
@@ -959,10 +1011,12 @@
     <string name="sync_select_none">取消全选</string>
     <string name="sync_item_config">接口与站源列表</string>
     <string name="sync_item_spider">Jar/脚本保存数据</string>
+    <string name="sync_item_mpv_config">MPV 配置管理</string>
     <string name="sync_item_login_state">登录态</string>
     <string name="sync_item_webhome">WebHome 主页数据</string>
     <string name="sync_item_search">搜索记录</string>
     <string name="sync_item_history">观看记录</string>
+    <string name="history_watched_time">已看 %1$s</string>
     <string name="sync_item_keep">收藏数据</string>
     <string name="sync_item_settings">应用设置</string>
     <string name="sync_item_remote_relay">中转服务配置</string>
@@ -1164,6 +1218,18 @@
     <string name="player_mpv_config">MPV 配置管理</string>
     <string name="player_mpv_render">MPV 渲染后端</string>
     <string name="mpv_render_native_unavailable">当前不可用</string>
+    <string name="player_bluray_menu">蓝光原盘菜单</string>
+    <string name="disc_menu_root">主菜单</string>
+    <string name="disc_menu_popup">弹出菜单</string>
+    <string name="disc_menu_previous">菜单返回</string>
+    <string name="disc_menu_up">上</string>
+    <string name="disc_menu_down">下</string>
+    <string name="disc_menu_left">左</string>
+    <string name="disc_menu_right">右</string>
+    <string name="disc_menu_open">原盘菜单</string>
+    <string name="disc_menu_open_hint">打开原盘主菜单；长按打开菜单导航</string>
+    <string name="disc_menu_navigation">菜单导航</string>
+    <string name="disc_menu_touch_hint">可直接点击画面中的菜单按钮，也可使用方向键选择</string>
     <string name="mpv_config_target">%1$s · %2$s</string>
     <string name="mpv_config_default">默认</string>
     <string name="mpv_config_local">本地 mpv.conf</string>
@@ -1224,13 +1290,60 @@
     <string name="mpv_config_current">当前使用：%1$s</string>
     <string name="mpv_config_apply_selected">应用所选</string>
     <string name="mpv_config_close">关闭</string>
+    <string name="mpv_config_custom_buttons">脚本按钮</string>
+    <string name="mpv_config_custom_button_new">新建脚本按钮</string>
+    <string name="mpv_config_custom_button_new_desc">添加到播放器控制层</string>
+    <string name="mpv_config_custom_button_title">脚本按钮</string>
+    <string name="mpv_config_custom_button_subtitle">在脚本列表中管理播放控制按钮</string>
+    <string name="mpv_config_custom_button_empty">暂无自定义按钮</string>
+    <string name="mpv_config_custom_button_empty_slot">空白位</string>
+    <string name="mpv_config_custom_button_drag">拖动调整顺序</string>
+    <string name="mpv_config_custom_button_import_export">导入/导出</string>
+    <string name="mpv_config_custom_button_import_export_desc">将全部自定义按钮及其 Lua 脚本保存为 XML 文件备份或分享</string>
+    <string name="mpv_config_custom_button_import">导入</string>
+    <string name="mpv_config_custom_button_export">导出</string>
+    <string name="mpv_config_custom_button_imported">已导入 %1$d 个按钮</string>
+    <string name="mpv_config_custom_button_exported">按钮导出成功</string>
+    <string name="mpv_config_custom_button_file_invalid">无法读取或写入所选文件</string>
+    <string name="mpv_config_custom_button_lua_section">Lua 脚本</string>
+    <string name="mpv_config_custom_button_add">新建脚本按钮</string>
+    <string name="mpv_config_custom_button_edit">编辑脚本按钮</string>
+    <string name="mpv_config_custom_button_name">按钮名称</string>
+    <string name="mpv_config_custom_button_name_hint">例如：切换画质</string>
+    <string name="mpv_config_custom_button_short">短按 Lua</string>
+    <string name="mpv_config_custom_button_long">长按 Lua</string>
+    <string name="mpv_config_custom_button_startup">MPV 启动时执行</string>
+    <string name="mpv_config_custom_button_enabled">启用按钮</string>
+    <string name="mpv_config_custom_button_enabled_short">启用</string>
+    <string name="mpv_config_custom_button_disabled_short">停用</string>
+    <string name="mpv_config_custom_button_delete">删除按钮</string>
+    <string name="mpv_config_custom_button_delete_message">确定删除“%1$s”吗？</string>
+    <string name="mpv_config_custom_button_saved">自定义按钮已保存</string>
+    <string name="mpv_config_custom_buttons_limit">最多添加 8 个自定义按钮</string>
+    <string name="mpv_config_custom_buttons_invalid">自定义按钮 ID 无效</string>
+    <string name="mpv_config_custom_button_trigger">执行时机</string>
+    <string name="mpv_config_custom_button_trigger_click">点击</string>
+    <string name="mpv_config_custom_button_trigger_long">长按</string>
+    <string name="mpv_config_custom_button_trigger_startup">启动时</string>
+    <string name="mpv_config_custom_button_code_hint">输入 Lua 脚本</string>
+    <string name="mpv_config_script_new">新建脚本</string>
+    <string name="mpv_config_script_create_desc">选择一种方式添加脚本；保存后可在脚本设置中启用按钮。</string>
+    <string name="mpv_config_script_text_edit">通过文本创建</string>
+    <string name="mpv_config_script_text_edit_desc">打开文本编辑器，输入并保存 Lua 脚本</string>
+    <string name="mpv_config_script_settings_title">脚本设置</string>
+    <string name="mpv_config_script_enabled">启用脚本</string>
+    <string name="mpv_config_script_settings_desc">设置名称、启用状态和执行时机</string>
+    <string name="mpv_config_script_open_editor">打开编辑窗口</string>
+    <string name="mpv_config_script_import_url">通过 URL 导入脚本</string>
+    <string name="mpv_config_script_import_url_desc">下载远程 Lua/JS 脚本并保存</string>
+    <string name="mpv_config_script_import_file">导入脚本文件</string>
+    <string name="mpv_config_script_import_file_desc">从本地选择 Lua/JS 脚本文件</string>
     <string name="player_libass">字幕渲染</string>
     <string name="player_caption">字幕样式</string>
     <string name="player_background">后台播放</string>
     <string name="player_audio_decode">音频软解</string>
     <string name="player_audio_passthrough">音频直通</string>
     <string name="player_video_decode">视频软解</string>
-    <string name="player_ffmpeg_mode">FFmpeg模式</string>
     <string name="player_aac_track">AAC优先</string>
     <string name="player_music_notification">音乐后台通知</string>
     <string name="player_audio_book_notification">有声书后台通知</string>
@@ -1252,7 +1365,8 @@
     <string name="player_preload_pause">暂停时继续预载</string>
     <string name="player_preload_pause_wifi">仅 WiFi</string>
     <string name="player_preload_pause_always">始终</string>
-    <string name="player_auto_play">自动播放</string>
+    <string name="player_auto_play">点播自动播放</string>
+    <string name="player_live_source_fallback">直播源失效自动切换</string>
     <string name="player_auto_change">自动换源</string>
     <string name="player_remember_brightness">记住播放亮度</string>
     <string name="player_failure_fallback">播放失败回退</string>
@@ -1261,7 +1375,11 @@
     <string name="player_osd">屏显设置</string>
     <string name="player_subtitle_auto_match">自动匹配字幕</string>
     <string name="player_subtitle_language">字幕偏好语言</string>
-    <string name="player_subtitle_assrt_token">射手网 Token</string>
+    <string name="player_subtitle_source_environment">环境变量（JSON）</string>
+    <string name="player_subtitle_source_environment_invalid">请输入有效的 JSON 对象</string>
+    <string name="player_subtitle_source">字幕源</string>
+    <string name="player_subtitle_source_count">已加载 %1$d 个</string>
+    <string name="player_subtitle_source_empty">暂无可用字幕源</string>
     <string name="player_subtitle_ai_max_concurrency">AI字幕最大并发数</string>
     <string name="player_subtitle_ai_chunk_count">AI字幕分块数量</string>
     <string name="subtitle_auto_match_hit">已自动匹配字幕：%1$s</string>
@@ -1424,6 +1542,7 @@
     <string name="dialog_config_choose_failed">读不到所选内容，请重新选择包目录或 zip</string>
     <string name="dialog_config_name">请输入名称…</string>
     <string name="dialog_config_url">请输入地址…</string>
+    <string name="dialog_config_addresses">备用地址，每行一个…</string>
 
     <!-- Error -->
     <string name="error_config_get">配置取得失败</string>
@@ -1532,8 +1651,9 @@
     <string name="update_download_source_unavailable">此版本没有可用的更新来源。</string>
 
     <!-- Crash -->
-    <string name="crash_info">发生意外错误\n抱歉给您带来不便</string>
+    <string name="crash_info">发生意外错误\n即将自动重启，本次不重新加载接口</string>
     <string name="crash_restart">重新启动</string>
+    <string name="crash_silent_restart">静默重启</string>
     <string name="crash_details">错误信息</string>
     <string name="crash_details_title">错误信息</string>
     <string name="crash_details_message">应用版本：%1$s\n\n%2$s</string>
@@ -1690,6 +1810,19 @@
         <item>搜索后选择播放源</item>
     </string-array>
 
+    <string-array name="select_interface_failover_mode">
+        <item>关闭</item>
+        <item>自动容灾</item>
+        <item>手动确认</item>
+    </string-array>
+
+    <string name="setting_interface_failover">点播接口容灾</string>
+    <string name="interface_failover_title">接口加载失败</string>
+    <string name="interface_failover_message">当前接口：%1$s</string>
+    <string name="interface_failover_next">正在尝试下一个接口：%1$s</string>
+    <string name="interface_failover_switch">切换接口</string>
+    <string name="interface_failover_cancelled">已取消接口切换</string>
+
     <string-array name="select_auto_skip_intro_outro">
         <item>关闭</item>
         <item>自动跳过</item>
@@ -1708,11 +1841,14 @@
 
     <string-array name="select_ui_scale">
         <item>跟随系统</item>
-        <item>标准</item>
-        <item>较紧凑</item>
-        <item>紧凑</item>
-        <item>更紧凑</item>
         <item>更小</item>
+        <item>紧凑</item>
+        <item>较紧凑</item>
+        <item>标准</item>
+        <item>稍大</item>
+        <item>较大</item>
+        <item>大</item>
+        <item>特大</item>
     </string-array>
 
     <string-array name="select_language">
@@ -1877,9 +2013,17 @@
     <string name="dialog_tmdb_api_key_tip">免费获取 API Key: https://www.themoviedb.org/settings/api</string>
     <string name="dialog_tmdb_language_label">TMDB 语言</string>
     <string name="dialog_tmdb_language_hint">例如 zh-CN</string>
-    <string name="dialog_tmdb_api_host_label">API 域名</string>
-    <string name="dialog_tmdb_api_host_hint">例如 https://api.tmdb.org</string>
-    <string name="dialog_tmdb_image_host_label">图片域名</string>
+    <string name="dialog_tmdb_api_host_label">TMDB API 线路</string>
+    <string name="dialog_tmdb_image_itv666">itv666 图片代理</string>
+    <string name="dialog_tmdb_image_direct">官方图片（直连）</string>
+    <string name="dialog_tmdb_api_itv666">itv666 API 代理</string>
+    <string name="dialog_tmdb_api_direct">官方 API（直连）</string>
+    <string name="dialog_tmdb_api_auto">自动（低延迟优先，失败切换）</string>
+    <string name="dialog_tmdb_image_auto">自动（低延迟优先，失败切换）</string>
+    <string name="dialog_tmdb_image_wsrv">wsrv.nl 图片代理</string>
+    <string name="dialog_tmdb_api_host_hint">默认 https://api.tmdb.org，可选择内置代理或输入自定义地址</string>
+    <string name="dialog_tmdb_proxy_host_help">API 和图片线路可以分别选择。自动模式会按已验证线路的延迟排序，失败时切换；已加入 itv666 和 wsrv.nl，也支持输入自定义地址。</string>
+    <string name="dialog_tmdb_image_host_label">TMDB 图片线路</string>
     <string name="dialog_tmdb_image_host_hint">例如 https://images.tmdb.org</string>
     <string name="dialog_tmdb_section_data">数据源</string>
     <string name="dialog_tmdb_section_ratings">评分扩展</string>
@@ -1977,6 +2121,10 @@
     <string name="detail_image_save_success">已保存至：%1$s</string>
     <string name="detail_image_save_failed">图片保存失败</string>
     <string name="detail_external_open_failed">无法打开外部链接</string>
+    <string name="detail_external_opening">正在打开外部页面</string>
+    <string name="detail_external_open_title">打开外部链接</string>
+    <string name="detail_external_open_builtin">内置浏览器</string>
+    <string name="detail_external_open_external">系统或外部浏览器</string>
     <string name="detail_image_permission_denied">存储权限被拒绝</string>
 
     <string name="detail_tmdb_photos">剧照</string>
@@ -2440,7 +2588,7 @@
 
     <!-- Auto-generated missing translations -->
     <string name="live_no_epg">00:00 - 23:59 暂无节目信息</string>
-    <string name="site_health_report_ad_blocked">广告拦截 · %1$d 次</string>
+    <string name="site_health_report_ad_blocked">播放 %1$d 次 / 广告拦截 %2$d 次</string>
     <string name="search_column">搜索布局</string>
     <string name="dialog_audio_enabled_label">启用规则</string>
     <string name="dialog_audio_add_hint">添加关键词或站点…</string>
@@ -2474,12 +2622,19 @@
     <string name="ad_rule_add_manual">手动添加规则</string>
     <string name="ad_rule_import_candidates">待审核接口规则（%d）</string>
     <string name="ad_rule_import_title">导入接口去广规则</string>
-    <string name="ad_rule_import_action">导入（默认停用）</string>
+    <string name="ad_rule_import_action">仅导入（保持停用）</string>
+    <string name="ad_rule_import_enable_action">导入并启用已选</string>
+    <string name="ad_rule_select_low_risk">低风险全选</string>
+    <string name="ad_rule_select_all">全选</string>
+    <string name="ad_rule_invert_selection">反选</string>
     <string name="ad_rule_ignore_all">忽略全部</string>
     <string name="ad_rule_import_empty">暂无待审核接口规则</string>
     <string name="ad_rule_section_custom">自定义规则</string>
     <string name="ad_rule_section_server">接口配置规则</string>
     <string name="ad_rule_empty">暂无规则</string>
+    <string name="ad_rule_enable_imported">全部启用接口导入规则</string>
+    <string name="ad_rule_disable_imported">全部停用接口导入规则</string>
+    <string name="ad_rule_disable_imported_confirm">确定停用全部接口导入规则吗？之后可以随时批量重新启用。</string>
     <string name="ad_rule_server_empty">来自配置 · 暂无</string>
     <string name="ad_rule_server_summary">来自配置 · 共 %d 条（只读）</string>
     <string name="ad_rule_edit_title">编辑规则</string>
@@ -2517,12 +2672,41 @@
     <string name="ad_block_total">总拦截次数</string>
     <string name="ad_feedback_count">AI 反馈次数</string>
     <string name="ad_ai_success_rate">AI 分析成功率</string>
-    <string name="ad_site_rank">站点拦截排行</string>
-    <string name="ad_rule_rank">规则命中排行</string>
+    <string name="ad_site_rank">站点</string>
+    <string name="ad_rule_rank">规则</string>
+    <string name="ad_pipeline_rank">播放链路</string>
     <string name="ad_stats_reset">重置统计</string>
     <string name="ad_stats_reset_confirm">确定重置所有统计数据吗？</string>
     <string name="ad_stats_empty">暂无统计数据</string>
-    <string name="ad_stats_overview">统计概览</string>
+    <string name="ad_stats_filter_empty">没有符合筛选条件的日志</string>
+    <string name="ad_stats_overview">概览</string>
+    <string name="ad_stats_log">拦截日志</string>
+    <string name="ad_stats_chart">统计图表</string>
+    <string name="ad_log_site_name">站点名称</string>
+    <string name="ad_log_site_domain">站点域名</string>
+    <string name="ad_log_rule_domain">拦截规则</string>
+    <string name="ad_log_ad_domain">广告域名</string>
+    <string name="ad_log_blocked_at">拦截时间</string>
+    <string name="ad_log_segment_start">切片开始时间</string>
+    <string name="ad_log_segment_end">切片结束时间</string>
+    <string name="ad_log_segment_duration">切片时长</string>
+    <string name="ad_log_playback_context">剧名</string>
+    <string name="ad_log_line_name">线路名称</string>
+    <string name="ad_log_episode_name">集数名称</string>
+    <string name="ad_log_pipeline">播放链路</string>
+    <string name="ad_log_unknown">未知</string>
+    <string name="ad_log_filter_hint">筛选</string>
+    <string name="ad_log_filter_search_hint">输入关键词查找</string>
+    <string name="ad_log_filter_all">全选</string>
+    <string name="ad_log_filter_clear">清除选择</string>
+    <string name="ad_log_filter_apply">应用</string>
+    <string name="ad_log_filter_cancel">取消</string>
+    <string name="ad_log_filter_options_empty">暂无可选值</string>
+    <string name="ad_log_filter_selected">已选 %d 项</string>
+    <string name="ad_site_overview">站点统计概览</string>
+    <string name="ad_site_count">涉及站点数</string>
+    <string name="ad_top_site">拦截最多站点</string>
+    <string name="ad_top_site_share">拦截占比</string>
     <string name="ad_stats_times">次</string>
     <string name="ad_stats_percent">%.1f%%</string>
     <string name="ad_stats_site_name">站点</string>
@@ -2566,7 +2750,7 @@
     <string name="ad_audio_skipped_title">已跳过广告</string>
     <string name="ad_audio_skipped_message">可在 %1$d 秒内撤销。</string>
     <string name="ad_audio_undo">撤销</string>
-    <string name="setting_ad_audio_title">音频指纹去广告（实验）</string>
+    <string name="setting_ad_audio_title">音频指纹去广告（实验性：开启后可能导致播放失败或掉帧）</string>
     <string name="setting_ad_audio_no_rules">无规则</string>
     <string name="setting_ad_audio_rule_error">规则错误</string>
     <string name="setting_ad_audio_rule_count">规则 %1$d · %2$s</string>
@@ -2576,9 +2760,30 @@
     <string name="setting_ad_audio_imported">已导入 %1$d 条规则 · %2$s</string>
     <string name="setting_ad_audio_import_failed">规则导入失败，已保留原规则。</string>
     <string name="setting_ad_audio_clear_done">已清除音频指纹规则</string>
-    <string name="speech_ad_enabled">语音广告识别</string>
+    <string name="speech_ad_enabled">语音广告识别（实验性：开启后可能导致播放失败或掉帧）</string>
     <string name="speech_ad_keywords">广告关键词</string>
     <string name="speech_ad_keyword_count">%1$d 个关键词</string>
+    <string name="speech_ad_rules">语音规则</string>
+    <string name="speech_ad_rules_none">暂无语音规则</string>
+    <string name="speech_ad_rules_summary">%1$d 条规则 · %2$s</string>
+    <string name="speech_ad_rules_error">规则设置错误：%1$s</string>
+    <string name="speech_ad_rules_manage">管理语音规则</string>
+    <string name="speech_ad_rules_edit">编辑规则</string>
+    <string name="speech_ad_rules_import">导入文本规则</string>
+    <string name="speech_ad_rules_clear">清除自定义规则</string>
+    <string name="speech_ad_rules_view_builtin">查看内置规则</string>
+    <string name="speech_ad_rules_clear_confirm">确认清除当前自定义语音规则？</string>
+    <string name="speech_ad_rules_clear_done">已清除自定义语音规则</string>
+    <string name="speech_ad_rules_saved">语音规则已保存</string>
+    <string name="speech_ad_rules_imported">已导入 %1$d 条语音规则</string>
+    <string name="speech_ad_rules_import_failed">语音规则导入失败：%1$s</string>
+    <string name="speech_ad_rules_source_none">无</string>
+    <string name="speech_ad_rules_source_builtin">内置</string>
+    <string name="speech_ad_rules_source_user">编辑</string>
+    <string name="speech_ad_rules_source_imported">导入</string>
+    <string name="speech_ad_rules_source_combined">内置 + 自定义</string>
+    <string name="speech_ad_builtin">内置语音规则</string>
+    <string name="speech_ad_builtin_value">%1$s · %2$d 条规则</string>
     <string name="speech_ad_skip_seconds">跳过时长</string>
     <string name="speech_ad_skip_seconds_value">%1$d 秒</string>
     <string name="speech_ad_skip_mode">跳过模式</string>
@@ -2622,4 +2827,66 @@
     <string name="setting_ad_probe_revision">revision %1$d · %2$d 条规则</string>
     <string name="setting_ad_probe_never">尚未拉取</string>
     <string name="setting_ad_probe_url_invalid">规则源必须以 https:// 开头</string>
-    <string name="setting_ad_probe_source_disabled">请先填写社区规则源地址</string></resources>
+    <string name="setting_ad_probe_source_disabled">请先填写社区规则源地址</string>
+    <string name="dialog_tmdb_test_config">测试配置</string>
+    <string name="dialog_tmdb_test_result_title">配置测试结果</string>
+    <string name="dialog_tmdb_test_api_success">TMDB API：连接成功并返回有效数据（%1$d 毫秒）</string>
+    <string name="dialog_tmdb_test_api_failed">TMDB API：测试失败（%1$s，%2$d 毫秒）</string>
+    <string name="dialog_tmdb_test_image_success">图片域名：连接成功并返回有效图片（%1$d 毫秒）</string>
+    <string name="dialog_tmdb_test_image_failed">图片域名：测试失败（%1$s，%2$d 毫秒）</string>
+    <string name="dialog_tmdb_test_omdb_success">OMDb API：连接成功并返回有效数据（%1$d 毫秒）</string>
+    <string name="dialog_tmdb_test_omdb_failed">OMDb API：测试失败（%1$s，%2$d 毫秒）</string>
+    <string name="site_health_report_search_hint">按站点名称搜索</string>
+    <string name="nav_following">追更</string>
+    <string name="home_following">追更</string>
+    <string name="sync_item_follow">追更</string>
+    <string name="following">追更</string>
+    <string name="following_add">加入追更</string>
+    <string name="following_added">已追更</string>
+    <string name="following_channel_name">追更更新</string>
+    <string name="following_channel_description">已追剧集的新集更新提醒</string>
+    <string name="following_notification_title">《%1$s》有新集</string>
+    <string name="following_notification_text">官方已更新至第 %1$d 集，当前源可播至第 %2$d 集</string>
+    <string name="following_check_all">检查更新</string>
+    <string name="following_check">检查</string>
+    <string name="following_checking">正在检查…</string>
+    <string name="following_check_done">更新检查完成</string>
+    <string name="following_check_failed">更新检查失败，已保留上次数据</string>
+    <string name="following_empty">还没有追更内容。打开剧集详情页，点击“加入追更”。</string>
+    <string name="following_summary">追更 %1$d 部 · 未读 %2$d 部</string>
+    <string name="following_continue">继续看</string>
+    <string name="following_read">标记已读</string>
+    <string name="following_notify_on">提醒开</string>
+    <string name="following_notify_off">提醒关</string>
+    <string name="following_change_source">换源</string>
+    <string name="following_cancel">取消追更</string>
+    <string name="following_delete_title">取消追更？</string>
+    <string name="following_delete_message">观看历史和 TMDB 进度会继续保留。</string>
+    <string name="following_official">官方已更新至第 %1$d 集</string>
+    <string name="following_official_unknown">官方状态未知</string>
+    <string name="following_source">当前源可播至第 %1$d 集</string>
+    <string name="following_source_unknown">当前源尚未检查</string>
+    <string name="following_watched">看到第 %1$d 集</string>
+    <string name="following_unwatched">还有 %1$d 集未看</string>
+    <string name="following_unwatched_none">已看完当前更新</string>
+    <string name="following_new_count">新 %1$d 集</string>
+    <string name="following_enabled_hint">追更功能当前已关闭。</string>
+    <string name="following_notification_permission_hint">未获得通知权限；站内角标和手动检查仍可使用。</string>
+    <string name="following_server_import">导入订阅</string>
+    <string name="following_server_url">服务端地址（http/https）</string>
+    <string name="following_server_token">Token（不会保存）</string>
+    <string name="following_server_preview">预览</string>
+    <string name="following_server_import_action">导入</string>
+    <string name="following_server_invalid">请输入有效的 http/https 服务端地址</string>
+    <string name="following_server_empty">没有可导入的订阅</string>
+    <string name="following_server_preview_title">待导入订阅</string>
+    <string name="following_server_result">已导入 %1$d 条，更新 %2$d 条</string>
+    <string name="following_filter_updates">只看更新</string>
+    <string name="following_filter_all">显示全部</string>
+    <string name="following_filter_empty">当前没有未看更新的追更内容。</string>
+    <string name="following_filter_unwatched">未看完</string>
+    <string name="following_filter_ended">已完结</string>
+    <string name="following_filter_failed">检查失败</string>
+    <string name="setting_following">追更更新</string>
+    <string name="following_next_season">追新季 S%1$d</string>
+</resources>

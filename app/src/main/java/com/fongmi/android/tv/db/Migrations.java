@@ -157,6 +157,29 @@ public class Migrations {
         }
     };
 
+    public static final Migration MIGRATION_45_46 = new Migration(45, 46) {
+        @Override
+        public void migrate(@NonNull SupportSQLiteDatabase database) {
+            addColumnIfMissing(database, "Config", "interfaceKey",
+                    "ALTER TABLE Config ADD COLUMN `interfaceKey` TEXT");
+            addColumnIfMissing(database, "Config", "urlsJson",
+                    "ALTER TABLE Config ADD COLUMN `urlsJson` TEXT");
+            database.execSQL("DROP INDEX IF EXISTS `index_Config_url_type`");
+            database.execSQL("UPDATE Config SET interfaceKey = lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))), 2) || '-' || substr('89ab', abs(random()) % 4 + 1, 1) || substr(lower(hex(randomblob(2))), 2) || '-' || lower(hex(randomblob(6))) WHERE interfaceKey IS NULL OR trim(interfaceKey) = ''");
+            database.execSQL("UPDATE Config SET urlsJson = '[\"' || replace(replace(url, '\\\\', '\\\\\\\\'), '\"', '\\\"') || '\"]' WHERE (urlsJson IS NULL OR trim(urlsJson) = '') AND url IS NOT NULL AND trim(url) != ''");
+            database.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_Config_interfaceKey_type` ON `Config` (`interfaceKey`, `type`)");
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_Config_url_type` ON `Config` (`url`, `type`)");
+        }
+    };
+
+    public static final Migration MIGRATION_46_47 = new Migration(46, 47) {
+        @Override
+        public void migrate(@NonNull SupportSQLiteDatabase database) {
+            addColumnIfMissing(database, "History", "sourceBindingKey",
+                    "ALTER TABLE History ADD COLUMN `sourceBindingKey` TEXT DEFAULT ''");
+        }
+    };
+
     private static void addColumnIfMissing(
             SupportSQLiteDatabase database,
             String table,

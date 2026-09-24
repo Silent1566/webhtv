@@ -730,6 +730,7 @@
                 android:layout_marginEnd="16dp"
                 android:background="@drawable/selector_video_item"
                 android:drawablePadding="6dp"
+                android:visibility="gone"
                 android:focusable="true"
                 android:focusableInTouchMode="true"
                 android:gravity="center"
@@ -823,6 +824,28 @@
                 app:drawableStartCompat="@drawable/ic_detail_keep_off" />
 
             <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/following"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="16dp"
+                android:background="@drawable/selector_video_item"
+                android:drawablePadding="6dp"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:gravity="center"
+                android:minWidth="96dp"
+                android:visibility="gone"
+                android:nextFocusLeft="@id/keep"
+                android:nextFocusRight="@id/tmdbRematch"
+                android:nextFocusUp="@id/actor"
+                android:nextFocusDown="@id/tmdbCast"
+                android:singleLine="true"
+                android:text="@string/following_add"
+                android:textColor="@color/white"
+                android:textSize="16sp"
+                app:drawableStartCompat="@drawable/ic_home_following" />
+
+            <com.google.android.material.textview.MaterialTextView
                 android:id="@+id/tmdbRematch"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -887,7 +910,7 @@
                 android:clipToPadding="false"
                 android:paddingStart="24dp"
                 android:paddingEnd="24dp"
-                android:nestedScrollingEnabled="false"
+                android:nestedScrollingEnabled="false" android:nextFocusDown="@id/part"
                 android:visibility="gone"
                 tools:visibility="visible" />
 
@@ -1175,7 +1198,9 @@
             android:nextFocusDown="@id/tmdbCrew"
             android:nextFocusUp="@id/tmdbPosters"
             android:paddingStart="24dp"
+            android:paddingTop="6dp"
             android:paddingEnd="24dp"
+            android:paddingBottom="6dp"
             android:visibility="gone" />
 
 
@@ -1346,8 +1371,7 @@
             android:layout_marginBottom="12dp"
             android:clipChildren="false"
             android:clipToPadding="false"
-            android:paddingStart="24dp"
-            android:paddingEnd="24dp"
+            android:paddingStart="24dp" android:paddingEnd="24dp"
             android:visibility="gone" />
 
         <androidx.leanback.widget.HorizontalGridView

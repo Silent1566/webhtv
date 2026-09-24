@@ -74,6 +74,19 @@ public class DetailModeControllerTest {
     }
 
     @Test
+    public void playerDetailController_bindsPlaybackServiceWithoutAutoPlay() throws Exception {
+        Path controllerPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "detail", "PlayerDetailController.java"));
+        String source = Files.readString(controllerPath, StandardCharsets.UTF_8);
+
+        assertTrue("detail direct-play must bind PlaybackService before the explicit play click",
+                source.contains("public boolean shouldBindPlaybackService()")
+                        && source.contains("return true;"));
+        assertTrue("binding PlaybackService must not enable automatic playback",
+                source.contains("protected boolean autoPlay()")
+                        && source.contains("return false; // 详情直放必须由用户点击播放"));
+    }
+
+    @Test
     public void tmdbDetailActivity_delegatesToModeController() throws Exception {
         Path activityPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
         String source = new String(Files.readAllBytes(activityPath), StandardCharsets.UTF_8);
@@ -105,5 +118,99 @@ public class DetailModeControllerTest {
                 !initPageBody.contains("binding.fusionActions.setVisibility(isFusionMode()"));
         assertTrue("initPage should not set detailActions visibility based on mode (delegated to Controller)",
                 !initPageBody.contains("binding.detailActions.setVisibility(isFusionMode()"));
+    }
+
+    @Test
+    public void modeController_isInitializedBeforeModeDependentViewSetup() throws Exception {
+        Path activityPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
+        String source = Files.readString(activityPath, StandardCharsets.UTF_8);
+        String initViewBody = methodBody(source, "protected void initView(Bundle savedInstanceState)");
+
+        int controller = initViewBody.indexOf("initModeController();");
+        int edgeToEdge = initViewBody.indexOf("applyDetailEdgeToEdge();");
+        int insets = initViewBody.indexOf("applySystemBarInsets();");
+        int page = initViewBody.indexOf("initPage();");
+        assertTrue("mode controller must exist before mode-dependent setup",
+                controller >= 0 && edgeToEdge > controller && insets > controller && page > controller);
+    }
+
+    @Test
+    public void playerDetailMode_keepsFullscreenInlinePlayback() throws Exception {
+        Path activityPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
+        String source = Files.readString(activityPath, StandardCharsets.UTF_8);
+        String onPlayBody = methodBody(source, "private void onPlay()");
+        String detailModeBody = methodBody(source, "private int getDetailMode()");
+
+        // 详情直放必须进入内嵌全屏播放器，不能因为播放载入界面误判成融合模式。
+        assertTrue("detail-player mode must keep fullscreen inline playback",
+                onPlayBody.contains("modeController.play();")
+                        && !onPlayBody.contains("isFusionMode()")
+                        && !onPlayBody.contains("isPlayerMode()"));
+        assertTrue("detail-player mode must restore the selected mode when no intent mode marker exists",
+                detailModeBody.contains("return Setting.getDetailOpenMode();")
+                        && !detailModeBody.contains("getIntent().getBooleanExtra(\"fusion\", false) ? Setting.DETAIL_OPEN_FUSION : Setting.DETAIL_OPEN_ENHANCED"));
+    }
+
+    @Test
+    public void playerDetailMode_entersFullscreenBeforeStartingPlayback() throws Exception {
+        Path activityPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
+        String source = Files.readString(activityPath, StandardCharsets.UTF_8);
+        String playBody = methodBody(source, "private void playDetailFullscreen()");
+
+        int enterFullscreen = playBody.indexOf("enterInlineFullscreen();");
+        int startPlayback = playBody.indexOf("if (!current) playInline();");
+        assertTrue("new detail-player playback must enter fullscreen before playback starts",
+                enterFullscreen >= 0 && startPlayback > enterFullscreen);
+        assertTrue("detail-player must not retain a first-frame pending transition",
+                playBody.contains("detailPlayerFullscreenPending = false;")
+                        && !playBody.contains("detailPlayerFullscreenPending = !current;"));
+    }
+
+    @Test
+    public void playerDetailMode_reusesCurrentPlaybackWithoutReloading() throws Exception {
+        Path activityPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
+        String source = Files.readString(activityPath, StandardCharsets.UTF_8);
+        String playBody = methodBody(source, "private void playDetailFullscreen()");
+        String inlineBody = methodBody(source, "private void playInline(long resumePosition, String failedUrl, String failureMessage)");
+
+        int enterFullscreen = playBody.indexOf("enterInlineFullscreen();");
+        int startPlayback = playBody.indexOf("if (!current) playInline();");
+        assertTrue("current playback may enter fullscreen immediately while new playback resolves once",
+                enterFullscreen >= 0
+                        && startPlayback > enterFullscreen
+                        && !inlineBody.contains("stopInlinePlayerForReload();"));
+    }
+
+    @Test
+    public void playerDetailMode_waitsForExplicitPlaybackAction() throws Exception {
+        Path activityPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
+        String source = Files.readString(activityPath, StandardCharsets.UTF_8);
+        String autoPlayBody = methodBody(source, "private void maybeAutoPlayInline()");
+
+        // 详情直放只定义点击播放后的全屏行为，进入详情页本身不能触发播放。
+        assertTrue("auto playback eligibility must be delegated to the active mode controller",
+                autoPlayBody.contains("modeController.shouldAutoPlay()")
+                        && !autoPlayBody.contains("isFusionMode()")
+                        && !autoPlayBody.contains("isAutoPlayMode()")
+                        && autoPlayBody.contains("binding.playerPanel.post(this::onPlay);"));
+    }
+
+    @Test
+    public void playbackHistoryPublishing_isDelegatedToModeController() throws Exception {
+        Path activityPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
+        String source = Files.readString(activityPath, StandardCharsets.UTF_8);
+        String body = methodBody(source, "private void updateInlineHistory(Episode item)");
+
+        assertTrue("history publishing eligibility must be delegated to the active mode controller",
+                body.contains("modeController.shouldPublishPlaybackHistory()")
+                        && !body.contains("isFusionMode() || isPlayerMode()"));
+    }
+
+    private String methodBody(String source, String signature) {
+        int start = source.indexOf(signature);
+        assertTrue(signature + " is missing from TmdbDetailActivity", start >= 0);
+        int end = source.indexOf("\n    private void ", start + signature.length());
+        if (end < 0) end = source.length();
+        return source.substring(start, end);
     }
 }

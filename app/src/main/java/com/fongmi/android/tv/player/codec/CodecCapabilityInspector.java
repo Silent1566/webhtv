@@ -58,10 +58,10 @@ public final class CodecCapabilityInspector {
             builder.append(text);
         }
         if (matched == 0) {
-            if (total == 0) return type == TYPE_AUDIO ? "未发现系统音频解码器" : "未发现匹配类型的硬件解码器";
+            if (total == 0) return type == TYPE_AUDIO ? "未发现硬件音频解码器" : "未发现匹配类型的硬件解码器";
             return TextUtils.isEmpty(query) ? "未发现解码能力" : "没有匹配关键词的解码能力";
         }
-        String title = type == TYPE_AUDIO ? "系统音频解码器 " : type == TYPE_VIDEO ? "硬件视频解码器 " : "解码器 ";
+        String title = type == TYPE_AUDIO ? "硬件音频解码器 " : type == TYPE_VIDEO ? "硬件视频解码器 " : "硬件解码器 ";
         return title + matched + "/" + total + "\n\n" + builder;
     }
 
@@ -166,6 +166,43 @@ public final class CodecCapabilityInspector {
         }
     }
 
+    /**
+     * Checks a regular HEVC Main10 decoder for the dimensions/rate of a
+     * Dolby Vision Profile 8.1 base layer. This query is intentionally
+     * separate from the Dolby Vision MIME query: a vendor may advertise
+     * HEVC Main10 while rejecting the Dolby Vision profile or its RPU.
+     */
+    public static MpvAutoOutputPolicy.DolbyVisionSupport hevcHdr10Support(
+            Context context, Format current, int width, int height) {
+        if (context == null) return MpvAutoOutputPolicy.DolbyVisionSupport.UNKNOWN;
+        String codecs = width >= 3840 || height >= 2160
+                ? "hvc1.2.4.L153.B0" : "hvc1.2.4.L120.B0";
+        Format.Builder builder = new Format.Builder()
+                .setSampleMimeType(MimeTypes.VIDEO_H265)
+                .setCodecs(codecs);
+        if (current != null) {
+            if (current.frameRate > 0) builder.setFrameRate(current.frameRate);
+            if (current.averageBitrate > 0) builder.setAverageBitrate(current.averageBitrate);
+            if (current.peakBitrate > 0) builder.setPeakBitrate(current.peakBitrate);
+        }
+        if (width > 0) builder.setWidth(width);
+        if (height > 0) builder.setHeight(height);
+        Format format = builder.build();
+        try {
+            for (androidx.media3.exoplayer.mediacodec.MediaCodecInfo info
+                    : MediaCodecSelector.DEFAULT.getDecoderInfos(
+                    MimeTypes.VIDEO_H265, false, false)) {
+                if (!info.hardwareAccelerated) continue;
+                if (info.isFormatSupported(context, format)) {
+                    return MpvAutoOutputPolicy.DolbyVisionSupport.SUPPORTED;
+                }
+            }
+            return MpvAutoOutputPolicy.DolbyVisionSupport.UNSUPPORTED;
+        } catch (Throwable ignored) {
+            return MpvAutoOutputPolicy.DolbyVisionSupport.UNKNOWN;
+        }
+    }
+
     private static boolean codecMatchesProfile(String codecs, int profile) {
         if (TextUtils.isEmpty(codecs)) return false;
         String expected = String.format(Locale.US, ".%02d.", profile);
@@ -198,7 +235,7 @@ public final class CodecCapabilityInspector {
             boolean video = mime != null && mime.startsWith("video/");
             boolean audio = mime != null && mime.startsWith("audio/");
             if (!video && !audio) return null;
-            if (video && !isHardwareCodec(info)) return null;
+            if (!isHardwareCodec(info)) return null;
             String text = video ? videoEntry(info, mime, caps) : audioEntry(info, mime, caps);
             return new CodecEntry(video ? TYPE_VIDEO : TYPE_AUDIO, video ? "视频" : "音频", info.getName(), mime, text, normalize(text));
         } catch (Throwable ignored) {
@@ -372,11 +409,10 @@ public final class CodecCapabilityInspector {
     }
 
     private static List<String> decoderNames(Context context, String mime, Format format) {
-        boolean audio = mime.startsWith("audio/");
         List<String> names = new ArrayList<>();
         try {
             for (androidx.media3.exoplayer.mediacodec.MediaCodecInfo info : MediaCodecSelector.DEFAULT.getDecoderInfos(mime, false, false)) {
-                if (!audio && !info.hardwareAccelerated) continue;
+                if (!isHardwareCodec(info)) continue;
                 if (info.isFormatSupported(context, format)) names.add(info.name);
                 else if (!names.contains(info.name)) names.add(info.name);
             }
@@ -389,21 +425,44 @@ public final class CodecCapabilityInspector {
         String mime = getSampleMimeType(format);
         if (TextUtils.isEmpty(mime)) return "无法识别 MIME，codecs=" + empty(format == null ? null : format.codecs);
         boolean audio = mime.startsWith("audio/");
-        List<String> supported = new ArrayList<>();
-        List<String> candidates = new ArrayList<>();
+        List<String> hardwareSupported = new ArrayList<>();
+        List<String> softwareSupported = new ArrayList<>();
+        List<String> hardwareCandidates = new ArrayList<>();
+        List<String> softwareCandidates = new ArrayList<>();
         try {
             for (androidx.media3.exoplayer.mediacodec.MediaCodecInfo info : MediaCodecSelector.DEFAULT.getDecoderInfos(mime, false, false)) {
-                if (!audio && !info.hardwareAccelerated) continue;
+                boolean hardware = isHardwareCodec(info);
+                if (!audio && !hardware) continue;
+                List<String> candidates = hardware
+                        ? hardwareCandidates : softwareCandidates;
+                List<String> supported = hardware
+                        ? hardwareSupported : softwareSupported;
                 candidates.add(info.name);
-                if (info.isFormatSupported(context, format)) supported.add(info.name);
+                if (info.isFormatSupported(context, format)) {
+                    supported.add(info.name);
+                }
             }
         } catch (MediaCodecUtil.DecoderQueryException e) {
             return "查询失败 " + e.getClass().getSimpleName() + ": " + e.getMessage();
         } catch (Throwable e) {
             return "查询失败 " + e.getClass().getSimpleName();
         }
-        if (!supported.isEmpty()) return audio ? "当前音频可由系统解码 / " + TextUtils.join(", ", supported) : "当前规格可硬解 / " + TextUtils.join(", ", supported);
-        if (!candidates.isEmpty()) return audio ? "有系统音频 decoder，但当前规格未声明支持 / 候选 " + TextUtils.join(", ", candidates) : "有硬解器支持该 MIME，但当前规格未声明可硬解 / 候选 " + TextUtils.join(", ", candidates);
+        if (!hardwareSupported.isEmpty()) {
+            return "当前规格可硬解 / "
+                    + TextUtils.join(", ", hardwareSupported);
+        }
+        if (audio && !softwareSupported.isEmpty()) {
+            return "当前规格仅有系统软件解码 / "
+                    + TextUtils.join(", ", softwareSupported);
+        }
+        if (!hardwareCandidates.isEmpty()) {
+            return "有硬件 decoder 支持该 MIME，但当前规格未声明可硬解 / 候选 "
+                    + TextUtils.join(", ", hardwareCandidates);
+        }
+        if (audio && !softwareCandidates.isEmpty()) {
+            return "没有硬件 decoder；有系统软件候选 / "
+                    + TextUtils.join(", ", softwareCandidates);
+        }
         return audio ? "没有该 MIME 的系统音频 decoder" : "没有该 MIME 的硬件 video decoder";
     }
 
@@ -462,9 +521,16 @@ public final class CodecCapabilityInspector {
     }
 
     private static boolean isHardwareCodec(MediaCodecInfo info) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) return info.isHardwareAccelerated();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            return info.isHardwareAccelerated() && !info.isSoftwareOnly();
+        }
         String name = info.getName().toLowerCase(Locale.US);
         return !name.contains("google") && !name.contains("android") && !name.contains("ffmpeg") && !name.contains("software") && !name.startsWith("c2.android");
+    }
+
+    private static boolean isHardwareCodec(
+            androidx.media3.exoplayer.mediacodec.MediaCodecInfo info) {
+        return info.hardwareAccelerated && !info.softwareOnly;
     }
 
     private static String codecClass(MediaCodecInfo info) {

@@ -9,6 +9,7 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.FragmentActivity;
 
 import com.fongmi.android.tv.R;
+import com.fongmi.android.tv.setting.Setting;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.textfield.TextInputLayout;
@@ -40,33 +41,59 @@ public final class SubtitleSettingsDialog {
         LightDialog.apply(dialog);
     }
 
-    public static void showAssrtToken(FragmentActivity activity, String currentToken, ValueCallback callback) {
+    public static void showSourceSummary(FragmentActivity activity, java.util.List<com.fongmi.android.tv.subtitle.provider.SubtitleProvider> providers, Runnable onSaved) {
         if (activity == null) return;
-        TextInputEditText input = new TextInputEditText(activity);
-        input.setSingleLine(true);
-        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
-        input.setText(TextUtils.isEmpty(currentToken) ? "" : currentToken);
-        if (input.getText() != null) input.setSelection(input.length());
+        if (providers == null || providers.isEmpty()) {
+            AlertDialog dialog = new MaterialAlertDialogBuilder(activity, R.style.Theme_WebHTV_LightDialog)
+                    .setTitle(R.string.player_subtitle_source)
+                    .setMessage(R.string.player_subtitle_source_empty)
+                    .setPositiveButton(R.string.dialog_positive, null)
+                    .show();
+            LightDialog.apply(dialog);
+            return;
+        }
+        String[] names = new String[providers.size()];
+        for (int i = 0; i < providers.size(); i++) names[i] = providers.get(i).getName();
+        AlertDialog dialog = new MaterialAlertDialogBuilder(activity, R.style.Theme_WebHTV_LightDialog)
+                .setTitle(R.string.player_subtitle_source)
+                .setNegativeButton(R.string.dialog_negative, null)
+                .setItems(names, (d, which) -> showSourceEnvironment(activity, providers.get(which), onSaved))
+                .show();
+        LightDialog.apply(dialog);
+    }
 
+    private static void showSourceEnvironment(FragmentActivity activity, com.fongmi.android.tv.subtitle.provider.SubtitleProvider provider, Runnable onSaved) {
+        TextInputEditText input = new TextInputEditText(activity);
+        input.setSingleLine(false);
+        input.setMinLines(4);
+        input.setText(Setting.getSubtitleSourceEnvironment(provider.getKey()));
         TextInputLayout layout = new TextInputLayout(activity);
-        layout.setHint(activity.getString(R.string.player_subtitle_assrt_token));
+        layout.setHint(activity.getString(R.string.player_subtitle_source_environment));
         layout.setBoxBackgroundMode(TextInputLayout.BOX_BACKGROUND_OUTLINE);
         layout.addView(input, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-
         LinearLayout container = new LinearLayout(activity);
         container.setOrientation(LinearLayout.VERTICAL);
         int horizontal = dp(activity, 20);
         container.setPadding(horizontal, dp(activity, 8), horizontal, 0);
-        container.addView(layout, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-
+        container.addView(layout);
         AlertDialog dialog = new MaterialAlertDialogBuilder(activity, R.style.Theme_WebHTV_LightDialog)
-                .setTitle(R.string.player_subtitle_assrt_token)
+                .setTitle(provider.getName())
                 .setView(container)
                 .setNegativeButton(R.string.dialog_negative, null)
-                .setPositiveButton(R.string.dialog_positive, (d, which) -> {
-                    if (callback != null) callback.onValue(input.getText() == null ? "" : input.getText().toString().trim());
-                })
+                .setPositiveButton(R.string.dialog_positive, null)
                 .show();
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(view -> {
+            String value = input.getText() == null ? "" : input.getText().toString().trim();
+            try {
+                if (!value.isEmpty() && !com.google.gson.JsonParser.parseString(value).isJsonObject()) throw new IllegalArgumentException();
+            } catch (RuntimeException e) {
+                layout.setError(activity.getString(R.string.player_subtitle_source_environment_invalid));
+                return;
+            }
+            Setting.putSubtitleSourceEnvironment(provider.getKey(), value);
+            if (onSaved != null) onSaved.run();
+            dialog.dismiss();
+        });
         LightDialog.apply(dialog);
     }
 

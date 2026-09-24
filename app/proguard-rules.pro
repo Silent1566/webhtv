@@ -72,6 +72,11 @@
 -keep class com.github.catvod.Proxy { *; }
 -keep class com.github.catvod.crawler.** { *; }
 -keep class * extends com.github.catvod.crawler.Spider
+# Chaquopy bridge loaded by name from CatVod jar spiders (for example the
+# csp_PyProxy sites in external configs). spring.jar resolves
+# com.fongmi.chaquo.Loader and com.fongmi.chaquo.Spider by their literal class
+# names via reflection, so R8 must not shrink or rename them in release builds.
+-keep class com.fongmi.chaquo.** { *; }
 
 # Jianpian
 -keep class com.p2p.** { *; }

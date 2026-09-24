@@ -5,12 +5,14 @@ import android.text.TextUtils;
 import androidx.annotation.NonNull;
 
 import com.fongmi.android.tv.App;
+import com.fongmi.android.tv.api.config.SubscriptionTmdbCredentialStore;
 import com.fongmi.android.tv.bean.TmdbConfig;
 import com.fongmi.android.tv.bean.TmdbEpisode;
 import com.fongmi.android.tv.bean.TmdbItem;
 import com.fongmi.android.tv.bean.TmdbPerson;
 import com.fongmi.android.tv.bean.TmdbVideo;
 import com.fongmi.android.tv.utils.TmdbImageSelector;
+import com.fongmi.android.tv.utils.TmdbProxy;
 import com.github.catvod.crawler.SpiderDebug;
 import com.github.catvod.utils.Path;
 import com.google.gson.JsonArray;
@@ -19,6 +21,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 import java.io.File;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;
@@ -121,6 +124,24 @@ public class TmdbService {
         String cacheKey = fallbackKeys.remove(0);
         if (!includeRelated) fallbackKeys.add(detailUrl(item, config, true));
         return requestJson(url, config, "detail", cacheKey, fallbackKeys, DETAIL_CACHE_TTL, "TMDB 详情返回为空", "TMDB 详情失败: HTTP ", false);
+    }
+
+    public JsonObject detailForFollowing(@NonNull TmdbItem item, @NonNull TmdbConfig config, boolean refresh) throws Exception {
+        ensureReady(config);
+        String url = detailUrl(item, config, false);
+        List<String> fallbackKeys = detailCacheKeys(item, config, false);
+        String cacheKey = "following-" + fallbackKeys.remove(0);
+        long ttl = TimeUnit.MINUTES.toMillis(30);
+        return requestJson(url, config, "detail-following", cacheKey, fallbackKeys, ttl,
+                "TMDB 追更详情返回为空", "TMDB 追更详情失败: HTTP ", refresh);
+    }
+
+    public JsonObject detailForSource(@NonNull TmdbItem item, int seasonNumber, @NonNull TmdbConfig config, @NonNull Set<String> missing) throws Exception {
+        ensureReady(config);
+        boolean includeRelated = missing.contains("recommendations") || missing.contains("similar");
+        String url = detailUrl(item, config, includeRelated);
+        List<String> fallbackKeys = detailCacheKeys(item, config, includeRelated);
+        return requestJson(url, config, "detail", sourceDetailCacheKey(item, seasonNumber, config, missing), fallbackKeys, DETAIL_CACHE_TTL, "TMDB 详情返回为空", "TMDB 详情失败: HTTP ", false);
     }
 
     private String detailAppend(@NonNull TmdbItem item, boolean includeRelated) {
@@ -572,7 +593,7 @@ public class TmdbService {
 
     public String image(String base, String path) {
         if (TextUtils.isEmpty(path)) return "";
-        return base + (path.startsWith("/") ? path : "/" + path);
+        return TmdbProxy.imageUrl(base, path);
     }
 
     private String searchUrl(String keyword, TmdbConfig config) {
@@ -585,12 +606,22 @@ public class TmdbService {
 
     private void ensureReady(TmdbConfig config) {
         if (!config.sanitize().isReady()) throw new IllegalStateException("请先配置 TMDB API Key");
+        ensureCredentialTransport(config);
     }
 
     private HttpUrl.Builder apiBuilder(String url, TmdbConfig config) {
+        ensureCredentialTransport(config);
         HttpUrl.Builder builder = HttpUrl.parse(url).newBuilder();
         if (TextUtils.isEmpty(config.getAccessToken())) builder.addQueryParameter("api_key", config.getApiKey());
         return builder;
+    }
+
+    private void ensureCredentialTransport(TmdbConfig config) {
+        if (config == null || !config.isTransientSubscriptionCredential()) return;
+        if (!SubscriptionTmdbCredentialStore.isCurrent(config.getCredentialSubscriptionKey(), config.getCredentialScopeEpoch())) {
+            throw new IllegalStateException("TMDB 临时凭据已失效");
+        }
+        if (!TmdbConfig.isOfficialApiBase(config.getApiBase())) throw new IllegalStateException("TMDB 临时凭据仅允许访问官方 HTTPS API");
     }
 
     void throwIfAuthBlocked(TmdbConfig config) {
@@ -608,6 +639,9 @@ public class TmdbService {
 
     RuntimeException httpFailure(TmdbConfig config, int statusCode, String message) {
         if (statusCode == 401 || statusCode == 403) {
+            if (config != null && config.isTransientSubscriptionCredential()) {
+                SubscriptionTmdbCredentialStore.clearIfCurrent(config.getCredentialSubscriptionKey(), config.getCredentialScopeEpoch());
+            }
             AUTH_FAILURE_BLOCKS.put(authCircuitKey(config), System.currentTimeMillis() + AUTH_FAILURE_COOLDOWN);
             SpiderDebug.log("tmdb", "authentication circuit opened status=%d cooldown=%dms", statusCode, AUTH_FAILURE_COOLDOWN);
             return new AuthException(statusCode, message);
@@ -628,9 +662,43 @@ public class TmdbService {
 
     private Response execute(String url, TmdbConfig config) throws Exception {
         throwIfAuthBlocked(config);
-        Request.Builder builder = new Request.Builder().url(url);
-        if (!TextUtils.isEmpty(config.getAccessToken())) builder.header("Authorization", "Bearer " + config.getAccessToken());
-        return com.github.catvod.net.OkHttp.client().newCall(builder.build()).execute();
+        String currentBase = config.getApiBase();
+        List<String> candidates = config.getApiCandidates();
+        Exception last = null;
+        for (String candidate : candidates) {
+            String requestUrl = url;
+            if (config.isApiAuto() && url.startsWith(currentBase)) {
+                requestUrl = candidate + url.substring(currentBase.length());
+            }
+            long started = System.nanoTime();
+            try {
+                Request.Builder builder = new Request.Builder().url(requestUrl);
+                if (!TextUtils.isEmpty(config.getAccessToken())) builder.header("Authorization", "Bearer " + config.getAccessToken());
+                Response response = com.github.catvod.net.OkHttp.client().newCall(builder.build()).execute();
+                if (response.isSuccessful() || !config.isApiAuto() || response.code() == 401 || response.code() == 403 || candidate.equals(candidates.get(candidates.size() - 1))) {
+                    if (response.isSuccessful() && config.isApiAuto()) {
+                        TmdbProxy.RouteSelector.success(TmdbProxy.RouteSelector.Kind.API, candidate,
+                                TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started));
+                    }
+                    return response;
+                }
+                TmdbProxy.RouteSelector.failure(TmdbProxy.RouteSelector.Kind.API, candidate);
+                response.close();
+            } catch (Exception e) {
+                last = e;
+                if (!config.isApiAuto() || candidate.equals(candidates.get(candidates.size() - 1))) break;
+                TmdbProxy.RouteSelector.failure(TmdbProxy.RouteSelector.Kind.API, candidate);
+            }
+        }
+        if (last != null) throw new IOException(redactMessage(last.getMessage()), last);
+        throw new IOException("TMDB request failed on all automatic routes");
+    }
+
+    public static String redactMessage(String message) {
+        if (TextUtils.isEmpty(message) || message.trim().isEmpty()) return "TMDB request failed";
+        String redacted = message.replaceAll("(?i)([?&](?:api_key|apikey|key|token|access_token)=)[^&\\s]+", "$1<redacted>");
+        redacted = redacted.replaceAll("(?i)(Bearer\\s+)[A-Za-z0-9._~+/-]+=*", "$1<redacted>");
+        return redacted;
     }
 
     private JsonObject requestVideoJson(String url, TmdbConfig config, String cacheKey) throws Exception {
@@ -795,6 +863,14 @@ public class TmdbService {
 
     String detailCacheKey(@NonNull TmdbItem item, @NonNull TmdbConfig config, boolean includeRelated) {
         return cacheKey("detail", item.getMediaType(), item.getTmdbId(), cacheLanguage(config), includeRelated ? "full" : "core");
+    }
+
+    String sourceDetailCacheKey(@NonNull TmdbItem item, int seasonNumber, @NonNull TmdbConfig config, @NonNull Set<String> missing) {
+        List<String> capabilities = new ArrayList<>();
+        for (String capability : missing) if (!TextUtils.isEmpty(capability)) capabilities.add(capability.trim().toLowerCase(Locale.ROOT));
+        capabilities.sort(String::compareTo);
+        String mask = capabilities.isEmpty() ? "none" : String.join(",", capabilities);
+        return cacheKey("tmdb-detail", item.getMediaType(), item.getTmdbId(), "season=" + Math.max(0, seasonNumber), "lang=" + cacheLanguage(config), "include=" + mask);
     }
 
     String searchCacheKey(@NonNull String keyword, @NonNull TmdbConfig config) {

@@ -20,6 +20,11 @@ public class EnhancedDetailController extends BaseTmdbDetailModeController {
     }
 
     @Override
+    public boolean isCinemaStyle() {
+        return true;
+    }
+
+    @Override
     protected boolean showInlinePlayer() {
         return false;
     }

@@ -259,6 +259,9 @@
     <string name="history_record_missing">The history record no longer exists</string>
     <string name="history_config_changed">VOD configuration changed. Please try again.</string>
     <string name="dialog_delete_global_history">Delete history from all VOD configurations?</string>
+    <string name="config_delete_title">Delete source?</string>
+    <string name="config_delete_message">Delete “%1$s”? Related playback history may also be lost. This cannot be undone.</string>
+    <string name="config_current_delete_message">This interface is currently in use. Switch to another interface before deleting it.</string>
     <string name="setting_home_history">Home recent history</string>
     <string name="setting_personal_recommendation">Personal recommendations</string>
     <string name="setting_recommendation_feedback">Not interested management</string>
@@ -522,7 +525,7 @@
     <string name="site_health_report_summary_reason">%1$d sites · %2$d samples · %3$d failures · %4$d degraded · Top %5$s x%6$d</string>
     <string name="site_health_report_setting_summary">%1$d sites · %2$d samples</string>
     <string name="site_health_report_row_meta">%1$d samples · %2$d failures</string>
-    <string name="site_health_report_ad_blocked">Ads blocked · %1$d</string>
+    <string name="site_health_report_ad_blocked">Playback %1$d / Ad blocks %2$d</string>
     <string name="site_health_report_stage">%1$s · %2$s · %3$d/%4$d</string>
     <string name="site_health_report_rate">%1$d%%</string>
     <string name="site_health_report_no_data">No data</string>
@@ -536,6 +539,11 @@
     <string name="site_health_clear_site">Clear this site</string>
     <string name="site_health_clear_site_title">Clear site health?</string>
     <string name="site_health_clear_site_message">Clear health samples for %1$s?</string>
+    <string name="site_health_clear_all">Clear all samples</string>
+    <string name="site_health_clear_all_title">Clear all site health samples?</string>
+    <string name="site_health_clear_all_message">This will delete all playback-chain health samples. This action cannot be undone.</string>
+    <string name="site_health_stage_home">Home</string>
+    <string name="site_health_stage_category">Category</string>
     <string name="site_health_stage_search">Search</string>
     <string name="site_health_stage_detail">Detail</string>
     <string name="site_health_stage_parse">Parse</string>
@@ -885,6 +893,50 @@
     <string name="site_name_reset_message">All custom names and groups for the current interface will be removed.</string>
     <string name="setting_short_drama_source">Short drama source config</string>
     <string name="setting_theme_color">Theme color</string>
+    <string name="theme_editor_title">Theme colors</string>
+    <string name="theme_enabled">Enable theme colors</string>
+    <string name="theme_editor_preview">Live preview</string>
+    <string name="theme_background">Background</string>
+    <string name="theme_background_wallpaper">Wallpaper</string>
+    <string name="theme_background_tinted_wallpaper">Tinted wallpaper</string>
+    <string name="theme_background_solid">Solid color</string>
+    <string name="theme_mode">Color mode</string>
+    <string name="theme_mode_system">System</string>
+    <string name="theme_mode_light">Light</string>
+    <string name="theme_mode_dark">Dark</string>
+    <string name="theme_palette">Highlight presets</string>
+    <string name="theme_core_colors">Core colors</string>
+    <string name="theme_color_primary">Highlight color</string>
+    <string name="theme_color_background">App background</string>
+    <string name="theme_color_surface">Content surface</string>
+    <string name="theme_color_edit">Edit color</string>
+    <string name="theme_hex_hint">HEX color</string>
+    <string name="theme_color_invalid">Enter an opaque #RGB or #RRGGBB color</string>
+    <string name="theme_color_contrast_unknown">Contrast will be calculated after a valid color is entered.</string>
+    <string name="theme_color_contrast">Suggested foreground %1$s · contrast %2$.2f:1</string>
+    <string name="theme_reset">Reset</string>
+    <string name="theme_cancel">Cancel</string>
+    <string name="theme_apply">Apply</string>
+    <string name="theme_apply_failed">Theme was not changed: %1$s</string>
+    <string name="theme_import_title">Import theme</string>
+    <string name="theme_import_input_hint">Paste JSON or HTTPS link</string>
+    <string name="theme_import_file">Open JSON</string>
+    <string name="theme_import_community">TweakCN community</string>
+    <string name="theme_import_preview_action">Preview import</string>
+    <string name="theme_import_use">Use theme</string>
+    <string name="theme_import_empty">Paste a theme JSON or HTTPS link first.</string>
+    <string name="theme_import_failed">Could not import theme.</string>
+    <string name="theme_import_no_warnings">No unsupported theme tokens.</string>
+    <string name="theme_import_warnings">Ignored items:\n%1$s</string>
+    <string name="theme_import_preview">Preview: %1$s</string>
+    <string name="theme_import_source_paste">Pasted JSON</string>
+    <string name="theme_import_source_file">Selected file</string>
+    <string name="theme_import_browser_unavailable">No browser is available for the community link.</string>
+    <string name="theme_export">Export</string>
+    <string name="theme_share">Share</string>
+    <string name="theme_exported">Theme exported.</string>
+    <string name="theme_export_failed">Could not export theme.</string>
+    <string name="theme_export_unavailable">No app is available for sharing themes.</string>
     <string name="setting_appearance">Appearance &amp; language</string>
     <string name="setting_appearance_summary">4 options</string>
     <string name="setting_auto">Auto</string>
@@ -962,10 +1014,12 @@
     <string name="sync_select_none">Deselect all</string>
     <string name="sync_item_config">Interfaces and source lists</string>
     <string name="sync_item_spider">Jar/script saved data</string>
+    <string name="sync_item_mpv_config">MPV configuration management</string>
     <string name="sync_item_login_state">Login state</string>
     <string name="sync_item_webhome">WebHome saved data</string>
     <string name="sync_item_search">Search records</string>
     <string name="sync_item_history">Watch history</string>
+    <string name="history_watched_time">Watched %1$s</string>
     <string name="sync_item_keep">Favorites</string>
     <string name="sync_item_settings">App settings</string>
     <string name="sync_item_remote_relay">Relay server config</string>
@@ -1167,6 +1221,18 @@
     <string name="player_mpv_config">MPV config manager</string>
     <string name="player_mpv_render">MPV renderer</string>
     <string name="mpv_render_native_unavailable">Unavailable</string>
+    <string name="player_bluray_menu">Blu-ray disc menu</string>
+    <string name="disc_menu_root">Top menu</string>
+    <string name="disc_menu_popup">Pop-up menu</string>
+    <string name="disc_menu_previous">Back</string>
+    <string name="disc_menu_up">Up</string>
+    <string name="disc_menu_down">Down</string>
+    <string name="disc_menu_left">Left</string>
+    <string name="disc_menu_right">Right</string>
+    <string name="disc_menu_open">Disc menu</string>
+    <string name="disc_menu_open_hint">Open the disc top menu. Long press for navigation controls.</string>
+    <string name="disc_menu_navigation">Menu navigation</string>
+    <string name="disc_menu_touch_hint">Tap the disc buttons directly, or select with these controls.</string>
     <string name="mpv_config_target">%1$s · %2$s</string>
     <string name="mpv_config_default">Default</string>
     <string name="mpv_config_local">Local mpv.conf</string>
@@ -1176,6 +1242,54 @@
     <string name="mpv_config_history_empty">No MPV config history</string>
     <string name="mpv_config_script_hint">Script URL or choose local script</string>
     <string name="mpv_config_scripts_count">%1$d scripts</string>
+    <string name="mpv_config_custom_buttons">Script buttons</string>
+    <string name="mpv_config_custom_button_new">New script button</string>
+    <string name="mpv_config_custom_button_new_desc">Add a button to the player controls</string>
+    <string name="mpv_config_custom_button_title">Script buttons</string>
+    <string name="mpv_config_custom_button_subtitle">Manage playback buttons in the script list</string>
+    <string name="mpv_config_custom_button_empty">No custom buttons yet</string>
+    <string name="mpv_config_custom_button_empty_slot">Empty slot</string>
+    <string name="mpv_config_custom_button_drag">Drag to reorder</string>
+    <string name="mpv_config_custom_button_import_export">Import / Export</string>
+    <string name="mpv_config_custom_button_import_export_desc">Back up or share custom buttons and their Lua scripts as an XML file</string>
+    <string name="mpv_config_custom_button_import">Import</string>
+    <string name="mpv_config_custom_button_export">Export</string>
+    <string name="mpv_config_custom_button_imported">Imported %1$d buttons</string>
+    <string name="mpv_config_custom_button_exported">Buttons exported</string>
+    <string name="mpv_config_custom_button_file_invalid">Unable to read or write the selected file</string>
+    <string name="mpv_config_custom_button_lua_section">Lua scripts</string>
+    <string name="mpv_config_custom_button_add">New script button</string>
+    <string name="mpv_config_custom_button_edit">Edit script button</string>
+    <string name="mpv_config_custom_button_name">Button title</string>
+    <string name="mpv_config_custom_button_name_hint">For example: Change quality</string>
+    <string name="mpv_config_custom_button_short">Short press Lua</string>
+    <string name="mpv_config_custom_button_long">Long press Lua</string>
+    <string name="mpv_config_custom_button_startup">Run on MPV startup</string>
+    <string name="mpv_config_custom_button_enabled">Enable button</string>
+    <string name="mpv_config_custom_button_enabled_short">ON</string>
+    <string name="mpv_config_custom_button_disabled_short">OFF</string>
+    <string name="mpv_config_custom_button_delete">Delete button</string>
+    <string name="mpv_config_custom_button_delete_message">Delete “%1$s”?</string>
+    <string name="mpv_config_custom_button_saved">Custom button saved</string>
+    <string name="mpv_config_custom_buttons_limit">You can add up to 8 custom buttons</string>
+    <string name="mpv_config_custom_buttons_invalid">Invalid custom button id</string>
+    <string name="mpv_config_custom_button_trigger">Trigger</string>
+    <string name="mpv_config_custom_button_trigger_click">Click</string>
+    <string name="mpv_config_custom_button_trigger_long">Long press</string>
+    <string name="mpv_config_custom_button_trigger_startup">On startup</string>
+    <string name="mpv_config_custom_button_code_hint">Enter Lua script</string>
+    <string name="mpv_config_script_new">New script</string>
+    <string name="mpv_config_script_create_desc">Choose how to add a script. Enable its player button later in script settings.</string>
+    <string name="mpv_config_script_text_edit">Create from text</string>
+    <string name="mpv_config_script_text_edit_desc">Open the text editor to enter and save the Lua script</string>
+    <string name="mpv_config_script_settings_title">Script settings</string>
+    <string name="mpv_config_script_enabled">Enable script</string>
+    <string name="mpv_config_script_settings_desc">Set the name, enabled state, and trigger</string>
+    <string name="mpv_config_script_open_editor">Open editor</string>
+    <string name="mpv_config_script_import_url">Import script from URL</string>
+    <string name="mpv_config_script_import_url_desc">Download and save a remote Lua/JS script</string>
+    <string name="mpv_config_script_import_file">Import script file</string>
+    <string name="mpv_config_script_import_file_desc">Choose a Lua/JS script file from this device</string>
     <string name="mpv_config_saved">MPV config saved. Reopen playback to apply it.</string>
     <string name="mpv_config_empty">MPV config is empty</string>
     <string name="mpv_config_file_invalid">Invalid mpv.conf file</string>
@@ -1233,7 +1347,6 @@
     <string name="player_audio_decode">Audio software decode</string>
     <string name="player_audio_passthrough">Audio passthrough</string>
     <string name="player_video_decode">Video software decode</string>
-    <string name="player_ffmpeg_mode">FFmpeg mode</string>
     <string name="player_aac_track">Prefer aac track</string>
     <string name="player_music_notification">Music background notification</string>
     <string name="player_audio_book_notification">Audiobook background notification</string>
@@ -1255,7 +1368,8 @@
     <string name="player_preload_pause">Continue preload while paused</string>
     <string name="player_preload_pause_wifi">Wi-Fi only</string>
     <string name="player_preload_pause_always">Always</string>
-    <string name="player_auto_play">Auto play</string>
+    <string name="player_auto_play">Auto play VOD</string>
+    <string name="player_live_source_fallback">Switch live source on failure</string>
     <string name="player_auto_change">Auto source change</string>
     <string name="player_remember_brightness">Remember playback brightness</string>
     <string name="player_failure_fallback">Failure fallback</string>
@@ -1264,7 +1378,11 @@
     <string name="player_osd">On-screen display</string>
     <string name="player_subtitle_auto_match">Auto subtitle match</string>
     <string name="player_subtitle_language">Preferred subtitle language</string>
-    <string name="player_subtitle_assrt_token">ASSRT token</string>
+    <string name="player_subtitle_source_environment">Environment variables (JSON)</string>
+    <string name="player_subtitle_source_environment_invalid">Enter a valid JSON object</string>
+    <string name="player_subtitle_source">Subtitle sources</string>
+    <string name="player_subtitle_source_count">%1$d loaded</string>
+    <string name="player_subtitle_source_empty">No subtitle sources available</string>
     <string name="player_subtitle_ai_max_concurrency">AI subtitle max concurrency</string>
     <string name="player_subtitle_ai_chunk_count">AI subtitle chunks</string>
     <string name="subtitle_auto_match_hit">Subtitle matched: %1$s</string>
@@ -1455,6 +1573,7 @@
     <string name="dialog_config_choose_failed">Could not read the selected item, please pick the package folder or zip again</string>
     <string name="dialog_config_name">Please enter the name…</string>
     <string name="dialog_config_url">Please enter the url…</string>
+    <string name="dialog_config_addresses">Backup addresses, one per line…</string>
 
     <!-- Error -->
     <string name="error_config_get">Configuration get failed</string>
@@ -1563,8 +1682,9 @@
     <string name="update_download_source_unavailable">The selected update source is not available for this release.</string>
 
     <!-- Crash -->
-    <string name="crash_info">An unexpected error occurred.\nSorry for the inconvenience.</string>
+    <string name="crash_info">An unexpected error occurred.\nRestarting automatically without reloading the interface.</string>
     <string name="crash_restart">Restart app</string>
+    <string name="crash_silent_restart">Silent restart</string>
     <string name="crash_details">Error details</string>
     <string name="crash_details_title">Error details</string>
     <string name="crash_details_message">App version: %1$s\n\n%2$s</string>
@@ -1726,6 +1846,19 @@
         <item>Choose source from search</item>
     </string-array>
 
+    <string-array name="select_interface_failover_mode">
+        <item>Off</item>
+        <item>Auto</item>
+        <item>Confirm</item>
+    </string-array>
+
+    <string name="setting_interface_failover">VOD config failover</string>
+    <string name="interface_failover_title">Interface load failed</string>
+    <string name="interface_failover_message">Current: %1$s</string>
+    <string name="interface_failover_next">Trying next interface: %1$s</string>
+    <string name="interface_failover_switch">Switch</string>
+    <string name="interface_failover_cancelled">Interface switch cancelled</string>
+
     <string-array name="select_auto_skip_intro_outro">
         <item>Off</item>
         <item>Auto skip</item>
@@ -1744,11 +1877,14 @@
 
     <string-array name="select_ui_scale">
         <item>Follow system</item>
-        <item>Standard</item>
-        <item>Mild compact</item>
+        <item>Smallest</item>
         <item>Compact</item>
-        <item>More compact</item>
-        <item>Smaller</item>
+        <item>Slightly compact</item>
+        <item>Standard</item>
+        <item>Slightly large</item>
+        <item>Large</item>
+        <item>Larger</item>
+        <item>Largest</item>
     </string-array>
 
     <string-array name="select_language">
@@ -1913,9 +2049,17 @@
     <string name="dialog_tmdb_api_key_tip">Get your free API key at: https://www.themoviedb.org/settings/api</string>
     <string name="dialog_tmdb_language_label">TMDB language</string>
     <string name="dialog_tmdb_language_hint">For example zh-CN</string>
-    <string name="dialog_tmdb_api_host_label">API host</string>
-    <string name="dialog_tmdb_api_host_hint">For example https://api.tmdb.org</string>
-    <string name="dialog_tmdb_image_host_label">Image host</string>
+    <string name="dialog_tmdb_api_host_label">TMDB API route</string>
+    <string name="dialog_tmdb_image_itv666">itv666 image mirror</string>
+    <string name="dialog_tmdb_image_direct">Official images (direct)</string>
+    <string name="dialog_tmdb_api_itv666">itv666 API mirror</string>
+    <string name="dialog_tmdb_api_direct">Official API (direct)</string>
+    <string name="dialog_tmdb_api_auto">Auto (latency priority, failover)</string>
+    <string name="dialog_tmdb_image_auto">Auto (latency priority, failover)</string>
+    <string name="dialog_tmdb_image_wsrv">wsrv.nl image proxy</string>
+    <string name="dialog_tmdb_api_host_hint">https://api.tmdb.org or choose a built-in mirror</string>
+    <string name="dialog_tmdb_proxy_host_help">API and image routes can be selected independently. Auto ranks the verified routes by latency and switches after failure; itv666 and wsrv.nl are included, and custom endpoints are supported.</string>
+    <string name="dialog_tmdb_image_host_label">TMDB image route</string>
     <string name="dialog_tmdb_image_host_hint">For example https://images.tmdb.org</string>
     <string name="dialog_tmdb_section_data">Data source</string>
     <string name="dialog_tmdb_section_ratings">Ratings</string>
@@ -2013,6 +2157,10 @@
     <string name="detail_image_save_success">Saved to: %1$s</string>
     <string name="detail_image_save_failed">Image save failed</string>
     <string name="detail_external_open_failed">Unable to open external link</string>
+    <string name="detail_external_opening">Opening external page</string>
+    <string name="detail_external_open_title">Open external link</string>
+    <string name="detail_external_open_builtin">Built-in browser</string>
+    <string name="detail_external_open_external">System or external browser</string>
     <string name="detail_image_permission_denied">Storage permission denied</string>
 
     <string name="detail_tmdb_photos">Stills</string>
@@ -2139,12 +2287,19 @@
     <string name="ad_rule_add_manual">Add rule manually</string>
     <string name="ad_rule_import_candidates">Source rules pending review (%d)</string>
     <string name="ad_rule_import_title">Import ad rules from source</string>
-    <string name="ad_rule_import_action">Import (disabled by default)</string>
+    <string name="ad_rule_import_action">Import only (keep disabled)</string>
+    <string name="ad_rule_import_enable_action">Import and enable selected</string>
+    <string name="ad_rule_select_low_risk">Select low risk</string>
+    <string name="ad_rule_select_all">Select all</string>
+    <string name="ad_rule_invert_selection">Invert selection</string>
     <string name="ad_rule_ignore_all">Ignore all</string>
     <string name="ad_rule_import_empty">No source rules pending review</string>
     <string name="ad_rule_section_custom">Custom rules</string>
     <string name="ad_rule_section_server">Rules from source config</string>
     <string name="ad_rule_empty">No rules</string>
+    <string name="ad_rule_enable_imported">Enable all imported source rules</string>
+    <string name="ad_rule_disable_imported">Disable all imported source rules</string>
+    <string name="ad_rule_disable_imported_confirm">Temporarily disable all imported source rules? You can re-enable them together at any time.</string>
     <string name="ad_rule_delete_confirm">Delete rule</string>
     <string name="ad_rule_delete_message">Delete “%1$s”? Imported source rules can be re-imported from the pending review list.</string>
     <string name="ad_rule_server_empty">From config · none</string>
@@ -2184,12 +2339,42 @@
     <string name="ad_block_total">Total blocked</string>
     <string name="ad_feedback_count">AI reports</string>
     <string name="ad_ai_success_rate">AI success rate</string>
-    <string name="ad_site_rank">Top blocked sites</string>
-    <string name="ad_rule_rank">Top matching rules</string>
+    <string name="ad_site_rank">Sites</string>
+    <string name="ad_rule_rank">Rules</string>
+    <string name="ad_pipeline_rank">Pipelines</string>
+    <string name="site_health_report_ad_summary">Ad blocking: %1$d total · %2$s</string>
     <string name="ad_stats_reset">Reset stats</string>
     <string name="ad_stats_reset_confirm">Reset all statistics?</string>
     <string name="ad_stats_empty">No statistics yet</string>
+    <string name="ad_stats_filter_empty">No logs match the filters</string>
     <string name="ad_stats_overview">Overview</string>
+    <string name="ad_stats_log">Block log</string>
+    <string name="ad_stats_chart">Charts</string>
+    <string name="ad_log_site_name">Site name</string>
+    <string name="ad_log_site_domain">Site domain</string>
+    <string name="ad_log_rule_domain">Block rule</string>
+    <string name="ad_log_ad_domain">Ad domain</string>
+    <string name="ad_log_blocked_at">Blocked at</string>
+    <string name="ad_log_segment_start">Segment start time</string>
+    <string name="ad_log_segment_end">Segment end time</string>
+    <string name="ad_log_segment_duration">Segment duration</string>
+    <string name="ad_log_playback_context">Title</string>
+    <string name="ad_log_line_name">Line name</string>
+    <string name="ad_log_episode_name">Episode name</string>
+    <string name="ad_log_pipeline">Pipeline</string>
+    <string name="ad_log_unknown">Unknown</string>
+    <string name="ad_log_filter_hint">Filter</string>
+    <string name="ad_log_filter_search_hint">Search filter values</string>
+    <string name="ad_log_filter_all">Select all</string>
+    <string name="ad_log_filter_clear">Clear selection</string>
+    <string name="ad_log_filter_apply">Apply</string>
+    <string name="ad_log_filter_cancel">Cancel</string>
+    <string name="ad_log_filter_options_empty">No filter values</string>
+    <string name="ad_log_filter_selected">%d selected</string>
+    <string name="ad_site_overview">Site overview</string>
+    <string name="ad_site_count">Sites involved</string>
+    <string name="ad_top_site">Most blocked site</string>
+    <string name="ad_top_site_share">Share of blocks</string>
     <string name="ad_stats_times">times</string>
     <string name="ad_stats_percent">%.1f%%</string>
     <string name="ad_stats_site_name">Site</string>
@@ -2570,7 +2755,7 @@
     <string name="ad_audio_skipped_title">Advertisement skipped</string>
     <string name="ad_audio_skipped_message">You can undo within %1$d seconds.</string>
     <string name="ad_audio_undo">Undo</string>
-    <string name="setting_ad_audio_title">Audio fingerprint ad skipping (experimental)</string>
+    <string name="setting_ad_audio_title">Audio fingerprint ad skipping (experimental; may cause playback failure or frame drops)</string>
     <string name="setting_ad_audio_no_rules">No rules</string>
     <string name="setting_ad_audio_rule_error">Rule error</string>
     <string name="setting_ad_audio_rule_count">Rules %1$d · %2$s</string>
@@ -2580,9 +2765,30 @@
     <string name="setting_ad_audio_imported">Imported %1$d rules · %2$s</string>
     <string name="setting_ad_audio_import_failed">Rule import failed; the previous rules were kept.</string>
     <string name="setting_ad_audio_clear_done">Audio fingerprint rules cleared</string>
-    <string name="speech_ad_enabled">Speech ad recognition</string>
+    <string name="speech_ad_enabled">Speech ad recognition (experimental; may cause playback failure or frame drops)</string>
     <string name="speech_ad_keywords">Ad keywords</string>
     <string name="speech_ad_keyword_count">%1$d keywords</string>
+    <string name="speech_ad_rules">Speech rules</string>
+    <string name="speech_ad_rules_none">No speech rules</string>
+    <string name="speech_ad_rules_summary">%1$d rules · %2$s</string>
+    <string name="speech_ad_rules_error">Rule settings error: %1$s</string>
+    <string name="speech_ad_rules_manage">Manage speech rules</string>
+    <string name="speech_ad_rules_edit">Edit rules</string>
+    <string name="speech_ad_rules_import">Import text rules</string>
+    <string name="speech_ad_rules_clear">Clear custom rules</string>
+    <string name="speech_ad_rules_view_builtin">View built-in rules</string>
+    <string name="speech_ad_rules_clear_confirm">Clear the current custom speech rules?</string>
+    <string name="speech_ad_rules_clear_done">Custom speech rules cleared</string>
+    <string name="speech_ad_rules_saved">Speech rules saved</string>
+    <string name="speech_ad_rules_imported">Imported %1$d speech rules</string>
+    <string name="speech_ad_rules_import_failed">Speech rule import failed: %1$s</string>
+    <string name="speech_ad_rules_source_none">none</string>
+    <string name="speech_ad_rules_source_builtin">built-in</string>
+    <string name="speech_ad_rules_source_user">edited</string>
+    <string name="speech_ad_rules_source_imported">imported</string>
+    <string name="speech_ad_rules_source_combined">built-in + custom</string>
+    <string name="speech_ad_builtin">Built-in speech rules</string>
+    <string name="speech_ad_builtin_value">%1$s · %2$d rules</string>
     <string name="speech_ad_skip_seconds">Skip duration</string>
     <string name="speech_ad_skip_seconds_value">%1$d seconds</string>
     <string name="speech_ad_skip_mode">Skip mode</string>
@@ -2626,4 +2832,66 @@
     <string name="setting_ad_probe_revision">Revision %1$d · %2$d rules</string>
     <string name="setting_ad_probe_never">Never fetched</string>
     <string name="setting_ad_probe_url_invalid">The rule source must start with https://</string>
-    <string name="setting_ad_probe_source_disabled">Set a community rule source first</string></resources>
+    <string name="setting_ad_probe_source_disabled">Set a community rule source first</string>
+    <string name="dialog_tmdb_test_config">Test configuration</string>
+    <string name="dialog_tmdb_test_result_title">Configuration test</string>
+    <string name="dialog_tmdb_test_api_success">TMDB API: connected and returned valid data (%1$d ms)</string>
+    <string name="dialog_tmdb_test_api_failed">TMDB API: failed (%1$s, %2$d ms)</string>
+    <string name="dialog_tmdb_test_image_success">Image domain: connected and returned a valid image (%1$d ms)</string>
+    <string name="dialog_tmdb_test_image_failed">Image domain: failed (%1$s, %2$d ms)</string>
+    <string name="dialog_tmdb_test_omdb_success">OMDb API: connected and returned valid data (%1$d ms)</string>
+    <string name="dialog_tmdb_test_omdb_failed">OMDb API: failed (%1$s, %2$d ms)</string>
+    <string name="site_health_report_search_hint">Search by site name</string>
+    <string name="nav_following">Following</string>
+    <string name="home_following">Following</string>
+    <string name="sync_item_follow">Following</string>
+    <string name="following">Follow</string>
+    <string name="following_add">Add to following</string>
+    <string name="following_added">Following</string>
+    <string name="following_channel_name">Following updates</string>
+    <string name="following_channel_description">New episode updates for followed shows</string>
+    <string name="following_notification_title">%1$s has a new episode</string>
+    <string name="following_notification_text">Official release: episode %1$d; current source: episode %2$d</string>
+    <string name="following_check_all">Check updates</string>
+    <string name="following_check">Check</string>
+    <string name="following_checking">Checking…</string>
+    <string name="following_check_done">Update check complete</string>
+    <string name="following_check_failed">Update check failed. Previous data was kept.</string>
+    <string name="following_empty">No followed shows yet. Open a series detail page and tap “Add to following”.</string>
+    <string name="following_summary">%1$d followed · %2$d unread</string>
+    <string name="following_continue">Continue</string>
+    <string name="following_read">Mark read</string>
+    <string name="following_notify_on">Notify on</string>
+    <string name="following_notify_off">Notify off</string>
+    <string name="following_change_source">Source</string>
+    <string name="following_cancel">Unfollow</string>
+    <string name="following_delete_title">Unfollow this show?</string>
+    <string name="following_delete_message">The viewing history and TMDB progress will be kept.</string>
+    <string name="following_official">Official: episode %1$d</string>
+    <string name="following_official_unknown">Official status unknown</string>
+    <string name="following_source">Current source: episode %1$d</string>
+    <string name="following_source_unknown">Current source not checked</string>
+    <string name="following_watched">Watched to episode %1$d</string>
+    <string name="following_unwatched">%1$d episodes remaining</string>
+    <string name="following_unwatched_none">Up to date</string>
+    <string name="following_new_count">New %1$d</string>
+    <string name="following_enabled_hint">Following is currently disabled.</string>
+    <string name="following_notification_permission_hint">Notifications were not authorized; in-app badges still work.</string>
+    <string name="following_server_import">Import subscriptions</string>
+    <string name="following_server_url">Server address (http/https)</string>
+    <string name="following_server_token">Token (not stored)</string>
+    <string name="following_server_preview">Preview</string>
+    <string name="following_server_import_action">Import</string>
+    <string name="following_server_invalid">Enter a valid http/https server address</string>
+    <string name="following_server_empty">No importable subscriptions found</string>
+    <string name="following_server_preview_title">Subscriptions to import</string>
+    <string name="following_server_result">Imported %1$d, updated %2$d</string>
+    <string name="following_filter_updates">Updates only</string>
+    <string name="following_filter_all">Show all</string>
+    <string name="following_filter_empty">No followed shows have unwatched updates.</string>
+    <string name="following_filter_unwatched">Unfinished</string>
+    <string name="following_filter_ended">Ended</string>
+    <string name="following_filter_failed">Check failed</string>
+    <string name="setting_following">Following updates</string>
+    <string name="following_next_season">Follow new season S%1$d</string>
+</resources>

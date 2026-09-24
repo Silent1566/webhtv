@@ -44,10 +44,17 @@ public final class RealtimeSubtitleSpeechRecognitionFactory implements SpeechRec
 
     @Override
     public Session create(Listener listener) {
+        return create(listener, ExecutionProfile.SUBTITLE);
+    }
+
+    @Override
+    public Session create(Listener listener, ExecutionProfile profile) {
         Objects.requireNonNull(listener, "listener");
+        Objects.requireNonNull(profile, "profile");
         if (!isReady()) throw new IllegalStateException("speech model is not ready");
         RealtimeSubtitleRecognizer recognizer = RealtimeSubtitleRecognizer.create(
-                modelDirectory(), vadFile(), spec, new RealtimeSubtitleRecognizer.Listener() {
+                modelDirectory(), vadFile(), spec, profile,
+                new RealtimeSubtitleRecognizer.Listener() {
                     @Override
                     public void onResult(String text, long startUs, long endUs,
                                          int timelineToken) {

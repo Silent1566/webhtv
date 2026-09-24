@@ -1,0 +1,72 @@
+diff --git a/libraries/extractor/src/main/java/androidx/media3/extractor/mp4/BoxParser.java b/libraries/extractor/src/main/java/androidx/media3/extractor/mp4/BoxParser.java
+--- a/libraries/extractor/src/main/java/androidx/media3/extractor/mp4/BoxParser.java
++++ b/libraries/extractor/src/main/java/androidx/media3/extractor/mp4/BoxParser.java
+@@ -2280,0 +2281,17 @@ public final class BoxParser {
++        } else if (MimeTypes.AUDIO_ALAC.equals(mimeType)) {
++          // Some QuickTime files wrap the ALAC atom in a wave container without an esds atom.
++          // Keep initializationData in Media3's canonical magic-cookie form.
++          byte[] initializationDataBytes =
++              parseAlacInitializationDataFromWave(parent, childPosition, childAtomSize);
++          if (initializationDataBytes != null) {
++            int[] parsedAlacConfig =
++                CodecSpecificDataUtil.parseAlacAudioSpecificConfig(initializationDataBytes);
++            sampleRate = parsedAlacConfig[0];
++            channelCount = parsedAlacConfig[1];
++            int bitDepth = parsedAlacConfig[2];
++            pcmEncoding = Util.getPcmEncoding(bitDepth);
++            if (pcmEncoding == C.ENCODING_INVALID) {
++              pcmEncoding = Format.NO_VALUE;
++            }
++            initializationData = ImmutableList.of(initializationDataBytes);
++          }
+@@ -2408,0 +2426,26 @@ public final class BoxParser {
++  /** Returns the ALAC magic cookie nested in a QuickTime {@code wave} container, if present. */
++  @Nullable
++  /* package */ static byte[] parseAlacInitializationDataFromWave(
++      ParsableByteArray parent, int wavePosition, int waveSize) throws ParserException {
++    int childPosition = wavePosition + Mp4Box.HEADER_SIZE;
++    while (childPosition - wavePosition < waveSize) {
++      parent.setPosition(childPosition);
++      int childAtomSize = parent.readInt();
++      ExtractorUtil.checkContainerInput(
++          childAtomSize >= Mp4Box.HEADER_SIZE, "childAtomSize too small");
++      int childAtomType = parent.readInt();
++      ExtractorUtil.checkContainerInput(
++          childPosition + childAtomSize <= wavePosition + waveSize,
++          "child atom exceeds wave container");
++      if (childAtomType == Mp4Box.TYPE_alac) {
++        int magicCookieSize = childAtomSize - Mp4Box.FULL_HEADER_SIZE;
++        ExtractorUtil.checkContainerInput(magicCookieSize > 0, "ALAC atom has no magic cookie");
++        byte[] magicCookie = new byte[magicCookieSize];
++        parent.setPosition(childPosition + Mp4Box.FULL_HEADER_SIZE);
++        parent.readBytes(magicCookie, 0, magicCookieSize);
++        return magicCookie;
++      }
++      childPosition += childAtomSize;
++    }
++    return null;
++  }
++
+diff --git a/libraries/extractor/src/test/java/androidx/media3/extractor/mp4/BoxParserTest.java b/libraries/extractor/src/test/java/androidx/media3/extractor/mp4/BoxParserTest.java
+--- a/libraries/extractor/src/test/java/androidx/media3/extractor/mp4/BoxParserTest.java
++++ b/libraries/extractor/src/test/java/androidx/media3/extractor/mp4/BoxParserTest.java
+@@ -45,0 +46,6 @@ public final class BoxParserTest {
++  private static final byte[] ALAC_WAVE_BOX =
++      Util.getBytesFromHexString(
++          "0000002C77617665"
++              + "00000024616C616300000000"
++              + "0010280A0E0600FF0001E0010000000000000000BB80");
++
+@@ -262,0 +269,11 @@ public final class BoxParserTest {
++  @Test
++  public void parseAlacInitializationDataFromWave_returnsMagicCookie() throws ParserException {
++    byte[] magicCookie =
++        BoxParser.parseAlacInitializationDataFromWave(
++            new ParsableByteArray(ALAC_WAVE_BOX), /* wavePosition= */ 0, ALAC_WAVE_BOX.length);
++
++    assertThat(magicCookie)
++        .isEqualTo(
++            Util.getBytesFromHexString(
++                "0010280A0E0600FF0001E0010000000000000000BB80"));
++  }
++

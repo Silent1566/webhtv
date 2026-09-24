@@ -38,12 +38,12 @@
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 
-    <androidx.core.widget.NestedScrollView
+    <com.fongmi.android.tv.ui.custom.CustomNestedScrollView
         android:id="@+id/contentScroll"
         android:layout_width="match_parent"
-        android:layout_height="300dp"
+        android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:fillViewport="true"
+        android:fillViewport="false"
         android:overScrollMode="never">
 
         <androidx.appcompat.widget.LinearLayoutCompat
@@ -63,6 +63,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="48dp"
                 android:layout_marginTop="6dp"
+                android:background="@android:color/transparent"
                 app:tabGravity="fill"
                 app:tabIndicatorColor="#1A73E8"
                 app:tabMode="fixed"
@@ -71,6 +72,7 @@
                 app:tabTextColor="#5F6368" />
 
             <androidx.appcompat.widget.LinearLayoutCompat
+
                 android:id="@+id/ociPanel"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -84,7 +86,10 @@
                 android:layout_marginTop="10dp"
                 android:gravity="center_vertical|start"
                 android:maxLines="1"
+                android:textColor="@color/dialog_outlined_button_text"
                 android:textSize="14sp"
+                app:backgroundTint="@color/dialog_outlined_button_bg"
+                app:strokeColor="@color/dialog_outlined_button_stroke"
                 tools:text="OCI mirror · dockerproxy.net" />
 
                 <com.google.android.material.textfield.TextInputLayout
@@ -109,7 +114,7 @@
 
         </androidx.appcompat.widget.LinearLayoutCompat>
 
-    </androidx.core.widget.NestedScrollView>
+    </com.fongmi.android.tv.ui.custom.CustomNestedScrollView>
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/save"
@@ -118,7 +123,9 @@
         android:layout_height="44dp"
         android:layout_marginTop="16dp"
         android:text="@string/update_settings_save"
+        android:textColor="@color/dialog_primary_button_text"
         android:textSize="14sp"
+        app:backgroundTint="@color/dialog_primary_button_bg"
         app:cornerRadius="8dp" />
 
 </androidx.appcompat.widget.LinearLayoutCompat>

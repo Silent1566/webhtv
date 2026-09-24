@@ -1,0 +1,137 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "io.github.anilbeesetti",
+    "module": "nextlib-media3ext",
+    "version": "1.10.0-0.12.1-fongmi-softload-av3a-ffmpeg901-r2",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "9.5.1"
+    }
+  },
+  "variants": [
+    {
+      "name": "releaseVariantReleaseApiPublication",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-api"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.2.10"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "nextlib-media3ext-1.10.0-0.12.1-fongmi-softload-av3a-ffmpeg901-r2.aar",
+          "url": "nextlib-media3ext-1.10.0-0.12.1-fongmi-softload-av3a-ffmpeg901-r2.aar",
+          "size": 6294461,
+          "sha512": "b6ec0691a578f878c723718934266653f30997f7b370d1e30a04098b1b5889c870e8da8e7484f921d2805fdda62c9833d369002b571021cebbd6692e8ba73f4f",
+          "sha256": "d22cb1885ef998f203b8b7811f6e8df4e42c3d3b3736825279bb1eb05d76a52f",
+          "sha1": "e3e72d755c66c925b173a58d8fda6f373b96f698",
+          "md5": "b643af3120de27bf40f0409679f277b3"
+        }
+      ]
+    },
+    {
+      "name": "releaseVariantReleaseRuntimePublication",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-runtime"
+      },
+      "dependencies": [
+        {
+          "group": "androidx.media3",
+          "module": "media3-exoplayer",
+          "version": {
+            "requires": "1.10.0"
+          }
+        },
+        {
+          "group": "com.google.errorprone",
+          "module": "error_prone_annotations",
+          "version": {
+            "requires": "2.48.0"
+          }
+        },
+        {
+          "group": "androidx.annotation",
+          "module": "annotation",
+          "version": {
+            "requires": "1.9.1"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.2.10"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "nextlib-media3ext-1.10.0-0.12.1-fongmi-softload-av3a-ffmpeg901-r2.aar",
+          "url": "nextlib-media3ext-1.10.0-0.12.1-fongmi-softload-av3a-ffmpeg901-r2.aar",
+          "size": 6294461,
+          "sha512": "b6ec0691a578f878c723718934266653f30997f7b370d1e30a04098b1b5889c870e8da8e7484f921d2805fdda62c9833d369002b571021cebbd6692e8ba73f4f",
+          "sha256": "d22cb1885ef998f203b8b7811f6e8df4e42c3d3b3736825279bb1eb05d76a52f",
+          "sha1": "e3e72d755c66c925b173a58d8fda6f373b96f698",
+          "md5": "b643af3120de27bf40f0409679f277b3"
+        }
+      ]
+    },
+    {
+      "name": "releaseVariantReleaseSourcePublication",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.usage": "java-runtime"
+      },
+      "files": [
+        {
+          "name": "nextlib-media3ext-1.10.0-0.12.1-fongmi-softload-av3a-ffmpeg901-r2-sources.jar",
+          "url": "nextlib-media3ext-1.10.0-0.12.1-fongmi-softload-av3a-ffmpeg901-r2-sources.jar",
+          "size": 20442,
+          "sha512": "514eb43ded3390d1da1f2b0da1e1a22711252908a9806deda7c0463095aaf64f01ff5ea2bb49b6da3b7cf6c3859ac8f85df31da871412fc19527cfeb5e37bc63",
+          "sha256": "043fe28b6c6faeecf58e9168ac92c61b2ed9c0c3010da5a5430af3c59d7741a4",
+          "sha1": "89a1b13b03e9415182dda3c9c95816bc5cee4c0c",
+          "md5": "e63687a2d7048145ac6bceb2a80a37c4"
+        }
+      ]
+    },
+    {
+      "name": "releaseVariantReleaseJavaDocPublication",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "javadoc",
+        "org.gradle.usage": "java-runtime"
+      },
+      "files": [
+        {
+          "name": "nextlib-media3ext-1.10.0-0.12.1-fongmi-softload-av3a-ffmpeg901-r2-javadoc.jar",
+          "url": "nextlib-media3ext-1.10.0-0.12.1-fongmi-softload-av3a-ffmpeg901-r2-javadoc.jar",
+          "size": 328836,
+          "sha512": "f7b4e8e40b6cdad5bab691969de0e4b8abcc7720fdb1df57b79dc4409a61c30aeb22d4a388698478129e7158affd4256fc702bd625a4d20330d78d313cf83e90",
+          "sha256": "fec4d75645d279c75dd18dee54d276cb1c65192566602f87b271a72faee3f186",
+          "sha1": "35ffd146804aab0a0ebaa275098978135b663973",
+          "md5": "ea725f8f9b30486f4180eb8576281a82"
+        }
+      ]
+    }
+  ]
+}

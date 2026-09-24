@@ -25,6 +25,8 @@ import androidx.media3.extractor.mkv.MatroskaExtractor;
 import androidx.media3.extractor.text.DefaultSubtitleParserFactory;
 
 import com.fongmi.android.tv.App;
+import com.fongmi.android.tv.player.exo.ass.AssFontMatroskaExtractor;
+import com.fongmi.android.tv.player.exo.ass.AssFontSet;
 import com.fongmi.android.tv.setting.PlaybackPerformanceSetting;
 import com.github.catvod.crawler.SpiderDebug;
 import com.suyashbelekar.exoplayerhdrutils.libdovi.FrameInfo;
@@ -47,8 +49,6 @@ import java.util.Map;
 final class DolbyVisionP81ExtractorsFactory implements ExtractorsFactory {
 
     private static final int TRANSFORM_GROWTH_BYTES = 10 * 1024;
-    static final int INITIAL_BUFFER_BYTES = 64 * 1024;
-    static final int INITIAL_SCRATCH_BYTES = 16 * 1024;
     private static final TransformStrategy P81_STRATEGY = new TransformStrategy(
             DoviStrategy.CONVERT_TO_P8,
             DoviStrategy.CONVERT_TO_P8,
@@ -61,6 +61,7 @@ final class DolbyVisionP81ExtractorsFactory implements ExtractorsFactory {
 
     private final ExtractorsFactory delegate;
     @Nullable private final ExoDolbyVisionPlaybackState playbackState;
+    @Nullable private final AssFontSet assFonts;
 
     DolbyVisionP81ExtractorsFactory(ExtractorsFactory delegate) {
         this(delegate, null);
@@ -69,8 +70,14 @@ final class DolbyVisionP81ExtractorsFactory implements ExtractorsFactory {
     DolbyVisionP81ExtractorsFactory(
             ExtractorsFactory delegate,
             @Nullable ExoDolbyVisionPlaybackState playbackState) {
+        this(delegate, playbackState, null);
+    }
+
+    DolbyVisionP81ExtractorsFactory(ExtractorsFactory delegate,
+            @Nullable ExoDolbyVisionPlaybackState playbackState, @Nullable AssFontSet assFonts) {
         this.delegate = delegate;
         this.playbackState = playbackState;
+        this.assFonts = assFonts;
     }
 
     @Override
@@ -81,9 +88,7 @@ final class DolbyVisionP81ExtractorsFactory implements ExtractorsFactory {
     @Override
     public Extractor[] createExtractors(
             Uri uri, Map<String, List<String>> responseHeaders) {
-        return wrap(
-                delegate.createExtractors(uri, responseHeaders),
-                isRemoteUri(uri) && PlaybackPerformanceSetting.isDeferredCuesEnabled());
+        return wrap(delegate.createExtractors(uri, responseHeaders), isRemoteUri(uri));
     }
 
     private Extractor[] wrap(Extractor[] extractors, boolean deferSeekForCues) {
@@ -92,10 +97,12 @@ final class DolbyVisionP81ExtractorsFactory implements ExtractorsFactory {
         for (int i = 0; i < extractors.length; i++) {
             Extractor extractor = extractors[i];
             if (extractor instanceof MatroskaExtractor
-                    && (deferSeekForCues || dv7P81Enabled)) {
+                    && (deferSeekForCues || dv7P81Enabled || assFonts != null)) {
                 int flags = MatroskaExtractor.FLAG_EMIT_RAW_SUBTITLE_DATA
                         | (deferSeekForCues ? MatroskaExtractor.FLAG_DEFER_SEEK_FOR_CUES : 0);
-                extractor = new MatroskaExtractor(
+                extractor = assFonts != null
+                        ? new AssFontMatroskaExtractor(flags, dv7P81Enabled, assFonts)
+                        : new MatroskaExtractor(
                         new DefaultSubtitleParserFactory(),
                         flags,
                         dv7P81Enabled);
@@ -362,15 +369,9 @@ final class DolbyVisionP81ExtractorsFactory implements ExtractorsFactory {
         private final ParsableByteArray outputData = new ParsableByteArray();
         @Nullable private final ExoDolbyVisionPlaybackState playbackState;
 
-        // Sized small on purpose. One of these is constructed for every video track of every
-        // media item, DV7 or not, so a megabyte each was paid unconditionally by sources that
-        // never convert anything. ensureCapacity doubles on demand, so a converting session
-        // still reaches whatever it needs after a few one-time growths, while a non-DV session
-        // never grows them at all. Not lazily null: both ensureCapacity overloads dereference
-        // their argument, so null would add an NPE surface at every call site for no gain.
-        private ByteBuffer pending = ByteBuffer.allocateDirect(INITIAL_BUFFER_BYTES);
-        private byte[] inputScratch = new byte[INITIAL_SCRATCH_BYTES];
-        private byte[] outputScratch = new byte[INITIAL_BUFFER_BYTES];
+        private ByteBuffer pending = ByteBuffer.allocateDirect(1024 * 1024);
+        private byte[] inputScratch = new byte[16 * 1024];
+        private byte[] outputScratch = new byte[1024 * 1024];
         @Nullable private HevcFrameTransformer transformer;
         @Nullable private LibDovi validator;
         @Nullable private Format sourceFormat;

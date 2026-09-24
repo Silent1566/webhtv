@@ -4,8 +4,13 @@ import android.os.SystemClock;
 import android.text.TextUtils;
 
 import androidx.annotation.Nullable;
+import com.fongmi.android.tv.App;
+import com.fongmi.android.tv.api.config.AdBlockStatsStore;
 import com.fongmi.android.tv.api.config.HlsRuleConfig;
+import com.fongmi.android.tv.utils.HlsAdblockNotice;
 import com.fongmi.android.tv.utils.HlsAdblockPipeline;
+import com.fongmi.android.tv.utils.HlsManifestCleaner;
+import com.fongmi.android.tv.utils.Notify;
 
 import com.fongmi.android.tv.player.PlaybackAutoContext;
 import com.fongmi.android.tv.player.PlaybackRouteRegistry;
@@ -139,6 +144,37 @@ public final class MpvHlsProxy extends NanoHTTPD {
 
     public synchronized String proxy(String url, Map<String, String> headers) throws IOException {
         return proxy(url, headers, url);
+    }
+
+    HlsAdTimeline adTimeline(long selectedBitsPerSecond) {
+        if (kernel != PlayerSetting.MPV || !Setting.isAdblock()) return HlsAdTimeline.NONE;
+        SessionStats stats = sessionStats.get(sessionId);
+        if (stats == null || !stats.vod) return HlsAdTimeline.NONE;
+        return resolveAdTimeline(stats.directAdTimeline, stats.adTimelines,
+                selectedBitsPerSecond, stats.variants.size());
+    }
+
+    static HlsAdTimeline resolveAdTimeline(
+            @Nullable HlsAdTimeline direct,
+            Map<HlsPlaylistRewriter.Variant, HlsAdTimeline> variants,
+            long selectedBitsPerSecond, int declaredVariantCount) {
+        if (direct != null) return direct;
+        HlsAdTimeline candidate = null;
+        int matched = 0;
+        for (Map.Entry<HlsPlaylistRewriter.Variant, HlsAdTimeline> entry : variants.entrySet()) {
+            HlsPlaylistRewriter.Variant variant = entry.getKey();
+            if (variant.kind() != HlsPlaylistRewriter.VariantKind.STREAM) continue;
+            if (selectedBitsPerSecond > 0 && selectedBitsPerSecond != variant.bandwidth()
+                    && selectedBitsPerSecond != variant.averageBandwidth()) continue;
+            if (candidate != null && !candidate.sameCuts(entry.getValue())) return HlsAdTimeline.NONE;
+            candidate = entry.getValue();
+            matched++;
+        }
+        // Probing a rendition does not mean it is selected. Until native selection
+        // is known, require agreement from every declared regular video variant.
+        if (selectedBitsPerSecond <= 0
+                && (declaredVariantCount <= 0 || matched != declaredVariantCount)) return HlsAdTimeline.NONE;
+        return candidate == null ? HlsAdTimeline.NONE : candidate;
     }
 
     public synchronized String proxy(
@@ -540,7 +576,7 @@ public final class MpvHlsProxy extends NanoHTTPD {
                 SpiderDebug.log(TAG, "invalid playlist session=%d code=%d bytes=%d url=%s", id, response.code(), text.length(), shortUrl(session.url));
                 return error(Status.BAD_REQUEST, "invalid playlist");
             }
-            text = applyAdblock(text, id, session.url);
+            text = applyAdblock(text, id, session.url, null, true);
             String rewritten = rewritePlaylist(response.request().url().toString(), text, id, null);
             byte[] data = rewritten.getBytes(StandardCharsets.UTF_8);
             SpiderDebug.log(TAG, "playlist session=%d code=%d bytes=%d rewritten=%d url=%s", id, response.code(), text.length(), data.length, shortUrl(session.url));
@@ -691,7 +727,8 @@ public final class MpvHlsProxy extends NanoHTTPD {
         boolean foregroundHandedOff = false;
         try {
             String range = requestHeader(httpSession, "range");
-            boolean targetPlaylist = isPlaylistUrl(target.url, null);
+            boolean targetPlaylist = MpvHlsSegmentContentPolicy.isPlaylist(
+                    target.role(), target.url, null);
             if (targetPlaylist) recordSelectedVariant(target);
             if (kernel == PlayerSetting.IJK
                     && !targetPlaylist
@@ -718,7 +755,8 @@ public final class MpvHlsProxy extends NanoHTTPD {
             }
             String finalUrl = response.request().url().toString();
             MediaType type = body.contentType();
-            if (isPlaylistUrl(target.url, type) || isPlaylistUrl(finalUrl, type)) {
+            if (targetPlaylist || MpvHlsSegmentContentPolicy.isPlaylist(
+                    target.role(), finalUrl, type == null ? null : type.toString())) {
                 recordSelectedVariant(target);
                 try (response; body) {
                     if (!response.isSuccessful()) {
@@ -732,7 +770,10 @@ public final class MpvHlsProxy extends NanoHTTPD {
                         SpiderDebug.log(TAG, "invalid nested playlist id=%s code=%d bytes=%d url=%s", id, response.code(), text.length(), shortUrl(target.url));
                         return error(Status.BAD_REQUEST, "invalid playlist");
                     }
-                    text = applyAdblock(text, target.sessionId, target.url);
+                    text = applyAdblock(text, target.sessionId, target.url, target.variant(),
+                            target.role() == HlsPlaylistRewriter.UriRole.VARIANT_PLAYLIST
+                                    && target.variant() != null
+                                    && target.variant().kind() == HlsPlaylistRewriter.VariantKind.STREAM);
                     String rewritten = rewritePlaylist(finalUrl, text, target.sessionId, target.variant());
                     byte[] data = rewritten.getBytes(StandardCharsets.UTF_8);
                     SpiderDebug.log(TAG, "nested playlist id=%s code=%d bytes=%d url=%s", id, response.code(), data.length, shortUrl(target.url));
@@ -794,26 +835,64 @@ public final class MpvHlsProxy extends NanoHTTPD {
         return client.newCall(builder.build()).execute();
     }
 
-    private String applyAdblock(String text, int session, String url) {
+    private String applyAdblock(String text, int session, String url,
+            @Nullable HlsPlaylistRewriter.Variant variant, boolean videoPlaylist) {
         if (!Setting.isAdblock() || !isVodPlaylist(text)) return text;
         if (HlsAdblockPipeline.isCoreM3u8Proxy(url)) return text;
+        if (kernel == PlayerSetting.MPV && !videoPlaylist) return text;
         try {
-            HlsAdblockPipeline.Outcome outcome = HlsAdblockPipeline.apply(url, text, HlsRuleConfig.getRules(), true);
-            if (!TextUtils.equals(outcome.manifest(), text)) {
-                if (kernel == PlayerSetting.MPV) {
-                    SpiderDebug.log(TAG,
-                            "adblock bypassed session=%d bytes=%d candidateBytes=%d reason=mpv-ts-timestamp-integrity url=%s",
-                            session, text.length(), outcome.manifest().length(), shortUrl(url));
-                    return text;
+            List<HlsManifestCleaner.Rule> rules = HlsRuleConfig.getRules();
+            boolean legacyFallback = HlsRuleConfig.isLegacyFallbackEnabled();
+            HlsAdblockPipeline.Outcome outcome = HlsAdblockPipeline.apply(url, text, rules, legacyFallback);
+            if (kernel == PlayerSetting.MPV) {
+                HlsAdTimeline timeline = HlsAdTimeline.from(text, outcome.manifest());
+                SessionStats stats = sessionStats.get(session);
+                if (stats != null) {
+                    if (variant == null) stats.directAdTimeline = timeline;
+                    else stats.adTimelines.merge(variant, timeline,
+                            (previous, next) -> previous.sameCuts(next) ? previous : HlsAdTimeline.NONE);
                 }
+                if (!TextUtils.equals(outcome.manifest(), text)) {
+                    SpiderDebug.log(TAG,
+                            "adblock planned session=%d ranges=%d cuts=%s mode=source-timeline-seek reason=%s url=%s",
+                            session, timeline.ranges().size(), timeline.ranges(), timeline.reason(), shortUrl(url));
+                }
+                // Keep timestamps, implicit AES IVs, byte ranges and rendition
+                // synchronization intact; MpvPlayer skips the detected time ranges.
+                // Notify as soon as a valid removal plan is available so MPV has the
+                // same user-visible adblock confirmation as Exo. Runtime skip
+                // accounting remains separate and is recorded only after playback.
+                if (!TextUtils.equals(outcome.manifest(), text)) {
+                    recordAndNotifyAdblock(url, outcome);
+                }
+                return text;
+            }
+            if (!TextUtils.equals(outcome.manifest(), text)) {
                 SpiderDebug.log(TAG, "adblock filtered session=%d bytes=%d->%d structured=%s legacy=%s url=%s",
                         session, text.length(), outcome.manifest().length(), outcome.structured(), outcome.legacy(), shortUrl(url));
             }
+            recordAndNotifyAdblock(url, outcome);
             return outcome.manifest();
         } catch (Throwable e) {
             SpiderDebug.log(TAG, "adblock ignored session=%d errorType=%s", session, e.getClass().getSimpleName());
             return text;
         }
+    }
+
+    private void recordAndNotifyAdblock(String url, HlsAdblockPipeline.Outcome outcome) {
+        if (!outcome.structured() && !outcome.legacy()) return;
+        okhttp3.HttpUrl parsed = okhttp3.HttpUrl.parse(url);
+        if (parsed == null) return;
+        long fallbackCount = outcome.legacy() ? Math.max(1, outcome.removedSegments()) : 0;
+        String pipeline = kernel == PlayerSetting.IJK ? "IJK" : "MPV";
+        AdBlockStatsStore.recordBlocks(parsed.host(), pipeline, outcome.ruleCounts(), fallbackCount,
+                parsed.host(), outcome.removedDurationSec(), outcome.removedSegmentDetails());
+        if (!HlsAdblockNotice.shouldNotify(url, System.currentTimeMillis())) return;
+        int removed = outcome.removedSegments() > 0 ? outcome.removedSegments() : (int) fallbackCount;
+        String message = outcome.structured() && outcome.removedDurationSec() > 0
+                ? String.format(Locale.US, "已跳过 %d 个广告片段（%.1f 秒）", removed, outcome.removedDurationSec())
+                : "已跳过 " + removed + " 个广告片段";
+        App.post(() -> Notify.show(message));
     }
 
     private String rewritePlaylist(String playlistUrl, String text, int session, @Nullable HlsPlaylistRewriter.Variant inheritedVariant) {
@@ -1058,8 +1137,8 @@ public final class MpvHlsProxy extends NanoHTTPD {
         try (okhttp3.Response response = fetch(session, url, null, true)) {
             if (!preloadGate.allows(preloadGeneration)) return false;
             ResponseBody body = response.body();
-            if (!response.isSuccessful() || body == null
-                    || isPlaylistUrl(url, body.contentType())) return false;
+            // The caller supplies parsed media segments, including *.m3u8?ts=... URLs.
+            if (!response.isSuccessful() || body == null) return false;
             long upstreamLength = body.contentLength();
             if (upstreamLength < MIN_CACHE_FILE_BYTES) return false;
             boolean stripPngPrefix = MpvHlsSegmentContentPolicy.shouldProbePngPrefix(
@@ -1418,15 +1497,6 @@ public final class MpvHlsProxy extends NanoHTTPD {
         } catch (Throwable e) {
             return uri;
         }
-    }
-
-    private static boolean isPlaylistUrl(String url, @Nullable MediaType type) {
-        String mime = type == null ? "" : type.toString().toLowerCase(Locale.US);
-        if (mime.contains("mpegurl") || mime.contains("m3u8")) return true;
-        String lower = url == null ? "" : url.toLowerCase(Locale.US);
-        int query = lower.indexOf('?');
-        if (query >= 0) lower = lower.substring(0, query);
-        return lower.endsWith(".m3u8") || lower.endsWith(".m3u");
     }
 
     private static boolean looksLikePlaylist(String text) {
@@ -2036,6 +2106,9 @@ public final class MpvHlsProxy extends NanoHTTPD {
         private final HlsProxyLiveLagTracker liveLag =
                 new HlsProxyLiveLagTracker();
         private volatile HlsPlaylistRewriter.Variant selectedVariant;
+        private volatile HlsAdTimeline directAdTimeline;
+        private final Map<HlsPlaylistRewriter.Variant, HlsAdTimeline> adTimelines =
+                new ConcurrentHashMap<>();
         private volatile int variantCount;
         private volatile List<HlsVariant> variants = List.of();
         private volatile List<HlsPlaylistRewriter.Segment> segments = List.of();

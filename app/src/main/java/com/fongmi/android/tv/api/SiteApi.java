@@ -15,6 +15,7 @@ import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.event.CatWebEvent;
 import com.fongmi.android.tv.player.Source;
 import com.fongmi.android.tv.setting.PlayerSetting;
+import com.fongmi.android.tv.setting.SiteHealthStore;
 import com.fongmi.android.tv.utils.PushParser;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.Sniffer;
@@ -59,6 +60,19 @@ public class SiteApi {
 
     @NonNull
     public static Result homeContent(@NonNull Site site) throws Exception {
+        long start = System.currentTimeMillis();
+        try {
+            Result result = homeContentRaw(site);
+            SiteHealthStore.recordHome(site, true, result.getList().size(), System.currentTimeMillis() - start, "");
+            return result;
+        } catch (Exception e) {
+            SiteHealthStore.recordHome(site, false, 0, System.currentTimeMillis() - start, e.getMessage());
+            throw e;
+        }
+    }
+
+    @NonNull
+    private static Result homeContentRaw(@NonNull Site site) throws Exception {
         if (isSpider(site)) {
             Spider spider = site.recent().spider();
             boolean crash = Prefers.getBoolean("crash");
@@ -94,6 +108,19 @@ public class SiteApi {
 
     @NonNull
     public static Result categoryContent(@NonNull String key, @NonNull String tid, @NonNull String page, boolean filter, @NonNull HashMap<String, String> extend) throws Exception {
+        long start = System.currentTimeMillis();
+        try {
+            Result result = categoryContentRaw(key, tid, page, filter, extend);
+            SiteHealthStore.recordCategory(key, true, result.getList().size(), System.currentTimeMillis() - start, "");
+            return result;
+        } catch (Exception e) {
+            SiteHealthStore.recordCategory(key, false, 0, System.currentTimeMillis() - start, e.getMessage());
+            throw e;
+        }
+    }
+
+    @NonNull
+    private static Result categoryContentRaw(@NonNull String key, @NonNull String tid, @NonNull String page, boolean filter, @NonNull HashMap<String, String> extend) throws Exception {
         SpiderDebug.log("category", "key=%s,tid=%s,page=%s,filter=%s,extend=%s", key, tid, page, filter, extend);
         Site site = VodConfig.get().getSite(key);
         if (isSpider(site)) {
@@ -145,21 +172,24 @@ public class SiteApi {
         long beforeSpider = System.currentTimeMillis();
         if (isSpider(site)) {
             String detailContent = site.recent().spider().detailContent(Arrays.asList(requestId));
-            SpiderDebug.log("detail", detailContent);
-            result = Result.fromJson(detailContent);
+            TmdbSourceCredentialIngress.Ingress ingress = TmdbSourceCredentialIngress.extractRootAndStrip(detailContent);
+            SpiderDebug.log("detail", ingress.getSanitizedJson());
+            result = Result.fromJson(ingress.getSanitizedJson());
         } else {
             ArrayMap<String, String> params = new ArrayMap<>();
             params.put("ac", ac(site.getType()));
             params.put("ids", requestId);
             String detailContent = call(site, params);
-            SpiderDebug.log("detail", detailContent);
-            result = Result.fromType(site.getType(), detailContent);
+            TmdbSourceCredentialIngress.Ingress ingress = TmdbSourceCredentialIngress.extractRootAndStrip(detailContent);
+            SpiderDebug.log("detail", ingress.getSanitizedJson());
+            result = Result.fromType(site.getType(), ingress.getSanitizedJson());
         }
         Source.get().parse(result.getVod().setFlags());
         result = applyPushTitle(push, result);
         cacheDetail(key, sourceKey, id, result, beforeSpider);
         return result;
     }
+
 
     /**
      * 把详情结果写进缓存，除非这条不该缓存。
@@ -185,6 +215,10 @@ public class SiteApi {
         if (result.getList().isEmpty() || CatAction.blank(result.getVod())) return;
         if (!hasMetadata(result.getVod())) {
             SpiderDebug.log("detail-cache", "skip key=%s,id=%s reason=noMetadata", key, id);
+            return;
+        }
+        if (result.getVod().getFlags().isEmpty()) {
+            SpiderDebug.log("detail-cache", "skip key=%s,id=%s reason=noPlayableContent", key, id);
             return;
         }
         if (CatWebEvent.requestedAfter(beforeSpider)) {

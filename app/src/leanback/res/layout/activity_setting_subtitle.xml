@@ -84,7 +84,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="16dp"
-                android:text="@string/player_subtitle_assrt_token"
+                android:text="@string/player_subtitle_source"
                 android:textColor="@color/white"
                 android:textSize="18sp" />
 

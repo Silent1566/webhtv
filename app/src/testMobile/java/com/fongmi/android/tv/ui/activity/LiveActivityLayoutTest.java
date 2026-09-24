@@ -12,6 +12,21 @@ import static org.junit.Assert.assertTrue;
 public class LiveActivityLayoutTest {
 
     @Test
+    public void leanbackLiveControlsUseSharedOsdWithoutLegacyTopBar() throws Exception {
+        Path sourcePath = findLeanbackJavaPath().resolve(Path.of(
+                "com", "fongmi", "android", "tv", "ui", "activity", "LiveActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        String showControlBody = section(source, "private void showControl(View view)", "private void hideControl()");
+
+        assertFalse(sourcePath + " is missing showControl", showControlBody.isEmpty());
+        assertTrue("leanback live controls must hide the retired top bar before showing shared OSD",
+                showControlBody.contains("mBinding.widget.top.setVisibility(View.GONE);")
+                        && showControlBody.contains("mOsd.setControlsVisible(true);"));
+        assertFalse("leanback live controls must not show the retired top bar when all OSD options are off",
+                showControlBody.contains("mBinding.widget.top.setVisibility(View.VISIBLE);"));
+    }
+
+    @Test
     public void explicitLivePiPPreparesVideoBeforeEnteringSystemPiP() throws Exception {
         Path sourcePath = findMobileJavaPath().resolve(Path.of(
                 "com", "fongmi", "android", "tv", "ui", "activity", "LiveActivity.java"));
@@ -162,6 +177,93 @@ public class LiveActivityLayoutTest {
         int cancelPending = onPipChangedBody.indexOf("cancelPendingLivePiP(false);", enteredPiP);
         assertTrue("a successful system PiP transition must cancel any still-pending manual entry",
                 enteredPiP >= 0 && cancelPending > enteredPiP);
+    }
+
+    @Test
+    public void liveConfigInitializationUsesRuntimeStateForMobileAndLeanback() throws Exception {
+        assertLiveConfigInitializationUsesRuntimeState(findMobileJavaPath());
+        assertLiveConfigInitializationUsesRuntimeState(findLeanbackJavaPath());
+    }
+
+    private static void assertLiveConfigInitializationUsesRuntimeState(Path javaRoot) throws Exception {
+        Path sourcePath = javaRoot.resolve(Path.of(
+                "com", "fongmi", "android", "tv", "ui", "activity", "LiveActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        String checkLiveBody = section(source, "private void checkLive()", "private Callback getCallback()");
+
+        assertFalse(sourcePath + " is missing checkLive", checkLiveBody.isEmpty());
+        assertTrue("checkLive must inspect the current LiveConfig state before loading",
+                checkLiveBody.contains("if (LiveConfig.isEmpty())"));
+        assertFalse("checkLive must not trust the potentially stale launch Intent empty flag",
+                checkLiveBody.contains("if (isEmpty())"));
+        assertTrue("an uninitialized LiveConfig must be initialized and loaded",
+                checkLiveBody.contains("LiveConfig.get().init().load(getCallback());"));
+        assertTrue("an already-loaded LiveConfig must continue directly to playback",
+                checkLiveBody.contains("getLive();"));
+    }
+
+    @Test
+    public void liveParseFailureUsesSourceFallbackForMobileAndLeanback() throws Exception {
+        assertLiveParseFailureUsesSourceFallback(findMobileJavaPath());
+        assertLiveParseFailureUsesSourceFallback(findLeanbackJavaPath());
+    }
+
+    private static void assertLiveParseFailureUsesSourceFallback(Path javaRoot) throws Exception {
+        Path sourcePath = javaRoot.resolve(Path.of(
+                "com", "fongmi", "android", "tv", "ui", "activity", "LiveActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        String renderLiveBody = section(source, "private void renderLive(Live live)", "private void setGroup(Live live)");
+
+        assertFalse(sourcePath + " is missing renderLive", renderLiveBody.isEmpty());
+        assertTrue("an empty parsed live source must enter fallback when source fallback is enabled",
+                renderLiveBody.contains("if (live == null || live.getGroups().isEmpty())")
+                        && renderLiveBody.contains("if (LiveSetting.isSourceFallback()) startFlow();"));
+        assertTrue("an empty parsed live source must stop before rendering groups",
+                renderLiveBody.indexOf("startFlow();") < renderLiveBody.indexOf("return;"));
+        assertTrue("a valid parsed live source must still render its groups",
+                renderLiveBody.contains("mViewModel.parseXml(live);")
+                        && renderLiveBody.contains("setGroup(live);")
+                        && renderLiveBody.contains("setWidth(live);"));
+    }
+
+    @Test
+    public void sourceHttpErrorBypassesPlayerRetriesWhenFallbackIsEnabledForMobileAndLeanback() throws Exception {
+        assertSourceHttpErrorBypassesPlayerRetries(findMobileJavaPath());
+        assertSourceHttpErrorBypassesPlayerRetries(findLeanbackJavaPath());
+    }
+
+    private static void assertSourceHttpErrorBypassesPlayerRetries(Path javaRoot) throws Exception {
+        Path sourcePath = javaRoot.resolve(Path.of(
+                "com", "fongmi", "android", "tv", "ui", "activity", "LiveActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        String method = section(source, "protected boolean onSourceHttpError(int statusCode, String msg)", "protected void onError(String msg)");
+
+        assertFalse(sourcePath + " is missing onSourceHttpError", method.isEmpty());
+        assertTrue("disabled source fallback must preserve the normal player retry chain",
+                method.contains("if (!LiveSetting.isSourceFallback()) return false;"));
+        assertTrue("enabled source fallback must route the HTTP failure into the live fallback flow",
+                method.contains("onError(msg);") && method.contains("return true;"));
+        assertTrue("the failure must be handled before returning true",
+                method.indexOf("onError(msg);") < method.indexOf("return true;"));
+    }
+
+    @Test
+    public void playbackErrorCancelsStaleBufferingFallbackForMobileAndLeanback() throws Exception {
+        assertPlaybackErrorCancelsStaleBufferingFallback(findMobileJavaPath());
+        assertPlaybackErrorCancelsStaleBufferingFallback(findLeanbackJavaPath());
+    }
+
+    private static void assertPlaybackErrorCancelsStaleBufferingFallback(Path javaRoot) throws Exception {
+        Path sourcePath = javaRoot.resolve(Path.of(
+                "com", "fongmi", "android", "tv", "ui", "activity", "LiveActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        String onErrorBody = section(source, "protected void onError(String msg)", "protected void onReload(String msg)");
+
+        assertFalse(sourcePath + " is missing onError", onErrorBody.isEmpty());
+        assertTrue("a playback error must cancel the stale buffering timeout before fallback",
+                onErrorBody.contains("App.removeCallbacks(mBufferingTimeout);")
+                        && onErrorBody.indexOf("App.removeCallbacks(mBufferingTimeout);")
+                        < onErrorBody.indexOf("startFlow();"));
     }
 
     @Test

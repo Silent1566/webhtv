@@ -39,6 +39,14 @@ public class SiteHealthStore {
     private static boolean loaded;
     private static boolean dirty;
 
+    public static void recordHome(Site site, boolean success, int count, long cost, String error) {
+        recordProtocol(site == null ? null : site.getKey(), ProtocolStage.HOME, success, count, cost, error);
+    }
+
+    public static void recordCategory(String key, boolean success, int count, long cost, String error) {
+        recordProtocol(key, ProtocolStage.CATEGORY, success, count, cost, error);
+    }
+
     public static void recordSearch(Site site, boolean success, int count, long cost, String error) {
         if (skip(site)) return;
         synchronized (SiteHealthStore.class) {
@@ -102,6 +110,16 @@ public class SiteHealthStore {
         }
     }
 
+    public static void recordPlayAttempt(String key) {
+        if (skip(key)) return;
+        synchronized (SiteHealthStore.class) {
+            Health health = get(key);
+            health.playAttempts++;
+            health.updatedAt = System.currentTimeMillis();
+            markDirty();
+        }
+    }
+
     public static void recordPlay(String key, boolean success, String error) {
         if (skip(key)) return;
         synchronized (SiteHealthStore.class) {
@@ -119,6 +137,53 @@ public class SiteHealthStore {
             markDirty();
         }
     }
+
+    private static void recordProtocol(String key, ProtocolStage stage, boolean success, int count, long cost, String error) {
+        if (skip(key)) return;
+        synchronized (SiteHealthStore.class) {
+            Health health = get(key);
+            health.updatedAt = System.currentTimeMillis();
+            boolean home = stage == ProtocolStage.HOME;
+            if (home) {
+                health.lastHomeCost = Math.max(0, cost);
+                health.lastHomeCount = Math.max(0, count);
+                if (success) {
+                    health.homeSuccess++;
+                    health.lastHomeSuccessAt = health.updatedAt;
+                    if (count <= 0) {
+                        health.homeEmpty++;
+                        health.lastHomeError = REASON_EMPTY_RESULT;
+                        health.addHomeReason(REASON_EMPTY_RESULT);
+                    }
+                } else {
+                    health.homeFail++;
+                    health.lastHomeFailAt = health.updatedAt;
+                    health.lastHomeError = trim(error);
+                    health.addHomeReason(reason("HOME", error));
+                }
+            } else {
+                health.lastCategoryCost = Math.max(0, cost);
+                health.lastCategoryCount = Math.max(0, count);
+                if (success) {
+                    health.categorySuccess++;
+                    health.lastCategorySuccessAt = health.updatedAt;
+                    if (count <= 0) {
+                        health.categoryEmpty++;
+                        health.lastCategoryError = REASON_EMPTY_RESULT;
+                        health.addCategoryReason(REASON_EMPTY_RESULT);
+                    }
+                } else {
+                    health.categoryFail++;
+                    health.lastCategoryFailAt = health.updatedAt;
+                    health.lastCategoryError = trim(error);
+                    health.addCategoryReason(reason("CATEGORY", error));
+                }
+            }
+            markDirty();
+        }
+    }
+
+    private enum ProtocolStage { HOME, CATEGORY }
 
     public static void sortSites(List<Site> sites) {
         if (!Setting.isSiteHealthSort()) return;
@@ -177,7 +242,7 @@ public class SiteHealthStore {
                 rows.add(Row.from(siteKey, displayName(siteKey, names), health));
             }
             rows.sort((a, b) -> Long.compare(b.updatedAt, a.updatedAt));
-            return new Report(cid, rows);
+            return new Report(cid, rows, AdBlockStatsStore.getStats());
         }
     }
 
@@ -327,11 +392,19 @@ public class SiteHealthStore {
         public final Summary summary;
         public final List<Row> rows;
         public final String cid;
+        public final long adBlockedTotal;
+        public final Map<String, Long> adBlockedBySite;
+        public final Map<String, Long> adBlockedByRule;
+        public final Map<String, Long> adBlockedByPipeline;
 
-        private Report(String cid, List<Row> rows) {
+        private Report(String cid, List<Row> rows, com.fongmi.android.tv.bean.AdBlockStats adStats) {
             this.cid = cid;
             this.rows = Collections.unmodifiableList(rows);
             this.summary = Summary.from(rows);
+            this.adBlockedTotal = adStats.getTotalBlocked();
+            this.adBlockedBySite = Collections.unmodifiableMap(new LinkedHashMap<>(adStats.getSiteBlocked()));
+            this.adBlockedByRule = Collections.unmodifiableMap(new LinkedHashMap<>(adStats.getRuleCounts()));
+            this.adBlockedByPipeline = Collections.unmodifiableMap(new LinkedHashMap<>(adStats.getPipelineCounts()));
         }
 
         public boolean isEmpty() {
@@ -378,39 +451,48 @@ public class SiteHealthStore {
         public final String siteKey;
         public final String siteName;
         public final Status status;
+        public final Stage home;
+        public final Stage category;
         public final Stage search;
         public final Stage detail;
         public final Stage parse;
         public final Stage play;
+        public final int playAttempts;
         public final long updatedAt;
 
-        private Row(String siteKey, String siteName, Status status, Stage search, Stage detail, Stage parse, Stage play, long updatedAt) {
+        private Row(String siteKey, String siteName, Status status, Stage home, Stage category, Stage search, Stage detail, Stage parse, Stage play, int playAttempts, long updatedAt) {
             this.siteKey = siteKey;
             this.siteName = siteName;
             this.status = status;
+            this.home = home;
+            this.category = category;
             this.search = search;
             this.detail = detail;
             this.parse = parse;
             this.play = play;
+            this.playAttempts = playAttempts;
             this.updatedAt = updatedAt;
         }
 
         private static Row from(String siteKey, String siteName, Health health) {
             double adPenalty = calculateAdPenalty(siteKey);
             return new Row(siteKey, siteName, health.status(adPenalty),
+                    new Stage("HOME", Math.max(0, health.homeSuccess - health.homeEmpty), health.homeFail + health.homeEmpty, health.homeEmpty, health.lastHomeCost, health.lastHomeFailAt, health.lastHomeError, health.homeReasons),
+                    new Stage("CATEGORY", Math.max(0, health.categorySuccess - health.categoryEmpty), health.categoryFail + health.categoryEmpty, health.categoryEmpty, health.lastCategoryCost, health.lastCategoryFailAt, health.lastCategoryError, health.categoryReasons),
                     new Stage("SEARCH", Math.max(0, health.searchSuccess - health.searchEmpty), health.searchFail + health.searchEmpty, health.searchEmpty, health.lastSearchCost, health.lastSearchFailAt, health.lastSearchError, health.searchReasons),
                     new Stage("DETAIL", health.detailSuccess, health.detailFail, 0, health.lastDetailCost, health.lastDetailFailAt, health.lastDetailError, health.detailReasons),
                     new Stage("PARSE", health.parseSuccess, health.parseFail, 0, health.lastParseCost, health.lastParseFailAt, health.lastParseError, health.parseReasons),
                     new Stage("PLAY", health.playSuccess, health.playFail, 0, 0, health.lastPlayFailAt, health.lastPlayError, health.playReasons),
+                    health.playAttempts,
                     health.updatedAt);
         }
 
         public int sampleCount() {
-            return search.sampleCount() + detail.sampleCount() + parse.sampleCount() + play.sampleCount();
+            return home.sampleCount() + category.sampleCount() + search.sampleCount() + detail.sampleCount() + parse.sampleCount() + play.sampleCount();
         }
 
         public int failureCount() {
-            return search.failureCount() + detail.failureCount() + parse.failureCount() + play.failureCount();
+            return home.failureCount() + category.failureCount() + search.failureCount() + detail.failureCount() + parse.failureCount() + play.failureCount();
         }
 
         public String topFailureReason() {
@@ -426,6 +508,8 @@ public class SiteHealthStore {
         }
 
         private void addReasonsTo(Map<String, Integer> reasons) {
+            home.addReasonsTo(reasons);
+            category.addReasonsTo(reasons);
             search.addReasonsTo(reasons);
             detail.addReasonsTo(reasons);
             parse.addReasonsTo(reasons);
@@ -509,6 +593,12 @@ public class SiteHealthStore {
 
     public static class Health {
 
+        private int homeSuccess;
+        private int homeFail;
+        private int homeEmpty;
+        private int categorySuccess;
+        private int categoryFail;
+        private int categoryEmpty;
         private int searchSuccess;
         private int searchFail;
         private int searchEmpty;
@@ -518,10 +608,19 @@ public class SiteHealthStore {
         private int parseFail;
         private int playSuccess;
         private int playFail;
+        private int playAttempts;
+        private int lastHomeCount;
+        private int lastCategoryCount;
         private int lastSearchCount;
+        private long lastHomeCost;
+        private long lastCategoryCost;
         private long lastSearchCost;
         private long lastDetailCost;
         private long lastParseCost;
+        private long lastHomeSuccessAt;
+        private long lastHomeFailAt;
+        private long lastCategorySuccessAt;
+        private long lastCategoryFailAt;
         private long lastSearchSuccessAt;
         private long lastSearchFailAt;
         private long lastDetailSuccessAt;
@@ -531,17 +630,21 @@ public class SiteHealthStore {
         private long lastPlaySuccessAt;
         private long lastPlayFailAt;
         private long updatedAt;
+        private String lastHomeError;
+        private String lastCategoryError;
         private String lastSearchError;
         private String lastDetailError;
         private String lastParseError;
         private String lastPlayError;
+        private Map<String, Integer> homeReasons;
+        private Map<String, Integer> categoryReasons;
         private Map<String, Integer> searchReasons;
         private Map<String, Integer> detailReasons;
         private Map<String, Integer> parseReasons;
         private Map<String, Integer> playReasons;
 
         private int total() {
-            return searchSuccess + searchFail + detailSuccess + detailFail + parseSuccess + parseFail + playSuccess + playFail;
+            return homeSuccess + homeFail + categorySuccess + categoryFail + searchSuccess + searchFail + detailSuccess + detailFail + parseSuccess + parseFail + playSuccess + playFail;
         }
 
         private Status status() {
@@ -558,8 +661,8 @@ public class SiteHealthStore {
         }
 
         private double score() {
-            int success = searchSuccess + detailSuccess * 2 + playSuccess * 5;
-            int fail = searchFail + detailFail * 2 + playFail * 5;
+            int success = homeSuccess + categorySuccess + searchSuccess + detailSuccess * 2 + playSuccess * 5;
+            int fail = homeFail + categoryFail + searchFail + detailFail * 2 + playFail * 5;
             if (success + fail == 0) return 0;
             double score = 60.0 * (success - fail) / (success + fail + 4.0);
             score += Math.min(lastSearchCount, 20) * 1.2;
@@ -568,6 +671,14 @@ public class SiteHealthStore {
             if (lastPlaySuccessAt > lastPlayFailAt) score += 18;
             if (lastPlayFailAt > lastPlaySuccessAt) score -= 18;
             return score;
+        }
+
+        private void addHomeReason(String reason) {
+            homeReasons = addReason(homeReasons, reason);
+        }
+
+        private void addCategoryReason(String reason) {
+            categoryReasons = addReason(categoryReasons, reason);
         }
 
         private void addSearchReason(String reason) {

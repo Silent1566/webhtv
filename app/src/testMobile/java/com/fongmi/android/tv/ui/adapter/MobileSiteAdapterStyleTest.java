@@ -15,12 +15,13 @@ public class MobileSiteAdapterStyleTest {
     public void siteLabelsKeepSelectionDialogContrastAcrossModes() throws Exception {
         Path moduleRoot = findModuleRoot();
         String adapter = read(moduleRoot.resolve(Path.of("src", "mobile", "java", "com", "fongmi", "android", "tv", "ui", "adapter", "SiteAdapter.java")));
-        String textColors = read(moduleRoot.resolve(Path.of("src", "main", "res", "color", "site_button_text.xml")));
+        String theme = read(moduleRoot.resolve(Path.of("src", "mobile", "java", "com", "fongmi", "android", "tv", "ui", "helper", "SiteDialogTheme.java")));
 
         assertTrue("Site labels should stay fully opaque in block mode",
                 adapter.contains("holder.binding.text.setAlpha(1.0f);"));
         assertFalse("Disabled search-mode labels should use the same text color as selectable site labels",
-                textColors.contains("android:state_enabled=\"false\""));
+                theme.contains("state_enabled"));
+        assertTrue("The adapter must use the palette covered by this test", adapter.contains("theme.apply(binding.text)"));
     }
 
     private static String read(Path path) throws Exception {

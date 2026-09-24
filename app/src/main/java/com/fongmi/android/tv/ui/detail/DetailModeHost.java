@@ -22,4 +22,12 @@ public interface DetailModeHost {
      * 返回 ActivityTmdbDetailBinding
      */
     ViewBinding binding();
+
+    void closeDetailFullscreenPlayer();
+
+    void playInline();
+
+    void playDetailFullscreen();
+
+    void playDefaultPlayback();
 }

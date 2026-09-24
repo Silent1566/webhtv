@@ -63,6 +63,11 @@ public class LiveConfig extends BaseConfig {
         return get().getLives().indexOf(get().getHome());
     }
 
+    public static Live getNextHome() {
+        int index = getHomeIndex() + 1;
+        return index > 0 && index < get().getLives().size() ? get().getLives().get(index) : null;
+    }
+
     public static boolean isOnly() {
         return get().getLives().size() == 1;
     }

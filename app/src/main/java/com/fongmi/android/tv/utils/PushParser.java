@@ -8,6 +8,8 @@ public final class PushParser {
 
     private static final Pattern PUSH_URL = Pattern.compile("(https?|thunder|magnet|ed2k|video):\\S+");
     private static final Pattern COMMON_HEADER = Pattern.compile("(?i)^(user-agent|referer|referrer|cookie|origin|authorization|range|accept|content-type)\\s*[:=].+");
+    private static final Pattern NETWORK_LOCATION = Pattern.compile("(?i)^(https?|file|content|smb|nfs|ftp|rtsp|video)://\\S+$");
+    private static final Pattern WINDOWS_PATH = Pattern.compile("(?i)^[a-z]:[\\\\/].+");
     private PushParser() {
     }
 
@@ -94,6 +96,22 @@ public final class PushParser {
 
         public String getName() {
             return title.isEmpty() ? url : title;
+        }
+
+        public boolean hasExplicitTitle() {
+            return !title.isEmpty();
+        }
+
+        public boolean shouldSkipAutoTmdbMatch() {
+            return !hasExplicitTitle() && isObviousMediaLocation(getName());
+        }
+
+        private static boolean isObviousMediaLocation(String value) {
+            String location = clean(value);
+            return NETWORK_LOCATION.matcher(location).matches()
+                    || location.startsWith("/")
+                    || location.startsWith("\\\\")
+                    || WINDOWS_PATH.matcher(location).matches();
         }
     }
 }

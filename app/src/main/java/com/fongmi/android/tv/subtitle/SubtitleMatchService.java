@@ -33,7 +33,7 @@ public final class SubtitleMatchService {
     private final Map<String, Integer> generations;
 
     public SubtitleMatchService() {
-        this(new SubtitleContextBuilder(), new SubtitleQueryPlanner(), new SubtitleProviderRegistry(), new SubtitleRanker());
+        this(new SubtitleContextBuilder(), new SubtitleQueryPlanner(), SubtitleProviderRegistry.get(), new SubtitleRanker());
     }
 
     SubtitleMatchService(SubtitleContextBuilder contextBuilder, SubtitleQueryPlanner queryPlanner, SubtitleProviderRegistry registry, SubtitleRanker ranker) {

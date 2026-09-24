@@ -2,14 +2,16 @@
 <androidx.appcompat.widget.LinearLayoutCompat xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@drawable/selector_ad_rule"
+    android:layout_marginTop="3dp"
+    android:layout_marginBottom="3dp"
+    android:background="@drawable/selector_ad_stats_item"
     android:focusable="true"
-    android:minHeight="48dp"
+    android:minHeight="54dp"
     android:orientation="horizontal"
     android:paddingStart="16dp"
-    android:paddingTop="8dp"
+    android:paddingTop="10dp"
     android:paddingEnd="16dp"
-    android:paddingBottom="8dp">
+    android:paddingBottom="10dp">
 
     <com.google.android.material.textview.MaterialTextView
         android:id="@+id/name"
@@ -21,7 +23,7 @@
         android:maxLines="1"
         android:text="站点名称"
         android:textColor="@color/dialog_outlined_button_text"
-        android:textSize="14sp" />
+        android:textSize="15sp" />
 
     <com.google.android.material.textview.MaterialTextView
         android:id="@+id/source"

@@ -628,7 +628,7 @@ public class TmdbUIAdapterTest {
         int fullBind = source.indexOf("applyFastTmdbPlaybackFullDetailNextFrame(item);", player);
         int canApply = source.indexOf("private boolean canApplyPlayerResult()");
         int fastCanApply = source.indexOf("mFastPlaybackFlag != null && mFastPlaybackEpisode != null && mHistory != null", canApply);
-        int actionVisibility = source.indexOf("setOriginalEnhancedActionVisibility(loadTmdbDetail && (Setting.isOriginalEnhancedDetailPage() || isIntentTmdbPlayback()));");
+        int actionVisibility = source.indexOf("setOriginalEnhancedActionVisibility(loadTmdbDetail && (isRuntimeOriginalEnhancedMode() || isIntentTmdbPlayback()));");
         int checkFlag = source.indexOf("private void checkFlag(Vod item)");
         int fastCheckFlag = source.indexOf("mFastTmdbPlaybackStarted && mFastPlaybackFlag != null && mFastPlaybackEpisode != null", checkFlag);
         int bindEpisodes = source.indexOf("setEpisodeAdapter(mFastPlaybackFlag.getEpisodes(), false);", fastCheckFlag);
@@ -837,10 +837,10 @@ public class TmdbUIAdapterTest {
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
         int loadContent = source.indexOf("private void loadContent(@Nullable TmdbBundle reusableBundle)");
         int loadStart = source.indexOf("load start mode=%d", loadContent);
-        int singlePass = source.indexOf("shouldLoadInitialStandaloneTmdbDetailInSinglePass", loadStart);
-        int taskLog = source.indexOf("load tasks mode=%d", singlePass);
-        int sourceStart = source.indexOf("long sourceStart = System.currentTimeMillis();", taskLog);
+        int sourceStart = source.indexOf("long sourceStart = System.currentTimeMillis();", loadStart);
         int sourceLog = source.indexOf("source detail cost=%dms", sourceStart);
+        int singlePass = source.indexOf("shouldLoadInitialStandaloneTmdbDetailInSinglePass", sourceLog);
+        int taskLog = source.indexOf("load tasks mode=%d", singlePass);
         int waitStart = source.indexOf("long tmdbWaitStart = System.currentTimeMillis();", sourceLog);
         int waitLog = source.indexOf("tmdb wait cost=%dms", waitStart);
         int singlePassApply = source.indexOf("if (singlePassStandaloneTmdb)", waitLog);
@@ -852,9 +852,9 @@ public class TmdbUIAdapterTest {
         int bundleMethod = source.indexOf("private TmdbBundle loadTmdbBundle", applyTmdbLog);
         int bundleLog = source.indexOf("tmdb bundle cost=%dms", bundleMethod);
 
-        assertTrue(sourcePath + " is missing standalone detail load profiling", loadContent >= 0 && loadStart > loadContent && taskLog > singlePass);
+        assertTrue(sourcePath + " is missing standalone detail load profiling", loadContent >= 0 && loadStart > loadContent && sourceStart > loadStart && sourceLog > sourceStart && singlePass > sourceLog && taskLog > singlePass);
         assertTrue("standalone detail load should measure source detail and TMDB wait separately",
-                sourceStart > taskLog && sourceLog > sourceStart && waitStart > sourceLog && waitLog > waitStart);
+                sourceStart > loadStart && sourceLog > sourceStart && singlePass > sourceLog && taskLog > singlePass && waitStart > taskLog && waitLog > waitStart);
         assertTrue("standalone TMDB modes should still apply source detail and TMDB bundle together in the single-pass branch",
                 singlePassApply > waitLog && applyLoaded > singlePassApply);
         assertTrue("detail page UI binding and TMDB bundle loading must stay observable for emulator verification",
@@ -891,18 +891,17 @@ public class TmdbUIAdapterTest {
         int contextGuard = source.indexOf("if (selectedFlag == null || selectedEpisode == null) return false;", cancelSwitch);
         int emptyContextGuard = source.indexOf("if (TextUtils.isEmpty(flag) || TextUtils.isEmpty(episodeUrl)) return false;", contextGuard);
         int generation = source.indexOf("int generation = ++inlinePlaybackGeneration;", emptyContextGuard);
-        int switchLoading = source.indexOf("inlinePlayerSwitchLoading = true;", generation);
-        int showLoading = source.indexOf("showInlineLoading();", switchLoading);
-        int position = source.indexOf("long position = player().getPosition();", showLoading);
+        int position = source.indexOf("long position = player().getPosition();", generation);
         int speed = source.indexOf("float speed = player().getSpeed();", position);
         int repeat = source.indexOf("boolean repeat = player().isRepeatOne();", speed);
         int request = source.indexOf("SiteApi.playerContent(key, flag, episodeUrl, playerType)", repeat);
         int staleGuard = source.indexOf("isInlinePlayerSwitchRequestCurrent(generation, key, flag, episodeUrl)", request);
         int lifecycleGuard = source.indexOf("private boolean isInlinePlayerSwitchRequestCurrent(int generation, String key, String flag, String episodeUrl)", staleGuard);
-        int pendingGuard = source.indexOf("return inlinePlayerSwitchLoading", lifecycleGuard);
-        int activeMode = source.indexOf("&& isInlinePlayerMode()", pendingGuard);
+        int activeInline = source.indexOf("return inlineStarted", lifecycleGuard);
+        int activeMode = source.indexOf("&& isInlinePlayerMode()", activeInline);
         int activeOwner = source.indexOf("&& isOwner()", activeMode);
-        int activePlayer = source.indexOf("&& !player().isEmpty()", activeOwner);
+        int activePlayer = source.indexOf("&& player() != null", activeOwner);
+        int activePlayback = source.indexOf("&& isInlinePlaybackRequestCurrent(generation, key, flag, episodeUrl)", activePlayer);
         int updateResult = source.indexOf("currentInlineResult = result;", staleGuard);
         int updateParse = source.indexOf("useParse = result.shouldUseParse();", updateResult);
         int switchResult = source.indexOf("player().switchPlayer(playerType, result, activePlaybackKey(), metadata, useParse, position, speed, repeat);", updateParse);
@@ -911,12 +910,16 @@ public class TmdbUIAdapterTest {
         assertTrue(sourcePath + " is missing refreshed inline player-kernel switching", switchMethod >= 0 && refreshCall > switchMethod && refreshMethod > refreshCall);
         assertTrue("choosing the active kernel must cancel only a pending kernel switch, while missing playback context must not invalidate the current playback request",
                 samePlayerGuard > refreshMethod && cancelSwitch > samePlayerGuard && contextGuard > cancelSwitch && emptyContextGuard > contextGuard && generation > emptyContextGuard);
-        assertTrue("inline kernel switching should expose a cancellable loading state and preserve playback state before refreshing the selected episode",
-                switchLoading > generation && showLoading > switchLoading && position > showLoading && speed > position && repeat > speed);
+        assertTrue("inline kernel switching should preserve playback state before refreshing the selected episode",
+                position > generation && speed > position && repeat > speed);
+        assertFalse("removed inline loading state must not be reintroduced solely for kernel switching",
+                source.substring(refreshMethod, request).contains("inlinePlayerSwitchLoading")
+                        || source.substring(refreshMethod, request).contains("showInlineLoading"));
         assertTrue("inline kernel switching should request a result resolved for the selected target kernel and ignore stale callbacks",
                 request > repeat && staleGuard > request);
-        assertTrue("inline kernel switch callbacks should require a pending switch and be ignored after leaving inline playback or losing player ownership",
-                lifecycleGuard > staleGuard && pendingGuard > lifecycleGuard && activeMode > pendingGuard && activeOwner > activeMode && activePlayer > activeOwner);
+        assertTrue("inline kernel switch callbacks should require active inline playback and be ignored after leaving inline playback or losing player ownership",
+                lifecycleGuard > staleGuard && activeInline > lifecycleGuard && activeMode > activeInline && activeOwner > activeMode
+                        && activePlayer > activeOwner && activePlayback > activePlayer);
         assertTrue("inline kernel switching should install the refreshed result before rebuilding the player",
                 updateResult > staleGuard && updateParse > updateResult && switchResult > updateParse);
         assertTrue("inline kernel switching must not fall back to rebuilding from the stale PlaySpec", oldFallback < 0);

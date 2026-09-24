@@ -268,7 +268,7 @@ public final class AppBackup {
     private static void reload() {
         VodConfig.get().clear("app-backup").init().load(new Callback());
         LiveConfig.get().clear().init().load();
-        WallConfig.get().init().load();
+        WallConfig.get().initPreservingSelection().load();
         ConfigEvent.common();
         RefreshEvent.keep();
         RefreshEvent.history();

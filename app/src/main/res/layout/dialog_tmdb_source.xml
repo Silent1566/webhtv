@@ -101,18 +101,27 @@
                     android:paddingBottom="8dp"
                     android:text="@string/dialog_tmdb_api_host_label" />
 
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/apiHostInput"
-                    style="@style/Widget.WebHTV.LightDialog.Input"
+                <com.google.android.material.textfield.TextInputLayout
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
                     android:layout_width="match_parent"
-                    android:layout_height="44dp"
-                    android:gravity="center_vertical"
-                    android:hint="@string/dialog_tmdb_api_host_hint"
-                    android:inputType="textUri"
-                    android:maxLines="1"
-                    android:paddingStart="12dp"
-                    android:paddingEnd="12dp"
-                    android:selectAllOnFocus="false" />
+                    android:layout_height="wrap_content"
+                    app:boxBackgroundColor="@android:color/transparent"
+                    app:boxStrokeWidth="1dp"
+                    app:endIconTint="?android:attr/textColorSecondary">
+
+                    <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                        android:id="@+id/apiHostInput"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:minHeight="52dp"
+                        android:completionThreshold="0"
+                        android:gravity="center_vertical"
+                        android:inputType="textUri"
+                        android:maxLines="1"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp"
+                        android:singleLine="true" />
+                </com.google.android.material.textfield.TextInputLayout>
 
                 <com.google.android.material.textview.MaterialTextView
                     style="@style/Widget.WebHTV.LightDialog.Label"
@@ -122,18 +131,34 @@
                     android:paddingBottom="8dp"
                     android:text="@string/dialog_tmdb_image_host_label" />
 
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/imageHostInput"
-                    style="@style/Widget.WebHTV.LightDialog.Input"
+                <com.google.android.material.textfield.TextInputLayout
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
                     android:layout_width="match_parent"
-                    android:layout_height="44dp"
-                    android:gravity="center_vertical"
-                    android:hint="@string/dialog_tmdb_image_host_hint"
-                    android:inputType="textUri"
-                    android:maxLines="1"
-                    android:paddingStart="12dp"
-                    android:paddingEnd="12dp"
-                    android:selectAllOnFocus="false" />
+                    android:layout_height="wrap_content"
+                    app:boxBackgroundColor="@android:color/transparent"
+                    app:boxStrokeWidth="1dp"
+                    app:endIconTint="?android:attr/textColorSecondary">
+
+                    <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                        android:id="@+id/imageHostInput"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:minHeight="52dp"
+                        android:completionThreshold="0"
+                        android:gravity="center_vertical"
+                        android:inputType="textUri"
+                        android:maxLines="1"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp"
+                        android:singleLine="true" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <com.google.android.material.textview.MaterialTextView
+                    style="@style/Widget.WebHTV.LightDialog.Helper"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:paddingTop="4dp"
+                    android:text="@string/dialog_tmdb_proxy_host_help" />
 
             </androidx.appcompat.widget.LinearLayoutCompat>
         </com.google.android.material.card.MaterialCardView>
@@ -258,8 +283,7 @@
                         android:layout_marginStart="12dp"
                         android:insetTop="0dp"
                         android:insetBottom="0dp"
-                        android:text="@string/dialog_tmdb_add"
-                        android:textAllCaps="false" />
+                        />
 
                 </androidx.appcompat.widget.LinearLayoutCompat>
 
@@ -313,8 +337,7 @@
                         android:layout_marginStart="12dp"
                         android:insetTop="0dp"
                         android:insetBottom="0dp"
-                        android:text="@string/dialog_tmdb_add"
-                        android:textAllCaps="false" />
+                        />
 
                 </androidx.appcompat.widget.LinearLayoutCompat>
 
@@ -331,8 +354,16 @@
                         android:layout_width="0dp"
                         android:layout_height="52dp"
                         android:layout_weight="1"
-                        android:text="@string/dialog_tmdb_site_manage"
-                        android:textAllCaps="false" />
+                        />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/testConfig"
+                        style="@style/Widget.WebHTV.LightDialog.Button.Tonal"
+                        android:layout_width="0dp"
+                        android:layout_height="52dp"
+                        android:layout_marginStart="12dp"
+                        android:layout_weight="1"
+                        />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/resetDefault"
@@ -341,8 +372,7 @@
                         android:layout_height="52dp"
                         android:layout_marginStart="12dp"
                         android:layout_weight="1"
-                        android:text="@string/dialog_tmdb_reset_default"
-                        android:textAllCaps="false" />
+                        />
 
                 </androidx.appcompat.widget.LinearLayoutCompat>
 

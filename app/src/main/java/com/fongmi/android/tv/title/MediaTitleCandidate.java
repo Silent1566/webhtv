@@ -10,6 +10,7 @@ public final class MediaTitleCandidate {
     public static final String SOURCE_AI = "ai";
     public static final String SOURCE_RULE = "rule";
     public static final String SOURCE_ALIAS = "alias";
+    public static final String SOURCE_CONTEXT = "context";
     public static final String SOURCE_RAW = "raw";
 
     private String title;

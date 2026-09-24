@@ -12,6 +12,7 @@ import androidx.viewbinding.ViewBinding;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.databinding.FragmentSettingSubtitleBinding;
 import com.fongmi.android.tv.setting.Setting;
+import com.fongmi.android.tv.subtitle.provider.SubtitleProviderRegistry;
 import com.fongmi.android.tv.ui.base.BaseFragment;
 import com.fongmi.android.tv.ui.dialog.SubtitleSettingsDialog;
 import com.fongmi.android.tv.utils.ResUtil;
@@ -41,14 +42,14 @@ public class SettingSubtitleFragment extends BaseFragment {
         subtitleLanguageValues = ResUtil.getStringArray(R.array.select_subtitle_language_value);
         mBinding.subtitleAutoMatchText.setText(getSwitch(Setting.isSubtitleAutoMatchEnabled()));
         mBinding.subtitleLanguageText.setText(getSubtitleLanguageText());
-        mBinding.subtitleAssrtTokenText.setText(getSubtitleAssrtTokenText());
+        mBinding.subtitleAssrtTokenText.setText(getSubtitleSourceText());
     }
 
     @Override
     protected void initEvent() {
         mBinding.subtitleAutoMatch.setOnClickListener(this::setSubtitleAutoMatch);
         mBinding.subtitleLanguage.setOnClickListener(this::onSubtitleLanguage);
-        mBinding.subtitleAssrtToken.setOnClickListener(this::onSubtitleAssrtToken);
+        mBinding.subtitleAssrtToken.setOnClickListener(this::onSubtitleSource);
     }
 
     private void setSubtitleAutoMatch(View view) {
@@ -63,11 +64,8 @@ public class SettingSubtitleFragment extends BaseFragment {
         });
     }
 
-    private void onSubtitleAssrtToken(View view) {
-        SubtitleSettingsDialog.showAssrtToken(requireActivity(), Setting.getSubtitleAssrtToken(), value -> {
-            Setting.putSubtitleAssrtToken(value);
-            mBinding.subtitleAssrtTokenText.setText(getSubtitleAssrtTokenText());
-        });
+    private void onSubtitleSource(View view) {
+        SubtitleSettingsDialog.showSourceSummary(requireActivity(), SubtitleProviderRegistry.get().providers(), () -> mBinding.subtitleAssrtTokenText.setText(getSubtitleSourceText()));
     }
 
     private String getSubtitleLanguageText() {
@@ -81,8 +79,8 @@ public class SettingSubtitleFragment extends BaseFragment {
         return 0;
     }
 
-    private String getSubtitleAssrtTokenText() {
-        return getString(TextUtils.isEmpty(Setting.getSubtitleAssrtToken()) ? R.string.setting_unconfigured : R.string.setting_configured);
+    private String getSubtitleSourceText() {
+        return getString(R.string.player_subtitle_source_count, SubtitleProviderRegistry.get().providerNames().size());
     }
 
     @Override

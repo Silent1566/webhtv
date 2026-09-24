@@ -1618,6 +1618,7 @@ fn normalize_sync_options(options: Option<&Value>) -> Value {
         "search": bool_value(object.and_then(|m| m.get("search")), true),
         "keep": bool_value(object.and_then(|m| m.get("keep")), true),
         "history": bool_value(object.and_then(|m| m.get("history")), true),
+        "follow": bool_value(object.and_then(|m| m.get("follow")), false),
         "settings": bool_value(object.and_then(|m| m.get("settings")), false),
         "remoteRelay": bool_value(object.and_then(|m| m.get("remoteRelay")), false),
         "paths": object

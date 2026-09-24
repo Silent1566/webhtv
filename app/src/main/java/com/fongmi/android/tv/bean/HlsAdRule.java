@@ -76,6 +76,7 @@ public class HlsAdRule {
         int signals = signalCount();
         if (signals == 0 || minimumSignals <= 0 || minimumSignals > signals) throw new IllegalArgumentException("Invalid minimum signals");
         HlsManifestCleaner.Rule.Builder builder = HlsManifestCleaner.Rule.builder()
+                .id(getId())
                 .playlistHostSuffixes(playlistHostSuffixes)
                 .playlistHostPatterns(playlistHostRegex)
                 .hostSuffixes(hostSuffixes)

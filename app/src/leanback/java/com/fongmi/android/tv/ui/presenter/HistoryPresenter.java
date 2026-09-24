@@ -81,7 +81,7 @@ public class HistoryPresenter extends Presenter {
         holder.binding.playback.setVisibility(!delete && item.hasPlaybackTime() ? View.VISIBLE : View.GONE);
         setProgress(holder.binding, item);
         holder.binding.delete.setVisibility(!delete ? View.GONE : View.VISIBLE);
-        holder.binding.remark.setVisibility(delete || same ? View.INVISIBLE : View.VISIBLE);
+        holder.binding.remark.setVisibility(same ? View.INVISIBLE : View.VISIBLE);
         ImgUtil.load(item.getVodName(), item.getVodPic(), holder.binding.image);
     }
 

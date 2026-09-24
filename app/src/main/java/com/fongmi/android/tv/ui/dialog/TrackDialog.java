@@ -31,7 +31,6 @@ import com.fongmi.android.tv.bean.Track;
 import com.fongmi.android.tv.databinding.DialogTrackBinding;
 import com.fongmi.android.tv.player.PlayerHelper;
 import com.fongmi.android.tv.player.PlayerManager;
-import com.fongmi.android.tv.player.exo.TrackUtil;
 import com.fongmi.android.tv.service.AiSubtitleTranslationService;
 import com.fongmi.android.tv.setting.PlaybackPerformanceSetting;
 import com.fongmi.android.tv.setting.PlayerSetting;
@@ -591,6 +590,9 @@ public final class TrackDialog extends BaseBottomSheetDialog implements TrackAda
             if (trackGroup.getType() != type) continue;
             for (int j = 0; j < trackGroup.length; j++) {
                 Format format = trackGroup.getTrackFormat(j);
+                // One subtitle cannot occupy both roles (the same rule is enforced by MPV).
+                if (type == C.TRACK_TYPE_TEXT && (secondarySubtitle
+                        ? player.isPrimarySubtitleSelected(format) : player.isSecondarySubtitleSelected(format))) continue;
                 String name = provider.getTrackName(format);
                 Log.d("TrackDialog", "track type=" + type + " id=" + format.id + " label=" + format.label + " lang=" + format.language + " codec=" + format.codecs + " mime=" + format.sampleMimeType + " name=" + name);
                 // Keep the player's native track id with the visible item. Runtime track
@@ -615,8 +617,7 @@ public final class TrackDialog extends BaseBottomSheetDialog implements TrackAda
     }
 
     private Format activeVideoFormat(Tracks tracks) {
-        if (secondarySubtitle || type != C.TRACK_TYPE_VIDEO) return null;
-        return TrackUtil.uniqueActiveFormat(tracks, type, player.getVideoFormat());
+        return null;
     }
 
     private void addPendingSubtitleTrack(List<Track> items) {

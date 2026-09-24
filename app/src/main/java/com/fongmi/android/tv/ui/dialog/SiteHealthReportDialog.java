@@ -3,13 +3,16 @@ package com.fongmi.android.tv.ui.dialog;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
+import android.text.Editable;
 import android.text.TextUtils;
+import android.text.TextWatcher;
 import android.text.format.DateFormat;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.ProgressBar;
 
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.widget.LinearLayoutCompat;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
@@ -26,6 +29,7 @@ import com.google.android.material.textview.MaterialTextView;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 public class SiteHealthReportDialog extends BaseAlertDialog {
 
@@ -33,6 +37,7 @@ public class SiteHealthReportDialog extends BaseAlertDialog {
     private SiteHealthStore.Report report;
     private Filter filter = Filter.ALL;
     private Sort sort = Sort.RECENT;
+    private String query = "";
 
     public static void show(Fragment fragment) {
         new SiteHealthReportDialog().show(fragment.getChildFragmentManager(), null);
@@ -61,8 +66,9 @@ public class SiteHealthReportDialog extends BaseAlertDialog {
         WindowManager.LayoutParams params = window.getAttributes();
         window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         window.getDecorView().setPadding(0, 0, 0, 0);
-        params.width = (int) (ResUtil.getScreenWidth(requireContext()) * (ResUtil.isLand(requireContext()) ? 0.62f : 0.94f));
-        params.height = (int) (ResUtil.getScreenHeight(requireContext()) * (ResUtil.isLand(requireContext()) ? 0.78f : 0.82f));
+        int margin = ResUtil.dp2px(ResUtil.isLand(requireContext()) ? 24 : 16);
+        params.width = Math.max(1, ResUtil.getScreenWidth(requireContext()) - margin * 2);
+        params.height = Math.max(1, ResUtil.getScreenHeight(requireContext()) - margin * 2);
         window.setAttributes(params);
         window.setLayout(params.width, params.height);
         binding.close.requestFocus();
@@ -85,6 +91,15 @@ public class SiteHealthReportDialog extends BaseAlertDialog {
         binding.sortRecent.setOnClickListener(view -> setSort(Sort.RECENT));
         binding.sortRate.setOnClickListener(view -> setSort(Sort.RATE));
         binding.sortSamples.setOnClickListener(view -> setSort(Sort.SAMPLES));
+        binding.clearAll.setOnClickListener(view -> confirmClearAll());
+        binding.search.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void afterTextChanged(Editable s) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
+                query = s == null ? "" : s.toString().trim().toLowerCase(Locale.ROOT);
+                render();
+            }
+        });
         binding.close.setOnClickListener(view -> dismiss());
     }
 
@@ -120,9 +135,16 @@ public class SiteHealthReportDialog extends BaseAlertDialog {
         button.setTypeface(Typeface.DEFAULT, selected ? Typeface.BOLD : Typeface.NORMAL);
     }
 
+    private void refreshReport() {
+        report = SiteHealthStore.report();
+        render();
+    }
+
     private void render() {
         while (binding.rows.getChildCount() > 1) binding.rows.removeViewAt(1);
-        binding.summary.setText(summaryText(report.summary));
+        binding.summary.setText(summaryText(report.summary) + "\n" + adDimensionSummary());
+        binding.clearAll.setEnabled(!report.isEmpty());
+        binding.clearAll.setAlpha(report.isEmpty() ? 0.5f : 1.0f);
         int visible = 0;
         for (SiteHealthStore.Row row : sortedRows()) {
             if (!matches(row)) continue;
@@ -159,7 +181,8 @@ public class SiteHealthReportDialog extends BaseAlertDialog {
     }
 
     private long lastFailAt(SiteHealthStore.Row row) {
-        return Math.max(Math.max(row.search.lastFailAt, row.detail.lastFailAt), Math.max(row.parse.lastFailAt, row.play.lastFailAt));
+        return Math.max(Math.max(row.home.lastFailAt, row.category.lastFailAt),
+                Math.max(Math.max(row.search.lastFailAt, row.detail.lastFailAt), Math.max(row.parse.lastFailAt, row.play.lastFailAt)));
     }
 
     private float successRate(SiteHealthStore.Row row) {
@@ -168,11 +191,45 @@ public class SiteHealthReportDialog extends BaseAlertDialog {
     }
 
     private boolean matches(SiteHealthStore.Row row) {
+        if (!query.isEmpty() && !row.siteName.toLowerCase(Locale.ROOT).contains(query)) return false;
         return switch (filter) {
             case ALL -> true;
             case BAD -> row.status == SiteHealthStore.Status.BAD;
             case WARN -> row.status == SiteHealthStore.Status.WARN;
         };
+    }
+
+    private String adDimensionSummary() {
+        return getString(R.string.site_health_report_ad_summary, report.adBlockedTotal, pipelineSummary(report.adBlockedByPipeline))
+                + "\n" + getString(R.string.ad_site_rank) + ": " + dimensionSummary(report.adBlockedBySite)
+                + "\n" + getString(R.string.ad_rule_rank) + ": " + ruleDimensionSummary(report.adBlockedByRule)
+                + "\n" + getString(R.string.ad_pipeline_rank) + ": " + dimensionSummary(report.adBlockedByPipeline);
+    }
+
+    private String dimensionSummary(java.util.Map<String, Long> values) {
+        if (values.isEmpty()) return getString(R.string.ad_stats_empty);
+        return values.entrySet().stream()
+                .sorted((a, b) -> Long.compare(b.getValue(), a.getValue()))
+                .limit(5)
+                .map(entry -> entry.getKey() + " " + entry.getValue())
+                .collect(java.util.stream.Collectors.joining(" · "));
+    }
+
+    private String ruleDimensionSummary(java.util.Map<String, Long> values) {
+        if (values.isEmpty()) return getString(R.string.ad_stats_empty);
+        return values.entrySet().stream()
+                .sorted((a, b) -> Long.compare(b.getValue(), a.getValue()))
+                .limit(5)
+                .map(entry -> AdBlockStatsStore.getRuleDisplayName(entry.getKey()) + " " + entry.getValue())
+                .collect(java.util.stream.Collectors.joining(" · "));
+    }
+
+    private String pipelineSummary(java.util.Map<String, Long> pipelines) {
+        if (pipelines.isEmpty()) return getString(R.string.ad_stats_empty);
+        return pipelines.entrySet().stream()
+                .sorted((a, b) -> Long.compare(b.getValue(), a.getValue()))
+                .map(entry -> entry.getKey() + " " + entry.getValue())
+                .collect(java.util.stream.Collectors.joining(" · "));
     }
 
     private String summaryText(SiteHealthStore.Summary summary) {
@@ -210,11 +267,13 @@ public class SiteHealthReportDialog extends BaseAlertDialog {
         header.addView(toggle, new LinearLayoutCompat.LayoutParams(dp(20), LinearLayoutCompat.LayoutParams.WRAP_CONTENT));
 
         root.addView(metaText(getString(R.string.site_health_report_row_meta, row.sampleCount(), row.failureCount())));
+        addStage(root, R.string.site_health_stage_home, row.home);
+        addStage(root, R.string.site_health_stage_category, row.category);
         addStage(root, R.string.site_health_stage_search, row.search);
         addStage(root, R.string.site_health_stage_detail, row.detail);
         addStage(root, R.string.site_health_stage_parse, row.parse);
         addStage(root, R.string.site_health_stage_play, row.play);
-        addAdBlockStats(root, row.siteKey);
+        addAdBlockStats(root, row);
 
         String reason = row.topFailureReason();
         if (!TextUtils.isEmpty(reason)) root.addView(metaText(getString(R.string.site_health_report_reason, reasonLabel(reason), row.topFailureCount())));
@@ -253,11 +312,12 @@ public class SiteHealthReportDialog extends BaseAlertDialog {
         block.addView(progress, progressParams);
     }
 
-    private void addAdBlockStats(LinearLayoutCompat root, String siteKey) {
-        long blocked = AdBlockStatsStore.getSiteBlockedCount(siteKey);
-        // 始终显示广告拦截统计（即使为 0，让用户知道该功能在工作）
+    private void addAdBlockStats(LinearLayoutCompat root, SiteHealthStore.Row row) {
+        long blocked = AdBlockStatsStore.getSiteBlockedCount(row.siteKey);
+        int playCount = row.playAttempts;
+        // 始终显示播放与广告拦截比值（即使为 0，让用户知道该功能在工作）
         int colorRes = blocked > 0 ? R.color.site_health_warn : R.color.black_80;
-        MaterialTextView view = text(getString(R.string.site_health_report_ad_blocked, blocked), 13, colorRes, Typeface.NORMAL);
+        MaterialTextView view = text(getString(R.string.site_health_report_ad_blocked, playCount, blocked), 13, colorRes, Typeface.NORMAL);
         LinearLayoutCompat.LayoutParams params = new LinearLayoutCompat.LayoutParams(LinearLayoutCompat.LayoutParams.MATCH_PARENT, LinearLayoutCompat.LayoutParams.WRAP_CONTENT);
         params.setMargins(0, dp(8), 0, 0);
         view.setLayoutParams(params);
@@ -280,6 +340,8 @@ public class SiteHealthReportDialog extends BaseAlertDialog {
         LinearLayoutCompat.LayoutParams params = new LinearLayoutCompat.LayoutParams(LinearLayoutCompat.LayoutParams.MATCH_PARENT, LinearLayoutCompat.LayoutParams.WRAP_CONTENT);
         params.setMargins(0, dp(8), 0, 0);
         block.setLayoutParams(params);
+        addRecentError(block, R.string.site_health_stage_home, row.home);
+        addRecentError(block, R.string.site_health_stage_category, row.category);
         addRecentError(block, R.string.site_health_stage_search, row.search);
         addRecentError(block, R.string.site_health_stage_detail, row.detail);
         addRecentError(block, R.string.site_health_stage_parse, row.parse);
@@ -305,16 +367,35 @@ public class SiteHealthReportDialog extends BaseAlertDialog {
     }
 
     private void confirmClearSite(SiteHealthStore.Row row) {
-        new MaterialAlertDialogBuilder(requireActivity(), R.style.ThemeOverlay_WebHTV_LightDialog)
-                .setTitle(R.string.site_health_clear_site_title)
-                .setMessage(getString(R.string.site_health_clear_site_message, row.siteName))
-                .setNegativeButton(R.string.dialog_negative, null)
-                .setPositiveButton(R.string.dialog_positive, (dialog, which) -> {
+        showClearConfirmation(
+                R.string.site_health_clear_site_title,
+                getString(R.string.site_health_clear_site_message, row.siteName),
+                () -> {
                     SiteHealthStore.clear(row.siteKey);
-                    report = SiteHealthStore.report();
-                    render();
-                })
-                .show();
+                    binding.root.post(this::refreshReport);
+                });
+    }
+
+    private void confirmClearAll() {
+        if (report.isEmpty()) return;
+        showClearConfirmation(
+                R.string.site_health_clear_all_title,
+                getString(R.string.site_health_clear_all_message),
+                () -> {
+                    SiteHealthStore.clear();
+                    binding.root.post(this::refreshReport);
+                });
+    }
+
+    private void showClearConfirmation(int titleRes, CharSequence message, Runnable action) {
+        AlertDialog dialog = new MaterialAlertDialogBuilder(requireActivity(), R.style.Theme_WebHTV_LightDialog)
+                .setTitle(titleRes)
+                .setMessage(message)
+                .setNegativeButton(R.string.dialog_negative, null)
+                .setPositiveButton(R.string.dialog_positive, (confirmation, which) -> action.run())
+                .create();
+        dialog.show();
+        LightDialog.apply(dialog);
     }
 
     private void addRecentError(LinearLayoutCompat block, int labelRes, SiteHealthStore.Stage stage) {

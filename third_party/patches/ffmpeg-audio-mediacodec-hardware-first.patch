@@ -1,0 +1,123 @@
+diff --git a/libavcodec/mediacodec_wrapper.h b/libavcodec/mediacodec_wrapper.h
+index 5dc8f3d..291597d 100644
+--- a/libavcodec/mediacodec_wrapper.h
++++ b/libavcodec/mediacodec_wrapper.h
+@@ -63,3 +63,3 @@ int ff_AMediaCodecProfile_getProfileFromAVCodecContext(AVCodecContext *avctx);
+ char *ff_AMediaCodecList_getCodecNameByType(const char *mime, int profile,
+-                                            int encoder, const char **codec_mime,
++                                            int encoder, int hardware_only, const char **codec_mime,
+                                             void *log_ctx);
+diff --git a/libavcodec/mediacodec_wrapper.c b/libavcodec/mediacodec_wrapper.c
+index e0da188..00169b0 100644
+--- a/libavcodec/mediacodec_wrapper.c
++++ b/libavcodec/mediacodec_wrapper.c
+@@ -50,6 +50,7 @@ struct JNIAMediaCodecListFields {
+     jmethodID get_supported_types_id;
+     jmethodID is_encoder_id;
+     jmethodID is_software_only_id;
++    jmethodID is_hardware_accelerated_id;
+ 
+     jclass codec_capabilities_class;
+     jfieldID color_formats_id;
+@@ -76,6 +77,7 @@ static const struct FFJniField jni_amediacodeclist_mapping[] = {
+         { "android/media/MediaCodecInfo", "getSupportedTypes", "()[Ljava/lang/String;", FF_JNI_METHOD, OFFSET(get_supported_types_id), 1 },
+         { "android/media/MediaCodecInfo", "isEncoder", "()Z", FF_JNI_METHOD, OFFSET(is_encoder_id), 1 },
+         { "android/media/MediaCodecInfo", "isSoftwareOnly", "()Z", FF_JNI_METHOD, OFFSET(is_software_only_id), 0 },
++        { "android/media/MediaCodecInfo", "isHardwareAccelerated", "()Z", FF_JNI_METHOD, OFFSET(is_hardware_accelerated_id), 0 },
+ 
+     { "android/media/MediaCodecInfo$CodecCapabilities", NULL, NULL, FF_JNI_CLASS, OFFSET(codec_capabilities_class), 1 },
+         { "android/media/MediaCodecInfo$CodecCapabilities", "colorFormats", "[I", FF_JNI_FIELD, OFFSET(color_formats_id), 1 },
+@@ -490,7 +492,7 @@ static const char *get_codec_mime_alias(const char *codec_name,
+ }
+ 
+ char *ff_AMediaCodecList_getCodecNameByType(const char *mime, int profile,
+-                                            int encoder, const char **codec_mime,
++                                            int encoder, int hardware_only, const char **codec_mime,
+                                             void *log_ctx)
+ {
+     int i;
+@@ -561,6 +563,18 @@ char *ff_AMediaCodecList_getCodecNameByType(const char *mime, int profile,
+             goto done_with_info;
+         }
+ 
++        if (hardware_only && jfields.is_hardware_accelerated_id) {
++            int is_hardware_accelerated = (*env)->CallBooleanMethod(
++                env, info, jfields.is_hardware_accelerated_id);
++            if (ff_jni_exception_check(env, 1, log_ctx) < 0) {
++                goto done;
++            }
++
++            if (!is_hardware_accelerated) {
++                goto done_with_info;
++            }
++        }
++
+         if (jfields.is_software_only_id) {
+             int is_software_only = (*env)->CallBooleanMethod(env, info, jfields.is_software_only_id);
+             if (ff_jni_exception_check(env, 1, log_ctx) < 0) {
+@@ -589,8 +603,11 @@ char *ff_AMediaCodecList_getCodecNameByType(const char *mime, int profile,
+         if (
+             strstr(name, "OMX.google") ||
+             strstr(name, "OMX.ffmpeg") ||
++            strstr(name, "c2.android") ||
+             (strstr(name, "OMX.SEC") && strstr(name, ".sw.")) ||
+-            !strcmp(name, "OMX.qcom.video.decoder.hevcswvdec")) {
++            !strcmp(name, "OMX.qcom.video.decoder.hevcswvdec") ||
++            (hardware_only && (strstr(name, ".sw.") ||
++                               strstr(name, "software")))) {
+             goto done_with_info;
+         }
+ 
+diff --git a/libavcodec/mediacodecdec_common.c b/libavcodec/mediacodecdec_common.c
+index 06a9bb2..70b0203 100644
+--- a/libavcodec/mediacodecdec_common.c
++++ b/libavcodec/mediacodecdec_common.c
+@@ -1353,11 +1353,11 @@ static int mediacodec_dec_get_video_codec(AVCodecContext *avctx, MediaCodecDecCo
+     }
+ 
+     s->codec_name = ff_AMediaCodecList_getCodecNameByType(
+-        mime, profile, 0, &codec_mime, avctx);
++        mime, profile, 0, 0, &codec_mime, avctx);
+     if (!s->codec_name && (avctx->hwaccel_flags & AV_HWACCEL_FLAG_ALLOW_PROFILE_MISMATCH)) {
+         profile = -1;
+         s->codec_name = ff_AMediaCodecList_getCodecNameByType(
+-            mime, profile, 0, &codec_mime, avctx);
++            mime, profile, 0, 0, &codec_mime, avctx);
+     }
+     if (!s->codec_name) {
+         av_log(avctx, AV_LOG_INFO, "Failed to getCodecNameByType(%s, %d)\n", mime, profile);
+@@ -1395,17 +1395,26 @@ static int mediacodec_dec_get_audio_codec(AVCodecContext *avctx, MediaCodecDecCo
+                                           const char *mime, FFAMediaFormat *format)
+ {
+-    s->codec = ff_AMediaCodec_createDecoderByType(mime, s->use_ndk_codec);
+-    if (!s->codec) {
+-        av_log(avctx, AV_LOG_ERROR, "Failed to create media decoder for mime %s\n", mime);
++    const char *codec_mime = mime;
++
++    s->codec_name = ff_AMediaCodecList_getCodecNameByType(
++        mime, -1, 0, 1, &codec_mime, avctx);
++    if (!s->codec_name) {
++        av_log(avctx, AV_LOG_INFO,
++               "No hardware audio MediaCodec decoder for mime %s\n", mime);
+         return AVERROR_EXTERNAL;
+     }
+ 
+-    s->codec_name = ff_AMediaCodec_getName(s->codec);
+-    if (!s->codec_name) {
+-        s->codec_name = av_strdup(mime);
+-        if (!s->codec_name)
+-            return AVERROR(ENOMEM);
++    s->codec = ff_AMediaCodec_createCodecByName(s->codec_name,
++                                                s->use_ndk_codec);
++    if (!s->codec) {
++        av_log(avctx, AV_LOG_ERROR,
++               "Failed to create hardware audio MediaCodec decoder %s for mime %s\n",
++               s->codec_name, mime);
++        return AVERROR_EXTERNAL;
+     }
+ 
++    ff_AMediaFormat_setString(format, "mime", codec_mime);
++    av_log(avctx, AV_LOG_INFO,
++           "WebHTV hardware audio MediaCodec decoder: %s\n", s->codec_name);
+     return 0;
+ }

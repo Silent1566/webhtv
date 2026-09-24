@@ -6,6 +6,7 @@ import android.os.Build;
 import android.text.TextUtils;
 
 import com.fongmi.android.tv.App;
+import com.fongmi.android.tv.BuildConfig;
 import com.fongmi.android.tv.utils.Notify;
 
 import com.google.gson.Gson;
@@ -46,6 +47,8 @@ import java.util.zip.ZipFile;
 public final class LabEnv {
 
     private static final ExecutorService EXECUTOR = Executors.newSingleThreadExecutor();
+    private static final String ABI_ARM64 = "arm64-v8a";
+    private static final String ABI_ARMV7 = "armeabi-v7a";
 
     private LabEnv() {
     }
@@ -281,14 +284,72 @@ public final class LabEnv {
         return files != null && files.length > 0;
     }
 
+    /**
+     * 实验室运行时必须与 APK 内实际打包的 native 资产一致。
+     *
+     * <p>不能只看 {@link Build#SUPPORTED_ABIS}：设备可能同时支持 arm64 和 armv7，
+     * 但当前 APK 只携带其中一个 flavor 的 7zz/proot。优先使用 APK flavor，只有
+     * flavor 未提供时才回退到设备 ABI 列表；未知架构返回空串，不能默认伪装成 arm64。
+     */
     public static String arch() {
-        if (Build.SUPPORTED_ABIS != null) {
-            for (String abi : Build.SUPPORTED_ABIS) {
-                if (abi.contains("arm64")) return "arm64-v8a";
-                if (abi.contains("armeabi-v7a") || abi.contains("armeabi")) return "armeabi-v7a";
+        return resolveArch(BuildConfig.FLAVOR_abi, Build.SUPPORTED_ABIS);
+    }
+
+    static String resolveArch(String packagedAbi, String[] supportedAbis) {
+        String packaged = normalizeAbi(packagedAbi);
+        if (isSupportedArch(packaged)) return packaged;
+        if (!TextUtils.isEmpty(packagedAbi)) return "";
+        if (supportedAbis != null) {
+            for (String abi : supportedAbis) {
+                String normalized = normalizeAbi(abi);
+                if (isSupportedArch(normalized)) return normalized;
             }
         }
-        return "arm64-v8a";
+        return "";
+    }
+
+    static String normalizeAbi(String abi) {
+        if (TextUtils.isEmpty(abi)) return "";
+        String normalized = abi.trim().toLowerCase(Locale.ROOT).replace('_', '-');
+        if (ABI_ARM64.equals(normalized) || "arm64".equals(normalized) || "aarch64".equals(normalized)) {
+            return ABI_ARM64;
+        }
+        if (ABI_ARMV7.equals(normalized)
+                || "armeabi".equals(normalized)
+                || "armv7".equals(normalized)
+                || "armv7-a".equals(normalized)
+                || "armv7a".equals(normalized)) {
+            return ABI_ARMV7;
+        }
+        return normalized;
+    }
+
+    private static boolean isSupportedArch(String arch) {
+        return ABI_ARM64.equals(arch) || ABI_ARMV7.equals(arch);
+    }
+
+    static LabModels.Download findDownload(LabModels.Item item) {
+        return findDownload(item, arch());
+    }
+
+    static LabModels.Download findDownload(LabModels.Item item, String selectedArch) {
+        if (item == null || item.downloads == null || item.downloads.isEmpty()) return null;
+        String normalizedArch = normalizeAbi(selectedArch);
+        if (!isSupportedArch(normalizedArch)) return null;
+        for (LabModels.Download download : item.downloads) {
+            if (download != null && normalizedArch.equals(normalizeAbi(download.arch))) return download;
+        }
+        return null;
+    }
+
+    static String downloadError(LabModels.Item item) {
+        if (item == null || item.downloads == null || item.downloads.isEmpty()) {
+            return "当前环境没有配置下载包";
+        }
+        String currentArch = arch();
+        return TextUtils.isEmpty(currentArch)
+                ? "当前 APK/设备架构不支持实验室环境"
+                : "当前环境没有适配 " + currentArch + " 的下载包";
     }
 
     public interface InstallCallback {
@@ -327,8 +388,8 @@ public final class LabEnv {
     public static void install(Context context, LabModels.Item item, String mirror, InstallCallback callback) {
         EXECUTOR.execute(() -> {
             try {
-                LabModels.Download download = pick(item, mirror);
-                if (download == null) throw new IOException("没有可用下载地址");
+                LabModels.Download download = findDownload(item);
+                if (download == null) throw new IOException(downloadError(item));
                 File packageDir = packageRoot(context, item);
                 packageDir.mkdirs();
                 for (String dir : item.mkdirList()) {
@@ -544,23 +605,9 @@ public final class LabEnv {
         return out.toByteArray();
     }
 
-    private static LabModels.Download pick(LabModels.Item item, String mirror) {
-        if (item.downloads == null || item.downloads.isEmpty()) return null;
-        String arch = arch();
-        for (LabModels.Download d : item.downloads) {
-            if (arch.equals(d.arch)) return d;
-        }
-        return item.downloads.get(0);
-    }
-
     public static String displayVersion(LabModels.Item item) {
-        if (item.downloads != null) {
-            for (LabModels.Download download : item.downloads) {
-                if (arch().equals(download.arch) && download.version != null && !download.version.isEmpty()) {
-                    return download.version;
-                }
-            }
-        }
+        LabModels.Download download = findDownload(item);
+        if (download != null && !TextUtils.isEmpty(download.version)) return download.version;
         return item.version == null ? "" : item.version;
     }
 

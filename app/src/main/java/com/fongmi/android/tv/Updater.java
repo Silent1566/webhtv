@@ -384,14 +384,21 @@ public class Updater implements UpdateTransfer.Callback, UpdateListener {
         FragmentActivity activity = activityRef == null ? null : activityRef.get();
         if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
 
-        new com.google.android.material.dialog.MaterialAlertDialogBuilder(activity, R.style.ThemeOverlay_WebHTV_LightDialog)
+        androidx.appcompat.app.AlertDialog alert = new com.google.android.material.dialog.MaterialAlertDialogBuilder(activity, R.style.ThemeOverlay_WebHTV_LightDialog)
                 .setTitle(R.string.update_backup_title)
                 .setMessage(R.string.update_backup_message)
                 .setPositiveButton(R.string.update_backup_positive, (dialog, which) -> startBackupAndUpdate(view))
                 .setNegativeButton(R.string.update_backup_negative, (dialog, which) -> startUpdate(view))
                 .setNeutralButton(R.string.dialog_negative, (dialog, which) -> view.setEnabled(true))
                 .setCancelable(false)
-                .show();
+                .create();
+        alert.setOnShowListener(dialog -> {
+            View buttonPanel = alert.findViewById(com.google.android.material.R.id.buttonPanel);
+            if (buttonPanel != null) buttonPanel.setFocusable(false);
+            View positive = alert.getButton(android.content.DialogInterface.BUTTON_POSITIVE);
+            if (positive != null) positive.requestFocus();
+        });
+        alert.show();
     }
 
     private void startBackupAndUpdate(View view) {

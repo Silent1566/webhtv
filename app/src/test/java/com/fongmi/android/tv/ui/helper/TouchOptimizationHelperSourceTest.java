@@ -83,10 +83,51 @@ public class TouchOptimizationHelperSourceTest {
     }
 
     @Test
-    public void recyclerListenersAreAttachedOnlyWhenOptimizationIsEnabled() throws Exception {
+    public void recyclerListenersAndLeanbackFocusModesAreTouchGated() throws Exception {
         String source = read("app/src/main/java/com/fongmi/android/tv/ui/helper/TouchOptimizationHelper.java");
 
-        assertTrue(source.contains("if (optimize && view instanceof RecyclerView recycler) attachListener(recycler);"));
+        assertTrue(source.contains("if (optimize) attachListener(recycler);"));
+        assertTrue(source.contains("setOnTouchInterceptListener"));
+        assertTrue(source.contains("setFocusScrollStrategy"));
+        assertTrue(source.contains("setFocusSearchDisabled"));
+        assertTrue(source.contains("onInterceptTouchEvent"));
+        assertTrue(source.contains("FOCUS_SCROLL_ITEM"));
+        assertTrue(source.contains("state.touchSettling = true;"));
+        assertTrue(source.contains("restoreGrid(grid);"));
+        assertTrue(source.contains("onScrollStateChanged"));
+    }
+
+    @Test
+    public void tvSearchRestoresPerSitePixelPositionAndPlayerUsesTvTouchContract() throws Exception {
+        String collect = read("app/src/leanback/java/com/fongmi/android/tv/ui/activity/CollectActivity.java");
+        String home = read("app/src/leanback/java/com/fongmi/android/tv/ui/activity/HomeActivity.java");
+        String video = read("app/src/leanback/java/com/fongmi/android/tv/ui/activity/VideoActivity.java");
+        String widget = read("app/src/leanback/res/layout/view_widget_vod.xml");
+        assertTrue(collect.contains("Map<String, SearchPosition> mSearchPositions"));
+        assertTrue(collect.contains("saveSearchPosition(getActiveSiteKey())"));
+        assertTrue(collect.contains("getTop() - mBinding.recycler.getPaddingTop()"));
+        assertTrue(collect.contains("scrollToPositionWithOffset"));
+        assertTrue(collect.contains("mSearchPositions.clear()"));
+        assertTrue(collect.contains("TouchOptimizationHelper.isTouchActive(parent)"));
+        assertTrue(collect.contains("mBoundSearchSiteKey"));
+        assertTrue(collect.contains("if (!siteKey.equals(mBoundSearchSiteKey))"));
+        assertTrue(home.contains("mTypeSelectionFromTouch"));
+        assertTrue(home.contains("if (Setting.isHomeVodAutoLoad() && !mTypeSelectionFromTouch) scheduleTypeSwitch(position);"));
+        assertFalse(collect.contains("private void scrollSearchToTop()"));
+        assertTrue(video.contains("private boolean onVideoTouch(View view, MotionEvent event)"));
+        assertTrue(video.contains("if (!Setting.isTouchOptimized()) return mKeyDown.onTouchEvent(event);"));
+        assertTrue(video.contains("TV_TOUCH_HORIZONTAL"));
+        assertTrue(video.contains("applyTvBrightness"));
+        assertTrue(video.contains("applyTvVolume"));
+        assertTrue(video.contains("mBinding.widget.brightProgress"));
+        assertTrue(video.contains("mBinding.widget.volumeProgress"));
+        assertTrue(video.contains("} else if (action == MotionEvent.ACTION_CANCEL) {"));
+        assertTrue(video.contains("if (action == MotionEvent.ACTION_UP) {"));
+        assertTrue(video.contains("if (seeking && player() != null) onSeekEnd(mTvTouchSeek)"));
+        assertTrue(video.contains("mTvTouchDownX <= Math.max(1, mBinding.video.getWidth()) / 2f"));
+        assertTrue(video.contains("mKeyDown.releaseSpeed()"));
+        assertTrue(widget.contains("@+id/bright"));
+        assertTrue(widget.contains("@+id/volume"));
     }
 
     @Test
@@ -104,33 +145,22 @@ public class TouchOptimizationHelperSourceTest {
     }
 
     @Test
-    public void touchOptimizationToggleCanEnableModeWithOneTouchMobile() throws Exception {
+    public void touchOptimizationRowIsRemovedFromMobilePersonalSettings() throws Exception {
         Path layout = path("app/src/mobile/res/layout/fragment_setting_personal.xml");
         var document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(layout.toFile());
-        var nodes = document.getElementsByTagName("androidx.appcompat.widget.LinearLayoutCompat");
 
-        for (int i = 0; i < nodes.getLength(); i++) {
-            var attributes = nodes.item(i).getAttributes();
-            var id = attributes.getNamedItem("android:id");
-            if (id == null || !"@+id/touchOptimization".equals(id.getNodeValue())) continue;
-            assertTrue("true".equals(attributes.getNamedItem("android:focusable").getNodeValue()));
-            assertTrue("false".equals(attributes.getNamedItem("android:focusableInTouchMode").getNodeValue()));
-            return;
-        }
-        throw new AssertionError("touchOptimization row not found");
+        assertFalse(hasId(document, "@+id/touchOptimization"));
+        assertFalse(hasId(document, "@+id/touchOptimizationText"));
     }
 
     @Test
     public void personalSettingsBindTouchOptimizationToggle() throws Exception {
         String leanback = read("app/src/leanback/java/com/fongmi/android/tv/ui/activity/SettingPersonalActivity.java");
-        String mobile = read("app/src/mobile/java/com/fongmi/android/tv/ui/fragment/SettingPersonalFragment.java");
         String root = read("app/src/leanback/java/com/fongmi/android/tv/ui/activity/SettingActivity.java");
 
         assertTrue(leanback.contains("mBinding.touchOptimization.setOnClickListener(this::setTouchOptimization);"));
         assertTrue(leanback.contains("mBinding.touchOptimizationText.setText(getSwitch(Setting.isTouchOptimized()));"));
         assertTrue(leanback.contains("TouchOptimizationHelper.sync(getWindow().getDecorView());"));
-        assertTrue(mobile.contains("mBinding.touchOptimization.setOnClickListener(this::setTouchOptimization);"));
-        assertTrue(mobile.contains("mBinding.touchOptimizationText.setText(getSwitch(Setting.isTouchOptimized()));"));
         assertFalse(root.contains("mBinding.touchOptimization"));
     }
 

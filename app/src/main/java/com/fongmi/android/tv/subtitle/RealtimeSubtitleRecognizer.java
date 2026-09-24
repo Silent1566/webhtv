@@ -25,7 +25,6 @@ import java.io.File;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -44,6 +43,7 @@ final class RealtimeSubtitleRecognizer {
     private static final long UNSET_US = Long.MIN_VALUE;
 
     private final RealtimeSubtitleModelCatalog.ModelSpec spec;
+    private final SpeechRecognitionFactory.ExecutionProfile profile;
     private final Listener listener;
     private final ArrayBlockingQueue<SpeechChunk> speechQueue = new ArrayBlockingQueue<>(SPEECH_QUEUE_CAPACITY);
     private final AtomicInteger decodeGeneration = new AtomicInteger();
@@ -52,14 +52,21 @@ final class RealtimeSubtitleRecognizer {
     private OfflineRecognizer offlineRecognizer;
     private Vad vad;
     private ExecutorService recognitionExecutor;
-    private Future<?> recognitionFuture;
     private volatile boolean released;
     private long streamBaseUs = UNSET_US;
     private long vadBaseUs = UNSET_US;
     private int speechSamples;
 
     static RealtimeSubtitleRecognizer create(File modelDir, File vadFile, RealtimeSubtitleModelCatalog.ModelSpec spec, Listener listener) {
-        return new RealtimeSubtitleRecognizer(modelDir, vadFile, spec, listener);
+        return create(modelDir, vadFile, spec,
+                SpeechRecognitionFactory.ExecutionProfile.SUBTITLE, listener);
+    }
+
+    static RealtimeSubtitleRecognizer create(File modelDir, File vadFile,
+                                             RealtimeSubtitleModelCatalog.ModelSpec spec,
+                                             SpeechRecognitionFactory.ExecutionProfile profile,
+                                             Listener listener) {
+        return new RealtimeSubtitleRecognizer(modelDir, vadFile, spec, profile, listener);
     }
 
     static boolean isStreaming(RealtimeSubtitleModelCatalog.ModelSpec spec) {
@@ -77,22 +84,36 @@ final class RealtimeSubtitleRecognizer {
         return isStreaming(spec) ? 0 : (int) (SAMPLE_RATE * 2.2f);
     }
 
-    private RealtimeSubtitleRecognizer(File modelDir, File vadFile, RealtimeSubtitleModelCatalog.ModelSpec spec, Listener listener) {
+    private RealtimeSubtitleRecognizer(File modelDir, File vadFile,
+                                       RealtimeSubtitleModelCatalog.ModelSpec spec,
+                                       SpeechRecognitionFactory.ExecutionProfile profile,
+                                       Listener listener) {
         this.spec = spec;
+        this.profile = profile;
         this.listener = listener;
         try {
             if (isStreaming(spec)) {
-                onlineRecognizer = new OnlineRecognizer(buildOnlineRecognizer(modelDir, spec));
+                onlineRecognizer = new OnlineRecognizer(buildOnlineRecognizer(modelDir, spec, profile));
                 onlineStream = onlineRecognizer.createStream();
             } else {
-                offlineRecognizer = new OfflineRecognizer(buildOfflineRecognizer(modelDir, spec));
+                offlineRecognizer = new OfflineRecognizer(buildOfflineRecognizer(modelDir, spec, profile));
                 vad = new Vad(buildVad(vadFile));
                 recognitionExecutor = Executors.newSingleThreadExecutor(r -> {
-                    Thread thread = new Thread(r, "realtime-subtitle-offline-asr");
+                    Runnable worker = () -> {
+                        if (profile == SpeechRecognitionFactory.ExecutionProfile.AD_AUDIO) {
+                            try {
+                                android.os.Process.setThreadPriority(
+                                        android.os.Process.THREAD_PRIORITY_BACKGROUND);
+                            } catch (RuntimeException ignored) {
+                            }
+                        }
+                        r.run();
+                    };
+                    Thread thread = new Thread(worker, "realtime-subtitle-offline-asr");
                     thread.setPriority(Thread.NORM_PRIORITY - 1);
                     return thread;
                 });
-                recognitionFuture = recognitionExecutor.submit(this::recognizeLoop);
+                recognitionExecutor.execute(this::recognizeLoop);
             }
         } catch (RuntimeException | Error error) {
             release();
@@ -125,15 +146,7 @@ final class RealtimeSubtitleRecognizer {
         released = true;
         decodeGeneration.incrementAndGet();
         speechQueue.clear();
-        if (recognitionFuture != null) {
-            try {
-                recognitionFuture.get();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            } catch (Throwable ignored) {
-            }
-        }
-        if (recognitionExecutor != null) recognitionExecutor.shutdownNow();
+        awaitRecognitionTermination(recognitionExecutor);
         if (onlineStream != null) onlineStream.release();
         if (onlineRecognizer != null) onlineRecognizer.release();
         if (vad != null) vad.release();
@@ -142,6 +155,25 @@ final class RealtimeSubtitleRecognizer {
         onlineRecognizer = null;
         vad = null;
         offlineRecognizer = null;
+    }
+
+    // A thread interruption is not proof that JNI decode has returned. Keep native objects
+    // alive and the owner occupied until the actual worker exits; preserve interrupt status.
+    static void awaitRecognitionTermination(ExecutorService executor) {
+        if (executor == null) return;
+        executor.shutdown();
+        boolean interrupted = false;
+        try {
+            while (true) {
+                try {
+                    if (executor.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS)) return;
+                } catch (InterruptedException e) {
+                    interrupted = true;
+                }
+            }
+        } finally {
+            if (interrupted) Thread.currentThread().interrupt();
+        }
     }
 
     private void acceptStreaming(float[] samples, long startUs, long endUs, int timelineToken) {
@@ -230,7 +262,9 @@ final class RealtimeSubtitleRecognizer {
         }
     }
 
-    private static OnlineRecognizerConfig buildOnlineRecognizer(File modelDir, RealtimeSubtitleModelCatalog.ModelSpec spec) {
+    private static OnlineRecognizerConfig buildOnlineRecognizer(
+            File modelDir, RealtimeSubtitleModelCatalog.ModelSpec spec,
+            SpeechRecognitionFactory.ExecutionProfile profile) {
         RealtimeSubtitleModelCatalog.ModelFile[] files = spec.files();
         OnlineTransducerModelConfig transducer = OnlineTransducerModelConfig.builder()
                 .setEncoder(new File(modelDir, files[0].relativePath()).getPath())
@@ -241,7 +275,7 @@ final class RealtimeSubtitleRecognizer {
                 .setTransducer(transducer)
                 .setTokens(new File(modelDir, files[3].relativePath()).getPath())
                 .setModelType(onlineModelType(spec))
-                .setNumThreads(threadCount())
+                .setNumThreads(threadCount(profile))
                 .setProvider("cpu")
                 .setDebug(false)
                 .build();
@@ -260,10 +294,12 @@ final class RealtimeSubtitleRecognizer {
                 .build();
     }
 
-    private static OfflineRecognizerConfig buildOfflineRecognizer(File modelDir, RealtimeSubtitleModelCatalog.ModelSpec spec) {
+    private static OfflineRecognizerConfig buildOfflineRecognizer(
+            File modelDir, RealtimeSubtitleModelCatalog.ModelSpec spec,
+            SpeechRecognitionFactory.ExecutionProfile profile) {
         RealtimeSubtitleModelCatalog.ModelFile[] files = spec.files();
         OfflineModelConfig.Builder model = OfflineModelConfig.builder()
-                .setNumThreads(threadCount())
+                .setNumThreads(threadCount(profile))
                 .setProvider("cpu")
                 .setDebug(false);
         switch (spec.engine()) {
@@ -316,6 +352,11 @@ final class RealtimeSubtitleRecognizer {
 
     private static int threadCount() {
         return Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors() / 2));
+    }
+
+    static int threadCount(SpeechRecognitionFactory.ExecutionProfile profile) {
+        return profile == SpeechRecognitionFactory.ExecutionProfile.AD_AUDIO
+                ? 1 : threadCount();
     }
 
     private static boolean containsSpeechText(String text) {

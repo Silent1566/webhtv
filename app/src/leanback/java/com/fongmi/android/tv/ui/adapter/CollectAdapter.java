@@ -33,7 +33,9 @@ public class CollectAdapter extends RecyclerView.Adapter<CollectAdapter.ViewHold
 
         void onItemClick(int position, Collect item);
 
-        boolean onCollectKey(int position, int keyCode, KeyEvent event);
+        default boolean onCollectKey(int position, int keyCode, KeyEvent event) {
+            return false;
+        }
     }
 
     public void add(Collect item) {

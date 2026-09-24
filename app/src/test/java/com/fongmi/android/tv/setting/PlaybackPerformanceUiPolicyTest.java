@@ -14,6 +14,16 @@ import static org.junit.Assert.assertTrue;
 public class PlaybackPerformanceUiPolicyTest {
 
     @Test
+    public void felIsDescribedOnlyInTheMpvCatalog() {
+        for (int kernel : new int[]{PlayerSetting.MPV, PlayerSetting.EXO}) {
+            PlaybackPerformanceOption option = PlaybackPerformanceCatalog.forKernel(kernel, false)
+                    .stream().filter(item -> item.id().equals(PlaybackPerformanceCatalog.DV7_HDR10_FALLBACK))
+                    .findFirst().orElseThrow();
+            assertEquals(kernel == PlayerSetting.MPV, option.description().contains("FEL 双层重建"));
+        }
+    }
+
+    @Test
     public void everyKernelSeparatesProfileCommonAndAdvancedWithoutLoss() {
         for (int kernel : new int[]{
                 PlayerSetting.EXO, PlayerSetting.MPV, PlayerSetting.IJK}) {
@@ -54,7 +64,8 @@ public class PlaybackPerformanceUiPolicyTest {
                         PlaybackPerformanceCatalog.MPV_HWDEC,
                         PlaybackPerformanceCatalog.MPV_FRAME_RATE,
                         PlaybackPerformanceCatalog.MPV_OPTION_PRIORITY,
-                        PlaybackPerformanceCatalog.AUDIO_PASSTHROUGH),
+                        PlaybackPerformanceCatalog.AUDIO_PASSTHROUGH,
+                        PlaybackPerformanceCatalog.MPV_MULTICHANNEL_AUDIO),
                 ids(PlaybackPerformanceUiPolicy
                         .splitForKernel(PlayerSetting.MPV, false).common()));
         assertEquals(Set.of(

@@ -6,6 +6,7 @@ import androidx.annotation.Nullable;
 
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.api.config.LiveConfig;
+import com.fongmi.android.tv.following.FollowingSettings;
 import com.fongmi.android.tv.impl.Diffable;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.utils.ResUtil;
@@ -20,7 +21,7 @@ public class HomeButton implements Diffable<HomeButton> {
 
     private static final String KEY_BUTTON = "home_button";
     private static final String KEY_SORTED = "home_button_sorted";
-    private static final String ALL = "0,1,2,3,4,5,6,7";
+    private static final String ALL = "0,1,2,3,8,4,5,6,7,9";
     private static List<HomeButton> buttons;
 
     private final int id;
@@ -33,10 +34,12 @@ public class HomeButton implements Diffable<HomeButton> {
         buttons.add(new HomeButton(1, R.string.home_live));
         buttons.add(new HomeButton(2, R.string.home_search));
         buttons.add(new HomeButton(3, R.string.home_keep));
+        buttons.add(new HomeButton(8, R.string.home_following));
         buttons.add(new HomeButton(4, R.string.home_push));
         buttons.add(new HomeButton(5, R.string.home_cast));
         buttons.add(new HomeButton(6, R.string.home_history_button));
         buttons.add(new HomeButton(7, R.string.home_setting));
+        buttons.add(new HomeButton(9, R.string.home_custom_csp));
         return buttons;
     }
 
@@ -48,6 +51,7 @@ public class HomeButton implements Diffable<HomeButton> {
         List<HomeButton> items = new ArrayList<>();
         for (HomeButton button : getButtons()) {
             if (button.getResId() == R.string.home_live && !LiveConfig.hasUrl()) continue;
+            if (button.getResId() == R.string.home_following && !FollowingSettings.isEnabled()) continue;
             items.add(button);
         }
         return items;
@@ -107,9 +111,11 @@ public class HomeButton implements Diffable<HomeButton> {
         ids.add("1");
         ids.add("2");
         ids.add("3");
+        ids.add("8");
         ids.add("4");
         if (!Setting.isHomeHistory()) ids.add("6");
         ids.add("7");
+        ids.add("9");
         return TextUtils.join(",", ids);
     }
 

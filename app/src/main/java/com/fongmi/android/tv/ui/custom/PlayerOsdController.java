@@ -26,6 +26,7 @@ import androidx.media3.common.Tracks;
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.player.DolbyVisionFormatLabel;
+import com.fongmi.android.tv.player.AudioPlaybackDiagnostics;
 import com.fongmi.android.tv.player.GpuLoadMonitor;
 import com.fongmi.android.tv.player.ijk.IjkDecodePressurePolicy;
 import com.fongmi.android.tv.player.PlayerManager;
@@ -167,6 +168,10 @@ public class PlayerOsdController {
 
     public boolean isDiagnosticsVisible() {
         return diagnosticsVisible;
+    }
+
+    public String sampleSpeedText() {
+        return lastSpeedText;
     }
 
     public void setDiagnosticsVisible(boolean visible) {
@@ -403,7 +408,10 @@ public class PlayerOsdController {
         Format audio = snapshot.audioFormat();
         String state = stateText(player.getPlaybackState()) + (player.isLoading() ? " / 正在加载" : "");
         String buffer = join(" / ", formatDuration(player.getBufferedDuration()), player.getBufferedPercentage() > 0 ? player.getBufferedPercentage() + "%" : "");
-        String rebuffer = snapshot.rebufferCount() <= 0 ? "0 次" : snapshot.rebufferCount() + " 次 / " + formatDuration(snapshot.rebufferTotalMs());
+        // MPV has no Exo analytics snapshot; its buffering tracker belongs to PlayerManager.
+        int rebufferCount = player.isMpv() ? player.getRebufferCount() : snapshot.rebufferCount();
+        long rebufferTotalMs = player.isMpv() ? player.getRebufferTotalMs() : snapshot.rebufferTotalMs();
+        String rebuffer = rebufferCount <= 0 ? "0 次" : rebufferCount + " 次 / " + formatDuration(rebufferTotalMs);
         long stableThroughput = player.getNetworkProtectionStableThroughput();
         long consumption = player.getNetworkProtectionConsumption();
         String networkProtection = player.getNetworkProtectionText();
@@ -435,7 +443,11 @@ public class PlayerOsdController {
                 snapshot.videoDecoderName(), getVideoTrackState(player),
                 videoDetails);
         AudioTrackState audioTrack = getAudioTrackState(player);
-        String audioText = summarizeAudio(audio, audioTrack, snapshot.audioDecoderName());
+        AudioPlaybackDiagnostics.Snapshot audioDetails = player.getAudioPlaybackDiagnostics();
+        String runtimeAudio = AudioPlaybackDiagnostics.format(audioDetails);
+        String audioText = TextUtils.isEmpty(runtimeAudio)
+                ? summarizeAudio(audio, audioTrack, snapshot.audioDecoderName())
+                : runtimeAudio;
         String render = PlayerSetting.getRender() == PlayerSetting.RENDER_SURFACE ? "Surface" : "Texture";
         String tunnel = switchText(PlayerSetting.isTunnelingEnabled());
         String performance = PlaybackPerformanceSetting.getProfileName(player.getPlayerType());
@@ -443,7 +455,7 @@ public class PlayerOsdController {
         String preload = "预载" + switchText(PreloadSetting.isPreload(player.getPlayerType()));
         String frameRateMatch = player.isExo() ? "帧率匹配 开" : "";
         String softTune = getSoftDecodeTuneText(player);
-        String playerText = join(" / ", player.getPlayerText(), player.getDecodeText(), render, "隧道" + tunnel, "性能" + performance, frameRateMatch, preload, "直通" + passThrough, softTune, player.isExo() ? "兜底开" : "");
+        String playerText = join(" / ", player.getPlayerText(), player.getDecodeText(), render, "隧道" + tunnel, "性能" + performance, frameRateMatch, preload, softTune, player.isExo() ? "兜底开" : "");
         String playback = join(" / ", state, buffer, "重缓冲 " + rebuffer, "掉帧 " + player.getDroppedFrames());
         String startup = getStartupText(player);
         String error = getErrorText(player, snapshot);
@@ -462,7 +474,7 @@ public class PlayerOsdController {
                 row("播放", playback),
                 row("配置", playerText),
                 TextUtils.isEmpty(startup) ? "" : row("起播", startup),
-                row("结论", getDiagnosis(player, snapshot, video, audioTrack, localSource)));
+                row("结论", getDiagnosis(player, snapshot, video, audioTrack, audioDetails, localSource)));
         String extra = join("\n",
                 row("设备", getDeviceText()),
                 row("系统", getSystemText()),
@@ -484,12 +496,12 @@ public class PlayerOsdController {
         return TextUtils.isEmpty(slowest) ? summary : summary + "  最慢 " + slowest;
     }
 
-    private String getDiagnosis(PlayerManager player, PlaybackAnalyticsListener.Snapshot snapshot, Format video, AudioTrackState audioTrack, boolean localSource) {
+    private String getDiagnosis(PlayerManager player, PlaybackAnalyticsListener.Snapshot snapshot, Format video, AudioTrackState audioTrack, AudioPlaybackDiagnostics.Snapshot audioDetails, boolean localSource) {
+        if (audioDetails.runtimeState() == AudioPlaybackDiagnostics.RuntimeState.FAILED) return "音频链路失败，先看音频和错误行";
         if (isDecodeError(snapshot) && player.isHardDecode()) return "硬件解码失败：设备可能不支持该视频编码、分辨率、帧率或规格";
         if (!TextUtils.isEmpty(snapshot.errorCode())) return "播放器报错，先看错误行";
         if (audioTrack.hasTracks() && audioTrack.isUnsupported()) return "音频轨不支持：" + summarizeAudioFormat(audioTrack.format()) + " / " + supportText(audioTrack.support());
         if (player.isExo() && audioTrack.hasTracks() && !audioTrack.selected() && snapshot.audioFormat() == null && player.getPlaybackState() == androidx.media3.common.Player.STATE_READY) return "已发现音轨但未选中，可能无声";
-        if (player.isExo() && audioTrack.hasTracks() && TextUtils.isEmpty(snapshot.audioDecoderName()) && player.getPlaybackState() == androidx.media3.common.Player.STATE_READY) return "已发现音轨但 decoder 未初始化，可能无声";
         if (!localSource) {
             long mediaBitrate = getMediaBitrate(video, snapshot.audioFormat() != null ? snapshot.audioFormat() : audioTrack.format());
             long availableBitrate = snapshot.bandwidthEstimate() > 0 ? snapshot.bandwidthEstimate() : lastSpeedKBps * 1024 * 8;
@@ -500,7 +512,20 @@ public class PlayerOsdController {
         }
         if (player.getDroppedFrames() >= 60) return "掉帧较多，可能是解码或渲染压力";
         if (!localSource && formatBitrateValue(video) >= 30_000_000) return "资源码率较高，对网络和解码要求高";
+        // Use the same observed output as the audio row. A missing decoder name
+        // is not a failure signal, and encoded output does not need an app decoder.
+        if (audioDetails.runtimeState() == AudioPlaybackDiagnostics.RuntimeState.ACTIVE) {
+            return switch (audioDetails.outputMode()) {
+                case PASSTHROUGH -> "音频直通，无需 App 解码器";
+                case COMPRESSED_DIRECT -> "音频压缩直出，由音频设备解码";
+                case OFFLOAD -> "音频卸载，由音频设备解码";
+                case PCM -> TextUtils.isEmpty(audioDetails.decoderName())
+                        ? "PCM 输出已建立，解码器名称未上报" : "正常";
+                case UNKNOWN -> "音频输出状态待确认";
+            };
+        }
         if (player.isExo() && audioTrack.hasTracks() && snapshot.audioFormat() == null) return "正在等待音频轨信息";
+        if (audioTrack.hasTracks() || audioDetails.runtimeState() == AudioPlaybackDiagnostics.RuntimeState.PENDING) return "音频输出状态待确认";
         return "正常";
     }
 

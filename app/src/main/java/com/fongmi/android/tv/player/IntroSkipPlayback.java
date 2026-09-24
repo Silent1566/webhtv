@@ -10,6 +10,7 @@ import com.github.catvod.crawler.SpiderDebug;
 
 import java.util.HashSet;
 import java.util.Set;
+import java.util.WeakHashMap;
 
 public class IntroSkipPlayback {
 
@@ -43,6 +44,18 @@ public class IntroSkipPlayback {
     private static final long MIN_SKIP_DELTA_MS = 1500;
     /** 时长归一粒度：HLS 的时长会随 manifest 精化抖动，别为几百毫秒反复重解析。 */
     private static final long DURATION_BUCKET_MS = 2000;
+    private static final Object CONFIRMATION_LOCK = new Object();
+    private static final WeakHashMap<Object, ConfirmationLease> CONFIRMATIONS = new WeakHashMap<>();
+
+    private static final class ConfirmationLease {
+        final IntroSkipPlayback owner;
+        final String id;
+
+        ConfirmationLease(IntroSkipPlayback owner, String id) {
+            this.owner = owner;
+            this.id = id;
+        }
+    }
 
     private final IntroSkipService service = new IntroSkipService();
     private final Set<String> skipped = new HashSet<>();
@@ -55,6 +68,7 @@ public class IntroSkipPlayback {
     private boolean suppressOpening;
     private boolean suppressEnding;
     private String pendingConfirmationId = "";
+    private Object pendingSession;
     private SkipConfirmListener skipConfirmListener;
     private Runnable skipConfirmDismisser;
     private SkipNoticeListener skipNoticeListener;
@@ -69,8 +83,8 @@ public class IntroSkipPlayback {
         resumeMs = 0;
         suppressOpening = false;
         suppressEnding = false;
-        pendingConfirmationId = "";
         if (skipConfirmDismisser != null) skipConfirmDismisser.run();
+        releaseConfirmationState();
     }
 
     /**
@@ -110,12 +124,36 @@ public class IntroSkipPlayback {
         this.skipNoticeListener = listener;
     }
 
-    /** 开始询问一个片段；同一时间只允许一个确认框占用状态。 */
+    /**
+     * 开始询问一个片段；同一时间只允许一个确认框占用状态。
+     *
+     * <p>确认状态按底层播放器会话共享，而不是只属于当前 Activity。播放页切换或同一播放器同时
+     * 被多个页面绑定时，每个页面都有自己的 {@link IntroSkipPlayback} 实例；若状态仅实例内可见，
+     * 它们会在同一秒的进度回调里各弹一次框。共享租约保证只有首个实例能真正显示确认框。
+     */
     public boolean beginConfirmation(Segment segment) {
+        return beginConfirmation(this, segment);
+    }
+
+    boolean beginConfirmation(Object session, Segment segment) {
+        if (session == null) return false;
         String id = id(segment);
-        if (id.isEmpty() || skipped.contains(id) || !pendingConfirmationId.isEmpty()) return false;
+        if (id.isEmpty() || skipped.contains(id)) return false;
+        synchronized (CONFIRMATION_LOCK) {
+            ConfirmationLease current = CONFIRMATIONS.get(session);
+            if (current != null) return current.owner == this && current.id.equals(id);
+            CONFIRMATIONS.put(session, new ConfirmationLease(this, id));
+        }
+        pendingSession = session;
         pendingConfirmationId = id;
         return true;
+    }
+
+    boolean hasConfirmation(Object session) {
+        if (session == null) return false;
+        synchronized (CONFIRMATION_LOCK) {
+            return CONFIRMATIONS.containsKey(session);
+        }
     }
 
     public boolean isConfirmationPending(Segment segment) {
@@ -130,7 +168,15 @@ public class IntroSkipPlayback {
 
     /** 取消、关闭或过期的确认不应使片段永久失效。 */
     public void cancelConfirmation(Segment segment) {
-        if (isConfirmationPending(segment)) pendingConfirmationId = "";
+        releaseConfirmation(segment);
+    }
+
+    /** 用户明确拒绝本段后，本集内不再重复询问；下一集 reset 后恢复。 */
+    public void declineConfirmation(Segment segment) {
+        String id = id(segment);
+        if (id.isEmpty()) return;
+        skipped.add(id);
+        releaseConfirmation(segment);
     }
 
     /** 只有实际执行了跳转/换集后才把片段记为已处理。 */
@@ -138,7 +184,25 @@ public class IntroSkipPlayback {
         String id = id(segment);
         if (id.isEmpty()) return;
         skipped.add(id);
-        if (id.equals(pendingConfirmationId)) pendingConfirmationId = "";
+        releaseConfirmation(segment);
+    }
+
+    private void releaseConfirmation(Segment segment) {
+        String id = id(segment);
+        if (!id.equals(pendingConfirmationId)) return;
+        releaseConfirmationState();
+    }
+
+    private void releaseConfirmationState() {
+        Object session = pendingSession;
+        String id = pendingConfirmationId;
+        pendingSession = null;
+        pendingConfirmationId = "";
+        if (session == null || id.isEmpty()) return;
+        synchronized (CONFIRMATION_LOCK) {
+            ConfirmationLease current = CONFIRMATIONS.get(session);
+            if (current != null && current.owner == this && current.id.equals(id)) CONFIRMATIONS.remove(session);
+        }
     }
 
     /**
@@ -224,6 +288,7 @@ public class IntroSkipPlayback {
         if (player == null || player.isReleased() || plan == null || plan.isEmpty()) return false;
         int mode = Setting.getIntroSkipMode();
         if (mode == Setting.INTRO_SKIP_OFF) return false;
+        if (mode == Setting.INTRO_SKIP_CONFIRM && hasConfirmation(player)) return true;
         long position = player.getPosition();
         long duration = player.getDuration();
         if (position < 0) return false;
@@ -268,7 +333,7 @@ public class IntroSkipPlayback {
                 int current = generation;
                 // 只有确认框真的弹出来了才算已处理；被别的框挡住时留着下个 tick 再问
                 if (isConfirmationPending(segment)) return true;
-                if (!beginConfirmation(segment)) continue;
+                if (!beginConfirmation(player, segment)) continue;
                 boolean shown;
                 try {
                     shown = skipConfirmListener.onSkipConfirm(segment,

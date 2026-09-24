@@ -46,6 +46,8 @@ import com.fongmi.android.tv.event.CastEvent;
 import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.event.ServerEvent;
+import com.fongmi.android.tv.following.FollowingPlaybackBridge;
+import com.fongmi.android.tv.following.FollowingScheduler;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.impl.ConfigListener;
 import com.fongmi.android.tv.model.SiteViewModel;
@@ -55,13 +57,16 @@ import com.fongmi.android.tv.service.DLNARendererService;
 import com.fongmi.android.tv.service.PlaybackService;
 import com.fongmi.android.tv.setting.AutoBackupPolicy;
 import com.fongmi.android.tv.setting.AppBranding;
+import com.fongmi.android.tv.setting.CustomCspSetting;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.adapter.BaseDiffCallback;
 import com.fongmi.android.tv.ui.adapter.TypeAdapter;
 import com.fongmi.android.tv.ui.base.BaseActivity;
+import com.fongmi.android.tv.ui.helper.TouchOptimizationHelper;
 import com.fongmi.android.tv.ui.custom.CustomRowPresenter;
 import com.fongmi.android.tv.ui.custom.CustomSelector;
 import com.fongmi.android.tv.ui.custom.CustomTitleView;
+import com.fongmi.android.tv.ui.dialog.CustomCspDialog;
 import com.fongmi.android.tv.ui.dialog.HistoryDialog;
 import com.fongmi.android.tv.ui.dialog.ExitConfirmDialog;
 import com.fongmi.android.tv.ui.dialog.HomeMenuDialog;
@@ -73,6 +78,7 @@ import com.fongmi.android.tv.ui.presenter.HistoryPresenter;
 import com.fongmi.android.tv.ui.presenter.ProgressPresenter;
 import com.fongmi.android.tv.ui.presenter.VodPresenter;
 import com.fongmi.android.tv.utils.Clock;
+import com.fongmi.android.tv.utils.CrashRestartMode;
 import com.fongmi.android.tv.utils.FileChooser;
 import com.fongmi.android.tv.utils.KeyUtil;
 import com.fongmi.android.tv.utils.Notify;
@@ -94,6 +100,7 @@ import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 
@@ -131,6 +138,9 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     private boolean pendingOpenVod; // 手动点击"点播"后等待数据加载完成再进分类页
     private boolean webConfirmKeyDown;
     private boolean webConfirmLongPress;
+    private boolean mTypeSelectionFromTouch;
+    private int focusGeneration;
+    private Runnable mPendingCategoryFocus;
     private final Runnable mTypeSwitch = this::switchType;
     private final Runnable mWebConfirmLongPress = this::triggerWebFocusedLongPress;
     private final Runnable mDelayedInitConfig = this::initConfig;
@@ -209,6 +219,14 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
             syncNativeContentInset();
             syncWebOverlayLayout();
         });
+        mBinding.typeRecycler.setOnFocusChangeListener((view, hasFocus) -> {
+            if (!hasFocus) {
+                invalidatePendingFocusRequests();
+                if (mFolder != null) mFolder.clearContentFocusRequest();
+            } else if (isCategoryVisible() && mFolder != null) {
+                mFolder.scrollContentToTop();
+            }
+        });
         mBinding.recycler.addOnChildViewHolderSelectedListener(new OnChildViewHolderSelectedListener() {
             @Override
             public void onChildViewHolderSelected(@NonNull RecyclerView parent, @Nullable RecyclerView.ViewHolder child, int position, int subposition) {
@@ -228,7 +246,8 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
                 mSelectedTypeView = child.itemView;
                 mSelectedTypeView.setSelected(true);
                 if (parent.hasFocus()) updateToolbarVisibility(true);
-                if (Setting.isHomeVodAutoLoad()) scheduleTypeSwitch(position);
+                mTypeSelectionFromTouch = TouchOptimizationHelper.isTouchActive(parent);
+                if (Setting.isHomeVodAutoLoad() && !mTypeSelectionFromTouch) scheduleTypeSwitch(position);
             }
         });
     }
@@ -240,7 +259,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     }
 
     private void resumeTypeSwitch() {
-        if (!Setting.isHomeVodAutoLoad() || mBinding.typeRecycler.getVisibility() != View.VISIBLE) return;
+        if (!Setting.isHomeVodAutoLoad() || mTypeSelectionFromTouch || mBinding.typeRecycler.getVisibility() != View.VISIBLE) return;
         int position = mBinding.typeRecycler.getSelectedPosition();
         if (position >= 0) scheduleTypeSwitch(position);
     }
@@ -257,13 +276,13 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     @Override
     public void onCategoryContentHorizontalEdge(Class item, int contentRow, boolean towardEnd) {
         if (!isCurrentCategory(item) || contentRow < 0) return;
+        mTypeSelectionFromTouch = false;
         item = getAdjacentCategory(item, towardEnd);
         if (item == null) return;
         mBinding.typeRecycler.removeCallbacks(mTypeSwitch);
         int position = mTypeAdapter.indexOf(item);
         mBinding.typeRecycler.setSelectedPosition(position);
-        if (contentRow == 0) focusFirstCard(item);
-        else focusCategoryButton(item);
+        focusCategoryButton(item);
     }
 
     private Class getAdjacentCategory(Class item, boolean towardEnd) {
@@ -277,17 +296,47 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     private void focusFirstCard(Class item) {
         showCategoryContent(item);
         getSupportFragmentManager().executePendingTransactions();
-        if (mFolder != null && isCurrentCategory(item)) mFolder.requestContentFocus(0);
+        if (mFolder != null && isCurrentCategory(item)) mFolder.requestContentFocus(0, focusGeneration);
     }
 
     private void focusCategoryButton(Class item) {
-        mBinding.typeRecycler.setVisibility(View.VISIBLE);
-        updateToolbarVisibility(true);
-        mBinding.typeRecycler.requestFocus();
+        if (item == null || getSupportFragmentManager().isStateSaved()) return;
         showCategoryContent(item);
+        // Complete the switch before checking the new page; otherwise the posted callback can
+        // run while the target fragment is not added yet and drop the header/focus restoration.
+        getSupportFragmentManager().executePendingTransactions();
+        final int generation = ++focusGeneration;
+        mPendingCategoryFocus = () -> {
+            if (generation != focusGeneration) return;
+            mPendingCategoryFocus = null;
+            if (isFinishing() || isDestroyed() || !isCurrentCategory(item) || mFolder == null) return;
+            int position = mTypeAdapter.indexOf(item);
+            if (position < 0 || mBinding.typeRecycler.getSelectedPosition() != position) return;
+            mBinding.typeRecycler.setVisibility(View.VISIBLE);
+            updateToolbarVisibility(true);
+            mBinding.typeRecycler.requestFocus();
+            mFolder.scrollContentToTop(generation);
+            mBinding.typeRecycler.setSelectedPosition(position, holder -> {
+                if (generation != focusGeneration || !mBinding.typeRecycler.hasFocus()) return;
+                if (isCurrentCategory(item) && mBinding.typeRecycler.getSelectedPosition() == position) {
+                    holder.itemView.requestFocus();
+                }
+            });
+        };
+        mBinding.typeRecycler.post(mPendingCategoryFocus);
+    }
+
+    private void invalidatePendingFocusRequests() {
+        focusGeneration++;
+        if (mBinding != null && mPendingCategoryFocus != null) {
+            mBinding.typeRecycler.removeCallbacks(mPendingCategoryFocus);
+        }
+        if (mBinding != null) mBinding.typeRecycler.removeCallbacks(mTypeSwitch);
+        mPendingCategoryFocus = null;
     }
 
     private void showHomeContent() {
+        invalidatePendingFocusRequests();
         mCurrentType = null;
         mBinding.progressLayout.setVisibility(View.VISIBLE);
         mBinding.categoryContainer.setVisibility(View.GONE);
@@ -303,7 +352,14 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     }
 
     private void showCategoryContent(Class item, boolean toggleFilter) {
-        if (getSupportFragmentManager().isStateSaved()) return;
+        if (getSupportFragmentManager().isStateSaved()) {
+            invalidatePendingFocusRequests();
+            return;
+        }
+        final int generation = ++focusGeneration;
+        if (mBinding != null && mPendingCategoryFocus != null) mBinding.typeRecycler.removeCallbacks(mPendingCategoryFocus);
+        mPendingCategoryFocus = null;
+        if (mFolder != null) mFolder.clearContentFocusRequest();
         getSupportFragmentManager().executePendingTransactions();
         if (item == null || item.isHome()) {
             showHomeContent();
@@ -339,6 +395,8 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
         else transaction.add(R.id.categoryContainer, target, tag);
         target.setUserVisibleHint(true);
         transaction.runOnCommit(() -> {
+            if (generation != focusGeneration || target != mFolder || !isCurrentCategory(item)) return;
+            target.scrollContentToTop(generation);
             restoreTypeFocus(keepTypeFocus, item);
             if (toggleFilter && target == mFolder && isCurrentCategory(item)) updateFilter(item);
         });
@@ -364,8 +422,9 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     }
 
     private void clearCategoryContent() {
+        invalidatePendingFocusRequests();
         mBinding.typeRecycler.removeCallbacks(mTypeSwitch);
-        mPendingTypePosition = -1;
+        clearStaleSiteTypes();
         mCurrentType = null;
         mFolder = null;
         mBinding.progressLayout.setVisibility(View.VISIBLE);
@@ -379,6 +438,14 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
             transaction.remove(fragment);
         }
         if (transaction != null) transaction.commit();
+    }
+
+    private void clearStaleSiteTypes() {
+        // Site switching starts asynchronously. Remove the old type row immediately so stale
+        // category buttons cannot be mistaken for the newly selected site during loading.
+        mTypeAdapter.addAll(Collections.emptyList());
+        mPendingTypePosition = -1;
+        mBinding.typeRecycler.setVisibility(View.GONE);
     }
 
     private void updateToolbarVisibility(boolean visible) {
@@ -532,6 +599,11 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     }
 
     private void initConfig() {
+        if (CrashRestartMode.consume()) {
+            SpiderDebug.log("startup", "skip config load once after crash restart");
+            showContent();
+            return;
+        }
         SpiderDebug.log("startup", "config load start cost=%sms", System.currentTimeMillis() - App.time());
         VodConfig.get().init().load(getCallback());
         LiveConfig.get().init().load();
@@ -640,7 +712,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
 
     private void setTypes(Result result) {
         if (result.getTypes().isEmpty()) {
-            mTypeAdapter.addAll(java.util.Collections.emptyList());
+            mTypeAdapter.addAll(Collections.emptyList());
             mBinding.typeRecycler.setVisibility(View.GONE);
             showHomeContent();
             return;
@@ -718,6 +790,12 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
             items.add(Func.create(button.getResId()));
         }
         mFuncAdapter.setItems(items, new BaseDiffCallback<Func>());
+    }
+
+    private void refreshFollowingCount() {
+        FollowingPlaybackBridge.refreshUnreadCountAsync(unread -> {
+            if (!isFinishing() && !isDestroyed()) setFunc();
+        });
     }
 
     private void getHistory() {
@@ -887,11 +965,21 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
             }
         } else if (item.getResId() == R.string.home_live) LiveActivity.start(this);
         else if (item.getResId() == R.string.home_keep) KeepActivity.start(this);
+        else if (item.getResId() == R.string.home_following) FollowingActivity.start(this, null);
         else if (item.getResId() == R.string.home_push) PushActivity.start(this);
         else if (item.getResId() == R.string.home_search) SearchActivity.start(this);
         else if (item.getResId() == R.string.home_setting) SettingActivity.start(this);
         else if (item.getResId() == R.string.home_cast) PushActivity.start(this, 3);
         else if (item.getResId() == R.string.home_history_button) HistoryActivity.start(this);
+        else if (item.getResId() == R.string.home_custom_csp) openCustomCsp();
+    }
+
+    private void openCustomCsp() {
+        PermissionUtil.requestFile(this, granted -> {
+            if (isFinishing() || isDestroyed() || getSupportFragmentManager().isStateSaved()) return;
+            if (granted) CustomCspDialog.show(this, this::setFunc);
+            else Notify.show(R.string.setting_custom_csp_permission_required);
+        });
     }
 
     @Override
@@ -952,6 +1040,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
 
     @Override
     public void onItemClick(Class item) {
+        mTypeSelectionFromTouch = false;
         if (item.isHome()) showHomeContent();
         else if (isCurrentCategory(item)) updateFilter(item);
         else {
@@ -968,7 +1057,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
 
     @Override
     public void onItemClick(Vod item) {
-        if (item.isAction()) mViewModel.action(getHome().getKey(), item.getAction());
+        if (item.isAction()) com.fongmi.android.tv.content.ActionCardHelper.handleAction(this, getHome().getKey(), item.getAction());
         else if (getHome().isIndex()) CollectActivity.start(this, item.getName());
         else VideoActivity.start(this, getHome().getKey(), item.getId(), item.getName(), item.getPic());
     }
@@ -1152,7 +1241,12 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     }
 
     private boolean requestContentFocus() {
-        if (isCategoryVisible()) return mFolder != null && mFolder.requestContentFocus();
+        if (isCategoryVisible()) {
+            invalidatePendingFocusRequests();
+            if (mFolder == null) return false;
+            mFolder.clearContentFocusRequest();
+            return mFolder.requestContentFocus();
+        }
         if (mBinding.recycler.getVisibility() != View.VISIBLE || mBinding.recycler.getChildCount() == 0) return false;
         View child = mBinding.recycler.getFocusedChild();
         if (child == null) child = mBinding.recycler.getChildAt(0);
@@ -1165,13 +1259,18 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
         mClock.start();
         syncHomeSiteLock();
         if (mWeb != null) mWeb.onResume();
+        FollowingScheduler.ensurePeriodic(this);
+        FollowingScheduler.enqueueDueNow(this);
         setFunc();
+        refreshFollowingCount();
         syncTypeItems();
         resumeTypeSwitch();
     }
 
     @Override
     protected void onPause() {
+        invalidatePendingFocusRequests();
+        if (mFolder != null) mFolder.clearContentFocusRequest();
         mBinding.typeRecycler.removeCallbacks(mTypeSwitch);
         cancelWebConfirmKey();
         if (mWeb != null) mWeb.onPause();
@@ -1239,6 +1338,8 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
 
     @Override
     protected void onDestroy() {
+        invalidatePendingFocusRequests();
+        if (mFolder != null) mFolder.clearContentFocusRequest();
         mBinding.typeRecycler.removeCallbacks(mTypeSwitch);
         cancelPendingStartupTasks();
         if (mWeb != null) mWeb.destroy();

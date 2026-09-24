@@ -47,6 +47,8 @@ import okhttp3.Response;
 public class PersonalRecommendationService {
 
     public static final int DEFAULT_PAGE_SIZE = 12;
+    private static final String CACHE_SOURCE_TMDB = "tmdb";
+    private static final String CACHE_SOURCE_DOUBAN = "douban";
     private static final int TMDB_HISTORY_SEED_BATCH = 4;
     private static final int MIN_TMDB_HISTORY_RESULTS = 4;
     private static final int DOUBAN_SEED_BATCH = 8;
@@ -93,6 +95,8 @@ public class PersonalRecommendationService {
         }
     };
 
+    private final PersonalRecommendationCache resultCache = new PersonalRecommendationCache(resultCacheDirectory());
+
     private static final DoubanRatingMemoryCache DOUBAN_RATING_CACHE =
             new DoubanRatingMemoryCache(MAX_DOUBAN_RATING_CACHE, DOUBAN_CACHE_TTL);
     private static final Object DOUBAN_REQUEST_LOCK = new Object();
@@ -101,7 +105,7 @@ public class PersonalRecommendationService {
     private static volatile boolean doubanCooldownLoaded;
 
     public PersonalRecommendationService() {
-        this(new TmdbService(), TmdbConfig.objectFrom(Setting.getTmdbConfig()));
+        this(new TmdbService(), TmdbConfig.effectiveCurrent());
     }
 
     public PersonalRecommendationService(TmdbService tmdbService, TmdbConfig tmdbConfig) {
@@ -119,9 +123,16 @@ public class PersonalRecommendationService {
 
     public RecommendationPages loadPage(@Nullable Vod currentVod, @Nullable TmdbItem currentItem, @Nullable JsonObject currentDetail, int offset, int pageSize) {
         if (!Setting.isPersonalRecommendation() || Thread.currentThread().isInterrupted()) return RecommendationPages.empty();
-        RecommendationPage tmdb = loadTmdbPage(currentVod, currentItem, currentDetail, offset, pageSize);
+        RecommendationPage tmdb = loadCachedOrRefreshTmdbPage(currentVod, currentItem, currentDetail, offset, pageSize);
         if (Thread.currentThread().isInterrupted()) return new RecommendationPages(tmdb, RecommendationPage.empty(""), RecommendationPage.empty(""));
-        RecommendationPage douban = loadDoubanPage(currentVod, offset, pageSize);
+        RecommendationPage douban = loadCachedOrRefreshDoubanPage(currentVod, offset, pageSize);
+        return new RecommendationPages(tmdb, douban, RecommendationPage.empty(aiFingerprint(currentVod, currentItem)));
+    }
+
+    public RecommendationPages loadIndependentPages(@Nullable Vod currentVod, @Nullable TmdbItem currentItem, @Nullable JsonObject currentDetail, int offset, int pageSize) {
+        if (!Setting.isPersonalRecommendation() || Thread.currentThread().isInterrupted()) return RecommendationPages.empty();
+        RecommendationPage tmdb = loadCachedOrRefreshTmdbPage(currentVod, currentItem, currentDetail, offset, pageSize);
+        RecommendationPage douban = loadCachedOrRefreshDoubanPage(currentVod, offset, pageSize);
         return new RecommendationPages(tmdb, douban, RecommendationPage.empty(aiFingerprint(currentVod, currentItem)));
     }
 
@@ -132,7 +143,7 @@ public class PersonalRecommendationService {
 
     public RecommendationPage loadTmdbPage(@Nullable Vod currentVod, @Nullable TmdbItem currentItem, @Nullable JsonObject currentDetail, int offset, int pageSize) {
         if (!Setting.isPersonalRecommendation() || !tmdbConfig.isReady()) return RecommendationPage.empty(historyFingerprint(currentVod, true));
-        return loadFromTmdb(currentVod, currentItem, currentDetail, offset, pageSize);
+        return loadCachedOrRefreshTmdbPage(currentVod, currentItem, currentDetail, offset, pageSize);
     }
 
     public List<TmdbItem> loadDouban(@Nullable Vod currentVod) {
@@ -210,7 +221,25 @@ public class PersonalRecommendationService {
 
     public RecommendationPage loadDoubanPage(@Nullable Vod currentVod, int offset, int pageSize) {
         if (!Setting.isPersonalRecommendation()) return RecommendationPage.empty(historyFingerprint(currentVod, false));
-        return loadFromDouban(currentVod, offset, pageSize);
+        return loadCachedOrRefreshDoubanPage(currentVod, offset, pageSize);
+    }
+
+    public RecommendationPage loadFreshTmdbPage(@Nullable Vod currentVod, @Nullable TmdbItem currentItem, @Nullable JsonObject currentDetail, int offset, int pageSize) {
+        if (!Setting.isPersonalRecommendation() || !tmdbConfig.isReady()) return RecommendationPage.empty(historyFingerprint(currentVod, true));
+        return writePage(CACHE_SOURCE_TMDB, tmdbCacheKey(currentVod, currentItem), tmdbFingerprint(currentVod), loadFromTmdb(currentVod, currentItem, currentDetail, offset, pageSize));
+    }
+
+    public RecommendationPage loadFreshDoubanPage(@Nullable Vod currentVod, int offset, int pageSize) {
+        if (!Setting.isPersonalRecommendation()) return RecommendationPage.empty(historyFingerprint(currentVod, false));
+        return writePage(CACHE_SOURCE_DOUBAN, doubanCacheKey(currentVod), doubanFingerprint(currentVod), loadFromDouban(currentVod, offset, pageSize));
+    }
+
+    public void writeCachedTmdbPage(@Nullable Vod currentVod, @Nullable TmdbItem currentItem, @Nullable PersonalRecommendationService.RecommendationPage page) {
+        writePage(CACHE_SOURCE_TMDB, tmdbCacheKey(currentVod, currentItem), tmdbFingerprint(currentVod), page);
+    }
+
+    public void writeCachedDoubanPage(@Nullable Vod currentVod, @Nullable PersonalRecommendationService.RecommendationPage page) {
+        writePage(CACHE_SOURCE_DOUBAN, doubanCacheKey(currentVod), doubanFingerprint(currentVod), page);
     }
 
     public RecommendationPage loadAiPage(@Nullable Vod currentVod, @Nullable TmdbItem currentItem, int pageSize) {
@@ -238,6 +267,16 @@ public class PersonalRecommendationService {
         return AiRecommendationService.fingerprint(currentTitle, aiHistoryFingerprint(currentTitle), Setting.getKeyword(), AiConfig.objectFrom(Setting.getAiConfig()));
     }
 
+    public String tmdbFingerprint(@Nullable Vod currentVod) {
+        List<String> seeds = historySeeds(currentTitle(currentVod, null), Integer.MAX_VALUE, true);
+        return recommendationFingerprint(seeds);
+    }
+
+    public String doubanFingerprint(@Nullable Vod currentVod) {
+        List<String> seeds = doubanSeeds(currentTitle(currentVod, null), Integer.MAX_VALUE);
+        return recommendationFingerprint(seeds);
+    }
+
     private String aiHistoryFingerprint(String currentTitle) {
         return AiRecommendationService.historyMetadataFingerprint(safeHistory(), currentTitle)
                 + "|feedback:" + RecommendationFeedbackStore.fingerprint();
@@ -249,6 +288,72 @@ public class PersonalRecommendationService {
                 ? historySeeds(currentTitle, Integer.MAX_VALUE, true)
                 : doubanSeeds(currentTitle, Integer.MAX_VALUE);
         return recommendationFingerprint(seeds);
+    }
+
+    private RecommendationPage loadCachedOrRefreshTmdbPage(
+            @Nullable Vod currentVod, @Nullable TmdbItem currentItem,
+            @Nullable JsonObject currentDetail, int offset, int pageSize) {
+        if (offset == 0) {
+            String key = tmdbCacheKey(currentVod, currentItem);
+            String fingerprint = tmdbFingerprint(currentVod);
+            RecommendationPage cached = resultCache.read(CACHE_SOURCE_TMDB, key, fingerprint);
+            if (cached != null) return cached;
+        }
+        return writePage(
+                CACHE_SOURCE_TMDB,
+                tmdbCacheKey(currentVod, currentItem),
+                tmdbFingerprint(currentVod),
+                loadFromTmdb(currentVod, currentItem, currentDetail, offset, pageSize));
+    }
+
+    private RecommendationPage loadCachedOrRefreshDoubanPage(@Nullable Vod currentVod, int offset, int pageSize) {
+        if (offset == 0) {
+            String key = doubanCacheKey(currentVod);
+            String fingerprint = doubanFingerprint(currentVod);
+            RecommendationPage cached = resultCache.read(CACHE_SOURCE_DOUBAN, key, fingerprint);
+            if (cached != null) return cached;
+        }
+        return writePage(
+                CACHE_SOURCE_DOUBAN,
+                doubanCacheKey(currentVod),
+                doubanFingerprint(currentVod),
+                loadFromDouban(currentVod, offset, pageSize));
+    }
+
+    private RecommendationPage writePage(String source, String key, String fingerprint, RecommendationPage page) {
+        resultCache.write(source, key, fingerprint, page);
+        return page;
+    }
+
+    private String tmdbCacheKey(@Nullable Vod currentVod, @Nullable TmdbItem currentItem) {
+        List<String> seeds = historySeeds(currentTitle(currentVod, currentItem), Integer.MAX_VALUE, true);
+        return String.join("|",
+                Objects.toString(currentTitle(currentVod, currentItem), ""),
+                historySeedFingerprint(seeds),
+                RecommendationFeedbackStore.fingerprint(),
+                Objects.toString(tmdbConfig.getApiBase(), ""),
+                Objects.toString(tmdbConfig.getLanguage(), ""));
+    }
+
+    private String doubanCacheKey(@Nullable Vod currentVod) {
+        List<String> seeds = doubanSeeds(currentTitle(currentVod, null), Integer.MAX_VALUE);
+        return String.join("|",
+                Objects.toString(currentTitle(currentVod, null), ""),
+                historySeedFingerprint(seeds),
+                RecommendationFeedbackStore.fingerprint(),
+                Objects.toString(tmdbConfig.getApiBase(), ""),
+                Objects.toString(tmdbConfig.getLanguage(), ""));
+    }
+
+    @Nullable
+    private File resultCacheDirectory() {
+        try {
+            File dir = new File(Path.cache(), "personal_rec");
+            if (!dir.exists() && !dir.mkdirs()) return null;
+            return dir;
+        } catch (Throwable e) {
+            return null;
+        }
     }
 
     private RecommendationPage loadFromTmdb(@Nullable Vod currentVod, @Nullable TmdbItem currentItem, @Nullable JsonObject currentDetail, int offset, int pageSize) {

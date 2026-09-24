@@ -33,6 +33,7 @@ public class DisabledDefaultRuleStore {
     public static void save(Set<String> ids) {
         Prefers.put(PREF_KEY, App.gson().toJson(new ArrayList<>(ids == null ? new HashSet<>() : ids)));
         RuleConfig.get().invalidate();
+        HlsRuleConfig.invalidate();
     }
 
     public static boolean isDisabled(String ruleId) {

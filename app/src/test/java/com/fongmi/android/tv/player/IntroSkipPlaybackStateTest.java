@@ -26,6 +26,42 @@ public class IntroSkipPlaybackStateTest {
     }
 
     @Test
+    public void oneConfirmationLeaseIsSharedByAllPagesUsingTheSamePlaybackSession() {
+        Object session = new Object();
+        IntroSkipPlayback first = new IntroSkipPlayback();
+        IntroSkipPlayback second = new IntroSkipPlayback();
+        Segment segment = segment();
+
+        assertTrue(first.beginConfirmation(session, segment));
+        assertTrue("同一播放会话已有确认框时，后续页面必须等待", second.hasConfirmation(session));
+        assertFalse("另一个播放页不能为同一会话再弹一个框", second.beginConfirmation(session, segment));
+
+        first.cancelConfirmation(segment);
+
+        assertFalse(first.hasConfirmation(session));
+        assertTrue("前一个框关闭后，当前页面仍可重新询问", second.beginConfirmation(session, segment));
+        second.reset();
+        assertFalse(second.hasConfirmation(session));
+    }
+
+    @Test
+    public void decliningConfirmationHandlesSegmentUntilReset() {
+        IntroSkipPlayback playback = new IntroSkipPlayback();
+        Segment segment = segment();
+
+        assertTrue(playback.beginConfirmation(segment));
+        playback.declineConfirmation(segment);
+
+        assertTrue(playback.isSegmentHandled(segment));
+        assertFalse(playback.isConfirmationPending(segment));
+        assertFalse("本集内拒绝后不能再次询问同一片段", playback.beginConfirmation(segment));
+
+        playback.reset();
+        assertFalse(playback.isSegmentHandled(segment));
+        assertTrue("换集 reset 后应允许再次询问", playback.beginConfirmation(segment));
+    }
+
+    @Test
     public void completingConfirmationMarksOnlyThatStableSegmentHandled() {
         IntroSkipPlayback playback = new IntroSkipPlayback();
         Segment segment = segment();

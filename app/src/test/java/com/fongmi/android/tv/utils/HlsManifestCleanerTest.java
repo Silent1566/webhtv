@@ -270,4 +270,30 @@ public class HlsManifestCleanerTest {
         assertTrue(result.fallback());
         assertEquals(manifest, result.manifest());
     }
+
+    @Test
+    public void attributesEachRemovedSegmentToTheFirstMatchingRule() {
+        String manifest = "#EXTM3U\n"
+                + "#EXTINF:7.0,\nhttps://ads.example.com/ad.ts\n"
+                + "#EXTINF:8.0,\nmain-1.ts\n"
+                + "#EXTINF:8.0,\nmain-2.ts\n"
+                + "#EXTINF:8.0,\nmain-3.ts\n"
+                + "#EXT-X-ENDLIST\n";
+        HlsManifestCleaner.Rule first = HlsManifestCleaner.Rule.builder()
+                .id("rule-first")
+                .hostSuffixes(List.of("ads.example.com"))
+                .minimumSignals(1)
+                .build();
+        HlsManifestCleaner.Rule second = HlsManifestCleaner.Rule.builder()
+                .id("rule-second")
+                .segmentUrlPatterns(List.of("/ad\\.ts$"))
+                .minimumSignals(1)
+                .build();
+
+        HlsManifestCleaner.Result result = HlsManifestCleaner.clean(BASE_URL, manifest, List.of(first, second));
+
+        assertTrue(result.changed());
+        assertEquals(Long.valueOf(1), result.ruleCounts().get("rule-first"));
+        assertFalse(result.ruleCounts().containsKey("rule-second"));
+    }
 }

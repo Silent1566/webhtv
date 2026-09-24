@@ -31,6 +31,16 @@ public class MobileAdRuleManageDialogTest {
     }
 
     @Test
+    public void legacyFallbackShowsConcreteCriteriaAndRemainsToggleable() throws Exception {
+        String dialog = read("app/src/mobile/java/com/fongmi/android/tv/ui/dialog/AdRuleManageDialog.java");
+        String adapter = read("app/src/mobile/java/com/fongmi/android/tv/ui/adapter/AdRuleAdapter.java");
+
+        assertTrue(dialog.contains("HlsRuleConfig.LEGACY_FALLBACK_DETAIL"));
+        assertTrue(adapter.contains("HlsRuleConfig.LEGACY_FALLBACK_SUMMARY"));
+        assertTrue(adapter.contains("listener.onHlsToggleClick"));
+    }
+
+    @Test
     public void mobileRuleRowsUseReadableTouchFriendlyCards() throws Exception {
         String layout = read("app/src/mobile/res/layout/adapter_ad_rule.xml");
 
@@ -39,6 +49,35 @@ public class MobileAdRuleManageDialogTest {
         assertTrue(layout.contains("app:strokeColor=\"@color/dialog_outlined_button_stroke\""));
         assertTrue(layout.contains("android:minHeight=\"64dp\""));
         assertTrue(layout.contains("android:contentDescription=\"@string/ad_rule_delete_confirm\""));
+    }
+
+    @Test
+    public void candidateImportOffersBatchSelectionAndExplicitActivation() throws Exception {
+        String dialog = read("app/src/mobile/java/com/fongmi/android/tv/ui/dialog/AdRuleManageDialog.java");
+        String layout = read("app/src/mobile/res/layout/dialog_ad_rule_manage.xml");
+
+        assertTrue(dialog.contains("R.string.ad_rule_select_low_risk")
+                && dialog.contains("R.string.ad_rule_select_all")
+                && dialog.contains("R.string.ad_rule_invert_selection"));
+        assertTrue(dialog.contains("importSelectedCandidates(candidates, selected, true)")
+                && dialog.contains("importSelectedCandidates(candidates, selected, false)"));
+        assertTrue(dialog.contains("ImportedAdRuleCandidateStore.ignoreCandidates(ids)")
+                && dialog.contains(".setNegativeButton(android.R.string.cancel, null)"));
+        assertTrue(layout.contains("android:id=\"@+id/importBulkActions\"")
+                && layout.contains("android:id=\"@+id/enableImported\"")
+                && layout.contains("android:id=\"@+id/disableImported\""));
+    }
+
+    @Test
+    public void committedToggleRefreshesOnlyItsCurrentRow() throws Exception {
+        String dialog = read("app/src/mobile/java/com/fongmi/android/tv/ui/dialog/AdRuleManageDialog.java");
+        String adapter = read("app/src/mobile/java/com/fongmi/android/tv/ui/adapter/AdRuleAdapter.java");
+
+        assertTrue(dialog.contains("adapter.refreshUserEnabled(item)")
+                && dialog.contains("adapter.refreshDefaultEnabled(ruleId, enabled)")
+                && dialog.contains("adapter.refreshHlsEnabled(item.key(), enabled)"));
+        assertTrue(adapter.contains("notifyItemChanged(i, enabled)")
+                && adapter.contains("List<Object> payloads"));
     }
 
     private static String read(String file) throws Exception {

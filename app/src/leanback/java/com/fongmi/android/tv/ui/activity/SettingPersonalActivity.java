@@ -10,7 +10,10 @@ import androidx.viewbinding.ViewBinding;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.bean.HomeButton;
 import com.fongmi.android.tv.databinding.ActivitySettingPersonalBinding;
+import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.event.RefreshEvent;
+import com.fongmi.android.tv.following.FollowingScheduler;
+import com.fongmi.android.tv.following.FollowingSettings;
 import com.fongmi.android.tv.setting.AppBranding;
 import com.fongmi.android.tv.setting.AutoBackupPolicy;
 import com.fongmi.android.tv.setting.GroupRuleConfig;
@@ -39,6 +42,7 @@ public class SettingPersonalActivity extends BaseActivity {
     private String[] searchColumn;
     private String[] searchResultSort;
     private String[] globalHistoryMode;
+    private String[] interfaceFailoverMode;
 
     public static void start(Activity activity) {
         activity.startActivity(new Intent(activity, SettingPersonalActivity.class));
@@ -62,14 +66,17 @@ public class SettingPersonalActivity extends BaseActivity {
     @Override
     protected void initEvent() {
         mBinding.homeVodAutoLoad.setOnClickListener(this::setHomeVodAutoLoad);
+        mBinding.following.setOnClickListener(this::setFollowing);
         mBinding.homeSiteLock.setOnClickListener(this::setHomeSiteLock);
         mBinding.autoBackup.setOnClickListener(this::setAutoBackup);
         mBinding.homeButtons.setOnClickListener(this::onHomeButtons);
         mBinding.fullscreenMenuKey.setOnClickListener(this::setFullscreenMenuKey);
         mBinding.homeMenuKey.setOnClickListener(this::setHomeMenuKey);
         mBinding.playBackToDetail.setOnClickListener(this::setPlayBackToDetail);
+        mBinding.playbackOverlay.setOnClickListener(this::setPlaybackOverlay);
         mBinding.episodeHistory.setOnClickListener(this::setEpisodeHistory);
         mBinding.globalHistory.setOnClickListener(this::setGlobalHistory);
+        mBinding.interfaceFailover.setOnClickListener(this::setInterfaceFailover);
         mBinding.playSpeed.setOnClickListener(this::setPlaySpeed);
         mBinding.groupRule.setOnClickListener(this::setGroupRule);
         mBinding.homeHistory.setOnClickListener(this::setHomeHistory);
@@ -90,14 +97,17 @@ public class SettingPersonalActivity extends BaseActivity {
 
     private void setText() {
         mBinding.homeVodAutoLoadText.setText(getSwitch(Setting.isHomeVodAutoLoad()));
+        mBinding.followingText.setText(getSwitch(FollowingSettings.isEnabled()));
         mBinding.homeSiteLockText.setText(getSwitch(Setting.isHomeSiteLock()));
         mBinding.autoBackupText.setText(getSwitch(isAutoBackupEnabled()));
         mBinding.homeButtonsText.setText(getString(R.string.home_buttons_selected, HomeButton.getButtons().size(), HomeButton.all().size()));
         mBinding.fullscreenMenuKeyText.setText((fullscreenMenuKey = getResources().getStringArray(R.array.select_fullscreen_menu_key))[Setting.getFullscreenMenuKey()]);
         mBinding.homeMenuKeyText.setText((homeMenuKey = getResources().getStringArray(R.array.select_home_menu_key))[Setting.getHomeMenuKey()]);
         mBinding.playBackToDetailText.setText(getSwitch(Setting.isPlayBackToDetail()));
+        mBinding.playbackOverlayText.setText(getSwitch(Setting.isPlaybackOverlayEnabled()));
         mBinding.episodeHistoryText.setText(getSwitch(Setting.isEpisodeHistory()));
         mBinding.globalHistoryText.setText((globalHistoryMode = getResources().getStringArray(R.array.select_global_history_mode))[Setting.getGlobalHistoryMode()]);
+        mBinding.interfaceFailoverText.setText((interfaceFailoverMode = getResources().getStringArray(R.array.select_interface_failover_mode))[Setting.getInterfaceFailoverMode()]);
         mBinding.playSpeedText.setText(getSpeedText(PlayerSetting.getDefaultSpeed()));
         mBinding.groupRuleText.setText(getString(R.string.setting_group_rule_summary, GroupRuleConfig.enabledCount(), GroupRuleConfig.totalCount()));
         mBinding.homeHistoryText.setText(getSwitch(Setting.isHomeHistory()));
@@ -124,6 +134,20 @@ public class SettingPersonalActivity extends BaseActivity {
 
     private void setHomeVodAutoLoad(View view) {
         Setting.putHomeVodAutoLoad(!Setting.isHomeVodAutoLoad());
+        setText();
+    }
+
+    private void setFollowing(View view) {
+        boolean enabled = !FollowingSettings.isEnabled();
+        FollowingSettings.setEnabled(enabled);
+        if (enabled) {
+            FollowingScheduler.ensurePeriodic(this);
+            FollowingScheduler.enqueueDueNow(this);
+        } else {
+            FollowingScheduler.cancelAll(this);
+        }
+        ConfigEvent.common();
+        RefreshEvent.home();
         setText();
     }
 
@@ -165,6 +189,11 @@ public class SettingPersonalActivity extends BaseActivity {
         HomeMenuKeyDialog.show(this, this::setText);
     }
 
+    private void setPlaybackOverlay(View view) {
+        Setting.putPlaybackOverlayEnabled(!Setting.isPlaybackOverlayEnabled());
+        setText();
+    }
+
     private void setPlayBackToDetail(View view) {
         Setting.putPlayBackToDetail(!Setting.isPlayBackToDetail());
         setText();
@@ -178,6 +207,11 @@ public class SettingPersonalActivity extends BaseActivity {
     private void setGlobalHistory(View view) {
         Setting.putGlobalHistoryMode((Setting.getGlobalHistoryMode() + 1) % globalHistoryMode.length);
         RefreshEvent.history();
+        setText();
+    }
+
+    private void setInterfaceFailover(View view) {
+        Setting.putInterfaceFailoverMode((Setting.getInterfaceFailoverMode() + 1) % interfaceFailoverMode.length);
         setText();
     }
 

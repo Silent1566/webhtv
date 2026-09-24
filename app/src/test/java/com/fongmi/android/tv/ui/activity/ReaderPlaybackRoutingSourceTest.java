@@ -174,6 +174,8 @@ public class ReaderPlaybackRoutingSourceTest {
         }) {
             String source = read(path);
 
+            assertTrue(path + " must cancel the previous player-content request before starting another",
+                    source.contains("if (mViewModel != null) mViewModel.cancelPlayerContent();"));
             assertTrue(path + " must track the result already applied to the player",
                     source.contains("mAppliedPlayerResult"));
             assertTrue(path + " must ignore a duplicate player result while playback remains active",
@@ -341,6 +343,56 @@ public class ReaderPlaybackRoutingSourceTest {
         int endBranch = source.indexOf("if(anchorsSettled() && atDocumentEnd())", effFn);
         assertTrue("the memo must be updated before the document-end shortcut returns",
                 memoUpdate > effFn && memoUpdate < endBranch);
+    }
+
+    /**
+     * 漫画横向翻页不是滚动文档：#reader 里只有当前页一张图，
+     * 通用滚动锚点会把每一页都算成第 0 页，翻页也不上报，导致历史节点丢失。
+     */
+    @Test
+    public void horizontalComicProgressUsesItsOwnPageState() throws Exception {
+        String source = read("app/src/main/assets/reader.html");
+
+        assertTrue("horizontal comics must read the active page instead of scroll anchors",
+                source.contains("if(DATA.kind === 2 && comicMode === 'h') return comicCur;"));
+        assertTrue("horizontal comics must save their page and total explicitly",
+                source.contains("AndroidReader.saveProgress(DATA.current|0, ch.url || '', ch.name || DATA.title || '', comicCur, comicTotal);"));
+        assertTrue("page flips must report progress immediately",
+                source.contains("comicShowPage(i){\n    comicCur = i;")
+                        && source.contains("updateComicInfo();\n    reportProgress();"));
+        assertTrue("restore must use comic page state, not the scroll restoration loop",
+                source.contains("comicShowPage(Math.max(0, Math.min(comicTotal - 1, Math.round(index || 0))));"));
+    }
+
+    /**
+     * 恢复定位依赖单调时钟，升级 reader.html 时不能把函数定义漏掉。
+     * 缺失时漫画重进会在 restoreAnchor 首行抛 ReferenceError，历史节点因此不生效。
+     */
+    @Test
+    public void readerDefinesTheMonotonicClockUsedByRestore() throws Exception {
+        String source = read("app/src/main/assets/reader.html");
+
+        assertTrue("the monotonic clock must exist",
+                source.contains("function nowMs(){\n    return (window.performance && performance.now) ? performance.now() : Date.now();"));
+        assertTrue("restore must use the monotonic clock",
+                source.contains("var deadline = nowMs() + 60000;"));
+    }
+
+    /**
+     * 小说分页模式只显示当前子分页，不能把文档到底误判成章节最后一页。
+     */
+    @Test
+    public void pagedNovelProgressMustUseCurrentSubPage() throws Exception {
+        String source = read("app/src/main/assets/reader.html");
+
+        int effective = source.indexOf("function effectiveAnchorIndex()");
+        int pageGuard = source.indexOf("if(pageMode) return idx;", effective);
+        int documentEnd = source.indexOf("if(anchorsSettled() && atDocumentEnd()) return total - 1;", effective);
+
+        assertTrue("paged novels must bypass the document-end completion shortcut",
+                effective >= 0 && pageGuard > effective && documentEnd > pageGuard);
+        assertTrue("paged novel progress must still be saved through the effective anchor",
+                source.contains("AndroidReader.saveProgress(DATA.current|0, ch.url || '', ch.name || DATA.title || '', effectiveAnchorIndex(), anchorTotal());"));
     }
 
     /**

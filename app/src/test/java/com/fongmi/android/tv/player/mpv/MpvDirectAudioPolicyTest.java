@@ -75,6 +75,18 @@ public class MpvDirectAudioPolicyTest {
         assertEquals("same-language-stereo", selection.reason());
     }
 
+    @Test
+    public void keepsMultichannelTrackWhenPcmModeIsSelected() {
+        MpvDirectAudioPolicy.Selection selection = MpvDirectAudioPolicy.select(List.of(
+                track("1", "eng", "truehd", "7.1", 8),
+                track("2", "en-US", "aac", "Stereo", 2)),
+                "1", "ac3,eac3", true);
+
+        assertFalse(selection.changed());
+        assertEquals("1", selection.id());
+        assertEquals("current-track-multichannel-pcm", selection.reason());
+    }
+
     private static MpvDirectAudioPolicy.Candidate track(String id, String language,
                                                         String codec, String title,
                                                         int channels) {

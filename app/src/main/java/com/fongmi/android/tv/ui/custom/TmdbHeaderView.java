@@ -110,6 +110,8 @@ public class TmdbHeaderView {
         default void onRematchLongClick() { onRematch(); }
 
         void onKeep();
+
+        void onFollowing();
     }
 
     private final Activity activity;
@@ -228,6 +230,20 @@ public class TmdbHeaderView {
         if (keep == null) return;
         keep.setSelected(selected);
         keep.setText(TmdbDetailLabels.keepLabel(selected));
+    }
+
+    public void setFollowingSelected(boolean selected) {
+        if (headerRoot == null) return;
+        MaterialButton following = headerRoot.findViewById(R.id.tmdbFollowing);
+        if (following == null) return;
+        following.setSelected(selected);
+        following.setText(ResUtil.getString(selected ? R.string.following_added : R.string.following_add));
+    }
+
+    public void setFollowingVisible(boolean visible) {
+        if (headerRoot == null) return;
+        View following = headerRoot.findViewById(R.id.tmdbFollowing);
+        if (following != null) following.setVisibility(visible ? View.VISIBLE : View.GONE);
     }
 
     /**
@@ -651,6 +667,9 @@ public class TmdbHeaderView {
         });
         headerRoot.findViewById(R.id.tmdbKeep).setOnClickListener(view -> {
             if (actionListener != null) actionListener.onKeep();
+        });
+        headerRoot.findViewById(R.id.tmdbFollowing).setOnClickListener(view -> {
+            if (actionListener != null) actionListener.onFollowing();
         });
     }
 
@@ -2019,6 +2038,7 @@ public class TmdbHeaderView {
     private void tintActions(int style) {
         tintAction(R.id.tmdbChangeSource, style);
         tintAction(R.id.tmdbKeep, style);
+        tintAction(R.id.tmdbFollowing, style);
         tintAction(R.id.tmdbRematch, style);
         tintAction(R.id.tmdbThemeToggle, style);
     }

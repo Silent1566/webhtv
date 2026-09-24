@@ -5,6 +5,11 @@
 文档状态：进行中。本文按检查点持续落盘；未标记“已完成逐提交审阅”的仓库，不应据此直接升级依赖。
 
 当前恢复入口：以“稳定任务 ID 与唯一文档索引”及各任务文档顶部状态为准。完整逐提交审计已完成至检查点 43；`E1`、`E2-2`、`E-SP1`、`E2-1`、`E3-1a`、`E7-1`、`E7-2 + C3`、`E-SP3`、`E9-3`、`P1`、`P2-1`、`P2-5`、`P2-2`、`P3`、`P4-1` 和 `C0-M` 已完成验证，`E-SP2` 候选已接入但仍待实机性能/seek 验收。C0-M 已在 `9b7cf9cfbbeac00b0e5a342d4c6071c2c2d7a223` 把 MPV FFmpeg 从 `04482c8d13ac27b2a9fe93f5d388929eef8af5f4` 切换到 Exo 已验证的 `177f090e0503b7e013922ca903bde14b1c375f18`；`C2` 默认暂缓。
+- 当前分支：`dev2`。
+- 当前修复基线：`154e003520a751a19187057f103e1496c5197457`（2026-09-13）。
+- 历史完整评估：仓库历史提交 `3b346c85d0a3fb8e6078e4dbe4511f3aa15795a0` 中的同名文件；主线提交 `784b90420d646eb6c7ddcc63ad622a92c65b02b4` 删除了根目录本地任务文档，因此本分支保留稳定任务索引与当前实施需要的记录。
+- 源码合并：第三轮目标为 `fish2018/webhtv:main@fc62397591701b2232ae7de4f50a032bd7742064`；2026-09-19 第五轮目标为 `2623cb812ea842b676bc7d8db699c1a7e70b8e1e`，唯一文档冲突已按本地索引结构解决，详见 [C4-main-upstream-merge.md](C4-main-upstream-merge.md)。
+- 下一步：完成定向验证后由当前 guard 原子提交本轮已验证改动并创建本地恢复 tag，不推送，详见 [E9-3-exo-dv5-vulkan-renderer.md](E9-3-exo-dv5-vulkan-renderer.md) 与 [P9-MPV-BLURAY-MENU.md](P9-MPV-BLURAY-MENU.md)。
 
 ## 稳定任务 ID 与唯一文档索引
 
@@ -22,40 +27,26 @@
 
 | 顺序 | 任务 ID | 类别 | 功能/能力 | 状态 | 唯一文档 |
 | ---: | --- | --- | --- | --- | --- |
-| 1 | `E1` | Exo | nextlib 内置 FFmpeg 升级至 9.0.1 | 已完成 | [E1-exo-ffmpeg-9.0.1.md](E1-exo-ffmpeg-9.0.1.md) |
-| 2 | `E2-2` | Exo | DV7→P8.1 codec/CSD 一致性 | 已实施 | [E2-2-exo-dv7-p81-csd.md](E2-2-exo-dv7-p81-csd.md) |
-| 3 | `E-SP1` | Exo 性能 | 首帧已渲染时立即解除遮罩 | 已完成 | [E-SP1-exo-first-frame-visible.md](E-SP1-exo-first-frame-visible.md) |
-| 4 | `E-SP2` | Exo 性能 | 远程大 MKV 延后 Cues、首次 seek 按需建索引 | **已完成**：`2156c74749a575b747d2f043419a5d47b485c0cf` / `recovery/E-SP2-CHAINED-SEEKHEAD/20260829004352-2156c74749a5`；双产品 arm64、连续 seek 和实机验证通过 | [E-SP2-exo-remote-mkv-deferred-cues.md](E-SP2-exo-remote-mkv-deferred-cues.md) |
-| 5 | `E-SP3` | Exo 性能/生命周期 | seek 预载隔离、HLS 预缓存崩溃防护和 seek 恢复门槛 | **已合入 `fongmi-sync`**：App `17f1a4cfe2547b8f3ddc61fab34212e77ae719ff`，Media3 `c9d3bd912b90ec0ca440c28455f3e6d9bba019ea` | [E-SP3-exo-seek-preload-isolation.md](E-SP3-exo-seek-preload-isolation.md) |
-| 6 | `E2-1` | Exo | HDR/Dolby Vision parser safety | **已完成** | [E2-1-exo-hdr-parser-safety.md](E2-1-exo-hdr-parser-safety.md) |
-| 6 | `E3-1a` | Exo | Pixel E-AC3 JOC capability guard | 已实施：`cda1ac8cf2f5d4d9c3beec68b0b520d6f7c218ec` / `recovery/E3-1a/20260826175658-cda1ac8cf2f5` | [E3-1a-exo-pixel-eac3-joc-guard.md](E3-1a-exo-pixel-eac3-joc-guard.md) |
-| 7 | `E3-1b` | Exo | DTS 14-bit 解析 | 已实施：`27b85eeeed5ceb55e56a67ae3b5cf8ff64b8da40` / `recovery/E3-1b/20260826201735-27b85eeeed5c` | [E3-1b-exo-dts-14bit.md](E3-1b-exo-dts-14bit.md) |
-| 8 | `E4-1` | Exo | 字幕字节与边界安全 | **已完成：A4-1a/A4-1b** | [E4-1-exo-subtitle-byte-safety.md](E4-1-exo-subtitle-byte-safety.md) |
-| 9 | `E4-J1` | Exo | Cue 数据契约 | **已实施并验证**：`af78e3b7656d6a0f210d7344b3852f301690c417` / `recovery/E4-J1/20260827133106-af78e3b7656d`；默认不启用碰撞或新渲染行为 | [E4-J1-exo-cue-data-contract.md](E4-J1-exo-cue-data-contract.md) |
-| 10 | `E6-1` | Exo | 有界缓存写入 correctness | **已实施并验证**：`0a8ed3b910679a08a7e41c735338c3804a2eb938` / `recovery/E6-1/20260827145043-0a8ed3b91067`；不引入并行预加载 | [E6-1-exo-smb-proxy-cache-correctness.md](E6-1-exo-smb-proxy-cache-correctness.md) |
-| 11 | `E7-1` | Exo | ISO reader safety | **已实施并验证**：`491a7def30484b0936426bbc57b09f5b6435ae80` / `recovery/E7-1/20260827160011-491a7def3048`；仅移植 IsoDataReader 安全修复 | [E7-1-exo-iso-reader-safety.md](E7-1-exo-iso-reader-safety.md) |
-| 12 | `E7-2` | Exo | ISO multi-extent reader/API | **已实施并编译验证**：`5f7d834bfdd00f215609df7b41c2ea7cadc2cd4f` / `recovery/E7-2-C3/20260827193629-5f7d834bfdd0`；按用户要求未跑测试/真实 split ISO | [E7-2-exo-iso-multi-extent-api.md](E7-2-exo-iso-multi-extent-api.md) |
-| 13 | `P0` | MPV | native 基线、等价提交与运行验收 | **评估已完成：基线/ELF/资产校验通过；无代码，待 P1/P2 明确批准** | [P0-mpv-native-baseline.md](P0-mpv-native-baseline.md) |
-| 14 | `P1` | MPV | 格式与 shader correctness | **已实施并验证**：`a5971e3814d3b0826a5702d607dd6d1675b2ce53` / `recovery/P1-MPV-FORMAT-SHADER-CORRECTNESS/20260828184107-a5971e3814d3`；用户多原盘回归通过 | [P1-mpv-format-shader-correctness.md](P1-mpv-format-shader-correctness.md) |
-| 15 | `P2-1` | MPV | Vulkan generic UV | **已实施并验证**：`fe4184933fbb3a02bd1ff2ff794a277123c35bdc` / `recovery/P2-1-MPV-VULKAN-GENERIC-UV/20260829003632-fe4184933fbb`；双 ABI、ELF、APK 资产身份及 compute/fragment/legacy/stable/auto 真机路径通过 | [P2-1-mpv-vulkan-generic-uv.md](P2-1-mpv-vulkan-generic-uv.md) |
-| 16 | `P2-5` | MPV | 非原生 DV5 自动选择 Vulkan/gpu-next | **已实施并验证**：V2453A 上自动切换至 `vulkan/gpu-next` + `hevc_mediacodec`，普通 HDR 新媒体项恢复 `opengl/gpu`；用户确认正常 | [P2-5-mpv-dv5-auto-vulkan.md](P2-5-mpv-dv5-auto-vulkan.md) |
-| 17 | `P2-2` | MPV | DV7 metadata/codecpar/error 完整性 | **已实施并验证**：`ba47756d7e463abeb9377088b819a2520e150935` / `recovery/P2-2-MPV-DV7-METADATA-CODECPAR/20260829065811-ba47756d7e46`；仅吸收 metadata-missing、`par_out`、错误传播和 `INT_MAX`，保留本地 packet/Surface/EL 安全契约 | [P2-2-mpv-dv7-metadata-codecpar.md](P2-2-mpv-dv7-metadata-codecpar.md) |
-| 18 | `P3` | MPV | AudioTrack 能力与直通 | **已完成**：`d82336bde585b62af43771284075a0a94a3d999e` / `recovery/P3/20260829094014-d82336bde585`；双 ABI、ELF、APK、API 35 手机端多声道 PCM fallback、pause/resume/seek 通过，HDMI/eARC/USB 原码直通留作硬件补验 | [P3-mpv-audiotrack.md](P3-mpv-audiotrack.md) |
-| 19 | `P4-1` | MPV | JNI shutdown/lifecycle | **已完成**：`907bfca982a4b1d4d9ee0eeddd05d02226b8f9bb` / `recovery/P4-1-MPV-JNI-SHUTDOWN/20260829103212-907bfca982a4` | `docs/P4-1-mpv-jni-shutdown.md` |
-| 20 | `C0-M` | 通用/MPV 搭载 | MPV 使用 FFmpeg 9.0.1 同源 revision 独立重建 | **已完成并关闭**：`9b7cf9cfbbeac00b0e5a342d4c6071c2c2d7a223` / `recovery/C0-M-MPV-FFMPEG-9.0.1/20260829122948-9b7cf9cfbbea`；双 ABI、ELF/资产、arm64 APK、多格式播放、快进、画中画和退出通过；退出期无 Surface 重初始化为升级前已存在的独立生命周期 bug | [C0-M-mpv-ffmpeg-9.0.1.md](C0-M-mpv-ffmpeg-9.0.1.md) |
-| 21 | `C2` | 通用 | FFmpeg DV7→P8.1 BSF | **实施中（显式 MPV P8.1，默认行为不变）** | [C2-dv7-p81-bsf.md](C2-dv7-p81-bsf.md) |
-| 22 | `C3` | 通用 | ISO multi-extent App resolver | **已随 `E7-2` 联合实施并通过 App 编译**：`5f7d834bfdd00f215609df7b41c2ea7cadc2cd4f` / `recovery/E7-2-C3/20260827193629-5f7d834bfdd0`；真实 split metadata 未验收 | [C3-iso-multi-extent-resolver.md](C3-iso-multi-extent-resolver.md) |
-| 23 | `C4` | 通用/上游应用合并 | 合并 `fish2018/webhtv:main` 的 APK 更新、局域网推送、MPV 字幕与阅读器修复 | **已实施并验证**：`d0809f804f812b818bcb22f36cae8634022db673` / `recovery/C4/20260901032617-d0809f804f81`；保留当前 `dev2` 文档、评估台账和本地播放器契约；OCI 发布失败即阻断并固定 setup-oras 完整 commit | [C4-main-upstream-merge.md](C4-main-upstream-merge.md) |
-| 24 | `E9-3` | Exo | DV5 MediaCodec + Vulkan/libplacebo GPU 映射 | **已实现并通过目标设备验收**：DV5 色彩映射稳定，DV5 -> DV7/HDR10 Surface 生命周期切换正常；最终提交 `6a3ddd266a94a6b984099876631cc6260e77b776` | [E9-3-exo-dv5-vulkan-renderer.md](E9-3-exo-dv5-vulkan-renderer.md) |
-| 25 | `P4-3` | MPV | 终止退出时抑制无 Surface 的 MediaCodec 重初始化 | **已实施并通过定向测试/真机验收**：`8250e2204f4054601202a3a3f2fe04f8766744ee` / `recovery/P4-3-MPV-SURFACE-TEARDOWN/20260829132806-8250e2204f40`；终止退出后不再创建一次性 decoder，PiP 返回和快速重开正常，不改 native/FFmpeg | [P4-3-mpv-surface-teardown.md](P4-3-mpv-surface-teardown.md) |
-| 26 | `P4-4` | MPV | 自动播放意图与延迟 pause 回调隔离 | **已完成**：`e8a1582d74844df0292cb27c6c8259a3d5eb5dfa` / `recovery/P4-4-MPV-AUTOPLAY-PAUSE-RACE/20260829135715-e8a1582d7484`；V2453A/API 35 冷启动和两次快速媒体替换均保持自动播放，两个暖切换样本约 3 秒推进约 2.8 秒；不改 native/FFmpeg/渲染链 | [P4-4-mpv-autoplay-pause-race.md](P4-4-mpv-autoplay-pause-race.md) |
-| 27 | `C5` | 通用/上游应用同步 | 合并 `origin/beta` 最新历史投影、播放 ownership、沉浸融合标题和 armv7 C2 资产修复 | **已完成并推送**：`fc5b6ba029348c2c06214a80e4c080d6b210269a` / `recovery/C5-beta-sync/20260901135541-fc5b6ba02934`；83 项定向测试、双端 Arm64 Java 编译及双 ABI MPV 资产门禁通过 | [C5-beta-sync.md](C5-beta-sync.md) |
-| 28 | `C6` | 通用/上游应用同步 | 合并 `origin/beta` 最新原生增强详情页 loading/backdrop 修复，并复审未推送的实时字幕原声识别语言快捷切换 | **已完成并推送**：提交 `a33ff92b8e65e11330ab17270b5f86a4c0b08183` / 恢复 tag `recovery/C6-beta-sync/20260902090623-a33ff92b8e65`；beta `c975ae1ed482a4bf47f106f5931bd2392e8ecce3`；四个目标测试类共 171 项通过，Mobile/Leanback Arm64 Java 编译通过；评审发现的 2 项 Important/1 项 Medium 已修复；设备播放回归待补验 | [C6-beta-sync.md](C6-beta-sync.md) |
-| 29 | `C7` | 通用/上游应用同步 | 合并 `origin/beta` 在 C6 之后的 TMDB 手动匹配持久化、标题锚点隔离和读改写竞态修复 | **已完成（本地未推送）**：目标 `7db1b9d188e27877154757528d441150142b90ed`；本地合并提交 `a8f2015363819c70b4e7ae67d419035e579b857f`；恢复 tag `recovery/C7-beta-sync/20260902101049-a8f201536381`；定向 TMDB 测试和 Mobile/Leanback Arm64 Java 编译通过 | [C7-beta-sync.md](C7-beta-sync.md) |
-| 30 | `C8` | 通用/上游应用同步 | 合并 `origin/beta` 在 C7 之后的片头片尾跳过、播放器生命周期、阅读器路由和更新包签名校验变更，并复审当前未推送改动 | **已完成并推送**：修复提交 `1d08c6fba24763023bf51792d344a3912b6d3cdb` / 恢复 tag `recovery/C8-beta-sync/20260903160741-1d08c6fba247`；beta 目标 `308694aaadd59d9d1ef230bded83cf84dafa114c`，合并提交 `5cf2f2e7fddd48454d10b86c27cc9f02e979098a` 已保留；73 项定向测试、Mobile/Leanback Arm64 Java 编译和 `git diff --check` 通过；`dev2` 与恢复 tag 已推送，`git pull --ff-only` 已更新到最新 | [C8-beta-sync.md](C8-beta-sync.md) |
-| 29 | `E-SP7` | Exo 性能/播放行为 | H.264/AVC 受约束轨道恢复自适应选轨，避免 800Kbps 视频固定到过高分辨率导致掉帧 | **已实施，待真实设备 A/B 验收**：`ExoUtil.applyVideoLimit()` 已恢复自适应选轨；定向单测和 Mobile arm64 Java 编译通过 | [E-SP7-exo-avc-adaptive-selection.md](E-SP7-exo-avc-adaptive-selection.md) |
-| 30 | `C9` | 通用/上游应用同步 | 合并 `origin/beta` 在 C6 之后的播放器、片段跳过、实时字幕、更新校验和移动详情页修复，并复审 E-SP7 合并树 | **已完成并推送**：`80ded1386a108dc8d1b08610c5b616d4d0f1f77f` / `recovery/C9-beta-sync/20260903072404-80ded1386a10`；E-SP7 定向测试、beta 受影响 175 项测试和两产品 Java 编译通过 | [C9-beta-sync.md](C9-beta-sync.md) |
-| 31 | `C10` | 通用/播放器供应链 | 播放器 AAR、Maven sidecar、lock、MPV native override 和构建输入以上游为准 | **清理已验证，待提交**：正式发布输入及全部 MPV native override 已与 `fish2018/webtv:main@ec478b0b697422a7785171c7b51a35b7a526564e` 对齐；v556 残留已删除，双 ABI MPV ELF 门禁通过，详情见 [C10-binary-upstream-alignment.md](C10-binary-upstream-alignment.md) | [C10-binary-upstream-alignment.md](C10-binary-upstream-alignment.md) |
+| 既有任务续修 | `E11` | Exo/App | 压缩音频输出、跳转释放状态、隧道一致性与起播恢复 | A 为 `123d871c027eb686702766bca995f616e8d2bd1e`，首次起播研究为 `e9fef2b90ee8aa634327c2c179eb3dc5d22cb1be`，直通开关修复为 `24fa078d2dc8a404fad23fc30972e5fc4a8a1b5b`。首次快速恢复现已实现：完整 AU 供数及启动门槛读回后，以 800 ms 窗口和原始播放头/路由复核判错，使用 Media3 内部恢复复用当前媒体与缓存；保留正常直出与关闭开关的 PCM 行为。C4 第七轮合并保留本地厂商直出初始化失败立即 PCM 回退，并接入按媒体/路由失败记忆、直通开关一致性和已缓冲起播恢复；合并冲突组合的最终验证记录见唯一任务文档。 | [E11-exo-compressed-audio-direct.md](E11-exo-compressed-audio-direct.md) |
+| 插入修复 | `P11` | MPV/App | AV3A 直播使用 `.m3u8?ts=…` 媒体端点时保持分片语义，修复代理误报 HTTP 400 | 已修复；19 项定向测试、Debug/快速 Release 构建和手机同源实播通过，持续超过 6 分钟、AV3A 音频输出无写入错误；Release 已安装，视频手动解码合同保持；源内迅雷插件 Debug JNI 问题独立记录 | [P11-mpv-live-av3a.md](P11-mpv-live-av3a.md) |
+| 插入需求 | `P10` | MPV/App | 全局智能去广开关接入，复用Exo识别并保持HLS时间轴/跳转 | 已实现并续修误跳正文、广告闪帧及Surface复用；原生输出边界fixture零广告帧，原链接正常跨广告；25项广告测试与4项Surface测试通过，Mobile64已安装且用户确认正常；原生库保持 | [P10-mpv-smart-adblock.md](P10-mpv-smart-adblock.md) |
+| 插入需求 | `C-AVS3` | 通用，Exo → MPV | AVS3 视频解码，基准档次与 High profile 分阶段验证 | baseline/0x32软件后端及MPV MediaCodec接入已交付；手机不具备AVS3硬件，硬解实际出帧与性能待目标设备验证 | [C-AVS3-video-decoding.md](C-AVS3-video-decoding.md) |
+| 插入需求 | `AV-DIAG-01` | 通用/App，Exo → MPV → IJK | 无 ADB 音视频分层诊断、脱敏和可判读的日志导出 | D0–D5实现/产物补齐，覆盖与验证见14.13–14.14；设备/性能待用户实测 | [AV-DIAG-01-playback-diagnostics.md](AV-DIAG-01-playback-diagnostics.md) |
+| 22 | `E9-3` | Exo/App | 普通 HEVC 硬解 + Vulkan/libplacebo 的 DV5 色彩映射默认准入 | 2026-09-12默认准入已实现，三个定向测试类及 Mobile/Leanback arm64 Java 编译通过；保留原生杜比和设备能力门控，待新版包原场景复测 | [E9-3-exo-dv5-vulkan-renderer.md](E9-3-exo-dv5-vulkan-renderer.md) |
+| P2 子阶段 | `P2-4` | MPV/native/App | Android BL 硬解 + EL 软解 + GPU FEL 重建，新增手动选择项 | 日志33否决9.20的整体性能收益；9.22完成跨项目/二进制复核，推荐先修正重复建链，再做绑定类型/外部图像对照；新方案未实施，电视实时性能未验收 | [P2-4-mpv-android-fel.md](P2-4-mpv-android-fel.md) |
+| 38 | `P9-MPV-BLURAY-MENU` | MPV/native/App | HDMV Blu-ray 菜单画面、按钮高亮、方向/确认/返回/Popup、菜单跳转与 still frame；BD-J 无提示回退现状 | 2026-09-11父菜单未命中修复已实现，定向验证及构建通过，用户测试确认并要求tag | [P9-MPV-BLURAY-MENU.md](P9-MPV-BLURAY-MENU.md) |
+
+新增产品需求（不改变既有上游提交的实施顺序）：
+
+| 任务 ID | 类别 | 功能/能力 | 状态 | 唯一文档 |
+| --- | --- | --- | --- | --- |
+| `E-SP9` | Exo 性能/播放行为 | 硬解模式无该 MIME 硬件候选时的处理策略 | **已回滚自动软解**：复评确认 `4a9f0fd14d04aa5f45c8601d9f77334666b435de` 违反“视频只能人工手动切换硬解/软解”的既有合同；恢复硬解模式不注册 FFmpeg 视频回退，音频独立回退保持不变 | [E-SP9-exo-unsupported-video-soft-fallback.md](E-SP9-exo-unsupported-video-soft-fallback.md) |
+| `E4-LIBASS` | Exo/字幕 | ASS 特效字幕及对齐 MPV 默认行为的主／副字幕 | **上游 HDR/DV 修复已合并到 dev3 并通过修复相关验证**：独立 SDR RGB 字幕层放行 HDR/DV/BT.2020，同时保留 SDR 旧矩阵与 DRM/rotation/tunneling 边界；Mobile ARM64 Debug/测试 APK 构建成功，4 项视频策略、1 项 native 原始 RGB/切换和 1 项 blur/transform 共 6/6 通过，产物哈希一致。既有 `AssPlaybackTest` 因本地 `applicationId=com.silent.android.webhtv` 与硬编码 `com.fongmi.android.tv` 不符而未启动 Activity；该测试和构建配置本轮均未改动，作为独立本地夹具问题保留 | [E4-LIBASS-exo-ass-rendering.md](E4-LIBASS-exo-ass-rendering.md) |
+| `C16` | common / 详情数据协议 | 参考 OmniBox，让 T3/T4 详情直接携带 TMDB 数据，APP 优先采用并仅补齐缺省部分；第 19 节实现**订阅配置接口响应根对象**的 `tmdb_api_key`，Key 只属于当前订阅接口，切换接口先清空，新接口配置有 Key 才加载、没有则为空，且不持久化；详情中的同名字段只剥离不作为凭据来源 | **客户端第 1-19 节阶段 1-5 已实现并验证，订阅配置根级修订及认证失败 epoch 隔离已落地**：既有阶段 A-F 提交为 `19128b7d18107b5c614078ebdadc863faa2476b5`、`1c4213db0baf24e9da9495edfdbaa9dcab43f527`、`6a994fa1acd85cd307bf111bc077f6e5a1385da0`、`b2343d1d1de476226b52bef11b80248e1d5033d9`、`6e2cde565ae34c1a0da392c7ca93f34cb97aaa99`、`d52fdfc5b2027872779026bad278c1a5c8e9f5d8`；第 19 节提交为 `a50de802a1c2c3491088fa0307c0484bc95e7f1e`、`7cc55beae44c891e01c0cbc5c4ea2ffee844cb3f`、`73abd0350b9808c5da727763deff3764e590d970`、`d2136e463391a6c34a4bf042d85cc001982cd001`、`fd593f3d3c3972811c7572ca92342b78f16b9fb3`、`b51a3795e9c88d2f370271f64513e5928d6e067f`、`9cd5c6399dac79411354c1be104d28a826e37127`。分配设备 `SM-N9700/Android 9 @ 192.168.50.3:5557` 上 Mobile/Leanback 凭据矩阵各 5/5、无 Key 回归各 3/3；私有目录与 logcat 无测试 Key。未提供真实第三方 Key，真实补齐、真实 401/403 和发布级源端门控/轮换仍未验证；T4 服务端待独立接入 | [C16-tmdb-source-detail-contract.md](C16-tmdb-source-detail-contract.md) |
+| `C17` | common / beta 同步复评 | 将 beta 最新播放器与 Leanback 修复合入 dev4，复评全部未推送 C16 改动并完成交付 | **已完成**：合并提交 `5acd3f084155e7016b3798528eb8343f2f076177`；PR [#317](https://github.com/Silent1566/webhtv/pull/317) 目标 `beta` | [C17-beta-sync-review-dev4-20260919.md](C17-beta-sync-review-dev4-20260919.md) |
+| `C18` | common / beta 同步复评 | 将 beta 最新代码合入 dev4，复评 FOLLOW-1 与 C16 等全部未推送改动并完成交付 | **已完成**：合并提交 `9f998d6808f3e8144d2d4d68f23d92308e49b599`；PR [#331](https://github.com/Silent1566/webhtv/pull/331) 目标 `beta` | [C18-beta-sync-review-dev4-20260920.md](C18-beta-sync-review-dev4-20260920.md) |
+| `C18` | common / beta 同步复评 | 将 beta 最新代码合入 dev4，复评 FOLLOW-1 与 C16 等全部未推送改动并完成交付 | **进行中**：合并树双端编译和移动端 JVM 全量测试已通过，待最终复评、提交、推送和 PR 到 `beta` | [C18-beta-sync-review-dev4-20260920.md](C18-beta-sync-review-dev4-20260920.md) |
+| `E-SP8` | Exo 性能/播放行为 | 基于现有短剧源设置的单实例队列连播、下一集预解析与受控预加载 | **代码实施及 beta 合并后复评通过**：`2b22c5240d52a8c2054299326f44fee6743ab26f` / `recovery/E-SP8/20260911201514-2b22c5240d52`；实验默认策略不变，连续切集双端设备验收与正式放量尚未完成；不变更依赖 | [E-SP8-exo-short-drama-queue.md](E-SP8-exo-short-drama-queue.md) |
 
 `C1` 是跨播放器真实输入验收维度，不单独形成代码任务或文档；它写入对应的 E/P 任务文档。`E-SP3` 已在 `fongmi-sync` 完成 App/Media3 合并，保留既有 `E4-J1`/`E6-1`/`E7-1`/`E7-2 + C3` 能力；`E9-3` 与已完成的 `P1` 现已共同进入集成树，后续按既定顺序处理 P2 阶段。
 
@@ -4971,3 +4962,64 @@ C3 的触发来源主要是 media `990abc2368fd74779f525ee345734470659f3d53`（`
 - beta：`IntroSkipServiceTest` 22 项与 `VideoActivityLayoutTest` 153 项共 175 项通过，失败/错误/跳过均为 0；片段身份、速度键释放和移动详情页外层滚动改动未发现需阻断提交的问题。
 - 结论：允许提交并推送当前合并树；C9 仍需保留真实设备播放和 OEM 行为作为后续补验，不把 Java/单测结果扩大为设备端完全验收。
 - 下一动作：task guard finish 创建两父合并提交和本地 annotated recovery tag，然后推送当前 `dev4` 与该新 tag。
+
+## 检查点 59：2026-09-12 C4 dev1 增量同步 fish2018/main
+
+### 59.1 冻结源与关系
+
+- 仓库：`https://github.com/fish2018/webhtv.git`；GitHub API 核对 `main` 为 `fc62397591701b2232ae7de4f50a032bd7742064`。
+- 本地 `upstream/main` 已指向同一完整 commit；一次 `git fetch upstream --prune` 因 GnuTLS 握手异常失败，故本轮不把失败的网络传输当作源内容，使用 API 与本地 ref 双重一致的冻结源。
+- C4 上一轮上游目标：`784b90420d646eb6c7ddcc63ad622a92c65b02b4`；本地实施基线：`dev1@da34bfc400ccff4c07287ef1e3cfa61327aaee39`。两者没有可用共同祖先（上游历史为 grafted 独立根），因此不能用普通 merge 直接生成有效三方索引；本轮按冻结基线对上游净变更做等价文件级三方合并，并在收口时保留上游目标作为 provenance parent。
+
+### 59.2 本轮完整上游 commit ledger 与处置
+
+| # | 完整 commit | 功能区域 | 处置 |
+| ---: | --- | --- | --- |
+| 1 | `2b36396c0d76b312154d560c0c94e55909b951a2` | MPV HDMV Blu-ray 菜单导航基础能力 | 纳入；新增 App 菜单策略、ISO/菜单接线与 native patch/test 资产，保留本地 MPV 生命周期和输出策略 |
+| 2 | `0c16bd37c05828014d382aa3ccfcd1e08b30b3fe` | MPV Blu-ray patch 可应用性修复 | 纳入；直接采用上游 patch 内容 |
+| 3 | `831b70433e3dbdfd6f119c6036a3c8cf22d85ae4` | MPV HDMV native 资产打包 | 纳入；18 个 `.so` 中属于本提交链的上游版本按用户规则直接覆盖，后续提交版本继续覆盖到最终目标 |
+| 4 | `55a6365a9ff8c1a096ceb4275d50b95c1ed5f488` | Blu-ray 缓冲/音频 underrun 与双 ABI 资产 | 纳入；Java 及脚本三方处理，native 资产直接采用最终上游文件 |
+| 5 | `f4e4f9e16fb6b99bf72f8a19a5cb184a488e0580` | ISO visit/饥饿跟踪 | 纳入；保留本地缓存、取消和生命周期保护 |
+| 6 | `5b774430f155039d843f2e6a79aefc7df9f918cc` | HDMV authored return 路由 | 纳入；patch 与 App 逻辑按三方结果合并 |
+| 7 | `4ded105fa7ea0e7aacd19a256919bd44d643ce96` | 任务文档正常跟踪规则 | 纳入；不删除本地任务文档 |
+| 8 | `310f8feef5c0a05e5dae6c0a063453113214ea2c` | 合并 Blu-ray 菜单背景的 authored return | 纳入；保留本地播放器改动 |
+| 9 | `1ec569658157d1a9323b5c2ef00cb3468b876fca` | ISO cache 分页渐进加载 | 纳入；ISO Java/ native 相关路径按三方结果合并 |
+| 10 | `d4657ae879c32f2f93f30dd832735a02d0999487` | 光盘菜单响应性与 TV 输出回退 | 纳入；保留本地输出失败回退状态机 |
+| 11 | `881c8bca2e6831d6a7d32f67c22c64ce37541e0b` | 历史卡片显示观看时间 | 纳入；在本地 playback/progress/marquee 合同上补入 `historyProgress` |
+| 12 | `55612b3571222e7c5f91eb9713f5e98bc0dc173c` | 观看时间位置调整 | 纳入；布局与本地 playback 标签组合 |
+| 13 | `c4b042bc5441b9e168293f7cadae5798c4608da5` | 观看时间位于文件名上方 | 纳入；布局按现有资源结构适配 |
+| 14 | `48dfa4d67a433390e9959b934b87331a78f11436` | 观看时间/文件名标签顺序 | 纳入；保留本地名称/备注跑马灯行为 |
+| 15 | `aa676a941ee101cbb40c9641840e3b638b81c3d4` | 子菜单触摸路由到父菜单 | 纳入；App/native patch/test 全部保留 |
+| 16 | `1ce8df96075f703a16cecfa077fd715c66b90279` | MPV script 按钮执行时机可见性 | 纳入；保留现有脚本配置兼容和测试 |
+| 17 | `f27805e30212e7f34410f20bb6f8979f44203c79` | MPV 独立 script enable 开关 | 纳入；配置模型、UI、资源和测试三方合并 |
+| 18 | `969261479167bca3f8f16f11551de7dcc9290112` | Mobile 播放器 source switch 接线 | 纳入；去重现有 `change2` binding，避免 Data Binding 重复 ID |
+| 19 | `d546c11ca875f31970e2389114020189ad032c08` | Exo DV5 GPU 映射默认准入 | 纳入；只合并既有 Exo renderer 默认策略，不改 ABI/native |
+| 20 | `fc62397591701b2232ae7de4f50a032bd7742064` | 115 过期分享状态优先于 metadata | 纳入；服务逻辑、缓存命名空间和测试保留 |
+
+### 59.3 用户覆盖策略实施结果
+
+- 二进制：最终 18 个 MPV `.so` 路径逐文件使用 `upstream/main` 内容，hash 校验通过；没有上游新增 `.aar`、`.jar` 或 `.apk` 需要覆盖，本轮未重新编译 native。
+- Java/Python：上游净变更包含 Java 文件，不包含 Python 文件；Java 采用基于旧目标的三方合并，冲突处保留 WebHTV 本地播放器、TMDB、生命周期、诊断和 UI 行为，并补入 Blu-ray 菜单、历史观看时间、脚本开关、DV5 默认映射和 115 状态修复。
+- XML/资源/patch/脚本：按代码契约组合；修复上游与本地已有 `change2` 的重复 Data Binding ID，保留全部上游菜单资源和本地既有控制入口。
+- 任务文档：保留 `docs/` 及任务文档，不接受上游删除本地评估资料的行为。
+
+### 59.4 验证与边界
+
+- 通过：18 路二进制 hash 对齐 `upstream/main`；`bash scripts/verify_mpv_native_assets.sh --require-elf`；`git diff --check`；无 `<<<<<<<`/`|||||||`/`>>>>>>>` 冲突标记。
+- 通过：Mobile/Leanback Arm64 Java 编译和受影响 JVM 单测，Gradle `BUILD SUCCESSFUL`。
+- 未执行：APK 打包、安装、连接设备播放、native 重建和 Blu-ray 实盘回归；因此不把 Java/ELF 校验扩大为设备播放完全验收。APK 打包前已观察可用内存达到约 1.7 GiB，但本轮没有执行 APK 打包。
+- 远端：不 push 分支或 tag。
+
+### 59.5 当前恢复锚点
+
+- 当前 HEAD 为 merge commit `65facf4bcbed78e702a1ec0fd86c50778fcf639f`，第一父提交 `da34bfc400ccff4c07287ef1e3cfa61327aaee39`，第二父提交 `fc62397591701b2232ae7de4f50a032bd7742064`；上游目标已是 HEAD 祖先。
+- Recovery tag：`recovery/merge-upstream-binary-override-java-merge/20260913015933-65facf4bcbed`。
+- 当前状态：完成（本地未推送）；工作树收口后不再重复构建、测试或扩展研究。
+
+## 检查点 60：2026-09-18 C4 dev4 同步 fish2018/main
+
+- 基线：`dev4@ac39115dd99c43b861e0a255c7b7a407af2855b2`；共同祖先：`fc62397591701b2232ae7de4f50a032bd7742064`；目标：`fish2018/webhtv:main@88aceb110959ff50afc23b10d9b9abe3e0f53255`。
+- 范围：52 个上游提交，10 个冲突文件全部按“本地行为契约 + 上游功能并集”解决；非代码二进制、测试资产、AAR/POM、lock/patch 随上游目标纳入。
+- 验证：Mobile/Leanback arm64 Debug Java 编译通过；Mobile arm64 Debug 单测 4587 项、0 failure、0 error、1 skipped；双 ABI MPV ELF/资产门禁通过；无冲突标记与 whitespace 错误。
+- 未执行：APK 打包、设备安装、实机播放矩阵、native 重建；不将当前证据扩大为实机机型验收。
+- 下一动作：由当前 C4 guard 生成双亲 merge commit 和 annotated recovery tag，不推送。

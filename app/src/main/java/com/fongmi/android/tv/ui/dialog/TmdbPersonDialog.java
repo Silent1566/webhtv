@@ -104,7 +104,7 @@ public class TmdbPersonDialog {
         this.person = person;
         this.site = site;
         this.tmdbService = new TmdbService();
-        this.tmdbConfig = TmdbConfig.objectFrom(Setting.getTmdbConfig());
+        this.tmdbConfig = TmdbConfig.effectiveCurrent();
         this.light = resolveLightTheme(activity);
     }
 

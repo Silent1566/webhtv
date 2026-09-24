@@ -7,6 +7,7 @@ import com.google.gson.JsonParser;
 import org.junit.Test;
 
 import java.lang.reflect.Field;
+import java.util.Set;
 
 import mockwebserver3.MockResponse;
 import mockwebserver3.MockWebServer;
@@ -55,6 +56,25 @@ public class TmdbServiceCacheKeyTest {
 
         assertEquals(service.seasonCacheKey(item, 2, first), service.seasonCacheKey(item, 2, second));
         assertEquals(service.episodeCacheKey(item, 2, 3, first), service.episodeCacheKey(item, 2, 3, second));
+    }
+
+    @Test
+    public void sourceDetailCacheKeyKeepsSeasonLanguageAndCapabilityMask() {
+        TmdbService service = new TmdbService();
+        TmdbItem item = new TmdbItem(123, "tv", "庆余年", "", "", "", "");
+        TmdbConfig chinese = config("https://api.tmdb.org/3", "first-key", "zh-CN");
+        TmdbConfig english = config("https://api.tmdb.org/3", "first-key", "en-US");
+
+        String first = service.sourceDetailCacheKey(item, 2, chinese, Set.of("images", "credits"));
+        String reordered = service.sourceDetailCacheKey(item, 2, chinese, Set.of("credits", "images"));
+        String otherSeason = service.sourceDetailCacheKey(item, 3, chinese, Set.of("images", "credits"));
+        String otherLanguage = service.sourceDetailCacheKey(item, 2, english, Set.of("images", "credits"));
+        String otherMask = service.sourceDetailCacheKey(item, 2, chinese, Set.of("images"));
+
+        assertEquals(first, reordered);
+        assertNotEquals(first, otherSeason);
+        assertNotEquals(first, otherLanguage);
+        assertNotEquals(first, otherMask);
     }
 
     @Test

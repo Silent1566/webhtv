@@ -1,0 +1,121 @@
+diff --git a/libraries/exoplayer_dash/src/main/java/androidx/media3/exoplayer/dash/manifest/DashManifestParser.java b/libraries/exoplayer_dash/src/main/java/androidx/media3/exoplayer/dash/manifest/DashManifestParser.java
+index ac9e00a938a..b02602f81e0 100644
+--- a/libraries/exoplayer_dash/src/main/java/androidx/media3/exoplayer/dash/manifest/DashManifestParser.java
++++ b/libraries/exoplayer_dash/src/main/java/androidx/media3/exoplayer/dash/manifest/DashManifestParser.java
+@@ -103,10 +103,14 @@ public class DashManifestParser extends DefaultHandler
+   private static final int[] MPEG_CHANNEL_CONFIGURATION_MAPPING =
+       new int[] {
+         Format.NO_VALUE, 1, 2, 3, 4, 5, 6, 8, 2, 3, 4, 7, 8, 24, 8, 12, 10, 12, 14, 12, 14
+       };
+ 
++  /** Maps AVS3 P7 Audio Vivid DASH channel configuration values to channel counts. */
++  private static final String AVS3A_P7_AUDIO_CHANNEL_CONFIGURATION_SCHEME =
++      "urn:avs:avs3:p7:2024:audio_channel_configuration";
++
+   private final XmlPullParserFactory xmlParserFactory;
+ 
+   public DashManifestParser() {
+     try {
+       xmlParserFactory = XmlPullParserFactory.newInstance();
+@@ -1607,10 +1611,13 @@ public class DashManifestParser extends DefaultHandler
+         audioChannels = parseDolbyChannelConfiguration(xpp);
+         break;
+       case "tag:dolby.com,2015:dash:audio_channel_configuration:2015":
+         audioChannels = parseDolbyAC4ChannelConfiguration(xpp, codecs);
+         break;
++      case AVS3A_P7_AUDIO_CHANNEL_CONFIGURATION_SCHEME:
++        audioChannels = parseAvs3aP7ChannelConfiguration(xpp);
++        break;
+       default:
+         audioChannels = Format.NO_VALUE;
+         break;
+     }
+     do {
+@@ -2091,10 +2098,31 @@ public class DashManifestParser extends DefaultHandler
+     return 0 <= index && index < MPEG_CHANNEL_CONFIGURATION_MAPPING.length
+         ? MPEG_CHANNEL_CONFIGURATION_MAPPING[index]
+         : Format.NO_VALUE;
+   }
+ 
++  /**
++   * Parses the AVS3 P7 Audio Vivid channel configuration values used by the test-library MPDs.
++   * Unknown values remain unspecified rather than being guessed as a speaker layout.
++   */
++  protected static int parseAvs3aP7ChannelConfiguration(XmlPullParser xpp) {
++    @Nullable String value = xpp.getAttributeValue(null, "value");
++    if (value == null) {
++      return Format.NO_VALUE;
++    }
++    switch (Ascii.toLowerCase(value)) {
++      case "f20101":
++        return 2;
++      case "f20203":
++        return 6;
++      case "f20a04":
++        return 12;
++      default:
++        return Format.NO_VALUE;
++    }
++  }
++
+   /**
+    * Parses the number of channels from the value attribute of an AudioChannelConfiguration with
+    * schemeIdUri "tag:dts.com,2014:dash:audio_channel_configuration:2012" as defined by Annex G
+    * (3.2) in ETSI TS 102 114 V1.6.1, or by the legacy schemeIdUri
+    * "urn:dts:dash:audio_channel_configuration:2012".
+diff --git a/libraries/exoplayer_dash/src/test/java/androidx/media3/exoplayer/dash/manifest/DashManifestParserTest.java b/libraries/exoplayer_dash/src/test/java/androidx/media3/exoplayer/dash/manifest/DashManifestParserTest.java
+index 9353be2b46c..ed45c11cba2 100644
+--- a/libraries/exoplayer_dash/src/test/java/androidx/media3/exoplayer/dash/manifest/DashManifestParserTest.java
++++ b/libraries/exoplayer_dash/src/test/java/androidx/media3/exoplayer/dash/manifest/DashManifestParserTest.java
+@@ -675,10 +675,51 @@ public class DashManifestParserTest {
+             DashManifestParser.parseCea708AccessibilityChannel(
+                 buildCea708AccessibilityDescriptors("Wrong format")))
+         .isEqualTo(Format.NO_VALUE);
+   }
+ 
++  @Test
++  public void parseAvs3aP7ChannelConfiguration() throws Exception {
++    DashManifestParser parser = new DashManifestParser();
++    assertThat(
++            parseAvs3aP7ChannelConfiguration(
++                parser,
++                "<AudioChannelConfiguration "
++                    + "schemeIdUri=\"urn:avs:avs3:p7:2024:audio_channel_configuration\" "
++                    + "value=\"F20101\"/>"))
++        .isEqualTo(2);
++    assertThat(
++            parseAvs3aP7ChannelConfiguration(
++                parser,
++                "<AudioChannelConfiguration "
++                    + "schemeIdUri=\"urn:avs:avs3:p7:2024:audio_channel_configuration\" "
++                    + "value=\"F20203\"/>"))
++        .isEqualTo(6);
++    assertThat(
++            parseAvs3aP7ChannelConfiguration(
++                parser,
++                "<AudioChannelConfiguration "
++                    + "schemeIdUri=\"urn:avs:avs3:p7:2024:audio_channel_configuration\" "
++                    + "value=\"F20A04\"/>"))
++        .isEqualTo(12);
++    assertThat(
++            parseAvs3aP7ChannelConfiguration(
++                parser,
++                "<AudioChannelConfiguration "
++                    + "schemeIdUri=\"urn:avs:avs3:p7:2024:audio_channel_configuration\" "
++                    + "value=\"F29999\"/>"))
++        .isEqualTo(Format.NO_VALUE);
++  }
++
++  private static int parseAvs3aP7ChannelConfiguration(DashManifestParser parser, String xml)
++      throws Exception {
++    XmlPullParser xpp = XmlPullParserFactory.newInstance().newPullParser();
++    xpp.setInput(new StringReader(xml + NEXT_TAG));
++    xpp.next();
++    return parser.parseAudioChannelConfiguration(xpp, "av3a.02");
++  }
++
+   @Test
+   public void parsePeriodAssetIdentifier() throws IOException {
+     DashManifestParser parser = new DashManifestParser();
+     DashManifest manifest =
+         parser.parse(

@@ -200,25 +200,6 @@ public class TrackDialogTest {
                         && adapter.contains("mItems.add(0, item)"));
     }
 
-    @Test
-    public void videoTrackListHighlightsOnlyTheDecodedAdaptiveTrack() throws Exception {
-        Path root = moduleRoot();
-        String dialog = read(root.resolve(Path.of("src", "main", "java", "com", "fongmi", "android", "tv", "ui", "dialog", "TrackDialog.java")));
-
-        assertTrue("track list must resolve the selected flag through the adaptive-aware helper",
-                dialog.contains("item.setSelected(isSelected(trackGroup, j, format, active))"));
-        assertTrue("the decoded video format must narrow a multi-track adaptive selection",
-                dialog.contains("TrackUtil.uniqueActiveFormat(tracks, type, player.getVideoFormat())"));
-        assertTrue("字段完全相同的两条轨道用 equals 会同时高亮，必须按引用比对",
-                dialog.contains("if (active != null) return format == active;")
-                        && !dialog.contains("return format.equals(active);"));
-        assertTrue("without a resolved decoded format the player flags must still win",
-                dialog.contains("return trackGroup.isTrackSelected(trackIndex);"));
-        assertTrue("轨道快照只能读一次，MPV/IJK 的快照由原生线程写入，两次读可能不一致",
-                dialog.contains("Tracks tracks = player.getCurrentTracks();")
-                        && dialog.contains("Format active = activeVideoFormat(tracks);"));
-    }
-
     private static String read(Path path) throws Exception {
         return new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
     }

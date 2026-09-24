@@ -9,6 +9,7 @@ import com.fongmi.android.tv.api.config.LiveConfig;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Backup;
 import com.fongmi.android.tv.bean.Config;
+import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.bean.Device;
 import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.bean.SyncOptions;
@@ -22,6 +23,7 @@ import com.fongmi.android.tv.setting.CustomCspSetting;
 import com.fongmi.android.tv.setting.ProxySetting;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.utils.LoginStateSync;
+import com.fongmi.android.tv.utils.MpvConfigSync;
 import com.fongmi.android.tv.utils.ProgressRequestBody;
 import com.fongmi.android.tv.utils.ScanTask;
 import com.fongmi.android.tv.utils.SyncFiles;
@@ -344,9 +346,13 @@ public class Manage implements Process {
             int type = intValue(params.get("type"), 0);
             String url = params.getOrDefault("url", "").trim();
             String name = params.getOrDefault("name", "").trim();
+            String interfaceKey = params.getOrDefault("interfaceKey", "").trim();
             if (TextUtils.isEmpty(url)) return Nano.error(Status.BAD_REQUEST, "Missing url");
-            Config config = Config.find(url, type).name(name);
-            config.save();
+            Config config = TextUtils.isEmpty(interfaceKey)
+                    ? Config.find(url, type)
+                    : AppDatabase.get().getConfigDao().findByInterfaceKey(interfaceKey, type);
+            if (config == null) config = Config.create(type);
+            config.interfaceKey(interfaceKey).url(url).name(name).save();
         }
         JsonObject object = new JsonObject();
         JsonArray items = new JsonArray();
@@ -361,10 +367,8 @@ public class Manage implements Process {
 
     private Response configUse(Map<String, String> params) {
         int type = intValue(params.get("type"), 0);
-        String url = params.getOrDefault("url", "").trim();
-        if (TextUtils.isEmpty(url)) return Nano.error(Status.BAD_REQUEST, "Missing url");
-        Config config = Config.find(url, type);
-        if (config.isEmpty()) return Nano.error(Status.NOT_FOUND, "Config not found");
+        Config config = findConfig(params, type);
+        if (config == null || config.isEmpty()) return Nano.error(Status.NOT_FOUND, "Config not found");
         switch (type) {
             case 1 -> LiveConfig.load(config, new Callback());
             case 2 -> WallConfig.load(config, new Callback());
@@ -375,10 +379,20 @@ public class Manage implements Process {
 
     private Response configDelete(Map<String, String> params) {
         int type = intValue(params.get("type"), 0);
-        String url = params.getOrDefault("url", "").trim();
-        if (TextUtils.isEmpty(url)) return Nano.error(Status.BAD_REQUEST, "Missing url");
-        Config.find(url, type).delete();
+        Config config = findConfig(params, type);
+        if (config == null || config.isEmpty()) return Nano.error(Status.NOT_FOUND, "Config not found");
+        config.delete();
         return configs(java.util.Collections.emptyMap());
+    }
+
+    private Config findConfig(Map<String, String> params, int type) {
+        String interfaceKey = params.getOrDefault("interfaceKey", "").trim();
+        if (!TextUtils.isEmpty(interfaceKey)) {
+            Config config = AppDatabase.get().getConfigDao().findByInterfaceKey(interfaceKey, type);
+            if (config != null) return config;
+        }
+        String url = params.getOrDefault("url", "").trim();
+        return TextUtils.isEmpty(url) ? null : AppDatabase.get().getConfigDao().find(url, type);
     }
 
     private JsonObject configObject(Config config, boolean forceActive) {
@@ -387,6 +401,8 @@ public class Manage implements Process {
         item.addProperty("typeName", configTypeName(config.getType()));
         item.addProperty("name", config.getName());
         item.addProperty("url", config.getUrl());
+        item.addProperty("interfaceKey", config.ensureInterfaceKey());
+        item.add("urls", App.gson().toJsonTree(config.getUrls()));
         item.addProperty("desc", config.getDesc());
         item.addProperty("time", config.getTime());
         item.addProperty("active", forceActive || isCurrentConfig(config));
@@ -396,14 +412,14 @@ public class Manage implements Process {
     private boolean containsConfig(JsonArray items, Config config) {
         for (int i = 0; i < items.size(); i++) {
             JsonObject item = items.get(i).getAsJsonObject();
-            if (item.get("type").getAsInt() == config.getType() && item.get("url").getAsString().equals(config.getUrl())) return true;
+            if (item.get("type").getAsInt() == config.getType() && item.get("interfaceKey").getAsString().equals(config.ensureInterfaceKey())) return true;
         }
         return false;
     }
 
     private boolean isCurrentConfig(Config config) {
         Config current = currentConfig(config.getType());
-        return current.getUrl().equals(config.getUrl());
+        return current.getType() == config.getType() && current.ensureInterfaceKey().equals(config.ensureInterfaceKey());
     }
 
     private Config currentConfig(int type) {
@@ -555,11 +571,13 @@ public class Manage implements Process {
         SyncOptions options = SyncOptions.objectFrom(params.get("options"));
         if (params.containsKey("paths")) options.paths(params.get("paths"));
         SyncFiles.Archive archive = null;
+        MpvConfigSync.Archive mpvArchive = null;
         LoginStateSync.Archive loginArchive = null;
         try {
             if (!pull && SyncFiles.hasPaths(options)) archive = SyncFiles.createArchive(SyncFiles.getPaths(options));
+            if (!pull && options.isMpvConfig()) mpvArchive = MpvConfigSync.createArchive();
             if (!pull && options.isLoginState()) loginArchive = LoginStateSync.createArchive();
-            RequestBody body = buildSyncBody(pull, options, archive, loginArchive);
+            RequestBody body = buildSyncBody(pull, options, archive, mpvArchive, loginArchive);
             String remote = device.replaceAll("/+$", "") + "/action?do=sync&mode=" + (pull ? "2" : "1") + "&type=backup";
             SpiderDebug.log("sync", "manage start direction=%s device=%s options=%s archive=%s", pull ? "pull" : "push", device, options, archive == null ? "none" : archive.getFile().getAbsolutePath());
             try (okhttp3.Response response = OkHttp.client(Constant.TIMEOUT_SYNC_TRANSFER).newCall(new Request.Builder().url(remote).post(body).build()).execute()) {
@@ -578,6 +596,11 @@ public class Manage implements Process {
                 object.addProperty("rawSize", archive.getRawSize());
                 object.addProperty("zipSize", archive.getZipSize());
             }
+            if (mpvArchive != null) {
+                object.addProperty("mpvFiles", mpvArchive.getCount());
+                object.addProperty("mpvRawSize", mpvArchive.getRawSize());
+                object.addProperty("mpvZipSize", mpvArchive.getZipSize());
+            }
             if (loginArchive != null) {
                 object.addProperty("loginFiles", loginArchive.getCount());
                 object.addProperty("loginRawSize", loginArchive.getRawSize());
@@ -586,11 +609,12 @@ public class Manage implements Process {
             return json(object);
         } finally {
             if (archive != null) archive.delete();
+            if (mpvArchive != null) mpvArchive.delete();
             if (loginArchive != null) loginArchive.delete();
         }
     }
 
-    private RequestBody buildSyncBody(boolean pull, SyncOptions options, SyncFiles.Archive archive, LoginStateSync.Archive loginArchive) {
+    private RequestBody buildSyncBody(boolean pull, SyncOptions options, SyncFiles.Archive archive, MpvConfigSync.Archive mpvArchive, LoginStateSync.Archive loginArchive) {
         if (pull) {
             FormBody.Builder body = new FormBody.Builder();
             body.add("options", options.toString());
@@ -598,7 +622,7 @@ public class Manage implements Process {
             body.add("device", Device.get().toString());
             return body.build();
         }
-        if (archive == null && loginArchive == null) {
+        if (archive == null && mpvArchive == null && loginArchive == null) {
             FormBody.Builder body = new FormBody.Builder();
             body.add("options", options.toString());
             body.add("force", "false");
@@ -612,6 +636,7 @@ public class Manage implements Process {
         body.addFormDataPart("backup", Backup.create(options).toString());
         if (options.isRemoteRelay()) body.addFormDataPart("remoteRelay", RemoteStore.exportRelayConfig());
         if (archive != null) body.addFormDataPart(SyncFiles.PART_NAME, archive.getFile().getName(), new ProgressRequestBody(archive.getFile(), ZIP, null));
+        if (mpvArchive != null) body.addFormDataPart(MpvConfigSync.PART_NAME, mpvArchive.getFile().getName(), new ProgressRequestBody(mpvArchive.getFile(), ZIP, null));
         if (loginArchive != null) body.addFormDataPart(LoginStateSync.PART_NAME, loginArchive.getFile().getName(), new ProgressRequestBody(loginArchive.getFile(), ZIP, null));
         return body.build();
     }

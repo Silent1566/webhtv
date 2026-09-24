@@ -35,6 +35,9 @@ public class IntroSkipActivityWiringTest {
         assertTrue(mobile.contains("setOnDismissListener"));
         assertTrue(leanback.contains("setOnDismissListener"));
         assertTrue(detail.contains("setOnDismissListener"));
+        assertTrue("手机取消按钮应将当前片段标为本集拒绝", mobile.contains("mIntroSkipPlayback.declineConfirmation(segment)"));
+        assertTrue("TV 取消按钮应将当前片段标为本集拒绝", leanback.contains("mIntroSkipPlayback.declineConfirmation(segment)"));
+        assertTrue("内嵌播放取消按钮应将当前片段标为本集拒绝", detail.contains("introSkipPlayback.declineConfirmation(segment)"));
         assertTrue(mobile.contains("mHistory.isRevPlay() ? -1 : 1"));
     }
 

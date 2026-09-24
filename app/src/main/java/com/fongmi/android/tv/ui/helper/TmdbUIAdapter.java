@@ -5,6 +5,7 @@ import android.text.TextUtils;
 
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.api.SiteApi;
+import com.fongmi.android.tv.api.config.SubscriptionTmdbCredentialStore;
 import com.fongmi.android.tv.bean.Episode;
 import com.fongmi.android.tv.bean.Flag;
 import com.fongmi.android.tv.bean.TmdbConfig;
@@ -16,6 +17,7 @@ import com.fongmi.android.tv.bean.TmdbSeasonMatchCache;
 import com.fongmi.android.tv.bean.TmdbSeasonSegment;
 import com.fongmi.android.tv.bean.TmdbSeasonScope;
 import com.fongmi.android.tv.bean.TmdbPerson;
+import com.fongmi.android.tv.bean.TmdbSourcePayload;
 import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.service.AiRecommendationService;
@@ -79,8 +81,8 @@ public class TmdbUIAdapter {
 
     private final Activity activity;
     private final TmdbService tmdbService;
-    private final TmdbMatcher tmdbMatcher;
-    private final TmdbConfig tmdbConfig;
+    private TmdbMatcher tmdbMatcher;
+    private TmdbConfig tmdbConfig;
     private final Runnable pendingVodRefresh = this::dispatchPendingVodRefresh;
     private final TmdbDetailPrefetch detailPrefetch;
     private final Task.Scope backgroundTasks;
@@ -119,11 +121,15 @@ public class TmdbUIAdapter {
     private boolean relatedVideoLoading;
     private String relatedVideoContextKey = "";
     private boolean loaded;
+    private boolean sourceOnly;
+    private TmdbBundle activeSourceBundle;
+    private TmdbSourcePayload activeSourcePayload;
     private volatile boolean episodeMetadataLoaded;
 
     private volatile int loadGeneration;
     private volatile int episodeMetadataGeneration;
     private volatile int relatedVideoGeneration;
+    private volatile SubscriptionTmdbCredentialStore.Scope subscriptionScope;
     private final Object episodeMetadataLock = new Object();
     // 季级内存缓存：切季 / 切线路会反复要同一季的集数，磁盘缓存虽然命中但仍要读文件 +
     // 解析整季 JSON。缓存解析结果让重复访问零 IO。键为 tmdbId|mediaType|season。
@@ -146,8 +152,7 @@ public class TmdbUIAdapter {
     public TmdbUIAdapter(Activity activity) {
         this.activity = activity;
         this.tmdbService = new TmdbService();
-        this.tmdbConfig = TmdbConfig.objectFrom(Setting.getTmdbConfig());
-        this.tmdbMatcher = new TmdbMatcher(tmdbService, tmdbConfig);
+        refreshRuntimeConfig();
         this.backgroundTasks = new Task.Scope(Task.recommendationExecutor());
         // 选集元数据独立线程池：recommendationExecutor 只有 3 条线程，推荐 / 个性化 / AI 推荐
         // 都挤在里面。原先 1200ms 延迟天然把选集和它们错开了，现在选集不再延迟，必须换到
@@ -157,11 +162,15 @@ public class TmdbUIAdapter {
     }
 
     public boolean isReady() {
-        return tmdbConfig.isReady();
+        return TmdbConfig.effectiveCurrent().isReady();
     }
 
     public boolean isLoaded() {
         return loaded;
+    }
+
+    public boolean isSourceOnly() {
+        return sourceOnly;
     }
 
     public boolean isEpisodeMetadataLoaded() {
@@ -380,10 +389,21 @@ public class TmdbUIAdapter {
         detailPrefetch.cancel();
     }
 
+    public void invalidateSubscription() {
+        refreshRuntimeConfig();
+        subscriptionScope = SubscriptionTmdbCredentialStore.currentScope();
+        loadGeneration++;
+        backgroundTasks.cancelAll();
+        episodeTasks.cancelAll();
+        cancelActivePrefetch();
+        detailPrefetch.cancel();
+    }
+
     /**
      * Prefetch core TMDB detail for a known item without mutating or publishing a Vod.
      */
     public void prefetch(TmdbItem item) {
+        refreshRuntimeConfig();
         if (item == null || !isReady()) return;
         long start = System.currentTimeMillis();
         // Intent 在主线程读：本方法由 prefetchDirectTmdbDetail 在主线程调用，而 Intent 内部是
@@ -484,6 +504,7 @@ public class TmdbUIAdapter {
      */
     public void load(TmdbItem item, Vod vod) {
         if (item == null) return;
+        refreshRuntimeConfig();
         // resetLoadState 会清掉 sourceCacheTitle，而手动换条目时 vod.getName() 已被
         // enrichVod 改写成上一个 TMDB 标题。先留住站源标题，季度绑定的键才能跨会话一致。
         String sourceTitle = sourceCacheTitle;
@@ -552,6 +573,7 @@ public class TmdbUIAdapter {
             load(item, vod);
             return;
         }
+        refreshRuntimeConfig();
         String sourceTitle = sourceCacheTitle;
         int generation = resetLoadState();
         captureSourceSeason(vod, sourceTitle);
@@ -560,6 +582,130 @@ public class TmdbUIAdapter {
         this.tmdbItem = item;
         saveMatch(vod, item);
         backgroundTasks.submit(() -> loadDetailSync(vod, cached.getItem(), cached.getDetail(), cached.getCast(), generation));
+    }
+
+    /**
+     * Applies a validated C16 source bundle first. If an effective credential exists, only planner-reported
+     * initial gaps are filled from TMDB; complete source data stays offline and lazy capabilities remain on demand.
+     */
+    public void loadSource(TmdbBundle bundle, Vod sourceVod, TmdbSourcePayload payload) {
+        if (bundle == null || bundle.item() == null || bundle.detail() == null || sourceVod == null) return;
+        refreshRuntimeConfig();
+        String sourceTitle = sourceCacheTitle;
+        int generation = resetLoadState();
+        sourceOnly = !tmdbConfig.isReady();
+        captureSourceSeason(sourceVod, sourceTitle);
+        if (requestSeasonNumber < 0 && payload != null && payload.getSeasonNumber() >= 0) requestSeasonNumber = payload.getSeasonNumber();
+        cancelActivePrefetch();
+        detailPrefetch.cancel();
+        applySourceBundle(bundle, sourceVod, payload);
+        TmdbSourceCapabilityPlanner.Plan plan = TmdbSourceCapabilityPlanner.plan(bundle, payload, TmdbSourceCapabilityPlanner.UiState.initialScreen());
+        boolean fillInitial = !sourceOnly && plan.hasInitialNetworkGaps();
+        SpiderDebug.log("tmdb", "source loaded title=%s media=%s id=%d seasons=%d sourceOnly=%s fill=%s missing=%s",
+                tmdbItem.getTitle(), tmdbItem.getMediaType(), tmdbItem.getTmdbId(), seasonOptions.size(), sourceOnly, fillInitial, plan.missing());
+        notifyVodChanged(sourceVod, generation, RefreshEvent.Type.VOD_CORE);
+        notifyLoadComplete(sourceVod, generation);
+        if (fillInitial) backgroundTasks.submit(() -> fillInitialSourceGaps(bundle, sourceVod, payload, plan, generation));
+    }
+
+    private void applySourceBundle(TmdbBundle bundle, Vod sourceVod, TmdbSourcePayload payload) {
+        vod = sourceVod;
+        activeSourceBundle = bundle;
+        activeSourcePayload = payload;
+        tmdbItem = bundle.item();
+        tmdbDetail = bundle.detail();
+        tmdbCast = new ArrayList<>(bundle.cast());
+        recommendations = new ArrayList<>(bundle.related());
+        relatedVideos = new ArrayList<>();
+        personalTmdbRecommendations = new ArrayList<>();
+        personalDoubanRecommendations = new ArrayList<>();
+        personalAiRecommendations = new ArrayList<>();
+        personalTmdbPage = PersonalRecommendationService.RecommendationPage.empty("");
+        personalDoubanPage = PersonalRecommendationService.RecommendationPage.empty("");
+        personalAiPage = PersonalRecommendationService.RecommendationPage.empty("");
+        activeFlag = activeFlagFor(sourceVod);
+        activeFlagKey = flagKey(activeFlag, flagIndex(sourceVod == null ? null : sourceVod.getFlags(), activeFlag));
+
+        seasonEpisodeCache.clear();
+        for (Map.Entry<Integer, List<TmdbEpisode>> entry : bundle.seasonEpisodes().entrySet()) {
+            if (entry.getKey() == null || entry.getKey() < 0 || entry.getValue() == null || entry.getValue().isEmpty()) continue;
+            seasonEpisodeCache.put(seasonEpisodeKey(tmdbItem, entry.getKey()), List.copyOf(entry.getValue()));
+        }
+        seasonOptions = sourceSeasonOptions(bundle);
+        if (tmdbItem.isTv()) {
+            List<Integer> seasons = new ArrayList<>();
+            Map<Integer, Integer> counts = new LinkedHashMap<>();
+            for (SeasonOption option : seasonOptions) {
+                seasons.add(option.getSeasonNumber());
+                counts.put(option.getSeasonNumber(), option.getEpisodeCount());
+            }
+            Flag sourceFlag = activeFlagFor(sourceVod);
+            seasonResolution = TmdbSeasonResolver.resolve(
+                    requestSeasonNumber,
+                    null,
+                    explicitSourceSeasons(sourceFlag),
+                    titleSeasonNumber,
+                    seasons,
+                    counts,
+                    sourceEpisodeCount(sourceFlag),
+                    sourceEpisodeNumbers(sourceFlag),
+                    null,
+                    false);
+            if (seasonResolution.getStatus() == TmdbSeasonResolver.Status.RESOLVED
+                    && seasonResolution.getSelectedSeason() != null) {
+                sourceSeasonNumber = seasonResolution.getSelectedSeason();
+            }
+        } else {
+            sourceSeasonNumber = -1;
+            seasonResolution = null;
+            seasonOptions = List.of();
+        }
+        episodeInfo = TmdbEpisodeInfo.from(tmdbItem.getMediaType(), tmdbDetail, sourceSeasonNumber);
+        loaded = true;
+        episodeMetadataLoaded = true;
+        enrichVod(sourceVod, tmdbItem, tmdbDetail);
+    }
+
+    private void fillInitialSourceGaps(TmdbBundle sourceBundle, Vod sourceVod, TmdbSourcePayload payload,
+                                       TmdbSourceCapabilityPlanner.Plan plan, int generation) {
+        long start = System.currentTimeMillis();
+        TmdbConfig requestConfig = tmdbConfig;
+        try {
+            JsonObject detail = tmdbService.detailForSource(sourceBundle.item(), payload == null ? 0 : payload.getSeasonNumber(), requestConfig, plan.missing());
+            if (!isCurrentGeneration(generation)) return;
+            TmdbBundle networkBundle = TmdbSourceAdapter.fromNetwork(sourceBundle.item(), detail, requestConfig);
+            TmdbBundle merged = TmdbSourceMerger.fillOnly(sourceBundle, payload, networkBundle);
+            SpiderDebug.log("tmdb", "source fill finish cost=%dms missing=%s", System.currentTimeMillis() - start, plan.missing());
+            if (activity == null) return;
+            activity.runOnUiThread(() -> {
+                if (!isCurrentGeneration(generation)) return;
+                applySourceBundle(merged, sourceVod, payload);
+                notifyVodChanged(sourceVod, generation, RefreshEvent.Type.VOD_CORE);
+                notifyLoadComplete(sourceVod, generation);
+            });
+        } catch (Throwable e) {
+            SpiderDebug.log("tmdb", "source fill failed cost=%dms missing=%s error=%s", System.currentTimeMillis() - start, plan.missing(), e.getMessage());
+        }
+    }
+
+    private static String seasonEpisodeKey(TmdbItem item, int seasonNumber) {
+        return item.getTmdbId() + "|" + item.getMediaType() + "|" + seasonNumber;
+    }
+
+    private static List<SeasonOption> sourceSeasonOptions(TmdbBundle bundle) {
+        List<SeasonOption> fromDetail = parseSeasonOptions(bundle.detail());
+        if (!fromDetail.isEmpty()) return fromDetail;
+        List<SeasonOption> result = new ArrayList<>();
+        for (Integer seasonNumber : bundle.seasons()) {
+            if (seasonNumber == null || seasonNumber < 0 || containsSeason(result, seasonNumber)) continue;
+            result.add(new SeasonOption(seasonNumber, "", "", bundle.seasonCounts().getOrDefault(seasonNumber, 0)));
+        }
+        return List.copyOf(result);
+    }
+
+    private static boolean containsSeason(List<SeasonOption> options, int seasonNumber) {
+        for (SeasonOption option : options) if (option.getSeasonNumber() == seasonNumber) return true;
+        return false;
     }
 
     public void rememberManualMatch(Vod vod, TmdbItem item) {
@@ -578,6 +724,7 @@ public class TmdbUIAdapter {
     }
 
     public void autoMatch(String videoName, Vod vod, String searchKeyword) {
+        refreshRuntimeConfig();
         int generation = resetLoadState();
         captureSourceSeason(vod, videoName);
         cancelActivePrefetch();
@@ -700,6 +847,7 @@ public class TmdbUIAdapter {
     }
 
     public List<TmdbItem> search(String keyword, Vod vod) throws Exception {
+        refreshRuntimeConfig();
         return tmdbMatcher.search(keyword, vod);
     }
 
@@ -724,6 +872,7 @@ public class TmdbUIAdapter {
 
     private int resetLoadState() {
         int generation = ++loadGeneration;
+        subscriptionScope = SubscriptionTmdbCredentialStore.currentScope();
         episodeMetadataGeneration++;
         tmdbItem = null;
         tmdbDetail = null;
@@ -756,6 +905,9 @@ public class TmdbUIAdapter {
         relatedVideoContextKey = "";
         relatedVideoGeneration++;
         loaded = false;
+        sourceOnly = false;
+        activeSourceBundle = null;
+        activeSourcePayload = null;
         episodeMetadataLoaded = false;
         pendingVodRefreshVod = null;
         pendingVodRefreshGeneration = generation;
@@ -1186,7 +1338,12 @@ public class TmdbUIAdapter {
         return activity == null || activity.getIntent() == null ? "" : activity.getIntent().getStringExtra("name");
     }
     private boolean isCurrentGeneration(int generation) {
-        return generation == loadGeneration;
+        return generation == loadGeneration && SubscriptionTmdbCredentialStore.isCurrent(subscriptionScope);
+    }
+
+    private void refreshRuntimeConfig() {
+        tmdbConfig = TmdbConfig.effectiveCurrent();
+        tmdbMatcher = new TmdbMatcher(tmdbService, tmdbConfig);
     }
 
     private void loadDetailSync(Vod vod, TmdbItem item, int generation) {
@@ -1443,7 +1600,7 @@ public class TmdbUIAdapter {
             PersonalRecommendationService.RecommendationPages pages = PersonalRecommendationService.RecommendationPages.empty();
             PersonalRecommendationService service = new PersonalRecommendationService(tmdbService, tmdbConfig);
             try {
-                pages = service.loadPage(vod, item, detail, 0, PersonalRecommendationService.DEFAULT_PAGE_SIZE);
+                pages = service.loadIndependentPages(vod, item, detail, 0, PersonalRecommendationService.DEFAULT_PAGE_SIZE);
             } catch (Throwable e) {
                 SpiderDebug.log("tmdb", "initial personal recommendations failed error=%s", e.getMessage());
             }
@@ -1458,12 +1615,13 @@ public class TmdbUIAdapter {
                 personalDoubanRecommendations = personalDoubanPage.getItems();
                 if (vod != null && (!personalTmdbRecommendations.isEmpty() || !personalDoubanRecommendations.isEmpty())) notifyVodChanged(vod, generation, RefreshEvent.Type.VOD_PERSONAL);
             });
-            service.enrichTmdbPageRatingsAsync(loadedPages.getTmdb(), enriched -> applyPersonalTmdbRatingEnrichment(enriched, generation, vod));
+            service.enrichTmdbPageRatingsAsync(loadedPages.getTmdb(), enriched -> applyPersonalTmdbRatingEnrichment(enriched, generation, vod, item, service));
         });
         loadPersonalAiRecommendationsAsync(vod, item, generation);
     }
 
     private void loadPersonalAiRecommendationsAsync(Vod vod, TmdbItem item, int generation) {
+        if (sourceOnly) return;
         if (vod == null || !Setting.isPersonalRecommendation() || personalAiLoading) return;
         personalAiLoading = true;
         backgroundTasks.submit(() -> {
@@ -1551,6 +1709,7 @@ public class TmdbUIAdapter {
             SpiderDebug.log("tmdb", "season episodes source=memory season=%d count=%d", seasonNumber, cached.size());
             return cached;
         }
+        if (sourceOnly) return List.of();
         JsonObject season = tmdbService.season(item, seasonNumber, tmdbConfig);
         if (season == null) return List.of();
         List<TmdbEpisode> episodes = tmdbService.episodes(season, tmdbConfig, item.getTmdbId(), seasonNumber);
@@ -2207,12 +2366,29 @@ public class TmdbUIAdapter {
     public void loadRelatedVideosAsync(int seasonNumber, int episodeNumber) {
         TmdbItem item = tmdbItem;
         Vod currentVod = vod;
-        if (!loaded || item == null || !isReady()) {
+        if (!loaded || item == null) {
+            relatedVideos = new ArrayList<>();
+            return;
+        }
+        String contextKey = item.getMediaType() + ":" + item.getTmdbId() + ":" + seasonNumber + ":" + episodeNumber + ":" + tmdbConfig.getLanguage();
+        if (applySourceVideosIfAvailable(item, seasonNumber, episodeNumber, contextKey)) return;
+        if (sourceOnly) {
+            relatedVideoGeneration++;
+            relatedVideoLoading = false;
+            relatedVideoContextKey = contextKey;
+            relatedVideos = new ArrayList<>(TmdbSourceAdapter.videos(
+                    tmdbDetail,
+                    item.getMediaType(),
+                    seasonNumber,
+                    episodeNumber,
+                    tmdbConfig.getLanguage()));
+            return;
+        }
+        if (!isReady()) {
             relatedVideos = new ArrayList<>();
             return;
         }
         int generation = loadGeneration;
-        String contextKey = item.getMediaType() + ":" + item.getTmdbId() + ":" + seasonNumber + ":" + episodeNumber + ":" + tmdbConfig.getLanguage();
         if (contextKey.equals(relatedVideoContextKey) && (relatedVideoLoading || relatedVideos != null)) return;
         int videoGeneration = ++relatedVideoGeneration;
         relatedVideoContextKey = contextKey;
@@ -2237,6 +2413,30 @@ public class TmdbUIAdapter {
         });
     }
 
+    private boolean applySourceVideosIfAvailable(TmdbItem item, int seasonNumber, int episodeNumber, String contextKey) {
+        String group;
+        if (item.isMovie()) {
+            group = TmdbSourceCapabilityPlanner.VIDEOS;
+        } else if (episodeNumber > 0 && seasonNumber >= 0) {
+            group = TmdbSourceCapabilityPlanner.episodeVideos(seasonNumber, episodeNumber);
+        } else if (seasonNumber >= 0) {
+            group = TmdbSourceCapabilityPlanner.seasonVideos(seasonNumber);
+        } else {
+            group = TmdbSourceCapabilityPlanner.VIDEOS;
+        }
+        if (!TmdbSourceCapabilityPlanner.isAvailable(activeSourceBundle, activeSourcePayload, group, seasonNumber, episodeNumber)) return false;
+        relatedVideoGeneration++;
+        relatedVideoLoading = false;
+        relatedVideoContextKey = contextKey;
+        relatedVideos = new ArrayList<>(TmdbSourceAdapter.videos(
+                tmdbDetail,
+                item.getMediaType(),
+                seasonNumber,
+                episodeNumber,
+                tmdbConfig.getLanguage()));
+        return true;
+    }
+
     public boolean hasMoreRecommendations() {
         return recommendationHasMore;
     }
@@ -2254,6 +2454,10 @@ public class TmdbUIAdapter {
     }
 
     public void loadMoreRecommendations(LoadMoreCallback callback) {
+        if (sourceOnly) {
+            if (callback != null) callback.onLoaded(false);
+            return;
+        }
         if (recommendationLoading || !recommendationHasMore || tmdbItem == null || tmdbDetail == null) {
             if (callback != null) callback.onLoaded(false);
             return;
@@ -2300,6 +2504,10 @@ public class TmdbUIAdapter {
     }
 
     public void refreshPersonalRecommendations(LoadMoreCallback callback) {
+        if (sourceOnly) {
+            if (callback != null) callback.onLoaded(false);
+            return;
+        }
         if (personalRefreshLoading || tmdbDetail == null) {
             if (callback != null) callback.onLoaded(false);
             return;
@@ -2341,11 +2549,15 @@ public class TmdbUIAdapter {
                 if (callback != null) callback.onLoaded(hasChanged);
                 if (hasAiChanged) loadPersonalAiRecommendationsAsync(vod, tmdbItem, generation);
             });
-            if (hasChanged) service.enrichTmdbPageRatingsAsync(loadedPages.getTmdb(), enriched -> applyPersonalTmdbRatingEnrichment(enriched, generation, vod));
+            if (hasChanged) service.enrichTmdbPageRatingsAsync(loadedPages.getTmdb(), enriched -> applyPersonalTmdbRatingEnrichment(enriched, generation, vod, tmdbItem, service));
         });
     }
 
     private void loadMorePersonalRecommendations(boolean tmdb, LoadMoreCallback callback) {
+        if (sourceOnly) {
+            if (callback != null) callback.onLoaded(false);
+            return;
+        }
         PersonalRecommendationService.RecommendationPage page = tmdb ? personalTmdbPage : personalDoubanPage;
         if (page == null || !page.hasMore() || (tmdb ? personalTmdbLoading : personalDoubanLoading)) {
             if (callback != null) callback.onLoaded(false);
@@ -2380,7 +2592,7 @@ public class TmdbUIAdapter {
                     if (callback != null) callback.onLoaded(changed);
                 }
             });
-            if (tmdb) service.enrichTmdbPageRatingsAsync(loadedPage, enriched -> applyPersonalTmdbRatingEnrichment(enriched, generation, vod));
+            if (tmdb) service.enrichTmdbPageRatingsAsync(loadedPage, enriched -> applyPersonalTmdbRatingEnrichment(enriched, generation, vod, tmdbItem, service));
         });
     }
 
@@ -2391,10 +2603,13 @@ public class TmdbUIAdapter {
         });
     }
 
-    private void applyPersonalTmdbRatingEnrichment(PersonalRecommendationService.RecommendationPage enriched, int generation, Vod eventVod) {
+    private void applyPersonalTmdbRatingEnrichment(
+            PersonalRecommendationService.RecommendationPage enriched, int generation, Vod eventVod,
+            TmdbItem currentItem, PersonalRecommendationService service) {
         activity.runOnUiThread(() -> {
             if (!isCurrentGeneration(generation) || enriched == null || !mergeRecommendationRatings(personalTmdbRecommendations, enriched.getItems())) return;
             if (personalTmdbPage != null) personalTmdbPage = personalTmdbPage.withItems(personalTmdbRecommendations);
+            if (service != null) service.writeCachedTmdbPage(eventVod, currentItem, personalTmdbPage);
             if (eventVod != null) notifyVodChanged(eventVod, generation, RefreshEvent.Type.VOD_PERSONAL);
         });
     }

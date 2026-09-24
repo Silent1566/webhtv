@@ -39,4 +39,17 @@
     <color name="site_health_warn">#B7791F</color>
     <color name="site_health_bad">#C53030</color>
 
+    <color name="following_page_bg">#F3F7FD</color>
+    <color name="following_card_bg">#FFFFFF</color>
+    <color name="following_card_stroke">#D8E3F2</color>
+    <color name="following_text_primary">#172033</color>
+    <color name="following_text_secondary">#65748B</color>
+    <color name="following_accent">#2563B9</color>
+    <color name="following_accent_focus">#174EA6</color>
+    <color name="following_button_focus">#FF8A00</color>
+    <color name="following_button_focus_pressed">#E56F00</color>
+    <color name="following_button_secondary">#EEF4FC</color>
+    <color name="following_button_text">#24599C</color>
+    <color name="following_danger_soft">#FDECEC</color>
+    <color name="following_danger">#B3261E</color>
 </resources>

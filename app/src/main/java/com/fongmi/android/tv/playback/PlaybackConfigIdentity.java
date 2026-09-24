@@ -15,7 +15,7 @@ public final class PlaybackConfigIdentity {
     }
 
     public static String currentKey() {
-        return keyForUrl(VodConfig.getUrl());
+        return keyForCid(VodConfig.getCid());
     }
 
     public static String currentName() {
@@ -24,8 +24,12 @@ public final class PlaybackConfigIdentity {
 
     public static String keyForCid(int cid) {
         Config config = Config.find(cid);
-        if (config == null || TextUtils.isEmpty(config.getUrl())) return currentKey();
-        return keyForUrl(config.getUrl());
+        if (config == null) return keyForUrl(VodConfig.getUrl());
+        String key = normalizeKey(config.getInterfaceKey());
+        if (!TextUtils.isEmpty(key)) return key;
+        key = config.ensureInterfaceKey();
+        config.save();
+        return normalizeKey(key);
     }
 
     public static String nameForCid(int cid) {
@@ -38,8 +42,9 @@ public final class PlaybackConfigIdentity {
         configKey = normalizeKey(configKey);
         if (TextUtils.isEmpty(configKey)) return 0;
         for (Config config : Config.getAll(0)) {
-            if (config == null || TextUtils.isEmpty(config.getUrl())) continue;
-            if (TextUtils.equals(configKey, keyForUrl(config.getUrl()))) return config.getId();
+            if (config == null) continue;
+            if (TextUtils.equals(configKey, normalizeKey(config.getInterfaceKey()))) return config.getId();
+            if (!TextUtils.isEmpty(config.getUrl()) && TextUtils.equals(configKey, keyForUrl(config.getUrl()))) return config.getId();
         }
         return 0;
     }

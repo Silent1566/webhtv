@@ -6,6 +6,8 @@ import java.util.List;
 
 public final class MediaTitleRequest {
 
+    private static final int MAX_CONTEXT_TITLES = 16;
+
     private String siteKey;
     private String vodId;
     private String rawTitle;
@@ -15,6 +17,8 @@ public final class MediaTitleRequest {
     private String episodeName;
     private String flag;
     private String source;
+    private String folderName;
+    private List<String> contextTitles;
     private int tmdbId;
     private int tmdbSeasonNumber;
     private List<MediaTitleLearningExample> learningExamples;
@@ -30,6 +34,8 @@ public final class MediaTitleRequest {
         this.episodeName = clean(builder.episodeName);
         this.flag = clean(builder.flag);
         this.source = clean(builder.source);
+        this.folderName = cleanFolderName(builder.folderName);
+        this.contextTitles = cleanContextTitles(builder.contextTitles);
         this.tmdbId = builder.tmdbId;
         this.tmdbSeasonNumber = builder.tmdbSeasonNumber;
         this.learningExamples = new ArrayList<>(builder.learningExamples);
@@ -76,6 +82,21 @@ public final class MediaTitleRequest {
         return source;
     }
 
+    /**
+     * Returns only the final directory component.  Title recognition must not
+     * send a complete local path or URL to an AI provider.
+     */
+    public String getFolderName() {
+        return folderName;
+    }
+
+    /**
+     * Returns bounded, de-duplicated sibling/context titles in caller order.
+     */
+    public List<String> getContextTitles() {
+        return Collections.unmodifiableList(contextTitles);
+    }
+
     public int getTmdbId() {
         return tmdbId;
     }
@@ -107,6 +128,8 @@ public final class MediaTitleRequest {
         private String episodeName;
         private String flag;
         private String source;
+        private String folderName;
+        private List<String> contextTitles = new ArrayList<>();
         private int tmdbId;
         private int tmdbSeasonNumber;
         private final List<MediaTitleLearningExample> learningExamples = new ArrayList<>();
@@ -157,6 +180,17 @@ public final class MediaTitleRequest {
             return this;
         }
 
+        public Builder folderName(String folderName) {
+            this.folderName = folderName;
+            return this;
+        }
+
+        public Builder contextTitles(List<String> contextTitles) {
+            this.contextTitles.clear();
+            if (contextTitles != null) this.contextTitles.addAll(contextTitles);
+            return this;
+        }
+
         public Builder tmdbId(int tmdbId) {
             this.tmdbId = tmdbId;
             return this;
@@ -181,5 +215,33 @@ public final class MediaTitleRequest {
         public MediaTitleRequest build() {
             return new MediaTitleRequest(this);
         }
+    }
+
+    private static String cleanFolderName(String value) {
+        String text = clean(value).replace('\\', '/');
+        while (text.length() > 1 && text.endsWith("/")) text = text.substring(0, text.length() - 1);
+        int slash = text.lastIndexOf('/');
+        if (slash >= 0) text = text.substring(slash + 1);
+        return text.trim();
+    }
+
+    private static List<String> cleanContextTitles(List<String> values) {
+        List<String> result = new ArrayList<>();
+        if (values == null) return result;
+        for (String value : values) {
+            String text = clean(value).replaceAll("(?i)https?://\\S+", " ").trim();
+            String pathText = text.replace('\\', '/');
+            int slash = pathText.lastIndexOf('/');
+            if (slash >= 0) text = pathText.substring(slash + 1).trim();
+            if (text.isEmpty() || text.length() > 160) continue;
+            boolean exists = false;
+            for (String item : result) if (item.equalsIgnoreCase(text)) {
+                exists = true;
+                break;
+            }
+            if (!exists) result.add(text);
+            if (result.size() >= MAX_CONTEXT_TITLES) break;
+        }
+        return result;
     }
 }

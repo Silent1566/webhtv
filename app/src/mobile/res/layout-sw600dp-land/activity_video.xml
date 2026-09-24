@@ -46,6 +46,7 @@
                 style="@style/Player.Vod"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
+                app:shutter_background_color="@android:color/black"
                 app:surface_type="none" />
 
             <FrameLayout
@@ -521,6 +522,15 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent" />
 
+            <include
+                android:id="@+id/discTools"
+                layout="@layout/view_disc_menu_tools"
+                android:layout_width="wrap_content"
+                android:layout_height="48dp"
+                android:layout_gravity="top|end"
+                android:layout_margin="8dp"
+                android:visibility="gone" />
+
         </FrameLayout>
 
         <View
@@ -696,6 +706,14 @@
                             android:layout_marginEnd="8dp"
                             android:text="@string/play_short_display"
                             app:drawableTopCompat="@drawable/ic_action_short_display_shadow" />
+
+                        <com.google.android.material.textview.MaterialTextView
+                            android:id="@+id/following"
+                            style="@style/VideoActionButton"
+                            android:layout_marginEnd="8dp"
+                            android:visibility="gone"
+                            android:text="@string/following_add"
+                            app:drawableTopCompat="@drawable/ic_home_following_shadow" />
 
                         <com.google.android.material.textview.MaterialTextView
                             android:id="@+id/search"

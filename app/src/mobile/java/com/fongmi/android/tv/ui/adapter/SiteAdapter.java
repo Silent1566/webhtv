@@ -18,6 +18,7 @@ import com.fongmi.android.tv.setting.SiteHealthStore;
 import com.fongmi.android.tv.setting.SiteBlockSetting;
 import com.fongmi.android.tv.setting.SiteOrderStore;
 import com.fongmi.android.tv.setting.SiteNameStore;
+import com.fongmi.android.tv.ui.helper.SiteDialogTheme;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -26,6 +27,7 @@ import java.util.Locale;
 public class SiteAdapter extends RecyclerView.Adapter<SiteAdapter.ViewHolder> {
 
     private final OnClickListener listener;
+    private final SiteDialogTheme theme;
     private final List<Site> mAllItems;
     private final List<Site> mItems;
     private String group;
@@ -35,8 +37,9 @@ public class SiteAdapter extends RecyclerView.Adapter<SiteAdapter.ViewHolder> {
     private boolean block;
     private int column = 1;
 
-    public SiteAdapter(OnClickListener listener) {
+    public SiteAdapter(OnClickListener listener, SiteDialogTheme theme) {
         this.listener = listener;
+        this.theme = theme;
         this.mAllItems = new ArrayList<>();
         this.mItems = new ArrayList<>();
         this.column = 1;
@@ -153,7 +156,11 @@ public class SiteAdapter extends RecyclerView.Adapter<SiteAdapter.ViewHolder> {
     @NonNull
     @Override
     public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        return new ViewHolder(AdapterSiteBinding.inflate(LayoutInflater.from(parent.getContext()), parent, false));
+        AdapterSiteBinding binding = AdapterSiteBinding.inflate(LayoutInflater.from(parent.getContext()), parent, false);
+        theme.apply(binding.text);
+        theme.tint(binding.search);
+        theme.tint(binding.change);
+        return new ViewHolder(binding);
     }
 
     @Override

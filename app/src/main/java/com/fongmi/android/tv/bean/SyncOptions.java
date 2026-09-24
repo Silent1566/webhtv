@@ -18,6 +18,8 @@ public class SyncOptions {
     private boolean history = true;
     @SerializedName("keep")
     private boolean keep = true;
+    @SerializedName("follow")
+    private boolean follow;
     @SerializedName("webHome")
     private boolean webHome = true;
     @SerializedName("settings")
@@ -26,6 +28,8 @@ public class SyncOptions {
     private boolean loginState = true;
     @SerializedName("remoteRelay")
     private boolean remoteRelay;
+    @SerializedName("mpvConfig")
+    private boolean mpvConfig;
     @SerializedName("paths")
     private String paths = Setting.getSyncPaths();
 
@@ -87,6 +91,15 @@ public class SyncOptions {
         return this;
     }
 
+    public boolean isFollow() {
+        return follow;
+    }
+
+    public SyncOptions follow(boolean follow) {
+        this.follow = follow;
+        return this;
+    }
+
     public boolean isWebHome() {
         return webHome;
     }
@@ -120,6 +133,15 @@ public class SyncOptions {
 
     public SyncOptions remoteRelay(boolean remoteRelay) {
         this.remoteRelay = remoteRelay;
+        return this;
+    }
+
+    public boolean isMpvConfig() {
+        return mpvConfig;
+    }
+
+    public SyncOptions mpvConfig(boolean mpvConfig) {
+        this.mpvConfig = mpvConfig;
         return this;
     }
 

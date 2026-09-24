@@ -3,6 +3,8 @@ package com.fongmi.android.tv.utils;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 public class PushParserTest {
 
@@ -72,5 +74,42 @@ public class PushParserTest {
 
         assertEquals("https://cdn.test/movie.mp4", parsed.getUrl());
         assertEquals("莫离", parsed.getTitle());
+    }
+
+    @Test
+    public void skipsAutoTmdbForObviousNetworkLocationsWithoutTitle() {
+        assertTrue(PushParser.fromId("https://cdn.test/movie.mp4").shouldSkipAutoTmdbMatch());
+        assertTrue(PushParser.fromId("http://cdn.test/live.m3u8").shouldSkipAutoTmdbMatch());
+        assertTrue(PushParser.fromId("file:///storage/emulated/0/Movies/movie.mkv").shouldSkipAutoTmdbMatch());
+        assertTrue(PushParser.fromId("content://media/external/video/media/12").shouldSkipAutoTmdbMatch());
+        assertTrue(PushParser.fromId("smb://server/share/movie.mkv").shouldSkipAutoTmdbMatch());
+    }
+
+    @Test
+    public void skipsAutoTmdbForObviousLocalPathsWithoutTitle() {
+        assertTrue(PushParser.fromId("/storage/emulated/0/Movies/movie.mkv").shouldSkipAutoTmdbMatch());
+        assertTrue(PushParser.fromId("C:\\Movies\\movie.mkv").shouldSkipAutoTmdbMatch());
+        assertTrue(PushParser.fromId("\\\\server\\share\\movie.mkv").shouldSkipAutoTmdbMatch());
+    }
+
+    @Test
+    public void explicitPipeTitleAlwaysKeepsTmdbMatching() {
+        PushParser.Parsed network = PushParser.fromId("https://cdn.test/movie.mp4|流浪地球");
+        PushParser.Parsed local = PushParser.fromId("/storage/emulated/0/movie.mkv|流浪地球");
+        PushParser.Parsed unusual = PushParser.fromId("https://cdn.test/movie.mp4|http爱情故事");
+
+        assertTrue(network.hasExplicitTitle());
+        assertFalse(network.shouldSkipAutoTmdbMatch());
+        assertTrue(local.hasExplicitTitle());
+        assertFalse(local.shouldSkipAutoTmdbMatch());
+        assertTrue(unusual.hasExplicitTitle());
+        assertFalse(unusual.shouldSkipAutoTmdbMatch());
+    }
+
+    @Test
+    public void normalTitlesAndWeakPathHintsKeepTmdbMatching() {
+        assertFalse(PushParser.fromId("流浪地球").shouldSkipAutoTmdbMatch());
+        assertFalse(PushParser.fromId("Fate/stay night").shouldSkipAutoTmdbMatch());
+        assertFalse(PushParser.fromId("movie.mkv").shouldSkipAutoTmdbMatch());
     }
 }

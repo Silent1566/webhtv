@@ -46,7 +46,7 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
     public interface Listener {
         void onItemClick(Episode item);
 
-        void onItemLongClick(View anchor, Episode item, int episodeNumber);
+        void onItemLongClick(View anchor, Episode item, int episodeNumber, TmdbEpisode tmdbEpisode);
     }
 
     private final Listener listener;
@@ -213,6 +213,7 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
         if (!TmdbEpisodeMatcher.shouldApply(episode, tmdbEpisode, episodeNumber)) {
             tmdbEpisode = null;
         }
+        TmdbEpisode boundTmdbEpisode = tmdbEpisode;
         // 匹配被拒时用文件自身集号（无有效集号则回退文件名），避免 position 回退值泄漏到标题
         int titleNumber = tmdbEpisode != null ? episodeNumber : episode.getNumber();
         String tmdbTitle = tmdbEpisode != null ? tmdbEpisode.getTitle() : "";
@@ -233,7 +234,7 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
         boolean showVisual = hasImage;
         boolean darkSurface = showVisual || !light || isNativeEnhanced();
 
-        applyCardSize(holder, compact, pageHasTmdbEpisodeData);
+        applyCardSize(holder, position, compact, pageHasTmdbEpisodeData);
         holder.binding.textPanel.setGravity(showVisual ? Gravity.NO_GRAVITY : Gravity.CENTER_VERTICAL);
         if (isNativeEnhanced()) {
             boolean phoneWidth = isPhoneWidth(holder.itemView);
@@ -241,12 +242,13 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
             holder.binding.index.setTextSize(nativeEnhancedIndexTextSize(phoneWidth, mode));
             holder.binding.title.setVisibility(View.GONE);
             holder.binding.date.setText(nativeEnhancedMeta(tmdbEpisode));
-            boolean showDate = !TextUtils.isEmpty(holder.binding.date.getText()) && mode == Mode.GRID;
-            holder.binding.date.setVisibility(showDate ? View.VISIBLE : View.GONE);
-            bindFileSize(holder, nativeEnhancedFileSizeBadge(fileSize, cleanTitle), showDate);
-            holder.binding.badge.setVisibility(View.GONE);
+            boolean showMeta = !TextUtils.isEmpty(holder.binding.date.getText());
+            holder.binding.date.setVisibility(showMeta ? View.VISIBLE : View.GONE);
+            bindFileSize(holder, nativeEnhancedFileSizeBadge(fileSize, cleanTitle), showMeta);
+            holder.binding.badge.setText(nativeEnhancedScore(tmdbEpisode));
+            holder.binding.badge.setVisibility(TextUtils.isEmpty(holder.binding.badge.getText()) ? View.GONE : View.VISIBLE);
             holder.binding.overview.setText(overview);
-            holder.binding.overview.setVisibility(mode == Mode.GRID && !TextUtils.isEmpty(overview) ? View.VISIBLE : View.GONE);
+            holder.binding.overview.setVisibility(TextUtils.isEmpty(overview) ? View.GONE : View.VISIBLE);
         } else if (mode == Mode.GRID) {
             holder.binding.index.setText(cleanTitle);
             holder.binding.index.setTextSize(14f);
@@ -302,12 +304,12 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
         holder.binding.getRoot().setOnKeyListener(keyListener);
         holder.binding.getRoot().setOnClickListener(view -> listener.onItemClick(episode));
         holder.binding.getRoot().setOnLongClickListener(view -> {
-            listener.onItemLongClick(view, episode, episodeNumber);
+            listener.onItemLongClick(view, episode, episodeNumber, boundTmdbEpisode);
             return true;
         });
     }
 
-    private void applyCardSize(ViewHolder holder, boolean compact, boolean hasTmdbEpisodeData) {
+    private void applyCardSize(ViewHolder holder, int position, boolean compact, boolean hasTmdbEpisodeData) {
         View root = holder.binding.getRoot();
         ViewGroup.LayoutParams params = root.getLayoutParams();
         int width;
@@ -330,8 +332,14 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
         params.height = height;
         if (params instanceof ViewGroup.MarginLayoutParams marginParams) {
             int gridSpacing = dp(holder.itemView, standardGridItem ? 8 : isNativeEnhanced() ? 12 : 8);
-            int marginStart = mode == Mode.GRID ? gridSpacing / 2 : 0;
-            int marginEnd = mode == Mode.GRID ? gridSpacing - marginStart : dp(holder.itemView, 12);
+            // Mirror SpaceItemDecoration used by the playback page so the first/last
+            // columns share the content edges while every grid card keeps equal width.
+            // The bind position is authoritative; do not read holder state mid-bind.
+            int gridColumn = position >= 0 ? position % gridSpanCount : 0;
+            int marginStart = mode == Mode.GRID ? gridSpacing * gridColumn / gridSpanCount : 0;
+            int marginEnd = mode == Mode.GRID
+                    ? gridSpacing - gridSpacing * (gridColumn + 1) / gridSpanCount
+                    : dp(holder.itemView, 12);
             int bottomMargin = dp(holder.itemView, isNativeEnhanced() && mode == Mode.GRID && hasTmdbEpisodeData ? 16 : mode == Mode.GRID ? 10 : 0);
             layoutChanged |= marginParams.getMarginStart() != marginStart
                     || marginParams.getMarginEnd() != marginEnd
@@ -646,6 +654,12 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
         if (episode.getVoteAverage() > 0) parts.add("★ " + String.format(Locale.US, "%.1f", episode.getVoteAverage()));
         if (episode.getRuntime() > 0) parts.add(episode.getRuntime() + "m");
         return TextUtils.join(" · ", parts);
+    }
+
+    private String nativeEnhancedScore(TmdbEpisode episode) {
+        if (episode == null || episode.getVoteAverage() <= 0) return "";
+        if (Util.isMobile()) return "★" + mobileRating(episode.getVoteAverage());
+        return "★ " + String.format(Locale.US, "%.1f", episode.getVoteAverage());
     }
 
     private String mobileRating(double rating) {

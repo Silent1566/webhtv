@@ -1,7 +1,5 @@
 package io.github.anilbeesetti.nextlib.media3ext.ffdecoder;
 
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
@@ -10,7 +8,6 @@ import org.junit.Test;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.InputStream;
-import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.zip.ZipEntry;
@@ -19,25 +16,8 @@ import java.util.zip.ZipFile;
 public class FfmpegVc1SupportTest {
 
     private static final String AAR_PATH = "third_party/maven/io/github/anilbeesetti/nextlib-media3ext/"
-            + "1.10.0-0.12.1-fongmi-softload-av3a-r1/"
-            + "nextlib-media3ext-1.10.0-0.12.1-fongmi-softload-av3a-r1.aar";
-
-    @Test
-    public void codecName_mapsWvc1ToVc1() {
-        assertEquals("vc1", FfmpegLibrary.getCodecName("video/wvc1"));
-    }
-
-    @Test
-    public void extraData_returnsFirstInitializationBlockForWvc1() throws Exception {
-        byte[] initializationData = {0x01, 0x02, 0x03, 0x04};
-        Class<?> decoderClass = Class.forName("io.github.anilbeesetti.nextlib.media3ext.ffdecoder.FfmpegVideoDecoder");
-        Method method = decoderClass.getDeclaredMethod("getExtraData", String.class, List.class);
-        method.setAccessible(true);
-
-        byte[] result = (byte[]) method.invoke(null, "video/wvc1", List.of(initializationData));
-
-        assertArrayEquals(initializationData, result);
-    }
+            + "1.10.0-0.12.1-fongmi-softload-av3a-ffmpeg901-r3/"
+            + "nextlib-media3ext-1.10.0-0.12.1-fongmi-softload-av3a-ffmpeg901-r3.aar";
 
     @Test
     public void bundledFfmpeg_hasVc1DecoderForEveryAbi() throws Exception {

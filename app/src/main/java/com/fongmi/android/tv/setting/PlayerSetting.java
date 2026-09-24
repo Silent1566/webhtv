@@ -25,10 +25,6 @@ public class PlayerSetting {
     public static final int[] KERNEL_ORDER = {EXO, IJK, MPV, SYSTEM};
     public static final int RENDER_SURFACE = 0;
     public static final int RENDER_TEXTURE = 1;
-    public static final int FFMPEG_MODE_NEXTLIB = 0;
-    public static final int FFMPEG_MODE_OFFICIAL = 1;
-    public static final int FFMPEG_MODE_SIMPLE = 2;
-    public static final int FFMPEG_MODE_AUTO = 3;
     public static final int MPV_RENDER_OPENGL = 0;
     public static final int MPV_RENDER_VULKAN = 1;
     public static final int AUDIO_BACKGROUND_ARTWORK = 0;
@@ -62,7 +58,6 @@ public class PlayerSetting {
     private static final int DEFAULT_PLAY_CACHE_OPTION = 0;
     private static final String KEY_IMMERSIVE_AUDIO_PLAYBACK = "immersive_audio_playback";
     private static final String KEY_FAILURE_FALLBACK = "player_failure_fallback";
-    private static final String KEY_FFMPEG_MODE = "ffmpeg_mode";
     private static final String KEY_CUSTOM_ASPECT_WIDTH = "custom_aspect_width";
     private static final String KEY_CUSTOM_ASPECT_HEIGHT = "custom_aspect_height";
     private static final String KEY_BRIGHTNESS_MIGRATED = "player_brightness_migrated";
@@ -450,6 +445,15 @@ public class PlayerSetting {
         Prefers.put("player_auto_play", autoPlay);
     }
 
+    /** Whether MPV should enter the HDMV Blu-ray menu instead of the main title. */
+    public static boolean isBlurayMenu() {
+        return Prefers.getBoolean("playback_bluray_menu", false);
+    }
+
+    public static void putBlurayMenu(boolean enabled) {
+        Prefers.put("playback_bluray_menu", enabled);
+    }
+
     public static int getBackground() {
         int stored = Prefers.getInt("background", BackgroundPlaybackPolicy.ON);
         int normalized = BackgroundPlaybackPolicy.normalize(stored);
@@ -718,67 +722,6 @@ public class PlayerSetting {
 
     public static void putVideoPrefer(boolean videoPrefer) {
         KernelPerformanceSetting.putVideoPrefer(getPlayer(), videoPrefer);
-    }
-
-    // AUTO 模式失败遍历顺序：能力从全到简（NextLib 有 ffmpeg 音视频兜底+解码调度调优；Simple 有音视频兜底；Official 纯官方）。
-    public static final int[] FFMPEG_AUTO_ORDER = {FFMPEG_MODE_NEXTLIB, FFMPEG_MODE_SIMPLE, FFMPEG_MODE_OFFICIAL};
-
-    // 进程内运行时覆盖，仅在设置为 AUTO 时生效，用于失败链遍历具体模式；不写盘。
-    private static volatile int ffmpegModeOverride = NONE;
-
-    public static int getFFmpegMode() {
-        int defaultMode = getDefaultFFmpegMode();
-        return sanitizeFFmpegMode(Prefers.getInt(KEY_FFMPEG_MODE, defaultMode), defaultMode);
-    }
-
-    public static void putFFmpegMode(int mode) {
-        Prefers.put(KEY_FFMPEG_MODE, sanitizeFFmpegMode(mode, getDefaultFFmpegMode()));
-        clearFFmpegModeOverride();
-    }
-
-    // ExoUtil 构造渲染器时使用的具体模式。AUTO 时解析成运行时覆盖，无覆盖则取遍历首项。
-    public static int getEffectiveFFmpegMode() {
-        int mode = getFFmpegMode();
-        if (mode != FFMPEG_MODE_AUTO) return mode;
-        int override = ffmpegModeOverride;
-        return isConcreteFFmpegMode(override) ? override : FFMPEG_AUTO_ORDER[0];
-    }
-
-    public static boolean isAutoFFmpegMode() {
-        return getFFmpegMode() == FFMPEG_MODE_AUTO;
-    }
-
-    public static void setFFmpegModeOverride(int mode) {
-        ffmpegModeOverride = isConcreteFFmpegMode(mode) ? mode : NONE;
-    }
-
-    public static void clearFFmpegModeOverride() {
-        ffmpegModeOverride = NONE;
-    }
-
-    static int getDefaultFFmpegMode() {
-        return sanitizeFFmpegMode(App.get().getResources().getInteger(R.integer.default_ffmpeg_mode), FFMPEG_MODE_SIMPLE);
-    }
-
-    static int sanitizeFFmpegMode(int mode, int defaultMode) {
-        if (isFFmpegMode(mode)) return mode;
-        return isFFmpegMode(defaultMode) ? defaultMode : FFMPEG_MODE_SIMPLE;
-    }
-
-    private static boolean isFFmpegMode(int mode) {
-        return isConcreteFFmpegMode(mode) || mode == FFMPEG_MODE_AUTO;
-    }
-
-    private static boolean isConcreteFFmpegMode(int mode) {
-        return mode == FFMPEG_MODE_NEXTLIB || mode == FFMPEG_MODE_OFFICIAL || mode == FFMPEG_MODE_SIMPLE;
-    }
-
-    public static boolean useNextLibFFmpeg() {
-        return getEffectiveFFmpegMode() == FFMPEG_MODE_NEXTLIB;
-    }
-
-    public static void putUseNextLibFFmpeg(boolean useNextLib) {
-        putFFmpegMode(useNextLib ? FFMPEG_MODE_NEXTLIB : FFMPEG_MODE_OFFICIAL);
     }
 
     public static boolean isPreferAAC() {

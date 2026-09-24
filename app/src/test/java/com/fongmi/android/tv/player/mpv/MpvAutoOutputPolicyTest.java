@@ -9,6 +9,24 @@ import org.junit.Test;
 public class MpvAutoOutputPolicyTest {
 
     @Test
+    public void failedDirectStaysOnGpuAcrossSameItemEvaluations() {
+        MpvAutoOutputPolicy.Decision tv = MpvAutoOutputPolicy.evaluate(1920, 1080, true, true, false, false);
+        for (int rebuild = 0; rebuild < 3; rebuild++) {
+            MpvAutoOutputPolicy.Decision safe = MpvAutoOutputPolicy.afterSurfaceFailure(tv, true);
+            assertFalse(safe.eligible());
+            assertEquals("surface-direct-failed-for-item", safe.reason());
+            assertEquals(MpvAutoOutputPolicy.Transition.KEEP_GPU,
+                    MpvAutoOutputPolicy.transition(safe.eligible(), false));
+            assertEquals(MpvAutoOutputPolicy.Transition.LEAVE_SURFACE_DIRECT,
+                    MpvAutoOutputPolicy.transition(safe.eligible(), true));
+        }
+        // New items/explicit settings changes clear the failure in PlayerManager.
+        assertTrue(MpvAutoOutputPolicy.afterSurfaceFailure(tv, false).eligible());
+        MpvAutoOutputPolicy.Decision mobile = MpvAutoOutputPolicy.evaluate(1920, 1080, true, false, false, false);
+        assertEquals(mobile, MpvAutoOutputPolicy.afterSurfaceFailure(mobile, false));
+    }
+
+    @Test
     public void acceptsTvHardwareDecodeAtAnyResolution() {
         assertTrue(MpvAutoOutputPolicy.evaluate(3840, 1632, true, true, false, false).eligible());
         assertTrue(MpvAutoOutputPolicy.evaluate(1920, 1080, true, true, false, false).eligible());
@@ -52,6 +70,38 @@ public class MpvAutoOutputPolicyTest {
         assertFalse(MpvAutoOutputPolicy.evaluate(
                 3840, 2160, true, true, false, false,
                 MpvAutoOutputPolicy.DolbyVisionSupport.UNSUPPORTED, 7, false).eligible());
+    }
+
+    @Test
+    public void usesHevcHdr10ForUnsupportedProfile8Only() {
+        MpvAutoOutputPolicy.Decision decision = MpvAutoOutputPolicy.evaluate(
+                3840, 2160, true, true, false, false,
+                MpvAutoOutputPolicy.DolbyVisionSupport.UNSUPPORTED, 8, false,
+                MpvAutoOutputPolicy.DolbyVisionSupport.SUPPORTED);
+        assertTrue(decision.eligible());
+        assertEquals("dv8-hdr10-base-layer", decision.reason());
+    }
+
+    @Test
+    public void keepsProfile8SoftwareWhenHevcCapabilityIsUnknownOrUnsupported() {
+        assertFalse(MpvAutoOutputPolicy.evaluate(
+                3840, 2160, true, true, false, false,
+                MpvAutoOutputPolicy.DolbyVisionSupport.UNSUPPORTED, 8, false,
+                MpvAutoOutputPolicy.DolbyVisionSupport.UNKNOWN).eligible());
+        assertFalse(MpvAutoOutputPolicy.evaluate(
+                3840, 2160, true, true, false, false,
+                MpvAutoOutputPolicy.DolbyVisionSupport.UNSUPPORTED, 8, false,
+                MpvAutoOutputPolicy.DolbyVisionSupport.UNSUPPORTED).eligible());
+    }
+
+    @Test
+    public void nativeProfile8AlwaysWinsOverHdr10Fallback() {
+        MpvAutoOutputPolicy.Decision decision = MpvAutoOutputPolicy.evaluate(
+                3840, 2160, true, true, false, false,
+                MpvAutoOutputPolicy.DolbyVisionSupport.SUPPORTED, 8, false,
+                MpvAutoOutputPolicy.DolbyVisionSupport.SUPPORTED);
+        assertTrue(decision.eligible());
+        assertEquals("dolby-vision-hw-supported", decision.reason());
     }
 
     @Test

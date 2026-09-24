@@ -115,6 +115,18 @@ public class Spider extends com.github.catvod.crawler.Spider {
         return toStr(app.callAttr("action", obj, action));
     }
 
+    public String subtitleInit(String config) {
+        return toStr(app.callAttr("subtitle_init", obj, config == null ? "" : config));
+    }
+
+    public String subtitleSearch(String request) {
+        return toStr(app.callAttr("subtitle_search", obj, request));
+    }
+
+    public String subtitleResolve(String request) {
+        return toStr(app.callAttr("subtitle_resolve", obj, request));
+    }
+
     @Override
     public void destroy() {
         try {

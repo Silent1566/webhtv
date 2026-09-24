@@ -17,12 +17,21 @@ public final class MpvDirectAudioPolicy {
 
     public static Selection select(List<Candidate> candidates, String currentId,
                                    String passthroughCodecs) {
+        return select(candidates, currentId, passthroughCodecs, false);
+    }
+
+    public static Selection select(List<Candidate> candidates, String currentId,
+                                   String passthroughCodecs,
+                                   boolean multichannelPcm) {
         Candidate current = findById(candidates, currentId);
         if (current == null) return new Selection(currentId, false, "current-track-unavailable");
         if (supportsPassthrough(current, passthroughCodecs)) {
             return new Selection(current.id(), false, "current-track-passthrough");
         }
         if (isStereo(current)) return new Selection(current.id(), false, "current-track-stereo");
+        if (multichannelPcm) {
+            return new Selection(current.id(), false, "current-track-multichannel-pcm");
+        }
 
         Candidate stereo = bestCandidate(candidates, current, true);
         if (stereo != null) return new Selection(stereo.id(), true, "same-language-stereo");

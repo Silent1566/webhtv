@@ -55,6 +55,13 @@ public class ImportedAdRuleCandidateStoreTest {
         assertEquals(ImportedAdRuleCandidate.STATUS_IGNORED, ignored.getStatus());
     }
 
+    @Test
+    public void emptyBatchAndNullSingleImportAreStorageFreeNoOps() {
+        assertFalse(ImportedAdRuleCandidateStore.importCandidate(null));
+        assertEquals(0, ImportedAdRuleCandidateStore.importCandidates(List.of(), true));
+        assertEquals(0, ImportedAdRuleCandidateStore.ignoreCandidates(List.of()));
+    }
+
     private static ImportedAdRuleCandidate candidate(String id, String status) {
         ImportedAdRuleCandidate candidate = new ImportedAdRuleCandidate();
         candidate.setId(id);

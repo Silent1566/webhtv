@@ -4,7 +4,9 @@ import android.text.TextUtils;
 
 import com.chaquo.python.PyObject;
 import com.chaquo.python.Python;
+import com.github.catvod.crawler.SpiderDebug;
 import com.github.catvod.net.OkHttp;
+import com.github.catvod.utils.Asset;
 import com.github.catvod.utils.Path;
 import com.github.catvod.utils.Util;
 
@@ -19,6 +21,11 @@ public class Loader {
 
     public Loader() {
         if (!Python.isStarted()) Python.start(Platform.create());
+        try {
+            Python.getInstance().getModule("webhtv_logging").callAttr("install");
+        } catch (RuntimeException error) {
+            SpiderDebug.log("python-spider", error);
+        }
         app = Python.getInstance().getModule("app");
     }
 
@@ -30,6 +37,11 @@ public class Loader {
     }
 
     private String source(String api, String name) {
+        if (api.startsWith("assets://")) {
+            String source = Asset.read(api);
+            if (TextUtils.isEmpty(source)) throw new IllegalStateException("Empty asset python script: " + api);
+            return source;
+        }
         if (!api.startsWith("http")) return api;
         File cache = Path.py(name);
         try (Response response = OkHttp.newCall(OkHttp.client(15000), api).execute()) {

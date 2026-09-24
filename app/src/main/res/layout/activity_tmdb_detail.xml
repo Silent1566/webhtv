@@ -110,6 +110,22 @@
                     android:visibility="gone"
                     app:backgroundTint="#3A4652"
                     app:strokeColor="@android:color/transparent" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/followingTop"
+                    style="?attr/materialButtonOutlinedStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:minHeight="40dp"
+                    android:minWidth="72dp"
+                    android:text="@string/following"
+                    android:textColor="@android:color/white"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:visibility="gone"
+                    app:backgroundTint="#3A4652"
+                    app:strokeColor="@android:color/transparent" />
             </LinearLayout>
 
             <!-- 占位 + 焦点桥梁：真正的 playerPanel 已提升到 root 层，避免全屏切换时 SurfaceView reparent 导致黑屏。
@@ -182,6 +198,28 @@
                     android:paddingEnd="4dp"
                     android:singleLine="true"
                     android:text="@string/keep"
+                    android:textColor="@android:color/white"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    app:backgroundTint="#3A4652"
+                    app:layout_flexBasisPercent="0%"
+                    app:layout_flexGrow="1"
+                    app:strokeColor="@android:color/transparent" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/followingFusion"
+                    style="?attr/materialButtonOutlinedStyle"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:includeFontPadding="false"
+                    android:maxLines="1"
+                    android:minHeight="42dp"
+                    android:minWidth="0dp"
+                    android:paddingStart="4dp"
+                    android:paddingEnd="4dp"
+                    android:singleLine="true"
+                    android:text="@string/following"
                     android:textColor="@android:color/white"
                     android:textSize="12sp"
                     android:textStyle="bold"
@@ -405,6 +443,27 @@
                                 android:paddingStart="0dp"
                                 android:paddingEnd="0dp"
                                 android:singleLine="true"
+                                android:textColor="@android:color/white"
+                                android:textSize="13sp"
+                                app:backgroundTint="#2B3743"
+                                app:strokeColor="@android:color/transparent" />
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/following"
+                                style="?attr/materialButtonOutlinedStyle"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="8dp"
+                                android:layout_weight="1"
+                                android:ellipsize="end"
+                                android:includeFontPadding="false"
+                                android:maxLines="1"
+                                android:minHeight="42dp"
+                                android:minWidth="0dp"
+                                android:paddingStart="0dp"
+                                android:paddingEnd="0dp"
+                                android:singleLine="true"
+                                android:text="@string/following"
                                 android:textColor="@android:color/white"
                                 android:textSize="13sp"
                                 app:backgroundTint="#2B3743"
@@ -963,6 +1022,7 @@
             style="@style/Player.Vod"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
+            app:shutter_background_color="@android:color/black"
             app:surface_type="none" />
 
         <master.flame.danmaku.ui.widget.DanmakuView
@@ -976,32 +1036,6 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent" />
 
-        <LinearLayout
-            android:id="@+id/playerProgress"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:gravity="center"
-            android:orientation="vertical"
-            android:visibility="gone">
-
-            <ProgressBar
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:indeterminateTint="@android:color/white" />
-
-            <TextView
-                android:id="@+id/playerProgressTraffic"
-                style="@style/Shadow"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:fontFeatureSettings="tnum"
-                android:textColor="@android:color/white"
-                android:textSize="13sp"
-                android:visibility="gone" />
-
-        </LinearLayout>
 
         <TextView
             android:id="@+id/playerError"
@@ -1092,6 +1126,32 @@
                 android:progressTint="#2196F3" />
 
         </LinearLayout>
+
+        <FrameLayout
+            android:id="@+id/playerLoading"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone">
+
+            <com.google.android.material.progressindicator.CircularProgressIndicator
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:indeterminate="true"
+                app:indicatorColor="@color/white" />
+
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/playerLoadingTraffic"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:layout_marginTop="44dp"
+                android:fontFeatureSettings="tnum"
+                android:textColor="@color/white"
+                android:textSize="16sp"
+                android:visibility="gone" />
+
+        </FrameLayout>
 
         <TextView
             android:id="@+id/playerDisplayTraffic"

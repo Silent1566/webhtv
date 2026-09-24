@@ -245,23 +245,4 @@ public class PlayerManagerTest {
         assertEquals(0, PlayerManager.httpStatus(new IOException("Socket closed")));
     }
 
-    @Test
-    public void nextUntriedFfmpegMode_walksOrderThenExhausts() {
-        int[] order = PlayerSetting.FFMPEG_AUTO_ORDER;
-        boolean[] tried = new boolean[order.length];
-
-        int first = PlayerManager.nextUntriedFfmpegMode(order, tried);
-        assertEquals(order[0], first);
-        tried[0] = true;
-
-        int second = PlayerManager.nextUntriedFfmpegMode(order, tried);
-        assertEquals(order[1], second);
-        tried[1] = true;
-
-        int third = PlayerManager.nextUntriedFfmpegMode(order, tried);
-        assertEquals(order[2], third);
-        tried[2] = true;
-
-        assertEquals(PlayerSetting.NONE, PlayerManager.nextUntriedFfmpegMode(order, tried));
-    }
 }

@@ -72,6 +72,50 @@ public class MpvDolbyVisionFallbackPolicyTest {
                         PlaybackPerformanceSetting.DV7_HANDLING_P81));
     }
 
+    @Test
+    public void explicitFelWinsEvenWhenNativeDv7IsSupported() {
+        for (MpvAutoOutputPolicy.DolbyVisionSupport nativeSupport
+                : MpvAutoOutputPolicy.DolbyVisionSupport.values()) {
+            for (MpvAutoOutputPolicy.DolbyVisionSupport p81Support
+                    : MpvAutoOutputPolicy.DolbyVisionSupport.values()) {
+                assertEquals(MpvPlayerEngine.DV7_FEL,
+                        MpvPlayerEngine.selectDv7Handling(nativeSupport, p81Support,
+                                PlaybackPerformanceSetting.DV7_HANDLING_FEL));
+            }
+        }
+    }
+
+    @Test
+    public void felPreservesOriginalLayersAndRpu() {
+        assertEquals("preserve", MpvPlayerEngine.dv7DemuxerOption(MpvPlayerEngine.DV7_FEL));
+        assertEquals("p81", MpvPlayerEngine.dv7DemuxerOption(MpvPlayerEngine.DV7_P81));
+        assertEquals("hdr10", MpvPlayerEngine.dv7DemuxerOption(MpvPlayerEngine.DV7_HDR10));
+        assertEquals("preserve", MpvPlayerEngine.dv7DemuxerOption(MpvPlayerEngine.DV7_PRESERVE));
+    }
+
+    @Test
+    public void profile8SelectsHdr10OnlyWithRegularHevcSupport() {
+        assertEquals(MpvPlayerEngine.DV8_HDR10,
+                MpvPlayerEngine.selectDv8Handling(
+                        MpvAutoOutputPolicy.DolbyVisionSupport.UNSUPPORTED,
+                        MpvAutoOutputPolicy.DolbyVisionSupport.SUPPORTED));
+        assertEquals(MpvPlayerEngine.DV8_PRESERVE,
+                MpvPlayerEngine.selectDv8Handling(
+                        MpvAutoOutputPolicy.DolbyVisionSupport.UNSUPPORTED,
+                        MpvAutoOutputPolicy.DolbyVisionSupport.UNKNOWN));
+        assertEquals(MpvPlayerEngine.DV8_PRESERVE,
+                MpvPlayerEngine.selectDv8Handling(
+                        MpvAutoOutputPolicy.DolbyVisionSupport.SUPPORTED,
+                        MpvAutoOutputPolicy.DolbyVisionSupport.SUPPORTED));
+    }
+
+    @Test
+    public void configuredProfile8FallbackIsReportedSeparatelyFromDv7() {
+        MpvPlayer.VideoTrackDiagnostics details = details(8);
+        assertTrue(MpvPlayerEngine.isConfiguredDv8Hdr10Fallback(details, true, true));
+        assertFalse(MpvPlayerEngine.isConfiguredDv7Hdr10Fallback(details, true, true));
+    }
+
     private static MpvPlayer.VideoTrackDiagnostics details(int profile) {
         return new MpvPlayer.VideoTrackDiagnostics(
                 "dvhe.0" + profile + ".06", profile, 6,

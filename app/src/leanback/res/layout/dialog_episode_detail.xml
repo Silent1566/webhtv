@@ -32,6 +32,7 @@
                 android:focusable="true"
                 android:focusedByDefault="true"
                 android:foreground="@drawable/selector_episode_photo"
+                android:nextFocusDown="@id/photosGrid"
                 app:cardCornerRadius="8dp"
                 app:cardElevation="4dp">
 

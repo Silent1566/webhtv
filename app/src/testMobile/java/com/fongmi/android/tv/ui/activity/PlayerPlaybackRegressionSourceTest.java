@@ -12,6 +12,19 @@ import static org.junit.Assert.assertTrue;
 public class PlayerPlaybackRegressionSourceTest {
 
     @Test
+    public void episodeNavigationUsesTheFullFlagListAcrossRangePages() throws Exception {
+        String mobile = readMobileJava("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java");
+        int adjacent = mobile.indexOf("private Episode getAdjacentEpisode(int offset)");
+        int adjacentEnd = mobile.indexOf("\n    private ", adjacent + 1);
+        String adjacentBlock = mobile.substring(adjacent, adjacentEnd);
+
+        assertTrue("range-paged episode navigation must resolve adjacent episodes from the full selected flag",
+                adjacentBlock.contains("getFlag().getEpisodes()"));
+        assertFalse("range-paged episode navigation must not stop at the currently displayed page",
+                adjacentBlock.contains("mEpisodeAdapter.getItems()"));
+    }
+
+    @Test
     public void customPlayerButtonOrderPreservesSpacerAndRefreshesVisibleFocusChain() throws Exception {
         String source = readMainJava("com", "fongmi", "android", "tv", "setting", "PlayerButtonSetting.java");
         int applyOrder = source.indexOf("public static void applyOrder(ViewGroup container, Map<String, View> views)");
@@ -225,6 +238,80 @@ public class PlayerPlaybackRegressionSourceTest {
                 releaseBlock.contains("mService.clearNavigationCallback(getNavigationCallback());"));
         assertFalse("callback cleanup must not depend on a playback-key ownership check",
                 releaseBlock.contains("if (owner) mService.clearNavigationCallback(getNavigationCallback());"));
+    }
+
+    @Test
+    public void mobileExoStartupPassesResumePositionAndSkipsTheSecondRestoreSeek() throws Exception {
+        String mobile = readMobileJava("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java");
+        String playback = readMainJava("com", "fongmi", "android", "tv", "ui", "activity", "PlaybackActivity.java");
+        int setPlayer = mobile.indexOf("private void setPlayer(Result result)");
+        int setPlayerEnd = mobile.indexOf("\n    private ", setPlayer + 1);
+        int setPosition = mobile.indexOf("private void setPosition()");
+        int setPositionEnd = mobile.indexOf("\n    private ", setPosition + 1);
+        int onPrepare = mobile.indexOf("protected void onPrepare()");
+        int startPlayerOverload = playback.indexOf("protected void startPlayer(String key, Result result, boolean useParse, long timeout,");
+
+        assertTrue("mobile startup must calculate the history position before dispatching the first player start",
+                setPlayer >= 0 && setPlayerEnd > setPlayer
+                        && mobile.indexOf("mInitialPlaybackPosition = resolveInitialPlaybackPosition();", setPlayer) > setPlayer
+                        && mobile.indexOf("startPlayer(getHistoryKey(), result, isUseParse(), getSite().getTimeout(), buildMetadata(), mInitialPlaybackPosition);", setPlayer) > setPlayer);
+        assertTrue("onPrepare must keep the existing position setup hook",
+                onPrepare >= 0 && mobile.indexOf("setPosition();", onPrepare) > onPrepare);
+        assertTrue("mobile position restoration must consume the initial position instead of seeking to it again",
+                setPosition >= 0 && setPositionEnd > setPosition
+                        && mobile.indexOf("long position = resolveInitialPlaybackPosition();", setPosition) > setPosition
+                        && mobile.indexOf("if (mInitialPlaybackPosition == position)", setPosition) > setPosition
+                        && mobile.indexOf("mInitialPlaybackPosition = C.TIME_UNSET;", setPosition) > setPosition
+                        && mobile.indexOf("player().seekTo(position);", setPosition) > mobile.indexOf("mInitialPlaybackPosition = C.TIME_UNSET;", setPosition)
+                        && mobile.indexOf("player().seekTo(position);", setPosition) < setPositionEnd);
+        assertTrue("the base activity must expose the position-aware start overload used by mobile",
+                startPlayerOverload >= 0 && playback.indexOf("player().start(PlaySpec.from(result, key, metadata), timeout, shouldAutoPlay(), startPositionMs);", startPlayerOverload) > startPlayerOverload);
+    }
+
+    @Test
+    public void livePlaybackAlwaysAutoplaysWhileVodUsesTheConfiguredPolicy() throws Exception {
+        String playback = readMainJava("com", "fongmi", "android", "tv", "ui", "activity", "PlaybackActivity.java");
+        String mobileLive = readMobileJava("com", "fongmi", "android", "tv", "ui", "activity", "LiveActivity.java");
+        String leanbackLive = readLeanbackJava("com", "fongmi", "android", "tv", "ui", "activity", "LiveActivity.java");
+
+        assertTrue("VOD playback must keep the user-configured autoplay policy",
+                playback.contains("protected boolean shouldAutoPlay() {\n        return PlayerSetting.isAutoPlay();\n    }")
+                        && playback.contains("player().parse(key, result, useParse, metadata, shouldAutoPlay(), startPositionMs);")
+                        && playback.contains("player().start(PlaySpec.from(result, key, metadata), timeout, shouldAutoPlay(), startPositionMs);"));
+        assertAlwaysAutoplay(mobileLive, "mobile live playback");
+        assertAlwaysAutoplay(leanbackLive, "leanback live playback");
+    }
+
+    @Test
+    public void episodeSwitchOverwritesPreviousHistoryPositionBeforeStartingTheNewEpisode() throws Exception {
+        String mobile = readMobileJava("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java");
+        String leanback = readLeanbackJava("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java");
+
+        assertEpisodeSwitchRestoresOnlyTargetEpisodePosition(mobile, "mobile");
+        assertEpisodeSwitchRestoresOnlyTargetEpisodePosition(leanback, "leanback");
+    }
+
+    private static void assertEpisodeSwitchRestoresOnlyTargetEpisodePosition(String source, String owner) {
+        int method = source.indexOf("private void updateHistory(Episode item)");
+        int methodEnd = source.indexOf("\n    private ", method + 1);
+        int savePrevious = source.indexOf("updatePlaybackHistoryPosition();", method);
+        int readTarget = source.indexOf("EpisodePositionCache.EpisodePosition cached", savePrevious);
+        int restoreTarget = source.indexOf("mHistory.setPosition(cached.position);", readTarget);
+        int clearMissingTarget = source.indexOf("mHistory.setPosition(C.TIME_UNSET);", restoreTarget);
+        int bindTarget = source.indexOf("mHistory.setEpisodeUrl(item.getUrl());", clearMissingTarget);
+
+        assertTrue(owner + " episode switch must replace the previous episode position with the target cache or TIME_UNSET before binding the target episode",
+                method >= 0 && methodEnd > method
+                        && savePrevious > method && savePrevious < readTarget
+                        && readTarget < restoreTarget
+                        && restoreTarget < clearMissingTarget
+                        && clearMissingTarget < bindTarget
+                        && bindTarget < methodEnd);
+    }
+
+    private static void assertAlwaysAutoplay(String source, String owner) {
+        assertTrue(owner + " must override the VOD autoplay preference",
+                source.contains("@Override\n    protected boolean shouldAutoPlay() {\n        return true;\n    }"));
     }
 
     private static void assertFocusRefreshAfter(String source, String methodSignature, String visibilityMutation) {

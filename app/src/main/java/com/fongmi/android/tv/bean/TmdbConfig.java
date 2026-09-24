@@ -2,15 +2,22 @@ package com.fongmi.android.tv.bean;
 
 import android.text.TextUtils;
 
+import com.fongmi.android.tv.api.config.SubscriptionTmdbCredentialStore;
+import com.fongmi.android.tv.setting.Setting;
+import com.fongmi.android.tv.utils.TmdbProxy;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.regex.Pattern;
 
 public class TmdbConfig {
+
+    public static final String ORIGIN_USER = "USER";
+    public static final String ORIGIN_TRANSIENT_SUBSCRIPTION = "TRANSIENT_SUBSCRIPTION";
 
     private static final Gson GSON = new Gson();
     private static final String DEFAULT_API_BASE = "https://api.tmdb.org/3";
@@ -34,6 +41,14 @@ public class TmdbConfig {
 
     @SerializedName("apiBase")
     private String apiBase;
+    @SerializedName("apiAuto")
+    private Boolean apiAuto;
+    @SerializedName("apiRouteConfigured")
+    private Boolean apiRouteConfigured;
+    @SerializedName("apiRouteMode")
+    private String apiRouteMode;
+    @SerializedName(value = "proxyBase", alternate = {"proxyHost", "tmdbProxy", "tmdbProxyBase"})
+    private String proxyBase;
     @SerializedName("apiKey")
     private String apiKey;
     @SerializedName(value = "apikey", alternate = {"api_key", "tmdbApiKey", "key"})
@@ -46,6 +61,12 @@ public class TmdbConfig {
     private String language;
     @SerializedName("imageBase")
     private String imageBase;
+    @SerializedName("imageAuto")
+    private Boolean imageAuto;
+    @SerializedName("imageRouteConfigured")
+    private Boolean imageRouteConfigured;
+    @SerializedName("imageRouteMode")
+    private String imageRouteMode;
     @SerializedName("backdropBase")
     private String backdropBase;
     @SerializedName(value = "enabledSites", alternate = {"siteKeys", "sites", "matchSites"})
@@ -58,6 +79,11 @@ public class TmdbConfig {
     private List<String> disabledSites;
     @SerializedName(value = "allowedSites", alternate = {"includeSites", "whitelistSites"})
     private List<String> allowedSites;
+    private transient String credentialOrigin = ORIGIN_USER;
+    private transient String credentialSubscriptionKey = "";
+    private transient long credentialScopeEpoch;
+    private transient String resolvedProxyApiBase;
+    private transient String resolvedProxyImageBase;
 
     public static TmdbConfig objectFrom(String json) {
         try {
@@ -68,20 +94,81 @@ public class TmdbConfig {
         }
     }
 
+    public static TmdbConfig effectiveCurrent() {
+        TmdbConfig configured = objectFrom(Setting.getTmdbConfig());
+        if (configured.isReady()) SubscriptionTmdbCredentialStore.discardCredential();
+        SubscriptionTmdbCredentialStore.Scope scope = SubscriptionTmdbCredentialStore.currentScope();
+        return effective(configured, SubscriptionTmdbCredentialStore.snapshot(scope));
+    }
+
+    public static TmdbConfig effective(TmdbConfig configured, SubscriptionTmdbCredentialStore.Snapshot snapshot) {
+        TmdbConfig effective = configured == null ? new TmdbConfig() : configured.copy();
+        effective.sanitize();
+        if (effective.isReady()) {
+            effective.credentialOrigin = ORIGIN_USER;
+            return effective;
+        }
+        if (snapshot != null && !snapshot.isEmpty() && isOfficialApiBase(DEFAULT_API_BASE)) {
+            effective.apiBase = DEFAULT_API_BASE;
+            effective.proxyBase = "";
+            effective.apiAuto = false;
+            effective.apiRouteConfigured = true;
+            effective.apiRouteMode = "direct";
+            effective.imageAuto = false;
+            effective.imageRouteConfigured = true;
+            effective.imageRouteMode = "direct";
+            effective.resolvedProxyApiBase = null;
+            effective.resolvedProxyImageBase = null;
+            effective.apiKey = snapshot.getApiKey();
+            effective.apiKeyCompat = effective.apiKey;
+            effective.accessToken = "";
+            effective.credentialOrigin = ORIGIN_TRANSIENT_SUBSCRIPTION;
+            effective.credentialSubscriptionKey = snapshot.getSubscriptionKey();
+            effective.credentialScopeEpoch = snapshot.getScopeEpoch();
+            return effective;
+        }
+        effective.credentialOrigin = ORIGIN_USER;
+        return effective;
+    }
+
     public TmdbConfig sanitize() {
-        apiBase = normalizeApiBase(trimOr(apiBase, DEFAULT_API_BASE));
+        if (TextUtils.isEmpty(credentialOrigin)) credentialOrigin = ORIGIN_USER;
+        String rawApiBase = trimOr(apiBase, DEFAULT_API_BASE);
+        if (TmdbProxy.isAuto(rawApiBase)) {
+            apiBase = DEFAULT_API_BASE;
+            apiAuto = true;
+        } else {
+            apiBase = normalizeApiBase(rawApiBase);
+            }
+        String rawImageBase = trimOr(imageBase, DEFAULT_IMAGE_BASE);
+        if (TmdbProxy.isAuto(rawImageBase)) {
+            imageBase = DEFAULT_IMAGE_BASE;
+            imageAuto = true;
+        } else {
+            imageBase = normalizeImageInput(rawImageBase);
+            }
+        String normalizedProxyBase = TmdbProxy.normalizeConfig(proxyBase);
+        if (!TextUtils.equals(proxyBase, normalizedProxyBase)) {
+            proxyBase = normalizedProxyBase;
+            resolvedProxyApiBase = null;
+            resolvedProxyImageBase = null;
+        }
         apiKey = trimOr(apiKey, trimOr(apiKeyCompat, ""));
         apiKeyCompat = apiKey;
         accessToken = trimOr(accessToken, "");
         if (!TextUtils.isEmpty(accessToken) && accessToken.equals(apiKey) && !isAccessToken(accessToken)) accessToken = "";
         omdbApiKey = trimOr(omdbApiKey, "");
         language = trimOr(language, DEFAULT_LANGUAGE);
-        imageBase = normalizeImageInput(trimOr(imageBase, DEFAULT_IMAGE_BASE));
         backdropBase = normalizeImageInput(trimOr(backdropBase, ""));
-        if (TextUtils.isEmpty(backdropBase) && isImageHost(imageBase)) backdropBase = imageBase(imageBase, "w780");
-        if (isImageHost(imageBase)) imageBase = imageBase(imageBase, "w342");
+        if (TmdbProxy.isImageWrapper(imageBase)) imageBase = TmdbProxy.imageWrapperBase(imageBase, "w342");
+        else {
+            if (TextUtils.isEmpty(backdropBase) && isImageHost(imageBase)) backdropBase = imageBase(imageBase, "w780");
+            if (isImageHost(imageBase)) imageBase = imageBase(imageBase, "w342");
+        }
+        if (TextUtils.isEmpty(backdropBase) && TmdbProxy.isImageWrapper(imageBase)) backdropBase = TmdbProxy.imageWrapperBase(imageBase, "w780");
         backdropBase = trimOr(backdropBase, DEFAULT_BACKDROP_BASE);
-        if (isImageHost(backdropBase) && !backdropBase.contains("/t/p/")) backdropBase = imageBase(backdropBase, "w780");
+        if (TmdbProxy.isImageWrapper(backdropBase)) backdropBase = TmdbProxy.imageWrapperBase(backdropBase, "w780");
+        else if (isImageHost(backdropBase) && !backdropBase.contains("/t/p/")) backdropBase = imageBase(backdropBase, "w780");
         enabledSites = cleanList(enabledSites);
         disabledSites = mergeList(cleanList(excludeKeywords), cleanList(disabledSites));
         excludeKeywords = null;
@@ -96,10 +183,69 @@ public class TmdbConfig {
     }
 
     public String getApiBase() {
+        if (isApiAuto()) {
+            String route = TmdbProxy.RouteSelector.preferred(TmdbProxy.RouteSelector.Kind.API, TmdbProxy.autoApiCandidates());
+            return TmdbProxy.apiBaseFor(route);
+        }
+        String proxy = resolvedProxyApiBase();
+        return TextUtils.isEmpty(proxy) ? apiBase : normalizeApiBase(proxy);
+    }
+
+    public String getConfiguredApiBase() {
         return apiBase;
     }
 
+    public String getProxyBase() {
+        return proxyBase;
+    }
+
+    public boolean isApiAuto() {
+        if (isTransientSubscriptionCredential()) return false;
+        if ("direct".equalsIgnoreCase(apiRouteMode) || "custom".equalsIgnoreCase(apiRouteMode)) return false;
+        return "auto".equalsIgnoreCase(apiRouteMode)
+                || Boolean.TRUE.equals(apiAuto)
+                || (TextUtils.isEmpty(apiRouteMode) && TextUtils.isEmpty(proxyBase) && isOfficialApiBase(apiBase))
+                || TmdbProxy.isAuto(proxyBase);
+    }
+
+    public boolean isApiRouteDefault() {
+        return TextUtils.isEmpty(apiRouteMode) && TextUtils.isEmpty(proxyBase) && isOfficialApiBase(apiBase);
+    }
+
+    public List<String> getApiCandidates() {
+        if (isApiAuto()) {
+            List<String> routes = new ArrayList<>();
+            for (String candidate : TmdbProxy.RouteSelector.order(TmdbProxy.RouteSelector.Kind.API, TmdbProxy.autoApiCandidates())) {
+                routes.add(TmdbProxy.apiBaseFor(candidate));
+            }
+            return routes;
+        }
+        return List.of(getApiBase());
+    }
+
+    public List<String> getImageCandidates() {
+        if (isImageAuto()) return TmdbProxy.RouteSelector.order(TmdbProxy.RouteSelector.Kind.IMAGE, TmdbProxy.autoImageCandidates());
+        return List.of(getImageHost());
+    }
+
+    public boolean isImageAuto() {
+        if (isTransientSubscriptionCredential()) return false;
+        if ("direct".equalsIgnoreCase(imageRouteMode) || "custom".equalsIgnoreCase(imageRouteMode)) return false;
+        return "auto".equalsIgnoreCase(imageRouteMode)
+                || Boolean.TRUE.equals(imageAuto)
+                || (TextUtils.isEmpty(imageRouteMode) && TextUtils.isEmpty(proxyBase) && isOfficialImageBase(imageBase));
+    }
+
+    public boolean isImageRouteDefault() {
+        return TextUtils.isEmpty(imageRouteMode) && TextUtils.isEmpty(proxyBase) && isOfficialImageBase(imageBase);
+    }
+
+    public boolean isProxyEnabled() {
+        return !TextUtils.isEmpty(proxyBase);
+    }
+
     public String getApiHost() {
+        if (isApiAuto()) return TmdbProxy.AUTO;
         String api = TextUtils.isEmpty(apiBase) ? DEFAULT_API_BASE : apiBase;
         api = trimTrailingSlash(api);
         if (api.endsWith("/3")) api = api.substring(0, api.length() - 2);
@@ -123,21 +269,33 @@ public class TmdbConfig {
     }
 
     public String getImageBase() {
+        TmdbProxy.RouteSelector.setAuto(TmdbProxy.RouteSelector.Kind.IMAGE, isImageAuto());
+        if (isImageAuto()) {
+            String route = TmdbProxy.RouteSelector.preferred(TmdbProxy.RouteSelector.Kind.IMAGE, TmdbProxy.autoImageCandidates());
+            return TmdbProxy.imageBaseFor(route, "w342");
+        }
+        return effectiveImageBase(imageBase, "w342");
+    }
+
+    public String getConfiguredImageBase() {
         return imageBase;
     }
 
     public String getBackdropBase() {
-        return backdropBase;
+        TmdbProxy.RouteSelector.setAuto(TmdbProxy.RouteSelector.Kind.IMAGE, isImageAuto());
+        if (isImageAuto()) {
+            String route = TmdbProxy.RouteSelector.preferred(TmdbProxy.RouteSelector.Kind.IMAGE, TmdbProxy.autoImageCandidates());
+            return TmdbProxy.imageBaseFor(route, "w780");
+        }
+        return effectiveImageBase(backdropBase, "w780");
+    }
+
+    public String getConfiguredImageHost() {
+        return imageHostFrom(imageBase);
     }
 
     public String getImageHost() {
-        String base = TextUtils.isEmpty(imageBase) ? DEFAULT_IMAGE_BASE : imageBase;
-        base = stripImageSize(base);
-        if (base.endsWith("/t/p")) base = base.substring(0, base.length() - 4);
-        base = trimTrailingSlash(base);
-        if (isHttpUrl(base)) return base;
-        String withScheme = ensureHttpScheme(base);
-        return isHttpUrl(withScheme) ? withScheme : DEFAULT_IMAGE_HOST;
+        return imageHostFrom(getImageBase());
     }
 
     public List<String> getEnabledSites() {
@@ -164,6 +322,37 @@ public class TmdbConfig {
         return !TextUtils.isEmpty(getAccessToken()) || !TextUtils.isEmpty(getApiKey());
     }
 
+    public boolean isTransientSubscriptionCredential() {
+        return ORIGIN_TRANSIENT_SUBSCRIPTION.equals(credentialOrigin);
+    }
+
+    public String getCredentialOrigin() {
+        return credentialOrigin;
+    }
+
+    public String getCredentialSubscriptionKey() {
+        return credentialSubscriptionKey == null ? "" : credentialSubscriptionKey;
+    }
+
+    public long getCredentialScopeEpoch() {
+        return credentialScopeEpoch;
+    }
+
+    public static boolean isOfficialApiBase(String value) {
+        if (TextUtils.isEmpty(value)) return false;
+        try {
+            URI uri = new URI(value.trim());
+            if (!"https".equalsIgnoreCase(uri.getScheme())) return false;
+            if (uri.getUserInfo() != null || uri.getPort() != -1 || uri.getQuery() != null || uri.getFragment() != null) return false;
+            String host = uri.getHost();
+            if (!"api.tmdb.org".equalsIgnoreCase(host) && !"api.themoviedb.org".equalsIgnoreCase(host)) return false;
+            String path = uri.getPath();
+            return "/3".equals(path) || "/3/".equals(path);
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
     public boolean hasSiteRules() {
         return !getEnabledSites().isEmpty() || !getAllowedSites().isEmpty() || !getDisabledSites().isEmpty();
     }
@@ -179,7 +368,99 @@ public class TmdbConfig {
     }
 
     public String toJson() {
-        return GSON.toJson(sanitize());
+        TmdbConfig persistable = copy();
+        if (persistable.isTransientSubscriptionCredential()) {
+            persistable.apiKey = "";
+            persistable.apiKeyCompat = "";
+            persistable.accessToken = "";
+            persistable.credentialOrigin = ORIGIN_USER;
+        }
+        return GSON.toJson(persistable.sanitize());
+    }
+
+    private TmdbConfig copy() {
+        TmdbConfig copy = new TmdbConfig();
+        copy.apiBase = apiBase;
+        copy.apiAuto = apiAuto;
+        copy.apiRouteConfigured = apiRouteConfigured;
+        copy.apiRouteMode = apiRouteMode;
+        copy.proxyBase = proxyBase;
+        copy.apiKey = apiKey;
+        copy.apiKeyCompat = apiKeyCompat;
+        copy.accessToken = accessToken;
+        copy.omdbApiKey = omdbApiKey;
+        copy.language = language;
+        copy.imageBase = imageBase;
+        copy.imageAuto = imageAuto;
+        copy.imageRouteConfigured = imageRouteConfigured;
+        copy.imageRouteMode = imageRouteMode;
+        copy.backdropBase = backdropBase;
+        copy.enabledSites = copyList(enabledSites);
+        copy.excludeKeywords = copyList(excludeKeywords);
+        copy.excludeKeywordsConfigured = excludeKeywordsConfigured;
+        copy.disabledSites = copyList(disabledSites);
+        copy.allowedSites = copyList(allowedSites);
+        copy.credentialOrigin = credentialOrigin;
+        copy.credentialSubscriptionKey = credentialSubscriptionKey;
+        copy.credentialScopeEpoch = credentialScopeEpoch;
+        copy.resolvedProxyApiBase = resolvedProxyApiBase;
+        copy.resolvedProxyImageBase = resolvedProxyImageBase;
+        return copy;
+    }
+
+    private String resolvedProxyApiBase() {
+        resolveProxy();
+        return resolvedProxyApiBase;
+    }
+
+    private void resolveProxy() {
+        if (TextUtils.isEmpty(proxyBase)) {
+            resolvedProxyApiBase = "";
+            resolvedProxyImageBase = "";
+            return;
+        }
+        if (!TmdbProxy.contains(proxyBase, resolvedProxyApiBase)) {
+            resolvedProxyApiBase = TmdbProxy.resolve(proxyBase);
+            resolvedProxyImageBase = TmdbProxy.imageHostFor(resolvedProxyApiBase);
+        }
+    }
+
+    private String effectiveImageBase(String configured, String size) {
+        String value = configured;
+        resolveProxy();
+        if (!TextUtils.isEmpty(resolvedProxyImageBase) && isOfficialImageBase(configured)) {
+            value = imageBase(resolvedProxyImageBase, size);
+        }
+        return value;
+    }
+
+    private static String imageHostFrom(String configured) {
+        if (TmdbProxy.isAuto(configured)) return TmdbProxy.AUTO;
+        if (TmdbProxy.isImageWrapper(configured)) return TmdbProxy.imageWrapperHost(configured);
+        String base = TextUtils.isEmpty(configured) ? DEFAULT_IMAGE_BASE : configured;
+        base = stripImageSize(base);
+        if (base.endsWith("/t/p")) base = base.substring(0, base.length() - 4);
+        base = trimTrailingSlash(base);
+        if (isHttpUrl(base)) return base;
+        String withScheme = ensureHttpScheme(base);
+        return isHttpUrl(withScheme) ? withScheme : DEFAULT_IMAGE_HOST;
+    }
+
+    private static boolean isOfficialImageBase(String value) {
+        if (TextUtils.isEmpty(value)) return true;
+        try {
+            URI uri = new URI(stripImageSize(trimTrailingSlash(value)));
+            String host = uri.getHost();
+            return "image.tmdb.org".equalsIgnoreCase(host)
+                    || "images.tmdb.org".equalsIgnoreCase(host)
+                    || "media.themoviedb.org".equalsIgnoreCase(host);
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private static List<String> copyList(List<String> values) {
+        return values == null ? null : new ArrayList<>(values);
     }
 
     private static String trimOr(String value, String fallback) {
@@ -217,6 +498,7 @@ public class TmdbConfig {
     }
 
     private static String imageBase(String value, String size) {
+        if (TmdbProxy.isImageWrapper(value)) return TmdbProxy.imageWrapperBase(value, size);
         String image = stripImageSize(value);
         if (image.endsWith("/t/p")) return joinUrl(image, size);
         return joinUrl(joinUrl(image, "t/p"), size);

@@ -13,6 +13,7 @@ import java.nio.file.Files;
 public class CompatFfmpegVideoRendererSourceTest {
 
     private static final String SOURCE_PATH = "app/src/main/java/io/github/anilbeesetti/nextlib/media3ext/ffdecoder/CompatFfmpegVideoRenderer.java";
+    private static final String EXO_UTIL_PATH = "app/src/main/java/com/fongmi/android/tv/player/exo/ExoUtil.java";
 
     /**
      * The audio renderer may ask whether the platform supports the exact {@link
@@ -42,10 +43,23 @@ public class CompatFfmpegVideoRendererSourceTest {
         assertTrue(source.contains("!selector.getDecoderInfos(mimeType, false, false).isEmpty()"));
     }
 
+    @Test
+    public void hardwareOnlyMode_neverRegistersFfmpegFallback() throws Exception {
+        String exoUtil = readSource(EXO_UTIL_PATH);
+
+        assertTrue(exoUtil.contains("if (videoRenderMode == EXTENSION_RENDERER_MODE_OFF) return;"));
+        assertFalse(exoUtil.contains("buildHardwareOnlyFfmpegVideoRenderer"));
+        assertFalse(exoUtil.contains("new CompatFfmpegVideoRenderer("));
+    }
+
     private static String readSource() throws Exception {
+        return readSource(SOURCE_PATH);
+    }
+
+    private static String readSource(String relativePath) throws Exception {
         File root = new File(System.getProperty("user.dir"));
-        while (root != null && !new File(root, SOURCE_PATH).isFile()) root = root.getParentFile();
+        while (root != null && !new File(root, relativePath).isFile()) root = root.getParentFile();
         assertNotNull("Unable to locate project root from " + System.getProperty("user.dir"), root);
-        return Files.readString(new File(root, SOURCE_PATH).toPath(), StandardCharsets.UTF_8);
+        return Files.readString(new File(root, relativePath).toPath(), StandardCharsets.UTF_8);
     }
 }

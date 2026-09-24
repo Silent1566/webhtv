@@ -8,7 +8,9 @@ import com.google.gson.reflect.TypeToken;
 
 import java.lang.reflect.Type;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Predicate;
 
 public final class ImportedAdRuleCandidateStore {
@@ -72,26 +74,57 @@ public final class ImportedAdRuleCandidateStore {
     }
 
     public static synchronized boolean importCandidate(String id) {
+        return id != null && importCandidates(List.of(id), false) > 0;
+    }
+
+    public static synchronized int importCandidates(List<String> ids, boolean enabled) {
+        if (ids == null || ids.isEmpty()) return 0;
         List<ImportedAdRuleCandidate> stored = load();
-        ImportedAdRuleCandidate candidate = findById(stored, id);
-        if (candidate == null || !ImportedAdRuleCandidate.STATUS_PENDING.equals(candidate.getStatus())) return false;
-        if (alreadyImported(candidate.getFingerprint())) {
-            candidate.setStatus(ImportedAdRuleCandidate.STATUS_IMPORTED);
-            save(stored);
-            return true;
+        Set<String> requested = new HashSet<>(ids);
+        Set<String> importedFingerprints = new HashSet<>();
+        for (UserAdRule rule : UserAdRuleStore.load()) {
+            if (rule == null) continue;
+            importedFingerprints.add(InterfaceAdRuleAnalyzer.fingerprint(rule.getHosts(), rule.getRegex(), rule.getExclude()));
         }
-        UserAdRuleStore.add(UserAdRule.fromImportedCandidate(candidate));
-        candidate.setStatus(ImportedAdRuleCandidate.STATUS_IMPORTED);
+        List<UserAdRule> additions = new ArrayList<>();
+        int imported = 0;
+        for (ImportedAdRuleCandidate candidate : stored) {
+            if (candidate.getId() == null || candidate.getFingerprint() == null || candidate.getFingerprint().isBlank()
+                    || !requested.contains(candidate.getId())
+                    || !ImportedAdRuleCandidate.STATUS_PENDING.equals(candidate.getStatus())) continue;
+            if (!importedFingerprints.add(candidate.getFingerprint())) {
+                candidate.setStatus(ImportedAdRuleCandidate.STATUS_IMPORTED);
+                imported++;
+                continue;
+            }
+            additions.add(UserAdRule.fromImportedCandidate(candidate, enabled));
+            candidate.setStatus(ImportedAdRuleCandidate.STATUS_IMPORTED);
+            imported++;
+        }
+        if (imported == 0) return 0;
+        UserAdRuleStore.addAll(additions);
         save(stored);
-        return true;
+        return imported;
     }
 
     public static synchronized void ignore(String id) {
+        if (id == null) return;
+        ignoreCandidates(List.of(id));
+    }
+
+    public static synchronized int ignoreCandidates(List<String> ids) {
+        if (ids == null || ids.isEmpty()) return 0;
+        Set<String> requested = new HashSet<>(ids);
         List<ImportedAdRuleCandidate> stored = load();
-        ImportedAdRuleCandidate candidate = findById(stored, id);
-        if (candidate == null) return;
-        candidate.setStatus(ImportedAdRuleCandidate.STATUS_IGNORED);
-        save(stored);
+        int ignored = 0;
+        for (ImportedAdRuleCandidate candidate : stored) {
+            if (candidate.getId() == null || !requested.contains(candidate.getId())
+                    || !ImportedAdRuleCandidate.STATUS_PENDING.equals(candidate.getStatus())) continue;
+            candidate.setStatus(ImportedAdRuleCandidate.STATUS_IGNORED);
+            ignored++;
+        }
+        if (ignored > 0) save(stored);
+        return ignored;
     }
 
     public static synchronized void reopen(String id) {
@@ -108,7 +141,9 @@ public final class ImportedAdRuleCandidateStore {
     }
 
     private static boolean alreadyImported(String fingerprint) {
+        if (fingerprint == null || fingerprint.isBlank()) return false;
         for (UserAdRule rule : UserAdRuleStore.load()) {
+            if (rule == null) continue;
             String existing = InterfaceAdRuleAnalyzer.fingerprint(rule.getHosts(), rule.getRegex(), rule.getExclude());
             if (fingerprint.equals(existing)) return true;
         }
@@ -116,11 +151,13 @@ public final class ImportedAdRuleCandidateStore {
     }
 
     private static ImportedAdRuleCandidate find(List<ImportedAdRuleCandidate> items, String fingerprint) {
+        if (fingerprint == null) return null;
         for (ImportedAdRuleCandidate item : items) if (fingerprint.equals(item.getFingerprint())) return item;
         return null;
     }
 
     private static ImportedAdRuleCandidate findById(List<ImportedAdRuleCandidate> items, String id) {
+        if (id == null) return null;
         for (ImportedAdRuleCandidate item : items) if (id.equals(item.getId())) return item;
         return null;
     }

@@ -1,22 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- TMDB 推荐影片卡片：竖版海报 + 标题 + 分来源评分 -->
-<androidx.appcompat.widget.LinearLayoutCompat xmlns:android="http://schemas.android.com/apk/res/android"
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
-    android:layout_width="120dp"
-    android:layout_height="wrap_content"
+    android:layout_width="108dp"
+    android:layout_height="162dp"
     android:layout_marginEnd="12dp"
-    android:background="@drawable/selector_tmdb_card"
+    android:defaultFocusHighlightEnabled="false"
     android:focusable="true"
     android:focusableInTouchMode="true"
-    android:orientation="vertical"
-    android:padding="6dp">
-
-    <androidx.cardview.widget.CardView
-        android:layout_width="108dp"
-        android:layout_height="162dp"
-        app:cardCornerRadius="8dp"
-        app:cardElevation="2dp">
+    android:stateListAnimator="@null"
+    app:cardBackgroundColor="#1C2530"
+    app:cardCornerRadius="8dp"
+    app:cardElevation="2dp"
+    app:rippleColor="@android:color/transparent"
+    app:strokeColor="#33FFFFFF"
+    app:strokeWidth="1dp">
 
         <FrameLayout
             android:layout_width="match_parent"
@@ -109,6 +108,4 @@
 
         </FrameLayout>
 
-    </androidx.cardview.widget.CardView>
-
-</androidx.appcompat.widget.LinearLayoutCompat>
+</com.google.android.material.card.MaterialCardView>

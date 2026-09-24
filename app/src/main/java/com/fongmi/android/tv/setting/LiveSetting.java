@@ -32,6 +32,14 @@ public class LiveSetting {
         Prefers.put("change", change);
     }
 
+    public static boolean isSourceFallback() {
+        return Prefers.getBoolean("live_source_fallback", true);
+    }
+
+    public static void putSourceFallback(boolean fallback) {
+        Prefers.put("live_source_fallback", fallback);
+    }
+
     public static boolean isInvert() {
         return Prefers.getBoolean("invert");
     }

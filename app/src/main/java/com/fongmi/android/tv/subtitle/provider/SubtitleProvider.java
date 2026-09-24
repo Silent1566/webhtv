@@ -11,6 +11,10 @@ public interface SubtitleProvider {
 
     String getName();
 
+    default String getKey() {
+        return getName();
+    }
+
     boolean isEnabled();
 
     default boolean isQueryIndependent() {

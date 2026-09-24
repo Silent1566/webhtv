@@ -9,6 +9,9 @@
     <string name="home_push">推送</string>
     <string name="home_cast">投屏</string>
     <string name="home_setting">设置</string>
+    <string name="home_custom_csp">站点注入</string>
+    <string name="home_custom_csp_on">站点注入：开</string>
+    <string name="home_custom_csp_off">站点注入：关</string>
     <string name="control_speed">倍速</string>
     <string name="control_scale">缩放</string>
     <string name="control_episode_column">长标题列数</string>

@@ -2,10 +2,14 @@ package com.fongmi.android.tv.api.config;
 
 import android.text.TextUtils;
 
+import androidx.appcompat.app.AlertDialog;
+
 import com.fongmi.android.tv.App;
+import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.api.CatSource;
 import com.fongmi.android.tv.api.CspWarmup;
 import com.fongmi.android.tv.api.Decoder;
+import com.fongmi.android.tv.api.TmdbSourceCredentialIngress;
 import com.fongmi.android.tv.api.loader.BaseLoader;
 import com.fongmi.android.tv.bean.Config;
 import com.fongmi.android.tv.bean.Depot;
@@ -14,23 +18,34 @@ import com.fongmi.android.tv.bean.HlsAdRule;
 import com.fongmi.android.tv.bean.Parse;
 import com.fongmi.android.tv.bean.Rule;
 import com.fongmi.android.tv.bean.Site;
+import com.fongmi.android.tv.bean.TmdbConfig;
 import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.setting.CustomCspSetting;
+import com.fongmi.android.tv.setting.InterfaceFailoverPolicy;
+import com.fongmi.android.tv.setting.InterfaceFailoverState;
+import com.fongmi.android.tv.setting.InterfaceOrderStore;
 import com.fongmi.android.tv.setting.GroupRuleConfig;
+import com.fongmi.android.tv.setting.Setting;
+import com.fongmi.android.tv.utils.Notify;
+import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.UrlUtil;
 import com.fongmi.android.tv.web.ext.WebHomeExtensionRegistry;
 import com.github.catvod.bean.Doh;
 import com.github.catvod.bean.Header;
 import com.github.catvod.bean.Proxy;
+import com.github.catvod.crawler.SpiderDebug;
 import com.github.catvod.utils.Json;
 import com.google.gson.JsonObject;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -48,6 +63,8 @@ public class VodConfig extends BaseConfig {
     private List<String> ads;
     private List<String> flags;
     private List<Parse> parses;
+    private volatile FailoverRound failoverRound;
+    private volatile AlertDialog failoverDialog;
 
     public static VodConfig get() {
         return Loader.INSTANCE;
@@ -74,7 +91,33 @@ public class VodConfig extends BaseConfig {
     }
 
     public static void load(Config config, Callback callback) {
-        get().clear("vod-config-load").config(config).load(callback);
+        get().startNewLoad(config, callback, "vod-config-load");
+    }
+
+    public static void selectConfig(Config config, Callback callback) {
+        if (config == null) return;
+        get().startNewLoad(config, callback, "vod-config-select");
+    }
+
+    public static void cancelFailover() {
+        get().stopFailover();
+    }
+
+    private void startNewLoad(Config config, Callback callback, String reason) {
+        abandonFailover();
+        clear(reason).config(config);
+        super.load(callback);
+    }
+
+    @Override
+    public void load(Callback callback) {
+        abandonFailover();
+        super.load(callback);
+    }
+
+    private void loadFailoverAttempt(Config config, Callback callback) {
+        clear("vod-config-failover").config(config);
+        super.load(callback);
     }
 
     public VodConfig init() {
@@ -82,6 +125,7 @@ public class VodConfig extends BaseConfig {
     }
 
     public VodConfig config(Config config) {
+        if (config != null) SubscriptionTmdbCredentialStore.beginSubscription(config.getId(), config.getUrl(), "vod-config");
         this.config = config;
         return this;
     }
@@ -121,6 +165,7 @@ public class VodConfig extends BaseConfig {
 
     @Override
     protected void postEvent() {
+        if (failoverRound != null) return;
         super.postEvent();
         ConfigEvent.vod();
     }
@@ -130,7 +175,40 @@ public class VodConfig extends BaseConfig {
         // 猫源填的是 bundle 地址（.js.md5），要先在本机把 Node 服务跑起来，再读它的 /config
         String url = CatSource.isBundle(config.getUrl()) ? CatSource.serve(config.getUrl()) : UrlUtil.convert(config.getUrl());
         String json = Decoder.getJson(url, TAG);
-        checkJson(config, CatSource.normalize(url, Json.parse(json)));
+        TmdbSourceCredentialIngress.Ingress ingress = TmdbSourceCredentialIngress.extractRootAndStrip(json);
+        checkJson(config, CatSource.normalize(url, Json.parse(ingress.getSanitizedJson())));
+        if (!isLoaded()) throw new Exception("VOD sites is empty");
+        acceptSubscriptionCredential(ingress.getCandidateKey(), config);
+    }
+
+    private static void acceptSubscriptionCredential(String candidateApiKey, Config config) {
+        if (candidateApiKey == null || candidateApiKey.isEmpty() || config == null) {
+            SpiderDebug.log("tmdb-credential", "config-candidate skip candidate=%s config=%s", candidateApiKey != null && !candidateApiKey.isEmpty(), config != null);
+            return;
+        }
+        boolean userReady = TmdbConfig.objectFrom(Setting.getTmdbConfig()).isReady();
+        SubscriptionTmdbCredentialStore.Scope scope = SubscriptionTmdbCredentialStore.currentScope();
+        boolean urlMatch = scope.isAvailable() && scope.getConfigUrl().equals(normalizeConfigUrl(config.getUrl()));
+        SpiderDebug.log("tmdb-credential", "config-candidate present=true userReady=%s scopeAvailable=%s scopeId=%d configId=%d urlMatch=%s",
+                userReady, scope.isAvailable(), scope.getConfigId(), config.getId(), urlMatch);
+        if (userReady) {
+            SubscriptionTmdbCredentialStore.discardCredential();
+            return;
+        }
+        if (!scope.isAvailable() || scope.getConfigId() != config.getId() || !scope.getConfigUrl().equals(normalizeConfigUrl(config.getUrl()))) return;
+        if (TmdbConfig.objectFrom(Setting.getTmdbConfig()).isReady()) {
+            SubscriptionTmdbCredentialStore.discardCredential();
+            return;
+        }
+        boolean accepted = SubscriptionTmdbCredentialStore.accept(candidateApiKey, scope.getConfigId(), scope.getConfigUrl(),
+                scope.getEpoch(), "subscription-config", config.getUrl());
+        SpiderDebug.log("tmdb-credential", "config-candidate accept=%s epoch=%d", accepted, scope.getEpoch());
+    }
+
+    private static String normalizeConfigUrl(String value) {
+        String normalized = value == null ? "" : value.trim();
+        while (normalized.endsWith("/")) normalized = normalized.substring(0, normalized.length() - 1);
+        return normalized;
     }
 
     @Override
@@ -179,6 +257,252 @@ public class VodConfig extends BaseConfig {
         config.setLogo(Json.safeString(object, "logo"));
         config.setNotice(Json.safeString(object, "notice"));
         config.setDanmaku(Json.safeString(object, "danmaku"));
+    }
+
+    void onConfigFailure(Config config, Callback callback, Throwable error) {
+        FailoverRound current = failoverRound;
+        String message = Notify.getError(R.string.error_config_get, error);
+        if (current != null && callback == current.attemptCallback) {
+            current.lastError = message;
+            App.post(() -> onAttemptFailure(current));
+            return;
+        }
+
+        int mode = Setting.getInterfaceFailoverMode();
+        if (!InterfaceFailoverPolicy.shouldFailover(mode)) {
+            App.post(() -> callback.error(message));
+            return;
+        }
+
+        String originUrl = config.getUrl();
+        List<String> addresses = config.getUrls();
+        int limit = InterfaceFailoverPolicy.fallbackLimit(addresses.size());
+        List<Config> remaining = new ArrayList<>();
+        for (String address : addresses) {
+            if (remaining.size() >= limit || TextUtils.equals(address, originUrl)) continue;
+            remaining.add(copyWithUrl(config, address));
+        }
+        if (remaining.isEmpty()) {
+            App.post(() -> callback.error(message));
+            return;
+        }
+
+        FailoverRound round = new FailoverRound(config, config.getDesc(), remaining, callback, message,
+                new InterfaceFailoverState(mode, originUrl, urls(remaining)));
+        failoverRound = round;
+        if (InterfaceFailoverPolicy.isConfirm(mode)) {
+            App.post(() -> showConfirmDialog(round));
+        } else {
+            App.post(this::startNextAttempt);
+        }
+    }
+
+    private void onAttemptFailure(FailoverRound round) {
+        if (failoverRound != round) return;
+        int mode = Setting.getInterfaceFailoverMode();
+        if (!InterfaceFailoverPolicy.shouldFailover(mode) || !round.state.shouldContinueAfterFailure()) {
+            finishFailure(round, round.lastError);
+            return;
+        }
+        startNextAttempt();
+    }
+
+    private void startNextAttempt() {
+        FailoverRound round = failoverRound;
+        if (round == null) return;
+        if (!InterfaceFailoverPolicy.shouldFailover(Setting.getInterfaceFailoverMode())) {
+            finishFailure(round, round.lastError);
+            return;
+        }
+        String nextUrl = round.state.nextAutomatic();
+        if (nextUrl == null) {
+            finishFailure(round, round.lastError);
+            return;
+        }
+        Config next = findCandidate(round.candidates, nextUrl);
+        if (next == null) {
+            finishFailure(round, round.lastError);
+            return;
+        }
+        Notify.show(ResUtil.getString(R.string.interface_failover_next, next.getDesc()));
+        round.attemptCallback = new Callback() {
+            @Override
+            public void success() {
+                if (round.attemptCallback != this) return;
+                finishSuccess(round);
+            }
+
+            @Override
+            public void error(String msg) {
+                if (round.attemptCallback != this) return;
+                round.lastError = msg;
+                App.post(() -> {
+                    if (round.attemptCallback == this) onAttemptFailure(round);
+                });
+            }
+        };
+        loadFailoverAttempt(next, round.attemptCallback);
+    }
+
+    private void startSelectedAttempt(FailoverRound round, int index) {
+        if (failoverRound != round || index < 0 || index >= round.candidates.size()) return;
+        if (!InterfaceFailoverPolicy.shouldFailover(Setting.getInterfaceFailoverMode())) {
+            finishFailure(round, round.lastError);
+            return;
+        }
+        Config selected = round.candidates.get(index);
+        String selectedUrl = round.state.select(index);
+        if (selectedUrl == null) {
+            finishFailure(round, round.lastError);
+            return;
+        }
+        Notify.show(ResUtil.getString(R.string.interface_failover_next, selected.getDesc()));
+        round.attemptCallback = new Callback() {
+            @Override
+            public void success() {
+                if (round.attemptCallback != this) return;
+                finishSuccess(round);
+            }
+
+            @Override
+            public void error(String msg) {
+                if (round.attemptCallback != this) return;
+                round.lastError = msg;
+                App.post(() -> {
+                    if (round.attemptCallback == this) onAttemptFailure(round);
+                });
+            }
+        };
+        loadFailoverAttempt(selected, round.attemptCallback);
+    }
+
+    private void showConfirmDialog(FailoverRound round) {
+        if (failoverRound != round) return;
+        android.app.Activity activity = App.activity();
+        if (activity == null || activity.isFinishing() || activity.isDestroyed()) {
+            finishFailure(round, round.lastError);
+            return;
+        }
+        CharSequence[] labels = new CharSequence[round.candidates.size()];
+        for (int i = 0; i < labels.length; i++) labels[i] = round.candidates.get(i).getDesc();
+        final int[] selected = {0};
+        AlertDialog dialog = new MaterialAlertDialogBuilder(activity)
+                .setTitle(R.string.interface_failover_title)
+                .setMessage(ResUtil.getString(R.string.interface_failover_message, round.originDesc))
+                .setSingleChoiceItems(labels, 0, (dialog1, which) -> selected[0] = which)
+                .setPositiveButton(R.string.interface_failover_switch, (dialog1, which) -> startSelectedAttempt(round, selected[0]))
+                .setNegativeButton(R.string.dialog_cancel, (dialog1, which) -> cancelFailover(round))
+                .create();
+        failoverDialog = dialog;
+        dialog.setOnCancelListener(dialog1 -> cancelFailover(round));
+        dialog.setOnDismissListener(dialog1 -> {
+            if (failoverDialog == dialog) failoverDialog = null;
+        });
+        dialog.show();
+    }
+
+    private void cancelFailover(FailoverRound round) {
+        if (failoverRound != round) return;
+        cancelRound(round);
+        Notify.show(R.string.interface_failover_cancelled);
+    }
+
+    private void stopFailover() {
+        FailoverRound round = failoverRound;
+        if (round == null) return;
+        round.state.cancel();
+        boolean loading = round.attemptCallback != null;
+        if (loading) cancelLoad(true);
+        failoverRound = null;
+        AlertDialog dialog = failoverDialog;
+        failoverDialog = null;
+        if (dialog != null) dialog.dismiss();
+        round.callback.error(errorMessage(round.lastError));
+    }
+
+    private void cancelRound(FailoverRound round) {
+        if (failoverRound != round) return;
+        round.state.cancel();
+        if (round.attemptCallback != null) cancelLoad(true);
+        failoverRound = null;
+        AlertDialog dialog = failoverDialog;
+        failoverDialog = null;
+        if (dialog != null) dialog.dismiss();
+        round.callback.error(errorMessage(round.lastError));
+    }
+
+    private void finishSuccess(FailoverRound round) {
+        if (failoverRound != round) return;
+        Config loaded = getConfig();
+        if (loaded != null && round.origin != null && loaded.getId() == round.origin.getId()) {
+            round.origin.url(loaded.getUrl()).update();
+            config(round.origin);
+        }
+        failoverRound = null;
+        super.postEvent();
+        ConfigEvent.vod();
+        round.callback.success();
+    }
+
+    private void finishFailure(FailoverRound round, String message) {
+        if (failoverRound != round) return;
+        failoverRound = null;
+        super.postEvent();
+        ConfigEvent.vod();
+        round.callback.error(errorMessage(message));
+    }
+
+    private String errorMessage(String message) {
+        return TextUtils.isEmpty(message) ? Notify.getError(R.string.error_config_get, new Exception("Configuration get failed")) : message;
+    }
+
+    private void abandonFailover() {
+        if (failoverRound != null) {
+            failoverRound.state.cancel();
+            cancelLoad(false);
+        }
+        failoverRound = null;
+        AlertDialog dialog = failoverDialog;
+        failoverDialog = null;
+        if (dialog != null) App.post(dialog::dismiss);
+    }
+
+    private List<String> urls(List<Config> configs) {
+        List<String> urls = new ArrayList<>();
+        for (Config config : configs) urls.add(config.getUrl());
+        return urls;
+    }
+
+    private Config findCandidate(List<Config> configs, String url) {
+        for (Config config : configs) if (TextUtils.equals(config.getUrl(), url)) return config;
+        return null;
+    }
+
+    private Config copyWithUrl(Config source, String url) {
+        Config copy = Config.objectFrom(source.toString());
+        copy.setUrl(url);
+        return copy;
+    }
+
+    private static final class FailoverRound {
+
+        private final String originDesc;
+        private final Config origin;
+        private final List<Config> candidates;
+        private final Callback callback;
+        private final InterfaceFailoverState state;
+        private String lastError;
+        private Callback attemptCallback;
+
+        private FailoverRound(Config origin, String originDesc, List<Config> candidates, Callback callback, String lastError,
+                              InterfaceFailoverState state) {
+            this.originDesc = originDesc;
+            this.origin = origin;
+            this.candidates = candidates;
+            this.callback = callback;
+            this.lastError = lastError;
+            this.state = state;
+        }
     }
 
     private void initList(JsonObject object) {

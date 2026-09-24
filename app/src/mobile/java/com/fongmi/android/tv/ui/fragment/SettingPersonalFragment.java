@@ -10,7 +10,10 @@ import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.databinding.FragmentSettingPersonalBinding;
+import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.event.RefreshEvent;
+import com.fongmi.android.tv.following.FollowingScheduler;
+import com.fongmi.android.tv.following.FollowingSettings;
 import com.fongmi.android.tv.setting.AppBranding;
 import com.fongmi.android.tv.setting.AutoBackupPolicy;
 import com.fongmi.android.tv.setting.GroupRuleConfig;
@@ -35,6 +38,7 @@ public class SettingPersonalFragment extends BaseFragment {
     private String[] searchColumn;
     private String[] siteColumn;
     private String[] globalHistoryMode;
+    private String[] interfaceFailoverMode;
     private String[] searchResultSort;
 
     public static SettingPersonalFragment newInstance() {
@@ -58,11 +62,13 @@ public class SettingPersonalFragment extends BaseFragment {
     @Override
     protected void initEvent() {
         mBinding.searchThread.setOnClickListener(this::setSearchThread);
+        mBinding.following.setOnClickListener(this::setFollowing);
         mBinding.autoBackup.setOnClickListener(this::setAutoBackup);
         mBinding.playbackOverlay.setOnClickListener(this::setPlaybackOverlay);
         mBinding.playBackToDetail.setOnClickListener(this::setPlayBackToDetail);
         mBinding.episodeHistory.setOnClickListener(this::setEpisodeHistory);
         mBinding.globalHistory.setOnClickListener(this::setGlobalHistory);
+        mBinding.interfaceFailover.setOnClickListener(this::setInterfaceFailover);
         mBinding.playSpeed.setOnClickListener(this::setPlaySpeed);
         mBinding.groupRule.setOnClickListener(this::setGroupRule);
         mBinding.searchUi.setOnClickListener(this::setSearchUi);
@@ -71,16 +77,17 @@ public class SettingPersonalFragment extends BaseFragment {
         mBinding.searchResultSort.setOnClickListener(this::setSearchResultSort);
         mBinding.resetApp.setOnClickListener(this::showResetAppDialog);
         mBinding.appBranding.setOnClickListener(this::startAppBranding);
-        mBinding.touchOptimization.setOnClickListener(this::setTouchOptimization);
     }
 
     private void setText() {
         mBinding.searchThreadText.setText(String.valueOf(Setting.getSearchThread()));
+        mBinding.followingText.setText(getSwitch(FollowingSettings.isEnabled()));
         mBinding.autoBackupText.setText(getSwitch(isAutoBackupEnabled()));
         mBinding.playbackOverlayText.setText(getSwitch(Setting.isPlaybackOverlayEnabled()));
         mBinding.playBackToDetailText.setText(getSwitch(Setting.isPlayBackToDetail()));
         mBinding.episodeHistoryText.setText(getSwitch(Setting.isEpisodeHistory()));
         mBinding.globalHistoryText.setText((globalHistoryMode = getResources().getStringArray(R.array.select_global_history_mode))[Setting.getGlobalHistoryMode()]);
+        mBinding.interfaceFailoverText.setText((interfaceFailoverMode = getResources().getStringArray(R.array.select_interface_failover_mode))[Setting.getInterfaceFailoverMode()]);
         mBinding.playSpeedText.setText(getSpeedText(PlayerSetting.getDefaultSpeed()));
         mBinding.groupRuleText.setText(getString(R.string.setting_group_rule_summary, GroupRuleConfig.enabledCount(), GroupRuleConfig.totalCount()));
         mBinding.searchUiText.setText((searchUi = getResources().getStringArray(R.array.select_search_ui))[Setting.getSearchUi()]);
@@ -88,7 +95,6 @@ public class SettingPersonalFragment extends BaseFragment {
         mBinding.siteColumnText.setText((siteColumn = getResources().getStringArray(R.array.select_site_column))[Setting.getSiteColumn() - 1]);
         mBinding.searchResultSortText.setText((searchResultSort = getResources().getStringArray(R.array.select_search_result_sort))[Setting.getSearchResultSort()]);
         mBinding.appBrandingText.setText(AppBranding.getSummary(requireContext()));
-        mBinding.touchOptimizationText.setText(getSwitch(Setting.isTouchOptimized()));
     }
 
     private String getSearchColumnText() {
@@ -109,6 +115,20 @@ public class SettingPersonalFragment extends BaseFragment {
             Setting.putSearchThread(value);
             setText();
         });
+    }
+
+    private void setFollowing(View view) {
+        boolean enabled = !FollowingSettings.isEnabled();
+        FollowingSettings.setEnabled(enabled);
+        if (enabled) {
+            FollowingScheduler.ensurePeriodic(requireContext());
+            FollowingScheduler.enqueueDueNow(requireContext());
+        } else {
+            FollowingScheduler.cancelAll(requireContext());
+        }
+        ConfigEvent.common();
+        RefreshEvent.home();
+        setText();
     }
 
     private void setAutoBackup(View view) {
@@ -149,6 +169,11 @@ public class SettingPersonalFragment extends BaseFragment {
     private void setGlobalHistory(View view) {
         Setting.putGlobalHistoryMode((Setting.getGlobalHistoryMode() + 1) % globalHistoryMode.length);
         RefreshEvent.history();
+        setText();
+    }
+
+    private void setInterfaceFailover(View view) {
+        Setting.putInterfaceFailoverMode((Setting.getInterfaceFailoverMode() + 1) % interfaceFailoverMode.length);
         setText();
     }
 
@@ -196,12 +221,6 @@ public class SettingPersonalFragment extends BaseFragment {
 
     private void startAppBranding(View view) {
         AppBrandingActivity.start(requireActivity());
-    }
-
-    private void setTouchOptimization(View view) {
-        boolean enabled = !Setting.isTouchOptimized();
-        Setting.putTouchOptimized(enabled);
-        mBinding.touchOptimizationText.setText(getSwitch(enabled));
     }
 
     private void resetApp() {
