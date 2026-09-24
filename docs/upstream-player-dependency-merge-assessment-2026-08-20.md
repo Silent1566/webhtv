@@ -47,6 +47,7 @@
 | `C18` | common / beta 同步复评 | 将 beta 最新代码合入 dev4，复评 FOLLOW-1 与 C16 等全部未推送改动并完成交付 | **已完成**：合并提交 `9f998d6808f3e8144d2d4d68f23d92308e49b599`；PR [#331](https://github.com/Silent1566/webhtv/pull/331) 目标 `beta` | [C18-beta-sync-review-dev4-20260920.md](C18-beta-sync-review-dev4-20260920.md) |
 | `C18` | common / beta 同步复评 | 将 beta 最新代码合入 dev4，复评 FOLLOW-1 与 C16 等全部未推送改动并完成交付 | **进行中**：合并树双端编译和移动端 JVM 全量测试已通过，待最终复评、提交、推送和 PR 到 `beta` | [C18-beta-sync-review-dev4-20260920.md](C18-beta-sync-review-dev4-20260920.md) |
 | `E-SP8` | Exo 性能/播放行为 | 基于现有短剧源设置的单实例队列连播、下一集预解析与受控预加载 | **代码实施及 beta 合并后复评通过**：`2b22c5240d52a8c2054299326f44fee6743ab26f` / `recovery/E-SP8/20260911201514-2b22c5240d52`；实验默认策略不变，连续切集双端设备验收与正式放量尚未完成；不变更依赖 | [E-SP8-exo-short-drama-queue.md](E-SP8-exo-short-drama-queue.md) |
+| `C20` | common / 追更刷新策略 | App 前台使用时将常规追更检查间隔缩短为 15 分钟，并提高前台到期批量；后台 6 小时兜底和已完结/计划中低频策略保持不变 | **已实现**：聚焦策略单测 5/5 与 Mobile/Leanback arm64 Java 编译通过，待 task guard 原子提交和恢复标签 | [C20-foreground-following-refresh.md](C20-foreground-following-refresh.md) |
 
 `C1` 是跨播放器真实输入验收维度，不单独形成代码任务或文档；它写入对应的 E/P 任务文档。`E-SP3` 已在 `fongmi-sync` 完成 App/Media3 合并，保留既有 `E4-J1`/`E6-1`/`E7-1`/`E7-2 + C3` 能力；`E9-3` 与已完成的 `P1` 现已共同进入集成树，后续按既定顺序处理 P2 阶段。
 

@@ -22,10 +22,12 @@ public class FollowingUpdateCoordinator {
 
     public int checkDue(long now) throws IOException {
         if (!FollowingSettings.isEnabled()) return 0;
-        List<Following> due = FollowingStore.database().getFollowingDao().findDue(now, 5);
+        boolean foreground = App.isForeground();
+        int limit = foreground ? FollowingSchedulePolicy.FOREGROUND_BATCH_SIZE : FollowingSchedulePolicy.BACKGROUND_BATCH_SIZE;
+        List<Following> due = FollowingStore.database().getFollowingDao().findDue(now, limit);
         int checked = 0;
         for (Following item : due) {
-            if (check(item, false)) checked++;
+            if (check(item, false, foreground)) checked++;
         }
         return checked;
     }
@@ -36,6 +38,10 @@ public class FollowingUpdateCoordinator {
     }
 
     boolean check(Following item, boolean manual) {
+        return check(item, manual, manual);
+    }
+
+    boolean check(Following item, boolean manual, boolean foreground) {
         long now = System.currentTimeMillis();
         try {
             FollowingSource source = FollowingStore.preferredSource(item.identityKey);
@@ -45,7 +51,7 @@ public class FollowingUpdateCoordinator {
             Throwable metadataError = null;
             if (item.tmdbId > 0) {
                 try {
-                    metadata = metadataClient.fetch(item, manual);
+                    metadata = metadataClient.fetch(item, manual || foreground);
                 } catch (Throwable error) {
                     // TMDB is the preferred official provider, but an unavailable/rate-limited
                     // provider must not make the whole record fail when the bound source is
@@ -77,7 +83,7 @@ public class FollowingUpdateCoordinator {
             item.lastCheckedAt = now;
             item.failureCount = 0;
             item.lastError = metadataError == null ? "" : "TMDB不可用，已回退原站";
-            item.nextCheckAt = FollowingSchedulePolicy.nextCheckAt(now, item.officialStatus, item.nextAirAt);
+            item.nextCheckAt = FollowingSchedulePolicy.nextCheckAt(now, item.officialStatus, item.nextAirAt, foreground);
             item.updatedAt = now;
             FollowingStore.update(item);
             if (source != null) FollowingStore.updateSource(source);
