@@ -27,11 +27,25 @@ public class PlayerPlaybackRegressionSourceTest {
         assertTrue(label + " onError must exist", method >= 0 && next > method);
         String body = source.substring(method, next);
         int stop = body.indexOf("player().stop();");
-        int prepare = body.indexOf("player().preparePlayer(applyHistoryPlayerKernel());");
+        int prepare = body.indexOf("player().preparePlayer(applyHistoryPlayerKernel(), true);");
         int flow = body.indexOf("startFlow();");
         assertTrue(label + " onError must stop the failed engine before rebuilding it", stop >= 0);
         assertTrue(label + " onError must recreate the remembered player before automatic line fallback", prepare > stop && prepare < flow);
         assertTrue(label + " automatic line fallback must still start after cleanup", flow > prepare);
+    }
+
+    @Test
+    public void automaticLineFallbackForcePreparesEvenForTheRememberedKernel() throws Exception {
+        String source = readMainJava("com", "fongmi", "android", "tv", "player", "PlayerManager.java");
+        int method = source.indexOf("public void preparePlayer(int type, boolean force)");
+        int methodEnd = source.indexOf("public void switchPlayer(int type, PlaySpec", method);
+        assertTrue("PlayerManager preparePlayer force overload must exist", method >= 0 && methodEnd > method);
+
+        String body = source.substring(method, methodEnd);
+        assertTrue("automatic fallback must force rebuilding even when the remembered kernel is active",
+                body.contains("if (engine == null || player == null || (next == playerType && !force)) return;"));
+        assertTrue("forced automatic fallback must reset the failed video surface",
+                body.contains("callback.onPlayerRebuild(player, force);"));
     }
 
     @Test

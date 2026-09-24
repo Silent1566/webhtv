@@ -12,12 +12,17 @@
 
 ## 修复
 
-在自动回退取址前调用 `preparePlayer(applyHistoryPlayerKernel())`。`applyHistoryPlayerKernel()` 恢复本剧记忆的核心；`preparePlayer()` 仅在需要时释放并重建同核心引擎，并重新绑定进度条、渲染面和 UI 状态。这样不会改变用户选择的核心，也不影响正常自动回退的地址流程。
+在自动回退取址前调用 `preparePlayer(applyHistoryPlayerKernel(), true)`。`applyHistoryPlayerKernel()` 恢复本剧记忆的核心；`preparePlayer(type, force)` 保留既有起播路径的默认语义，但在 `force=true` 时即使目标核心与当前核心相同，也释放并重建同核心引擎，同时要求 UI 清理并重绑渲染 Surface、进度条和 UI 状态。这样不会改变用户选择的核心，也不影响正常自动回退的地址流程。
+
+第一轮评审发现仅调用原 `preparePlayer(type)` 不满足验收：该方法在目标核心等于当前核心时直接返回，音频-only 故障现场仍可能被下一条线路继承。因此修复必须显式区分“普通起播前准备”与“错误恢复强制重建”，避免影响手动切换和正常起播。
 
 ## 验证
 
 - `PlayerPlaybackRegressionSourceTest.autoLineFallbackRebuildsRememberedPlayerBeforeFetchingNextLine`
-- Mobile/Leanback ARM64 debug 编译或按需要覆盖安装后，用首线路失败且第二线路可播的资源验证画面恢复。
+- `PlayerPlaybackRegressionSourceTest.automaticLineFallbackForcePreparesEvenForTheRememberedKernel`
+- `:app:testMobileArm64_v8aDebugUnitTest --tests com.fongmi.android.tv.ui.activity.PlayerPlaybackRegressionSourceTest --no-daemon`：14 个测试通过。
+- `:app:compileMobileArm64_v8aDebugJavaWithJavac :app:compileLeanbackArm64_v8aDebugJavaWithJavac --no-daemon`：通过。
+- 如后续需要实机复核，用首线路失败且第二线路可播的资源覆盖安装测试包，验证自动切线路后画面恢复。
 
 ## 回滚
 
