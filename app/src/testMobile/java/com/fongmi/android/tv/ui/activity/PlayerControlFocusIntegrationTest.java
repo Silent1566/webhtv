@@ -66,7 +66,7 @@ public class PlayerControlFocusIntegrationTest {
                         && activity.indexOf("KeyUtil.isDownKey(event)", hiddenPlaybackPredicate) > hiddenPlaybackPredicate);
         assertTrue("leanback detail-player fullscreen must disable the system focus highlight that covers video when controls hide",
                 activity.contains("private boolean isLeanbackInlinePlayerPanel()")
-                        && activity.contains("return Util.isLeanback() && (isFusionMode() || isPlayerMode());")
+                        && activity.contains("return Util.isLeanback() && (modeController.isFusionMode() || modeController.isPlayerMode());")
                         && activity.contains("binding.playerPanel.setDefaultFocusHighlightEnabled(false);")
                         && activity.contains("binding.playerPanel.setRippleColor(ColorStateList.valueOf(0x00000000));"));
     }
