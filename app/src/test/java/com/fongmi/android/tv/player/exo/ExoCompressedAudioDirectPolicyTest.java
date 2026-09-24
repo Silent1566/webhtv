@@ -27,6 +27,7 @@ import androidx.media3.exoplayer.analytics.PlayerId;
 import org.junit.Test;
 import org.junit.Ignore;
 
+import java.lang.reflect.Field;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -239,6 +240,7 @@ public class ExoCompressedAudioDirectPolicyTest {
         f.memory.nowMs.set(800);
         f.output.getPositionUs();
         ExoPlaybackException error = assertThrows(ExoPlaybackException.class, () -> wrapped.render(0, 800_000));
+        assertTrue(isRecoverable(error));
         assertEquals(ExoPlaybackException.TYPE_RENDERER, error.type);
         assertEquals(PlaybackException.ERROR_CODE_AUDIO_TRACK_WRITE_FAILED, error.errorCode);
         assertTrue(error.getCause() instanceof ExoStartupAudioRenderer.StartupStallException);
@@ -1358,6 +1360,12 @@ public class ExoCompressedAudioDirectPolicyTest {
                 .setIsGaplessSupported(gapless)
                 .setIsSpeedChangeSupported(speedChange)
                 .build();
+    }
+
+    private static boolean isRecoverable(ExoPlaybackException error) throws ReflectiveOperationException {
+        Field field = ExoPlaybackException.class.getDeclaredField("isRecoverable");
+        field.setAccessible(true);
+        return field.getBoolean(error);
     }
 
     private static class UnsupportedAudioOutputProvider
