@@ -852,7 +852,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         setupOverviewInteraction();
         if (Util.isMobile()) binding.headerTitle.setText("");
         else binding.headerTitle.setText(detailModeTitle());
-        binding.headerTitle.setVisibility(Util.isMobile() || !isCinemaMode() ? View.VISIBLE : View.INVISIBLE);
+        binding.headerTitle.setVisibility(Util.isMobile() || !modeController.isCinemaStyle() ? View.VISIBLE : View.INVISIBLE);
         binding.title.setText(getNameText());
         binding.subtitle.setText("");
         binding.sourceValue.setText(getString(R.string.detail_source_current, getKeyText()));
@@ -901,12 +901,12 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         personalDoubanAdapter.setOnItemLongClickListener(item -> onRecommendationLongClick(item, "douban"));
         personalAiAdapter.setOnItemLongClickListener(item -> onRecommendationLongClick(item, "ai"));
         personalAiAdapter.setOnItemFocusListener(this::showAiRecommendationReason);
-        castAdapter.setCinema(isCinemaMode());
-        creatorAdapter.setCinema(isCinemaMode());
-        relatedAdapter.setCinema(isCinemaMode());
-        personalTmdbAdapter.setCinema(isCinemaMode());
-        personalDoubanAdapter.setCinema(isCinemaMode());
-        personalAiAdapter.setCinema(isCinemaMode());
+        castAdapter.setCinema(modeController.isCinemaStyle());
+        creatorAdapter.setCinema(modeController.isCinemaStyle());
+        relatedAdapter.setCinema(modeController.isCinemaStyle());
+        personalTmdbAdapter.setCinema(modeController.isCinemaStyle());
+        personalDoubanAdapter.setCinema(modeController.isCinemaStyle());
+        personalAiAdapter.setCinema(modeController.isCinemaStyle());
         setDetailAdaptersLight(resolveLightTheme());
         updateEpisodeLayoutManager();
         binding.episodeContainer.setItemAnimator(null);
@@ -977,9 +977,9 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             }
         };
 
-        if (isFusionMode()) {
+        if (rawFusionMode()) {
             modeController = new FusionDetailController(host);
-        } else if (isPlayerMode()) {
+        } else if (rawPlayerMode()) {
             modeController = new PlayerDetailController(host);
         } else {
             modeController = new EnhancedDetailController(host);
@@ -1019,7 +1019,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
                     binding.headerBar.getPaddingRight(),
                     binding.headerBar.getPaddingBottom()
             );
-            if (!isCinemaMode()) TmdbDetailLayoutUtils.setHeightDp(binding.heroSpacer, defaultHeroSpacerHeightDp());
+            if (!modeController.isCinemaStyle()) TmdbDetailLayoutUtils.setHeightDp(binding.heroSpacer, defaultHeroSpacerHeightDp());
             return insets;
         });
         ViewCompat.requestApplyInsets(binding.root);
@@ -1036,7 +1036,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             window.setNavigationBarContrastEnforced(false);
         }
         WindowInsetsControllerCompat insets = WindowCompat.getInsetsController(window, window.getDecorView());
-        boolean lightBars = lightTheme && !isFusionMode();
+        boolean lightBars = lightTheme && !modeController.shouldShowInlinePlayer();
         insets.setAppearanceLightStatusBars(lightBars);
         insets.setAppearanceLightNavigationBars(lightBars);
     }
@@ -1897,7 +1897,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         applyBackdropSurface(colors);
         binding.backdropFill.setAlpha(backdropSlideAlpha());
         binding.backdrop.setAlpha(backdropSlideAlpha());
-        binding.backdropShade.setBackground(isCinemaMode() ? cinemaBackdropShade() : TmdbDetailLayoutUtils.colorDrawable(colors.backdropShade));
+        binding.backdropShade.setBackground(modeController.isCinemaStyle() ? cinemaBackdropShade() : TmdbDetailLayoutUtils.colorDrawable(colors.backdropShade));
         setCard(binding.contentPanel, colors.panel, colors.line);
         setPlayerCard(colors);
         setCard(binding.tmdbPanel, colors.panel, colors.line);
@@ -1930,8 +1930,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         binding.overviewToggle.setTextColor(colors.accent);
         binding.episodeEmpty.setTextColor(colors.secondary);
         binding.tmdbStatus.setTextColor(colors.secondary);
-        binding.personalAiReason.setTextColor(isCinemaMode() ? 0xE6FFFFFF : colors.secondary);
-        if (isCinemaMode()) binding.personalAiReason.setShadowLayer(3f, 0f, 1.5f, 0xCC000000);
+        binding.personalAiReason.setTextColor(modeController.isCinemaStyle() ? 0xE6FFFFFF : colors.secondary);
+        if (modeController.isCinemaStyle()) binding.personalAiReason.setShadowLayer(3f, 0f, 1.5f, 0xCC000000);
         else binding.personalAiReason.setShadowLayer(0f, 0f, 0f, 0x00000000);
         tintTmdbSectionTitles(colors);
         styleSourceValue();
@@ -1949,7 +1949,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         if (episodePhotoAdapter != null) episodePhotoAdapter.setLight(lightTheme);
         if (posterAdapter != null) posterAdapter.setLight(lightTheme);
         setDetailAdaptersLight(lightTheme);
-        if (isCinemaMode()) scheduleBackdropSlide(BACKDROP_SLIDE_DELAY_MS);
+        if (modeController.isCinemaStyle()) scheduleBackdropSlide(BACKDROP_SLIDE_DELAY_MS);
     }
 
     private void styleSourceValue() {
@@ -1985,10 +1985,10 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
                 binding.personalAiTitle,
                 binding.externalLinksTitle
         };
-        int color = isCinemaMode() ? 0xFFFFFFFF : colors.primary;
+        int color = modeController.isCinemaStyle() ? 0xFFFFFFFF : colors.primary;
         for (TextView title : titles) {
             title.setTextColor(color);
-            if (isCinemaMode()) title.setShadowLayer(3f, 0f, 1.5f, 0xCC000000);
+            if (modeController.isCinemaStyle()) title.setShadowLayer(3f, 0f, 1.5f, 0xCC000000);
             else title.setShadowLayer(0f, 0f, 0f, 0x00000000);
         }
         updateTmdbSeasonActionVisibility();
@@ -2000,7 +2000,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         boolean pictureInPicture = isInPictureInPictureMode();
         boolean showMobileButton = DetailThemeVisibility.showMobileThemeButton(mobile, inlineFullscreen, inlinePiPLayout, pictureInPicture);
         boolean showLargeScreenButton = DetailThemeVisibility.showLargeScreenThemeButton(mobile, inlineFullscreen, inlinePiPLayout, pictureInPicture);
-        boolean fusionMode = isFusionMode();
+        boolean fusionMode = modeController.isFusionMode();
         boolean playbackPage = isAutoPlayMode() || detailPlayerActive;
         // 手机版也使用底部一排的主题按钮（themeModeDetail），不再使用右上角浮动按钮（themeModeTop）
         binding.themeModeTop.setVisibility(View.GONE);
@@ -2010,7 +2010,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private void applyTemplateCardChrome(ThemeColors colors) {
-        if (isCinemaMode()) {
+        if (modeController.isCinemaStyle()) {
             binding.contentPanel.setCardBackgroundColor(0x00000000);
             binding.contentPanel.setStrokeWidth(0);
             binding.tmdbPanel.setCardBackgroundColor(0x00000000);
@@ -2026,7 +2026,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private void applyDetailTemplate() {
-        if (isCinemaMode()) applyCinemaDetailTemplate();
+        if (modeController.isCinemaStyle()) applyCinemaDetailTemplate();
         else applyDefaultDetailTemplate();
     }
 
@@ -2036,7 +2036,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         TmdbDetailLayoutUtils.setWidthMatch(binding.contentPanel);
         TmdbDetailLayoutUtils.setWidthMatch(binding.tmdbSection);
         TmdbDetailLayoutUtils.setMarginsDp(binding.contentPanel, 16, 0, 16, 0);
-        TmdbDetailLayoutUtils.setMarginsDp(binding.playerPanel, 16, isFusionMode() ? 22 : 14, 16, isFusionMode() ? 20 : 16);
+        TmdbDetailLayoutUtils.setMarginsDp(binding.playerPanel, 16, modeController.isFusionMode() ? 22 : 14, 16, modeController.isFusionMode() ? 20 : 16);
         TmdbDetailLayoutUtils.setMarginsDp(binding.tmdbSection, 16, 16, 16, 0);
         binding.contentPanel.setRadius(ResUtil.dp2px(20));
         binding.tmdbPanel.setRadius(ResUtil.dp2px(20));
@@ -2070,7 +2070,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private int defaultHeroSpacerHeightDp() {
-        if (isFusionMode()) return 0;
+        if (modeController.isFusionMode()) return 0;
         if (!Util.isMobile()) return 102;
         int insetDp = Math.round(statusBarInsetTop / getResources().getDisplayMetrics().density);
         return Math.max(72, 102 - Math.min(insetDp, 30));
@@ -2245,7 +2245,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private boolean isLeanbackInlinePlayerPanel() {
-        return Util.isLeanback() && (isFusionMode() || isPlayerMode());
+        return Util.isLeanback() && (modeController.isFusionMode() || modeController.isPlayerMode());
     }
 
     private void setupPlayerPanelFocusLayer() {
@@ -4105,7 +4105,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private float backdropSlideAlpha() {
-        return isCinemaMode() && !lightTheme ? 0.9f : 1f;
+        return modeController.isCinemaStyle() && !lightTheme ? 0.9f : 1f;
     }
 
     private int nextBackdropSlideIndex() {
@@ -4168,9 +4168,27 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         return true;
     }
 
+    private boolean isCinemaStyle() {
+        return modeController != null ? modeController.isCinemaStyle() : rawCinemaMode();
+    }
+
+    private boolean rawCinemaMode() {
+        return getIntent().getIntExtra("detail_mode", Setting.getDetailOpenMode()) == Setting.DETAIL_OPEN_CINEMA || Setting.isTmdbCinemaStyle();
+    }
+
+    @Override
+    protected boolean applyGlobalTheme() {
+        return !isCinemaStyle();
+    }
+
+    @Override
+    protected boolean preserveDetailThemeState() {
+        return isCinemaStyle();
+    }
+
     private ThemeColors currentThemeColors() {
         ThemeColors colors = lightTheme ? ThemeColors.light() : ThemeColors.dark();
-        return isCinemaMode() ? ThemeColors.cinema(lightTheme) : colors;
+        return isCinemaStyle() ? ThemeColors.cinema(lightTheme) : colors;
     }
 
     private void refreshBackdropSurface() {
@@ -4190,7 +4208,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private int backdropFallbackBackground(ThemeColors colors) {
-        return isPlayerMode() ? 0xFF0F141A : colors.background;
+        return modeController.isPlayerMode() ? 0xFF0F141A : colors.background;
     }
 
     private String episodeFallbackStillUrl() {
@@ -4368,7 +4386,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         if (!(view instanceof LinearLayout row)) return;
         boolean focused = row.hasFocus();
         GradientDrawable background = new GradientDrawable();
-        background.setColor(isCinemaMode() ? TmdbCinemaTheme.palette(lightTheme).ratingChip() : colors.chip);
+        background.setColor(modeController.isCinemaStyle() ? TmdbCinemaTheme.palette(lightTheme).ratingChip() : colors.chip);
         background.setCornerRadius(ResUtil.dp2px(10));
         background.setStroke(ResUtil.dp2px(focused ? FOCUS_STROKE_DP : CHIP_STROKE_DP), focused ? FOCUS_STROKE : colors.line);
         row.setBackground(background);
@@ -4462,7 +4480,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private int ratingChipBackground(ThemeColors colors) {
-        return isCinemaMode() ? TmdbCinemaTheme.palette(true).ratingChip() : colors.chip;
+        return modeController.isCinemaStyle() ? TmdbCinemaTheme.palette(true).ratingChip() : colors.chip;
     }
 
     private int readableDetailRatingColor(int color) {
@@ -4699,7 +4717,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
                 renderFlagSelection();
                 renderEpisodes();
                 refreshSeasonSourceRoutes();
-                if (isFusionMode()) onPlay();
+                if (modeController.isFusionMode()) onPlay();
             });
             binding.flagContainer.addView(button);
         }
@@ -6182,7 +6200,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         episodePhotoAdapter.setItems(tmdbEpisodePhotos);
         episodePhotoAdapter.rebindAttached(binding.episodePhotoList);
 
-        int sectionGapDp = isPlayerMode() && !isCinemaMode() ? 12 : 20;
+        int sectionGapDp = modeController.isPlayerMode() && !modeController.isCinemaStyle() ? 12 : 20;
         setTopMargin(binding.posterTitle, hasPhotos ? sectionGapDp : 0);
         binding.posterTitle.setVisibility(hasPosters ? View.VISIBLE : View.GONE);
         binding.posterList.setVisibility(hasPosters ? View.VISIBLE : View.GONE);
@@ -7244,20 +7262,16 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         return coalesce(matchedTmdbItem == null ? "" : matchedTmdbItem.getPosterUrl(), matchedTmdbItem == null ? "" : matchedTmdbItem.getBackdropUrl(), vod == null ? "" : vod.getPic(), getPicText());
     }
 
-    private boolean isFusionMode() {
+    private boolean rawFusionMode() {
         return getDetailMode() == Setting.DETAIL_OPEN_FUSION || getIntent().getBooleanExtra("fusion", false);
     }
 
-    private boolean isPlayerMode() {
+    private boolean rawPlayerMode() {
         return getDetailMode() == Setting.DETAIL_OPEN_PLAYER;
     }
 
-    private boolean isCinemaMode() {
-        return getIntent().getIntExtra("detail_mode", Setting.getDetailOpenMode()) == Setting.DETAIL_OPEN_CINEMA || Setting.isTmdbCinemaStyle();
-    }
-
     private int getDetailMode() {
-        // 返回原始模式，不做 normalize，否则 isPlayerMode() 永远返回 false
+        // 返回原始模式，不做 normalize，否则 modeController.isPlayerMode() 永远返回 false
         if (getIntent().hasExtra("detail_mode")) return getIntent().getIntExtra("detail_mode", Setting.DETAIL_OPEN_ENHANCED);
         // 详情直放没有内嵌播放界面；若既无 detail_mode 也无 fusion 标记，只能按当前设置还原，
         // 不能把无标记默认成炫彩详情，否则点击播放会误走融合内嵌播放。
@@ -7265,8 +7279,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private int detailModeTitle() {
-        if (isFusionMode()) return R.string.setting_detail_open_fusion;
-        if (isPlayerMode()) return R.string.setting_detail_open_player;
+        if (modeController.isFusionMode()) return R.string.setting_detail_open_fusion;
+        if (modeController.isPlayerMode()) return R.string.setting_detail_open_player;
         return R.string.setting_detail_open_enhanced;
     }
 
@@ -7275,7 +7289,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private boolean shouldUseLoadingOnlyBeforeDefaultPlayback() {
-        return isAutoPlayMode() && !isFusionMode() && !isPlayerMode();
+        return isAutoPlayMode() && !modeController.isFusionMode() && !modeController.isPlayerMode();
     }
 
     private void setLoadingOnlyBeforeDefaultPlayback(boolean loadingOnly) {
@@ -7288,7 +7302,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private boolean isInlinePlayerMode() {
-        return isFusionMode() || detailPlayerActive;
+        return modeController.isFusionMode() || detailPlayerActive;
     }
 
     private boolean isCurrentInlinePlayback(Episode episode) {
@@ -7580,7 +7594,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private boolean suppressInlineDisplayForLeanbackFusionExit() {
-        if (!Util.isLeanback() || !isFusionMode()) return false;
+        if (!Util.isLeanback() || !modeController.isFusionMode()) return false;
         inlineDisplaySuppressUntil = Math.max(inlineDisplaySuppressUntil, SystemClock.uptimeMillis() + LEANBACK_FUSION_EXIT_DISPLAY_SUPPRESS_MS);
         hideInlineDisplayPanel();
         return true;
@@ -9816,7 +9830,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
 
     private boolean shouldShowDetailFullscreenControlsOnReady() {
         // 详情直放模式:只在首次准备完成时显示控制栏,快进/后退导致的 STATE_READY 不显示
-        return detailPlayerActive && !isFusionMode() && inlineFullscreen && !isLock() && !inlineFirstReady;
+        return detailPlayerActive && !modeController.isFusionMode() && inlineFullscreen && !isLock() && !inlineFirstReady;
     }
 
     private void applyInlineShortDramaMode() {
@@ -9941,8 +9955,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private void applyInlinePlayerEmbeddedLayout() {
         if (binding == null) return;
         // 融合模式上下 margin (22dp/20dp) 比普通模式 (14dp/16dp) 略大
-        int topMarginDp = isFusionMode() ? 22 : 14;
-        int bottomMarginDp = isFusionMode() ? 20 : 16;
+        int topMarginDp = modeController.isFusionMode() ? 22 : 14;
+        int bottomMarginDp = modeController.isFusionMode() ? 20 : 16;
         // TV 版左右贴边（margin=0），mobile 版左右留白 16dp
         int horizontalMarginDp = Util.isLeanback() ? 0 : 16;
         FrameLayout.LayoutParams params;
@@ -9984,8 +9998,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         ViewGroup.LayoutParams sp = binding.playerPanelSpacer.getLayoutParams();
         if (sp == null) return;
         int target = ResUtil.dp2px(252);
-        int topMargin = ResUtil.dp2px(isFusionMode() ? 22 : 14);
-        int bottomMargin = ResUtil.dp2px(isFusionMode() ? 20 : 16);
+        int topMargin = ResUtil.dp2px(modeController.isFusionMode() ? 22 : 14);
+        int bottomMargin = ResUtil.dp2px(modeController.isFusionMode() ? 20 : 16);
         boolean changed = sp.height != target;
         if (sp instanceof ViewGroup.MarginLayoutParams marginParams) {
             if (marginParams.topMargin != topMargin || marginParams.bottomMargin != bottomMargin) {
@@ -10731,7 +10745,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     @Override
     protected void onFirstFrameRendered() {
         recordInlinePlayHealth(true, "");
-        if (!detailPlayerFullscreenPending || !isPlayerMode() || !inlineStarted || !isOwner()) return;
+        if (!detailPlayerFullscreenPending || !modeController.isPlayerMode() || !inlineStarted || !isOwner()) return;
         revealDetailPlayerFullscreen();
     }
 
@@ -11817,7 +11831,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private void openMatchedDetail(Site site, Vod match, TmdbItem item) {
-        if (isFusionMode()) {
+        if (modeController.isFusionMode()) {
             switchSourceDetail(site, match, item, "");
             return;
         }
@@ -11864,7 +11878,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         TmdbBundle reusableBundle = canReuseTmdbBundle(item) ? activeTmdbBundle : null;
         Intent intent = new Intent(getIntent());
         intent.putExtra("detail_mode", getDetailMode());
-        intent.putExtra("fusion", isFusionMode());
+        intent.putExtra("fusion", modeController.isFusionMode());
         intent.putExtra("key", site.getKey());
         intent.putExtra("id", match.getId());
         intent.putExtra("name", match.getName());
