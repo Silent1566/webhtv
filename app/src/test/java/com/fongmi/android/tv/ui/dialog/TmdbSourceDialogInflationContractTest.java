@@ -38,8 +38,12 @@ public class TmdbSourceDialogInflationContractTest {
         assertFalse(layout.contains("@+id/proxyHostInput"));
         assertTrue(source.contains("setupRouteDropdown(apiHostInput, apiOptionLabels(), activity.getString(R.string.dialog_tmdb_api_host_label))"));
         assertTrue(source.contains("setupRouteDropdown(imageHostInput, imageOptionLabels(), activity.getString(R.string.dialog_tmdb_image_host_label))"));
-        assertTrue(source.contains("wireTextDpadFocus(apiHostInput, languageInput, imageHostInput, null, null)"));
-        assertTrue(source.contains("wireTextDpadFocus(imageHostInput, apiHostInput, omdbApiKeyInput, null, null)"));
+        assertTrue(source.contains("wireRouteDpadFocus(apiHostInput, apiOptionLabels(),\n"
+                + "                activity.getString(R.string.dialog_tmdb_api_host_label), languageInput, imageHostInput)"));
+        assertTrue(source.contains("wireRouteDpadFocus(imageHostInput, imageOptionLabels(),\n"
+                + "                activity.getString(R.string.dialog_tmdb_image_host_label), apiHostInput, omdbApiKeyInput)"));
+        assertTrue("route focus wiring must preserve the route activation key handler",
+                source.indexOf("wireRouteDpadFocus(apiHostInput", source.indexOf("private void wireConfigDialogFocus")) > 0);
         assertTrue(source.contains("showRoutePicker(input, labels, title)"));
         assertTrue(source.contains(".setSingleChoiceItems(labels, checked"));
         int show = source.indexOf("private void showRoutePicker");

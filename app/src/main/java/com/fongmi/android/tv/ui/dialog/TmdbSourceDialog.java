@@ -219,6 +219,20 @@ public class TmdbSourceDialog {
         });
     }
 
+    private void wireRouteDpadFocus(MaterialAutoCompleteTextView input, String[] labels, String title, View up, View down) {
+        input.setOnKeyListener((v, keyCode, event) -> {
+            if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+            if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER) {
+                input.removeCallbacks(routeFocusPicker);
+                showRoutePicker(input, labels, title);
+                return true;
+            }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_UP && up != null) return requestFocus(up);
+            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN && down != null) return requestFocus(down);
+            return false;
+        });
+    }
+
     private void showRoutePicker(MaterialAutoCompleteTextView input, String[] labels, String title) {
         clearRouteFocusPickers();
         String current = inputText(input);
@@ -318,8 +332,10 @@ public class TmdbSourceDialog {
         View negative = dialog.getButton(AlertDialog.BUTTON_NEGATIVE);
         wireTextDpadFocus(apiKeyInput, null, languageInput, null, null);
         wireTextDpadFocus(languageInput, apiKeyInput, apiHostInput, null, null);
-        wireTextDpadFocus(apiHostInput, languageInput, imageHostInput, null, null);
-        wireTextDpadFocus(imageHostInput, apiHostInput, omdbApiKeyInput, null, null);
+        wireRouteDpadFocus(apiHostInput, apiOptionLabels(),
+                activity.getString(R.string.dialog_tmdb_api_host_label), languageInput, imageHostInput);
+        wireRouteDpadFocus(imageHostInput, imageOptionLabels(),
+                activity.getString(R.string.dialog_tmdb_image_host_label), apiHostInput, omdbApiKeyInput);
         wireTextDpadFocus(omdbApiKeyInput, imageHostInput, ruleInput, null, null);
         wireTextDpadFocus(ruleInput, omdbApiKeyInput, disabledRuleInput, null, addBtn);
         wireDpadFocus(addBtn, omdbApiKeyInput, addDisabledBtn, ruleInput, null);
