@@ -2869,6 +2869,9 @@
     <string name="following_delete_title">Unfollow this show?</string>
     <string name="following_delete_message">The viewing history and TMDB progress will be kept.</string>
     <string name="following_official">Official: episode %1$d</string>
+    <string name="following_season_total">Season: %1$d episodes</string>
+    <string name="following_series_total">Series: %1$d episodes</string>
+    <string name="following_weekday">Updates every %1$s</string>
     <string name="following_official_unknown">Official status unknown</string>
     <string name="following_source">Current source: episode %1$d</string>
     <string name="following_source_unknown">Current source not checked</string>
@@ -2895,4 +2898,13 @@
     <string name="following_filter_failed">Check failed</string>
     <string name="setting_following">Following updates</string>
     <string name="following_next_season">Follow new season S%1$d</string>
+    <string-array name="following_weekdays">
+        <item>Sunday</item>
+        <item>Monday</item>
+        <item>Tuesday</item>
+        <item>Wednesday</item>
+        <item>Thursday</item>
+        <item>Friday</item>
+        <item>Saturday</item>
+    </string-array>
 </resources>

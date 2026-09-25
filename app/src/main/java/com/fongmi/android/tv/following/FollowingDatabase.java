@@ -1,18 +1,32 @@
 package com.fongmi.android.tv.following;
 
 import android.content.Context;
-
+import androidx.annotation.NonNull;
 import androidx.room.Database;
 import androidx.room.Room;
 import androidx.room.RoomDatabase;
+import androidx.room.migration.Migration;
+import androidx.sqlite.SQLiteConnection;
+import androidx.sqlite.db.SupportSQLiteDatabase;
 
 import com.fongmi.android.tv.App;
 
-@Database(entities = {Following.class, FollowingSource.class}, version = 1, exportSchema = true)
+@Database(entities = {Following.class, FollowingSource.class}, version = 2, exportSchema = true)
 public abstract class FollowingDatabase extends RoomDatabase {
 
     public static final String NAME = "following";
-    public static final int VERSION = 1;
+    public static final int VERSION = 2;
+    public static final Migration MIGRATION_1_2 = new Migration(1, 2) {
+        @Override
+        public void migrate(@NonNull SupportSQLiteDatabase database) {
+            database.execSQL("ALTER TABLE `following` ADD COLUMN `next_air_weekday` INTEGER NOT NULL DEFAULT 0");
+        }
+
+        @Override
+        public void migrate(@NonNull SQLiteConnection connection) {
+            connection.prepare("ALTER TABLE `following` ADD COLUMN `next_air_weekday` INTEGER NOT NULL DEFAULT 0").step();
+        }
+    };
     private static volatile FollowingDatabase instance;
 
     public static FollowingDatabase get() {
@@ -26,6 +40,7 @@ public abstract class FollowingDatabase extends RoomDatabase {
 
     public static FollowingDatabase create(Context context) {
         return Room.databaseBuilder(context.getApplicationContext(), FollowingDatabase.class, NAME)
+                .addMigrations(MIGRATION_1_2)
                 .fallbackToDestructiveMigrationOnDowngrade()
                 .build();
     }

@@ -6,8 +6,6 @@ public final class FollowingSchedulePolicy {
 
     public static final long PERIODIC_INTERVAL = TimeUnit.HOURS.toMillis(6);
     public static final long FOREGROUND_INTERVAL = TimeUnit.MINUTES.toMillis(15);
-    public static final int BACKGROUND_BATCH_SIZE = 5;
-    public static final int FOREGROUND_BATCH_SIZE = 20;
     public static final long PERIODIC_FLEX = TimeUnit.HOURS.toMillis(1);
     public static final long MIN_ONE_SHOT_DELAY = TimeUnit.MINUTES.toMillis(15);
     public static final long MIN_ONE_SHOT_AFTER_CHECK = TimeUnit.HOURS.toMillis(1);
