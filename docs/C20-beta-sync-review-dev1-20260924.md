@@ -93,3 +93,11 @@
 - 本地恢复标签：`recovery/C20-beta-sync-review-dev1-20260924/20260925001538-4b38555402d8`。
 - 已推送：`origin/dev1` 指向合并提交。
 - PR：https://github.com/Silent1566/webhtv/pull/365 （`dev1` -> `beta`，打开且可合并，仅创建，不合并）。
+
+## 2026-09-25 追加修复与推送恢复锚点
+
+- **目标**：推送 `dev1` 的追更站点大小写修复，并创建新的 `dev1 -> beta` 中文 PR；不合并 PR。
+- **已完成**：远端 `beta` 已包含于本地 `HEAD`；`7cd8799dfe8e1d82366f3d69430c95e8cd8109c9` 已通过 `VodConfigSiteKeyTest`、`git diff --check` 与 `git diff --cached --check`；剔除提交 `5682f2b054b577b0db5c6f7c1143f2eebb51858e`、`2faa1f37757f` 均不在 `HEAD` 祖先中。
+- **未完成**：`git push origin dev1` 因 GitHub TLS 握手持续失败未完成；`gh auth status` 报告 keyring token 失效，且匿名 API 已限流，无法创建 PR。
+- **不安全状态**：无；tracked 工作区干净，本地已提交并打恢复标签，未跟踪文件均为既有验证截图/dump。
+- **恢复动作**：GitHub 传输与认证恢复后，直接重新执行 `git push origin dev1`，然后创建 `dev1 -> beta` 的中文 PR，标题“修复追更站点大小写键匹配”，内容使用任务文档中的中文 PR 描述；不要重新评审或重跑已通过的测试。
