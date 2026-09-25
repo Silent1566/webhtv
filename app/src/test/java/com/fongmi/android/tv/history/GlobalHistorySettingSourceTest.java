@@ -17,7 +17,7 @@ public class GlobalHistorySettingSourceTest {
         assertTrue(source.contains("GLOBAL_HISTORY_OFF = 0"));
         assertTrue(source.contains("GLOBAL_HISTORY_AUTO = 1"));
         assertTrue(source.contains("GLOBAL_HISTORY_SEARCH = 2"));
-        assertTrue(source.contains("Prefers.getInt(\"global_history_mode\", GLOBAL_HISTORY_OFF)"));
+        assertTrue(source.contains("getAll().get(\"global_history_mode\")"));
         assertTrue(source.contains("Prefers.put(\"global_history_mode\""));
     }
 
@@ -26,7 +26,9 @@ public class GlobalHistorySettingSourceTest {
         String source = read("app/src/main/java/com/fongmi/android/tv/setting/Setting.java");
 
         assertTrue(source.contains("mode == GLOBAL_HISTORY_OFF ? -1 : mode"));
-        assertTrue(source.contains("mode != GLOBAL_HISTORY_AUTO && mode != GLOBAL_HISTORY_SEARCH"));
+        assertTrue(source.contains("value instanceof Boolean legacy"));
+        assertTrue(source.contains("value instanceof Number number"));
+        assertTrue(source.contains("return clampGlobalHistoryMode(number.intValue())"));
     }
 
     @Test
