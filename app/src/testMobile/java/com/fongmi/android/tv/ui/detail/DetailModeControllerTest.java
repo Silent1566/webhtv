@@ -58,6 +58,25 @@ public class DetailModeControllerTest {
     }
 
     @Test
+    public void enhancedDetailController_keepsThemeControlOfCinemaPresentation() throws Exception {
+        Path controllerPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "detail", "EnhancedDetailController.java"));
+        Path hostPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "detail", "DetailModeHost.java"));
+        Path activityPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
+        String controller = new String(Files.readAllBytes(controllerPath), StandardCharsets.UTF_8);
+        String host = new String(Files.readAllBytes(hostPath), StandardCharsets.UTF_8);
+        String activity = new String(Files.readAllBytes(activityPath), StandardCharsets.UTF_8);
+
+        assertTrue("Enhanced mode must delegate cinema presentation to the selected detail theme",
+                controller.contains("return host.isCinemaStyle();"));
+        assertTrue("DetailModeHost must expose the selected cinema style",
+                host.contains("boolean isCinemaStyle();"));
+        assertTrue("Activity must wire the host cinema style to rawCinemaMode()",
+                activity.contains("public boolean isCinemaStyle()") && activity.contains("return rawCinemaMode();"));
+        assertTrue("The mode refactor must not hard-code EnhancedDetailController.isCinemaStyle() to true",
+                !controller.contains("return true;") || !controller.contains("public boolean isCinemaStyle()"));
+    }
+
+    @Test
     public void playerDetailController_hasCorrectVisibilityLogic() throws Exception {
         Path controllerPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "detail", "PlayerDetailController.java"));
         String source = new String(Files.readAllBytes(controllerPath), StandardCharsets.UTF_8);

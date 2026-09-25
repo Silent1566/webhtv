@@ -21,7 +21,7 @@ public class EnhancedDetailController extends BaseTmdbDetailModeController {
 
     @Override
     public boolean isCinemaStyle() {
-        return true;
+        return host.isCinemaStyle();
     }
 
     @Override

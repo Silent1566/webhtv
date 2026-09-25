@@ -971,6 +971,11 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             }
 
             @Override
+            public boolean isCinemaStyle() {
+                return rawCinemaMode();
+            }
+
+            @Override
             public void closeDetailFullscreenPlayer() {
                 TmdbDetailActivity.this.closeDetailFullscreenPlayer();
             }
