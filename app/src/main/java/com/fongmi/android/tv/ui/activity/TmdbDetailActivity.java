@@ -221,6 +221,7 @@ import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.Task;
 import com.fongmi.android.tv.ui.utils.TmdbDetailLayoutUtils;
 import com.fongmi.android.tv.utils.TmdbDetailCache;
+import com.fongmi.android.tv.utils.TmdbLanguagePolicy;
 import com.fongmi.android.tv.utils.TmdbEpisodeSorter;
 import com.fongmi.android.tv.utils.TmdbImageSelector;
 import com.fongmi.android.tv.utils.TmdbImageSaver;
@@ -2438,7 +2439,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
                 return;
             }
             if (sourceBundle != null) {
-                if (reusableBundle != null) sourceBundle = TmdbSourceMerger.merge(sourceBundle, sourcePayload, reusableBundle, null).bundle();
+                if (reusableBundle != null) sourceBundle = TmdbSourceMerger.merge(sourceBundle, sourcePayload, reusableBundle, null, TmdbLanguagePolicy.requestLanguage(tmdbConfig)).bundle();
                 TmdbBundle initialBundle = sourceBundle;
                 runOnAliveUi(() -> {
                     if (generation != loadGeneration) return;
@@ -2448,14 +2449,14 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
                     applyLoaded(finalVod, initialBundle, new ArrayList<>(), finalError, false);
                 });
                 if (!decision.networkAllowed()) return;
-                TmdbSourceCapabilityPlanner.Plan plan = TmdbSourceCapabilityPlanner.plan(initialBundle, sourcePayload, TmdbSourceCapabilityPlanner.UiState.initialScreen());
+                TmdbSourceCapabilityPlanner.Plan plan = TmdbSourceCapabilityPlanner.plan(initialBundle, sourcePayload, TmdbSourceCapabilityPlanner.UiState.initialScreen(), TmdbLanguagePolicy.requestLanguage(tmdbConfig));
                 SpiderDebug.log("tmdb-detail-flow", "source payload plan required=%s missing=%s total=%dms", plan.required(), plan.missing(), System.currentTimeMillis() - loadStart);
                 if (!plan.hasInitialNetworkGaps()) return;
                 try {
                     long sourceFillStart = System.currentTimeMillis();
                     JsonObject detail = tmdbService.detailForSource(initialBundle.item(), sourcePayload.getSeasonNumber(), tmdbConfig, plan.missing());
                     TmdbBundle networkBundle = TmdbSourceAdapter.fromNetwork(initialBundle.item(), detail, tmdbConfig);
-                    TmdbBundle mergedBundle = TmdbSourceMerger.fillOnly(initialBundle, sourcePayload, networkBundle);
+                    TmdbBundle mergedBundle = TmdbSourceMerger.fillOnly(initialBundle, sourcePayload, networkBundle, TmdbLanguagePolicy.requestLanguage(tmdbConfig));
                     SpiderDebug.log("tmdb-detail-flow", "source payload network fill cost=%dms groups=%s total=%dms", System.currentTimeMillis() - sourceFillStart, plan.missing(), System.currentTimeMillis() - loadStart);
                     if (generation != loadGeneration || Thread.currentThread().isInterrupted()) return;
                     runOnAliveUi(() -> {
@@ -2888,10 +2889,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private String tmdbDetailTitle(TmdbItem item, JsonObject detail) {
-        if (item == null || detail == null) return "";
-        String primary = "movie".equalsIgnoreCase(item.getMediaType()) ? string(detail, "title") : string(detail, "name");
-        if (!TextUtils.isEmpty(primary)) return primary;
-        return "movie".equalsIgnoreCase(item.getMediaType()) ? string(detail, "name") : string(detail, "title");
+        return tmdbService.preferredTitle(item, detail, tmdbConfig);
     }
 
     private void loadTmdbMediaBlocks(TmdbBundle bundle) {
@@ -3559,9 +3557,9 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         if (!isTmdbAllowedForCurrentSite()) return null;
         TmdbMatchCache cache = Setting.getTmdbMatchCache();
         // 手动选择优先，且不做标题兼容性校验：用户之所以手动选，正是因为标题解析结果不对。
-        TmdbItem manual = cache.findManual(getKeyText(), getIdText(), getTmdbRawTitle());
+        TmdbItem manual = cache.findManual(getKeyText(), getIdText(), getTmdbRawTitle(), TmdbLanguagePolicy.requestLanguage(tmdbConfig));
         if (manual != null) return manual;
-        TmdbItem item = cache.find(getKeyText(), getIdText(), getTmdbRawTitle());
+        TmdbItem item = cache.find(getKeyText(), getIdText(), getTmdbRawTitle(), TmdbLanguagePolicy.requestLanguage(tmdbConfig));
         if (!isCachedTmdbMatchCompatible(item)) return null;
         return item;
     }
@@ -3598,7 +3596,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         // 不加锁会让后到的自动结果基于旧快照覆盖掉刚落盘的手动选择。
         synchronized (Setting.class) {
             TmdbMatchCache cache = Setting.getTmdbMatchCache();
-            cache.put(getKeyText(), getIdText(), getTmdbRawTitle(), item);
+            cache.put(getKeyText(), getIdText(), getTmdbRawTitle(), item, TmdbLanguagePolicy.requestLanguage(tmdbConfig));
             Setting.putTmdbMatchCache(cache);
         }
     }
@@ -3609,7 +3607,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         List<String> aliases = tmdbSourceTitleAliases();
         synchronized (Setting.class) {
             TmdbMatchCache cache = Setting.getTmdbMatchCache();
-            cache.putManual(getKeyText(), getIdText(), aliases, item);
+            cache.putManual(getKeyText(), getIdText(), aliases, item, TmdbLanguagePolicy.requestLanguage(tmdbConfig));
             Setting.putTmdbMatchCache(cache);
         }
     }
@@ -6571,7 +6569,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             logTmdbMatch("原生增强播放标题：raw=%s，缓存标题=%s，详情标题=%s，播放标题=%s", getTmdbRawTitle(), matchedTmdbItem == null ? "" : matchedTmdbItem.getTitle(), tmdbDetailTitle(matchedTmdbItem, matchedTmdbDetail), playbackHistoryName());
             TmdbItem item = playbackTmdbItem();
             EpisodePosition position = historyEpisodePosition(selectedEpisode);
-            String tmdbDetailCacheKey = TmdbDetailCache.put(item, matchedTmdbDetail, detailCastItems);
+            String tmdbDetailCacheKey = TmdbDetailCache.put(item, matchedTmdbDetail, detailCastItems, TmdbLanguagePolicy.requestLanguage(tmdbConfig));
             SpiderDebug.log("tmdb-tv", "play launch prep cost=%dms title=%s", System.currentTimeMillis() - start, playbackHistoryName());
             VideoActivity.startDirectTmdb(this, getKeyText(), getIdText(), playbackHistoryName(), playbackHistoryPic(), playbackMark(), fastPlaybackEpisodeTitles(), item, playbackTmdbVod(), vod, tmdbDetailCacheKey, playbackFlag(), selectedSeasonFlagKey(), playbackEpisodeName(), playbackEpisodeUrl(), position.season(), position.number(), isResumeFromHistory() ? getIntentResumeHistory() : null);
         });
@@ -6853,7 +6851,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         }
         dialogBinding.meta.setText(episodeMeta(detail));
         dialogBinding.meta.setVisibility(TextUtils.isEmpty(dialogBinding.meta.getText()) ? View.GONE : View.VISIBLE);
-        String overview = string(detail, "overview");
+        String overview = tmdbService.translatedOverview(detail, tmdbConfig);
         if (TextUtils.isEmpty(overview)) overview = episode == null ? "" : episode.getDesc();
         dialogBinding.overview.setText(TextUtils.isEmpty(overview) ? getString(R.string.detail_tmdb_empty) : overview);
         String crew = episodeCrew(detail);
@@ -7237,7 +7235,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private String episodeDetailTitle(Episode episode, int episodeNumber, JsonObject detail) {
-        String name = string(detail, "name");
+        String name = TmdbLanguagePolicy.bestDisplayValue(string(detail, "name"), array(detail, "translations", "translations"), "name", TmdbLanguagePolicy.requestLanguage(tmdbConfig));
         if (TextUtils.isEmpty(name)) {
             TmdbEpisode tmdbEpisode = tmdbEpisodes.get(episodeNumber);
             name = tmdbEpisode == null ? "" : tmdbEpisode.getTitle();

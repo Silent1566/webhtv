@@ -34,6 +34,7 @@ import com.fongmi.android.tv.utils.EpisodeTitleFormatter;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.Task;
 import com.fongmi.android.tv.utils.TmdbDetailCache;
+import com.fongmi.android.tv.utils.TmdbLanguagePolicy;
 import com.fongmi.android.tv.utils.TmdbImageSelector;
 import com.fongmi.android.tv.utils.Util;
 import com.github.catvod.crawler.SpiderDebug;
@@ -459,7 +460,7 @@ public class TmdbUIAdapter {
      * 指定的季号，没有时退化为唯一正片季（单季剧最常见）。返回 < 0 表示证据不足，不猜。
      */
     static int likelySeasonNumber(JsonObject detail, int intentSeason) {
-        List<SeasonOption> options = parseSeasonOptions(detail);
+        List<SeasonOption> options = parseSeasonOptions(detail, null);
         if (options.isEmpty()) return -1;
         int target = intentSeason;
         if (target < 0) {
@@ -599,7 +600,7 @@ public class TmdbUIAdapter {
         cancelActivePrefetch();
         detailPrefetch.cancel();
         applySourceBundle(bundle, sourceVod, payload);
-        TmdbSourceCapabilityPlanner.Plan plan = TmdbSourceCapabilityPlanner.plan(bundle, payload, TmdbSourceCapabilityPlanner.UiState.initialScreen());
+        TmdbSourceCapabilityPlanner.Plan plan = TmdbSourceCapabilityPlanner.plan(bundle, payload, TmdbSourceCapabilityPlanner.UiState.initialScreen(), TmdbLanguagePolicy.requestLanguage(tmdbConfig));
         boolean fillInitial = !sourceOnly && plan.hasInitialNetworkGaps();
         SpiderDebug.log("tmdb", "source loaded title=%s media=%s id=%d seasons=%d sourceOnly=%s fill=%s missing=%s",
                 tmdbItem.getTitle(), tmdbItem.getMediaType(), tmdbItem.getTmdbId(), seasonOptions.size(), sourceOnly, fillInitial, plan.missing());
@@ -674,7 +675,7 @@ public class TmdbUIAdapter {
             JsonObject detail = tmdbService.detailForSource(sourceBundle.item(), payload == null ? 0 : payload.getSeasonNumber(), requestConfig, plan.missing());
             if (!isCurrentGeneration(generation)) return;
             TmdbBundle networkBundle = TmdbSourceAdapter.fromNetwork(sourceBundle.item(), detail, requestConfig);
-            TmdbBundle merged = TmdbSourceMerger.fillOnly(sourceBundle, payload, networkBundle);
+            TmdbBundle merged = TmdbSourceMerger.fillOnly(sourceBundle, payload, networkBundle, TmdbLanguagePolicy.requestLanguage(requestConfig));
             SpiderDebug.log("tmdb", "source fill finish cost=%dms missing=%s", System.currentTimeMillis() - start, plan.missing());
             if (activity == null) return;
             activity.runOnUiThread(() -> {
@@ -693,7 +694,7 @@ public class TmdbUIAdapter {
     }
 
     private static List<SeasonOption> sourceSeasonOptions(TmdbBundle bundle) {
-        List<SeasonOption> fromDetail = parseSeasonOptions(bundle.detail());
+        List<SeasonOption> fromDetail = parseSeasonOptions(bundle.detail(), TmdbConfig.effectiveCurrent());
         if (!fromDetail.isEmpty()) return fromDetail;
         List<SeasonOption> result = new ArrayList<>();
         for (Integer seasonNumber : bundle.seasons()) {
@@ -865,7 +866,7 @@ public class TmdbUIAdapter {
 
     private TmdbDetailCache.Entry takeTmdbDetailCache(TmdbItem item) {
         if (activity == null || activity.getIntent() == null || item == null) return null;
-        TmdbDetailCache.Entry cached = TmdbDetailCache.take(activity.getIntent().getStringExtra(TmdbDetailCache.EXTRA_KEY), item);
+        TmdbDetailCache.Entry cached = TmdbDetailCache.take(activity.getIntent().getStringExtra(TmdbDetailCache.EXTRA_KEY), item, TmdbLanguagePolicy.requestLanguage(tmdbConfig));
         if (cached != null) SpiderDebug.log("tmdb", "detail core memory-cache hit title=%s media=%s id=%d", cached.getItem().getTitle(), cached.getItem().getMediaType(), cached.getItem().getTmdbId());
         return cached;
     }
@@ -1025,7 +1026,7 @@ public class TmdbUIAdapter {
 
     private void resolveSeason(Vod sourceVod, TmdbItem item, JsonObject detail) {
         synchronized (Setting.class) {
-        seasonOptions = parseSeasonOptions(detail);
+        seasonOptions = parseSeasonOptions(detail, tmdbConfig);
         List<Integer> tmdbSeasons = new ArrayList<>();
         Map<Integer, Integer> seasonCounts = new HashMap<>();
         for (SeasonOption option : seasonOptions) {
@@ -1276,7 +1277,7 @@ public class TmdbUIAdapter {
         }
     }
 
-    static List<SeasonOption> parseSeasonOptions(JsonObject detail) {
+    static List<SeasonOption> parseSeasonOptions(JsonObject detail, TmdbConfig config) {
         List<SeasonOption> result = new ArrayList<>();
         if (detail == null || !detail.has("seasons") || !detail.get("seasons").isJsonArray()) return result;
         for (JsonElement element : detail.getAsJsonArray("seasons")) {
@@ -1286,7 +1287,7 @@ public class TmdbUIAdapter {
             if (number < 0) continue;
             result.add(new SeasonOption(
                     number,
-                    jsonString(season, "name"),
+                    TmdbLanguagePolicy.bestDisplayValue(jsonString(season, "name"), season.has("translations") && season.get("translations").isJsonObject() && season.getAsJsonObject("translations").has("translations") && season.getAsJsonObject("translations").get("translations").isJsonArray() ? season.getAsJsonObject("translations").getAsJsonArray("translations") : null, "name", TmdbLanguagePolicy.requestLanguage(config)),
                     jsonString(season, "air_date"),
                     Math.max(0, jsonInt(season, "episode_count", 0))));
         }
@@ -1442,10 +1443,7 @@ public class TmdbUIAdapter {
     }
 
     private String detailTitle(TmdbItem item, JsonObject detail) {
-        if (detail == null) return "";
-        String primary = "movie".equalsIgnoreCase(item.getMediaType()) ? jsonString(detail, "title") : jsonString(detail, "name");
-        if (!TextUtils.isEmpty(primary)) return primary;
-        return "movie".equalsIgnoreCase(item.getMediaType()) ? jsonString(detail, "name") : jsonString(detail, "title");
+        return tmdbService.preferredTitle(item, detail, tmdbConfig);
     }
 
     private static String jsonString(JsonObject object, String key) {
@@ -1746,8 +1744,8 @@ public class TmdbUIAdapter {
     private TmdbItem getCachedMatch(Vod vod) {
         if (vod == null) return null;
         TmdbMatchCache cache = Setting.getTmdbMatchCache();
-        TmdbItem manual = cache.findManual(cacheSiteKey(vod), cacheVodId(vod), vod.getName());
-        return manual != null ? manual : cache.find(cacheSiteKey(vod), cacheVodId(vod), vod.getName());
+        TmdbItem manual = cache.findManual(cacheSiteKey(vod), cacheVodId(vod), vod.getName(), TmdbLanguagePolicy.requestLanguage(tmdbConfig));
+        return manual != null ? manual : cache.find(cacheSiteKey(vod), cacheVodId(vod), vod.getName(), TmdbLanguagePolicy.requestLanguage(tmdbConfig));
     }
 
     private boolean isManualMatch(Vod vod) {
@@ -1778,7 +1776,7 @@ public class TmdbUIAdapter {
         // 不加锁会让后到的自动结果基于旧快照覆盖掉刚落盘的手动选择。
         synchronized (Setting.class) {
             TmdbMatchCache cache = Setting.getTmdbMatchCache();
-            cache.put(cacheSiteKey(vod), cacheVodId(vod), vod.getName(), item);
+            cache.put(cacheSiteKey(vod), cacheVodId(vod), vod.getName(), item, TmdbLanguagePolicy.requestLanguage(tmdbConfig));
             Setting.putTmdbMatchCache(cache);
         }
     }
@@ -1792,7 +1790,7 @@ public class TmdbUIAdapter {
         List<String> aliases = manualMatchTitleAliases(vod);
         synchronized (Setting.class) {
             TmdbMatchCache cache = Setting.getTmdbMatchCache();
-            cache.putManual(cacheSiteKey(vod), cacheVodId(vod), aliases, item);
+            cache.putManual(cacheSiteKey(vod), cacheVodId(vod), aliases, item, TmdbLanguagePolicy.requestLanguage(tmdbConfig));
             Setting.putTmdbMatchCache(cache);
         }
     }

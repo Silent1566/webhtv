@@ -39,6 +39,17 @@ public class TmdbDetailDirectPlayTransitionSourceTest {
         assertTrue(closeMethod.contains("currentInlineResult = null;"));
     }
 
+    @Test
+    public void directPlaybackSnapshotUsesLanguageIdentityAndUnifiedOverviewPolicy() throws Exception {
+        String source = Files.readString(
+                Paths.get("src/leanback/java/com/fongmi/android/tv/ui/activity/VideoActivity.java"), StandardCharsets.UTF_8);
+
+        assertTrue(source.contains("TmdbDetailCache.take(getIntent().getStringExtra(TmdbDetailCache.EXTRA_KEY), getTmdbItem(), currentTmdbLanguage())"));
+        assertFalse(source.contains("TmdbDetailCache.take(getIntent().getStringExtra(TmdbDetailCache.EXTRA_KEY), getTmdbItem())"));
+        assertTrue(source.contains("translatedOverview(detail, currentTmdbConfig())"));
+        assertFalse(source.contains("cachedTmdbOverviewForLanguage(translations, \"zh-CN\")"));
+    }
+
     private static String methodBody(String source, String signature) {
         int start = source.indexOf(signature);
         if (start < 0) return "";

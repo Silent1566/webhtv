@@ -39,8 +39,10 @@ public final class RemoteConfigOps {
         Config config = TextUtils.isEmpty(interfaceKey)
                 ? Config.find(url, type)
                 : AppDatabase.get().getConfigDao().findByInterfaceKey(interfaceKey, type);
+        if (config == null) config = findByAddressAlias(payload, type);
         if (config == null) config = Config.create(type);
         config.interfaceKey(interfaceKey).mergeUrls(urls(payload)).url(url).name(name).save();
+        com.fongmi.android.tv.playback.PlaybackIdentityResolver.resolveSaved(config);
         return RemoteCommandResult.success("Config saved", data());
     }
 
@@ -74,6 +76,21 @@ public final class RemoteConfigOps {
         if (config == null || config.isEmpty()) return RemoteCommandResult.failure("Config not found");
         config.delete();
         return RemoteCommandResult.success("Config deleted", data());
+    }
+
+    private static Config findByAddressAlias(JsonObject payload, int type) {
+        for (Config config : Config.getAll(type)) {
+            for (String alias : strings(payload, "addressMatchAliases")) if (config.getAddressMatchAliases().contains(alias)) return config;
+        }
+        return null;
+    }
+
+    private static List<String> strings(JsonObject payload, String key) {
+        List<String> result = new ArrayList<>();
+        JsonElement element = payload == null ? null : payload.get(key);
+        if (element == null || !element.isJsonArray()) return result;
+        for (JsonElement item : element.getAsJsonArray()) if (item != null && item.isJsonPrimitive()) result.add(item.getAsString());
+        return result;
     }
 
     private static Config findConfig(JsonObject payload, int type) {
