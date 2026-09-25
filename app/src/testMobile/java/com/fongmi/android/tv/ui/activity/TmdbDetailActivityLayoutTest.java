@@ -1091,8 +1091,8 @@ public class TmdbDetailActivityLayoutTest {
         int methodEnd = source.indexOf("\n    }", method);
         String body = source.substring(method, methodEnd);
 
-        assertTrue("Profile light detail must keep the historical translucent poster surface",
-                body.contains("return lightTheme ? 0.35f : 0.5f;"));
+        assertTrue("Profile light detail must show the original backdrop without a transparency wash",
+                body.contains("return lightTheme ? 1f : 0.5f;"));
         assertTrue("Cinema dark detail must retain its historical backdrop opacity",
                 body.contains("return lightTheme ? 1f : 0.9f;"));
         assertTrue("Backdrop opacity must remain theme-aware instead of one global opaque value",
