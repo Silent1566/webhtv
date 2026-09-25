@@ -86,6 +86,15 @@
                     tools:text="官方已更新至第 12 集" />
 
                 <TextView
+                    android:id="@+id/metadata"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:textColor="@color/following_text_secondary"
+                    android:textSize="12sp"
+                    tools:text="本季 12 集 · 全剧 24 集 · 每周日更新" />
+
+                <TextView
                     android:id="@+id/source"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
