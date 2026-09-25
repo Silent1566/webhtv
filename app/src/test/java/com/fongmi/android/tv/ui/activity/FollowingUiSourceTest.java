@@ -46,7 +46,16 @@ public class FollowingUiSourceTest {
 
         assertTrue(layout.contains("com.google.android.flexbox.FlexboxLayout"));
         assertTrue(layout.contains("app:flexWrap=\"wrap\""));
+        assertTrue(layout.contains("app:justifyContent=\"flex_start\""));
+        assertTrue(layout.contains("app:layout_flexGrow=\"0\""));
+        assertTrue(layout.contains("app:layout_flexBasisPercent=\"@fraction/following_action_basis\""));
+        assertTrue(read("app/src/mobile/res/values/following_fractions.xml").contains(">30%<"));
+        assertTrue(read("app/src/mobile/res/values-sw600dp/following_fractions.xml").contains(">18%<"));
+        assertTrue(layout.indexOf("@+id/error") < layout.indexOf("com.google.android.flexbox.FlexboxLayout"));
         assertFalse(layout.contains("HorizontalScrollView"));
+        assertFalse(layout.contains("app:justifyContent=\"center\""));
+        assertFalse(layout.contains("app:justifyContent=\"space_evenly\""));
+        assertFalse(layout.contains("app:justifyContent=\"space_around\""));
         for (String id : List.of("nextSeason", "continuePlay", "check", "read", "notify", "sourceChange", "delete")) {
             assertTrue(layout.contains("android:id=\"@+id/" + id + "\""));
         }
