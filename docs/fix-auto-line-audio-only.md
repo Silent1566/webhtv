@@ -12,9 +12,11 @@
 
 ## 修复
 
-在自动回退取址前调用 `preparePlayer(applyHistoryPlayerKernel(), true)`。`applyHistoryPlayerKernel()` 恢复本剧记忆的核心；`preparePlayer(type, force)` 保留既有起播路径的默认语义，但在 `force=true` 时即使目标核心与当前核心相同，也释放并重建同核心引擎，同时要求 UI 清理并重绑渲染 Surface、进度条和 UI 状态。这样不会改变用户选择的核心，也不影响正常自动回退的地址流程。
+在自动回退取址前调用 `applyHistoryPlayerKernel(true)`。该方法恢复本剧记忆的核心，并直接进入 `preparePlayer(type, force)`；`preparePlayer(type, force)` 保留既有起播路径的默认语义，但在 `force=true` 时即使目标核心与当前核心相同，也释放并重建同核心引擎，同时要求 UI 清理并重绑渲染 Surface、进度条和 UI 状态。这样不会改变用户选择的核心，也不影响正常自动回退的地址流程。
 
 第一轮评审发现仅调用原 `preparePlayer(type)` 不满足验收：该方法在目标核心等于当前核心时直接返回，音频-only 故障现场仍可能被下一条线路继承。因此修复必须显式区分“普通起播前准备”与“错误恢复强制重建”，避免影响手动切换和正常起播。
+
+2026-09-25 测试版日志证实第一版强制重建仍未生效：`preparePlayer(type, force)` 在回调 `onPlayerRebuild()` 前已把 `spec=null`，导致 `isOwner()` 失败并跳过 `setRender()`；同时 `onError()` 通过原 helper 触发了一次普通重建、再触发一次强制重建，造成重复重建。现在 `onPlayerRebuild()` 完成新播放器和 Surface 重绑后才清空旧 `spec`，且错误恢复路径只执行一次强制重建。
 
 ## 验证
 
