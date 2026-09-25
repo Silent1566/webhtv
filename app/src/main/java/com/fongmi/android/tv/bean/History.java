@@ -29,6 +29,7 @@ import com.fongmi.android.tv.playback.TmdbSeasonProgressStore;
 import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.utils.ResUtil;
+import com.fongmi.android.tv.utils.TmdbLanguagePolicy;
 import com.fongmi.android.tv.utils.Util;
 import com.google.gson.annotations.SerializedName;
 import com.google.gson.reflect.TypeToken;
@@ -1146,7 +1147,7 @@ public class History implements Diffable<History> {
         String siteKey = getSiteKey();
         String vodId = getVodId();
         if (TextUtils.isEmpty(siteKey) || TextUtils.isEmpty(vodId)) return;
-        TmdbItem item = Setting.getTmdbMatchCache().find(siteKey, vodId, getVodName());
+        TmdbItem item = Setting.getTmdbMatchCache().find(siteKey, vodId, getVodName(), TmdbLanguagePolicy.requestLanguage(TmdbConfig.effectiveCurrent()));
         if (item != null && item.getTmdbId() > 0) {
             this.tmdbId = item.getTmdbId();
             this.mediaType = item.getMediaType();

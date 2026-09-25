@@ -2805,6 +2805,9 @@
     <string name="following_delete_title">取消追更？</string>
     <string name="following_delete_message">觀看歷史和 TMDB 進度會繼續保留。</string>
     <string name="following_official">官方已更新至第 %1$d 集</string>
+    <string name="following_season_total">本季共 %1$d 集</string>
+    <string name="following_series_total">全劇共 %1$d 集</string>
+    <string name="following_weekday">每週%1$s更新</string>
     <string name="following_official_unknown">官方狀態未知</string>
     <string name="following_source">目前來源可播至第 %1$d 集</string>
     <string name="following_source_unknown">目前來源尚未檢查</string>
@@ -2831,4 +2834,13 @@
     <string name="following_filter_failed">檢查失敗</string>
     <string name="setting_following">追更更新</string>
     <string name="following_next_season">追新季 S%1$d</string>
+    <string-array name="following_weekdays">
+        <item>日</item>
+        <item>一</item>
+        <item>二</item>
+        <item>三</item>
+        <item>四</item>
+        <item>五</item>
+        <item>六</item>
+    </string-array>
 </resources>

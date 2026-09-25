@@ -27,11 +27,13 @@ public class PlayerPlaybackRegressionSourceTest {
         assertTrue(label + " onError must exist", method >= 0 && next > method);
         String body = source.substring(method, next);
         int stop = body.indexOf("player().stop();");
-        int prepare = body.indexOf("player().preparePlayer(applyHistoryPlayerKernel(), true);");
+        int prepare = body.indexOf("applyHistoryPlayerKernel(true);");
         int flow = body.indexOf("startFlow();");
         assertTrue(label + " onError must stop the failed engine before rebuilding it", stop >= 0);
         assertTrue(label + " onError must recreate the remembered player before automatic line fallback", prepare > stop && prepare < flow);
         assertTrue(label + " automatic line fallback must still start after cleanup", flow > prepare);
+        assertFalse(label + " onError must not prepare the remembered kernel twice",
+                body.contains("player().preparePlayer(applyHistoryPlayerKernel(), true);"));
     }
 
     @Test
@@ -46,6 +48,10 @@ public class PlayerPlaybackRegressionSourceTest {
                 body.contains("if (engine == null || player == null || (next == playerType && !force)) return;"));
         assertTrue("forced automatic fallback must reset the failed video surface",
                 body.contains("callback.onPlayerRebuild(player, force);"));
+        int rebuild = body.indexOf("callback.onPlayerRebuild(player, force);");
+        int clearSpec = body.indexOf("spec = null;");
+        assertTrue("forced automatic fallback must keep ownership while rebuilding the video surface",
+                rebuild >= 0 && clearSpec > rebuild);
     }
 
     @Test

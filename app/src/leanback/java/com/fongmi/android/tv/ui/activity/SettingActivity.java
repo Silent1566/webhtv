@@ -18,6 +18,7 @@ import com.fongmi.android.tv.bean.Live;
 import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.databinding.ActivitySettingBinding;
 import com.fongmi.android.tv.db.AppDatabase;
+import com.fongmi.android.tv.setting.ConfigSyncPolicy;
 import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.impl.Callback;
@@ -142,7 +143,12 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
     private void load(Config config) {
         switch (config.getType()) {
             case 0:
+                String previousVodUrl = VodConfig.getUrl();
                 VodConfig.load(config, getCallback());
+                if (ConfigSyncPolicy.shouldSyncLive(previousVodUrl, LiveConfig.getUrl())) {
+                    Config liveConfig = AppDatabase.get().getConfigDao().find(config.getUrl(), 1);
+                    if (liveConfig != null) LiveConfig.load(liveConfig, new Callback());
+                }
                 break;
             case 1:
                 LiveConfig.load(config, getCallback());

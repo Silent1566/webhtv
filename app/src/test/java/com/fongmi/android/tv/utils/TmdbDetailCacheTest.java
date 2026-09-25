@@ -33,10 +33,10 @@ public class TmdbDetailCacheTest {
         List<TmdbPerson> cast = new ArrayList<>();
         cast.add(new TmdbPerson(1, "张若昀", "范闲", "", "Acting", ""));
 
-        String key = TmdbDetailCache.put(item, detail, cast);
+        String key = TmdbDetailCache.put(item, detail, cast, "zh-Hans");
         cast.clear();
 
-        TmdbDetailCache.Entry entry = TmdbDetailCache.take(key, item);
+        TmdbDetailCache.Entry entry = TmdbDetailCache.take(key, item, "zh-CN");
 
         assertTrue(!key.isEmpty());
         assertSame(item, entry.getItem());
@@ -47,13 +47,43 @@ public class TmdbDetailCacheTest {
     }
 
     @Test
+    public void takeRejectsSnapshotFromAnotherLanguage() {
+        TmdbItem item = new TmdbItem(123, "tv", "庆余年", "", "", "", "");
+        JsonObject detail = new JsonObject();
+
+        String key = TmdbDetailCache.put(item, detail, List.of(), "en-US");
+
+        assertNull(TmdbDetailCache.take(key, item, "zh-CN"));
+    }
+
+    @Test
+    public void takeAcceptsEquivalentLanguageIdentity() {
+        TmdbItem item = new TmdbItem(123, "tv", "庆余年", "", "", "", "");
+        JsonObject detail = new JsonObject();
+
+        String key = TmdbDetailCache.put(item, detail, List.of(), "zh-Hans");
+
+        assertEquals("zh-CN", TmdbDetailCache.take(key, item, "zh-CN").getLanguage());
+    }
+
+    @Test
+    public void takeRejectsRegionalChineseVariantForSimplifiedTarget() {
+        TmdbItem item = new TmdbItem(123, "tv", "慶餘年", "", "", "", "");
+        JsonObject detail = new JsonObject();
+
+        String key = TmdbDetailCache.put(item, detail, List.of(), "zh-TW");
+
+        assertNull(TmdbDetailCache.take(key, item, "zh-CN"));
+    }
+
+    @Test
     public void takeReturnsNullForMismatchedTmdbItem() {
         TmdbItem item = new TmdbItem(123, "tv", "庆余年", "", "", "", "");
         TmdbItem other = new TmdbItem(456, "tv", "庆余年 第二季", "", "", "", "");
         JsonObject detail = new JsonObject();
 
-        String key = TmdbDetailCache.put(item, detail, List.of());
+        String key = TmdbDetailCache.put(item, detail, List.of(), "zh-CN");
 
-        assertNull(TmdbDetailCache.take(key, other));
+        assertNull(TmdbDetailCache.take(key, other, "zh-CN"));
     }
 }

@@ -2038,12 +2038,15 @@ public void resetTrack(int type) {
         stopParse();
         engine.release();
         playerType = next;
-        spec = null;
-        clearPendingSwitchRestore();
         if (SpiderDebug.isEnabled()) SpiderDebug.log("player", "prepare player type=%d decode=%d", next, decode);
         engine = buildEngine(playerType, sanitizeDecode(decode));
         player = engine.getPlayer();
+        // Keep the previous ownership key until the UI has rebound the replacement
+        // player. Clearing it first makes isOwner() fail and skips setRender(),
+        // leaving PlayerView attached to the released player while audio continues.
         callback.onPlayerRebuild(player, force);
+        spec = null;
+        clearPendingSwitchRestore();
     }
 
     public void switchPlayer(int type, PlaySpec freshSpec, long position, float speed, boolean repeat) {

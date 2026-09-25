@@ -94,6 +94,9 @@ public class Following {
     @ColumnInfo(name = "next_air_at")
     public long nextAirAt;
 
+    @ColumnInfo(name = "next_air_weekday")
+    public int nextAirWeekday;
+
     @ColumnInfo(name = "last_observed_episode")
     public int lastObservedEpisode;
 
@@ -165,6 +168,7 @@ public class Following {
         item.nextAirSeason = nextAirSeason;
         item.nextAirEpisode = nextAirEpisode;
         item.nextAirAt = nextAirAt;
+        item.nextAirWeekday = nextAirWeekday;
         item.lastObservedEpisode = lastObservedEpisode;
         item.readWatermarkEpisode = readWatermarkEpisode;
         item.lastNotifiedEpisode = lastNotifiedEpisode;

@@ -2215,7 +2215,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
      * 没有记录时 getPlayerOrDefault 会退回设置页的全局默认。
      * 播放服务还没连上时先只记会话内核（取址在工作线程上读它），引擎由 onServiceConnected 补齐。
      */
-    private int applyHistoryPlayerKernel() {
+    private int applyHistoryPlayerKernel(boolean forcePrepare) {
         int kernel = mHistory == null ? PlayerSetting.getPlayer() : mHistory.getPlayerOrDefault();
         PlayerSetting.putActivePlayer(kernel);
         if (service() == null) {
@@ -2223,13 +2223,17 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
             return kernel;
         }
         mPendingPlayerKernel = PlayerSetting.NONE;
-        player().preparePlayer(kernel);
+        player().preparePlayer(kernel, forcePrepare);
         // preparePlayer() is intentionally allowed before playback ownership
         // is established; keep the mobile seek view on the replacement player.
         getSeekView().setProgressPlayer(player().getPlayer());
         setPlayerKernel();
         setDecode();
         return kernel;
+    }
+
+    private int applyHistoryPlayerKernel() {
+        return applyHistoryPlayerKernel(false);
     }
 
     /**
@@ -7617,7 +7621,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         // Automatic line fallback continues in the same failed playback session.
         // Keep the remembered kernel, but recreate its engine so the next line cannot
         // inherit a decoder/Surface failure that audio-only playback can survive.
-        player().preparePlayer(applyHistoryPlayerKernel(), true);
+        applyHistoryPlayerKernel(true);
         showError(msg);
         startFlow();
     }

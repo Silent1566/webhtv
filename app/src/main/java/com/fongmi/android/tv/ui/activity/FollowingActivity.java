@@ -234,9 +234,8 @@ public class FollowingActivity extends AppCompatActivity implements FollowingAda
                 return;
             }
             FollowingUpdateCoordinator coordinator = new FollowingUpdateCoordinator();
-            int limit = Math.min(5, items.size());
             boolean success = false;
-            for (int i = 0; i < limit; i++) success |= coordinator.checkNow(items.get(i).identityKey, true);
+            for (Following item : items) success |= coordinator.checkNow(item.identityKey, true);
             boolean finalSuccess = success;
             App.post(() -> {
                 if (binding == null) return;

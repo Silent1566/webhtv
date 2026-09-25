@@ -16,8 +16,10 @@ import org.json.JSONObject;
 
 import java.io.File;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CancellationException;
@@ -32,6 +34,16 @@ import okhttp3.Response;
 public class JarLoader {
 
     private static final int SPIDER_INIT_ATTEMPTS = 2;
+
+    /**
+     * On translated runtimes (x86 emulator executing arm64 native code) ART's
+     * {@code UnloadNativeLibraries()} calls into the binary translator and can
+     * SIGSEGV from {@code HeapTaskDaemon}. Dropping a replaced
+     * {@code DexClassLoader} therefore crashed the app on every interface
+     * reload. Retiring the loader keeps it strongly reachable for the process
+     * lifetime on those devices only, which skips the unsafe unload path.
+     */
+    private static final List<DexClassLoader> RETAINED_ON_TRANSLATED_RUNTIME = new ArrayList<>();
 
     private final ConcurrentHashMap<String, DexClassLoader> loaders;
     private final ConcurrentHashMap<String, Method> methods;
@@ -51,11 +63,22 @@ public class JarLoader {
         try {
             SpiderCleanup.destroy("jar-loader", spiders);
         } finally {
+            retireLoaders();
             loaders.clear();
             methods.clear();
             spiders.clear();
             locks.clear();
             recent = null;
+        }
+    }
+
+    private void retireLoaders() {
+        if (loaders.isEmpty()) return;
+        if (!NativeBridgeGuard.isTranslatedRuntime()) return;
+        synchronized (RETAINED_ON_TRANSLATED_RUNTIME) {
+            RETAINED_ON_TRANSLATED_RUNTIME.addAll(loaders.values());
+            SpiderDebug.log("jar-loader", "retained translated loaders count=%s total=%s",
+                    loaders.size(), RETAINED_ON_TRANSLATED_RUNTIME.size());
         }
     }
 

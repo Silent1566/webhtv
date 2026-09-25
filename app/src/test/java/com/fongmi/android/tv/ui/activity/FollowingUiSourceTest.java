@@ -46,7 +46,16 @@ public class FollowingUiSourceTest {
 
         assertTrue(layout.contains("com.google.android.flexbox.FlexboxLayout"));
         assertTrue(layout.contains("app:flexWrap=\"wrap\""));
+        assertTrue(layout.contains("app:justifyContent=\"flex_start\""));
+        assertTrue(layout.contains("app:layout_flexGrow=\"0\""));
+        assertTrue(layout.contains("app:layout_flexBasisPercent=\"@fraction/following_action_basis\""));
+        assertTrue(read("app/src/mobile/res/values/following_fractions.xml").contains(">30%<"));
+        assertTrue(read("app/src/mobile/res/values-sw600dp/following_fractions.xml").contains(">18%<"));
+        assertTrue(layout.indexOf("@+id/error") < layout.indexOf("com.google.android.flexbox.FlexboxLayout"));
         assertFalse(layout.contains("HorizontalScrollView"));
+        assertFalse(layout.contains("app:justifyContent=\"center\""));
+        assertFalse(layout.contains("app:justifyContent=\"space_evenly\""));
+        assertFalse(layout.contains("app:justifyContent=\"space_around\""));
         for (String id : List.of("nextSeason", "continuePlay", "check", "read", "notify", "sourceChange", "delete")) {
             assertTrue(layout.contains("android:id=\"@+id/" + id + "\""));
         }
@@ -106,9 +115,27 @@ public class FollowingUiSourceTest {
     public void followingScreenExposesOfficialSourceAndUserStatesSeparately() throws Exception {
         String adapter = read("app/src/main/java/com/fongmi/android/tv/ui/adapter/FollowingAdapter.java");
         assertTrue(adapter.contains("following_official"));
+        assertTrue(adapter.contains("following_season_total"));
+        assertTrue(adapter.contains("following_series_total"));
+        assertTrue(adapter.contains("following_weekday"));
+        assertTrue(adapter.contains("R.array.following_weekdays"));
         assertTrue(adapter.contains("following_source"));
         assertTrue(adapter.contains("following_watched"));
         assertTrue(adapter.contains("following_unwatched"));
+    }
+
+    @Test
+    public void checkAllRefreshesEveryFollowingItemWithoutACountLimit() throws Exception {
+        String activity = read("app/src/main/java/com/fongmi/android/tv/ui/activity/FollowingActivity.java");
+        String coordinator = read("app/src/main/java/com/fongmi/android/tv/following/FollowingUpdateCoordinator.java");
+        String dao = read("app/src/main/java/com/fongmi/android/tv/following/FollowingDao.java");
+
+        assertTrue(activity.contains("for (Following item : items) success |= coordinator.checkNow(item.identityKey, true);"));
+        assertFalse(activity.contains("Math.min(5, items.size())"));
+        assertTrue(coordinator.contains("findDue(now)"));
+        assertFalse(coordinator.contains("BATCH_SIZE"));
+        assertTrue(dao.contains("ORDER BY next_check_at ASC\""));
+        assertFalse(dao.contains("LIMIT :limit"));
     }
 
     @Test

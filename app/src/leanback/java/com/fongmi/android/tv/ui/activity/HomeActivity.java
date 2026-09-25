@@ -42,6 +42,7 @@ import com.fongmi.android.tv.bean.Style;
 import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.databinding.ActivityHomeBinding;
 import com.fongmi.android.tv.db.AppDatabase;
+import com.fongmi.android.tv.setting.ConfigSyncPolicy;
 import com.fongmi.android.tv.event.CastEvent;
 import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.event.RefreshEvent;
@@ -1152,10 +1153,18 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     public void setConfig(Config config) {
         if (config.getType() != 0) return;
         if (config.getUrl().startsWith("file")) {
-            PermissionUtil.requestFile(this, allGranted -> VodConfig.load(config, getCallback()));
+            PermissionUtil.requestFile(this, allGranted -> loadVodConfig(config));
         } else {
-            VodConfig.load(config, getCallback());
+            loadVodConfig(config);
         }
+    }
+
+    private void loadVodConfig(Config config) {
+        String previousVodUrl = VodConfig.getUrl();
+        VodConfig.load(config, getCallback());
+        if (!ConfigSyncPolicy.shouldSyncLive(previousVodUrl, LiveConfig.getUrl())) return;
+        Config liveConfig = AppDatabase.get().getConfigDao().find(config.getUrl(), 1);
+        if (liveConfig != null) LiveConfig.load(liveConfig, new Callback());
     }
 
     @Override

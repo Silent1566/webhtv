@@ -90,6 +90,7 @@ public class FollowingAdapter extends RecyclerView.Adapter<FollowingAdapter.Hold
         int released = FollowingUpdatePolicy.releasedEpisode(item);
         if (released > 0) holder.binding.official.setText(holder.itemView.getContext().getString(R.string.following_official, released));
         else holder.binding.official.setText(R.string.following_official_unknown);
+        bindMetadata(holder, item);
         if (source != null && source.playableEpisode > 0) {
             holder.binding.source.setText(holder.itemView.getContext().getString(R.string.following_source, source.playableEpisode));
         } else {
@@ -127,6 +128,25 @@ public class FollowingAdapter extends RecyclerView.Adapter<FollowingAdapter.Hold
         holder.binding.notify.setOnClickListener(view -> listener.onToggleNotify(item));
         holder.binding.sourceChange.setOnClickListener(view -> listener.onChangeSource(item));
         holder.binding.delete.setOnClickListener(view -> listener.onDelete(item));
+    }
+
+    private void bindMetadata(Holder holder, Following item) {
+        List<String> parts = new ArrayList<>();
+        if (item.seasonTotalEpisodes > 0) {
+            parts.add(holder.itemView.getContext().getString(R.string.following_season_total, item.seasonTotalEpisodes));
+        }
+        if (item.seriesTotalEpisodes > 0) {
+            parts.add(holder.itemView.getContext().getString(R.string.following_series_total, item.seriesTotalEpisodes));
+        }
+        if (item.nextAirWeekday > 0) {
+            parts.add(holder.itemView.getContext().getString(R.string.following_weekday,
+                    holder.itemView.getResources().getStringArray(R.array.following_weekdays)[item.nextAirWeekday - 1]));
+        }
+        if (parts.isEmpty()) holder.binding.metadata.setVisibility(View.GONE);
+        else {
+            holder.binding.metadata.setVisibility(View.VISIBLE);
+            holder.binding.metadata.setText(String.join(" · ", parts));
+        }
     }
 
     @Override
