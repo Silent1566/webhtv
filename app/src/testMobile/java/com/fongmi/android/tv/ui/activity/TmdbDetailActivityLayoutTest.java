@@ -229,8 +229,7 @@ public class TmdbDetailActivityLayoutTest {
         assertTrue("title normalization must prefer detail name/title over cached item title",
                 normalize > loadBundle && detailTitle > normalize
                         && source.indexOf("tmdbDetailTitle(item, detail)", normalize) > normalize
-                        && source.indexOf("string(detail, \"name\")", detailTitle) > detailTitle
-                        && source.indexOf("string(detail, \"title\")", detailTitle) > detailTitle);
+                        && source.indexOf("return tmdbService.preferredTitle(item, detail, tmdbConfig);", detailTitle) > detailTitle);
         assertTrue("native enhanced playback history name must use normalized TMDB title",
                 playbackName >= 0 && source.indexOf("coalesce(matchedTmdbTitle()", playbackName) > playbackName);
         assertTrue("detail page vod title must use normalized TMDB title",
