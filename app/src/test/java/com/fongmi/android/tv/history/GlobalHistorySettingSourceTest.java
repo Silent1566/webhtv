@@ -39,7 +39,9 @@ public class GlobalHistorySettingSourceTest {
         String leanbackLayout = read("app/src/leanback/res/layout/activity_setting_personal.xml");
 
         assertTrue(mobile.contains("mBinding.globalHistory"));
-        assertTrue(mobile.contains("mBinding.globalHistory.post(() -> mBinding.globalHistory.setOnClickListener(this::setGlobalHistory))"));
+        assertTrue(mobile.contains("event.getActionMasked() == MotionEvent.ACTION_DOWN"));
+        assertTrue(mobile.contains("if (!globalHistoryTouchStarted) return"));
+        assertTrue(mobile.contains("globalHistoryTouchStarted = false"));
         assertTrue(mobile.contains("select_global_history_mode"));
         assertTrue(leanback.contains("mBinding.globalHistory"));
         assertTrue(leanback.contains("select_global_history_mode"));

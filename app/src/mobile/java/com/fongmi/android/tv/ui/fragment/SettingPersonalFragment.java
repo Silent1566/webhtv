@@ -1,6 +1,7 @@
 package com.fongmi.android.tv.ui.fragment;
 
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 
@@ -40,6 +41,7 @@ public class SettingPersonalFragment extends BaseFragment {
     private String[] globalHistoryMode;
     private String[] interfaceFailoverMode;
     private String[] searchResultSort;
+    private boolean globalHistoryTouchStarted;
 
     public static SettingPersonalFragment newInstance() {
         return new SettingPersonalFragment();
@@ -67,10 +69,19 @@ public class SettingPersonalFragment extends BaseFragment {
         mBinding.playbackOverlay.setOnClickListener(this::setPlaybackOverlay);
         mBinding.playBackToDetail.setOnClickListener(this::setPlayBackToDetail);
         mBinding.episodeHistory.setOnClickListener(this::setEpisodeHistory);
-        // Defer this listener until the initial navigation/touch event has finished.
-        // Otherwise the event which opens Personal settings can be delivered to this
-        // newly created row and cycle the persisted mode without a deliberate tap.
-        mBinding.globalHistory.post(() -> mBinding.globalHistory.setOnClickListener(this::setGlobalHistory));
+        // Require a touch sequence which starts on this row. An ACTION_UP inherited
+        // from the setting-page entry gesture or a synthetic navigation click must
+        // not open the dialog or mutate the persisted global-history mode.
+        mBinding.globalHistory.setOnTouchListener((view, event) -> {
+            if (event.getActionMasked() == MotionEvent.ACTION_DOWN) globalHistoryTouchStarted = true;
+            else if (event.getActionMasked() == MotionEvent.ACTION_CANCEL) globalHistoryTouchStarted = false;
+            return false;
+        });
+        mBinding.globalHistory.setOnClickListener(view -> {
+            if (!globalHistoryTouchStarted) return;
+            globalHistoryTouchStarted = false;
+            setGlobalHistory(view);
+        });
         mBinding.interfaceFailover.setOnClickListener(this::setInterfaceFailover);
         mBinding.playSpeed.setOnClickListener(this::setPlaySpeed);
         mBinding.groupRule.setOnClickListener(this::setGroupRule);
