@@ -2167,7 +2167,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private Drawable cinemaBackdropShade() {
-        if (lightTheme) return cinemaLightBackdropShade();
+        if (lightTheme) return TmdbDetailLayoutUtils.colorDrawable(Color.TRANSPARENT);
         boolean compact = isCompactWidth();
         GradientDrawable horizontal = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, compact ? new int[]{
                 0xEC090B0F, 0xD6090B0F, 0x78090B0F, 0x42090B0F, 0x96090B0F
@@ -2178,21 +2178,6 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
                 0x10090B0F, 0x26090B0F, 0xA6090B0F, 0xE6090B0F
         } : new int[]{
                 0x12090B0F, 0x2D090B0F, 0xB8090B0F, 0xF0090B0F
-        });
-        return new LayerDrawable(new Drawable[]{horizontal, vertical});
-    }
-
-    private Drawable cinemaLightBackdropShade() {
-        boolean compact = isCompactWidth();
-        GradientDrawable horizontal = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, compact ? new int[]{
-                0xB8F4F7FA, 0x99F4F7FA, 0x55F4F7FA, 0x24F4F7FA, 0x70F4F7FA
-        } : new int[]{
-                0x99F4F7FA, 0x80F4F7FA, 0x40F4F7FA, 0x1AF4F7FA, 0x55F4F7FA
-        });
-        GradientDrawable vertical = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, compact ? new int[]{
-                0x0AF4F7FA, 0x18F4F7FA, 0x55F4F7FA, 0x99F4F7FA
-        } : new int[]{
-                0x04F4F7FA, 0x0FF4F7FA, 0x3DF4F7FA, 0x70F4F7FA
         });
         return new LayerDrawable(new Drawable[]{horizontal, vertical});
     }

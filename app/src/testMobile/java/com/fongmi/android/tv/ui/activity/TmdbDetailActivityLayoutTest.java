@@ -1095,6 +1095,13 @@ public class TmdbDetailActivityLayoutTest {
                 body.contains("return lightTheme ? 1f : 0.5f;"));
         assertTrue("Cinema dark detail must retain its historical backdrop opacity",
                 body.contains("return lightTheme ? 1f : 0.9f;"));
+        int cinemaShade = source.indexOf("private Drawable cinemaBackdropShade()");
+        int cinemaShadeEnd = source.indexOf("\n    }", cinemaShade);
+        String cinemaShadeBody = source.substring(cinemaShade, cinemaShadeEnd);
+        assertTrue("Light cinema backdrop must show original artwork without a light gradient wash",
+                cinemaShadeBody.contains("return TmdbDetailLayoutUtils.colorDrawable(Color.TRANSPARENT);"));
+        assertTrue("Light cinema gradient wash must not remain",
+                source.indexOf("private Drawable cinemaLightBackdropShade()") < 0);
         assertTrue("Backdrop opacity must remain theme-aware instead of one global opaque value",
                 !body.contains("return modeController.isCinemaStyle() && !lightTheme ? 0.9f : 1f;"));
         int initPage = source.indexOf("private void initPage()");
