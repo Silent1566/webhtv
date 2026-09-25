@@ -23,8 +23,7 @@ public class FollowingUpdateCoordinator {
     public int checkDue(long now) throws IOException {
         if (!FollowingSettings.isEnabled()) return 0;
         boolean foreground = App.isForeground();
-        int limit = foreground ? FollowingSchedulePolicy.FOREGROUND_BATCH_SIZE : FollowingSchedulePolicy.BACKGROUND_BATCH_SIZE;
-        List<Following> due = FollowingStore.database().getFollowingDao().findDue(now, limit);
+        List<Following> due = FollowingStore.database().getFollowingDao().findDue(now);
         int checked = 0;
         for (Following item : due) {
             if (check(item, false, foreground)) checked++;

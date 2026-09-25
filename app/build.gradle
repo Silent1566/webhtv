@@ -90,6 +90,7 @@ android {
 
     // ASS rendering is part of normal builds; package the matching prebuilt ABI.
     sourceSets.main.jniLibs.srcDir(rootProject.file('third_party/exo-ass-native/prebuilt'))
+    sourceSets.androidTest.assets.srcDir(files("$projectDir/schemas").files)
 
     signingConfigs {
         release {
@@ -210,6 +211,7 @@ dependencies {
     coreLibraryDesugaring libs.desugar
     testLeanbackImplementation 'org.robolectric:robolectric:4.16'
     androidTestImplementation libs.junit
+    androidTestImplementation libs.room.testing
     androidTestImplementation libs.work.testing
     testImplementation libs.okhttp.mockwebserver
     androidTestImplementation libs.androidx.test.runner

@@ -18,8 +18,8 @@ public abstract class FollowingDao {
     @Query("SELECT * FROM following ORDER BY has_update DESC, updated_at DESC")
     public abstract List<Following> findAll();
 
-    @Query("SELECT * FROM following WHERE enabled = 1 AND next_check_at <= :now ORDER BY next_check_at ASC LIMIT :limit")
-    public abstract List<Following> findDue(long now, int limit);
+    @Query("SELECT * FROM following WHERE enabled = 1 AND next_check_at <= :now ORDER BY next_check_at ASC")
+    public abstract List<Following> findDue(long now);
 
     @Query("SELECT * FROM following WHERE identity_key = :identityKey LIMIT 1")
     public abstract Following find(String identityKey);
