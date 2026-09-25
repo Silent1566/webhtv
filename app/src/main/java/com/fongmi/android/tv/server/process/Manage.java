@@ -373,14 +373,16 @@ public class Manage implements Process {
             case 1 -> LiveConfig.load(config, new Callback());
             case 2 -> WallConfig.load(config, new Callback());
             default -> {
+                String previousVodUrl = VodConfig.getUrl();
                 VodConfig.load(config, new Callback());
-                loadMatchingLiveConfig(config);
+                loadMatchingLiveConfig(config, previousVodUrl);
             }
         }
         return configs(java.util.Collections.emptyMap());
     }
 
-    private void loadMatchingLiveConfig(Config config) {
+    private void loadMatchingLiveConfig(Config config, String previousVodUrl) {
+        if (!TextUtils.equals(LiveConfig.getUrl(), previousVodUrl)) return;
         Config liveConfig = AppDatabase.get().getConfigDao().find(config.getUrl(), 1);
         if (liveConfig == null) return;
         LiveConfig.load(liveConfig, new Callback());

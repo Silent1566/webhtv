@@ -19,17 +19,25 @@ public class ConfigUseLiveSyncAcceptanceTest {
         String settingFragment = read("app/src/mobile/java/com/fongmi/android/tv/ui/fragment/SettingFragment.java");
         String home = read("app/src/leanback/java/com/fongmi/android/tv/ui/activity/HomeActivity.java");
 
-        assertTrue(manage.contains("default -> {\n                VodConfig.load(config, new Callback());\n                loadMatchingLiveConfig(config);"));
+        assertTrue(manage.contains("default -> {\n                String previousVodUrl = VodConfig.getUrl();\n                VodConfig.load(config, new Callback());\n                loadMatchingLiveConfig(config, previousVodUrl);"));
         assertTrue(manage.contains("Config liveConfig = AppDatabase.get().getConfigDao().find(config.getUrl(), 1);"));
         assertTrue(manage.contains("if (liveConfig == null) return;"));
-        assertTrue(remote.contains("Config liveConfig = type == 0 ? matchingLiveConfig(config) : null;"));
+        assertTrue(manage.contains("if (!TextUtils.equals(LiveConfig.getUrl(), previousVodUrl)) return;"));
+        assertTrue(remote.contains("String previousVodUrl = type == 0 ? VodConfig.getUrl() : null;"));
+        assertTrue(remote.contains("Config liveConfig = type == 0 ? matchingLiveConfig(config, previousVodUrl) : null;"));
         assertTrue(remote.contains("if (liveConfig != null) LiveConfig.load(liveConfig, new Callback());"));
         assertTrue(remote.contains("Config liveConfig = AppDatabase.get().getConfigDao().find(config.getUrl(), 1);"));
-        assertTrue(setting.contains("loadMatchingLiveConfig(config);"));
+        assertTrue(setting.contains("loadMatchingLiveConfig(config, previousVodUrl);"));
+        assertTrue(setting.contains("String previousVodUrl = VodConfig.getUrl();"));
+        assertTrue(setting.contains("if (!TextUtils.equals(LiveConfig.getUrl(), previousVodUrl)) return;"));
         assertTrue(setting.contains("Config liveConfig = AppDatabase.get().getConfigDao().find(config.getUrl(), 1);"));
-        assertTrue(settingFragment.contains("loadMatchingLiveConfig(config);"));
+        assertTrue(settingFragment.contains("loadMatchingLiveConfig(config, previousVodUrl);"));
+        assertTrue(settingFragment.contains("String previousVodUrl = VodConfig.getUrl();"));
+        assertTrue(settingFragment.contains("if (!TextUtils.equals(LiveConfig.getUrl(), previousVodUrl)) return;"));
         assertTrue(settingFragment.contains("Config liveConfig = AppDatabase.get().getConfigDao().find(config.getUrl(), 1);"));
         assertTrue(home.contains("loadVodConfig(config);"));
+        assertTrue(home.contains("String previousVodUrl = VodConfig.getUrl();"));
+        assertTrue(home.contains("if (!TextUtils.equals(LiveConfig.getUrl(), previousVodUrl)) return;"));
         assertTrue(home.contains("Config liveConfig = AppDatabase.get().getConfigDao().find(config.getUrl(), 1);"));
         assertFalse(manage.contains("default -> VodConfig.load(config, new Callback());"));
     }

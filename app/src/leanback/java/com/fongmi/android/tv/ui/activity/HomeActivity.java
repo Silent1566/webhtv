@@ -1159,7 +1159,9 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     }
 
     private void loadVodConfig(Config config) {
+        String previousVodUrl = VodConfig.getUrl();
         VodConfig.load(config, getCallback());
+        if (!TextUtils.equals(LiveConfig.getUrl(), previousVodUrl)) return;
         Config liveConfig = AppDatabase.get().getConfigDao().find(config.getUrl(), 1);
         if (liveConfig != null) LiveConfig.load(liveConfig, new Callback());
     }
