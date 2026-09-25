@@ -12,6 +12,7 @@ import com.fongmi.android.tv.bean.TmdbItem;
 import com.fongmi.android.tv.bean.TmdbPerson;
 import com.fongmi.android.tv.bean.TmdbVideo;
 import com.fongmi.android.tv.utils.TmdbImageSelector;
+import com.fongmi.android.tv.utils.TmdbLanguagePolicy;
 import com.fongmi.android.tv.utils.TmdbProxy;
 import com.github.catvod.crawler.SpiderDebug;
 import com.github.catvod.utils.Path;
@@ -36,6 +37,8 @@ import java.util.Set;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+
+import androidx.annotation.Nullable;
 
 import okhttp3.HttpUrl;
 import okhttp3.Request;
@@ -154,9 +157,9 @@ public class TmdbService {
 
     private String detailUrl(@NonNull TmdbItem item, @NonNull TmdbConfig config, boolean includeRelated) {
         return apiBuilder(config.getApiBase() + "/" + item.getMediaType() + "/" + item.getTmdbId(), config)
-                .addQueryParameter("language", config.getLanguage())
+                .addQueryParameter("language", requestLanguage(config))
                 .addQueryParameter("append_to_response", detailAppend(item, includeRelated))
-                .addQueryParameter("include_image_language", config.getLanguage() + ",null")
+                .addQueryParameter("include_image_language", requestLanguage(config) + ",null")
                 .build()
                 .toString();
     }
@@ -164,9 +167,9 @@ public class TmdbService {
     public JsonObject season(@NonNull TmdbItem item, int seasonNumber, @NonNull TmdbConfig config) throws Exception {
         ensureReady(config);
         HttpUrl url = apiBuilder(config.getApiBase() + "/tv/" + item.getTmdbId() + "/season/" + seasonNumber, config)
-                .addQueryParameter("language", config.getLanguage())
+                .addQueryParameter("language", requestLanguage(config))
                 .addQueryParameter("append_to_response", "images,credits,aggregate_credits,translations")
-                .addQueryParameter("include_image_language", config.getLanguage() + ",null")
+                .addQueryParameter("include_image_language", requestLanguage(config) + ",null")
                 .build();
         return requestJson(url.toString(), config, "season", seasonCacheKey(item, seasonNumber, config), SEASON_CACHE_TTL, "TMDB 分季返回为空", "TMDB 分季失败: HTTP ");
     }
@@ -178,9 +181,9 @@ public class TmdbService {
     public JsonObject season(@NonNull TmdbItem item, int seasonNumber, @NonNull TmdbConfig config, JsonObject detail, boolean refresh) throws Exception {
         ensureReady(config);
         HttpUrl url = apiBuilder(config.getApiBase() + "/tv/" + item.getTmdbId() + "/season/" + seasonNumber, config)
-                .addQueryParameter("language", config.getLanguage())
+                .addQueryParameter("language", requestLanguage(config))
                 .addQueryParameter("append_to_response", "images,credits,aggregate_credits,translations")
-                .addQueryParameter("include_image_language", config.getLanguage() + ",null")
+                .addQueryParameter("include_image_language", requestLanguage(config) + ",null")
                 .build();
         return requestJson(url.toString(), config, "season", seasonCacheKey(item, seasonNumber, config), seasonCacheTtl(detail), "TMDB 分季返回为空", "TMDB 分季失败: HTTP ", refresh);
     }
@@ -188,9 +191,9 @@ public class TmdbService {
     public JsonObject episode(@NonNull TmdbItem item, int seasonNumber, int episodeNumber, @NonNull TmdbConfig config, JsonObject detail) throws Exception {
         ensureReady(config);
         HttpUrl url = apiBuilder(config.getApiBase() + "/tv/" + item.getTmdbId() + "/season/" + seasonNumber + "/episode/" + episodeNumber, config)
-                .addQueryParameter("language", config.getLanguage())
+                .addQueryParameter("language", requestLanguage(config))
                 .addQueryParameter("append_to_response", "images,credits,translations")
-                .addQueryParameter("include_image_language", config.getLanguage() + ",null")
+                .addQueryParameter("include_image_language", requestLanguage(config) + ",null")
                 .build();
         return requestJson(url.toString(), config, "episode", episodeCacheKey(item, seasonNumber, episodeNumber, config), seasonCacheTtl(detail), "TMDB 单集返回为空", "TMDB 单集失败: HTTP ");
     }
@@ -198,9 +201,9 @@ public class TmdbService {
     public JsonObject episode(int tmdbId, int seasonNumber, int episodeNumber, @NonNull TmdbConfig config) throws Exception {
         ensureReady(config);
         HttpUrl url = apiBuilder(config.getApiBase() + "/tv/" + tmdbId + "/season/" + seasonNumber + "/episode/" + episodeNumber, config)
-                .addQueryParameter("language", config.getLanguage())
+                .addQueryParameter("language", requestLanguage(config))
                 .addQueryParameter("append_to_response", "images,credits,translations")
-                .addQueryParameter("include_image_language", config.getLanguage() + ",null")
+                .addQueryParameter("include_image_language", requestLanguage(config) + ",null")
                 .build();
         return requestJson(url.toString(), config, "episode", episodeCacheKey(tmdbId, seasonNumber, episodeNumber, config), SEASON_CACHE_TTL, "TMDB 单集返回为空", "TMDB 单集失败: HTTP ");
     }
@@ -208,7 +211,7 @@ public class TmdbService {
     public JsonObject person(int personId, @NonNull TmdbConfig config) throws Exception {
         ensureReady(config);
         HttpUrl url = apiBuilder(config.getApiBase() + "/person/" + personId, config)
-                .addQueryParameter("language", config.getLanguage())
+                .addQueryParameter("language", requestLanguage(config))
                 .addQueryParameter("append_to_response", "combined_credits,images,translations,external_ids")
                 .build();
         if (System.currentTimeMillis() >= 0) return requestJson(url.toString(), config, "person", PERSON_CACHE_TTL, "TMDB 演员作品返回为空", "TMDB 演员作品失败: HTTP ");
@@ -337,16 +340,19 @@ public class TmdbService {
         List<TmdbEpisode> items = new ArrayList<>();
         try {
             JsonArray results = array(season, "episodes");
+            String target = requestLanguage(config);
             for (JsonElement element : results) {
                 try {
                     if (!element.isJsonObject()) continue;
                     JsonObject object = element.getAsJsonObject();
                     int number = object.has("episode_number") && !object.get("episode_number").isJsonNull() ? object.get("episode_number").getAsInt() : items.size() + 1;
+                    String title = episodeValue(object, season, number, "name", target);
+                    String overview = episodeValue(object, season, number, "overview", target);
                     items.add(new TmdbEpisode(
                             number,
-                            string(object, "name"),
+                            title,
                             string(object, "air_date"),
-                            string(object, "overview"),
+                            overview,
                             image(config.getBackdropBase(), string(object, "still_path")),
                             object.has("vote_average") && !object.get("vote_average").isJsonNull() ? object.get("vote_average").getAsDouble() : 0,
                             object.has("runtime") && !object.get("runtime").isJsonNull() ? object.get("runtime").getAsInt() : 0,
@@ -494,7 +500,7 @@ public class TmdbService {
     private List<TmdbVideo> requestVideos(TmdbItem item, String path, TmdbVideo.Scope scope, int seasonNumber, int episodeNumber, TmdbConfig config) throws Exception {
         ensureReady(config);
         HttpUrl url = apiBuilder(config.getApiBase() + path, config)
-                .addQueryParameter("language", config.getLanguage())
+                .addQueryParameter("language", requestLanguage(config))
                 .addQueryParameter("include_video_language", videoLanguages(config))
                 .build();
         String cacheKey = videoCacheKey(item, scope, seasonNumber, episodeNumber, config);
@@ -554,26 +560,73 @@ public class TmdbService {
         String mediaType = normalizeMediaType(item.getMediaType());
         if (TextUtils.isEmpty(mediaType) || item.getTmdbId() <= 0) return new ArrayList<>();
         HttpUrl url = apiBuilder(config.getApiBase() + "/" + mediaType + "/" + item.getTmdbId() + "/" + type, config)
-                .addQueryParameter("language", config.getLanguage())
+                .addQueryParameter("language", requestLanguage(config))
                 .addQueryParameter("page", String.valueOf(Math.max(1, page)))
                 .build();
         JsonObject body = requestJson(url.toString(), config, type, DETAIL_CACHE_TTL, "TMDB 推荐返回为空", "TMDB 推荐失败: HTTP ");
         return items(array(body, "results"), config, mediaType);
     }
 
+    public String preferredTitle(@Nullable TmdbItem item, @Nullable JsonObject detail, @NonNull TmdbConfig config) {
+        if (item == null || detail == null) return "";
+        String primary = "movie".equalsIgnoreCase(item.getMediaType()) ? string(detail, "title", "name") : string(detail, "name", "title");
+        return TmdbLanguagePolicy.bestDisplayValue(primary, array(detail, "translations", "translations"), preferredTitleKey(item), requestLanguage(config));
+    }
+
+    public String seasonName(@Nullable JsonObject season, @NonNull TmdbConfig config) {
+        return TmdbLanguagePolicy.bestDisplayValue(string(season, "name"), translations(season), "name", requestLanguage(config));
+    }
+
+    public String seasonOverview(@Nullable JsonObject season, @NonNull TmdbConfig config) {
+        return TmdbLanguagePolicy.bestDisplayValue(string(season, "overview"), translations(season), "overview", requestLanguage(config));
+    }
+
     public String translatedOverview(JsonObject detail, @NonNull TmdbConfig config) {
-        String current = string(detail, "overview");
-        if (!TextUtils.isEmpty(current)) return current;
-        JsonArray translations = array(detail, "translations", "translations");
-        String preferred = overviewForLanguage(translations, config.getLanguage());
-        if (!TextUtils.isEmpty(preferred)) return preferred;
-        preferred = overviewForLanguage(translations, languageRoot(config.getLanguage()));
-        if (!TextUtils.isEmpty(preferred)) return preferred;
-        preferred = overviewForLanguage(translations, "zh-CN");
-        if (!TextUtils.isEmpty(preferred)) return preferred;
-        preferred = overviewForLanguage(translations, "zh");
-        if (!TextUtils.isEmpty(preferred)) return preferred;
-        return overviewForLanguage(translations, "en");
+        String preferred = TmdbLanguagePolicy.bestDisplayValue(string(detail, "overview"), translations(detail), "overview", requestLanguage(config));
+        return preferred == null ? "" : preferred;
+    }
+
+    private String preferredTitleKey(TmdbItem item) {
+        return "movie".equalsIgnoreCase(item.getMediaType()) ? "title" : "name";
+    }
+
+    private JsonArray translations(JsonObject object) {
+        return array(object, "translations", "translations");
+    }
+
+    private String episodeValue(JsonObject episode, JsonObject season, int number, String key, String target) {
+        JsonArray episodeTranslations = translations(episode);
+        if (episodeTranslations.size() > 0) {
+            String value = TmdbLanguagePolicy.bestDisplayValue(string(episode, key), episodeTranslations, key, target);
+            if (!TextUtils.isEmpty(value)) return value;
+        }
+        JsonObject seasonTranslation = seasonTranslationFor(season, number);
+        if (seasonTranslation != null) {
+            String value = TmdbLanguagePolicy.bestDisplayValue(string(episode, key), array(seasonTranslation, "translations"), key, target);
+            if (!TextUtils.isEmpty(value)) return value;
+        }
+        return string(episode, key);
+    }
+
+    private JsonObject seasonTranslationFor(JsonObject season, int number) {
+        if (season == null || number <= 0) return null;
+        for (JsonElement element : array(season, "translations", "translations")) {
+            if (element == null || !element.isJsonObject()) continue;
+            JsonObject object = element.getAsJsonObject();
+            JsonObject data = object.has("data") && object.get("data").isJsonObject() ? object.getAsJsonObject("data") : null;
+            if (data == null) continue;
+            JsonArray episodes = data.has("episode_translations") && data.get("episode_translations").isJsonArray() ? data.getAsJsonArray("episode_translations") : new JsonArray();
+            for (JsonElement episodeElement : episodes) {
+                if (episodeElement == null || !episodeElement.isJsonObject()) continue;
+                JsonObject episode = episodeElement.getAsJsonObject();
+                if (episode.has("episode_number") && !episode.get("episode_number").isJsonNull() && episode.get("episode_number").getAsInt() == number) return object;
+            }
+        }
+        return null;
+    }
+
+    private String requestLanguage(TmdbConfig config) {
+        return TmdbLanguagePolicy.requestLanguage(config);
     }
 
     public List<TmdbItem> personWorks(JsonObject person, @NonNull TmdbConfig config) {
@@ -598,7 +651,7 @@ public class TmdbService {
 
     private String searchUrl(String keyword, TmdbConfig config) {
         return apiBuilder(config.getApiBase() + "/search/multi", config)
-                .addQueryParameter("language", config.getLanguage())
+                .addQueryParameter("language", requestLanguage(config))
                 .addQueryParameter("query", keyword)
                 .build()
                 .toString();
@@ -913,8 +966,7 @@ public class TmdbService {
     }
 
     private String cacheLanguage(TmdbConfig config) {
-        String language = config == null ? "" : config.getLanguage();
-        return TextUtils.isEmpty(language) ? "zh-CN" : language;
+        return TmdbLanguagePolicy.requestLanguage(config);
     }
 
     private boolean isOnAir(JsonObject detail) {

@@ -180,6 +180,7 @@ import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.Sniffer;
 import com.fongmi.android.tv.utils.Task;
 import com.fongmi.android.tv.utils.TmdbDetailCache;
+import com.fongmi.android.tv.utils.TmdbLanguagePolicy;
 import com.fongmi.android.tv.utils.Util;
 import com.fongmi.android.tv.utils.VodDetailCache;
 import com.github.catvod.crawler.SpiderDebug;
@@ -2206,7 +2207,8 @@ private boolean runtimeSourceOnly;
         if (!TextUtils.isEmpty(overview) && (TextUtils.isEmpty(item.getContent()) || overview.length() > item.getContent().length())) {
             item.setContent(overview);
         }
-        String title = firstNonEmpty(cachedTmdbString(detail, "title"), cachedTmdbString(detail, "name"), cached.getItem() == null ? "" : cached.getItem().getTitle());
+        String title = new com.fongmi.android.tv.service.TmdbService().preferredTitle(cached.getItem(), detail, currentTmdbConfig());
+        if (TextUtils.isEmpty(title)) title = firstNonEmpty(cachedTmdbString(detail, "title"), cachedTmdbString(detail, "name"), cached.getItem() == null ? "" : cached.getItem().getTitle());
         if (!TextUtils.isEmpty(title) && TextUtils.isEmpty(item.getName())) item.setName(title);
         String artwork = firstNonEmpty(cachedFastTmdbPoster(cached), cachedFastTmdbBackdrop(cached));
         if (!TextUtils.isEmpty(artwork) && TextUtils.isEmpty(item.getPic())) item.setPic(artwork);
@@ -2234,7 +2236,7 @@ private boolean runtimeSourceOnly;
     private TmdbDetailCache.Entry takeFastTmdbDetailCache() {
         if (mFastTmdbDetailCacheChecked) return mFastTmdbDetailCache;
         mFastTmdbDetailCacheChecked = true;
-        mFastTmdbDetailCache = TmdbDetailCache.take(getIntent().getStringExtra(TmdbDetailCache.EXTRA_KEY), getTmdbItem());
+        mFastTmdbDetailCache = TmdbDetailCache.take(getIntent().getStringExtra(TmdbDetailCache.EXTRA_KEY), getTmdbItem(), currentTmdbLanguage());
         if (mFastTmdbDetailCache != null) {
             TmdbItem item = mFastTmdbDetailCache.getItem();
             SpiderDebug.log("video-flow", "fast tmdb detail memory-cache hit title=%s media=%s id=%d", item == null ? "" : item.getTitle(), item == null ? "" : item.getMediaType(), item == null ? 0 : item.getTmdbId());
@@ -2243,56 +2245,23 @@ private boolean runtimeSourceOnly;
     }
 
     private String cachedTmdbOverview(JsonObject detail) {
-        String overview = cachedTmdbString(detail, "overview");
-        if (!TextUtils.isEmpty(overview)) return overview.trim();
-        JsonArray translations = cachedTmdbArray(cachedTmdbObject(detail, "translations"), "translations");
-        String language = cachedTmdbLanguage();
-        overview = cachedTmdbOverviewForLanguage(translations, language);
-        if (!TextUtils.isEmpty(overview)) return overview;
-        overview = cachedTmdbOverviewForLanguage(translations, cachedTmdbLanguageRoot(language));
-        if (!TextUtils.isEmpty(overview)) return overview;
-        overview = cachedTmdbOverviewForLanguage(translations, "zh-CN");
-        if (!TextUtils.isEmpty(overview)) return overview;
-        overview = cachedTmdbOverviewForLanguage(translations, "zh");
-        if (!TextUtils.isEmpty(overview)) return overview;
-        return cachedTmdbOverviewForLanguage(translations, "en");
-    }
-
-    private String cachedTmdbOverviewForLanguage(JsonArray translations, String language) {
-        if (translations == null || TextUtils.isEmpty(language)) return "";
-        String target = language.toLowerCase(Locale.ROOT);
-        for (JsonElement element : translations) {
-            if (element == null || !element.isJsonObject()) continue;
-            JsonObject object = element.getAsJsonObject();
-            String iso = cachedTmdbString(object, "iso_639_1");
-            String name = firstNonEmpty(cachedTmdbString(object, "name"), cachedTmdbString(object, "english_name"));
-            String code = cachedTmdbString(object, "iso_3166_1");
-            if (!cachedTmdbLanguageMatches(target, iso, code, name)) continue;
-            String overview = cachedTmdbString(cachedTmdbObject(object, "data"), "overview");
-            if (!TextUtils.isEmpty(overview)) return overview.trim();
-        }
-        return "";
-    }
-
-    private boolean cachedTmdbLanguageMatches(String target, String iso, String code, String name) {
-        String root = cachedTmdbLanguageRoot(target);
-        if (target.equalsIgnoreCase(iso) || target.equalsIgnoreCase(iso + "-" + code)) return true;
-        if (!TextUtils.isEmpty(root) && root.equalsIgnoreCase(iso)) return true;
-        return target.equalsIgnoreCase(name);
-    }
-
-    private String cachedTmdbLanguage() {
         try {
-            return com.fongmi.android.tv.bean.TmdbConfig.effectiveCurrent().getLanguage();
+            return new com.fongmi.android.tv.service.TmdbService().translatedOverview(detail, currentTmdbConfig());
         } catch (Throwable e) {
-            return "";
+            return cachedTmdbString(detail, "overview");
         }
     }
 
-    private String cachedTmdbLanguageRoot(String language) {
-        if (TextUtils.isEmpty(language)) return "";
-        int separator = language.indexOf('-');
-        return separator > 0 ? language.substring(0, separator) : language;
+    private com.fongmi.android.tv.bean.TmdbConfig currentTmdbConfig() {
+        try {
+            return com.fongmi.android.tv.bean.TmdbConfig.effectiveCurrent();
+        } catch (Throwable e) {
+            return null;
+        }
+    }
+
+    private String currentTmdbLanguage() {
+        return TmdbLanguagePolicy.requestLanguage(currentTmdbConfig());
     }
 
     private String cachedTmdbImage(JsonObject detail, String key) {

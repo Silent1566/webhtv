@@ -5,6 +5,7 @@ import android.text.TextUtils;
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.title.MediaTitleParser;
+import com.fongmi.android.tv.utils.TmdbLanguagePolicy;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -32,14 +33,16 @@ public class TmdbMatchCache {
     }
 
     public TmdbItem find(String siteKey, String vodId) {
-        if (TextUtils.isEmpty(siteKey) || TextUtils.isEmpty(vodId)) return null;
-        Entry entry = getItems().get(key(siteKey, vodId));
-        return entry == null ? null : entry.toItem();
+        return find(siteKey, vodId, "", "");
     }
 
     public TmdbItem find(String siteKey, String vodId, String sourceTitle) {
+        return find(siteKey, vodId, sourceTitle, "");
+    }
+
+    public TmdbItem find(String siteKey, String vodId, String sourceTitle, String targetLanguage) {
         Entry entry = findEntry(siteKey, vodId, sourceTitle);
-        return entry == null ? null : entry.toItem();
+        return entry == null ? null : entry.toDisplayItem(targetLanguage);
     }
 
     /**
@@ -47,8 +50,12 @@ public class TmdbMatchCache {
      * 所以它既不受标题兼容性校验约束，也不该被后续自动匹配覆盖。
      */
     public TmdbItem findManual(String siteKey, String vodId, String sourceTitle) {
+        return findManual(siteKey, vodId, sourceTitle, "");
+    }
+
+    public TmdbItem findManual(String siteKey, String vodId, String sourceTitle, String targetLanguage) {
         Entry entry = findManualEntry(siteKey, vodId, sourceTitle);
-        return entry == null ? null : entry.toItem();
+        return entry == null ? null : entry.toDisplayItem(targetLanguage);
     }
 
     public boolean isManual(String siteKey, String vodId, String sourceTitle) {
@@ -87,12 +94,20 @@ public class TmdbMatchCache {
     }
 
     public void put(String siteKey, String vodId, TmdbItem item) {
+        put(siteKey, vodId, item, "");
+    }
+
+    public void put(String siteKey, String vodId, TmdbItem item, String language) {
         if (TextUtils.isEmpty(siteKey) || TextUtils.isEmpty(vodId) || item == null || item.getTmdbId() <= 0) return;
         if (isManual(getItems().get(key(siteKey, vodId)))) return;
-        getItems().put(key(siteKey, vodId), Entry.from(item));
+        getItems().put(key(siteKey, vodId), Entry.from(item, language));
     }
 
     public void put(String siteKey, String vodId, String sourceTitle, TmdbItem item) {
+        put(siteKey, vodId, sourceTitle, item, "");
+    }
+
+    public void put(String siteKey, String vodId, String sourceTitle, TmdbItem item, String language) {
         if (TextUtils.isEmpty(sourceTitle)) {
             put(siteKey, vodId, item);
             return;
@@ -100,7 +115,7 @@ public class TmdbMatchCache {
         if (TextUtils.isEmpty(siteKey) || TextUtils.isEmpty(vodId) || item == null || item.getTmdbId() <= 0) return;
         // 自动匹配不得覆盖用户的手动选择，否则下次进场读回的是自动猜测。
         if (findManualEntry(siteKey, vodId, sourceTitle) != null) return;
-        Entry entry = Entry.from(item);
+        Entry entry = Entry.from(item, language);
         getItems().put(key(siteKey, vodId, sourceTitle), entry);
         putTitle(sourceTitle, entry);
     }
@@ -112,8 +127,12 @@ public class TmdbMatchCache {
      * 但 findManualEntry 不看标题域，所以"手动"的排他性只作用于当前条目。
      */
     public void putManual(String siteKey, String vodId, List<String> sourceTitles, TmdbItem item) {
+        putManual(siteKey, vodId, sourceTitles, item, "");
+    }
+
+    public void putManual(String siteKey, String vodId, List<String> sourceTitles, TmdbItem item, String language) {
         if (TextUtils.isEmpty(siteKey) || TextUtils.isEmpty(vodId) || item == null || item.getTmdbId() <= 0) return;
-        Entry entry = Entry.manual(item);
+        Entry entry = Entry.manual(item, language);
         if (sourceTitles != null) {
             for (String sourceTitle : sourceTitles) entry.addManualTitle(matchTitle(sourceTitle));
         }
@@ -204,6 +223,7 @@ public class TmdbMatchCache {
         private double rating;
         private String originalLanguage;
         private String originCountry;
+        private String language;
         private String department;
         private boolean manual;
         private List<String> manualTitles;
@@ -217,7 +237,11 @@ public class TmdbMatchCache {
         }
 
         public static Entry manual(TmdbItem item) {
-            Entry entry = from(item);
+            return manual(item, "");
+        }
+
+        public static Entry manual(TmdbItem item, String language) {
+            Entry entry = from(item, language);
             entry.manual = true;
             entry.manualTitles = new ArrayList<>();
             return entry;
@@ -241,7 +265,12 @@ public class TmdbMatchCache {
         }
 
         public static Entry from(TmdbItem item) {
+            return from(item, "");
+        }
+
+        public static Entry from(TmdbItem item, String language) {
             Entry entry = new Entry();
+            entry.language = TmdbLanguagePolicy.normalize(language);
             entry.tmdbId = item.getTmdbId();
             entry.mediaType = item.getMediaType();
             entry.title = item.getTitle();
@@ -259,6 +288,15 @@ public class TmdbMatchCache {
 
         public TmdbItem toItem() {
             return new TmdbItem(tmdbId, mediaType, title, subtitle, overview, posterUrl, backdropUrl, credit, rating, originalLanguage, originCountry, null, department);
+        }
+
+        public TmdbItem toDisplayItem(String targetLanguage) {
+            if (TextUtils.isEmpty(targetLanguage) || TmdbLanguagePolicy.matchesTarget(targetLanguage, language)) return toItem();
+            return new TmdbItem(tmdbId, mediaType, "", "", "", posterUrl, backdropUrl, credit, rating, originalLanguage, originCountry, null, department);
+        }
+
+        public String getLanguage() {
+            return language == null ? "" : language;
         }
     }
 }

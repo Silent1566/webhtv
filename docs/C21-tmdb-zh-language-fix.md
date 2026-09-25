@@ -1,7 +1,7 @@
 # C21：TMDB `zh-CN` 配置下国产剧偶现英文的完整修复设计
 
 - 日期：2026-09-24
-- 状态：设计完成，等待批准实施
+- 状态：实施完成，Leanback JVM 针对性验证通过（2026-09-25）
 - 任务类型：common / TMDB 元数据语言一致性
 - 目标版本分支：`dev2`
 - 风险等级：中高（跨详情、分季、单集、缓存、播放页和历史；不修改播放器内核）
@@ -691,6 +691,15 @@ VideoTmdbLanguageRegressionTest
 9. 未修改播放器内核和上游二进制。
 10. 相关提交有唯一恢复标签。
 
+## 10.1 实施记录
+
+- 2026-09-25：完成语言策略、detail/season/episode 展示值、请求/缓存语言归一、源 payload 语言治理、语言感知合并、详情/播放页语言身份与 Leanback fast playback 收口。
+- 2026-09-25：新增并更新 JVM 回归测试，覆盖中文 translations 优先、英文明确降级、语言别名缓存键、快照拒绝、匹配缓存语言身份、英文 source core 被中文 network 覆盖。
+- 2026-09-25：Leanback 与 Mobile 定向 JVM 测试分别通过，覆盖中文 translations 优先、英文明确降级、语言别名缓存键、快照拒绝、匹配缓存语言身份、英文 source core 被中文 network 覆盖、source payload fill-only 接线和 season 名称语言策略。
+- 2026-09-25 04:42：`scripts/build_arm64_debug_install.sh --flavor leanback --serial 192.168.50.3:5557` 覆盖安装成功；设备确认 `lastUpdateTime=2026-09-25 04:42:00`，应用可在 5557 启动。设备端三类真实 TMDB 数据场景仍待用户指定/提供后执行。
+- 2026-09-25 第二轮复评：修正 `zh-CN` 与 `zh-TW` 的缓存/源数据兼容边界，避免繁体快照或繁体源数据阻断简体目标语言刷新；同时移除 Leanback 播放页遗留的私有语言兜底辅助方法，改为统一走 `TmdbService`/`TmdbLanguagePolicy`。
+- 2026-09-25 第二轮验证：Leanback Arm64 Debug Java 编译通过；Leanback 相关 JVM 回归（语言策略、TMDB 翻译、缓存键、详情快照、匹配缓存、源合并、能力规划、直连播放静态回归）通过；Mobile 定向静态回归通过。
+
 ## 11. 风险与回滚
 
 | 风险 | 缓解 | 回滚 |
@@ -712,4 +721,5 @@ VideoTmdbLanguageRegressionTest
 
 ## 13. 下一步
 
-等待用户明确回复“开始实施”后，从阶段 1 开始执行。实施时必须重新启动 task guard，并只做当前批准阶段。
+- Leanback 测试包覆盖安装已完成；三类真实 TMDB 数据验收仍待用户提供/指定具体剧目后执行。
+- 完成设备验收后，按任务守卫提交并创建唯一 annotated local recovery tag。

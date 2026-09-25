@@ -4,6 +4,7 @@ import android.text.TextUtils;
 
 import com.fongmi.android.tv.bean.TmdbItem;
 import com.fongmi.android.tv.bean.TmdbPerson;
+import com.github.catvod.crawler.SpiderDebug;
 import com.google.gson.JsonObject;
 
 import java.util.ArrayList;
@@ -20,18 +21,28 @@ public class TmdbDetailCache {
     private static final AtomicLong NEXT_ID = new AtomicLong();
     private static final ConcurrentHashMap<String, Entry> CACHE = new ConcurrentHashMap<>();
 
-    public static String put(TmdbItem item, JsonObject detail, List<TmdbPerson> cast) {
+    public static String put(TmdbItem item, JsonObject detail, List<TmdbPerson> cast, String language) {
         if (item == null || item.getTmdbId() <= 0 || detail == null) return "";
         if (CACHE.size() >= MAX_PENDING) CACHE.clear();
         String key = "tmdb_detail_" + NEXT_ID.incrementAndGet();
-        CACHE.put(key, new Entry(item, detail, cast));
+        CACHE.put(key, new Entry(item, detail, cast, TmdbLanguagePolicy.normalize(language)));
         return key;
     }
 
+    public static String put(TmdbItem item, JsonObject detail, List<TmdbPerson> cast) {
+        return put(item, detail, cast, "");
+    }
+
     public static Entry take(String key, TmdbItem expected) {
+        return take(key, expected, "");
+    }
+
+    public static Entry take(String key, TmdbItem expected, String expectedLanguage) {
         if (TextUtils.isEmpty(key)) return null;
         Entry entry = CACHE.remove(key);
-        if (entry == null || !entry.matches(expected)) return null;
+        boolean rejected = entry != null && !entry.matches(expected, expectedLanguage);
+        if (rejected) SpiderDebug.log("tmdb-language-cache", "snapshotLanguage=%s target=%s result=reject", entry.getLanguage(), expectedLanguage);
+        if (entry == null || rejected) return null;
         return entry;
     }
 
@@ -43,11 +54,17 @@ public class TmdbDetailCache {
         private final TmdbItem item;
         private final JsonObject detail;
         private final List<TmdbPerson> cast;
+        private final String language;
 
-        private Entry(TmdbItem item, JsonObject detail, List<TmdbPerson> cast) {
+        private Entry(TmdbItem item, JsonObject detail, List<TmdbPerson> cast, String language) {
             this.item = item;
             this.detail = detail;
             this.cast = cast == null ? new ArrayList<>() : new ArrayList<>(cast);
+            this.language = language == null ? "" : language;
+        }
+
+        public String getLanguage() {
+            return language;
         }
 
         public TmdbItem getItem() {
@@ -62,9 +79,10 @@ public class TmdbDetailCache {
             return new ArrayList<>(cast);
         }
 
-        private boolean matches(TmdbItem expected) {
+        private boolean matches(TmdbItem expected, String expectedLanguage) {
             if (expected == null || item == null) return false;
-            return item.getTmdbId() == expected.getTmdbId() && normalize(item.getMediaType()).equals(normalize(expected.getMediaType()));
+            if (item.getTmdbId() != expected.getTmdbId() || !normalize(item.getMediaType()).equals(normalize(expected.getMediaType()))) return false;
+            return TmdbLanguagePolicy.matchesTarget(expectedLanguage, language);
         }
 
         private String normalize(String value) {
