@@ -39,6 +39,7 @@ public class GlobalHistorySettingSourceTest {
         String leanbackLayout = read("app/src/leanback/res/layout/activity_setting_personal.xml");
 
         assertTrue(mobile.contains("mBinding.globalHistory"));
+        assertTrue(mobile.contains("mBinding.globalHistory.post(() -> mBinding.globalHistory.setOnClickListener(this::setGlobalHistory))"));
         assertTrue(mobile.contains("select_global_history_mode"));
         assertTrue(leanback.contains("mBinding.globalHistory"));
         assertTrue(leanback.contains("select_global_history_mode"));
