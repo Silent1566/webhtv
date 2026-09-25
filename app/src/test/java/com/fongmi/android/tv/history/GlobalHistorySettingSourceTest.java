@@ -6,6 +6,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class GlobalHistorySettingSourceTest {
@@ -40,7 +41,7 @@ public class GlobalHistorySettingSourceTest {
 
         assertTrue(mobile.contains("mBinding.globalHistory"));
         assertTrue(mobile.contains("event.getActionMasked() == MotionEvent.ACTION_DOWN"));
-        assertTrue(mobile.contains("event.getActionMasked() == MotionEvent.ACTION_UP"));
+        assertFalse(mobile.contains("event.getActionMasked() == MotionEvent.ACTION_UP"));
         assertTrue(mobile.contains("MotionEvent.ACTION_CANCEL) globalHistoryTouchStarted = false"));
         assertTrue(mobile.contains("if (!globalHistoryTouchStarted) return"));
         assertTrue(mobile.contains("globalHistoryTouchStarted = false"));
