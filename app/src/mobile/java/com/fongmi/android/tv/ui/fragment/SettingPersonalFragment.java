@@ -69,12 +69,12 @@ public class SettingPersonalFragment extends BaseFragment {
         mBinding.playbackOverlay.setOnClickListener(this::setPlaybackOverlay);
         mBinding.playBackToDetail.setOnClickListener(this::setPlayBackToDetail);
         mBinding.episodeHistory.setOnClickListener(this::setEpisodeHistory);
-        // Require a touch sequence which starts on this row. An ACTION_UP inherited
-        // from the setting-page entry gesture or a synthetic navigation click must
-        // not open the dialog or mutate the persisted global-history mode.
+        // Require a fresh touch sequence on this row. An ACTION_UP inherited from
+        // the setting-page entry gesture must not mutate the persisted mode.
         mBinding.globalHistory.setOnTouchListener((view, event) -> {
             if (event.getActionMasked() == MotionEvent.ACTION_DOWN) globalHistoryTouchStarted = true;
-            else if (event.getActionMasked() == MotionEvent.ACTION_CANCEL) globalHistoryTouchStarted = false;
+            else if (event.getActionMasked() == MotionEvent.ACTION_UP
+                    || event.getActionMasked() == MotionEvent.ACTION_CANCEL) globalHistoryTouchStarted = false;
             return false;
         });
         mBinding.globalHistory.setOnClickListener(view -> {

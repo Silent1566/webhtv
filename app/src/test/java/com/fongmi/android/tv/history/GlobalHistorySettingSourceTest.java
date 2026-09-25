@@ -40,6 +40,8 @@ public class GlobalHistorySettingSourceTest {
 
         assertTrue(mobile.contains("mBinding.globalHistory"));
         assertTrue(mobile.contains("event.getActionMasked() == MotionEvent.ACTION_DOWN"));
+        assertTrue(mobile.contains("event.getActionMasked() == MotionEvent.ACTION_UP"));
+        assertTrue(mobile.contains("MotionEvent.ACTION_CANCEL) globalHistoryTouchStarted = false"));
         assertTrue(mobile.contains("if (!globalHistoryTouchStarted) return"));
         assertTrue(mobile.contains("globalHistoryTouchStarted = false"));
         assertTrue(mobile.contains("select_global_history_mode"));
