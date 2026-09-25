@@ -1082,6 +1082,24 @@ public class TmdbDetailActivityLayoutTest {
     }
 
     @Test
+    public void profileBackdropKeepsHistoricalTransparencyOverPosterArt() throws Exception {
+        Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int method = source.indexOf("private float backdropSlideAlpha()");
+
+        assertTrue(sourcePath + " is missing backdropSlideAlpha", method >= 0);
+        int methodEnd = source.indexOf("\n    }", method);
+        String body = source.substring(method, methodEnd);
+
+        assertTrue("Profile light detail must keep the historical translucent poster surface",
+                body.contains("return lightTheme ? 0.35f : 0.5f;"));
+        assertTrue("Cinema dark detail must retain its historical backdrop opacity",
+                body.contains("return lightTheme ? 1f : 0.9f;"));
+        assertTrue("Backdrop opacity must remain theme-aware instead of one global opaque value",
+                !body.contains("return modeController.isCinemaStyle() && !lightTheme ? 0.9f : 1f;"));
+    }
+
+    @Test
     public void detailLoadsPersonalAiCacheBeforeSlowMediaBlocksFinish() throws Exception {
         Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);

@@ -4124,7 +4124,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private float backdropSlideAlpha() {
-        return modeController.isCinemaStyle() && !lightTheme ? 0.9f : 1f;
+        if (modeController.isCinemaStyle()) return lightTheme ? 1f : 0.9f;
+        return lightTheme ? 0.35f : 0.5f;
     }
 
     private int nextBackdropSlideIndex() {
