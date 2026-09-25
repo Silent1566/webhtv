@@ -37,6 +37,12 @@ public class Config {
     private String interfaceKey;
     @SerializedName("urlsJson")
     private String urlsJson;
+    @SerializedName("legacyConfigKeysJson")
+    private String legacyConfigKeysJson;
+    @SerializedName("addressMatchAliasesJson")
+    private String addressMatchAliasesJson;
+    @SerializedName("identityResolutionState")
+    private String identityResolutionState;
     @SerializedName("json")
     private String json;
     @SerializedName("name")
@@ -176,6 +182,7 @@ public class Config {
     }
 
     public Config urls(List<String> urls) {
+        rememberAddressAliases(getUrls());
         List<String> result = new ArrayList<>();
         if (urls != null) for (String item : urls) addUrl(result, item);
         setUrl(result.isEmpty() ? "" : result.get(0));
@@ -216,6 +223,89 @@ public class Config {
 
     public void setUrlsJson(String urlsJson) {
         this.urlsJson = urlsJson;
+    }
+
+    public String getLegacyConfigKeysJson() {
+        return legacyConfigKeysJson;
+    }
+
+    public List<String> getLegacyConfigKeys() {
+        return readStringList(legacyConfigKeysJson);
+    }
+
+    public void setLegacyConfigKeysJson(String value) {
+        legacyConfigKeysJson = value;
+    }
+
+    public Config addLegacyConfigKey(String value) {
+        List<String> values = getLegacyConfigKeys();
+        addUnique(values, value);
+        legacyConfigKeysJson = App.gson().toJson(values);
+        return this;
+    }
+
+    public Config addLegacyConfigKeys(List<String> values) {
+        List<String> current = getLegacyConfigKeys();
+        if (values != null) for (String value : values) addUnique(current, value);
+        legacyConfigKeysJson = App.gson().toJson(current);
+        return this;
+    }
+
+    public String getAddressMatchAliasesJson() {
+        return addressMatchAliasesJson;
+    }
+
+    public List<String> getAddressMatchAliases() {
+        return readStringList(addressMatchAliasesJson);
+    }
+
+    public void setAddressMatchAliasesJson(String value) {
+        addressMatchAliasesJson = value;
+    }
+
+    public Config addAddressMatchAliases(List<String> values) {
+        List<String> aliases = getAddressMatchAliases();
+        if (values != null) for (String value : values) addUnique(aliases, value);
+        addressMatchAliasesJson = App.gson().toJson(aliases);
+        return this;
+    }
+
+    public String getIdentityResolutionState() {
+        return TextUtils.isEmpty(identityResolutionState) ? "unresolved" : identityResolutionState;
+    }
+
+    public void setIdentityResolutionState(String value) {
+        identityResolutionState = value;
+    }
+
+    public Config identityResolutionState(String value) {
+        setIdentityResolutionState(value);
+        return this;
+    }
+
+    private void rememberAddressAliases(List<String> values) {
+        if (values == null || values.isEmpty()) return;
+        List<String> aliases = new ArrayList<>();
+        aliases.addAll(com.fongmi.android.tv.playback.PlaybackConfigIdentity.strictAddressKeys(getType(), values));
+        aliases.addAll(com.fongmi.android.tv.playback.PlaybackConfigIdentity.endpointMatchKeys(getType(), values));
+        aliases.addAll(com.fongmi.android.tv.playback.PlaybackConfigIdentity.hostMatchKeys(getType(), values));
+        addAddressMatchAliases(aliases);
+        for (String value : values) addLegacyConfigKey(com.fongmi.android.tv.playback.PlaybackConfigIdentity.keyForUrl(value));
+    }
+
+    private List<String> readStringList(String json) {
+        try {
+            Type listType = TypeToken.getParameterized(List.class, String.class).getType();
+            List<String> values = App.gson().fromJson(json, listType);
+            return values == null ? new ArrayList<>() : new ArrayList<>(values);
+        } catch (Exception e) {
+            return new ArrayList<>();
+        }
+    }
+
+    private static void addUnique(List<String> values, String value) {
+        value = value == null ? "" : value.trim();
+        if (!TextUtils.isEmpty(value) && !values.contains(value)) values.add(value);
     }
 
     public String ensureInterfaceKey() {
@@ -333,6 +423,8 @@ public class Config {
     public Config insert() {
         if (isEmpty()) return this;
         ensureInterfaceKey();
+        rememberAddressAliases(getUrls());
+        if (TextUtils.isEmpty(identityResolutionState)) identityResolutionState = "unresolved";
         setId(Math.toIntExact(AppDatabase.get().getConfigDao().insert(this)));
         return this;
     }
@@ -340,6 +432,8 @@ public class Config {
     public Config save() {
         if (isEmpty()) return this;
         ensureInterfaceKey();
+        rememberAddressAliases(getUrls());
+        if (TextUtils.isEmpty(identityResolutionState)) identityResolutionState = "unresolved";
         AppDatabase.get().getConfigDao().insertOrUpdate(this);
         return this;
     }

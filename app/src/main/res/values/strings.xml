@@ -2861,6 +2861,7 @@
     <string name="following_summary">%1$d followed · %2$d unread</string>
     <string name="following_continue">Continue</string>
     <string name="following_read">Mark read</string>
+    <string name="following_read_all">Mark all read</string>
     <string name="following_notify_on">Notify on</string>
     <string name="following_notify_off">Notify off</string>
     <string name="following_change_source">Source</string>
