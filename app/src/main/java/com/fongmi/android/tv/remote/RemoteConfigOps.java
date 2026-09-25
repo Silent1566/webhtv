@@ -9,6 +9,7 @@ import com.fongmi.android.tv.api.config.WallConfig;
 import com.fongmi.android.tv.bean.Config;
 import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.db.AppDatabase;
+import com.fongmi.android.tv.setting.ConfigSyncPolicy;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.remote.RemoteModels.RemoteCommandResult;
 import com.google.gson.JsonArray;
@@ -65,9 +66,8 @@ public final class RemoteConfigOps {
     }
 
     private static Config matchingLiveConfig(Config config, String previousVodUrl) {
-        if (!TextUtils.equals(LiveConfig.getUrl(), previousVodUrl)) return null;
-        Config liveConfig = AppDatabase.get().getConfigDao().find(config.getUrl(), 1);
-        return liveConfig;
+        if (!ConfigSyncPolicy.shouldSyncLive(previousVodUrl, LiveConfig.getUrl())) return null;
+        return AppDatabase.get().getConfigDao().find(config.getUrl(), 1);
     }
 
     public static RemoteCommandResult delete(JsonObject payload) {

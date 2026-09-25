@@ -18,6 +18,7 @@ import com.fongmi.android.tv.bean.Live;
 import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.databinding.ActivitySettingBinding;
 import com.fongmi.android.tv.db.AppDatabase;
+import com.fongmi.android.tv.setting.ConfigSyncPolicy;
 import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.impl.Callback;
@@ -144,7 +145,10 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
             case 0:
                 String previousVodUrl = VodConfig.getUrl();
                 VodConfig.load(config, getCallback());
-                loadMatchingLiveConfig(config, previousVodUrl);
+                if (ConfigSyncPolicy.shouldSyncLive(previousVodUrl, LiveConfig.getUrl())) {
+                    Config liveConfig = AppDatabase.get().getConfigDao().find(config.getUrl(), 1);
+                    if (liveConfig != null) LiveConfig.load(liveConfig, new Callback());
+                }
                 break;
             case 1:
                 LiveConfig.load(config, getCallback());
@@ -154,13 +158,6 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
                 WallConfig.load(config, getCallback());
                 break;
         }
-    }
-
-    private void loadMatchingLiveConfig(Config config, String previousVodUrl) {
-        if (!TextUtils.equals(LiveConfig.getUrl(), previousVodUrl)) return;
-        Config liveConfig = AppDatabase.get().getConfigDao().find(config.getUrl(), 1);
-        if (liveConfig == null) return;
-        LiveConfig.load(liveConfig, new Callback());
     }
 
     private Callback getCallback() {

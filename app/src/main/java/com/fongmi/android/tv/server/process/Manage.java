@@ -10,6 +10,7 @@ import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.bean.Backup;
 import com.fongmi.android.tv.bean.Config;
 import com.fongmi.android.tv.db.AppDatabase;
+import com.fongmi.android.tv.setting.ConfigSyncPolicy;
 import com.fongmi.android.tv.bean.Device;
 import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.bean.SyncOptions;
@@ -376,17 +377,13 @@ public class Manage implements Process {
             default -> {
                 String previousVodUrl = VodConfig.getUrl();
                 VodConfig.load(config, new Callback());
-                loadMatchingLiveConfig(config, previousVodUrl);
+                if (ConfigSyncPolicy.shouldSyncLive(previousVodUrl, LiveConfig.getUrl())) {
+                    Config liveConfig = AppDatabase.get().getConfigDao().find(config.getUrl(), 1);
+                    if (liveConfig != null) LiveConfig.load(liveConfig, new Callback());
+                }
             }
         }
         return configs(java.util.Collections.emptyMap());
-    }
-
-    private void loadMatchingLiveConfig(Config config, String previousVodUrl) {
-        if (!TextUtils.equals(LiveConfig.getUrl(), previousVodUrl)) return;
-        Config liveConfig = AppDatabase.get().getConfigDao().find(config.getUrl(), 1);
-        if (liveConfig == null) return;
-        LiveConfig.load(liveConfig, new Callback());
     }
 
     private Response configDelete(Map<String, String> params) {
