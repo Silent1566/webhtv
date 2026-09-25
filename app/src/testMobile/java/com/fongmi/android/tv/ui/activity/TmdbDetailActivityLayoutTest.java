@@ -1102,6 +1102,13 @@ public class TmdbDetailActivityLayoutTest {
                 cinemaShadeBody.contains("return TmdbDetailLayoutUtils.colorDrawable(Color.TRANSPARENT);"));
         assertTrue("Light cinema gradient wash must not remain",
                 source.indexOf("private Drawable cinemaLightBackdropShade()") < 0);
+        assertTrue("Light cinema copy must use a local feathered plate instead of covering the poster",
+                source.contains("private void applyLightCinemaCopyPlate()")
+                        && source.contains("binding.detailInfo.setBackground(new LightCinemaCopyPlateDrawable(feather, ResUtil.dp2px(18)));")
+                        && source.contains("if (!(lightTheme && isCinemaStyle()))"));
+        assertTrue("Light cinema copy plate must stay a light white mist instead of the heavier warm beige slab",
+                source.contains("private static final int PLATE = 0xC8FFFFFF;")
+                        && !source.contains("0xE6F6F1EA"));
         assertTrue("Backdrop opacity must remain theme-aware instead of one global opaque value",
                 !body.contains("return modeController.isCinemaStyle() && !lightTheme ? 0.9f : 1f;"));
         int initPage = source.indexOf("private void initPage()");
@@ -1816,9 +1823,10 @@ public class TmdbDetailActivityLayoutTest {
         assertTrue("episode title must use the shared episode-tool focus chrome when it is actionable",
                 activity.contains("setEpisodeTitleButton(binding.episodeTitle, colors);")
                         && activity.contains("private void applyEpisodeTitleButtonFocus(MaterialButton button, ThemeColors colors)"));
-        assertTrue("unfocused season action must blend into the episode heading without a persistent chip surface",
-                activity.contains("button.setBackgroundTintList(ColorStateList.valueOf(focused ? colors.control : Color.TRANSPARENT));")
-                        && activity.contains("button.setStrokeWidth(focused ? ResUtil.dp2px(FOCUS_STROKE_DP) : 0);"));
+        assertTrue("unfocused season action keeps a light-cinema chip and stays transparent in other themes",
+                activity.contains("boolean lightCinemaPlate = lightTheme && isCinemaStyle();")
+                        && activity.contains("return lightCinemaPlate ? colors.chip : Color.TRANSPARENT;")
+                        && activity.contains("button.setStrokeWidth(focused ? ResUtil.dp2px(FOCUS_STROKE_DP) : (lightCinemaPlate ? ResUtil.dp2px(CHIP_STROKE_DP) : 0));"));
         assertTrue("season action must show only a short season label instead of combining it with the episode heading",
                 activity.contains("binding.episodeTitle.setText(detailSeasonButtonLabel());")
                         && activity.contains("private String detailSeasonButtonLabel()")
