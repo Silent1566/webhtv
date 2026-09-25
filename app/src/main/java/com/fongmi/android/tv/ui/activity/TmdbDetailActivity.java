@@ -955,6 +955,10 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         binding.personalAiList.setNestedScrollingEnabled(false);
         binding.personalAiList.setAdapter(personalAiAdapter);
         applyDetailTheme();
+        // BaseActivity applies the global Material theme after initView/initEvent. Profile
+        // detail owns translucent cards and backdrop surfaces, so reapply that contract
+        // after the global pass instead of letting tokens.surface() force opaque cards.
+        binding.root.post(this::applyDetailTheme);
     }
 
     private void initModeController() {

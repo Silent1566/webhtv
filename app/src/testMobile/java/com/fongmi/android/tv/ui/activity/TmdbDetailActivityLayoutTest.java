@@ -1097,6 +1097,9 @@ public class TmdbDetailActivityLayoutTest {
                 body.contains("return lightTheme ? 1f : 0.9f;"));
         assertTrue("Backdrop opacity must remain theme-aware instead of one global opaque value",
                 !body.contains("return modeController.isCinemaStyle() && !lightTheme ? 0.9f : 1f;"));
+        int initPage = source.indexOf("private void initPage()");
+        assertTrue("Profile detail must reapply its translucent chrome after the global Material theme pass",
+                source.indexOf("binding.root.post(this::applyDetailTheme);", initPage) > initPage);
     }
 
     @Test
