@@ -47,6 +47,17 @@ public class TmdbServiceCacheKeyTest {
     }
 
     @Test
+    public void cacheKeysNormalizeLanguageCaseAndAliases() {
+        TmdbService service = new TmdbService();
+        TmdbItem item = new TmdbItem(123, "tv", "庆余年", "", "", "", "");
+
+        assertEquals(service.detailCacheKey(item, config("https://api.tmdb.org/3", "key", "ZH-Hans"), true),
+                service.detailCacheKey(item, config("https://api.tmdb.org/3", "key", "zh-CN"), true));
+        assertNotEquals(service.detailCacheKey(item, config("https://api.tmdb.org/3", "key", "zh-CN"), true),
+                service.detailCacheKey(item, config("https://api.tmdb.org/3", "key", "zh-TW"), true));
+    }
+
+    @Test
     public void seasonAndEpisodeCacheKeysIgnoreAuthAndApiBase() {
         TmdbService service = new TmdbService();
         TmdbItem item = new TmdbItem(123, "tv", "庆余年", "", "", "", "");
