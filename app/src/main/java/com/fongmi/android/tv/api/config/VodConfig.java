@@ -652,7 +652,11 @@ public class VodConfig extends BaseConfig {
     }
 
     public Site getSite(String key) {
-        return getSites().stream().filter(item -> item.getKey().equals(key)).findFirst().orElse(new Site());
+        Site exact = getSites().stream().filter(item -> item.getKey().equals(key)).findFirst().orElse(null);
+        if (exact != null) return exact;
+        // Following and history identities intentionally normalize source keys to lowercase. Preserve
+        // compatibility with saved routes when a current configuration changes only key case.
+        return getSites().stream().filter(item -> item.getKey().equalsIgnoreCase(key)).findFirst().orElse(new Site());
     }
 
     private void setParse(Config config, Parse parse, boolean save) {
