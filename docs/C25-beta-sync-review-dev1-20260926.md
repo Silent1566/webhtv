@@ -7,8 +7,8 @@
 - **允许路径**：`app`、`docs/C25-beta-sync-review-dev1-20260926.md`。
 - **分支/HEAD**：`dev1`；合并前 `83e0a3159b90e07a019c514e14224a905d06e230`；合并后 `c1645a374596c470fc7db3f543deaf9fab4ab701`。
 - **保护面**：任务开始前仓库根目录的 18 个未跟踪验证产物（`theme_verify_*.png/xml`、`runtime_verify_*.png`、`window_dump.xml`、`window_state.txt`、`surfaceflinger_state.txt`、`transparency_verification.png`）均未纳入本任务。
-- **当前状态**：合并、2 轮复评、1 处最小修复、定向验证已完成；准备执行任务守卫收尾、推送并创建 PR。
-- **下一动作**：`task_guard.sh finish` 提交 → 推送 `dev1` → 创建 base=`beta`、head=`dev1` 的中文 PR。
+- **当前状态**：合并、2 轮复评、1 处最小修复、定向验证、提交、推送、创建 PR 均已完成。
+- **下一动作**：等待 PR #378 评审结果；如需改进站点弹窗聚焦行文字对比度，另起独立任务拆分 `SiteAdapter` 的 `selected` 语义（本轮已记录为不改动项）。
 
 ## 基线与提交台账
 
@@ -53,4 +53,6 @@
 
 ## 交付状态
 
-- 待提交、推送 `dev1`，并创建 base=`beta`、head=`dev1` 的中文 PR（只创建，不合并）。
+- 本任务提交：`720d2bcbd3d16a8b91acb703fbee8ad22a408473`（删除两个被取代的 drawable + 本任务记录），恢复标签 `recovery/C25-beta-sync-review-dev1-20260926/20260927005542-720d2bcbd3d1`。
+- 已推送 `dev1`（`5058aaab2..720d2bcbd`），并创建 base=`beta`、head=`dev1` 的中文 PR：<https://github.com/Silent1566/webhtv/pull/378>（只创建，未合并）。
+- PR 内含 6 个提交：`f7674024e962`、`1bb72bd7099c`、`1e41863c181c`、`83e0a3159b90`、`c1645a374596`（合并提交）、`720d2bcbd3d1`。
