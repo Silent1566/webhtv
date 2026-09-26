@@ -4,13 +4,13 @@
 
 - **目标**：将远端 `beta` 最新代码合入 `dev1`，循环复评相对 `origin/dev1` 的全部未推送改动（含已提交未推送的主题改动），发现问题则最小修复并验证；通过后提交、推送并创建中文 PR 到 `beta`，只创建 PR，不合并。
 - **验收**：合并结果包含远端 beta 最新提交；不重新带入远端已移除/剔除的回退或主题提交；本地未推送改动与 beta 新改动组合后通过定向静态检查、单元/源码测试和 Debug 测试包覆盖安装启动验证；PR 描述用中文说明改动内容并保持排版清楚。
-- **当前状态**：合并、3 轮复评、2 处最小修复和验证已完成；准备执行任务守卫收尾、推送并创建 PR。
+- **当前状态**：合并、4 轮复评、2 处最小修复和验证已完成；准备执行任务守卫收尾、推送并创建 PR。
 - **基线**：合并前本地 `dev1@8da7bd625373ec1028b834dbfb01d8edf69a1600`；远端 `beta@b15b6cdfe044cf7498df3ab5885fa4e1be663cf7`；远端 `origin/dev1@5d788440bb8d6d592482f7e297f326298bffc144`。
 - **合并提交**：`5e51a2c0eb2e392d4cd3fa01389652a2fc33782f`，父提交为上述本地 dev1 和远端 beta。
 - **当前关键文件**：本地未推送主题/详情页改动（`TmdbDetailActivity`、`DetailModeHost`、`EnhancedDetailController`、`TmdbCinemaTheme` 等）与 beta 新增的 TMDB 语言策略、追更元数据、配置同步、播放器 Surface 修复和 Native loader 保护。
 - **已完成证据**：合并无冲突；`git diff --check` 通过；被剔除提交 `5682f2b054b577b0db5c6f7c1143f2eebb51858e`、`2faa1f37757f` 均不在合并结果祖先中。
 - **未验证边界**：没有执行多设备真实远端同步矩阵；Go/Rust 工具链当前不可用，本轮未重复运行其测试；播放器自动线路回退和超级解析修复沿用远端任务文档中的源码评审、测试与设备证据，本任务补充组合后启动冒烟。
-- **下一动作**：执行任务守卫收尾，推送 `dev1`，并创建只打开不合并的中文 PR。
+- **下一动作**：执行任务守卫收尾，推送 `dev4`，并创建只打开不合并的中文 PR。
 
 ## 范围与提交台账
 
@@ -59,8 +59,9 @@
 - 通过：`bash ./gradlew :app:testMobileArm64_v8aDebugUnitTest --tests 'com.fongmi.android.tv.bean.TmdbSourcePayloadTest' --tests 'com.fongmi.android.tv.utils.TmdbLanguagePolicyTest' --tests 'com.fongmi.android.tv.ui.helper.TmdbSourceCapabilityPlannerTest' --tests 'com.fongmi.android.tv.ui.helper.TmdbSourceMergerTest'`（第 1 次测试失败为测试夹具在 parse 后再 setLanguage，未覆盖 parse 入口；修正夹具后同一验证通过）。
 - 通过：`bash ./gradlew :app:testMobileArm64_v8aDebugUnitTest --tests 'com.fongmi.android.tv.ui.activity.TmdbDetailActivityLayoutTest' --tests 'com.fongmi.android.tv.ui.detail.DetailModeControllerTest' --tests 'com.fongmi.android.tv.ui.helper.TmdbCinemaThemeTest' :app:compileLeanbackArm64_v8aDebugJavaWithJavac --continue`，144 个测试通过，Leanback Java 编译通过（第一次组合验证失败为上述过期标题测试断言，修正后通过；同轮 Mobile Java 编译已由测试任务完成）。
 - 通过：`bash scripts/build_arm64_debug_install.sh --flavor mobile --abi arm64-v8a --serial 192.168.50.3:5555`，Debug APK 覆盖安装成功；打包后 Gradle daemon 已停止。
+- 通过：`./gradlew :app:testMobileArm64_v8aDebugUnitTest --tests com.fongmi.android.tv.server.process.ProxyRedirectResponseTest --tests com.fongmi.android.tv.server.process.ProxyRangeResponsePolicyTest --continue`，确认短数组响应不会越界，且 302 空响应/Range 策略行为保持正确。
 - 通过：指定模拟器启动 `com.silent.android.webhtv` 后进程存在（PID 3899），焦点为 `HomeActivityCurrent`，启动窗口内无 `FATAL EXCEPTION`、fatal signal 或相关 App error。
 
 ## 交付状态
 
-- 待验证、提交、推送和创建 PR。
+- 待提交、推送和创建 PR。

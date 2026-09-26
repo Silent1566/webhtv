@@ -56,9 +56,13 @@ public class Proxy implements Process {
             SpiderDebug.log("proxy", "response object do=%s type=%s", params.get("do"), rs[0].getClass().getName());
             return response;
         }
-        InputStream stream = rs[2] instanceof InputStream candidate ? candidate : null;
-        if (rs.length < 3 || !(rs[0] instanceof Integer code) || (stream == null && !canResponseHaveEmptyBody(code))) {
+        if (rs.length < 3 || !(rs[0] instanceof Integer code)) {
             SpiderDebug.log("proxy", "response invalid do=%s status=%s mime=%s body=%s headers=%s", params.get("do"), rs.length > 0 ? rs[0] : null, rs.length > 1 ? rs[1] : null, rs.length > 2 ? rs[2] : null, rs.length > 3 ? rs[3] : null);
+            return Nano.error(INVALID_RESPONSE);
+        }
+        InputStream stream = rs[2] instanceof InputStream candidate ? candidate : null;
+        if (stream == null && !canResponseHaveEmptyBody(code)) {
+            SpiderDebug.log("proxy", "response invalid do=%s status=%s mime=%s body=%s headers=%s", params.get("do"), code, rs[1], rs[2], rs.length > 3 ? rs[3] : null);
             return Nano.error(INVALID_RESPONSE);
         }
         Map<String, String> headers = headers(rs.length > 3 ? rs[3] : null);
