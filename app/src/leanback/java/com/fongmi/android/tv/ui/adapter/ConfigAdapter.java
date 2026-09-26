@@ -141,12 +141,12 @@ public class ConfigAdapter extends RecyclerView.Adapter<ConfigAdapter.ViewHolder
         if (position < 0 || position >= getItemCount()) return false;
         RecyclerView recycler = findRecycler(source);
         if (recycler == null) return false;
-        requestFocus(recycler, position);
+        requestFocus(recycler, position, source.getId());
         return true;
     }
 
-    private void requestFocus(RecyclerView recycler, int position) {
-        FocusRequest focus = new FocusRequest(recycler, position);
+    private void requestFocus(RecyclerView recycler, int position, int targetId) {
+        FocusRequest focus = new FocusRequest(recycler, position, targetId);
         recycler.stopScroll();
         // 目标行可能尚未挂载；监听它实际挂载的时机，避免提前回调无效后焦点停在原行。
         focus.listenForTarget();
@@ -166,12 +166,14 @@ public class ConfigAdapter extends RecyclerView.Adapter<ConfigAdapter.ViewHolder
 
         private final RecyclerView recycler;
         private final int position;
+        private final int targetId;
         private boolean listening;
         private boolean finished;
 
-        private FocusRequest(RecyclerView recycler, int position) {
+        private FocusRequest(RecyclerView recycler, int position, int targetId) {
             this.recycler = recycler;
             this.position = position;
+            this.targetId = targetId;
         }
 
         private void listenForTarget() {
@@ -183,7 +185,11 @@ public class ConfigAdapter extends RecyclerView.Adapter<ConfigAdapter.ViewHolder
             if (finished) return;
             RecyclerView.ViewHolder holder = recycler.findViewHolderForAdapterPosition(position);
             if (holder == null) return;
-            View target = holder.itemView.findViewById(R.id.text);
+            // 上下移动时保持当前列：接口名称到接口名称、修改到修改、删除到删除。
+            View target = holder.itemView.findViewById(targetId);
+            if (target == null || target.getVisibility() != View.VISIBLE || !target.isFocusable()) {
+                target = holder.itemView.findViewById(R.id.text);
+            }
             if (target != null && target.getVisibility() == View.VISIBLE && target.isFocusable()) {
                 finish(target);
             } else {

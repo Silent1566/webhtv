@@ -63,6 +63,26 @@ public class InterfaceEntryInteractionTest {
     }
 
     @Test
+    public void leanbackConfigActionsKeepTheirColumnAndVisibleFocusBorder() throws Exception {
+        String source = read("app/src/leanback/java/com/fongmi/android/tv/ui/adapter/ConfigAdapter.java");
+        String layout = read("app/src/leanback/res/layout/adapter_config.xml");
+        String icon = read("app/src/leanback/res/color/config_history_icon.xml");
+        String normal = read("app/src/leanback/res/drawable/shape_config_history_item_normal.xml");
+        String focused = read("app/src/leanback/res/drawable/shape_config_history_item_focused.xml");
+
+        assertTrue(source.contains("requestFocus(recycler, position, source.getId())"));
+        assertTrue(source.contains("holder.itemView.findViewById(targetId)"));
+        assertTrue(source.contains("target = holder.itemView.findViewById(R.id.text)"));
+        assertTrue(layout.contains("android:id=\"@+id/edit\""));
+        assertTrue(layout.contains("android:id=\"@+id/delete\""));
+        assertTrue(layout.contains("android:contentDescription=\"@string/setting_delete\""));
+        assertTrue(icon.contains("?attr/colorOnPrimary"));
+        assertTrue(normal.contains("?attr/colorOutline"));
+        assertTrue(focused.contains("android:width=\"2dp\""));
+        assertTrue(focused.contains("?attr/colorOnPrimary"));
+    }
+
+    @Test
     public void newConfigStartsBlankWhileEditingKeepsTheSelectedConfig() throws Exception {
         for (String file : new String[]{
                 "app/src/mobile/java/com/fongmi/android/tv/ui/dialog/ConfigDialog.java",
