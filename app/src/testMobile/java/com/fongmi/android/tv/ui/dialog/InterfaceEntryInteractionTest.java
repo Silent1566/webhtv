@@ -83,6 +83,19 @@ public class InterfaceEntryInteractionTest {
     }
 
     @Test
+    public void leanbackConfigNameLooksClickableBeforeItReceivesFocus() throws Exception {
+        String layout = read("app/src/leanback/res/layout/adapter_config.xml");
+        String selector = read("app/src/leanback/res/drawable/selector_config_name_item.xml");
+        String normal = read("app/src/leanback/res/drawable/shape_config_name_item_normal.xml");
+
+        assertTrue(layout.contains("android:background=\"@drawable/selector_config_name_item\""));
+        assertTrue(selector.contains("@drawable/shape_config_name_item_normal"));
+        assertTrue(selector.contains("@drawable/shape_config_history_item_focused"));
+        assertTrue(normal.contains("android:width=\"2dp\""));
+        assertTrue(normal.contains("?attr/colorPrimary"));
+    }
+
+    @Test
     public void newConfigStartsBlankWhileEditingKeepsTheSelectedConfig() throws Exception {
         for (String file : new String[]{
                 "app/src/mobile/java/com/fongmi/android/tv/ui/dialog/ConfigDialog.java",
