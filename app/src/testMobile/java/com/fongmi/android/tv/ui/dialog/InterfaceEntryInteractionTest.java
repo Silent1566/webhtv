@@ -85,14 +85,18 @@ public class InterfaceEntryInteractionTest {
     @Test
     public void leanbackConfigNameLooksClickableBeforeItReceivesFocus() throws Exception {
         String layout = read("app/src/leanback/res/layout/adapter_config.xml");
-        String selector = read("app/src/leanback/res/drawable/selector_config_name_item.xml");
-        String normal = read("app/src/leanback/res/drawable/shape_config_name_item_normal.xml");
+        String buttonBackground = read("app/src/main/res/color/dialog_outlined_button_bg.xml");
+        String buttonStroke = read("app/src/main/res/color/dialog_outlined_button_stroke.xml");
 
-        assertTrue(layout.contains("android:background=\"@drawable/selector_config_name_item\""));
-        assertTrue(selector.contains("@drawable/shape_config_name_item_normal"));
-        assertTrue(selector.contains("@drawable/shape_config_history_item_focused"));
-        assertTrue(normal.contains("android:width=\"2dp\""));
-        assertTrue(normal.contains("?attr/colorPrimary"));
+        assertTrue(layout.contains("com.google.android.material.button.MaterialButton"));
+        assertTrue(layout.contains("style=\"?attr/materialButtonOutlinedStyle\""));
+        assertTrue(layout.contains("android:textColor=\"@color/dialog_outlined_button_text\""));
+        assertTrue(layout.contains("app:backgroundTint=\"@color/dialog_outlined_button_bg\""));
+        assertTrue(layout.contains("app:strokeColor=\"@color/dialog_outlined_button_stroke\""));
+        assertTrue(layout.contains("app:strokeWidth=\"2dp\""));
+        assertTrue(buttonBackground.contains("android:color=\"#D2E3FC\""));
+        assertTrue(buttonStroke.contains("android:color=\"#C8CDD2\""));
+        assertTrue(buttonStroke.contains("android:color=\"#0B57D0\""));
     }
 
     @Test
