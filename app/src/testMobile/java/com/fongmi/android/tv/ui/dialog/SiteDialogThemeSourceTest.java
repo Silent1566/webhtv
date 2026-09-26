@@ -75,6 +75,21 @@ public class SiteDialogThemeSourceTest {
     }
 
     @Test
+    public void leanbackSiteItemsKeepReadableThemeContrast() throws Exception {
+        String layout = read("app/src/leanback/res/layout/adapter_site.xml");
+        String text = read("app/src/leanback/res/color/site_item_text.xml");
+        String check = read("app/src/leanback/res/color/site_item_check.xml");
+        assertTrue(layout.contains("android:textColor=\"@color/site_item_text\""));
+        assertTrue(layout.contains("app:buttonTint=\"@color/site_item_check\""));
+        assertFalse("a disabled checkbox is rendered with Android's greyed-out alpha", layout.contains("android:enabled=\"false\""));
+        assertTrue(text.contains("?attr/colorOnPrimary"));
+        assertTrue(text.contains("?attr/colorOnSurface"));
+        assertTrue(check.contains("?attr/colorOnPrimary"));
+        assertTrue(check.contains("?attr/colorPrimary"));
+        assertTrue(check.contains("?attr/colorOnSurfaceVariant"));
+    }
+
+    @Test
     public void everyActivityAppliesThemeChangesImmediately() throws Exception {
         String mobile = read("app/src/mobile/java/com/fongmi/android/tv/ui/base/BaseActivity.java");
         assertTrue(mobile.contains("event.getType() == RefreshEvent.Type.LANGUAGE"));
