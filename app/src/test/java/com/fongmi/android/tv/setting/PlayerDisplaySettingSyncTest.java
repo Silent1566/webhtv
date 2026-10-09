@@ -63,6 +63,32 @@ public class PlayerDisplaySettingSyncTest {
                         && source.indexOf("setDiagnosticsPanel(player);", render) > render);
     }
 
+    /**
+     * 诊断面板的重缓冲计数必须按「有没有 Exo analytics 快照」分派，而不是按是否 MPV。
+     *
+     * <p>非 Exo 时 {@code snapshot} 是 {@code Snapshot.empty()}，重缓冲恒为 0；若只对 MPV 分支，
+     * IJK 会落到快照分支而永远读到 0，排查时会被误导。
+     */
+    @Test
+    public void playerOsdDiagnosticsReadRebufferCountPerEngine() throws Exception {
+        String source = read(mainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "custom", "PlayerOsdController.java")));
+
+        int count = source.indexOf("int rebufferCount =");
+        int total = source.indexOf("long rebufferTotalMs =");
+        assertTrue("the diagnostics must compute a re-buffer count and total", count >= 0 && total > count);
+        String countExpr = source.substring(count, source.indexOf(';', count));
+        String totalExpr = source.substring(total, source.indexOf(';', total));
+
+        assertTrue("re-buffer count must read the engine-agnostic tracker for every non-Exo engine, not only MPV",
+                countExpr.contains("player.isExo()")
+                        && countExpr.contains("snapshot.rebufferCount()")
+                        && countExpr.contains("player.getRebufferCount()"));
+        assertTrue("re-buffer total must read the engine-agnostic tracker for every non-Exo engine, not only MPV",
+                totalExpr.contains("player.isExo()")
+                        && totalExpr.contains("snapshot.rebufferTotalMs()")
+                        && totalExpr.contains("player.getRebufferTotalMs()"));
+    }
+
     @Test
     public void backupIncludesPlaybackDisplayPreferences() throws Exception {
         String source = read(mainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "bean", "Backup.java")));
