@@ -173,4 +173,21 @@ UI_TOKEN_STATUS   PASS
 
 ## 交付坐标
 
-见「闭环记录」。
+| 项 | 值 |
+| --- | --- |
+| 任务起始 HEAD | `40ba21ed8766fd59d981b77e04c121557268fcb4` |
+| 合并前 `origin/beta` tip | `841a5707d59832cb18c4e8cc3e36e8841f3e3a3d` |
+| 合并提交（本任务唯一提交） | `fe4d02e076d781f5158d791c6aae8e0d216f07fb`（两个父：`40ba21ed8` + `841a5707d`） |
+| 合并结果树 / 合并前 HEAD 树 | `79182bfdb509d1a53102fa72ea839d79f205ab87`（同一棵树） |
+| recovery tag | `recovery/C56-beta-merge-review-dev1/20261009193053-fe4d02e076d7` |
+| 推送 | `git push origin dev1` → `67d930ed6..fe4d02e07  dev1 -> dev1`（`origin/dev1` = `fe4d02e07` = 本地 HEAD） |
+| PR | [#431](https://github.com/Silent1566/webhtv/pull/431)（`dev1 -> beta`，中文正文，**只创建未合并**） |
+| PR 校验 | `state=OPEN`、`mergedAt=null`、`mergeable=MERGEABLE`、`changedFiles=4`；PR 文件集与 `git diff --name-only origin/beta HEAD` 逐项一致 |
+| 收尾复核 | `git ls-remote origin refs/heads/beta` 仍为 `841a5707d`（未前进，本合并已含该 tip） |
+
+## 闭环记录
+
+- 2026-10-09 19:30（Asia/Shanghai）：`task_guard.sh finish` 生成合并提交 `fe4d02e07` + recovery tag，`git rev-list --parents -n1 fe4d02e07` 校验为**两个父**且第二父 == beta tip（`841a5707d`），`MERGE_HEAD` 已清空，工作区干净。
+- `git push origin dev1` 成功；`gh pr create --base beta --head dev1` 创建 PR #431（**未合并**，`mergedAt=null`）。
+- PR 文件集校验：`gh api repos/Silent1566/webhtv/pulls/431/files` 的 4 个文件名与本地 `git diff --name-only origin/beta HEAD` **逐项一致**：`CustomCspDialog.java`、`CustomCspDialogLayoutTest.java`、`docs/C56-beta-merge-review-dev1-20261009.md`、`docs/SITE-INJECT-FULLPAGE-20261009.md`。
+- 本闭环只改文档（新增本文件、订正 `docs/SITE-INJECT-FULLPAGE-20261009.md`），再次推送后 PR #431 会自动带上文档更新。
