@@ -54,6 +54,36 @@
 
 但**仍有一条未经修改的路径**：若引擎（IJK/MPV）持续报 BUFFERING/`isLoading()` 而画面实际在推进，则圈的收口仍被 `getPlaybackState() == STATE_READY` 挡住（`hidePlaybackProgressIfStale()` 的末行）。截图取证显示 `0 KB/s`（无流量）+ 画面在走，与此形态相符。闭合它需要在 UI 侧引入「位置确有推进 ⇒ 视为已恢复」的**独立判据**（或为 IJK/MPV 补等价状态重判），这属**产品/UX 决定**（会改变合法缓冲期间的显示），需用户明确授权并按 AGENTS.md 完成设计门与真机验证后再实施。
 
+## 5557 实机验证（2026-10-09 19:0x）
+
+**设备**：`192.168.50.3:5557`（本工作区分配口），leanback flavor，Android 9 / SDK 28，x86_64 模拟器 + arm64 转译（已装 APK 为 arm64-v8a）。
+
+**构建与安装**：`bash scripts/build_arm64_debug_install.sh --flavor leanback --serial 192.168.50.3:5557` → **Debug 变体**（符合“不打正式包”），`BUILD SUCCESSFUL in 4m 54s`，APK 191 MB；脚本自带 `install -r` 覆盖安装。
+
+**签名与产物同一性**：设备原 APK 证书 SHA-256 与本机 `~/.android/debug.keystore` 逐字节相同（`95e4b2e7…ff7e4d`），且 `local.properties` 无 release 签名项 ⇒ 可直接覆盖安装、**未卸载**；安装后设备 `base.apk` 的 SHA-256 与本地产物一致（`d5953c0c…`），确保验证的就是本系列构建。
+
+| 检查 | 结果 |
+| --- | --- |
+| A/B 对照（关键） | 本轮开始时已备份改动前设备 APK（`73c6567a…`）；装回旧版跑同一场景，**复现完全相同的失败**（`连接超时` + 位置冻结 + `duration=C.TIME_UNSET`）⇒ 该失败与本系列改动**无因果** |
+| `ijk-smoke.mp4`（139 KB, 1080p） | 新旧构建都冻结（旧 85 ms / 新 203 ms）并报 `连接超时`；日志伴 `ACodec setPortMode … failed w/ err -1010` 与 `EGL_BAD_MATCH` ⇒ 模拟器硬解该样本失败，属环境/样本问题 |
+| `sintel-trailer.mp4`（52 s，技能推荐样本） | **正常播放到片尾**：`duration=52209` 已知、`position` 推进至 52208，无崩溃 |
+| 加载圈滞留（覆盖修复 1/2/3 的观感面） | 播放中与注入 3 次右方向键 seek 后，`id/progress` 节点数均为 **0**（无滞留圈） |
+| 修复 3 的 `setPlayer(null)` 分支 | 连续 3 轮重复投递同一 VIEW intent（`onNewIntent → cancelPlayerContent() → setPlayer(null)`）：每轮仍能起播、圈不滞留、无崩溃 |
+| 崩溃 | `logcat -b crash` 为空 |
+
+### 本轮未能在设备上定证的部分（诚实记录）
+
+1. **修复 4（IJK 重缓冲读数）**：本地文件不产生重缓冲，修复前后都读 0，**无法用设备读数区分**；其决定性证据仍是源级用例 + 代码审查。
+2. **修复 2/3 的「同一集无法再次起播」语义**：需详情页内播路径（沉浸融合/详情直放，依赖站点/详情数据），本轮未构造该路径，故该语义**未在设备上直接验证**；已验的是同一族作废路径不导致圈滞留。
+3. 我尝试直接写 prefs 切到 IJK（`player=1`）并开屏显诊断，但**应用启动时把内核重置回 EXO**（`player` 键消失），故未取得 IJK 诊断面板读数。prefs 事后校验完好（XML 可解析、141 项、无重复键），无损坏残留。
+
+### 资源回收与设备终态
+
+- `gradlew --no-daemon clean` → `BUILD SUCCESSFUL in 1m 51s`；`app/build` 等 5 个构建目录残留 **0**
+- `gradlew --stop` 停掉 1 个 Gradle 守护进程；残留 `java.exe` **0**
+- 设备上临时 xml、本地 `/tmp/dev-5557.apk` 与取证目录已删；工作区 `dirty=0`
+- 设备最终安装的是**本系列构建**（sha256 `d5953c0c…`），prefs 干净
+
 ## 交付坐标
 
 | 项 | 值 |
