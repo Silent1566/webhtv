@@ -19,6 +19,7 @@ import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.databinding.DialogCustomCspBinding;
 import com.fongmi.android.tv.ui.custom.CustomNestedScrollView;
+import com.fongmi.android.tv.utils.ResUtil;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -47,7 +48,9 @@ import org.robolectric.annotation.LooperMode;
  *   <li>Material 弹窗面板（{@code @id/custom} → customPanel → parentPanel）默认 {@code wrap_content}，
  *       必须一并改成 {@code match_parent}，否则内容比窗口短时页面底部会留空隙、按钮区不贴底；</li>
  *   <li>短内容（文本模式 JSON 编辑器、空搜索结果）同样铺满；</li>
- *   <li>变异检验：同一套断言在修复前的两种旧参数下都必然失败，证明断言确实能抓住这两次缺陷。</li>
+ *   <li>真实横屏配置（{@code land} qualifier，{@code ResUtil.isLand} 为真）也必须铺满，锁死
+ *       “按朝向挑一套比例手算窗口”的横屏分支回归；</li>
+ *   <li>变异检验：同一套断言在修复前的两种旧尺寸策略下都必然失败，证明断言确实能抓住这两次缺陷。</li>
  * </ol>
  */
 @RunWith(RobolectricTestRunner.class)
@@ -146,12 +149,26 @@ public class CustomCspDialogLayoutTest {
         assertTrue("旧竖屏参数下按钮区应当被挤出页面（用户看到的压扁）",
                 binding.footer.getBottom() > binding.root.getMeasuredHeight());
 
-        // 旧横屏：窗口 0.76×0.98 → 页面左右各留出空白（用户看到的“没有全屏”）。
-        int landscapeWidth = dp(686);
-        int landscapeHeight = dp(386);
-        assertEquals("旧横屏窗口宽度是 0.76×屏宽", (int) (landscapeWidth * 0.76f), Math.round(landscapeWidth * 0.76f));
-        assertTrue("旧横屏窗口按比例居中，不是整页", landscapeWidth - (int) (landscapeWidth * 0.76f) > 0);
-        assertTrue("旧横屏窗口高度按比例，不是整页", landscapeHeight - (int) (landscapeHeight * 0.98f) > 0);
+        // 旧横屏：窗口 0.76×屏宽、0.98×屏高并居中 → 页面四周留白（用户看到的“没有全屏”）。
+        // 旧实现缩的是窗口本身，这里用同一套面板链按旧窗口尺寸实测，把缺陷钉在布局测量上，
+        // 而不是用「(int)(W*0.76f) 等于 W*0.76f 取整」这类恒真算式冒充变异检验。
+        int screenWidth = dp(686);
+        int screenHeight = dp(386);
+        ViewGroup landscapePanel = panelChain();
+        tallList();
+        measure(landscapePanel, (int) (screenWidth * 0.76f), (int) (screenHeight * 0.98f) - statusBarPx());
+        assertTrue("旧横屏窗口宽度只有 0.76×屏宽，页面左右留白（用户看到的“没有全屏”）",
+                binding.root.getMeasuredWidth() < screenWidth);
+        assertTrue("旧横屏窗口高度只有 0.98×屏高，页面上下留白",
+                binding.root.getMeasuredHeight() < screenHeight - statusBarPx());
+
+        // 当前实现接在同一条面板链上必须让窗口铺满：一旦回归“按屏宽/屏高比例手算”这两条必然转红。
+        CustomCspDialog.applyPageSizing(hostWindow(), binding.root, binding.contentScroll);
+        WindowManager.LayoutParams params = hostWindow().getAttributes();
+        assertEquals("当前实现在横屏也不得按屏宽比例手算窗口宽度",
+                ViewGroup.LayoutParams.MATCH_PARENT, params.width);
+        assertEquals("当前实现在横屏也不得按屏高比例手算窗口高度",
+                ViewGroup.LayoutParams.MATCH_PARENT, params.height);
     }
 
     private void assertFullPage(int[] screen, String orientation) {
@@ -182,6 +199,40 @@ public class CustomCspDialogLayoutTest {
         assertEquals(label + " root 高度必须 MATCH_PARENT", ViewGroup.LayoutParams.MATCH_PARENT, binding.root.getLayoutParams().height);
         assertEquals(label + " 滚动区高度交给权重", 0, ((LinearLayoutCompat.LayoutParams) binding.contentScroll.getLayoutParams()).height);
         assertEquals(label + " 滚动区吃权重", 1f, ((LinearLayoutCompat.LayoutParams) binding.contentScroll.getLayoutParams()).weight, 0f);
+    }
+
+    /**
+     * 真实横屏配置下的回归锁。Robolectric 默认显示是竖屏，上面几条用例只能用合成尺寸验证共享的
+     * 尺寸策略，因此分辨不出“实现里按朝向挑一套比例手算窗口”——第 1 轮的横屏 0.76×0.98 正是用户
+     * 复测反馈的“没有全屏”，而它在竖屏 Robolectric 环境里永远走不到。这里显式加 {@code land}
+     * qualifier 让 {@code ResUtil.isLand} 为真，横屏分支一旦再按屏比例手算窗口，本用例必然转红。
+     */
+    @Test
+    @Config(qualifiers = "w686dp-h386dp-land")
+    public void landscapeOrientationQualifierAlsoFillsTheWholePage() {
+        assertTrue("land qualifier 必须让 ResUtil.isLand 为真，否则本用例退化成竖屏重复",
+                ResUtil.isLand(binding.getRoot().getContext()));
+        ViewGroup panel = panelChain();
+        tallList();
+        CustomCspDialog.applyPageSizing(hostWindow(), binding.root, binding.contentScroll);
+        WindowManager.LayoutParams params = hostWindow().getAttributes();
+        assertEquals("真实横屏下窗口宽度必须 MATCH_PARENT，不得按屏宽比例手算",
+                ViewGroup.LayoutParams.MATCH_PARENT, params.width);
+        assertEquals("真实横屏下窗口高度必须 MATCH_PARENT，不得按屏高比例手算",
+                ViewGroup.LayoutParams.MATCH_PARENT, params.height);
+        assertEquals("真实横屏下 root 高度必须 MATCH_PARENT",
+                ViewGroup.LayoutParams.MATCH_PARENT, binding.root.getLayoutParams().height);
+        assertEquals("真实横屏下滚动区高度交给权重",
+                0, ((LinearLayoutCompat.LayoutParams) binding.contentScroll.getLayoutParams()).height);
+        assertEquals("真实横屏下滚动区吃权重",
+                1f, ((LinearLayoutCompat.LayoutParams) binding.contentScroll.getLayoutParams()).weight, 0f);
+        int width = binding.getRoot().getResources().getDisplayMetrics().widthPixels;
+        int height = binding.getRoot().getResources().getDisplayMetrics().heightPixels;
+        measure(panel, width, height);
+        assertEquals("真实横屏下 root 必须铺满整页", height, binding.root.getMeasuredHeight());
+        assertEquals("真实横屏下页面宽度必须铺满", width, binding.root.getMeasuredWidth());
+        assertEquals("真实横屏下按钮区必须保持 40dp", dp(40), binding.footer.getMeasuredHeight());
+        assertEquals("真实横屏下按钮区必须贴底", height - binding.root.getPaddingBottom(), binding.footer.getBottom());
     }
 
     /**

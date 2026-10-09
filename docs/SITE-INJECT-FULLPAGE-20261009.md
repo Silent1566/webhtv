@@ -7,7 +7,8 @@
 - 保护面：两轮 guard 启动时工作区均干净（pre-existing dirty path 0 个）；分支 `dev1`。
 - 交付状态：两轮都已提交 + 恢复 tag。
   - 第 1 轮（竖屏整页、修压缩）：`22348293b8b5aa3ca4b1c88e223eaf1b98743e78`，tag `recovery/SITE-INJECT-FULLPAGE-20261009/20261009184323-22348293b8b5`。
-  - 第 2 轮（横屏也整页、修“没有全屏”）：见本文件末尾「第 2 轮」小节。
+  - 第 2 轮（横屏也整页、修“没有全屏”）：`40ba21ed8766fd59d981b77e04c121557268fcb4`，tag `recovery/SITE-INJECT-FULLPAGE-20261009/20261009190557-40ba21ed8766`。
+  - **C56 复评（2026-10-09）**：两个提交在合并远端 beta 时被逐行复评；生产代码无缺陷（本轮未改动），测试代码发现 1 个真问题（见第 7 节「C56 复评订正」）并已修复、双向负对照锁定。
 - 回滚：`git revert` 对应提交即可；无数据迁移、无依赖或 native 变更。
 - 下一步唯一动作：无（已交付）。
 
@@ -127,6 +128,20 @@ scroll.height = 0; scroll.weight = 1; scroll.setMaxHeight(0);
 
 变异检验（真实执行）：把 `applyPageSizing` 临时改回第 1 轮实现（横屏 0.76×0.98）→ **4/5 失败**（`bothOrientations…`、`windowIsMatchParent…`、`shortContent…`、`footerNeverShrinks…`），恢复后 5/5 通过。
 
+#### C56 复评订正（2026-10-09，`docs/C56-beta-merge-review-dev1-20261009.md`）
+
+上面这条“4/5 失败”的**口径不成立，已订正**：
+
+- 旧横屏那三条断言是**恒真算式**（`assertEquals((int)(W*0.76f), Math.round(W*0.76f))` 比较的是同一条算式的两种取整，另两条 `W - (int)(W*0.76f) > 0` 对任意正宽高都成立），**不调用任何生产代码**，无法转红；
+- 更关键：本仓 Robolectric **只装在 leanback 测试变体**（`app/build.gradle` 的 `testLeanbackImplementation`），而 Robolectric 默认显示是**竖屏**。第 1 轮“横屏按朝向挑一套 0.76×0.98 手算窗口”只有在 `ResUtil.isLand(...)` 为真时才走到，因此它在 JVM 层**永远不可达**——实测负对照 A：把 `applyPageSizing` 改回第 1 轮按朝向分支实现、用修复前的测试文件跑 → `tests=5 failures=0`（**全绿，缺陷可原样复发而不被发现**）。
+
+订正后的实现（只改测试，5 例 → 6 例）：
+
+1. `legacyParamsReproduceBothReportedDefects` 的横屏部分改为用同一套面板链按**旧窗口尺寸实测**（root 宽度 < 屏宽、root 高度 < 可用高度），再对**当前实现**断言窗口宽高必须是 `MATCH_PARENT`；
+2. 新增 `landscapeOrientationQualifierAlsoFillsTheWholePage()`：`@Config(qualifiers = "w686dp-h386dp-land")` 让 `ResUtil.isLand` 为真（用例自带 qualifier 自检），断言真实横屏下窗口/root/滚动区参数与“铺满 + 按钮区 40dp 贴底”。
+
+负对照 B（同一变异 + 订正后测试）→ `tests=6 failures=1`：`landscapeOrientationQualifierAlsoFillsTheWholePage` 报 `真实横屏下 root 高度必须 MATCH_PARENT expected:<-1> but was:<378>`；负对照 C（撤销变异）→ 6/6 全绿。生产文件 sha256 在变异前后字节一致（`311c8e09…1eeb`）。
+
 ### 8. 第 2 轮验证
 
 设备实测（同一模拟器，`bash scripts/build_arm64_debug_install.sh`，覆盖安装、未卸载；`registry.json` 先备份为用户原文件后临时写入 5 条注入用于“条目多”场景）：
@@ -140,6 +155,8 @@ scroll.height = 0; scroll.weight = 1; scroll.setMaxHeight(0);
 
 - `:app:testLeanbackArm64_v8aDebugUnitTest` → BUILD SUCCESSFUL，**4145 项 / 0 failure / 0 error / 2 skipped**（含新增 1 项）。
 - `:app:testMobileArm64_v8aDebugUnitTest` → BUILD SUCCESSFUL，**4980 项 / 0 failure / 0 error / 2 skipped**。
+
+C56 复评订正后（同一命令，`CustomCspDialogLayoutTest` 5 → 6 例）：leanback **4146 项 / 0 failure / 0 error / 2 skipped**（651 suites），mobile **4980 项 / 0 failure / 0 error / 2 skipped**（726 suites）。
 
 设备状态回收：`registry.json` 还原为用户原文件（`md5 bce0777921bc78ec1991f4d89f1b3d87` 一致）、`wm size reset` / `wm density reset` / `accelerometer_rotation=1` 恢复、应用已 force-stop、`/sdcard/ui.xml` 已删除。
 
