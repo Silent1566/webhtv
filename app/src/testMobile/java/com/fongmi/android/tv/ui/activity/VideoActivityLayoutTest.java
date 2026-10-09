@@ -1331,6 +1331,15 @@ public class VideoActivityLayoutTest {
                 error.contains("mPlaybackRequestActive = false;")
                         && error.contains("mPlaybackPlayerStarted = false;")
                         && error.contains("showError(msg);"));
+        // 未绑定详情就丢弃结果的分支同样必须释放守卫：本次不会走 startPlayer，没有新的 READY 回调，
+        // 守卫留下就等于「画面在动、圈不走」——与下面「同一结果已在播」分支同源。
+        int notReadyReturn = setPlayer.indexOf("if (!canApplyPlayerResult())");
+        assertTrue("the drop-before-detail-ready early return must exist", notReadyReturn >= 0);
+        String notReadyBranch = setPlayer.substring(notReadyReturn, setPlayer.indexOf("if (result == mAppliedPlayerResult", notReadyReturn));
+        assertTrue("a dropped result before detail binding has no later READY callback, so it must clear the guard itself",
+                notReadyBranch.contains("mPlaybackRequestActive = false;")
+                        && notReadyBranch.contains("mPlaybackPlayerStarted = false;")
+                        && notReadyBranch.contains("return;"));
         // 早退分支同样必须释放守卫：同一结果已在播时不会再走 startPlayer，没有新的 READY 回调，
         // 守卫留下就等于「画面在动、圈不走」——两个清除点都被它自己挡下。
         int duplicateResultReturn = setPlayer.indexOf("if (result == mAppliedPlayerResult && !player().isEmpty())");

@@ -3051,6 +3051,11 @@ private boolean runtimeSourceOnly;
             return;
         }
         if (!canApplyPlayerResult()) {
+            // 详情尚未绑定就丢弃这个结果，本次不会再走 startPlayer，也就不会有新的 READY 回调来收圈。
+            // 守卫若留在这里，onStateChanged 与 hidePlaybackProgressIfStale 都会被它挡下，圈从此没有
+            // 任何清除路径——与下面「同一结果已在播」分支同源，一并释放。
+            mPlaybackRequestActive = false;
+            mPlaybackPlayerStarted = false;
             SpiderDebug.log("video-flow", "drop player result before detail ready key=%s id=%s", getKey(), getId());
             return;
         }
