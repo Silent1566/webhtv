@@ -3039,7 +3039,15 @@ private boolean runtimeSourceOnly;
     }
 
     private void setPlayer(Result result) {
-        if (result == null || isFinishing() || isDestroyed()) return;
+        // null 结果表示这次取流请求已被作废（SiteViewModel.cancelPlayerContent 会向 PLAYER
+        // LiveData 写入 null），不会再有结果回调来收圈。守卫若留在这里，onStateChanged 与
+        // hidePlaybackProgressIfStale 两条清除路径会永久被挡下，圈再无任何清除路径。
+        if (result == null) {
+            mPlaybackRequestActive = false;
+            mPlaybackPlayerStarted = false;
+            return;
+        }
+        if (isFinishing() || isDestroyed()) return;
         SpiderDebug.log("video-flow", "player finish cost=%dms useParse=%s multi=%s msg=%s", System.currentTimeMillis() - playerStartTime, result.shouldUseParse(), result.getUrl().isMulti(), result.getMsg());
         if (service() == null) {
             mPendingPlayer = result;

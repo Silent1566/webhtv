@@ -1324,6 +1324,15 @@ public class VideoActivityLayoutTest {
                         && request.contains("mPlaybackPlayerStarted = false;"));
         assertTrue("the new player session must be marked started before startPlayer can synchronously emit READY",
                 markStarted >= 0 && startPlayer > markStarted);
+        // 取流请求被作废时 ViewModel 会向 PLAYER LiveData 写入 null（cancelPlayerContent）：那次回调
+        // 不会再有任何结果，守卫必须在这里释放，否则两条清除路径同样被永久挡下。
+        int nullResultReturn = setPlayer.indexOf("if (result == null)");
+        assertTrue("the null-result branch must exist", nullResultReturn >= 0);
+        String nullResultBranch = setPlayer.substring(nullResultReturn, setPlayer.indexOf("if (isFinishing()", nullResultReturn));
+        assertTrue("an invalidated request has no later result callback, so it must clear the guard itself",
+                nullResultBranch.contains("mPlaybackRequestActive = false;")
+                        && nullResultBranch.contains("mPlaybackPlayerStarted = false;")
+                        && nullResultBranch.contains("return;"));
         assertTrue("a stale READY callback must not hide the new episode loading spinner before startPlayer",
                 state.contains("if (mPlaybackRequestActive && !mPlaybackPlayerStarted) break;")
                         && state.indexOf("mPlaybackRequestActive = false;") > state.indexOf("if (mPlaybackRequestActive && !mPlaybackPlayerStarted) break;"));

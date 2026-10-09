@@ -51,21 +51,22 @@ public class TmdbDetailDirectPlayTransitionSourceTest {
     }
 
     /**
-     * 作废在途取址请求时必须一并释放它留下的加载标记。
+     * 被作废的取流请求必须留着释放路径，不能留下永久加载标记。
      *
-     * <p>{@code refreshAndSwitchInlinePlayer} 与 {@code cancelPendingInlinePlayerSwitch} 都只自增代际，
-     * 在途回调会因「不再是最新请求」直接返回、永不执行自身的 {@code inlinePlaybackPending = false}；
+     * <p>三条作废路径都没有结果回调可用来收圈：换内核/打开外部播放器会自增代际并取消任务
+     * （回调可能根本不执行），选择面变更（详情重载/外部播放返回）会让回调因请求失效直接返回。
      * 标记残留会让详情页加载圈永久留在屏上（见 {@code updateInlineLoading} 的首个条件），
-     * 并让 {@code isSamePendingInlinePlayback} 恒真，同一集无法再次起播。
+     * 并让 {@code isSamePendingInlinePlayback} 恒真、同一集无法再次起播。
      */
     @Test
     public void cancellingAnInlinePlaybackRequestReleasesItsLoadingFlag() throws Exception {
         String source = Files.readString(SOURCE, StandardCharsets.UTF_8);
 
+        // 自增代际、不接替请求的两处：必须在投递新请求之前同步释放
         String switchMethod = methodBody(source, "private boolean refreshAndSwitchInlinePlayer(int playerType)");
         assertFalse("refreshAndSwitchInlinePlayer must exist", switchMethod.isEmpty());
         int switchGeneration = switchMethod.indexOf("++inlinePlaybackGeneration");
-        int switchRelease = switchMethod.indexOf("inlinePlaybackPending = false;");
+        int switchRelease = switchMethod.indexOf("releaseInlinePlaybackPending();");
         int switchSubmit = switchMethod.indexOf("detailTasks.submit(");
         assertTrue("refreshAndSwitchInlinePlayer must release the loading flag of the request it invalidates",
                 switchGeneration >= 0 && switchRelease > switchGeneration);
@@ -76,7 +77,24 @@ public class TmdbDetailDirectPlayTransitionSourceTest {
         assertFalse("cancelPendingInlinePlayerSwitch must exist", cancelMethod.isEmpty());
         assertTrue("cancelPendingInlinePlayerSwitch must release the loading flag of the request it invalidates",
                 cancelMethod.contains("inlinePlaybackGeneration++;")
-                        && cancelMethod.contains("inlinePlaybackPending = false;"));
+                        && cancelMethod.contains("releaseInlinePlaybackPending();"));
+
+        // 选择面变更不自增代际，只能由回调按归属释放
+        String playMethod = methodBody(source, "private void playInline(long resumePosition, String failedUrl, String failureMessage)");
+        assertFalse("playInline must exist", playMethod.isEmpty());
+        int markGeneration = playMethod.indexOf("++inlinePlaybackGeneration");
+        assertTrue("playInline must record the generation that owns the pending flag",
+                markGeneration >= 0
+                        && playMethod.indexOf("inlinePlaybackPendingGeneration = generation;", markGeneration) > markGeneration);
+        int firstStaleRelease = playMethod.indexOf("releaseInlinePlaybackPending(generation);");
+        assertTrue("both stale branches (success and failure) must release the flag they own",
+                firstStaleRelease >= 0
+                        && playMethod.indexOf("releaseInlinePlaybackPending(generation);", firstStaleRelease + 1) > firstStaleRelease);
+
+        String ownedRelease = methodBody(source, "private void releaseInlinePlaybackPending(int generation)");
+        assertFalse("the owned release must exist", ownedRelease.isEmpty());
+        assertTrue("the owned release must refuse to clear a newer request's flag",
+                ownedRelease.contains("inlinePlaybackPendingGeneration != generation"));
     }
 
     private static String methodBody(String source, String signature) {
