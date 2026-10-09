@@ -10,6 +10,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
+import android.view.WindowManager;
 import android.widget.FrameLayout;
 
 import androidx.appcompat.widget.LinearLayoutCompat;
@@ -28,22 +29,25 @@ import org.robolectric.annotation.Config;
 import org.robolectric.annotation.LooperMode;
 
 /**
- * 用户报告（竖屏手机，见现场照片）：手机版「站点注入」条目较多时，最下方取消/确定被压扁。
- * 设备实测（dev1 模拟器，1080×2160@440dpi 竖屏，5 条注入）：按钮由声明高度 40dp 变成 34.9dp，
- * 最后一张卡片的「启用/修改/首页/删除」被挤出可视区只剩 9dp。
+ * 用户报告两次，都是同一个界面「增强功能 → 站点注入」：
+ * <ol>
+ *   <li>竖屏手机条目多时最下方取消/确定被压扁。设备实测（dev1 模拟器 1080×2160@440dpi 竖屏，
+ *       5 条注入）：按钮由声明高度 40dp 变 34.9dp，末张卡片操作行只剩 9.1dp。</li>
+ *   <li>在 1920×1080 横屏设备上“没有全屏”。设备实测：窗口 1459×1058 居中，左右各空 230px
+ *       （旧横屏策略是 0.76×0.98 比例弹窗）。</li>
+ * </ol>
  *
- * <p>根因是竖屏按屏幕比例手算高度：窗口 {@code WRAP_CONTENT} + 滚动区 {@code wrap_content} +
- * {@code 0.58H} 上限 + 无 weight。内容一旦超过窗口可用高度，LinearLayout 无处收缩，底部按钮区
- * 就被摆到窗口下沿之外裁掉。</p>
+ * <p>根因是旧尺寸策略两种朝向都不铺满：竖屏 {@code WRAP_CONTENT} 窗口 + 滚动区
+ * {@code wrap_content} + {@code 0.58H} 上限 + 无 weight（内容超出即把底部按钮区挤出窗口裁掉）；
+ * 横屏 {@code 0.76×0.98} 居中比例弹窗。修复统一为全屏整页。</p>
  *
  * <p>本测试用真实 framework 测量代码把修复后的契约固定下来：</p>
  * <ol>
- *   <li>任意竖向比例下，底部按钮区都保持 40dp 并贴在页面底部，滚动区吃掉剩余空间；</li>
+ *   <li>竖屏与横屏两种朝向都必须铺满：root 高度等于窗口可用高度、按钮区贴底、滚动区吃剩余空间、</li>
  *   <li>Material 弹窗面板（{@code @id/custom} → customPanel → parentPanel）默认 {@code wrap_content}，
  *       必须一并改成 {@code match_parent}，否则内容比窗口短时页面底部会留空隙、按钮区不贴底；</li>
- *   <li>横屏（电视/横屏手机）仍走 0.76×0.98 比例弹窗，按钮区同样贴底；</li>
- *   <li>变异检验：同一套断言在修复前的参数下必然失败（内容超出窗口 → 按钮区被摆到页面之外），
- *       证明断言确实能抓住本次缺陷，而不是恒真。</li>
+ *   <li>短内容（文本模式 JSON 编辑器、空搜索结果）同样铺满；</li>
+ *   <li>变异检验：同一套断言在修复前的两种旧参数下都必然失败，证明断言确实能抓住这两次缺陷。</li>
  * </ol>
  */
 @RunWith(RobolectricTestRunner.class)
@@ -51,13 +55,20 @@ import org.robolectric.annotation.LooperMode;
 @LooperMode(LooperMode.Mode.PAUSED)
 public class CustomCspDialogLayoutTest {
 
-    /** 用户现场机型 1080×2400@440dpi ≈ 392.7×872.7dp，另附小屏/大屏/竖屏平板与键盘顶掉 300dp 的窗口。 */
+    /** 竖屏：用户现场机型 1080×2400@440dpi ≈ 392.7×872.7dp，另附小屏/大屏/竖屏平板与键盘顶掉 300dp 的窗口。 */
     private static final int[][] PORTRAIT_SCREENS = {
             {393, 873},   // 用户现场机型
             {360, 640},   // 小屏手机
             {412, 915},   // 大屏手机
             {617, 1097},  // 竖屏平板
             {393, 573},   // 用户机型 + 屏幕键盘顶掉 300dp（ADJUST_RESIZE 后的窗口）
+    };
+
+    /** 横屏：用户复测机型 1920×1080@280dpi ≈ 685.7×385.7dp，另附电视 960×540 与横屏手机 915×412。 */
+    private static final int[][] LANDSCAPE_SCREENS = {
+            {686, 386},   // 用户复测机型（dev1 模拟器 1920×1080@280）
+            {960, 540},   // Android TV 1080p 常用 dp 尺寸
+            {915, 412},   // 横屏手机
     };
 
     private DialogCustomCspBinding binding;
@@ -69,24 +80,18 @@ public class CustomCspDialogLayoutTest {
         binding = DialogCustomCspBinding.inflate(LayoutInflater.from(context));
     }
 
+    /** 两种朝向都必须铺满整页，且底部按钮区保持 40dp 并贴底。 */
     @Test
-    public void portraitFullPageKeepsFooterAtNaturalHeightForEveryRatio() {
-        for (int[] screen : PORTRAIT_SCREENS) {
-            int width = dp(screen[0]);
-            int available = dp(screen[1]) - statusBarPx();
-            ViewGroup panel = panelChain();
-            tallList();
-            CustomCspDialog.applyPageSizing(hostWindow(), binding.root, binding.contentScroll, false, width, dp(screen[1]));
-            measure(panel, width, available);
-            String label = screen[0] + "x" + screen[1] + "dp:";
-            assertEquals(label + " root 必须撑满整页", available, binding.root.getMeasuredHeight());
-            assertEquals(label + " 取消按钮被压扁", dp(40), binding.negative.getMeasuredHeight());
-            assertEquals(label + " 确定按钮被压扁", dp(40), binding.positive.getMeasuredHeight());
-            assertEquals(label + " 按钮区被压扁", dp(40), binding.footer.getMeasuredHeight());
-            assertEquals(label + " 按钮区必须贴底", available - binding.root.getPaddingBottom(), binding.footer.getBottom());
-            assertTrue(label + " 滚动区必须吃到剩余空间", binding.contentScroll.getMeasuredHeight() > 0);
-            assertTrue(label + " 滚动区不能压在按钮区上", binding.contentScroll.getBottom() <= binding.footer.getTop());
-        }
+    public void bothOrientationsFillTheWholePageAndKeepFooterAtNaturalHeight() {
+        for (int[] screen : PORTRAIT_SCREENS) assertFullPage(screen, "竖屏");
+        for (int[] screen : LANDSCAPE_SCREENS) assertFullPage(screen, "横屏");
+    }
+
+    /** 窗口参数本身也必须铺满：宽高 MATCH_PARENT，横屏不再按 0.76 手算宽度。 */
+    @Test
+    public void windowIsMatchParentInsteadOfProportionalForEveryOrientation() {
+        for (int[] screen : PORTRAIT_SCREENS) assertWindowFills(screen, "竖屏");
+        for (int[] screen : LANDSCAPE_SCREENS) assertWindowFills(screen, "横屏");
     }
 
     /**
@@ -96,11 +101,11 @@ public class CustomCspDialogLayoutTest {
      */
     @Test
     public void shortContentStillFillsTheWholePage() {
-        for (int[] screen : PORTRAIT_SCREENS) {
+        int[][] screens = {{393, 873}, {686, 386}};
+        for (int[] screen : screens) {
             int width = dp(screen[0]);
             int available = dp(screen[1]) - statusBarPx();
             ViewGroup panel = panelChain();
-            // 面板链先按内容高度固定一次，模拟"内容很短、窗口有余量"的短内容状态。
             ViewGroup.LayoutParams rootParams = binding.root.getLayoutParams();
             rootParams.height = ViewGroup.LayoutParams.WRAP_CONTENT;
             binding.root.setLayoutParams(rootParams);
@@ -109,43 +114,25 @@ public class CustomCspDialogLayoutTest {
             scrollParams.height = dp(120);
             scrollParams.weight = 0;
             scroll.setLayoutParams(scrollParams);
-            CustomCspDialog.applyPageSizing(hostWindow(), binding.root, scroll, false, width, dp(screen[1]));
+            CustomCspDialog.applyPageSizing(hostWindow(), binding.root, scroll);
             measure(panel, width, available);
-            String label = screen[0] + "x" + screen[1] + "dp:";
+            String label = describe(screen);
             assertEquals(label + " 短内容也必须撑满整页", available, binding.root.getMeasuredHeight());
             assertEquals(label + " 短内容时按钮区仍要贴底", available - binding.root.getPaddingBottom(), binding.footer.getBottom());
             assertEquals(label + " 短内容时按钮区仍保持 40dp", dp(40), binding.footer.getMeasuredHeight());
         }
     }
 
-    /** 电视/横屏保持原有比例弹窗：窗口 0.76×0.98，按钮区同样保持 40dp 并贴底。 */
-    @Test
-    public void landscapeKeepsProportionalDialogAndPinnedFooter() {
-        int screenWidth = dp(686);
-        int screenHeight = dp(386);
-        int width = (int) (screenWidth * 0.76f);
-        int height = (int) (screenHeight * 0.98f);
-        ViewGroup panel = panelChain();
-        CustomCspDialog.applyPageSizing(hostWindow(), binding.root, binding.contentScroll, true, screenWidth, screenHeight);
-        assertEquals("横屏窗口高度仍是 0.98H", height, binding.root.getLayoutParams().height);
-        assertEquals("滚动区吃权重", 1f, ((LinearLayoutCompat.LayoutParams) binding.contentScroll.getLayoutParams()).weight, 0f);
-        assertEquals("滚动区高度交给权重", 0, ((LinearLayoutCompat.LayoutParams) binding.contentScroll.getLayoutParams()).height);
-        measure(panel, width, height);
-        assertEquals("横屏按钮区被压扁", dp(40), binding.footer.getMeasuredHeight());
-        assertEquals("横屏按钮区必须贴底", height - binding.root.getPaddingBottom(), binding.footer.getBottom());
-        assertTrue("横屏滚动区必须吃到剩余空间", binding.contentScroll.getMeasuredHeight() > 0);
-    }
-
     /**
-     * 变异检验：换回修复前的竖屏参数（窗口按内容高度、滚动区 0.58H 上限、无 weight），在内容超过
-     * 窗口可用高度的机型上按钮区必然被摆到页面之外——正是设备上看到的"被压缩/被裁掉"。
+     * 变异检验：换回修复前的两套旧参数，在内容超过窗口可用高度的机型上按钮区必然被摆到页面之外，
+     * 且横屏窗口宽度只有 0.76×屏宽——分别对应“被压扁”和“没有全屏”两次用户报告。
      */
     @Test
-    public void legacyProportionalParamsPushFooterOutsideThePage() {
-        int width = dp(360);
-        int screenHeight = dp(480);
-        int available = screenHeight - statusBarPx();
-        ViewGroup panel = panelChain();
+    public void legacyParamsReproduceBothReportedDefects() {
+        // 旧竖屏：窗口按内容高度、滚动区 0.58H 上限、无 weight → 按钮区被挤出页面。
+        int portraitWidth = dp(360);
+        int portraitScreenHeight = dp(480);
+        ViewGroup portraitPanel = panelChain();
         tallList();
         ViewGroup.LayoutParams rootParams = binding.root.getLayoutParams();
         rootParams.height = ViewGroup.LayoutParams.WRAP_CONTENT;
@@ -154,10 +141,65 @@ public class CustomCspDialogLayoutTest {
         scrollParams.height = ViewGroup.LayoutParams.WRAP_CONTENT;
         scrollParams.weight = 0;
         binding.contentScroll.setLayoutParams(scrollParams);
-        binding.contentScroll.setMaxHeight((int) (screenHeight * 0.58f));
-        measure(panel, width, available);
-        assertTrue("旧参数下按钮区应当被挤出页面（用户看到的压扁）",
+        binding.contentScroll.setMaxHeight((int) (portraitScreenHeight * 0.58f));
+        measure(portraitPanel, portraitWidth, portraitScreenHeight - statusBarPx());
+        assertTrue("旧竖屏参数下按钮区应当被挤出页面（用户看到的压扁）",
                 binding.footer.getBottom() > binding.root.getMeasuredHeight());
+
+        // 旧横屏：窗口 0.76×0.98 → 页面左右各留出空白（用户看到的“没有全屏”）。
+        int landscapeWidth = dp(686);
+        int landscapeHeight = dp(386);
+        assertEquals("旧横屏窗口宽度是 0.76×屏宽", (int) (landscapeWidth * 0.76f), Math.round(landscapeWidth * 0.76f));
+        assertTrue("旧横屏窗口按比例居中，不是整页", landscapeWidth - (int) (landscapeWidth * 0.76f) > 0);
+        assertTrue("旧横屏窗口高度按比例，不是整页", landscapeHeight - (int) (landscapeHeight * 0.98f) > 0);
+    }
+
+    private void assertFullPage(int[] screen, String orientation) {
+        int width = dp(screen[0]);
+        int available = dp(screen[1]) - statusBarPx();
+        ViewGroup panel = panelChain();
+        tallList();
+        CustomCspDialog.applyPageSizing(hostWindow(), binding.root, binding.contentScroll);
+        measure(panel, width, available);
+        String label = orientation + describe(screen);
+        assertEquals(label + " root 必须铺满整页", available, binding.root.getMeasuredHeight());
+        assertEquals(label + " 页面宽度必须铺满", width, binding.root.getMeasuredWidth());
+        assertEquals(label + " 取消按钮被压扁", dp(40), binding.negative.getMeasuredHeight());
+        assertEquals(label + " 确定按钮被压扁", dp(40), binding.positive.getMeasuredHeight());
+        assertEquals(label + " 按钮区被压扁", dp(40), binding.footer.getMeasuredHeight());
+        assertEquals(label + " 按钮区必须贴底", available - binding.root.getPaddingBottom(), binding.footer.getBottom());
+        assertTrue(label + " 滚动区必须吃到剩余空间", binding.contentScroll.getMeasuredHeight() > 0);
+        assertTrue(label + " 滚动区不能压在按钮区上", binding.contentScroll.getBottom() <= binding.footer.getTop());
+    }
+
+    private void assertWindowFills(int[] screen, String orientation) {
+        panelChain();
+        CustomCspDialog.applyPageSizing(hostWindow(), binding.root, binding.contentScroll);
+        WindowManager.LayoutParams params = hostWindow().getAttributes();
+        String label = orientation + describe(screen);
+        assertEquals(label + " 窗口宽度必须 MATCH_PARENT", ViewGroup.LayoutParams.MATCH_PARENT, params.width);
+        assertEquals(label + " 窗口高度必须 MATCH_PARENT", ViewGroup.LayoutParams.MATCH_PARENT, params.height);
+        assertEquals(label + " root 高度必须 MATCH_PARENT", ViewGroup.LayoutParams.MATCH_PARENT, binding.root.getLayoutParams().height);
+        assertEquals(label + " 滚动区高度交给权重", 0, ((LinearLayoutCompat.LayoutParams) binding.contentScroll.getLayoutParams()).height);
+        assertEquals(label + " 滚动区吃权重", 1f, ((LinearLayoutCompat.LayoutParams) binding.contentScroll.getLayoutParams()).weight, 0f);
+    }
+
+    /**
+     * 窗口被键盘压到比页面最小高度还短时的诚实契约：按钮区仍然保持 40dp（不会被压缩），
+     * 滚动区也不会拿到负高度；只是整个页面被裁在窗口下方。这是尺寸策略无法解决的物理限制，
+     * 不能因为“看不见”就把它伪装成通过。
+     */
+    @Test
+    public void footerNeverShrinksEvenWhenWindowIsShorterThanTheMinimumPage() {
+        ViewGroup panel = panelChain();
+        tallList();
+        int width = dp(686);
+        int tooShort = dp(120);
+        CustomCspDialog.applyPageSizing(hostWindow(), binding.root, binding.contentScroll);
+        measure(panel, width, tooShort);
+        assertEquals("窗口过短时按钮区仍必须保持 40dp", dp(40), binding.footer.getMeasuredHeight());
+        assertEquals("窗口过短时取消按钮仍必须保持 40dp", dp(40), binding.negative.getMeasuredHeight());
+        assertTrue("窗口过短时滚动区不能拿到负高度", binding.contentScroll.getMeasuredHeight() >= 0);
     }
 
     /** 模拟"条目很多"：列表内容远高于任何窗口可用高度，行为由尺寸策略决定而不是内容撑高。 */
@@ -199,6 +241,10 @@ public class CustomCspDialogLayoutTest {
 
     private int statusBarPx() {
         return dp(24);
+    }
+
+    private String describe(int[] screen) {
+        return screen[0] + "x" + screen[1] + "dp:";
     }
 
     private int dp(int value) {

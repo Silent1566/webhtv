@@ -150,7 +150,7 @@ public class CustomCspDialog extends BaseAlertDialog {
         if (window == null) return;
         window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         window.getDecorView().setPadding(0, 0, 0, 0);
-        applyPageSizing(window, binding.root, binding.contentScroll, ResUtil.isLand(requireContext()), ResUtil.getScreenWidth(requireContext()), ResUtil.getScreenHeight(requireContext()));
+        applyPageSizing(window, binding.root, binding.contentScroll);
         binding.enabled.requestFocus();
         if (clipboardOverlay == null) clipboardOverlay = SettingClipboardOverlay.attach(this, binding.getRoot());
         getDialog().setOnKeyListener((dialog, keyCode, event) -> {
@@ -163,35 +163,34 @@ public class CustomCspDialog extends BaseAlertDialog {
     }
 
     /**
-     * 站点注入页面的窗口/内容尺寸策略，拆成静态方法便于 JVM 测量测试锁定“底部按钮区不被压扁”。
+     * 站点注入页面的窗口/内容尺寸策略：**两种朝向都铺满整页**，拆成静态方法便于 JVM 测量测试
+     * 锁定“底部按钮区不被压扁”与“页面确实铺满”。
      *
-     * <p>横屏（电视/横屏手机）保持原有比例弹窗：0.76×0.98 窗口 + 权重滚动区。
+     * <p>旧策略两种朝向都不铺满：竖屏按比例手算高度（{@code WRAP_CONTENT} 窗口 + 滚动区
+     * {@code wrap_content} + {@code 0.58H} 上限 + 无 weight），横屏是 {@code 0.76×0.98} 居中
+     * 比例弹窗。前者在条目多时把底部按钮区挤出窗口下沿裁掉（设备实测取消/确定 从 40dp 变
+     * 34.9dp、末张卡片操作行只剩 9.1dp）；后者在 1080×1920/1920×1080 设备上左右各空出
+     * 一大块背景，用户实测反馈“没有全屏”。这个页面内容多，应按用户要求统一改成全屏整页。
      *
-     * <p>竖屏铺满整页：按比例手算高度（WRAP_CONTENT 窗口 + 滚动区 wrap_content + 0.58H 上限 +
-     * 无 weight）在条目多时会把底部按钮区挤出窗口下沿裁掉，用户实测取消/确定 从 40dp 被压到
-     * 34.9dp 且最后一张卡片的操作按钮被完全挤出。铺满整页后窗口高度交给系统，固定高的按钮区
-     * 永远保住自然高度，剩余空间全部由权重滚动区吃掉。
+     * <p>铺满后窗口高度交给系统，固定高的按钮区永远保住自然高度，剩余空间全部由权重滚动区
+     * 吃掉；页面左右边缘由 XML 的 20dp padding 保证正文不贴边。
      *
      * <p>铺满后窗口自身没有多余空间躲屏幕键盘，必须显式 ADJUST_RESIZE，否则底部按钮和列表会被
      * 键盘盖住（与 AboutDialog 全屏弹窗同一处理）。
      */
-    static void applyPageSizing(Window window, LinearLayoutCompat root, CustomNestedScrollView scroll, boolean land, int screenWidth, int screenHeight) {
+    static void applyPageSizing(Window window, LinearLayoutCompat root, CustomNestedScrollView scroll) {
         WindowManager.LayoutParams params = window.getAttributes();
-        if (land) {
-            params.width = (int) (screenWidth * 0.76f);
-            params.height = (int) (screenHeight * 0.98f);
-        } else {
-            params.width = WindowManager.LayoutParams.MATCH_PARENT;
-            params.height = WindowManager.LayoutParams.MATCH_PARENT;
-            window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
-        }
+        params.width = WindowManager.LayoutParams.MATCH_PARENT;
+        params.height = WindowManager.LayoutParams.MATCH_PARENT;
+        params.gravity = Gravity.CENTER;
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         window.setAttributes(params);
         window.setLayout(params.width, params.height);
         ViewGroup.LayoutParams rootParams = root.getLayoutParams();
-        rootParams.height = land ? params.height : ViewGroup.LayoutParams.MATCH_PARENT;
+        rootParams.height = ViewGroup.LayoutParams.MATCH_PARENT;
         root.setLayoutParams(rootParams);
-        if (!land) expandToWindow(root);
-        // 滚动区两种朝向都吃权重：竖屏不再用 maxHeight 手算上限，横屏行为不变。
+        expandToWindow(root);
+        // 滚动区吃权重、不再用 maxHeight 手算上限，剩余空间全部由它吃掉。
         LinearLayoutCompat.LayoutParams scrollParams = (LinearLayoutCompat.LayoutParams) scroll.getLayoutParams();
         scrollParams.height = 0;
         scrollParams.weight = 1;
@@ -200,7 +199,7 @@ public class CustomCspDialog extends BaseAlertDialog {
     }
 
     /**
-     * 竖屏铺满整页：把 root 之上的 Material 弹窗面板（{@code @id/custom} → customPanel → parentPanel）
+     * 铺满整页：把 root 之上的 Material 弹窗面板（{@code @id/custom} → customPanel → parentPanel）
      * 一并改成 match_parent。
      *
      * <p>它们默认 wrap_content，内容比窗口短时会让 root 的 match_parent 退化成“按内容高度”，
