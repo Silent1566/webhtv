@@ -50,6 +50,7 @@ import com.fongmi.android.tv.databinding.DialogCustomCspBinding;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.setting.CustomCspSetting;
 import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
+import com.fongmi.android.tv.ui.custom.CustomNestedScrollView;
 import com.fongmi.android.tv.ui.custom.CustomTextListener;
 import com.fongmi.android.tv.ui.custom.SafeScrollEditText;
 import com.fongmi.android.tv.ui.custom.SettingClipboardOverlay;
@@ -147,24 +148,9 @@ public class CustomCspDialog extends BaseAlertDialog {
         getDialog().setCanceledOnTouchOutside(false);
         Window window = getDialog().getWindow();
         if (window == null) return;
-        WindowManager.LayoutParams params = window.getAttributes();
-        int screenWidth = ResUtil.getScreenWidth(requireContext());
-        int screenHeight = ResUtil.getScreenHeight(requireContext());
-        boolean land = ResUtil.isLand(requireContext());
         window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         window.getDecorView().setPadding(0, 0, 0, 0);
-        params.width = (int) (screenWidth * (land ? 0.76f : 0.94f));
-        params.height = land ? (int) (screenHeight * 0.98f) : WindowManager.LayoutParams.WRAP_CONTENT;
-        window.setAttributes(params);
-        window.setLayout(params.width, params.height);
-        ViewGroup.LayoutParams rootParams = binding.root.getLayoutParams();
-        rootParams.height = land ? params.height : ViewGroup.LayoutParams.WRAP_CONTENT;
-        binding.root.setLayoutParams(rootParams);
-        LinearLayoutCompat.LayoutParams scrollParams = (LinearLayoutCompat.LayoutParams) binding.contentScroll.getLayoutParams();
-        scrollParams.height = land ? 0 : ViewGroup.LayoutParams.WRAP_CONTENT;
-        scrollParams.weight = land ? 1 : 0;
-        binding.contentScroll.setLayoutParams(scrollParams);
-        binding.contentScroll.setMaxHeight(land ? 0 : (int) (screenHeight * 0.58f));
+        applyPageSizing(window, binding.root, binding.contentScroll, ResUtil.isLand(requireContext()), ResUtil.getScreenWidth(requireContext()), ResUtil.getScreenHeight(requireContext()));
         binding.enabled.requestFocus();
         if (clipboardOverlay == null) clipboardOverlay = SettingClipboardOverlay.attach(this, binding.getRoot());
         getDialog().setOnKeyListener((dialog, keyCode, event) -> {
@@ -174,6 +160,61 @@ public class CustomCspDialog extends BaseAlertDialog {
             else closeAndSave(false);
             return true;
         });
+    }
+
+    /**
+     * 站点注入页面的窗口/内容尺寸策略，拆成静态方法便于 JVM 测量测试锁定“底部按钮区不被压扁”。
+     *
+     * <p>横屏（电视/横屏手机）保持原有比例弹窗：0.76×0.98 窗口 + 权重滚动区。
+     *
+     * <p>竖屏铺满整页：按比例手算高度（WRAP_CONTENT 窗口 + 滚动区 wrap_content + 0.58H 上限 +
+     * 无 weight）在条目多时会把底部按钮区挤出窗口下沿裁掉，用户实测取消/确定 从 40dp 被压到
+     * 34.9dp 且最后一张卡片的操作按钮被完全挤出。铺满整页后窗口高度交给系统，固定高的按钮区
+     * 永远保住自然高度，剩余空间全部由权重滚动区吃掉。
+     *
+     * <p>铺满后窗口自身没有多余空间躲屏幕键盘，必须显式 ADJUST_RESIZE，否则底部按钮和列表会被
+     * 键盘盖住（与 AboutDialog 全屏弹窗同一处理）。
+     */
+    static void applyPageSizing(Window window, LinearLayoutCompat root, CustomNestedScrollView scroll, boolean land, int screenWidth, int screenHeight) {
+        WindowManager.LayoutParams params = window.getAttributes();
+        if (land) {
+            params.width = (int) (screenWidth * 0.76f);
+            params.height = (int) (screenHeight * 0.98f);
+        } else {
+            params.width = WindowManager.LayoutParams.MATCH_PARENT;
+            params.height = WindowManager.LayoutParams.MATCH_PARENT;
+            window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        }
+        window.setAttributes(params);
+        window.setLayout(params.width, params.height);
+        ViewGroup.LayoutParams rootParams = root.getLayoutParams();
+        rootParams.height = land ? params.height : ViewGroup.LayoutParams.MATCH_PARENT;
+        root.setLayoutParams(rootParams);
+        if (!land) expandToWindow(root);
+        // 滚动区两种朝向都吃权重：竖屏不再用 maxHeight 手算上限，横屏行为不变。
+        LinearLayoutCompat.LayoutParams scrollParams = (LinearLayoutCompat.LayoutParams) scroll.getLayoutParams();
+        scrollParams.height = 0;
+        scrollParams.weight = 1;
+        scroll.setLayoutParams(scrollParams);
+        scroll.setMaxHeight(0);
+    }
+
+    /**
+     * 竖屏铺满整页：把 root 之上的 Material 弹窗面板（{@code @id/custom} → customPanel → parentPanel）
+     * 一并改成 match_parent。
+     *
+     * <p>它们默认 wrap_content，内容比窗口短时会让 root 的 match_parent 退化成“按内容高度”，
+     * 页面底部留出空隙、底部按钮区不贴底。改成 match_parent 后窗口高度一路直达 root，
+     * 剩余空间全部由权重滚动区吃掉；DecorView 的参数不是 MarginLayoutParams，循环到那里自然结束。
+     */
+    private static void expandToWindow(View root) {
+        for (ViewParent parent = root.getParent(); parent instanceof ViewGroup; parent = parent.getParent()) {
+            ViewGroup group = (ViewGroup) parent;
+            ViewGroup.LayoutParams params = group.getLayoutParams();
+            if (!(params instanceof ViewGroup.MarginLayoutParams)) break;
+            params.height = ViewGroup.LayoutParams.MATCH_PARENT;
+            group.setLayoutParams(params);
+        }
     }
 
     @Override
