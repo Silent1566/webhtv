@@ -9004,6 +9004,12 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         String episodeUrl = selectedEpisode.getUrl();
         if (TextUtils.isEmpty(flag) || TextUtils.isEmpty(episodeUrl)) return false;
         int generation = ++inlinePlaybackGeneration;
+        // 只自增代际、不接替请求：在途的取址回调会因“不再是最新请求”直接返回，
+        // 它留下的加载标记必须在这里释放，否则圈永久留在屏上，且同一集会因
+        // isSamePendingInlinePlayback 恒真而无法再次起播。切内核自身的缓冲显示由
+        // updateInlineLoading 的引擎条件兜住，不依赖这个标记。
+        inlinePlaybackPending = false;
+        updateInlineDisplayPanel();
         long position = player().getPosition();
         float speed = player().getSpeed();
         boolean repeat = player().isRepeatOne();
@@ -9040,6 +9046,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
 
     private void cancelPendingInlinePlayerSwitch() {
         inlinePlaybackGeneration++;
+        // 同 refreshAndSwitchInlinePlayer：作废在途取址请求时必须一并释放它留下的加载标记。
+        inlinePlaybackPending = false;
         updateInlineDisplayPanel();
     }
 
