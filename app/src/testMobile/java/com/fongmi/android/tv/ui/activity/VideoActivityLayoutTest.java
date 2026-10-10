@@ -158,6 +158,35 @@ public class VideoActivityLayoutTest {
     }
 
     @Test
+    public void mobileVodControlOverlayShowsBatteryIconLikeFusionMode() throws Exception {
+        // 影视原生/详情直放模式播放器要像沉浸融合内联播放器一样显示电池电量。
+        // 锁定三件事：布局里有 @+id/battery、可见性只由全屏/锁定/播放状态决定、
+        // 图标档位复用沉浸融合同一套 BatteryUtil（不另造一份映射）。
+        Path controlLayout = findMobileResPath().resolve(Path.of("layout", "view_control_vod.xml"));
+        assertTrue(controlLayout + " is missing @+id/battery",
+                collectAndroidIds(controlLayout.toFile()).contains("battery"));
+
+        Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int visibility = source.indexOf("mBinding.control.battery.setVisibility(");
+        assertTrue("missing battery visibility wiring in " + sourcePath, visibility >= 0);
+        String statement = source.substring(visibility, source.indexOf(';', visibility));
+        assertTrue("battery must show only in fullscreen: " + statement,
+                statement.contains("isFullscreen()") && statement.contains("!isLock()") && statement.contains("mHistory != null"));
+        assertFalse("battery is an overlay icon, it must not follow PlayerButtonSetting: " + statement,
+                statement.contains("PlayerButtonSetting"));
+
+        String helper = methodBody(source, "private void updateBatteryIcon()", "private void setOrient()");
+        assertTrue("battery icon must reuse BatteryUtil level/icon mapping",
+                helper.contains("BatteryUtil.getLevel(this)") && helper.contains("BatteryUtil.getIcon(level)"));
+        assertTrue("an unreadable battery level must hide the icon instead of showing a wrong bucket",
+                helper.contains("level < 0") && helper.contains("View.GONE"));
+        assertTrue("the clock tick must refresh the battery while the control bar is up",
+                methodBody(source, "public void onTimeChanged(long time)", "private void updatePlaybackHistoryPosition()")
+                        .contains("updateBatteryIcon()"));
+    }
+
+    @Test
     public void mobileVodControlOverlayRoutesBlankTouchesToGestureDetector() throws Exception {
         Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);

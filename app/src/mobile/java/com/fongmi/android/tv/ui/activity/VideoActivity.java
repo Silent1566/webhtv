@@ -188,6 +188,7 @@ import com.fongmi.android.tv.ui.player.VodPlayerUiHost;
 import com.fongmi.android.tv.ui.player.ShortDramaQueueCoordinator;
 import com.fongmi.android.tv.utils.ActivityLaunch;
 import com.fongmi.android.tv.utils.AudioUtil;
+import com.fongmi.android.tv.utils.BatteryUtil;
 import com.fongmi.android.tv.utils.Clock;
 import com.fongmi.android.tv.utils.FileChooser;
 import com.fongmi.android.tv.utils.ImgUtil;
@@ -5531,6 +5532,9 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         mBinding.control.fullscreen.setVisibility(isLock() || shortDrama ? View.GONE : View.VISIBLE);
         mBinding.control.keep.setVisibility(mHistory == null ? View.GONE : View.VISIBLE);
         mBinding.control.nightMode.setVisibility(mHistory == null ? View.GONE : View.VISIBLE);
+        // 电池图标与沉浸融合模式内联播放器同规则：全屏、未锁定且已开始播放才显示。
+        mBinding.control.battery.setVisibility(isFullscreen() && !isLock() && mHistory != null && !player().isEmpty() ? View.VISIBLE : View.GONE);
+        updateBatteryIcon();
         boolean showPlayParams = PlayerButtonSetting.isVisible(PlayerButtonSetting.PLAY_PARAMS);
         mBinding.control.action.playParams.setVisibility(showPlayParams ? View.VISIBLE : View.GONE);
         mBinding.control.action.playParams.setSelected(mOsd != null && mOsd.isDiagnosticsVisible());
@@ -5632,6 +5636,20 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         Traffic.setSpeed(mBinding.progress.traffic, service() == null ? null : player());
         hidePlaybackProgressIfStale();
         App.post(mR2, 1000);
+    }
+
+    /**
+     * 电池图标按当前电量档位刷新（与沉浸融合模式 TmdbDetailActivity.updateMobileInlineBatteryIcon 同源，
+     * 都走 BatteryUtil）。图标隐藏时不取值，避免无谓地注册 ACTION_BATTERY_CHANGED 粘性广播。
+     */
+    private void updateBatteryIcon() {
+        if (!isVisible(mBinding.control.battery)) return;
+        int level = BatteryUtil.getLevel(this);
+        if (level < 0) {
+            mBinding.control.battery.setVisibility(View.GONE);
+            return;
+        }
+        mBinding.control.battery.setImageResource(BatteryUtil.getIcon(level));
     }
 
     private void setOrient() {
@@ -7827,6 +7845,8 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
     @Override
     public void onTimeChanged(long time) {
         android.util.Log.d("VideoActivity", "onTimeChanged: isOwner=" + isOwner() + " mHistory=" + (mHistory != null));
+        // 控制栏可见时每秒刷新一次电量（与沉浸融合模式刷新内联时间的节奏一致）。
+        if (isVisible(mBinding.control.getRoot())) updateBatteryIcon();
         if (!isOwner() || mHistory == null) return;
         long position, duration;
         mHistory.setCreateTime(time);
