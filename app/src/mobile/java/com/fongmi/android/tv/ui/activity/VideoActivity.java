@@ -188,11 +188,13 @@ import com.fongmi.android.tv.ui.player.VodPlayerUiHost;
 import com.fongmi.android.tv.ui.player.ShortDramaQueueCoordinator;
 import com.fongmi.android.tv.utils.ActivityLaunch;
 import com.fongmi.android.tv.utils.AudioUtil;
+import com.fongmi.android.tv.utils.BatteryUtil;
 import com.fongmi.android.tv.utils.Clock;
 import com.fongmi.android.tv.utils.FileChooser;
 import com.fongmi.android.tv.utils.ImgUtil;
 import com.fongmi.android.tv.utils.EpisodeHistoryTitleResolver;
 import com.fongmi.android.tv.utils.EpisodeTitleFormatter;
+import com.fongmi.android.tv.utils.Formatters;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.PiP;
 import com.fongmi.android.tv.utils.PushParser;
@@ -211,6 +213,7 @@ import com.google.gson.JsonObject;
 import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
 import java.io.File;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -5531,6 +5534,9 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         mBinding.control.fullscreen.setVisibility(isLock() || shortDrama ? View.GONE : View.VISIBLE);
         mBinding.control.keep.setVisibility(mHistory == null ? View.GONE : View.VISIBLE);
         mBinding.control.nightMode.setVisibility(mHistory == null ? View.GONE : View.VISIBLE);
+        // 电池+时间与沉浸融合模式内联播放器同规则：全屏、未锁定且已开始播放才显示。
+        mBinding.control.batteryInfo.setVisibility(isFullscreen() && !isLock() && mHistory != null && !player().isEmpty() ? View.VISIBLE : View.GONE);
+        updateBatteryInfo();
         boolean showPlayParams = PlayerButtonSetting.isVisible(PlayerButtonSetting.PLAY_PARAMS);
         mBinding.control.action.playParams.setVisibility(showPlayParams ? View.VISIBLE : View.GONE);
         mBinding.control.action.playParams.setSelected(mOsd != null && mOsd.isDiagnosticsVisible());
@@ -5632,6 +5638,22 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         Traffic.setSpeed(mBinding.progress.traffic, service() == null ? null : player());
         hidePlaybackProgressIfStale();
         App.post(mR2, 1000);
+    }
+
+    /**
+     * 刷新控制栏的电池+时间块（与沉浸融合模式 TmdbDetailActivity.updateMobileInlineControlStatus
+     * 同源：都走 BatteryUtil 与 Formatters.TIME）。容器隐藏时直接返回，避免无谓地注册
+     * ACTION_BATTERY_CHANGED 粘性广播；电量读不到（level < 0）时整条隐藏，不显示错误档位。
+     */
+    private void updateBatteryInfo() {
+        if (!isVisible(mBinding.control.batteryInfo)) return;
+        mBinding.control.batteryTime.setText(LocalDateTime.now().format(Formatters.TIME));
+        int level = BatteryUtil.getLevel(this);
+        if (level < 0) {
+            mBinding.control.batteryInfo.setVisibility(View.GONE);
+            return;
+        }
+        mBinding.control.battery.setImageResource(BatteryUtil.getIcon(level));
     }
 
     private void setOrient() {
@@ -7827,6 +7849,8 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
     @Override
     public void onTimeChanged(long time) {
         android.util.Log.d("VideoActivity", "onTimeChanged: isOwner=" + isOwner() + " mHistory=" + (mHistory != null));
+        // 控制栏可见时每秒刷新一次电量与时间（与沉浸融合模式刷新内联时间的节奏一致）。
+        if (isVisible(mBinding.control.getRoot())) updateBatteryInfo();
         if (!isOwner() || mHistory == null) return;
         long position, duration;
         mHistory.setCreateTime(time);
