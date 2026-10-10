@@ -159,31 +159,45 @@ public class VideoActivityLayoutTest {
 
     @Test
     public void mobileVodControlOverlayShowsBatteryIconLikeFusionMode() throws Exception {
-        // 影视原生/详情直放模式播放器要像沉浸融合内联播放器一样显示电池电量。
-        // 锁定三件事：布局里有 @+id/battery、可见性只由全屏/锁定/播放状态决定、
-        // 图标档位复用沉浸融合同一套 BatteryUtil（不另造一份映射）。
+        // 影视原生/详情直放模式播放器要像沉浸融合内联播放器一样显示「电池电量 + 当前时间」。
+        // 锁定四件事：布局里有 @+id/batteryInfo 竖排容器（含 battery 图标与 batteryTime 文本）、
+        // 可见性只由全屏/锁定/播放状态决定、图标档位与时间格式复用沉浸融合同一套工具
+        // （BatteryUtil / Formatters.TIME，不另造一份映射）。
         Path controlLayout = findMobileResPath().resolve(Path.of("layout", "view_control_vod.xml"));
-        assertTrue(controlLayout + " is missing @+id/battery",
-                collectAndroidIds(controlLayout.toFile()).contains("battery"));
+        Set<String> ids = collectAndroidIds(controlLayout.toFile());
+        for (String requiredId : List.of("batteryInfo", "battery", "batteryTime")) {
+            assertTrue(controlLayout + " is missing @+id/" + requiredId, ids.contains(requiredId));
+        }
+        // 时间文本必须嵌在 batteryInfo 容器里（融合模式是同构的竖排块，不是两个并列控件）。
+        assertTrue("the clock text must live inside the batteryInfo container",
+                hasAncestorAndroidId(findAndroidId(controlLayout.toFile(), "batteryTime"), "batteryInfo"));
+        assertTrue("the battery icon must live inside the batteryInfo container",
+                hasAncestorAndroidId(findAndroidId(controlLayout.toFile(), "battery"), "batteryInfo"));
+        // view_widget_vod 已有 @id/time 且与 view_control_vod 同处 activity_video 视图树；
+        // 重名会让 ViewBinding 按 id 查找时命错控件。这里锁定本布局不得再引入 time。
+        assertFalse("view_control_vod must not redeclare @id/time (view_widget_vod already owns it)",
+                ids.contains("time"));
 
         Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
-        int visibility = source.indexOf("mBinding.control.battery.setVisibility(");
+        int visibility = source.indexOf("mBinding.control.batteryInfo.setVisibility(");
         assertTrue("missing battery visibility wiring in " + sourcePath, visibility >= 0);
         String statement = source.substring(visibility, source.indexOf(';', visibility));
-        assertTrue("battery must show only in fullscreen: " + statement,
+        assertTrue("battery block must show only in fullscreen: " + statement,
                 statement.contains("isFullscreen()") && statement.contains("!isLock()") && statement.contains("mHistory != null"));
         assertFalse("battery is an overlay icon, it must not follow PlayerButtonSetting: " + statement,
                 statement.contains("PlayerButtonSetting"));
 
-        String helper = methodBody(source, "private void updateBatteryIcon()", "private void setOrient()");
+        String helper = methodBody(source, "private void updateBatteryInfo()", "private void setOrient()");
         assertTrue("battery icon must reuse BatteryUtil level/icon mapping",
                 helper.contains("BatteryUtil.getLevel(this)") && helper.contains("BatteryUtil.getIcon(level)"));
-        assertTrue("an unreadable battery level must hide the icon instead of showing a wrong bucket",
+        assertTrue("the clock text must reuse the shared time formatter like fusion mode does",
+                helper.contains("LocalDateTime.now().format(Formatters.TIME)"));
+        assertTrue("an unreadable battery level must hide the whole block instead of showing a wrong bucket",
                 helper.contains("level < 0") && helper.contains("View.GONE"));
-        assertTrue("the clock tick must refresh the battery while the control bar is up",
+        assertTrue("the clock tick must refresh the battery/time block while the control bar is up",
                 methodBody(source, "public void onTimeChanged(long time)", "private void updatePlaybackHistoryPosition()")
-                        .contains("updateBatteryIcon()"));
+                        .contains("updateBatteryInfo()"));
     }
 
     @Test
