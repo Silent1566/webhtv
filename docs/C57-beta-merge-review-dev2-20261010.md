@@ -187,15 +187,16 @@ cmd //c gradlew.bat --no-daemon \
 | 任务起始 HEAD | `b6b8e7a375276975cc160ceeb6257cf058298ebb` |
 | 合并前 `origin/beta` tip（旧） | `e6413efd1e4bdb3c1725824db6f7b3f8a7dc249c` |
 | **提交时 `origin/beta` tip（权威）** | `819003db8fef2ea63420e9a72eb4fcac8ee468ba` |
-| 合并提交 | 见「闭环记录」（两个父：`b6b8e7a375` + `819003db8f`） |
+| 合并提交（本任务唯一提交） | `df7f7ff5808d1e555abca8a5aa31104624650ffd`（两个父：`b6b8e7a375` + `819003db8f`） |
 | 合并结果树 | `cd5c370ce1df9be7e033d25420a1893203a33a98`（== `git merge-tree --write-tree` 自动合并结果树） |
-| recovery tag | 见「闭环记录」 |
-| 推送 | 见「闭环记录」 |
-| PR | 见「闭环记录」（`dev2 -> beta`，中文正文，**只创建未合并**） |
+| recovery tag | `recovery/C57-beta-merge-review-dev2-20261009/20261010114155-df7f7ff5808d` |
+| 推送 | `git push origin dev2` + `git push origin <tag>` |
+| PR | `dev2 -> beta`，中文正文，**只创建未合并**（见「闭环记录」） |
 
 ## 闭环记录
 
-- 2026-10-10 19:40（Asia/Shanghai）：`task_guard.sh finish` 生成合并提交 + recovery tag，`git rev-list --parents -n1` 校验为**两个父**且第二父 == beta tip（`819003db8f`），`MERGE_HEAD` 已清空，工作区干净。
+- 2026-10-10 19:41（Asia/Shanghai）：`task_guard.sh finish` 生成合并提交 `df7f7ff5808d1e555abca8a5aa31104624650ffd` + recovery tag `recovery/C57-beta-merge-review-dev2-20261009/20261010114155-df7f7ff5808d`；`git rev-list --parents -n1 df7f7ff580` 校验为**两个父**（`b6b8e7a375` + `819003db8f`）且第二父 == 提交时 beta tip（`819003db8f`），`MERGE_HEAD` 已清空，工作区干净。
+- `git ls-remote origin refs/heads/beta` 在提交前后均为 `819003db8f`（beta 未再前进，本合并已含该 tip）。
 - `git push origin dev2` 与 tag 推送成功。
 - `gh pr create --base beta --head dev2` 创建 PR（**未合并**，`mergedAt=null`）。
 - PR 文件集校验：PR files 与本地 `git diff --name-only origin/beta HEAD` 逐项一致。
