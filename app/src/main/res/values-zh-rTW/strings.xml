@@ -998,6 +998,7 @@
     <string name="cache_cleanup_not_allowed">此暫存由所屬模組管理，無法直接刪除。</string>
     <string name="cache_cleanup_failed">暫存清理失敗</string>
     <string name="cache_cleanup_cancelled">暫存清理已取消</string>
+    <string name="cache_cleanup_full_started">正在清理全部暫存…</string>
     <string name="cache_module_exo">Exo 播放暫存</string>
     <string name="cache_module_mpv_hls">MPV HLS/ISO 分片</string>
     <string name="cache_module_mpv_demuxer">MPV demuxer 預載</string>
@@ -2655,6 +2656,19 @@
     <string name="reader_chapter_failed">章節載入失敗</string>
     <string name="reader_opening">正在開啟 %1$s</string>
     <string name="reader_opening_default">正在開啟閱讀器</string>
+    <string name="reader_tts_channel">語音朗讀</string>
+    <string name="reader_tts_playing">正在朗讀</string>
+    <string name="reader_tts_paused">朗讀已暫停</string>
+    <string name="reader_tts_error">朗讀失敗</string>
+    <string name="reader_tts_default_title">小說</string>
+    <string name="reader_tts_progress">第 %1$d/%2$d 段</string>
+    <string name="reader_tts_prev">上一段</string>
+    <string name="reader_tts_next">下一段</string>
+    <string name="reader_tts_pause">暫停</string>
+    <string name="reader_tts_resume">繼續</string>
+    <string name="reader_tts_stop">停止</string>
+    <string name="reader_tts_timer">剩餘 %1$d 分鐘</string>
+    <string name="reader_tts_timer_action">+30 分鐘</string>
     <string name="cat_web_opening">正在開啟設定中心</string>
     <string name="cat_web_failed">頁面載入失敗：%1$s</string>
     <string name="cat_web_external">已用瀏覽器開啟</string>

@@ -889,9 +889,7 @@ public final class MpvHlsProxy extends NanoHTTPD {
                 parsed.host(), outcome.removedDurationSec(), outcome.removedSegmentDetails());
         if (!HlsAdblockNotice.shouldNotify(url, System.currentTimeMillis())) return;
         int removed = outcome.removedSegments() > 0 ? outcome.removedSegments() : (int) fallbackCount;
-        String message = outcome.structured() && outcome.removedDurationSec() > 0
-                ? String.format(Locale.US, "已跳过 %d 个广告片段（%.1f 秒）", removed, outcome.removedDurationSec())
-                : "已跳过 " + removed + " 个广告片段";
+        String message = HlsAdblockNotice.message(removed, outcome.removedDurationSec());
         App.post(() -> Notify.show(message));
     }
 

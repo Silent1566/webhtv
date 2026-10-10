@@ -1046,6 +1046,7 @@
     <string name="cache_cleanup_not_allowed">This cache is managed by its owner and cannot be removed directly.</string>
     <string name="cache_cleanup_failed">Cache cleanup failed</string>
     <string name="cache_cleanup_cancelled">Cache cleanup cancelled</string>
+    <string name="cache_cleanup_full_started">Cleaning all cache…</string>
     <string name="cache_module_exo">Exo playback cache</string>
     <string name="cache_module_mpv_hls">MPV HLS/ISO segments</string>
     <string name="cache_module_mpv_demuxer">MPV demuxer preload</string>
@@ -1662,6 +1663,19 @@
     <string name="reader_chapter_failed">Failed to load chapter</string>
     <string name="reader_opening">Opening %1$s</string>
     <string name="reader_opening_default">Opening reader</string>
+    <string name="reader_tts_channel">Read aloud</string>
+    <string name="reader_tts_playing">Reading aloud</string>
+    <string name="reader_tts_paused">Read aloud paused</string>
+    <string name="reader_tts_error">Read aloud failed</string>
+    <string name="reader_tts_default_title">Novel</string>
+    <string name="reader_tts_progress">Paragraph %1$d / %2$d</string>
+    <string name="reader_tts_prev">Prev</string>
+    <string name="reader_tts_next">Next</string>
+    <string name="reader_tts_pause">Pause</string>
+    <string name="reader_tts_resume">Resume</string>
+    <string name="reader_tts_stop">Stop</string>
+    <string name="reader_tts_timer">%1$d min left</string>
+    <string name="reader_tts_timer_action">+30 min</string>
     <string name="cat_web_opening">Opening settings</string>
     <string name="cat_web_failed">Failed to load page: %1$s</string>
     <string name="cat_web_external">Opened in browser</string>

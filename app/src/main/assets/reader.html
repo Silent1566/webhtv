@@ -272,6 +272,9 @@ body { background:var(--bg); color:var(--fg); }
 .tts-ctrl-btn.play { width:60px; height:60px; background:var(--accent); color:var(--reader-color-50); font-size:24px; box-shadow:0 6px 20px rgba(0,0,0,0.25); }
 .tts-ctrl-btn:active { transform:scale(0.92); }
 .tts-status-text { text-align:center; font-size:12px; color:var(--fg); opacity:0.6; min-height:16px; margin:4px 0; }
+.tts-engine-form { display:flex; flex-direction:column; gap:8px; flex:1; }
+.tts-input { width:100%; box-sizing:border-box; padding:8px 10px; border-radius:12px; border:1px solid rgba(128,128,128,0.3); background:rgba(128,128,128,0.1); color:var(--fg); font-size:12px; }
+.tts-textarea { min-height:62px; resize:vertical; font-family:monospace; }
 .tts-highlight { background:rgba(255,140,66,0.28) !important; border-radius:4px; transition:background 0.3s; }
 
 /* ===== 章节目录抽屉（底部） ===== */
@@ -632,8 +635,13 @@ body.comic-active .chapter-drawer .drawer-tab-content { color:var(--reader-color
     <div class="tts-status-text" id="ttsStatus">点击播放开始朗读</div>
     <div class="tts-source-row">
         <div class="pill-opt active" data-tts-source="system">系统</div>
-        <div class="pill-opt" data-tts-source="tencent">腾讯</div>
-        <div class="pill-opt" data-tts-source="microsoft">微软</div>
+        <div class="pill-opt" data-tts-source="edge">微软</div>
+        <div class="pill-opt" data-tts-source="baidu">百度</div>
+        <div class="pill-opt" data-tts-source="custom">在线</div>
+    </div>
+    <div class="setting-row" id="ttsVoiceRow">
+        <span class="label">音色</span>
+        <select class="font-select" id="ttsVoiceSelect"></select>
     </div>
     <div class="tts-ctrl">
         <button class="tts-ctrl-btn" id="btnTtsPrev" title="上一段">⏮</button>
@@ -642,12 +650,35 @@ body.comic-active .chapter-drawer .drawer-tab-content { color:var(--reader-color
     </div>
     <div class="setting-row">
         <span class="label">语速</span>
-        <input type="range" class="slider" id="seekTtsSpeed" min="0" max="200" value="100" />
+        <input type="range" class="slider" id="seekTtsSpeed" min="50" max="200" value="100" />
         <span class="val" id="tvTtsSpeed">1.0x</span>
+    </div>
+    <div class="setting-row" id="ttsPitchRow">
+        <span class="label">音调</span>
+        <input type="range" class="slider" id="seekTtsPitch" min="50" max="150" value="100" />
+        <span class="val" id="tvTtsPitch">1.0</span>
+    </div>
+    <div class="setting-row">
+        <span class="label">定时</span>
+        <div class="pill-group" id="ttsTimerGroup">
+            <div class="pill-opt active" data-ttstimer="0">关</div>
+            <div class="pill-opt" data-ttstimer="10">10分</div>
+            <div class="pill-opt" data-ttstimer="20">20分</div>
+            <div class="pill-opt" data-ttstimer="30">30分</div>
+            <div class="pill-opt" data-ttstimer="60">60分</div>
+        </div>
     </div>
     <div class="setting-row">
         <span class="label">跟随</span>
         <div class="pill-opt" id="btnTtsFollow" style="max-width:120px;">开</div>
+    </div>
+    <div class="setting-row" id="ttsEngineBox" style="display:none;">
+        <div class="tts-engine-form">
+            <input class="tts-input" id="ttsEngineName" placeholder="引擎名称（可空）" />
+            <textarea class="tts-input tts-textarea" id="ttsEngineUrl" placeholder="在线朗读规则，例如 https://host/tts?text={{java.encodeURI(speakText)}}&spd={{speakSpeed}}"></textarea>
+            <input class="tts-input" id="ttsEngineHeader" placeholder="Header（可空，Key: Value JSON）" />
+            <div class="pill-btn" id="btnTtsEngineSave">保存在线引擎</div>
+        </div>
     </div>
     <div class="setting-row">
         <div class="pill-btn" id="btnTtsStop">停止朗读</div>
@@ -1420,35 +1451,39 @@ $('seekPage').addEventListener('input', function(){
     }
 });
 
-/* ===================== TTS 语音朗读 ===================== */
-var ttsPlaying = false, ttsPaused = false;
-var ttsSpeed = parseFloat(getSet('novel_ttsSpeed', '1'));
-var ttsFollow = getSet('novel_ttsFollow', '1') === '1';
+/* ===================== TTS 语音朗读（原生朗读 + 浏览器兜底） =====================
+ *
+ * 主线走原生朗读（AndroidReader.ttsStart 等）：Android WebView 不实现 Web Speech API，
+ * 直接调 speechSynthesis 在真机上完全无声，因此 JS 只负责收集段落、显示状态与高亮跟随，
+ * 合成/播放/后台服务/通知栏控制都在原生侧（见 ReaderTtsService / ReaderTtsController）。
+ * 只有在浏览器里预览 reader.html（没有 AndroidReader 桥）时才回落到 speechSynthesis。
+ */
+var ttsState = 'stopped', ttsParagraph = -1, ttsTotal = 0;
 var ttsSource = getSet('novel_ttsSource', 'system');
-var ttsParagraphs = [], ttsIndex = 0, ttsUtterance = null;
-var ttsVoiceName = getSet('novel_ttsVoice', '');
+var ttsSpeed = parseFloat(getSet('novel_ttsSpeed', '1'));
+var ttsPitch = parseFloat(getSet('novel_ttsPitch', '1'));
+var ttsTimer = parseInt(getSet('novel_ttsTimer', '0'), 10);
+var ttsFollow = getSet('novel_ttsFollow', '1') === '1';
+var ttsParagraphs = [];            // [{el, text}]，当前 DOM 顺序
+var ttsVoiceCache = {};            // source -> [{id,name}]
+var ttsInfo = {};                  // ttsInfo() 原始值
+var ttsContinuePending = false;    // 章末续读：等新章注入后续读
+var ttsLastEl = null;              // 最后朗读的段落元素，用于追加模式续读定位
+var ttsWebUtterance = null;        // 浏览器兜底用
+var ttsEngineDirty = false;
 
-function ttsRefreshSource(){
-    qsa('.tts-source-row .pill-opt').forEach(function(b){
-        b.classList.toggle('active', b.dataset.ttsSource === ttsSource);
-    });
+function ttsNative(){
+    return !!(window.AndroidReader && typeof AndroidReader.ttsStart === 'function');
 }
-qsa('.tts-source-row .pill-opt').forEach(function(b){
-    b.addEventListener('click', function(){
-        ttsSource = this.dataset.ttsSource;
-        putSet('novel_ttsSource', ttsSource);
-        ttsRefreshSource();
-        if(ttsPlaying && ttsSource !== 'system') { ttsStopNative(); ttsPlaying = false; ttsPaused = false; }
-        if(ttsSource === 'tencent') showToast('已选择腾讯云语音');
-        else if(ttsSource === 'microsoft') showToast('微软云语音需在原生端配置，暂用系统语音');
-    });
-});
-function ttsSetStatus(s){ $('ttsStatus').textContent = s; }
+function ttsSetStatus(s){ var el = $('ttsStatus'); if(el) el.textContent = s; }
+function ttsSetPlayGlyph(playing){ $('btnTtsPlay').textContent = playing ? '⏸' : '▶'; }
+function ttsVoicePrefKey(source){ return 'novel_ttsVoice_' + source; }
+
 function ttsGetParagraphs(){
     var els = novelBlocks();
     var out = [];
     for(var i = 0; i < els.length; i++){
-        var t = els[i].textContent.trim();
+        var t = (els[i].textContent || '').trim();
         if(t) out.push({el: els[i], text: t});
     }
     return out;
@@ -1456,128 +1491,365 @@ function ttsGetParagraphs(){
 function ttsClearHighlight(){
     qsa('.tts-highlight').forEach(function(el){ el.classList.remove('tts-highlight'); });
 }
-function ttsNativeAvailable(){
-    return ttsSource === 'tencent' && window.AndroidReader && typeof AndroidReader.ttsSpeak === 'function';
-}
-function ttsStopNative(){
-    if(window.AndroidReader && typeof AndroidReader.ttsStop === 'function'){
-        try { AndroidReader.ttsStop(); } catch(e){}
-    }
-}
-function ttsSpeak(idx){
-    if(idx >= ttsParagraphs.length){ ttsStop(); ttsSetStatus('朗读完毕'); return; }
-    ttsIndex = idx;
-    ttsClearHighlight();
-    var p = ttsParagraphs[idx];
+function ttsHighlight(index, doScroll){
+    var p = ttsParagraphs[index];
+    if(!p) return;
+    qsa('.tts-highlight').forEach(function(el){ if(el !== p.el) el.classList.remove('tts-highlight'); });
     p.el.classList.add('tts-highlight');
-    if(ttsFollow) p.el.scrollIntoView({behavior:'smooth', block:'center'});
-    if(ttsNativeAvailable()){
-        try {
-            AndroidReader.ttsSpeak(p.text);
-            var np = ttsParagraphs[idx + 1];
-            if(np) AndroidReader.ttsPrefetch(np.text);
-        } catch(e){ showToast('腾讯云语音调用失败: ' + e); }
-        ttsSetStatus('正在朗读（腾讯云）');
+    ttsLastEl = p.el;
+    if(doScroll && ttsFollow) p.el.scrollIntoView({behavior:'smooth', block:'center'});
+}
+
+/* ---------- 音源 / 音色 ---------- */
+function ttsRefreshSource(){
+    qsa('.tts-source-row .pill-opt').forEach(function(b){
+        b.classList.toggle('active', b.dataset.ttsSource === ttsSource);
+    });
+    var box = $('ttsEngineBox');
+    if(box) box.style.display = ttsSource === 'custom' ? 'flex' : 'none';
+    // 音调只有系统引擎与微软 Edge 支持；百度发音接口没有音调参数，
+    // 与其留一个「拖了没反应」的控件，不如按音源隐藏。
+    var pitchRow = $('ttsPitchRow');
+    if(pitchRow) pitchRow.style.display = (ttsSource === 'system' || ttsSource === 'edge') ? '' : 'none';
+    if(ttsSource === 'custom') ttsLoadEngineForm();
+    ttsLoadVoices(ttsSource);
+}
+function ttsLoadEngineForm(){
+    if(!ttsNative() || !ttsInfo.custom) return;
+    if(ttsEngineDirty) return;
+    $('ttsEngineName').value = ttsInfo.custom.name || '';
+    $('ttsEngineUrl').value = ttsInfo.custom.url || '';
+    $('ttsEngineHeader').value = ttsInfo.custom.header || '';
+}
+function ttsRenderVoices(list){
+    var sel = $('ttsVoiceSelect');
+    sel.innerHTML = '';
+    var current = getSet(ttsVoicePrefKey(ttsSource), '');
+    var matched = false;
+    (list || []).forEach(function(v){
+        var opt = document.createElement('option');
+        opt.value = v.id;
+        opt.textContent = v.name || v.id;
+        if(v.id === current){ opt.selected = true; matched = true; }
+        sel.appendChild(opt);
+    });
+    if(!matched && sel.options.length > 0){
+        sel.options[0].selected = true;
+        putSet(ttsVoicePrefKey(ttsSource), sel.options[0].value);
+    }
+    var row = $('ttsVoiceRow');
+    if(row) row.style.display = sel.options.length > 0 ? '' : 'none';
+}
+function ttsLoadVoices(source){
+    var cached = ttsVoiceCache[source];
+    if(cached){ ttsRenderVoices(cached); return; }
+    if(!ttsNative()){ ttsRenderVoices([]); return; }
+    try {
+        var list = JSON.parse(AndroidReader.ttsVoices(source) || '[]');
+        if(list && list.length > 0){
+            ttsVoiceCache[source] = list;
+            ttsRenderVoices(list);
+            return;
+        }
+        // 系统音色要等 TextToSpeech 初始化，原生随后用 __onTtsVoices 推送
+        ttsRenderVoices([]);
+    } catch(e){ ttsRenderVoices([]); }
+}
+function ttsCurrentVoice(){ var sel = $('ttsVoiceSelect'); return sel ? (sel.value || '') : ''; }
+
+/* ---------- 启动 / 控制 ---------- */
+function ttsSourceTitle(){
+    return DATA.title || DATA.vodName || '小说';
+}
+function ttsStartFrom(paragraphs, startIndex){
+    ttsParagraphs = paragraphs || ttsGetParagraphs();
+    if(ttsParagraphs.length === 0){ ttsSetStatus('没有可朗读的内容'); return; }
+    var index = Math.max(0, Math.min(startIndex | 0, ttsParagraphs.length - 1));
+    ttsParagraph = index;
+    ttsTotal = ttsParagraphs.length;
+    if(!ttsNative()){
+        ttsWebStart(index);
         return;
     }
-    var u = new SpeechSynthesisUtterance(p.text);
-    u.rate = ttsSpeed; u.lang = 'zh-CN';
-    var voices = speechSynthesis.getVoices();
-    var v = voices.filter(function(x){ return x.lang.indexOf('zh') === 0; });
-    if(ttsVoiceName){
-        var found = voices.filter(function(x){ return x.name === ttsVoiceName; })[0];
-        if(found) u.voice = found;
-    } else if(v.length > 0){
-        u.voice = v[0];
+    var payload = {
+        source: ttsSource,
+        voice: ttsCurrentVoice(),
+        rate: ttsSpeed,
+        pitch: ttsPitch,
+        timer: ttsTimer,
+        index: index,
+        title: ttsSourceTitle(),
+        paragraphs: ttsParagraphs.map(function(p){ return p.text; })
+    };
+    if(ttsSource === 'custom'){
+        var rule = {name: $('ttsEngineName').value.trim(), url: $('ttsEngineUrl').value.trim(), header: $('ttsEngineHeader').value.trim(), contentType: 'audio/mpeg'};
+        if(!rule.url){ ttsSetStatus('请先填写在线朗读规则'); showToast('请先填写在线朗读规则'); return; }
+        payload.rule = JSON.stringify(rule);
     }
-    u.onend = function(){ if(ttsPlaying) ttsSpeak(idx + 1); };
-    u.onerror = function(){ if(ttsPlaying) ttsSpeak(idx + 1); };
-    ttsUtterance = u;
-    speechSynthesis.speak(u);
+    try {
+        AndroidReader.ttsStart(JSON.stringify(payload));
+        ttsSetStatus('正在朗读…');
+        ttsSetPlayGlyph(true);
+    } catch(e){
+        ttsSetStatus('朗读启动失败：' + e);
+        showToast('朗读启动失败：' + e);
+    }
 }
-function ttsStart(){
-    ttsParagraphs = ttsGetParagraphs();
-    if(ttsParagraphs.length === 0){ ttsSetStatus('没有可朗读的内容'); return; }
-    ttsPlaying = true; ttsPaused = false;
-    $('btnTtsPlay').textContent = '⏸';
-    ttsSetStatus('正在朗读...');
-    ttsSpeak(0);
-}
-function ttsPause(){
-    if(!ttsPlaying || ttsPaused) return;
-    if(ttsSource === 'tencent') { ttsStopNative(); ttsPaused = true; }
-    else { speechSynthesis.pause(); ttsPaused = true; }
-    $('btnTtsPlay').textContent = '▶';
-    ttsSetStatus('已暂停');
-}
-function ttsResume(){
-    if(!ttsPlaying || !ttsPaused) return;
-    if(ttsSource === 'tencent') { ttsPaused = false; ttsSpeak(ttsIndex); }
-    else { speechSynthesis.resume(); ttsPaused = false; }
-    $('btnTtsPlay').textContent = '⏸';
-    ttsSetStatus('正在朗读...');
-}
+function ttsStart(){ ttsStartFrom(ttsGetParagraphs(), 0); }
 function ttsStop(){
-    ttsStopNative();
-    speechSynthesis.cancel();
-    ttsPlaying = false; ttsPaused = false;
-    $('btnTtsPlay').textContent = '▶';
+    ttsContinuePending = false;
+    ttsLastEl = null;
+    if(ttsNative()){ try { AndroidReader.ttsStop(); } catch(e){} }
+    ttsWebStop();
+    ttsState = 'stopped'; ttsParagraph = -1;
+    ttsSetPlayGlyph(false);
     ttsClearHighlight();
     ttsSetStatus('点击播放开始朗读');
 }
-$('btnTtsPlay').addEventListener('click', function(){
-    if(ttsPlaying && !ttsPaused) ttsPause();
-    else if(ttsPlaying && ttsPaused) ttsResume();
-    else ttsStart();
+function ttsToggle(){
+    if(ttsState === 'playing' || ttsState === 'paused'){
+        if(!ttsNative()){ ttsWebToggle(); return; }
+        try { AndroidReader.ttsToggle(); } catch(e){}
+        return;
+    }
+    ttsStart();
+}
+function ttsPrev(){
+    if(ttsState === 'stopped' || ttsParagraph < 0){ ttsStart(); return; }
+    if(!ttsNative()){ ttsWebSeek(Math.max(0, ttsParagraph - 1)); return; }
+    try { AndroidReader.ttsPrev(); } catch(e){}
+}
+function ttsNext(){
+    if(ttsState === 'stopped' || ttsParagraph < 0){ ttsStart(); return; }
+    if(!ttsNative()){ ttsWebSeek(Math.min(ttsParagraphs.length - 1, ttsParagraph + 1)); return; }
+    try { AndroidReader.ttsNext(); } catch(e){}
+}
+
+/* ---------- 章节切换时的续读 ---------- */
+function ttsOnChapterSwitching(){
+    // 手动切章 / 章末续读：都等新章注入后从「下一个未读段落」继续
+    if(ttsState !== 'playing' && ttsState !== 'paused') return;
+    ttsContinuePending = true;
+}
+function ttsContinueAfterChapter(){
+    if(!ttsContinuePending) return;
+    ttsContinuePending = false;
+    if(!ttsNative()){
+        ttsWebStop();
+        ttsState = 'stopped';
+        ttsSetPlayGlyph(false);
+        ttsSetStatus('已切换章节，请重新开始朗读');
+        return;
+    }
+    var paragraphs = ttsGetParagraphs();
+    var start = 0;
+    if(ttsLastEl){
+        for(var i = 0; i < paragraphs.length; i++){
+            if(paragraphs[i].el === ttsLastEl){ start = i + 1; break; }
+        }
+    }
+    ttsLastEl = null;
+    if(start >= paragraphs.length){
+        // 新章没有可续读的段落（例如空章）：停止，避免原生队列空转
+        ttsStop();
+        return;
+    }
+    ttsStartFrom(paragraphs, start);
+}
+function ttsLoadNextChapter(){
+    if(DATA.kind !== 1 || !DATA.chapters || DATA.chapters.length === 0){ ttsStop(); return; }
+    if(DATA.current >= DATA.chapters.length - 1){
+        ttsStop();
+        ttsSetStatus('朗读完毕（已是最后一章）');
+        showToast('朗读完毕');
+        return;
+    }
+    // 章末续读意图在此确定：新章数据注入后由 ttsContinueAfterChapter 接上。
+    // 不能依赖 ttsState（原生可能刚把它置成 stopped），否则会丢掉续读。
+    ttsContinuePending = true;
+    if(isPageMode()) goChapter(DATA.current + 1);
+    else loadNextNovelAppend();
+}
+
+/* ---------- 原生回调 ---------- */
+window.__onTtsState = function(json){
+    ttsState = json.state || 'stopped';
+    ttsParagraph = (typeof json.paragraph === 'number') ? json.paragraph : -1;
+    ttsTotal = json.total || ttsTotal;
+    if(ttsState === 'playing'){
+        ttsSetPlayGlyph(true);
+        ttsSetStatus('正在朗读 ' + Math.max(0, ttsParagraph + 1) + '/' + (ttsTotal || ttsParagraphs.length) + (ttsTimer > 0 ? '（定时 ' + ttsTimer + ' 分钟）' : ''));
+    } else if(ttsState === 'paused'){
+        ttsSetPlayGlyph(false);
+        ttsSetStatus('已暂停');
+    } else if(ttsState === 'error'){
+        ttsSetPlayGlyph(false);
+        ttsSetStatus(json.message || '朗读失败');
+        ttsClearHighlight();
+        if(json.message) showToast(json.message);
+    } else {
+        ttsSetPlayGlyph(false);
+        if(json.message) ttsSetStatus(json.message);
+    }
+};
+window.__onTtsProgress = function(json){
+    ttsParagraph = json.paragraph;
+    ttsTotal = json.total || ttsTotal;
+    ttsHighlight(json.paragraph, true);
+    if(ttsState === 'playing') ttsSetStatus('正在朗读 ' + (json.paragraph + 1) + '/' + (ttsTotal || ttsParagraphs.length));
+};
+window.__onTtsChapterEnd = function(){ ttsLoadNextChapter(); };
+window.__onTtsVoices = function(list){
+    if(!list || !list.length) return;
+    ttsVoiceCache[ttsSource] = list;
+    ttsRenderVoices(list);
+};
+
+/* ---------- 浏览器兜底（无原生桥时） ---------- */
+function ttsWebStart(index){
+    if(!window.speechSynthesis){ ttsSetStatus('当前环境不支持语音朗读'); return; }
+    ttsWebSpeak(index);
+}
+function ttsWebSpeak(index){
+    if(index >= ttsParagraphs.length){ ttsWebStop(); ttsSetStatus('朗读完毕'); return; }
+    ttsParagraph = index;
+    ttsHighlight(index, true);
+    var u = new SpeechSynthesisUtterance(ttsParagraphs[index].text);
+    u.rate = ttsSpeed; u.pitch = ttsPitch; u.lang = 'zh-CN';
+    var voiceId = ttsCurrentVoice();
+    if(voiceId){
+        var found = speechSynthesis.getVoices().filter(function(x){ return x.name === voiceId || x.voiceURI === voiceId; })[0];
+        if(found) u.voice = found;
+    }
+    u.onend = function(){ if(ttsState === 'playing') ttsWebSpeak(index + 1); };
+    u.onerror = function(){ if(ttsState === 'playing') ttsWebSpeak(index + 1); };
+    ttsWebUtterance = u;
+    ttsState = 'playing';
+    ttsSetPlayGlyph(true);
+    ttsSetStatus('正在朗读 ' + (index + 1) + '/' + ttsParagraphs.length);
+    speechSynthesis.speak(u);
+}
+function ttsWebSeek(index){ speechSynthesis.cancel(); ttsWebSpeak(index); }
+function ttsWebToggle(){
+    if(ttsState === 'playing'){ speechSynthesis.pause(); ttsState = 'paused'; ttsSetPlayGlyph(false); ttsSetStatus('已暂停'); }
+    else if(ttsState === 'paused'){ speechSynthesis.resume(); ttsState = 'playing'; ttsSetPlayGlyph(true); ttsSetStatus('正在朗读…'); }
+}
+function ttsWebStop(){
+    if(window.speechSynthesis) speechSynthesis.cancel();
+    ttsWebUtterance = null;
+}
+
+/* ---------- 初始化 ---------- */
+function ttsInitSettings(){
+    $('seekTtsSpeed').value = Math.round(ttsSpeed * 100);
+    $('tvTtsSpeed').textContent = ttsSpeed.toFixed(1) + 'x';
+    $('seekTtsPitch').value = Math.round(ttsPitch * 100);
+    $('tvTtsPitch').textContent = ttsPitch.toFixed(1);
+    $('btnTtsFollow').textContent = ttsFollow ? '开' : '关';
+    $('btnTtsFollow').classList.toggle('active', ttsFollow);
+    qsa('#ttsTimerGroup .pill-opt').forEach(function(b){
+        b.classList.toggle('active', parseInt(b.dataset.ttstimer, 10) === ttsTimer);
+    });
+    if(ttsNative()){
+        try { ttsInfo = JSON.parse(AndroidReader.ttsInfo() || '{}'); } catch(e){ ttsInfo = {}; }
+        if(ttsInfo.edgeVoices && ttsInfo.edgeVoices.length){
+            ttsVoiceCache['edge'] = ttsInfo.edgeVoices;
+        }
+        if(ttsInfo.custom) ttsEngineDirty = false;
+    }
+    ttsRefreshSource();
+    ttsSetPlayGlyph(ttsState === 'playing');
+    if(ttsInfo.state && ttsInfo.state !== 'stopped' && ttsInfo.paragraph >= 0){
+        // 重新打开面板时与原生状态对齐
+        ttsState = ttsInfo.state;
+        ttsParagraphs = ttsGetParagraphs();
+        ttsHighlight(ttsInfo.paragraph, false);
+        ttsSetPlayGlyph(ttsState === 'playing');
+        ttsSetStatus(ttsState === 'playing' ? '正在朗读 ' + (ttsInfo.paragraph + 1) + '/' + (ttsParagraphs.length || 0) : '已暂停');
+    } else if(ttsInfo.systemAvailable === false && ttsSource === 'system'){
+        ttsSetStatus('设备未安装系统 TTS 引擎，建议改用「微软」或「百度」在线音源');
+    }
+}
+qsa('.tts-source-row .pill-opt').forEach(function(b){
+    b.addEventListener('click', function(){
+        if(ttsState === 'playing' || ttsState === 'paused') ttsStop();
+        ttsSource = this.dataset.ttsSource;
+        putSet('novel_ttsSource', ttsSource);
+        ttsRefreshSource();
+        if(ttsSource === 'system' && ttsInfo.systemAvailable === false){
+            ttsSetStatus('设备未安装系统 TTS 引擎，建议改用「微软」或「百度」在线音源');
+        } else if(ttsSource === 'edge'){
+            ttsSetStatus('微软 Edge 语音（Neural 音色），需要网络');
+        } else if(ttsSource === 'baidu'){
+            ttsSetStatus('百度在线语音，需要网络');
+        } else {
+            ttsSetStatus('自定义在线朗读引擎');
+        }
+    });
 });
-$('btnTtsPrev').addEventListener('click', function(){
-    if(!ttsPlaying) { ttsStart(); return; }
-    ttsStopNative();
-    speechSynthesis.cancel();
-    ttsSpeak(Math.max(0, ttsIndex - 1));
+$('ttsVoiceSelect').addEventListener('change', function(){
+    putSet(ttsVoicePrefKey(ttsSource), this.value);
+    if(ttsNative() && (ttsState === 'playing' || ttsState === 'paused')){
+        try { AndroidReader.ttsSetVoice(this.value); } catch(e){}
+    }
 });
-$('btnTtsNext').addEventListener('click', function(){
-    if(!ttsPlaying) { ttsStart(); return; }
-    ttsStopNative();
-    speechSynthesis.cancel();
-    ttsSpeak(ttsIndex + 1);
-});
-$('btnTtsStop').addEventListener('click', ttsStop);
+$('btnTtsPlay').addEventListener('click', ttsToggle);
+$('btnTtsPrev').addEventListener('click', ttsPrev);
+$('btnTtsNext').addEventListener('click', ttsNext);
+$('btnTtsStop').addEventListener('click', function(){ ttsStop(); });
 $('seekTtsSpeed').addEventListener('input', function(){
     ttsSpeed = parseFloat(this.value) / 100;
     $('tvTtsSpeed').textContent = ttsSpeed.toFixed(1) + 'x';
     putSet('novel_ttsSpeed', ttsSpeed);
-    if(ttsUtterance) ttsUtterance.rate = ttsSpeed;
+    if(ttsNative() && ttsState !== 'stopped'){
+        try { AndroidReader.ttsSetRate(ttsSpeed); } catch(e){}
+    } else if(ttsWebUtterance){ ttsWebUtterance.rate = ttsSpeed; }
+});
+$('seekTtsPitch').addEventListener('input', function(){
+    ttsPitch = parseFloat(this.value) / 100;
+    $('tvTtsPitch').textContent = ttsPitch.toFixed(1);
+    putSet('novel_ttsPitch', ttsPitch);
+    if(ttsNative() && ttsState !== 'stopped'){
+        try { AndroidReader.ttsSetPitch(ttsPitch); } catch(e){}
+    } else if(ttsWebUtterance){ ttsWebUtterance.pitch = ttsPitch; }
+});
+qsa('#ttsTimerGroup .pill-opt').forEach(function(b){
+    b.addEventListener('click', function(){
+        ttsTimer = parseInt(this.dataset.ttstimer, 10) || 0;
+        putSet('novel_ttsTimer', ttsTimer);
+        qsa('#ttsTimerGroup .pill-opt').forEach(function(x){
+            x.classList.toggle('active', parseInt(x.dataset.ttstimer, 10) === ttsTimer);
+        });
+        if(ttsNative() && ttsState !== 'stopped'){
+            try { AndroidReader.ttsSetTimer(ttsTimer); } catch(e){}
+        }
+        ttsSetStatus(ttsTimer > 0 ? '朗读定时 ' + ttsTimer + ' 分钟' : '已取消定时');
+    });
 });
 $('btnTtsFollow').addEventListener('click', function(){
     ttsFollow = !ttsFollow;
     putSet('novel_ttsFollow', ttsFollow ? '1' : '0');
-    $('btnTtsFollow').textContent = ttsFollow ? '开' : '关';
-    $('btnTtsFollow').classList.toggle('active', ttsFollow);
+    this.textContent = ttsFollow ? '开' : '关';
+    this.classList.toggle('active', ttsFollow);
 });
-function ttsInitSettings(){
-    $('seekTtsSpeed').value = ttsSpeed * 100;
-    $('tvTtsSpeed').textContent = ttsSpeed.toFixed(1) + 'x';
-    $('btnTtsFollow').textContent = ttsFollow ? '开' : '关';
-    $('btnTtsFollow').classList.toggle('active', ttsFollow);
-    ttsRefreshSource();
-}
-
-function nativeTtsStart(){
-    if(ttsPlaying && !ttsPaused && ttsSource === 'tencent') ttsSetStatus('正在朗读（腾讯云）');
-}
-function nativeTtsDone(){
-    if(ttsPlaying && !ttsPaused && ttsSource === 'tencent') ttsSpeak(ttsIndex + 1);
-}
-function nativeTtsError(){
-    if(ttsPlaying && !ttsPaused && ttsSource === 'tencent'){
-        ttsSetStatus('腾讯云语音异常，继续下一段');
-        ttsSpeak(ttsIndex + 1);
+['ttsEngineName','ttsEngineUrl','ttsEngineHeader'].forEach(function(id){
+    $(id).addEventListener('input', function(){ ttsEngineDirty = true; });
+});
+$('btnTtsEngineSave').addEventListener('click', function(){
+    if(!ttsNative()){ showToast('浏览器环境无需配置'); return; }
+    var rule = {name: $('ttsEngineName').value.trim(), url: $('ttsEngineUrl').value.trim(), header: $('ttsEngineHeader').value.trim(), contentType: 'audio/mpeg'};
+    if(!rule.url){ showToast('请填写在线朗读规则'); return; }
+    var ok = false;
+    try { ok = AndroidReader.ttsSaveEngine(JSON.stringify(rule)); } catch(e){ ok = false; }
+    if(ok){
+        ttsEngineDirty = false;
+        ttsInfo.custom = rule;
+        showToast('在线引擎已保存');
+        ttsSetStatus('在线引擎已保存，点击播放开始朗读');
+    } else {
+        showToast('规则无法解析（暂不支持 @js: 规则）');
     }
-}
-window.__onNativeTtsStart = nativeTtsStart;
-window.__onNativeTtsDone = nativeTtsDone;
-window.__onNativeTtsError = nativeTtsError;
+});
 
 /* ===================== 自动阅读 ===================== */
 var autoMode = getSet('novel_autoMode', 'scroll');
@@ -1833,6 +2105,7 @@ function __updateChapter(data){
     if(switchWatchdog){ clearTimeout(switchWatchdog); switchWatchdog = null; }
     switchingChapter = false;
     reportProgress();
+    if(typeof ttsContinueAfterChapter === 'function') ttsContinueAfterChapter();
 }
 function setTitle(t){
     document.title = t || '阅读';
@@ -2003,6 +2276,8 @@ function appendNovelChapter(data){
     updateCharCount();
     var t = DATA.chapters && DATA.chapters[novelAppendIndex] ? DATA.chapters[novelAppendIndex].name : data.title;
     setTitle(t || DATA.vodName || '阅读');
+    // 无缝追加模式下同样需要为朗读续上新增章节的段落
+    if(typeof ttsContinueAfterChapter === 'function') ttsContinueAfterChapter();
 }
 /* ===== 漫画：影视+ 独立阅读器 ===== */
 var comicIdx = 0, comicLoading = false;
@@ -2333,6 +2608,8 @@ function goChapter(i){
     if(i < 0){ showToast('已是第一章'); return; }
     if(i >= DATA.chapters.length){ showToast('已到最终章'); stopAuto(); return; }
     reportProgress();
+    // 朗读中手动切章（或章末续读）：新章内容注入后从下一段继续朗读
+    if(typeof ttsOnChapterSwitching === 'function') ttsOnChapterSwitching();
     prevChapterIndex = DATA.current | 0;
     switchingChapter = true;
     if(switchWatchdog) clearTimeout(switchWatchdog);

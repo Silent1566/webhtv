@@ -21,6 +21,7 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
@@ -105,19 +106,23 @@ public final class CacheCleanupManager {
         long startedAt = System.currentTimeMillis();
         ArrayList<CacheCleanupResult> results = new ArrayList<>();
         try {
-            int total = plan.modules().size();
-            for (int index = 0; index < total; index++) {
-                CacheModuleId id = plan.modules().get(index);
-                if (CANCELLED.get()) {
-                    results.add(new CacheCleanupResult(id, CacheCleanupStatus.CANCELLED,
-                            0, 0, 0, 0, List.of("cancelled")));
-                    break;
+            if (plan.mode() == CacheCleanupMode.FULL) {
+                results.add(cleanEverything(plan, progress));
+            } else {
+                int total = plan.modules().size();
+                for (int index = 0; index < total; index++) {
+                    CacheModuleId id = plan.modules().get(index);
+                    if (CANCELLED.get()) {
+                        results.add(new CacheCleanupResult(id, CacheCleanupStatus.CANCELLED,
+                                0, 0, 0, 0, List.of("cancelled")));
+                        break;
+                    }
+                    if (progress != null) {
+                        int completed = index;
+                        App.post(() -> progress.accept(new CacheCleanupProgress(id, completed, total, 0, 0)));
+                    }
+                    results.add(cleanModule(id, plan.mode()));
                 }
-                if (progress != null) {
-                    int completed = index;
-                    App.post(() -> progress.accept(new CacheCleanupProgress(id, completed, total, 0, 0)));
-                }
-                results.add(cleanModule(id, plan.mode()));
             }
         } catch (Throwable error) {
             CacheModuleId id = plan.modules().get(0);
@@ -140,6 +145,170 @@ public final class CacheCleanupManager {
         App.post(CacheCenter.get()::invalidate);
         App.post(() -> callback.accept(result));
         App.post(CacheCenter.get()::publishChanged);
+    }
+
+    /**
+     * Clears everything the registry can name, then whatever no module claimed.
+     *
+     * <p>The settings row's long-press shortcut is documented as "the one-key clear from before the
+     * cache management split", so it must not inherit the tiered plans' deliberate omissions: L1/L2
+     * keep age windows, L3 still skips the diagnostic log family and the report-only unclassified
+     * cache. Here every module is cleaned through its owner first - several caches (Exo's
+     * SimpleCache, Glide's disk cache, the rolling diagnostic log) must be released by their owner
+     * instead of having files pulled out from under an open journal - and the residual sweep then
+     * removes the leftovers, the plugin script directories and the unclassified report.</p>
+     *
+     * <p>Only two carve-outs survive a full clean, because deleting them can not be undone by a
+     * re-download: a transfer that is running right now, and the roots of a playback cache that has
+     * to wait for playback to stop.</p>
+     */
+    private static CacheCleanupResult cleanEverything(CacheCleanupPlan plan,
+                                                      Consumer<CacheCleanupProgress> progress) {
+        File cache = App.get().getCacheDir();
+        List<CacheModule> registry = CacheModuleRegistry.modules(cache);
+        CacheUsage before = measureCache(cache);
+        ArrayList<String> warnings = new ArrayList<>();
+        ArrayList<File> preserved = new ArrayList<>();
+        boolean success = true;
+        boolean deferred = false;
+        boolean cancelled = false;
+        int total = plan.modules().size() + 1;
+        for (int index = 0; index < plan.modules().size(); index++) {
+            if (CANCELLED.get()) {
+                cancelled = true;
+                break;
+            }
+            CacheModuleId id = plan.modules().get(index);
+            if (progress != null) {
+                int completed = index;
+                App.post(() -> progress.accept(new CacheCleanupProgress(id, completed, total, 0, 0)));
+            }
+            CacheCleanupStatus gate = CachePolicyEngine.directCleanupStatus(id, PlaybackService.isRunning());
+            if (gate == CacheCleanupStatus.DEFERRED) {
+                deferred = true;
+                preserved.addAll(moduleRoots(id, registry));
+                warnings.add(id.id() + ": " + gate.name().toLowerCase(Locale.ROOT));
+                continue;
+            }
+            // A module the UI may not clean directly (plugin scripts, the report-only unclassified
+            // cache) is not skipped: the residual sweep below removes exactly the same files with
+            // the running loader's scripts and the in-flight transfers preserved.
+            if (gate != CacheCleanupStatus.COMPLETED) continue;
+            try {
+                Outcome outcome = executeCleanup(id, CacheCleanupMode.FULL);
+                success &= outcome.success();
+                warnings.addAll(outcome.warnings());
+            } catch (Throwable error) {
+                success = false;
+                warnings.add(id.id() + ": " + error.getClass().getSimpleName());
+            }
+        }
+        if (!cancelled) {
+            if (progress != null) {
+                int completed = total - 1;
+                App.post(() -> progress.accept(new CacheCleanupProgress(
+                        CacheModuleId.UNCLASSIFIED, completed, total, 0, 0)));
+            }
+            preserved.addAll(activePluginScripts(cache));
+            sweepResidual(cache, preserved, Updater.isDownloading(), ApkUrlPush.isActive(), warnings);
+        }
+        CacheUsage after = measureCache(cache);
+        CacheCleanupStatus status = cancelled ? CacheCleanupStatus.CANCELLED
+                : success && !deferred ? CacheCleanupStatus.COMPLETED : CacheCleanupStatus.PARTIAL;
+        return new CacheCleanupResult(plan.modules().isEmpty() ? null : plan.modules().get(0), status,
+                before.bytes(), after.bytes(), Math.max(0, before.files() - after.files()),
+                after.files(), warnings);
+    }
+
+    /**
+     * Measures the whole cache directory the same way the inventory measures a module root, so the
+     * released-bytes figure a full clean reports is comparable with the number the panel shows for
+     * the same files.
+     */
+    private static CacheUsage measureCache(File cache) {
+        CacheMeasurement measurement = CacheInventory.measureRoots(CacheModuleId.UNCLASSIFIED,
+                List.of(CacheRoot.tree(cache)));
+        return new CacheUsage(measurement.bytes(), measurement.fileCount());
+    }
+
+    /**
+     * The roots a module owns, taken from the registry rather than rebuilt from literal names, so a
+     * preserved playback cache is exactly the tree the inventory counts for that module.
+     */
+    private static List<File> moduleRoots(CacheModuleId id, List<CacheModule> registry) {
+        ArrayList<File> roots = new ArrayList<>();
+        for (CacheModule module : registry) {
+            if (module.id() != id) continue;
+            for (CacheRoot root : module.roots()) if (root.root() != null) roots.add(root.root());
+        }
+        return roots;
+    }
+
+    /**
+     * The script files of the loaders that are running right now.
+     *
+     * <p>These are the only plugin-script files a full clean keeps: deleting the script a site is
+     * loading from would break that site, and unlike a cache nothing re-downloads it before the
+     * next use.</p>
+     */
+    private static List<File> activePluginScripts(File cache) {
+        ArrayList<File> scripts = new ArrayList<>();
+        for (String key : BaseLoader.get().activePluginKeys()) {
+            if (key == null || key.isEmpty()) continue;
+            scripts.add(new File(new File(cache, "jar"), key + ".jar"));
+            scripts.add(new File(new File(cache, "py"), key + ".py"));
+            scripts.add(new File(new File(cache, "js"), key + ".js"));
+        }
+        return scripts;
+    }
+
+    /**
+     * Removes whatever is left after every module was cleared through its owner: the leftovers, the
+     * plugin script directories and the unclassified cache a tiered plan deliberately protects.
+     *
+     * <p>Carve-outs, in the order they are checked: a subtree the caller preserved (a playback cache
+     * that has to wait for playback to stop, the script of a running loader), a file a transfer is
+     * using right now, the mpv recovery files, and symbolic links. A directory that still holds one
+     * of these keeps existing, because deleting it would take the preserved entry with it.</p>
+     */
+    static void sweepResidual(File cache, List<File> preserved, boolean updaterDownloading,
+                              boolean apkUrlPushing, List<String> warnings) {
+        File[] children = cache == null ? null : cache.listFiles();
+        if (children == null) {
+            warnings.add("cache root unreadable");
+            return;
+        }
+        HashSet<String> kept = new HashSet<>();
+        for (File file : preserved) if (file != null) kept.add(file.getAbsolutePath());
+        for (File child : children) sweepEntry(child, kept, updaterDownloading, apkUrlPushing, warnings);
+    }
+
+    private static void sweepEntry(File file, Set<String> preserved, boolean updaterDownloading,
+                                   boolean apkUrlPushing, List<String> warnings) {
+        if (file == null || !file.exists() || preserved.contains(file.getAbsolutePath())) return;
+        if (CachePathSafety.isSymbolicLink(file)) {
+            warnings.add("symbolic link skipped: " + file.getName());
+            return;
+        }
+        if (PROTECTED_NAMES.contains(file.getName())) {
+            warnings.add("protected file skipped: " + file.getName());
+            return;
+        }
+        if (CacheTempFilePolicy.isInUse(file.getName(), updaterDownloading, apkUrlPushing)) {
+            warnings.add("in use skipped: " + file.getName());
+            return;
+        }
+        if (file.isDirectory()) {
+            File[] children = file.listFiles();
+            if (children == null) {
+                warnings.add("unreadable directory: " + file.getName());
+                return;
+            }
+            for (File child : children) sweepEntry(child, preserved, updaterDownloading, apkUrlPushing, warnings);
+            File[] remaining = file.listFiles();
+            if (remaining != null && remaining.length > 0) return;
+        }
+        if (!file.delete()) warnings.add("delete failed: " + file.getName());
     }
 
     private static CacheCleanupResult cleanModule(CacheModuleId id, CacheCleanupMode mode) {
@@ -170,16 +339,17 @@ public final class CacheCleanupManager {
         File cache = App.get().getCacheDir();
         long limit = CachePolicyStore.getLimit(id);
         long retention = CachePolicyStore.getRetentionDays() * 24L * 60L * 60L * 1000L;
+        boolean now = explicitRequest(mode);
         return switch (id) {
             case EXO -> outcome(MediaSourceFactory.clearCacheIfIdle());
             case MPV_HLS -> outcome(MpvHlsCacheCoordinator.shared(Path.cache("mpv_hls")).clearIfIdle());
             case MPV_DEMUXER -> clearTree(new File(cache, "mpv-demuxer-cache"));
             case MPV_RUNTIME -> clearTrees(new File(cache, "mpv_lut_shaders"), new File(cache, "fontconfig"));
-            case LYRICS -> mode == CacheCleanupMode.MODULE
+            case LYRICS -> now
                     ? outcome(LyricsRepository.clearCache() >= 0)
                     : outcome(CacheRetentionManager.applyLimit(new File(cache, "lyrics"), limit,
                     retention, System::currentTimeMillis, Set.of()));
-            case KARAOKE -> mode == CacheCleanupMode.MODULE
+            case KARAOKE -> now
                     ? outcome(KaraokeTrackRepository.clearCache())
                     : outcome(CacheRetentionManager.applyLimit(new File(cache, "karaoke_tracks"), limit,
                     retention, System::currentTimeMillis, Set.of()));
@@ -188,21 +358,52 @@ public final class CacheCleanupManager {
                 yield new Outcome(true, List.of());
             }
             case WEBHOME_RAW -> outcome(WebHomeRawAdapter.clearCache());
-            case EPG -> mode == CacheCleanupMode.MODULE ? outcome(EpgParser.clearCache())
+            case EPG -> now ? outcome(EpgParser.clearCache())
                     : outcome(CacheRetentionManager.applyLimit(new File(cache, "epg"), limit,
                     Math.min(retention, 6L * 60L * 60L * 1000L), System::currentTimeMillis, Set.of()));
             case GLIDE -> {
                 Glide.get(App.get()).clearDiskCache();
                 yield new Outcome(true, List.of());
             }
-            case PLUGIN_SCRIPTS -> clearPluginCache(retention, Set.copyOf(BaseLoader.get().activePluginKeys()));
-            case TEMP_FILES -> clearTemporaryFiles(TEMP_RETENTION_MS, limit);
+            case PLUGIN_SCRIPTS -> clearPluginCache(explicitRetention(mode, retention),
+                    Set.copyOf(BaseLoader.get().activePluginKeys()));
+            case TEMP_FILES -> clearTemporaryFiles(cache, explicitRetention(mode, TEMP_RETENTION_MS), limit,
+                    Updater.isDownloading(), ApkUrlPush.isActive(), System.currentTimeMillis());
             case DIAGNOSTIC_LOGS -> outcome(clearDiagnosticLogs());
             case LEGACY_FILES -> clearLegacyPaths(cache, mode);
             // Owner-managed and deliberately unreported: a cleanup must not guess at caches whose
-            // owner is unknown, so this module is only ever measured.
+            // owner is unknown, so this module is only ever measured. The full sweep is the one
+            // caller that may remove it, because that is its documented job.
             case UNCLASSIFIED -> new Outcome(true, List.of());
         };
+    }
+
+    /**
+     * True when the user asked for exactly these files (the per-row button, or the settings row's
+     * long-press "clear everything").
+     *
+     * <p>An explicit request ignores the age windows a tiered or automatic run keeps. That rule
+     * already applied to the legacy paths, and the temporary-file row was the one module that
+     * missed it: the row reported freshly written {@code webhtv-*.zip} / {@code update.apk}
+     * leftovers, the button applied the 24-hour retention meant for background runs, and the result
+     * was "released nothing, deleted 0 files" with the reported files still on disk. Files a
+     * running transfer is using stay protected in every mode.</p>
+     */
+    static boolean explicitRequest(CacheCleanupMode mode) {
+        return mode == CacheCleanupMode.MODULE || mode == CacheCleanupMode.FULL;
+    }
+
+    /**
+     * The age window a deletion helper is handed: an explicit request keeps nothing back, a tiered
+     * or automatic run keeps the background window.
+     *
+     * <p>Every age-windowed module funnels through this single expression so the rule can be
+     * verified without an Android runtime and can not be re-broken at one call site. That is
+     * exactly how the temporary-file row came to report files it would not delete: the row's own
+     * button passed the 24-hour window meant for background runs.</p>
+     */
+    static long explicitRetention(CacheCleanupMode mode, long backgroundRetentionMs) {
+        return explicitRequest(mode) ? 0L : backgroundRetentionMs;
     }
 
     /**
@@ -217,7 +418,7 @@ public final class CacheCleanupManager {
      * deletes a staging directory that the current process is still using.</p>
      */
     private static Outcome clearLegacyPaths(File cache, CacheCleanupMode mode) {
-        long retentionMs = mode == CacheCleanupMode.MODULE ? 0 : LEGACY_RETENTION_MS;
+        long retentionMs = explicitRetention(mode, LEGACY_RETENTION_MS);
         boolean success = true;
         ArrayList<String> warnings = new ArrayList<>();
         for (CacheLegacyRules.Rule rule : CacheLegacyRules.rules()) {
@@ -244,16 +445,20 @@ public final class CacheCleanupManager {
         }
     }
 
-    private static Outcome clearTemporaryFiles(long retentionMs, long limitBytes) {
-        File cache = App.get().getCacheDir();
-        File[] files = cache.listFiles(File::isFile);
+    /**
+     * Removes the cache-root temporary family.
+     *
+     * <p>Every input is passed in instead of being re-read, so the clock and the transfer state that
+     * decide a deletion can be verified without an Android runtime, and the reporting call and the
+     * deleting call can never disagree about them.</p>
+     */
+    static Outcome clearTemporaryFiles(File cache, long retentionMs, long limitBytes,
+                                       boolean updaterDownloading, boolean apkUrlPushing, long now) {
+        File[] files = cache == null ? null : cache.listFiles(File::isFile);
         if (files == null) return new Outcome(false, List.of("cache root unreadable"));
-        long now = System.currentTimeMillis();
         boolean success = true;
         ArrayList<String> warnings = new ArrayList<>();
         ArrayList<File> remaining = new ArrayList<>();
-        boolean updaterDownloading = Updater.isDownloading();
-        boolean apkUrlPushing = ApkUrlPush.isActive();
         TemporaryFamily family = temporaryFamily(cache);
         for (File file : files) {
             String name = file.getName();
@@ -456,6 +661,13 @@ public final class CacheCleanupManager {
         return new Outcome(success, success ? List.of() : List.of("owner cleanup failed"));
     }
 
-    private record Outcome(boolean success, List<String> warnings) {
+    /**
+     * Bytes and files of one measurement, kept local so the full-clean progress does not depend on
+     * a module id it does not have.
+     */
+    private record CacheUsage(long bytes, long files) {
+    }
+
+    record Outcome(boolean success, List<String> warnings) {
     }
 }

@@ -91,6 +91,21 @@ public class CachePolicyEngineTest {
         assertFalse(CachePolicyEngine.manualCleanupAllowed(CacheModuleId.LEGACY_FILES, null));
     }
 
+    /**
+     * The settings row's long-press shortcut clears every module, including the report-only ones a
+     * tiered plan deliberately protects, and it is the mode that selects the full clean path.
+     */
+    @Test
+    public void fullPlanCoversEveryModuleExactlyOnce() {
+        CacheCleanupPlan plan = CachePolicyEngine.plan(CacheCleanupMode.FULL);
+        assertEquals(CacheCleanupMode.FULL, plan.mode());
+        assertEquals(CacheModuleId.values().length, plan.modules().size());
+        assertEquals(plan.modules().size(), plan.modules().stream().distinct().count());
+        assertTrue(plan.modules().contains(CacheModuleId.EXO));
+        assertTrue(plan.modules().contains(CacheModuleId.DIAGNOSTIC_LOGS));
+        assertTrue(plan.modules().contains(CacheModuleId.UNCLASSIFIED));
+    }
+
     @Test
     public void modulePlanIsExplicitAndSingleModule() {
         assertEquals(List.of(CacheModuleId.LYRICS),

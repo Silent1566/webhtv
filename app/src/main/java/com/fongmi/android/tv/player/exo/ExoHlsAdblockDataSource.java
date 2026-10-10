@@ -161,9 +161,7 @@ final class ExoHlsAdblockDataSource implements DataSource {
 
     private static String notice(HlsAdblockPipeline.Outcome outcome) {
         int removed = outcome.removedSegments() > 0 ? outcome.removedSegments() : (outcome.legacy() ? 1 : 0);
-        return outcome.structured() && outcome.removedDurationSec() > 0
-                ? String.format(Locale.US, "已跳过 %d 个广告片段（%.1f 秒）", removed, outcome.removedDurationSec())
-                : "已跳过 " + removed + " 个广告片段";
+        return HlsAdblockNotice.message(removed, outcome.removedDurationSec());
     }
 
     record Result(String manifest, boolean changed, String notice) {}

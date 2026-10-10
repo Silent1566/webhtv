@@ -156,6 +156,12 @@
         </service>
 
         <service
+            android:name=".service.ReaderTtsService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback"
+            android:stopWithTask="true" />
+
+        <service
             android:name=".service.ManageService"
             android:exported="false"
             android:foregroundServiceType="dataSync|connectedDevice"

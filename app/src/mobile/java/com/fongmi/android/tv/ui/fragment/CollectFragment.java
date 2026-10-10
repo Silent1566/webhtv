@@ -639,8 +639,11 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
     }
 
     private GradientDrawable getGroupPopupBackground() {
+        // 同 SearchFragment.getScopePopupBackground()：面板写死 Color.WHITE 时，深色模式下
+        // 近白字的 colorOnSurface 压在白底上只有 1.29:1，分组下拉根本看不清。
+        // 面板与 item 文字改用同一张表（M3 菜单容器 colorSurfaceContainer）。
         GradientDrawable drawable = new GradientDrawable();
-        drawable.setColor(Color.WHITE);
+        drawable.setColor(ThemeController.current().colorSurfaceContainer());
         drawable.setCornerRadius(ResUtil.dp2px(6));
         return drawable;
     }
