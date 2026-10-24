@@ -207,8 +207,8 @@ gradlew.bat :app:compileLeanbackArm64_v8aDebugJavaWithJavac :app:compileMobileAr
 | 阶段 | 状态 | 落地内容 | 验证 |
 | --- | --- | --- | --- |
 | P0 `TmdbMatcher` 比较侧归一 | **已完成** | 新增 `canonicalTitle()`＝`Trans.s2t(false, text)` 与 `compareKey()`＝`normalize(canonicalTitle())`；`chooseStrictMatch` / `chooseContainedYearMatch` / `chooseSmartMatch` / `titleSimilarityScore` 的比较两侧全部改用 `compareKey`；`sortSearchResults` 改为先在比较器外算一次相似度（`IdentityHashMap`），避免在排序中反复做简繁转换 | 新增 `app/src/testMobile/java/com/fongmi/android/tv/ui/helper/TmdbMatcherHantTest.java`：**改前 3/5 失败**（`strictMatch_acceptsTraditionalSourceTitleAgainstSimplifiedTmdbTitle`、`strictMatch_matchesWithTraditionalInterfaceLanguageEnabled`、`containedYearMatch_acceptsTraditionalSourceTitle`），改后 5/5 通过；`--tests "com.fongmi.android.tv.ui.helper.*"` 361 例全绿；leanback + mobile `compile*JavaWithJavac` 均 BUILD SUCCESSFUL |
-| P1 `TmdbMatchCache.sourceKey` 语言无关 | 待做 | 见第 3.1 节；需注意老缓存一次性失配，可做新旧双键兜底 | — |
-| P1 `MediaTitleParser` 繁体噪声词表 | 待做 | 见第 3.1 节 | — |
+| P1 `TmdbMatchCache.sourceKey` 语言无关 | **已完成** | `normalize()` 改为 `legacyNormalize(canonicalTitle(text))`，新增 `canonicalTitle()`＝`Trans.s2t(false, text)`；写入一律走新格式键；`findEntry` 增加旧格式键兜底（`legacyKey` / `legacyTitleKey`），`findManualEntry` 的别名比对同时认新旧两种归一，避免升级后历史匹配结果一次性失效 | 新增 `app/src/test/java/com/fongmi/android/tv/bean/TmdbMatchCacheHantTest.java`（简写繁读、繁写简读、手动选择跨字形仍可读、旧格式键仍可读、不同片名不粘连） |
+| P1 清洗词表繁体等价词 | **已完成** | `app/src/main/java/com/fongmi/android/tv/title/MediaTitleParser.java` 的 `cleanTitle` 三处正则与 `isNoiseTag`，以及 `app/src/main/java/com/fongmi/android/tv/ui/helper/TmdbMatcher.java` 的 `cleanVideoName` 与 `isNoiseTag`，均补上高碼/無水印/無台標/國語/國配/國粵/粵語/內封/簡繁/雙語/合集/完結/未刪減/加長版/修復版/連載至/台灣版/大陸版/內地版/中國版/韓版/美國版/英國版 等繁体写法 | 新增 `app/src/test/java/com/fongmi/android/tv/title/MediaTitleParserHantTest.java`（`慶餘年（高碼）`→`慶餘年`、`與鳳行 國語中字`→`與鳳行`、`贅婿 連載至第30集`→`贅婿` 等 6 例） |
 
 **实施中确认的两个补充事实**：
 
