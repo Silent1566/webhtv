@@ -87,6 +87,12 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
     private boolean lock;
     private int render = -1;
     private int requestedAspectMode = VideoAspectMode.ORIGINAL;
+    private boolean resizeApplied;
+    private int resizeAppliedMode;
+    private int resizeAppliedEffectiveMode;
+    private int resizeAppliedTargetAspect;
+    private int resizeAppliedContentAspect;
+    private boolean resizeAppliedStretch;
     private ExoOutputModeManager exoOutputModeManager;
     private ExoAssSession attachedAssSession;
     private ExoSubtitleSession attachedSubtitleSession;
@@ -481,17 +487,48 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
         PlayerView view = getExoView();
         VideoAspectMode.Spec spec = VideoAspectMode.resolve(resizeMode, viewportAspectRatio(view), PlayerSetting.getCustomAspectRatio());
         int effectiveResizeMode = effectiveResizeMode(spec.resizeMode());
+        float contentAspectRatio = spec.hasTargetAspectRatio() ? spec.targetAspectRatio() : sourceAspectRatio();
+        if (!VideoAspectMode.isValidRatio(contentAspectRatio)) contentAspectRatio = 0f;
+        // 同一次进入播放页里，这个方法会被 onPlayerRenderRequired / onPlayerRebuild / 子类 setScale
+        // 以及 applyResizeMode 自己排的第二次 view.post 反复触发（设备实测 14-16 对）。
+        // 每一对都要拼 20+ 字段的日志、写 4 行 logcat、再 requestLayout 两次，
+        // 全都压在首帧窗口的主线程上。决策输入完全相同时直接返回。
+        // 键包含所有影响结果的量（模式/有效模式/目标比例/来源比例/stretch），
+        // 任一输入变化（视频尺寸到位、切集、切渲染、改比例）都会让键不同，仍然真实施加。
+        if (isResizeModeApplied(resizeMode, effectiveResizeMode, spec.targetAspectRatio(), contentAspectRatio, spec.stretch())) return;
         logSurfaceState("applyResizeMode before mode=" + resizeMode + " effective=" + effectiveResizeMode + " aspect=" + spec.targetAspectRatio());
         if (mService != null) player().setVideoAspect(spec.targetAspectRatio(), spec.stretch());
         view.setResizeMode(effectiveResizeMode);
         AspectRatioFrameLayout content = view.findViewById(androidx.media3.ui.R.id.exo_content_frame);
-        float contentAspectRatio = spec.hasTargetAspectRatio() ? spec.targetAspectRatio() : sourceAspectRatio();
-        if (!VideoAspectMode.isValidRatio(contentAspectRatio)) contentAspectRatio = 0f;
         if (content != null) content.setAspectRatio(contentAspectRatio);
         view.requestLayout();
         View surface = view.getVideoSurfaceView();
         if (surface != null) surface.requestLayout();
         logSurfaceState("applyResizeMode after mode=" + resizeMode + " effective=" + effectiveResizeMode + " aspect=" + contentAspectRatio);
+    }
+
+    private boolean isResizeModeApplied(int resizeMode, int effectiveResizeMode,
+                                        float targetAspectRatio, float contentAspectRatio, boolean stretch) {
+        int targetBits = Float.floatToIntBits(targetAspectRatio);
+        int contentBits = Float.floatToIntBits(contentAspectRatio);
+        if (resizeApplied && resizeAppliedMode == resizeMode
+                && resizeAppliedEffectiveMode == effectiveResizeMode
+                && resizeAppliedTargetAspect == targetBits
+                && resizeAppliedContentAspect == contentBits
+                && resizeAppliedStretch == stretch) {
+            return true;
+        }
+        resizeApplied = true;
+        resizeAppliedMode = resizeMode;
+        resizeAppliedEffectiveMode = effectiveResizeMode;
+        resizeAppliedTargetAspect = targetBits;
+        resizeAppliedContentAspect = contentBits;
+        resizeAppliedStretch = stretch;
+        return false;
+    }
+
+    private void invalidateAppliedResizeMode() {
+        resizeApplied = false;
     }
 
     private float viewportAspectRatio(PlayerView view) {
@@ -750,6 +787,8 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
         if (binding.applied()) {
             if (binding.detachedFirst()) getExoView().setPlayer(null);
             getExoView().setPlayer(binding.player());
+            // 换了引擎实例，PlayerView 内部状态与视频尺寸都可能变，比例必须重算一次。
+            invalidateAppliedResizeMode();
             surfaceDiagnostics.rebind("attach", binding.detachedFirst(), getExoView().getVideoSurfaceView());
             logSurfaceState("attach after setPlayer");
             syncVideoSurfaceSize(null);
@@ -902,6 +941,8 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
         getExoView().setRender(temporaryRender);
         getExoView().setRender(targetRender);
         render = -1;
+        // 引擎换过、PlayerView 也被重置过，上一次施加的比例不再可信。
+        invalidateAppliedResizeMode();
     }
 
     protected void reattachVideoSurfaceAfterReparent() {

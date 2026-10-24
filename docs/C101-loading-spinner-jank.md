@@ -226,3 +226,48 @@ XML 事实：`@+id/loading`（148dp×112dp，含 `ProgressBar indeterminate` + `
 - `catvod/src/test/java/com/github/catvod/crawler/DebugLogStoreTest.java:22/:34` 仍引用已删除的 `DebugLogStore.trimLines/readTail` → `:catvod:testDebugUnitTest` 整体不可编译（既有缺陷）。
 - 工作区 `core.autocrlf=true` 导致 6 个源码契约测试硬编码 LF 断言恒失败（mobile 4、leanback +2），与本任务无关。
 - `emulator-5556` 上 `simpleperf record -p <pid>` 恒 0 samples、`-e cpu-cycles` 与 dwarf callchain 均不支持、`atrace` 无 trace folder、`kill -3` 不产 `/data/anr/` → 该模拟器无法做栈级归因，播放页归因改用 logcat 时间线 + framestats。
+
+## 11. S7（播放页首帧窗口内的固定开销）实施记录（2026-10-24 20:0x 起）
+
+在 §10.4 的结论上继续追播放页残留。以下四项全部来自设备实测证据，不含推测性优化。
+
+### 11.1 证据来源
+
+- AOT 后 + `debug_log=false` 的 `s6-aot-off` 采样（emulator-5556）：load-early janky 42.86% / 36.90%，p99 1100 / 950ms；framestats 显示长帧几乎只来自 `starve`（p99 1000 / 350ms）与偶发 `trav` 383 / 434ms，`after`/`sync`/`draw` 三相均 <50ms。
+- `trav=383ms` 那一帧（PT 19:44:25.719 → DS 19:44:26.102）的 logcat 覆盖 `19:44:25.523 TV-Shell: Shell command 'getprop ro.serialno'`、`getEpisodeTitles` 三次重算与 `applyResizeMode before/after` 成对刷屏。
+- 一次进入播放页实测重复：`applyResizeMode before/after` 16 / 14 组、`MPV_SIZE: video layout new` 17 / 21 行；`exo-audio` 日志步骤独占 354–757ms（`19:24:45.566`→`:46.852` 中最后一段）。
+- 进度 tick（`Clock.doJob` 每秒 → `PlaybackEventCollector.onProgress` → `PlaybackRecord.clientKey()` → `Device.get()`）每次都会重扫 `NetworkInterface.getByName(eth0/wlan0)`、`Settings.Secure`、`Build` 字段。
+
+### 11.2 S7-1 `applyResizeMode` 幂等（`app/src/main/java/com/fongmi/android/tv/ui/activity/PlaybackActivity.java`）
+
+- `applyResizeModeNow` 先算完 `effectiveResizeMode` 与 `contentAspectRatio`，再用 `isResizeModeApplied(...)` 比对「上一次真正应用过的参数」（模式、有效模式、目标比例、内容比例的 `Float.floatToIntBits`、stretch）；全等则直接返回，不再打日志、不再 `setVideoAspect`、不再请求 layout。
+- 新增字段 `resizeApplied / resizeAppliedMode / resizeAppliedEffectiveMode / resizeAppliedTargetAspect / resizeAppliedContentAspect / resizeAppliedStretch` 与 `invalidateAppliedResizeMode()`；后者在 `resetVideoSurfaceForDecoderSwitch()`（`render = -1;` 之后）与 `attachSurface(...)`（`setPlayer(...)` 之后）调用，保证换了 surface 一定重算。
+- `applyResizeMode(int)` 的 `view.post` 二次调用保留（首帧尺寸可能尚未确定），但第二次通常命中守卫直接返回。
+- 新增 `app/src/test/java/com/fongmi/android/tv/ui/activity/PlaybackActivityResizeModeIdempotenceTest.java`（4 例）：守卫先于一切副作用、六个比较项齐全、两类重绑都会失效缓存、二次 post 仍在且不自递归。
+
+### 11.3 S7-2 移除音频能力探测（`app/src/main/java/com/fongmi/android/tv/player/exo/ExoUtil.java`）
+
+- `buildAudioSink(...)` 的诊断块原本调用 `AudioCapabilities.getCapabilities(...)` 取通道数/AC3 支持，该路径会在主线程同步创建并释放 `AudioTrack`，设备实测这一行日志独占 354–757ms。
+- 改为只记录本方法已算好的配置量：`SpiderDebug.log("exo-audio", "configured passthrough=%s floatOutput=%s playbackParams=%s offloadPolicy=%s", ...)`，不再触碰音频硬件；`AudioCapabilities` 的 import 一并删除。
+- offload 策略装配顺序不变（`directPolicy.setAudioPassthroughEnabled(passthrough)` → `AudioTrackAudioOutputProvider.Builder`）。
+- 新增 `app/src/test/java/com/fongmi/android/tv/player/exo/ExoUtilAudioCapabilityLogTest.java`（3 例）：日志不再触发硬件探测、日志本身与 `isEnabled()` 门禁保留、装配顺序不变、未用 import 不回流。
+
+### 11.4 S7-3 设备身份进程内缓存（`app/src/main/java/com/fongmi/android/tv/bean/Device.java`、`playback/PlaybackRecord.java`）
+
+- 稳定身份（serial / eth MAC / wlan MAC / Android ID / 型号 / 设备形态）在进程生命周期内不变，改为 `ensureIdentity()` 双检锁一次性探测，字段 `identitySerial/identityEth/identityWlan/identityUuid/identityName/identityType` 缓存。
+- `Device.get()` 仍返回新的可变实体（调用方会 setter 后 `save()`），`setTime(App.time())` 与 `setIp(Server.get().getAddress())` 继续每次实时取——地址会随网络变化。
+- 新增 `Device.identityUuid()`（空值归一为空串）；播放中的每秒进度 tick 走 `PlaybackRecord.clientKey()` → `Device.identityUuid()`，不再构造整个 `Device`、不再枚举网卡。
+- 新增 `app/src/test/java/com/fongmi/android/tv/bean/DeviceIdentityCacheTest.java`（4 例）：`get()` 不再逐次探测、双检锁形态、热调用点用廉价访问器、返回值新鲜度约束仍成立。
+
+### 11.5 S7-4 mobile 播放页日志与 intent 解析降本（`app/src/mobile/java/com/fongmi/android/tv/ui/activity/VideoActivity.java`）
+
+- `getEpisodeTitles()` 结果缓存（`episodeTitles/episodeTitlesReady`），intent extras 由 `episodeTitleValues()` 只反序列化一次；`onNewIntent` 在 `getIntent().putExtras(intent);` 之后调用 `invalidateEpisodeTitlesCache()` 失效两层缓存。方法名与调用形态未变（多处源码契约测试依赖）。
+- 去掉三处每次调用都打的 `Log.d`（`集数标题数量`、`getEpisodeTitles - values`、`isIntentTmdbPlayback`），`applyTmdbEpisodeTitles` 不再逐集打印，改为一行 `applyTmdbEpisodeTitles applied=N/M`；`Setting.isTmdbEpisodeFileSize()` 提到循环外。
+- leanback 侧同名方法本来就没有这些日志，本次不动（保持两侧行为一致，仅补齐 mobile 的历史遗留）。
+- 新增 `app/src/testMobile/java/com/fongmi/android/tv/ui/activity/VideoActivityEpisodeTitlesCacheTest.java`（4 例）：extras 只读一次、换条目必须失效、不再逐集打日志、对外方法名不变。
+
+### 11.6 验证
+
+- 定向：`bash ./gradlew :app:testMobileArm64_v8aDebugUnitTest --tests '*PlaybackActivityResizeModeIdempotenceTest' --tests '*ExoUtilAudioCapabilityLogTest' --tests '*DeviceIdentityCacheTest' --tests '*VideoActivityEpisodeTitlesCacheTest'` → `BUILD SUCCESSFUL`（15 tests, 0 failed）。
+- 全量：`:app:testMobileArm64_v8aDebugUnitTest` **5350 tests / 4 failed / 2 skipped**；`:app:testLeanbackArm64_v8aDebugUnitTest` **4563 tests / 6 failed / 2 skipped**。失败集合与 §10.6 记录的既有 CRLF 冤案完全一致（mobile：`ReaderPlaybackRoutingSourceTest` ×2、`TmdbSourceOnlyInteractionTest`、`WebThemeTokenSourceTest`；leanback 再加 `SearchResultDownFocusTest`、`NativeEnhancedPlaybackStyleFocusTest`），无新增。
+- 双 flavor `:app:compile{Mobile,Leanback}Arm64_v8aDebugJavaWithJavac` 均随上述任务通过。
