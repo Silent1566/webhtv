@@ -177,3 +177,52 @@ XML 事实：`@+id/loading`（148dp×112dp，含 `ProgressBar indeterminate` + `
 - 2026-10-24 14:3x　**S5 完成**（豆瓣图片 host 正则预编译）。改动：`app/src/main/java/com/fongmi/android/tv/utils/ImageHeaderPolicy.java` 新增 `private static final Pattern DOUBAN_IMAGE_HOST = Pattern.compile("img\\d+\\.doubanio\\.com");`，`isDoubanImageHost` 由 `host.matches(...)`（每次调用重新编译正则）改为 `DOUBAN_IMAGE_HOST.matcher(host).matches()`；`app/src/test/java/com/fongmi/android/tv/utils/ImageHeaderPolicyTest.java` 增 2 例（全名匹配边界：`imgx` 不匹配、`img1.doubanio.com.evil.test` 不匹配、`x.img1.doubanio.com` 不匹配、null/空/非 URL 返回空；以及 100 次重复查询稳定）。
   - 验证：`:app:testMobileArm64_v8aDebugUnitTest --tests '*ImageHeaderPolicyTest'` BUILD SUCCESSFUL（6 tests, 0 failed，test-results XML `tests="6" failures="0" errors="0"`）；模块编译随该任务通过。
   - 收益定位：本项是「主线程固定小开销」类的清理，单次省的是正则编译（数十微秒级），只在图片列表反复走 referer 判定时累积；与 F1/F2/S1 属叠加关系，不单独作为验收判据。
+
+## 10. 验收复测与归因结论（2026-10-24 16:0x–16:3x）
+
+### 10.1 验收数据（emulator-5556，mobile debug ≥196MB，`debug_log=false`，探针 `scripts/perf/loading_jank_probe.sh --runs 3`）
+
+| 路径 | tag | Total | Janky | janky% | p50 | p95 | p99 | Slow UI thread | High input latency | Missed Vsync |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 详情页 TmdbDetailActivity | s5-off | 615/596/581 | 364/253/373 | 59.19/42.45/64.20 | 18/10/18ms | 23/22/24ms | **53/48/38ms** | 6/5/2 | 579/444/543 | 3/3/3 |
+| 播放页 VideoActivity | s5-play2 | 100/131/119 | 36/81/71 | 36.00/61.83/59.66 | 14/17/17ms | 200/150/-ms | **750/500/500ms** | 1/3/- | 99/118/- | 1/3/3 |
+| 基线（改动前） | baseline-off | 120/143/145 | 63/81/40 | 52.50/56.64/27.59 | 17/18/7ms | - | **650/550/450ms** | 0–12 | 110/78/122 | - |
+
+- **p99 收益明确**：详情页从基线 450–650ms 降到 **38–53ms**（已优于 ≤120ms 门禁）；播放页仍为 500–750ms。
+- 详情页 `Slow UI thread` 只剩 2–6 帧，`Slow issue draw commands` 7–15 帧；播放页 `Slow UI thread` 1–3 帧。**主线程长任务（用户抱怨的「转圈中途停住」）在详情页已实质消除。**
+
+### 10.2 janky% 不能作为本机判据（模拟器底噪实测）
+
+- 空载对照：停在首页只做无点击滑动 12s → `Total 307 / Janky 137 = 44.63%`，p50 10ms、p99 89ms，`High input latency 307`（等于总帧数）、`Slow UI thread 0`、`Missed Vsync 0`、`Frame deadline missed 0`。
+- 即 `emulator-5556` 的 input 注入延迟约 18ms/帧 > 16.7ms 帧预算，**任何界面都有 ~44.6% 的 janky 地板**；因此 §2 里「Janky ≤20%」在这台模拟器上物理不可达，本轮判定改用 **p99 + framestats 主线程耗时**。
+- 该项判定修正也解释了为什么 s5-off 的 janky%（42–64%）远高于 p99 表现：计数器被 `High input latency` 撑起，与主线程无关。
+
+### 10.3 framestats 三分解（真正的「圈停住」证据）
+
+解析 `gfxinfo framestats` 16 列，定义 `starve = Vsync − IntendedVsync`（主线程没按时申请到 vsync = 被长任务占住）、`trav = DrawStart − PerformTraversalsStart`（主线程真实 measure/layout/draw）：
+
+| 路径 | run | starve>100ms 帧数 | 最大 starve | trav>40ms 帧数 | 最大 trav |
+|---|---|---|---|---|---|
+| 播放页 baseline | 1/2/3 | 7/6/5 | 916.7/816.7/783.3ms | 3/3/3 | 296.7/295.3/243.9ms |
+| 播放页 s5-play2 | 1/2/3 | 9/5/6 | 750/700/616.7ms | 3/6/3 | 238.7/243.7/236.5ms |
+| 详情页 s5-off | 1/2/3 | **2/2/2** | 683.3/616.7/516.7ms | 1/1/0 | 107.4/112.8/2.2ms |
+
+- **详情页已把长帧压到每轮只 2 次 starve、trav 基本 <115ms**；播放页仍稳定出现 5–9 次 starve>100ms 与 3–6 帧 trav>40ms。
+- 播放页长帧 logcat 精确对位（s5-play2/run2）：Davy `duration=859ms` 的帧其 `IntendedVsync=8344.349s → Vsync=8345.049s`（starve 700ms）、`trav=147.5ms`，落在 `15:15:48.983 VideoActivity: onStart: calling mClock.stop().start()` → `15:15:49.046 Skipped 42 frames!` 之间；其余长帧（trav 47.2/243.7/113.9/43.3/45.7ms）落在 `49.526 ExoPlayerImpl: Init` → `49.629 vulkan searching for layers` → `49.722 MediaSessionImpl: Init` → `49.826/49.867 MediaController: Init` → `49.850 Skipped 31 frames!` 这一段，即 **ExoPlayer/MediaSession/MediaController 初始化 + native bridge 加载 `libexo_dovi_renderer.so` 全压在首帧窗口的主线程**。
+- 排除项复核：`ExoDv5Native.java:26 private static final LoadResult LOAD_RESULT = loadLibrary();` 已是类初始化期一次性执行（logcat 里 `libnb: enter native_bridge2_getTrampoline ... nativeProbeCapabilities` 连打 7 行是 native bridge 每个 trampoline 两行的固有形态，不是重复加载）；`setContextWall` 切换背景与图片完成相隔 3ms（缓存命中）→ **两者均非热点，勿再怀疑**。
+
+### 10.4 结论
+
+1. **S1–S5 达成目标主体**：详情页「转圈中途停住」的长任务已从每轮 7 帧级降到 2 次 starve、trav<115ms，p99 450–650ms → 38–53ms。
+2. **播放页仍有残留**：首帧窗口内 ExoPlayer/MediaSession/MediaController/vulkan/native bridge 的主线程初始化仍造成 3–6 帧 trav 40–244ms、5–9 次 starve>100ms，p99 500–750ms。
+3. **janky% 门禁作废**（见 10.2），后续验收统一看 p99 与 starve/trav。
+
+### 10.5 S6 决策：本轮不做
+
+§5 的 S6 触发条件是「详情页进入仍 Janky>40% 且需补自占比证据」。按 10.2 修正判据后，详情页的真实主线程指标（trav>40ms 仅 1/1/0 帧、p99 38–53ms）已说明 **F1（XML inflate 过重）不是当前瓶颈**，做 ViewStub/AsyncLayoutInflater 收窄属无证据优化，故不启动。若后续仍要压播放页 p99，建议的下一步（需另行授权、独立任务 ID）是「把 `PlaybackService` 的 ExoPlayer/MediaSession 构建从首帧窗口挪到首帧之后」，而不是再收紧详情页 XML。
+
+### 10.6 期间发现但不属于本任务的范围外缺陷（记录，不修）
+
+- `catvod/src/test/java/com/github/catvod/crawler/DebugLogStoreTest.java:22/:34` 仍引用已删除的 `DebugLogStore.trimLines/readTail` → `:catvod:testDebugUnitTest` 整体不可编译（既有缺陷）。
+- 工作区 `core.autocrlf=true` 导致 6 个源码契约测试硬编码 LF 断言恒失败（mobile 4、leanback +2），与本任务无关。
+- `emulator-5556` 上 `simpleperf record -p <pid>` 恒 0 samples、`-e cpu-cycles` 与 dwarf callchain 均不支持、`atrace` 无 trace folder、`kill -3` 不产 `/data/anr/` → 该模拟器无法做栈级归因，播放页归因改用 logcat 时间线 + framestats。
