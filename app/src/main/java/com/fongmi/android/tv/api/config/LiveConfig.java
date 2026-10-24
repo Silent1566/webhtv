@@ -32,7 +32,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class LiveConfig extends BaseConfig {
@@ -221,14 +220,27 @@ public class LiveConfig extends BaseConfig {
     private void finishLive(Config config, String spider) {
         CustomCspSetting.inject(getLives(), spider);
         getLives().removeIf(Live::isEmpty);
-        Map<String, Live> items = Live.findAll().stream().collect(Collectors.toMap(Live::getName, Function.identity()));
-        // 旧版本曾把简繁转换后的名字写进主键，历史行因此按“译文名”落库；这里按译文名再兜一次，
+        // 旧版本曾把简繁转换后的名字写进主键，历史行因此按“译文名”落库；这里按归一后的名字兜一次，
         // 让已经在繁体态保存过收藏/屏蔽/上次频道的用户在升级后仍能匹配上，而不是静默丢失。
-        Map<String, Live> legacy = new HashMap<>();
-        for (Live item : items.values()) legacy.putIfAbsent(Trans.s2t(item.getName()), item);
-        getLives().forEach(live -> live.sync(items.containsKey(live.getName()) ? items.get(live.getName()) : legacy.get(live.getName())));
+        // 归一化显式传 pass=false，与当前界面语言无关，否则同一份数据在两种语言下会得到不同键。
+        Map<String, Live> items = new HashMap<>();
+        for (Live item : Live.findAll()) items.putIfAbsent(Trans.s2t(false, item.getName()), item);
+        getLives().forEach(live -> live.sync(items.get(Trans.s2t(false, live.getName()))));
         // 同理，Config.home 也可能是旧版本写入的译文名，两种写法都认。
-        setHome(config, getLives().isEmpty() ? new Live() : getLives().stream().filter(item -> item.getName().equals(config.getHome()) || item.getDisplayName().equals(config.getHome())).findFirst().orElse(getLives().get(0)), false);
+        setHome(config, getLives().isEmpty() ? new Live() : getLives().stream().filter(item -> matchesHome(item, config.getHome())).findFirst().orElse(getLives().get(0)), false);
+    }
+
+    /**
+     * 上次频道是否就是这一条直播源。
+     * <p>
+     * 旧版本把简繁转换后的名字写进 {@code Config.home}，所以除了当前语言的显示名，
+     * 还要把候选名与配置值都做一次双向简繁归一后再比，避免升级后静默退回第一个频道。
+     */
+    private boolean matchesHome(Live item, String home) {
+        if (TextUtils.isEmpty(home)) return false;
+        if (item.getName().equals(home) || item.getDisplayName().equals(home)) return true;
+        // 归一必须与当前界面语言无关，因此显式传 pass=false 强制转换，而不是用受语言状态影响的 s2t(String)。
+        return Trans.s2t(false, item.getName()).equals(Trans.s2t(false, home));
     }
 
     public void setKeep(Channel channel) {
