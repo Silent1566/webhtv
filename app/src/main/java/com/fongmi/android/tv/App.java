@@ -25,11 +25,13 @@ import com.fongmi.android.tv.remote.RemoteAgent;
 import com.fongmi.android.tv.setting.AppBranding;
 import com.fongmi.android.tv.setting.ProxySetting;
 import com.fongmi.android.tv.setting.Setting;
+import com.fongmi.android.tv.subtitle.provider.SubtitleProviderRegistry;
 import com.fongmi.android.tv.theme.ThemeController;
 import com.fongmi.android.tv.utils.DanmakuSearchListFocusFixer;
 import com.fongmi.android.tv.utils.NsdDeviceDiscovery;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.PreviousProcessExitLogger;
+import com.fongmi.android.tv.utils.Task;
 import com.fongmi.android.tv.utils.WebViewDataDirectoryGuard;
 import com.fongmi.hook.Hook;
 import com.github.catvod.crawler.DebugLogStore;
@@ -131,7 +133,20 @@ public class App extends Application implements Application.ActivityLifecycleCal
         registerActivityLifecycleCallbacks(this);
         registerContentHandlers();
         resumeBackgroundServices();
+        warmSubtitleProviders();
         post(() -> CacheScheduler.get().start(), 30_000L);
+    }
+
+    /**
+     * 字幕提供方注册表的首次初始化会同步启动 CPython 并导入 webhtv_logging / app 模块
+     * （设备实测约 0.9s，debuggerd 抓栈显示主线程停在 libpython3.10.so）。
+     * 它过去发生在播放页 Activity 的构造期
+     * （VideoActivity / TmdbDetailActivity -> SubtitlePlaybackSession -> DefaultController
+     * -> SubtitleMatchService -> SubtitleProviderRegistry.get()），正好压在首帧窗口里。
+     * 现在提前到 App 启动的后台线程，用户从首页点进播放页时这份成本已经付完。
+     */
+    private void warmSubtitleProviders() {
+        Task.execute(SubtitleProviderRegistry::get);
     }
 
     private void registerContentHandlers() {

@@ -10,10 +10,10 @@
 - 目标：让「进入详情页/播放页时加载中动画（含播放器加载圈）」不再卡顿（转圈中途停住再恢复）。
 - 验收：同一探针脚本 `scripts/perf/loading_jank_probe.sh`、debug_log 开/关两态各 3 次采样，进入卡片窗口 **Janky ≤20%、p99 ≤120ms、无 `Skipped ≥60 frames!`**；功能不变（详情渲染、内联自动播放、详情直放、换源/重匹配）；回归门禁全绿。
 - 当前文件/符号：见 §5 分阶段。
-- 已完成：探针脚本打通并采到基线；根因全部有证据（§3）。
-- 未验证的工作区改动：无（代码尚未改）。
-- 未决风险：设备是 interpret-only debug 构建，绝对帧时被放大（故用相对基线）；模拟器 uiautomator 不可用（已绕开）。
-- 下一步（唯一）：实施 S1（两 flavor `VideoActivity` 覆写 `deferPlaybackServiceBinding()`）。
+- 已完成：探针脚本打通并采到基线；根因全部有证据（§3）；S1–S5、S7、S9 已实现（§9/§11/§12），其中 S1–S7 已提交并带 recovery tag。
+- 未验证的工作区改动：无（S9 代码与测试已通过定向 + 双 flavor 全量单测）。
+- 未决风险：设备是 interpret-only debug 构建，绝对帧时被放大（故用相对基线）；模拟器 uiautomator 不可用（已绕开）；模拟器 janky% 有 ~44.6% 的输入延迟地板（§10.2），判定看 p99 与 framestats 相位。
+- 下一步（唯一）：完成 S9 的 guard finish 提交与 recovery tag，然后用探针做冷/热 A/B 复测（对比 §12.1 的 992ms/365ms 与 `Skipped 65 frames`）。
 
 ## 1. 问题陈述（用户可见现象）
 
@@ -271,3 +271,50 @@ XML 事实：`@+id/loading`（148dp×112dp，含 `ProgressBar indeterminate` + `
 - 定向：`bash ./gradlew :app:testMobileArm64_v8aDebugUnitTest --tests '*PlaybackActivityResizeModeIdempotenceTest' --tests '*ExoUtilAudioCapabilityLogTest' --tests '*DeviceIdentityCacheTest' --tests '*VideoActivityEpisodeTitlesCacheTest'` → `BUILD SUCCESSFUL`（15 tests, 0 failed）。
 - 全量：`:app:testMobileArm64_v8aDebugUnitTest` **5350 tests / 4 failed / 2 skipped**；`:app:testLeanbackArm64_v8aDebugUnitTest` **4563 tests / 6 failed / 2 skipped**。失败集合与 §10.6 记录的既有 CRLF 冤案完全一致（mobile：`ReaderPlaybackRoutingSourceTest` ×2、`TmdbSourceOnlyInteractionTest`、`WebThemeTokenSourceTest`；leanback 再加 `SearchResultDownFocusTest`、`NativeEnhancedPlaybackStyleFocusTest`），无新增。
 - 双 flavor `:app:compile{Mobile,Leanback}Arm64_v8aDebugJavaWithJavac` 均随上述任务通过。
+
+## 12. S9（字幕 ProviderRegistry / CPython 初始化移出主线程）实施记录（2026-10-25 起）
+
+### 12.1 证据：冷/热进入播放页的 A/B 对照
+
+同一 app 进程内先冷进播放页、BACK 回首页、再热进播放页（emulator-5556，mobile，detail_open_mode=2 直进 VideoActivity，debug_log=false，已 cmd package compile -m speed -f AOT），产物在仓库外 F:/Workspace/webtv2/whdiag/perf/cold2/：
+
+| 指标 | 冷入口 | 热入口 |
+|---|---|---|
+| START ... VideoActivity → VideoActivity: Clock started in initView | 992ms | 365ms |
+| 主线程（tid == pid）python.stderr: <frozen importlib._bootstrap>:283: DeprecationWarning: the load_module() method is deprecated | 有 | 无 |
+| Choreographer: Skipped N frames! | Skipped 65 / Skipped 30 / Skipped 43 | 无 |
+| Number Slow UI thread / Missed Vsync | 15 / 14 | 11 / 11 |
+| Davey | duration=791ms（starve≈333ms、trav≈372ms）、duration=984ms（starve≈717ms） | 无 |
+
+- 冷入口那 ~1.1s 主线程停顿 = 第二次 new Loader()（字幕侧）落在主线程；首页首次 Python.start 在后台线程（home.log 里 tid=31191），所以热入口只差这一份。
+- debuggerd <pid> 连续抓栈（coldseq/dbg1..8.txt）命中主线程停在 libpython3.10.so 帧 9 处 + libhoudini.so + art::ArtField::GetTypeDescriptor / FindFieldFast+613（解释执行），#6-8 次已回到 __epoll_pwait 空闲。
+- 触发链（全部在 Activity 字段初始化期，即构造期、主线程）：
+  VideoActivity.java:450（mobile）/ :409（leanback）/ TmdbDetailActivity.java:317 的 private final SubtitlePlaybackSession subtitlePlaybackSession = new SubtitlePlaybackSession(this);
+  → SubtitlePlaybackSession.DefaultController 的 private final SubtitleAutoController delegate = new SubtitleAutoController(...) 与 private final SubtitleMatchService manualService = new SubtitleMatchService();
+  → SubtitleMatchService() 里的 SubtitleProviderRegistry.get()
+  → 静态 INSTANCE → installBuiltinSources() → SubtitleSourceManager.install() → PythonSubtitleScriptRuntime → chaquo/Loader.java（Python.start + getModule("webhtv_logging") + getModule("app")，全同步）。
+
+### 12.2 S9-1 SubtitleMatchService 注册表改惰性（app/src/main/java/com/fongmi/android/tv/subtitle/SubtitleMatchService.java）
+
+- 字段由 private final SubtitleProviderRegistry registry; 改为 private volatile SubtitleProviderRegistry registry;，无参构造器改为 this(new SubtitleContextBuilder(), new SubtitleQueryPlanner(), null, new SubtitleRanker());——构造期不再触发 SubtitleProviderRegistry.get()，Activity 字段初始化因此不再付 CPython 启动成本。
+- 新增惰性访问器（双检锁，包内可见性不变）：registry() 先读 volatile 字段，为空时 synchronized 再取一次并调 SubtitleProviderRegistry.get()；包私有四参构造器（测试注入用）保持原样。
+- 就绪检查（registry().enabledProviders().isEmpty()）从 autoMatch / manualSearch 的调用线程搬进它们各自已提交到 Task.searchExecutor() 的任务体首部，语义不变（仍是同一 skipped("provider_unavailable") 结果），但类初始化改在后台线程发生。
+- 其余 4 处引用（search ×2、resolve ×2）全部改走 registry()。
+
+### 12.3 S9-2 App 启动后台预热（app/src/main/java/com/fongmi/android/tv/App.java）
+
+- onCreate() 在 resumeBackgroundServices(); 之后、post(() -> CacheScheduler.get().start(), 30_000L); 之前插入 warmSubtitleProviders();；新增 private void warmSubtitleProviders() { Task.execute(SubtitleProviderRegistry::get); }（Task.execute 走 5 线程共享池）。
+- 目的：把注册表初始化提前到 App 启动的后台线程；即使某些路径（如 SubtitleManualSearchDialog 主线程调 manualSearch）仍可能首触，预热通常已把 INSTANCE 建好。
+- 新增 import：com.fongmi.android.tv.subtitle.provider.SubtitleProviderRegistry、com.fongmi.android.tv.utils.Task（按现有字母序插在 PreviousProcessExitLogger 与 WebViewDataDirectoryGuard 之间）。
+
+### 12.4 新增契约测试（源码文本断言，JVM 侧，不依赖 Android 运行时）
+
+- app/src/test/java/com/fongmi/android/tv/subtitle/provider/SubtitleProviderRegistryLazyInitTest.java（4 例）：无参构造器不再 eager 解析注册表；所有 provider 使用点都走惰性访问器；可用性检查已移入后台任务；注入构造器仍接受显式 registry。
+- app/src/test/java/com/fongmi/android/tv/AppStartupWarmupSourceTest.java（2 例）：warmSubtitleProviders() 使用 SubtitleProviderRegistry::get 与 Task.execute(（且不得出现直接调用 SubtitleProviderRegistry.get();）；public void onCreate() 内预热调用早于 post(() -> CacheScheduler.get().start()，且 ThemeController.applyNightModeToApp(); 与 resumeBackgroundServices(); 仍在。
+- 两个测试都按 S4/S7 的既有范式写：readSource() 兼容 Gradle 工作目录为模块目录或仓库根，读取后把 CRLF 归一化为 LF 再按括号深度切片方法体。
+
+### 12.5 验证
+
+- 定向：bash ./gradlew :app:compileMobileArm64_v8aDebugJavaWithJavac :app:compileLeanbackArm64_v8aDebugJavaWithJavac :app:testMobileArm64_v8aDebugUnitTest --tests '*SubtitleProviderRegistryLazyInitTest' --tests '*AppStartupWarmupSourceTest' → 双 flavor 编译通过，BUILD SUCCESSFUL（6 tests, 0 failed）。
+- 全量 mobile：5356 tests completed, 4 failed, 2 skipped；全量 leanback：4569 tests completed, 6 failed, 2 skipped。失败集合与 §10.6 / §11.6 记录的既有 CRLF 冤案完全一致（mobile：ReaderPlaybackRoutingSourceTest ×2、TmdbSourceOnlyInteractionTest、WebThemeTokenSourceTest；leanback 再加 SearchResultDownFocusTest、NativeEnhancedPlaybackStyleFocusTest），无新增。
+- 每条新增测试均由定向命令单独验证；未放宽任何既有断言。
