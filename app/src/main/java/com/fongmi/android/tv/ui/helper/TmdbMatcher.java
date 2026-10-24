@@ -8,13 +8,16 @@ import com.fongmi.android.tv.bean.Vod;
 import com.fongmi.android.tv.service.TmdbService;
 import com.fongmi.android.tv.setting.Setting;
 import com.github.catvod.crawler.SpiderDebug;
+import com.github.catvod.utils.Trans;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CancellationException;
 import java.util.regex.Matcher;
@@ -138,11 +141,11 @@ public class TmdbMatcher {
     }
 
     private TmdbItem chooseStrictMatch(List<TmdbItem> items, String keyword, Vod vod, int sourceYear) {
-        String normalized = normalize(keyword);
+        String normalized = compareKey(keyword);
         int season = sourceSeasonNumber(keyword, vod);
         List<TmdbItem> matches = new ArrayList<>();
         for (TmdbItem item : items) {
-            if (!normalize(item.getTitle()).equals(normalized)) continue;
+            if (!compareKey(item.getTitle()).equals(normalized)) continue;
             if (sourceYear <= 0 || tmdbItemYear(item) == sourceYear || tmdbSeasonYearMatches(item, season, sourceYear)) matches.add(item);
         }
         if (matches.isEmpty()) return null;
@@ -153,12 +156,12 @@ public class TmdbMatcher {
 
     private TmdbItem chooseContainedYearMatch(List<TmdbItem> items, String keyword, Vod vod, int sourceYear) {
         if (sourceYear <= 0) return null;
-        String normalized = normalize(keyword);
+        String normalized = compareKey(keyword);
         if (normalized.length() < 4) return null;
         for (TmdbItem item : items) {
             int itemYear = tmdbItemYear(item);
             if (itemYear != sourceYear) continue;
-            String title = normalize(removeYearFromTitle(item.getTitle(), itemYear));
+            String title = compareKey(removeYearFromTitle(item.getTitle(), itemYear));
             if (Math.min(title.length(), normalized.length()) < 4) continue;
             if (!title.contains(normalized) && !normalized.contains(title)) continue;
             if (isUnwantedSplitSeasonMatch(item, keyword, vod)) continue;
@@ -168,15 +171,15 @@ public class TmdbMatcher {
     }
 
     private TmdbItem chooseSmartMatch(List<TmdbItem> items, String keyword, Vod vod, int sourceYear) {
-        String normalized = normalize(keyword);
+        String normalized = compareKey(keyword);
         TmdbItem sameTitle = null;
         TmdbItem closeYear = null;
         for (TmdbItem item : items) {
-            String title = normalize(item.getTitle());
+            String title = compareKey(item.getTitle());
             if (TextUtils.isEmpty(title) || TextUtils.isEmpty(normalized)) continue;
             int itemYear = tmdbItemYear(item);
             boolean titleMatch = title.equals(normalized);
-            boolean cleanedTitleMatch = normalize(removeYearFromTitle(item.getTitle(), itemYear)).equals(normalized);
+            boolean cleanedTitleMatch = compareKey(removeYearFromTitle(item.getTitle(), itemYear)).equals(normalized);
             if (!titleMatch && !cleanedTitleMatch) continue;
             if (sourceYear <= 0) {
                 if (isUnwantedSplitSeasonMatch(item, keyword, vod)) continue;
@@ -200,8 +203,11 @@ public class TmdbMatcher {
 
     private void sortSearchResults(List<TmdbItem> items, String keyword, int sourceYear) {
         if (items == null || items.size() < 2) return;
+        // 相似度里要做简繁归一，属于 O(n) 逐字转换；先在比较器外算一次，别在每次比较里重复转。
+        Map<TmdbItem, Integer> scores = new IdentityHashMap<>();
+        for (TmdbItem item : items) scores.put(item, titleSimilarityScore(item, keyword));
         items.sort((a, b) -> {
-            int compare = Integer.compare(titleSimilarityScore(b, keyword), titleSimilarityScore(a, keyword));
+            int compare = Integer.compare(scores.getOrDefault(b, 0), scores.getOrDefault(a, 0));
             if (compare != 0) return compare;
             compare = compareYear(a, b, sourceYear);
             if (compare != 0) return compare;
@@ -213,8 +219,8 @@ public class TmdbMatcher {
 
     private int titleSimilarityScore(TmdbItem item, String keyword) {
         int keywordYear = firstYear(keyword);
-        String query = normalize(removeYearFromTitle(keyword, keywordYear));
-        String title = normalize(removeYearFromTitle(item.getTitle(), tmdbItemYear(item)));
+        String query = compareKey(removeYearFromTitle(keyword, keywordYear));
+        String title = compareKey(removeYearFromTitle(item.getTitle(), tmdbItemYear(item)));
         if (TextUtils.isEmpty(query) || TextUtils.isEmpty(title)) return 0;
         if (title.equals(query)) return 1000;
         if (title.contains(query) || query.contains(title)) {
@@ -470,6 +476,33 @@ public class TmdbMatcher {
 
     private String normalize(String text) {
         return Objects.toString(text, "").replaceAll("[\\s·•:：\\-_/\\\\|()（）\\[\\]【】]+", "").trim().toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * 比较用的标题键：先做简繁归一，再走常规标点/大小写归一。
+     *
+     * <p>为什么需要它：站源标题在繁体界面下会被 {@code Vod.trans()} 逐字转成繁体，
+     * 而 TMDB 数据按 {@code TmdbConfig.language}（默认 zh-CN）返回简体标题。
+     * 两侧字形不同，任何逐字符比较都会失配，所以比较前必须压成同一字形。
+     *
+     * <p>归一化结果只用于比较，<b>不能</b>当作搜索关键词回传给 TMDB：
+     * 实测把归一化产物当查询词会直接搜出 0 条结果。
+     */
+    private String compareKey(String text) {
+        return normalize(canonicalTitle(text));
+    }
+
+    /**
+     * 把任意简/繁标题统一转成繁体字形。
+     *
+     * <p>必须显式传 {@code pass = false}：{@code Trans.s2t(String)} 会按当前界面语言短路，
+     * 简体态下直接返回原文，等于没归一，测试也会假绿。
+     *
+     * <p>方向只能单向转繁，不能转回简体：{@code T2S} 表在 10 组「多简对一繁」的字上是多对一
+     * 坍缩（余/馀→餘），反向转换会把「余罪/强势/线上」这类常用简体词改写成异体字。
+     */
+    private static String canonicalTitle(String text) {
+        return Trans.s2t(false, Objects.toString(text, ""));
     }
 
     private String removeNoiseBrackets(String text) {
