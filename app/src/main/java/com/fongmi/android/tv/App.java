@@ -51,8 +51,9 @@ public class App extends Application implements Application.ActivityLifecycleCal
     private volatile int foregroundActivities;
     private Hook hook;
 
-    private Resources resources;
-    private int resourcesLanguage = Integer.MIN_VALUE;
+    private final Object resourcesLock = new Object();
+    private volatile Resources resources;
+    private volatile int resourcesLanguage = Integer.MIN_VALUE;
 
     public App() {
         instance = this;
@@ -210,24 +211,43 @@ public class App extends Application implements Application.ActivityLifecycleCal
         return hook != null ? hook.getPackageName() : getBaseContext().getPackageName();
     }
 
+    /**
+     * 全应用的语言资源入口：{@code ResUtil} 与几乎所有界面都经由这里取 Resources，
+     * 并且调用方可能来自任意线程（包括 Task 线程池），所以这里必须是非阻塞安全的。
+     * <p>
+     * 语言切换会把新 Configuration 写进框架自己持有的 Resources，而
+     * {@code updateConfiguration} 不是线程安全的：缓存未命中时若无锁，两个线程会同时改写同一个
+     * Resources，WebView 在 Android 9 挂到这个 AssetManager 上的资源包就可能被写坏。
+     * 另外这条路径一旦抛异常，异常会穿透每一个取资源的调用点（含系统回调），所以更新失败只记日志并
+     * 继续返回框架 Resources，让界面以系统语言降级显示，而不是把异常散播到全应用。
+     */
     @Override
     @SuppressWarnings("deprecation")
     public Resources getResources() {
         int language = Setting.getLanguage();
-        if (resources == null || resourcesLanguage != language) {
+        Resources cached = resources;
+        if (cached != null && resourcesLanguage == language) return cached;
+        synchronized (resourcesLock) {
+            if (resources != null && resourcesLanguage == language) return resources;
             Resources resources = super.getResources();
-            Configuration configuration = Setting.wrapLanguage(getBaseContext()).getResources().getConfiguration();
-            // WebView adds its resource package to the framework-owned AssetManager on Android 9.
-            resources.updateConfiguration(configuration, resources.getDisplayMetrics());
+            try {
+                Configuration configuration = Setting.wrapLanguage(getBaseContext()).getResources().getConfiguration();
+                // WebView adds its resource package to the framework-owned AssetManager on Android 9.
+                resources.updateConfiguration(configuration, resources.getDisplayMetrics());
+            } catch (Throwable e) {
+                SpiderDebug.log("resources", "apply language failed language=%s error=%s", language, e.getMessage());
+            }
             this.resources = resources;
             resourcesLanguage = language;
+            return resources;
         }
-        return resources;
     }
 
     public void invalidateResources() {
-        resources = null;
-        resourcesLanguage = Integer.MIN_VALUE;
+        synchronized (resourcesLock) {
+            resources = null;
+            resourcesLanguage = Integer.MIN_VALUE;
+        }
     }
 
     @Override

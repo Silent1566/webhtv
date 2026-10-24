@@ -25,6 +25,22 @@ public class AppResourcesWebViewCompatibilityTest {
                 source.contains("resources = Setting.wrapLanguage(getBaseContext()).getResources();"));
     }
 
+    @Test
+    public void applicationResourcesUpdateIsSerializedAndFailSafe() throws Exception {
+        String source = read(findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "App.java")));
+
+        assertTrue("Application resources lookups are reachable from background threads, so the language update must run under a lock",
+                source.contains("synchronized (resourcesLock) {"));
+        assertTrue("A failed language update must not propagate out of getResources into every resource consumer",
+                source.contains("} catch (Throwable e) {"));
+        assertTrue("Application must still return the framework-owned Resources when the language update fails",
+                source.contains("return resources;"));
+        int invalidate = source.indexOf("public void invalidateResources() {");
+        assertTrue("Resource cache invalidation must remain the single place that drops the cache", invalidate > 0);
+        assertTrue("Resource cache invalidation must take the same lock as the update path",
+                source.indexOf("synchronized (resourcesLock) {", invalidate) > invalidate);
+    }
+
     private static String read(Path path) throws Exception {
         return new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
     }
