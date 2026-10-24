@@ -6046,6 +6046,15 @@ private boolean runtimeSourceOnly;
         return getHistoryKey();
     }
 
+    // C101: creating PlayerManager + ExoPlayer inside PlaybackService.onCreate is a
+    // multi-hundred-millisecond main-thread stall that freezes the loading spinner.
+    // PlaybackActivity already ships this gate; waiting for the first frame lets the
+    // spinner keep animating while the service is built.
+    @Override
+    protected boolean deferPlaybackServiceBinding() {
+        return true;
+    }
+
     @Override
     protected void onPrepare() {
         android.util.Log.d("VideoActivity", "onPrepare: setting Clock callback");

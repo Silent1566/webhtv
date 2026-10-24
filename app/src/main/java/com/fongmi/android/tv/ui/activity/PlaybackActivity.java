@@ -617,6 +617,7 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
 
     private void bindPlaybackServiceAfterFirstFrame() {
         View root = getExoView().getRootView();
+        root.postDelayed(this::bindPlaybackServiceIfIdle, 500L);
         root.getViewTreeObserver().addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
             @Override
             public boolean onPreDraw() {
@@ -627,6 +628,14 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
                 return true;
             }
         });
+    }
+
+    // C101: safety net for the deferred binding. If the first frame never arrives (the
+    // activity is finishing or never draws), playback must still connect instead of
+    // hanging on the loading spinner forever.
+    private void bindPlaybackServiceIfIdle() {
+        if (isFinishing() || isDestroyed() || bound) return;
+        bindPlaybackService();
     }
 
     private void buildControllerAsync(SessionToken token) {

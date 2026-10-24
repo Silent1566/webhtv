@@ -6592,6 +6592,13 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         return getHistoryKey();
     }
 
+    // C101: see the leanback flavor note; deferring keeps the loading spinner animating
+    // while PlaybackService builds PlayerManager and the ExoPlayer instance.
+    @Override
+    protected boolean deferPlaybackServiceBinding() {
+        return true;
+    }
+
     @Override
     protected void onControllerReadyReconciled() {
         if (canHideSeekProgress()) showPlaybackContent();
