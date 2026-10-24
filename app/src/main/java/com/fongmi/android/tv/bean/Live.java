@@ -347,7 +347,8 @@ public class Live {
     }
 
     public Group find(Group item) {
-        for (Group group : getGroups()) if (group.getName().equals(item.getName())) return group;
+        // 旧版本的分组名会被简繁转换改写并参与身份判断，这里统一走 Group.matchesName() 做与语言无关的归一比对。
+        for (Group group : getGroups()) if (group.matchesName(item.getName())) return group;
         getGroups().add(item);
         return item;
     }
@@ -371,6 +372,12 @@ public class Live {
         return this;
     }
 
+    /**
+     * 记住上次播放的频道。
+     * <p>
+     * 组名与频道名都取持久化身份名，不能取界面语言下的展示名；否则切一次语言这条记录就再也匹配不上，
+     * 「上次频道」会静默回落到第一组第一个频道。旧版本写入的译文组名/频道名由读取侧的归一比对兼容。
+     */
     public Live keep(Channel channel) {
         setKeep(channel.getGroup().getName() + AppDatabase.SYMBOL + channel.getName() + AppDatabase.SYMBOL + channel.getCurrent());
         return this;

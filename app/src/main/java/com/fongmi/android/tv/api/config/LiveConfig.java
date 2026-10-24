@@ -260,7 +260,8 @@ public class LiveConfig extends BaseConfig {
         if (splits.length < 3) return new int[]{1, 0};
         for (int i = 0; i < items.size(); i++) {
             Group group = items.get(i);
-            if (group.getName().equals(splits[0])) {
+            // 旧版本把简繁转换后的组名写进了 keep 键，因此这里用与语言无关的归一名比对（见 Group.matchesName）。
+            if (group.matchesName(splits[0])) {
                 int j = group.find(splits[1]);
                 if (j != -1) {
                     group.getChannel().get(j).setIndex(splits[2]);

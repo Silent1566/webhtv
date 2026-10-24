@@ -42,8 +42,9 @@ class LiveBrowse {
 
     @NonNull
     static ImmutableList<MediaItem> getChannels(@NonNull String parentId) {
+        // 浏览树 id 来自可持久化的身份名（Live.keep 会写同一套名字），但也兼容旧版本写入的译文名。
         String groupName = parentId.substring(LIVE_GROUP.length());
-        Group group = liveHome().getGroups().stream().filter(item -> item.getName().equals(groupName)).findFirst().orElse(null);
+        Group group = liveHome().getGroups().stream().filter(item -> item.matchesName(groupName)).findFirst().orElse(null);
         if (group == null) {
             liveCountMap.put(groupName, 0);
             return ImmutableList.of();
