@@ -562,7 +562,7 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
      * 按钮文案被源名取代后读屏会只剩一个孤立的源名，因此同步补回「直播源」动作语义。
      */
     private void setSource(Live live) {
-        String name = live == null ? "" : live.getName();
+        String name = live == null ? "" : live.getDisplayName();
         boolean named = !name.isEmpty();
         String label = named ? name : getString(R.string.live_control_source);
         mBinding.control.action.source.setText(label);

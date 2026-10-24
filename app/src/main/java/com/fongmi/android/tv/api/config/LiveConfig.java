@@ -23,10 +23,12 @@ import com.fongmi.android.tv.utils.UrlUtil;
 import com.github.catvod.bean.Header;
 import com.github.catvod.bean.Proxy;
 import com.github.catvod.utils.Json;
+import com.github.catvod.utils.Trans;
 import com.google.gson.JsonObject;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -220,8 +222,13 @@ public class LiveConfig extends BaseConfig {
         CustomCspSetting.inject(getLives(), spider);
         getLives().removeIf(Live::isEmpty);
         Map<String, Live> items = Live.findAll().stream().collect(Collectors.toMap(Live::getName, Function.identity()));
-        getLives().forEach(live -> live.sync(items.get(live.getName())));
-        setHome(config, getLives().isEmpty() ? new Live() : getLives().stream().filter(item -> item.getName().equals(config.getHome())).findFirst().orElse(getLives().get(0)), false);
+        // 旧版本曾把简繁转换后的名字写进主键，历史行因此按“译文名”落库；这里按译文名再兜一次，
+        // 让已经在繁体态保存过收藏/屏蔽/上次频道的用户在升级后仍能匹配上，而不是静默丢失。
+        Map<String, Live> legacy = new HashMap<>();
+        for (Live item : items.values()) legacy.putIfAbsent(Trans.s2t(item.getName()), item);
+        getLives().forEach(live -> live.sync(items.containsKey(live.getName()) ? items.get(live.getName()) : legacy.get(live.getName())));
+        // 同理，Config.home 也可能是旧版本写入的译文名，两种写法都认。
+        setHome(config, getLives().isEmpty() ? new Live() : getLives().stream().filter(item -> item.getName().equals(config.getHome()) || item.getDisplayName().equals(config.getHome())).findFirst().orElse(getLives().get(0)), false);
     }
 
     public void setKeep(Channel channel) {
