@@ -248,6 +248,7 @@ import com.bumptech.glide.request.target.CustomTarget;
 import com.bumptech.glide.request.target.Target;
 import com.bumptech.glide.request.transition.Transition;
 import com.github.catvod.crawler.SpiderDebug;
+import com.github.catvod.utils.Trans;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -12992,10 +12993,12 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private int scoreTmdbMediaType(TmdbItem item, @Nullable Vod sourceVod) {
         // 类型只做轻量加减分，不作为放宽条件：标题/年份不一致的候选不会走到这里。
         if (sourceVod == null) return 0;
+        // 站源类型名在繁体界面已被 Vod.trans() 转成繁体。这里先做简繁归一（压成繁体）再判断，
+        // 关键词也只写繁体形：归一后简体「电视剧」与繁体「電視劇」落到同一个串，两种界面都能命中。
         String type = normalize(sourceVod.getTypeName() + " " + sourceVod.getRemarks());
         if (TextUtils.isEmpty(type)) return 0;
-        boolean tv = type.contains("剧") || type.contains("集") || type.contains("连续") || type.contains("电视剧");
-        boolean movie = type.contains("电影") || type.contains("影片");
+        boolean tv = type.contains("劇") || type.contains("集") || type.contains("連續") || type.contains("電視劇");
+        boolean movie = type.contains("電影") || type.contains("影片");
         if (tv && "tv".equalsIgnoreCase(item.getMediaType())) return 20;
         if (movie && "movie".equalsIgnoreCase(item.getMediaType())) return 20;
         if ((tv && "movie".equalsIgnoreCase(item.getMediaType())) || (movie && "tv".equalsIgnoreCase(item.getMediaType()))) return -30;
@@ -13163,7 +13166,25 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private String normalize(String text) {
+        return plainNormalize(canonicalTitle(text));
+    }
+
+    /**
+     * 只做标点/空白/大小写归一，不做简繁转换。噪声词表与类型关键词都是简体字形，
+     * 一旦吃到简繁归一就会整体失配，因此这些判定必须继续走这里。
+     */
+    private String plainNormalize(String text) {
         return Objects.toString(text, "").replaceAll("[\\s·•:：\\-_/\\\\|()（）\\[\\]【】]+", "").trim().toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * 站源标题在繁体界面会被 Vod.trans() 逐字转繁，而 TMDB 返回的标题字形由 TmdbConfig.language
+     * 决定（默认 zh-CN，简体）。两侧字形不同时逐字符比较必然失败，所以比较前统一压到繁体一侧。
+     * 方向只能单向转繁：t2s 存在 10 组「多简对一繁」坍缩，会把余罪/强势/线上等常用简体词改坏。
+     * 必须显式传 pass=false，Trans.s2t(String) 在简体态会短路返回原文而假绿。
+     */
+    private static String canonicalTitle(String text) {
+        return Trans.s2t(false, Objects.toString(text, ""));
     }
 
     private String cleanTmdbSearchQuery(String text) {
@@ -13182,7 +13203,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         cleaned = cleaned.replaceAll("(?i)(?<!\\d)(?:24|25|30|50|60|120)\\s*(?:fps|帧)(?![\\u4e00-\\u9fffA-Za-z0-9])", " ");
         cleaned = cleaned.replaceAll("(更新至|更至|连载至|連載至)\\s*$", " ");
         cleaned = cleaned.replaceAll("(国语版|国配版|普通话版|粤语版|台语版|闽南语版|原声版|配音版|中字版|字幕版|台版|台灣版|台湾版|港版|港澳版|大陆版|內地版|内地版|中国版|中國版|泰版|泰国版|泰國版|韩版|韩国版|韓國版|日版|日本版|美版|美国版|美國版|英版|英国版|英國版)", " ");
-        cleaned = cleaned.replaceAll("(真彩|臻彩|高码|高码率|无水印|无台标|国语|国配|国粤|粤语|中字|字幕|内封|简繁|双语|官中|杜比|合集|全集|完结|未删减|加长版|修复版)", " ");
+        cleaned = cleaned.replaceAll("(真彩|臻彩|高码|高码率|高碼|高碼率|无水印|無水印|无台标|無台標|国语|國語|国配|國配|国粤|國粵|粤语|粵語|中字|字幕|内封|內封|简繁|簡繁|双语|雙語|官中|杜比|合集|全集|完结|完結|未删减|未刪減|加长版|加長版|修复版|修復版)", " ");
         cleaned = cleaned.replaceAll("[._\\-+]+", " ");
         cleaned = cleaned.replaceAll("\\s+", " ").trim();
         cleaned = cleaned.replaceAll("^[\\s:：,，.。·|/\\\\]+|[\\s:：,，.。·|/\\\\]+$", "");
@@ -13203,11 +13224,12 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private boolean isTmdbNoiseTag(String text) {
+        // 归一后再比：资源站标签在繁体界面是「高碼/無水印/連載至」，只写一套繁体词表即可同时覆盖两种字形。
         String value = normalize(text);
         if (TextUtils.isEmpty(value)) return true;
         return value.matches("(?i).*(4k|8k|1080p|2160p|720p|hdr|hdr10|dv|webdl|bluray|bdrip|remux|hevc|h265|h264|x265|x264|aac|dts|ddp|atmos|nf|netflix|amzn|dsnp).*")
-                || value.matches(".*(真彩|臻彩|高码|高码率|无水印|无台标|国语|国配|国粤|粤语|中字|字幕|内封|简繁|双语|官中|杜比|合集|全集|完结|未删减|加长版|修复版).*")
-                || value.matches(".*(国语版|国配版|普通话版|粤语版|台语版|闽南语版|原声版|配音版|中字版|字幕版|台版|台灣版|台湾版|港版|港澳版|大陆版|內地版|内地版|中国版|中國版|泰版|泰国版|泰國版|韩版|韩国版|韓國版|日版|日本版|美版|美国版|美國版|英版|英国版|英國版).*");
+                || value.matches(".*(真彩|臻彩|高碼|高碼率|無水印|無台標|國語|國配|國粵|粵語|中字|字幕|內封|簡繁|雙語|官中|杜比|合集|全集|完結|未刪減|加長版|修復版).*")
+                || value.matches(".*(國語版|國配版|普通話版|粵語版|台語版|閩南語版|原聲版|配音版|中字版|字幕版|台版|台灣版|港版|港澳版|大陸版|內地版|中國版|泰版|泰國版|韓版|韓國版|日版|日本版|美版|美國版|英版|英國版).*");
     }
 
     private Flag findInitialFlag(List<Flag> flags) {
