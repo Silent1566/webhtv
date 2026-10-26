@@ -318,3 +318,80 @@ XML 事实：`@+id/loading`（148dp×112dp，含 `ProgressBar indeterminate` + `
 - 定向：bash ./gradlew :app:compileMobileArm64_v8aDebugJavaWithJavac :app:compileLeanbackArm64_v8aDebugJavaWithJavac :app:testMobileArm64_v8aDebugUnitTest --tests '*SubtitleProviderRegistryLazyInitTest' --tests '*AppStartupWarmupSourceTest' → 双 flavor 编译通过，BUILD SUCCESSFUL（6 tests, 0 failed）。
 - 全量 mobile：5356 tests completed, 4 failed, 2 skipped；全量 leanback：4569 tests completed, 6 failed, 2 skipped。失败集合与 §10.6 / §11.6 记录的既有 CRLF 冤案完全一致（mobile：ReaderPlaybackRoutingSourceTest ×2、TmdbSourceOnlyInteractionTest、WebThemeTokenSourceTest；leanback 再加 SearchResultDownFocusTest、NativeEnhancedPlaybackStyleFocusTest），无新增。
 - 每条新增测试均由定向命令单独验证；未放宽任何既有断言。
+
+## 13. S10（baseline profile）实施记录（2026-10-26 起）
+
+### 13.1 为什么这条能解释「上游 APK 更流畅」
+
+对齐反查（上游 OK影视 5.1.6 与上游 leanback armeabi_v7a）后确认：两个上游包都带 `assets/dexopt/baseline.prof` + `.profm`，本仓此前完全没有这个资产。
+
+改动前的运行证据（emulator-5556，mobile debug）：
+
+- `Dexopt state: x86_64: [status=run-from-apk]`（首次安装后从未 AOT，全解释执行）
+- tap 窗口主线程 simpleperf：`libart.so 45.38%`（`artMterpAsmInstructionStart` 2.53%、`interpreter::DoCall` 2.49%、`Class::FindClassMethod` 5.63%、`ArtField::GetTypeDescriptor`/`FindFieldFast` 各 2.14%、`ClassLinker::ResolveMethod` 1.96%）
+- 台上那 34s 的 `service onCreate` 与 ANR 也是同一机制在无 AOT 下的放大
+
+### 13.2 设计决策（AGENTS.md §7 门禁）
+
+对比了三条路径：
+
+| 方案 | 依赖/构建成本 | 效果 | 决策 |
+|---|---|---|---|
+| `androidx.baselineprofile` Gradle 插件 + Macrobenchmark 模块（官方推荐生成链路） | 新增 test 模块 + `benchmark-macro-junit4` + uiautomator，需 root 设备或 GMD | 规则最贴近真实旅程 | **否决**：为一个 profile 引入新模块与依赖，超出本问题范围 |
+| 手写 `baseline-prof.txt`（挑类/方法） | 零依赖 | 覆盖不全、易过时 | **否决**：无法证明覆盖进页路径 |
+| **用 `profman --dump-classes-and-methods` 从设备已积累的真实 ART profile 生成**（官方「手动创建」路径） | 零依赖、零模块 | 规则来自真实执行 | **采用** |
+
+关键机制确认（官方 baseline-profiles 文档）：
+
+- AGP 7.4 起支持 app 模块的 `src/main/baseline-prof.txt`；AGP 8.0 起支持 `src/main/generated/baselineProfiles/` 多文件源集。本仓 AGP 9.2.1 属支持范围。
+- AGP 把人工可读规则（`[HSP]*L<class>;-><method><sig>`）编成 `assets/dexopt/baseline.prof`（要求 < 1.5 MB），由 ART 在安装期使用。
+- API 24–27 由 `androidx.profileinstaller` 在首跑安装；本仓该库已由 appcompat 等传递依赖带入（`androidx.profileinstaller:profileinstaller:1.4.0`，release 运行时类路径实测存在），**无需新增依赖**。
+- 上游包内同时存在 `.prof` 与 `.profm`，与本仓产物一致。
+
+### 13.3 生成方式与产物
+
+采集（emulator-5556，root 取 profile）：设备上已积累 41 KB 真实 `primary.prof`，用官方命令导出：
+
+```
+adb shell profman --dump-classes-and-methods \
+  --profile-file=/data/misc/profiles/cur/0/com.silent.android.webhtv/primary.prof \
+  --apk=<base.apk>
+```
+
+产出 `app/src/main/baseline-prof.txt`：**31,712 条规则**，其中本应用 9,299 条、启动标记（`S`）6,890 条。热点类分布与前面各阶段定位的瓶颈吻合：`VideoActivity` 397、`PlayerManager` 251、`PlaybackActivity` 92、`History` 89、`PlaybackService` 49、`ExoUtil` 45。
+
+构建验证（`:app:assembleMobileArm64_v8aRelease -PfastRelease=true`）：
+
+- `app/build/intermediates/merged_art_profile/mobileArm64_v8aRelease/.../baseline-prof.txt` = 33,996 行（依赖库 + 本应用 9,299 等），确认 AGP 真的合并了本应用规则；
+- release APK 内出现 `assets/dexopt/baseline.prof`（**29,571 B**）与 `assets/dexopt/baseline.profm`（2,203 B），均 < 1.5 MB 上限。
+
+一个必须记录的 AGP 行为：**debug 变体不产出 dexopt 资产**。同一份 `baseline-prof.txt` 在 `mobileArm64_v8aDebug` 下 `merged_art_profile` 只有依赖库的 2,283 行、本应用 0 行，APK 内无 `assets/dexopt/`。即 baseline profile 只作用于 release（非 debuggable）包，用 debug 包测不出收益。
+
+### 13.4 验收（同一镜像、同一 fastRelease release 包、profile 开/关 A/B）
+
+两包仅差 `app/src/main/baseline-prof.txt` 是否存在；均为 `-PfastRelease=true`（未混淆）。每组 5 次真实冷启动（`am force-stop` + `am start -W`，逐次确认取到 `TotalTime`）：
+
+| 组 | 冷启动 TotalTime（ms） | 中位数 |
+|---|---|---|
+| profile 开（含本应用 9,299 条规则） | 1752 / 1282 / 1097 / 1232 / 1173 | **1232** |
+| 对照（仅依赖库规则 4,077 B） | 2470 / 1580 / 1125 / 1182 / 1196 | **1196** |
+
+安装期状态均从 `run-from-apk` 变为 `x86_64: [status=speed-profile] [reason=install]`，即 ART 确实按 profile 做了 AOT。
+
+**必须诚实标注的限制**：本机冷启动中位数两组几乎相同（1232 vs 1196），差异落在噪声内，**未能复现上游那种量级差异**。原因有二：
+
+1. 这台 x86_64 模拟器跑 arm64 包要靠 houdini 翻译，且空载 janky 地板已有 44.6%（§10.2），模拟器固定成本盖过了 ART 解释执行那部分；
+2. `am start -W` 的 `TotalTime` 只到首个窗口显示，而进页后「转圈停住」发生在之后的 measure/layout/draw 与播放器构建阶段，冷启动指标对这段不敏感。
+
+因此本阶段的结论是**结构性归位**：把上游有、本仓缺的 profile 资产补齐并打通生成链路，**收益需在真机 release 包上用探针脚本（`scripts/perf/loading_jank_probe.sh`）复测**，不能用本机冷启动数字宣称已改善。
+
+### 13.5 复现与回滚
+
+- 重新生成：`bash scripts/perf/baseline_profile_build.sh --serial emulator-5556`（`--reset` 会先清设备 profile 并留 60s 手动走「首页→详情→播放」旅程）。
+- 回滚：删除唯一新增文件 `app/src/main/baseline-prof.txt` 即回到改动前状态（`git revert` 本提交等价）；不涉及任何代码、依赖或构建脚本改动。
+- 合并产物自查：`app/build/intermediates/merged_art_profile/<variant>/…/baseline-prof.txt` 的行数与本应用规则数，以及 release APK 内 `assets/dexopt/baseline.prof` 的大小。
+
+### 13.6 与既有工作项的关系
+
+- 与 S1/S2/S3/S7/S9 全部叠加，互不冲突：那些是把主线程工作移出/削减，本阶段是让 ART 直接编译热点，两者相乘。
+- S8（拆 `PlaybackService.onCreate`）仍独立待办，与 profile 无关。
