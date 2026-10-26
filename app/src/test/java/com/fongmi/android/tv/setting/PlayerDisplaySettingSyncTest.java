@@ -104,22 +104,27 @@ public class PlayerDisplaySettingSyncTest {
     }
 
     /**
-     * 媒体信息徽标的两条展示语义：
-     * 控制栏唤醒时无条件展示；控制栏隐藏时与其它常驻屏显同级，只有在
-     * 「屏显设置 → 媒体信息」开关打开时才展示（默认关闭）。
+     * 媒体信息徽标的唯一开关是「屏显设置 → 媒体信息」（默认关闭）：
+     * 关闭时控制栏唤醒也不再渲染徽标（非全屏唤醒的控制栏本就拥挤），
+     * 打开时控制栏隐藏同样作为常驻项展示，与标题 / 时间 / 进度 / 码率同级。
      */
     @Test
-    public void mediaBadgesFollowTheMediaInfoSwitchOnlyWhenTheControlBarIsHidden() throws Exception {
+    public void mediaBadgesAreGatedByTheMediaInfoSwitchOnEveryPath() throws Exception {
         String source = read(mainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "custom", "PlayerOsdController.java")));
         int method = source.indexOf("private void setMediaBadges(PlayerManager player)");
         assertTrue("PlayerOsdController is missing setMediaBadges", method >= 0);
         int methodEnd = source.indexOf("\n    }", method);
         String body = source.substring(method, methodEnd);
 
-        assertTrue("the control bar must show media badges regardless of the media info switch",
-                !body.contains("!controlsVisible || !PlayerSetting.isDisplayMediaBadges()"));
-        assertTrue("the media info switch must only gate the persistent (control-bar-hidden) path",
-                body.contains("!controlsVisible && !PlayerSetting.isDisplayMediaBadges()"));
+        assertTrue("the media info switch must gate media badges instead of the control bar visibility",
+                body.contains("!PlayerSetting.isDisplayMediaBadges()")
+                        && !body.contains("!controlsVisible && !PlayerSetting.isDisplayMediaBadges()"));
+
+        int only = source.indexOf("private boolean renderMediaBadgesOnly()");
+        assertTrue("PlayerOsdController is missing renderMediaBadgesOnly", only >= 0);
+        String onlyBody = source.substring(only, source.indexOf("\n    }", only));
+        assertTrue("the suppressed mobile control-bar path must also honor the media info switch",
+                onlyBody.contains("if (!PlayerSetting.isDisplayMediaBadges())"));
 
         String persistent = source.substring(source.indexOf("// 控制栏隐藏时，按用户设置显示常驻屏显"));
         String renderEnd = "private boolean renderMediaBadgesOnly()";
@@ -133,6 +138,62 @@ public class PlayerDisplaySettingSyncTest {
         assertTrue("the persistent badges must raise the bottom corners to clear the persistent text line",
                 source.contains("int bottomInset = controlsVisible ? dp(80) : dp(22);")
                         && source.contains("int topInset = controlsVisible ? dp(64) : 0;"));
+    }
+
+    /**
+     * 「媒体信息位置」单选新增关闭项，且位置键始终保留用户最近一次选的四角：
+     * 关闭只关 {@code player_osd_media_badges}，不改位置；再次开启回到那个角，
+     * 从未设置过（默认关闭）时则回到默认的右下角（index 3）。
+     */
+    @Test
+    public void mediaBadgePositionChoiceKeepsTheLastCornerAcrossOff() throws Exception {
+        String setting = read(mainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "setting", "PlayerSetting.java")));
+        assertTrue("the Off choice must be the 5th item of the position list",
+                setting.contains("MEDIA_BADGE_POSITION_OFF = 4"));
+
+        int choice = setting.indexOf("public static int getMediaBadgeChoice()");
+        assertTrue("PlayerSetting is missing getMediaBadgeChoice", choice >= 0);
+        String choiceExpr = setting.substring(choice, setting.indexOf(';', choice));
+        assertTrue("the selected choice must be Off while media info is disabled",
+                choiceExpr.contains("isDisplayMediaBadges()") && choiceExpr.contains("MEDIA_BADGE_POSITION_OFF"));
+        assertTrue("the selected choice must be the stored corner while media info is enabled",
+                choiceExpr.contains("getMediaBadgePosition()"));
+        assertTrue("an unset position key must still fall back to the bottom-right corner", setting.contains("KEY_MEDIA_BADGE_POSITION, 3"));
+
+        int apply = setting.indexOf("public static void putMediaBadgeChoice(int which)");
+        assertTrue("PlayerSetting is missing putMediaBadgeChoice", apply >= 0);
+        String applyBody = setting.substring(apply, setting.indexOf("\n    }", apply));
+        assertTrue("choosing Off must only switch media info off and keep the remembered corner",
+                applyBody.contains("putDisplayMediaBadges(false)")
+                        && !applyBody.contains("putMediaBadgePosition(MEDIA_BADGE_POSITION_OFF)"));
+        assertTrue("choosing a corner must enable media info and remember that corner",
+                applyBody.contains("putMediaBadgePosition(which)") && applyBody.contains("putDisplayMediaBadges(true)"));
+
+        Path mobileSettingPage = Path.of("com", "fongmi", "android", "tv", "ui", "fragment", "SettingPlayerFragment.java");
+        Path leanbackSettingPage = Path.of("com", "fongmi", "android", "tv", "ui", "activity", "SettingPlayerActivity.java");
+        String[] flavors = {"mobile", "leanback"};
+        Path[] settingPages = {mobileSettingPage, leanbackSettingPage};
+        for (int i = 0; i < flavors.length; i++) {
+            String flavor = flavors[i];
+            String page = read(sourcePath(flavor, "java").resolve(settingPages[i]));
+            assertTrue(flavor + " 媒体信息位置单选必须显示当前选项（含关闭）",
+                    page.contains("PlayerSetting.getMediaBadgeChoice()"));
+            assertTrue(flavor + " 媒体信息位置单选必须写回开启/关闭",
+                    page.contains("PlayerSetting.putMediaBadgeChoice(which);"));
+            assertFalse(flavor + " 媒体信息位置单选不得再用只改角位的旧入口",
+                    page.contains("PlayerSetting.putMediaBadgePosition(which);"));
+        }
+
+        for (String locale : new String[]{"values", "values-zh-rCN", "values-zh-rTW"}) {
+            String strings = locale.equals("values")
+                    ? read(mainResPath().resolve(Path.of("values", "strings.xml")))
+                    : read(mainResPath().resolve(Path.of(locale, "strings.xml")));
+            int arrayStart = strings.indexOf("<string-array name=\"select_media_badge_position\">");
+            assertTrue(locale + " must keep the media info position list", arrayStart >= 0);
+            String array = strings.substring(arrayStart, strings.indexOf("</string-array>", arrayStart));
+            int items = array.split("<item>", -1).length - 1;
+            assertTrue(locale + " media info position list must offer four corners plus Off, was " + items, items == 5);
+        }
     }
 
     @Test

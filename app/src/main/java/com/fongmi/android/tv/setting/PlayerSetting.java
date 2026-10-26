@@ -598,6 +598,31 @@ public class PlayerSetting {
         return position < 0 || position > 3 ? 3 : position;
     }
 
+    /**
+     * 「媒体信息位置」单选里的关闭项。位置键只存四角（0..3），
+     * 「开 / 关」由 {@code player_osd_media_badges} 表达，因此关闭时位置键必须保持原值，
+     * 重新开启才会回到用户上一次选的那个角（默认右下角）。
+     */
+    public static final int MEDIA_BADGE_POSITION_OFF = 4;
+
+    /** 「媒体信息位置」单选的选中项：开启时是四角，关闭时是关闭项。 */
+    public static int getMediaBadgeChoice() {
+        return isDisplayMediaBadges() ? getMediaBadgePosition() : MEDIA_BADGE_POSITION_OFF;
+    }
+
+    /**
+     * 应用「媒体信息位置」单选结果：选四角即开启媒体信息并记住该角；选关闭只关开关、
+     * 不改位置。位置键始终保留用户最近一次的选择。
+     */
+    public static void putMediaBadgeChoice(int which) {
+        if (which == MEDIA_BADGE_POSITION_OFF) {
+            putDisplayMediaBadges(false);
+            return;
+        }
+        putMediaBadgePosition(which);
+        putDisplayMediaBadges(true);
+    }
+
     public static boolean[] getDisplayChecked() {
         return new boolean[]{isDisplayTime(), isDisplayTraffic(), isDisplaySize(), isDisplayProgress(), isDisplayMini(), isDisplayTitle(), isOsdDiagnostics(), isDisplayMediaBadges()};
     }

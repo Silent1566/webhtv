@@ -223,7 +223,7 @@ public class PlayerOsdController {
     private boolean render() {
         if (suppressed) {
             // mobile 播放器在控制栏出现时会抑制整个 OSD 根（控制栏自带标题与分辨率）。
-            // 媒体信息徽标是唯一的例外：它本来就只在控制栏出现时展示。
+            // 媒体信息徽标是唯一的例外：它只在「屏显设置 → 媒体信息」开启时才放行。
             if (controlsVisible && renderMediaBadgesOnly()) return true;
             root.setVisibility(View.GONE);
             return false;
@@ -289,9 +289,24 @@ public class PlayerOsdController {
 
     /**
      * 控制栏出现但 OSD 根被抑制（mobile 播放器）时的渲染路径。
-     * 只放行媒体信息徽标，四角文本、诊断面板与迷你进度一律隐藏。
+     * 只放行媒体信息徽标，四角文本、诊断面板与迷你进度一律隐藏；
+     * 徽标本身仍受「媒体信息」开关约束（默认关闭），关闭时控制栏唤醒不再塞进一行徽标。
      */
     private boolean renderMediaBadgesOnly() {
+        if (!PlayerSetting.isDisplayMediaBadges()) {
+            topLeft.setVisibility(View.GONE);
+            topRight.setVisibility(View.GONE);
+            bottomLeft.setVisibility(View.GONE);
+            bottomRight.setVisibility(View.GONE);
+            diagnosticsPanel.setVisibility(View.GONE);
+            if (miniProgress != null) miniProgress.setVisibility(View.GONE);
+            if (mediaBadges != null) {
+                mediaBadges.setVisibility(View.GONE);
+                mediaBadgeSignature = "";
+            }
+            root.setVisibility(View.GONE);
+            return false;
+        }
         topLeft.setVisibility(View.GONE);
         topRight.setVisibility(View.GONE);
         bottomLeft.setVisibility(View.GONE);
@@ -433,9 +448,9 @@ public class PlayerOsdController {
      */
     private void setMediaBadges(PlayerManager player) {
         if (mediaBadges == null) return;
-        // 控制栏唤醒时无条件展示（控制栏自带片名与分辨率，徽标是它的补充信息）；
-        // 控制栏隐藏时只在用户打开「媒体信息」开关后作为常驻项展示。
-        if (player == null || (!controlsVisible && !PlayerSetting.isDisplayMediaBadges())) {
+        // 「屏显设置 → 媒体信息」是唯一开关，控制栏唤醒与否都看它：
+        // 关闭时（默认）控制栏唤醒也不再显示，打开时控制栏隐藏同样作为常驻项展示。
+        if (player == null || !PlayerSetting.isDisplayMediaBadges()) {
             mediaBadges.setVisibility(View.GONE);
             mediaBadgeSignature = "";
             return;

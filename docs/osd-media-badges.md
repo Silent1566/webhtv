@@ -2,11 +2,11 @@
 
 **Recovery anchor**
 
-- 目标：播放器显示当前媒体的徽标（分辨率 / 动态范围 / 画面来源与画质 / 视频编码 / 音频编码 / 声道 / 帧率 / 码率 / 容器 / 特别标签 / IMAX / 流媒体平台），**同一行横排**，每条为「现成徽标牌位图 + 可选文本 + 类别色胶囊」；没有对应牌的事实（帧率 / 码率 / 容器）只显示文本，不再用语义不符的自绘图标。展示语义两条：**控制栏唤醒时无条件显示**（不看「媒体信息」开关，因为控制栏自带片名与分辨率，徽标是它的补充信息）；**控制栏隐藏时**，只有「屏显设置 → 媒体信息」开关打开才作为常驻项显示，与标题 / 时间 / 进度 / 码率同级。开关进「屏显设置」多选（**默认关**），位置独立成行四角单选（默认右下角）。
-- 验收：开关默认关闭时不显示任何常驻徽标；控制栏一旦唤醒，无论开关与否都显示徽标；打开开关且媒体信息可解析时，控制栏隐藏后徽标也在所选角落按类别色胶囊横排常驻；Exo/MPV/IJK 三引擎均不崩溃。（第三轮起按用户明确授权打包现成徽标位图，第四轮扩到参考 JSON 全量 **100 张**，第五轮并入扩充包再补 **27 张**、共 **127 张**，其中含 Dolby / DTS / IMAX / 各家流媒体平台的商标与字标，属于**用户已知并接受**的取舍。）
-- Lane/scope：task_guard `osd-media-badges`（mode=standard），base HEAD `4dda4b56b8d67e0cb78e6617f7b0f776591383a9`，branch `dev1`。
+- 目标：播放器显示当前媒体的徽标（分辨率 / 动态范围 / 画面来源与画质 / 视频编码 / 音频编码 / 声道 / 帧率 / 码率 / 容器 / 特别标签 / IMAX / 流媒体平台），**同一行横排**，每条为「现成徽标牌位图 + 可选文本 + 类别色胶囊」；没有对应牌的事实（帧率 / 码率 / 容器）只显示文本，不再用语义不符的自绘图标。展示语义（第七轮起）：「媒体信息」开关是**唯一总闸**——关闭时无论控制栏是否唤醒都不显示（连 renderMediaBadgesOnly() 这条独立放行路径也一并收口）；打开时控制栏隐藏也作为常驻项显示，与标题 / 时间 / 进度 / 码率同级。开关进「屏显设置」多选（**默认关**），位置独立成行单选，**选项为 左上角 / 右上角 / 左下角 / 右下角 / 关闭（默认）**：选角位 = 记下该角并打开开关；选「关闭」= 只关开关、**保留最近一次角位**，因此再次打开开关会回到上次的角位，从未设过则回到默认右下角。
+- 验收（第七轮起）：默认「关闭」时控制栏唤醒与非全屏页面都**不显示**徽标；选角位即打开开关，控制栏隐藏时徽标仍以该角位常驻；再选「关闭」后重新打开开关要回到最近一次角位（从未设过则右下角）；Exo/MPV/IJK 三引擎均不崩溃。（第三轮起按用户明确授权打包现成徽标位图，第四轮扩到参考 JSON 全量 **100 张**，第五轮并入扩充包再补 **27 张**、共 **127 张**，其中含 Dolby / DTS / IMAX / 各家流媒体平台的商标与字标，属于**用户已知并接受**的取舍。）
+- Lane/scope：当前轮次 task_guard `osd-badges-off`（mode=standard），base HEAD `3220d20d6c3d4a9f90b192340dae06d10e512c58`，branch `dev3`；历史轮次见 §9。
 - 回滚：单一逻辑提交，回滚该提交即可完整撤销；新增键 `player_osd_media_badges` / `player_osd_media_badge_position` 未被引用时是惰性偏好项，不会影响旧版本行为。
-- 后续任务：`osd-badge-icons`（base HEAD `49e5b2c4bc05a5e1e05f2bc18327d1c02079b9f5`）把徽标从「常驻屏显」改为「控制栏可见时展示」并加图标；`osd-badge-plates`（base HEAD `7d4bee6ce1`）改为横排 + 类别色 + 现成徽标牌；`osd-badge-plates-all`（base HEAD `0dc165a9a2`）把参考 JSON 的 **100 条规则 + 100 张牌图全量入库**，并删掉语义不符的自绘兜底图标；`osd-badges-persist`（base HEAD `39e1b4a0d4`）把徽标从「只在控制栏可见时渲染」改为「控制栏唤醒无条件显示 + 开关打开后常驻显示」；`osd-badge-expansion`（base HEAD `192b55c2fc`）并入参考扩充包的媒体事实规则、把牌图扩到 127 张，并统一同行高度。
+- 后续任务：`osd-badge-icons`（base HEAD `49e5b2c4bc05a5e1e05f2bc18327d1c02079b9f5`）把徽标从「常驻屏显」改为「控制栏可见时展示」并加图标；`osd-badge-plates`（base HEAD `7d4bee6ce1`）改为横排 + 类别色 + 现成徽标牌；`osd-badge-plates-all`（base HEAD `0dc165a9a2`）把参考 JSON 的 **100 条规则 + 100 张牌图全量入库**，并删掉语义不符的自绘兜底图标；`osd-badges-persist`（base HEAD `39e1b4a0d4`）把徽标从「只在控制栏可见时渲染」改为「控制栏唤醒无条件显示 + 开关打开后常驻显示」；`osd-badge-expansion`（base HEAD `192b55c2fc`）并入参考扩充包的媒体事实规则、把牌图扩到 127 张，并统一同行高度；`osd-badges-off`（base HEAD `3220d20d6c3d4a9f90b192340dae06d10e512c58`）新增「关闭」选项并让开关成为唯一总闸、关闭时保留最近一次角位。
 
 ## 1. 需求与取舍
 
@@ -93,19 +93,21 @@
 - 第五轮新增的两条非运行时组：**VIDEO_TECH**（HDR Vivid / 3D）与 **EDITION**（CC标准收藏 / 港台日美英德法欧韩版 / 箭影 / 碟影 / 全区版），都只认文件名；同组多命中时只保留排在前面的那条（例如 `HDR.Vivid.3D` 只出 HDR Vivid）。
 - 已知行为：`gms_remux_1/2/3`、`gms_blu_ray_*`、`gms_web_*` 的 pattern 要求文件名结尾带已知发布组名（如 `-FraMeSToR`），没有发布组的 `...REMUX...mkv` 只会命中 `gq_remux`。这是参考实现的原样行为，未做放宽。
 
-## 7. 开关入口（三个，全部等价）
+## 7. 开关入口（全部等价）
 
 | 入口 | 载体 | 文案 |
 | --- | --- | --- |
 | 设置 → 屏显设置（多选） | `select_player_osd` 第 8 项 → `PlayerSettingsRow` 开关 | 「媒体信息」（zh-rCN）/「媒體資訊」（zh-rTW）/「Media info」 |
 | 播放控件 → 屏显芯片弹窗（TV/手机） | 两 flavor `ControlDialog` 第 8 个芯片 `displayMediaBadges` | 同上 |
 | TMDB 详情页内联控件 → 屏显芯片弹窗 | `DisplayDialog`（`Mode.PLAYER_OSD`）`display_media_badges` | 同上 |
+| 设置 → 播放设置 → 媒体信息位置（单选） | `ChoiceDialog.showSingle`，5 项：左上角 / 右上角 / 左下角 / 右下角 / 关闭 | 「媒体信息位置」 |
+| 播放控件 → 屏显芯片弹窗的「媒体信息」芯片 | 两 flavor `ControlDialog` / `DisplayDialog`：拨到开 = 用最近一次角位显示；拨到关 = 等价「关闭」 | 同上 |
 
-三者都读写同一对键（`player_osd_media_badges` + `player_osd_media_badge_position`），`ControlDialog.toggleDisplaySetting(index)` 与 `DisplayDialog.setDisplay(...)` 都汇入 `PlayerSetting.putDisplayChecked(...)` / `putDisplayMediaBadges(...)`，随后调用 `onDisplayChanged()` / `inlineControlDialogDisplayChanged()`，由 `PlayerOsdController.render()` 下一次轮询生效。
+上表各入口都读写同一对键（`player_osd_media_badges` + `player_osd_media_badge_position`），`ControlDialog.toggleDisplaySetting(index)` 与 `DisplayDialog.setDisplay(...)` 都汇入 `PlayerSetting.putDisplayChecked(...)` / `putDisplayMediaBadges(...)`，随后调用 `onDisplayChanged()` / `inlineControlDialogDisplayChanged()`，由 `PlayerOsdController.render()` 下一次轮询生效。
 
 ## 8. 已知缺口（有意为之）
 
-- 徽标的两条展示路径：控制栏唤醒时无条件显示（`setMediaBadges` 不再看开关）；控制栏隐藏时由「媒体信息」开关决定（关闭时 `setMediaBadges` 立即隐藏并清空重建签名）。
+- 徽标的展示路径（第七轮改写）：`setMediaBadges` 只看「媒体信息」开关，关闭时**控制栏唤醒也不再显示**（这是用户明确要求的「关闭不显示包括控制栏唤醒后」）；开关打开时才渲染，控制栏隐藏时作为常驻项。suppressed 分支里 `renderMediaBadgesOnly()` 先查同一个开关，关闭时把四角 / 诊断 / 迷你进度 / 徽标全部 GONE 并清空签名后返回 false。
 - 角位内缩按控制栏状态分支：控制栏可见时上两角 `topMargin=64dp` / 下两角 `bottomMargin=80dp`（避开顶栏按钮列与底部进度条）；控制栏隐藏时上两角 `0`（靠布局自带的 14dp padding）、下两角 `22dp`（抬高一行，避开常驻进度 / 码率文本）。
 - mobile 播放器在 `showControl()` 里先 `setOsdSuppressed(true)` 隐藏整个 OSD 根，因此徽标走 `renderMediaBadgesOnly()` 这条独立放行路径。
 - 徽标与标题/分辨率/时间**允许同角共存**（用户确认）：徽标容器是独立 `FlexboxLayout`，同角重叠时由 `layout_gravity` 决定层级，二者可能相互覆盖——有意的「零侵入」取舍。
@@ -130,6 +132,29 @@
 - 位置四角（`player_osd_media_badge_position` → `@id/osdMediaBadges` bounds）：`0` 左上 / `1` 右上 / `2` 左下 / `3` 右下（默认），控制栏可见时四角均内缩避开控制栏。
 - 控制栏自动隐藏后再 dump，只剩 `@id/osd`，**没有 `@id/osdMediaBadges` 节点** → 这条是**改动前**（开关关闭）的观测；`osd-badges-persist` 之后改为：开关关闭时依旧如此，开关打开时常驻路径同样渲染徽标（见 §9 本轮实测）。
 - 全屏下位置 `1`（右上）徽标 `[1644,519][1895,735]`，与进度条不重叠。
+
+### 第七轮：关闭项 + 开关成为唯一总闸（task_guard `osd-badges-off`，base HEAD `3220d20d6c3d4a9f90b192340dae06d10e512c58`）
+
+用户原话（两段需求）：「新增一个关闭选项，默认关闭不显示包括控制栏唤醒后，关闭状态时用户开启媒体信息屏显时自动改成右下角（也就是现在的默认值），如果用户有历史设置则设置为最近一次的设置，比如用户之前设置在左上角后关闭屏显再开启屏显还是自动左上角」；「非全屏状态下唤醒控制栏不再显示媒体信息……除非是用户自己开启了屏显，没开启的时候非全屏唤醒控制栏不显示」。
+
+#### 改动
+
+1. `PlayerSetting.java`：新增 `MEDIA_BADGE_POSITION_OFF = 4`、`getMediaBadgeChoice()`（返回 `isDisplayMediaBadges() ? getMediaBadgePosition() : MEDIA_BADGE_POSITION_OFF`）、`putMediaBadgeChoice(int which)`（`which == OFF` 只 `putDisplayMediaBadges(false)` 并 return，**角位键原样保留**；否则 `putMediaBadgePosition(which)` + `putDisplayMediaBadges(true)`）。「历史角位」因此天然成立：关闭只动开关不动位置。
+2. `PlayerOsdController.java`：`setMediaBadges(player)` 的门控由「控制栏可见就显示」改为只看 `PlayerSetting.isDisplayMediaBadges()`；`renderMediaBadgesOnly()`（mobile 隐藏 OSD 根后的独立放行路径）开头先查同一开关，关闭时把四角 / 诊断 / 迷你进度 / 徽标全部 `GONE`、清空 `mediaBadgeSignature`、`root` 置 `GONE` 并返回 false，防止这条旁路把「控制栏唤醒」当成显示许可。
+3. 三语 `select_media_badge_position` 数组各追加第 5 项：`Off` / `关闭` / `關閉`（默认选中项由 `getMediaBadgeChoice()` 决定，从未开过就落在「关闭」）。
+4. 两 flavor 设置页（`SettingPlayerActivity.java` leanback / `SettingPlayerFragment.java` mobile）的 `onBadgePosition` / `updateBadgePositionText` 改用新入口；摘要文本用 `badgePosition.length > which` 兜底，越界时显示 `setting_off`。
+5. `PlayerDisplaySettingSyncTest.java`：旧用例 `mediaBadgesFollowTheMediaInfoSwitchOnlyWhenTheControlBarIsHidden` 改写为 `mediaBadgesAreGatedByTheMediaInfoSwitchOnEveryPath`（断言 `setMediaBadges` 体内含 `!PlayerSetting.isDisplayMediaBadges()`、不再含旧组合；`renderMediaBadgesOnly` 含开关判断；保留常驻分支与 inset 断言），新增 `mediaBadgePositionChoiceKeepsTheLastCornerAcrossOff`（断言 `OFF = 4`、`getMediaBadgeChoice()` 两种返回、默认 3、`putMediaBadgeChoice` 分支、两 flavor 设置页改用新入口、三语数组恰好 5 项）。
+
+#### 验证（emulator-5554，1920×1080，sdk28，zh-CN，mobileArm64-v8a debug）
+
+- 单测：`PlayerDisplaySettingSyncTest` leanback 10 例 0 失败、mobile 10 例 0 失败，`ControlDialogOsdSettingsTest` mobile 9 例 0 失败；整任务里另有 8 例既存环境失败（MpvFontConfigTest / MpvHlsCacheCoordinatorTest / NativeEnhancedPlaybackStyleFocusTest / ReaderPlaybackRoutingSourceTest / SearchResultDownFocusTest / TmdbSourceOnlyInteractionTest / WebThemeTokenSourceTest），它们读取的文件都不在本轮 diff 内。
+- 构建安装：`assembleMobileArm64_v8aDebug` BUILD SUCCESSFUL，`app/build/outputs/apk/mobileArm64_v8a/debug/app-mobile-arm64_v8a-debug.apk`（209,274,248 字节）`adb install -r -t` 成功。
+- 实测截图（`off-live.png` 关闭态控制栏唤醒无徽标、`on-badges.png` 开启后回到左上角、`off-dialog.png` 五项对话框、`on-panel.png` 播放控件芯片、`state.png`）按 task guard 的 scope 约束**不进入仓库**，本轮暂存于 `.design-evidence` 之外的同机目录 `%TEMP%\osd-badges-off-evidence\`；仓库内只保留文字证据。
+- **关闭（默认）时控制栏唤醒不显示**：`off-live.png` 中控制栏已唤醒（短显 / 搜索 / 投屏 / 设置 与 线路 / 选集 全部在屏），视频小窗左上角**没有任何徽标**；同帧 `uiautomator` dump 中 `webhtv:id/osd*` 节点数 = **0**。
+- **开关打开后按历史角位显示**：设置页把「媒体信息位置」先选成**左上角**（prefs `player_osd_media_badges=true` + `player_osd_media_badge_position=0`），再选**关闭**（prefs 变 `false`，但 `position` 仍为 `0`）；随后在播放控件里把「媒体信息」芯片拨到开，徽标出现在**视频小窗左上角**（`on-badges.png`：HD / AVC / AAC 44.1KHZ 64KBPS / 2.0 顶到小窗顶边），即「关闭再开启仍回到最近一次设置」。
+- **关闭立即生效**：同一会话里再把芯片拨回关（prefs `false`），徽标立刻从画面消失，无需退出播放。
+- **默认值即右下角**：全新安装时 `player_osd_media_badge_position` 默认 3，因此从未设过角位就直接打开开关会落在右下角；`off-dialog.png` 里「关闭」为选中态，说明默认选择就是关闭。
+- 设置页「媒体信息位置」对话框实测 5 项：左上角 / 右上角 / 左下角 / 右下角 / **关闭**（`off-dialog.png`，`关闭` 高亮为当前值，与历史截图里 4 项旧版对比）。
 
 ### 第五轮：常驻显示 + 控制栏唤醒无条件显示（task_guard `osd-badges-persist`，base HEAD `39e1b4a0d4`）
 
