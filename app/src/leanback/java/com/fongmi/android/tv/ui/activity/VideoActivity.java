@@ -2447,7 +2447,7 @@ private boolean runtimeSourceOnly;
     }
 
     private String currentTmdbLanguage() {
-        return TmdbLanguagePolicy.requestLanguage(currentTmdbConfig());
+        return TmdbLanguagePolicy.requestLanguage(currentTmdbConfig(), Setting.getLanguage());
     }
 
     private String cachedTmdbImage(JsonObject detail, String key) {

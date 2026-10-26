@@ -97,9 +97,11 @@ public final class MediaTitleParser {
         clean = NOISE_WORDS.matcher(clean).replaceAll(" ");
         clean = FRAME_RATE_PATTERN.matcher(clean).replaceAll(" ");
         clean = clean.replaceAll("(更新至|更至|连载至|全|共)\\s*[0-9零〇一二三四五六七八九十百]+\\s*[集话話回期章节節]", " ");
-        clean = clean.replaceAll("(更新至|更至|连载至)\\s*$", " ");
-        clean = clean.replaceAll("(国语版|国配版|普通话版|粤语版|台语版|闽南语版|原声版|配音版|中字版|字幕版|台版|台湾版|港版|大陆版|内地版|中国版|泰版|韩版|日版|美版|英版)", " ");
-        clean = clean.replaceAll("(真彩|臻彩|高码|高码率|无水印|无台标|国语|国配|国粤|粤语|中字|字幕|内封|简繁|双语|官中|杜比|合集|全集|完结|未删减|加长版|修复版|防和谐版|防和谐)", " ");
+        clean = clean.replaceAll("(更新至|更至|连载至|連載至)\\s*$", " ");
+        // 站源标题在繁体界面下会被改成繁体，噪声词表必须同时列出简体与繁体写法，
+        // 否则「慶餘年（高碼）」这类标题清洗不掉尾部标记，会连标记一起拿去搜 TMDB。
+        clean = clean.replaceAll("(国语版|国配版|普通话版|普通話版|粤语版|粵語版|台语版|台語版|闽南语版|閩南語版|原声版|原聲版|配音版|中字版|字幕版|台版|台湾版|台灣版|港版|大陆版|大陸版|内地版|內地版|中国版|中國版|泰版|韩版|韓版|日版|美版|英版)", " ");
+        clean = clean.replaceAll("(真彩|臻彩|高码|高码率|高碼|高碼率|无水印|無水印|无台标|無台標|国语|國語|国配|國配|国粤|國粵|粤语|粵語|中字|字幕|内封|內封|简繁|簡繁|双语|雙語|官中|杜比|合集|全集|完结|完結|未删减|未刪減|加长版|加長版|修复版|修復版|防和谐版|防和諧版|防和谐|防和諧)", " ");
         clean = clean.replaceAll("[#＃]+", "");
         clean = clean.replaceAll("(?i)(^|\\s)(动漫|动画|电视剧|剧集|电影|综艺)(\\s|$)", " ");
         clean = clean.replaceAll("[._\\-+]+", " ");
@@ -402,7 +404,7 @@ public final class MediaTitleParser {
         String value = normalize(text);
         if (value.isEmpty()) return true;
         return NOISE_WORDS.matcher(text).find()
-                || value.matches(".*(真彩|臻彩|高码|无水印|无台标|国语|国配|国粤|粤语|中字|字幕|内封|简繁|双语|官中|杜比|合集|全集|完结|未删减|加长版|修复版).*");
+                || value.matches(".*(真彩|臻彩|高码|高碼|无水印|無水印|无台标|無台標|国语|國語|国配|國配|国粤|國粵|粤语|粵語|中字|字幕|内封|內封|简繁|簡繁|双语|雙語|官中|杜比|合集|全集|完结|完結|未删减|未刪減|加长版|加長版|修复版|修復版).*");
     }
 
     private int inferTrailingSeason(String raw) {

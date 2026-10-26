@@ -51,8 +51,14 @@ public class App extends Application implements Application.ActivityLifecycleCal
     private volatile int foregroundActivities;
     private Hook hook;
 
-    private Resources resources;
-    private int resourcesLanguage = Integer.MIN_VALUE;
+    /** 同一语言上语言更新连续失败的次数上限，超过后放弃该语言，避免热路径无限重试。 */
+    private static final int MAX_RESOURCES_APPLY_ATTEMPTS = 3;
+
+    private final Object resourcesLock = new Object();
+    private volatile Resources resources;
+    private volatile int resourcesLanguage = Integer.MIN_VALUE;
+    private int resourcesFailedLanguage = Integer.MIN_VALUE;
+    private int resourcesFailures;
 
     public App() {
         instance = this;
@@ -210,24 +216,87 @@ public class App extends Application implements Application.ActivityLifecycleCal
         return hook != null ? hook.getPackageName() : getBaseContext().getPackageName();
     }
 
+    /**
+     * 全应用的语言资源入口：{@code ResUtil} 与几乎所有界面都经由这里取 Resources，
+     * 并且调用方可能来自任意线程（包括 Task 线程池），所以这里必须是非阻塞安全的。
+     * <p>
+     * 语言切换会把新 Configuration 写进框架自己持有的 Resources，而
+     * {@code updateConfiguration} 不是线程安全的：缓存未命中时若无锁，两个线程会同时改写同一个
+     * Resources，WebView 在 Android 9 挂到这个 AssetManager 上的资源包就可能被写坏。
+     * 另外这条路径一旦抛异常，异常会穿透每一个取资源的调用点（含系统回调），所以更新失败只记日志并
+     * 继续返回框架 Resources，让界面以系统语言降级显示，而不是把异常散播到全应用。
+     * <p>
+     * 更新失败时<b>不</b>把语言记成已应用：否则同一语言的后续调用会命中快路径，
+     * 失败将被永久固化到下次切语言或重启。这里只缓存 Resources（避免反复 super.getResources()），
+     * 语言标记留在未命中态，下次取资源时自动重试。
+     * <p>
+     * 但重试必须有限：{@code getResources()} 是热路径（每个 TextView 都可能调用），
+     * 若该语言的更新恒定失败，无限重试等于每次取资源都重算 Configuration 并刷一条日志。
+     * 因此同一语言连续失败 {@link #MAX_RESOURCES_APPLY_ATTEMPTS} 次后放弃该项语言：
+     * 认领该语言、固定返回框架 Resources，让热路径恢复成一次 volatile 读。放弃状态在语言变化
+     * （{@link #resourcesFailedLanguage} 随之失配）或被 {@link #invalidateResources()} 显式重置后才解除。
+     */
     @Override
     @SuppressWarnings("deprecation")
     public Resources getResources() {
         int language = Setting.getLanguage();
-        if (resources == null || resourcesLanguage != language) {
-            Resources resources = super.getResources();
-            Configuration configuration = Setting.wrapLanguage(getBaseContext()).getResources().getConfiguration();
-            // WebView adds its resource package to the framework-owned AssetManager on Android 9.
-            resources.updateConfiguration(configuration, resources.getDisplayMetrics());
-            this.resources = resources;
+        Resources cached = resources;
+        if (cached != null && resourcesLanguage == language) return cached;
+        synchronized (resourcesLock) {
+            if (resources != null && resourcesLanguage == language) return resources;
+            if (shouldRetryResourcesApply(language)) {
+                Resources resources = super.getResources();
+                try {
+                    Configuration configuration = Setting.wrapLanguage(getBaseContext()).getResources().getConfiguration();
+                    // WebView adds its resource package to the framework-owned AssetManager on Android 9.
+                    resources.updateConfiguration(configuration, resources.getDisplayMetrics());
+                    resourcesFailedLanguage = Integer.MIN_VALUE;
+                    resourcesFailures = 0;
+                    this.resources = resources;
+                    resourcesLanguage = language;
+                } catch (RuntimeException e) {
+                    recordResourcesApplyFailure(language, e);
+                    // 失败只缓存 Resources 本身、不认领语言：下一轮同语言调用会再试一次。
+                    this.resources = resources;
+                    resourcesLanguage = Integer.MIN_VALUE;
+                    if (resourcesFailures >= MAX_RESOURCES_APPLY_ATTEMPTS) {
+                        // 放弃该语言：认领语言让热路径恢复为一次 volatile 读，避免每次取资源都重算并刷日志。
+                        SpiderDebug.log("resources", "apply language gave up language=%s attempts=%d", language, resourcesFailures);
+                        resourcesLanguage = language;
+                    }
+                }
+                return resources;
+            }
+            // 已放弃该语言：不再重算 Configuration，直接返回框架 Resources。
+            Resources fallback = this.resources != null ? this.resources : super.getResources();
+            this.resources = fallback;
             resourcesLanguage = language;
+            return fallback;
         }
-        return resources;
+    }
+
+    /** 该语言是否还值得再尝试一次；同一语言连续失败到上限后放弃，直到语言变化或显式失效。 */
+    private boolean shouldRetryResourcesApply(int language) {
+        return resourcesFailedLanguage != language || resourcesFailures < MAX_RESOURCES_APPLY_ATTEMPTS;
+    }
+
+    private void recordResourcesApplyFailure(int language, RuntimeException e) {
+        if (resourcesFailedLanguage == language) {
+            resourcesFailures++;
+        } else {
+            resourcesFailedLanguage = language;
+            resourcesFailures = 1;
+        }
+        SpiderDebug.log("resources", "apply language failed language=%s attempt=%d error=%s", language, resourcesFailures, e.getMessage());
     }
 
     public void invalidateResources() {
-        resources = null;
-        resourcesLanguage = Integer.MIN_VALUE;
+        synchronized (resourcesLock) {
+            resources = null;
+            resourcesLanguage = Integer.MIN_VALUE;
+            resourcesFailedLanguage = Integer.MIN_VALUE;
+            resourcesFailures = 0;
+        }
     }
 
     @Override
