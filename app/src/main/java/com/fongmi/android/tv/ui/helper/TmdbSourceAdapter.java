@@ -11,6 +11,7 @@ import com.fongmi.android.tv.bean.TmdbSourceDetail;
 import com.fongmi.android.tv.bean.TmdbSourcePayload;
 import com.fongmi.android.tv.bean.TmdbVideo;
 import com.fongmi.android.tv.bean.Vod;
+import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.utils.TmdbLanguagePolicy;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -86,7 +87,7 @@ public final class TmdbSourceAdapter {
         boolean tv = "tv".equals(mediaType);
         String titleKey = tv ? "name" : "title";
         String title = TmdbLanguagePolicy.bestDisplayValue(firstString(detail, tv ? new String[]{"name", "title"} : new String[]{"title", "name"}),
-                array(object(detail, "translations"), "translations"), titleKey, TmdbLanguagePolicy.requestLanguage(config));
+                array(object(detail, "translations"), "translations"), titleKey, TmdbLanguagePolicy.requestLanguage(config, Setting.getLanguage()));
         if (title.isEmpty() && vod != null && coreComplete) title = vod.getName();
         String date = firstString(detail, tv ? new String[]{"first_air_date", "release_date"} : new String[]{"release_date", "first_air_date"});
         double vote = number(detail, "vote_average", 0d);
@@ -98,7 +99,7 @@ public final class TmdbSourceAdapter {
                 mediaType,
                 title,
                 subtitle,
-                TmdbLanguagePolicy.bestDisplayValue(string(detail, "overview"), array(object(detail, "translations"), "translations"), "overview", TmdbLanguagePolicy.requestLanguage(config)),
+                TmdbLanguagePolicy.bestDisplayValue(string(detail, "overview"), array(object(detail, "translations"), "translations"), "overview", TmdbLanguagePolicy.requestLanguage(config, Setting.getLanguage())),
                 poster,
                 backdrop,
                 "",
@@ -295,11 +296,12 @@ public final class TmdbSourceAdapter {
 
     private static List<TmdbEpisode> episodes(JsonObject season, int tmdbId, int seasonNumber, TmdbConfig config) {
         List<TmdbEpisode> result = new ArrayList<>();
+        // 语言策略每条分集都一样，提到循环外，避免按集重复读 Setting（一季几十集）。
+        String target = TmdbLanguagePolicy.requestLanguage(config, Setting.getLanguage());
         for (JsonElement element : array(season, "episodes")) {
             if (!element.isJsonObject()) continue;
             JsonObject episode = element.getAsJsonObject();
             int number = integer(episode, "episode_number", result.size() + 1);
-            String target = TmdbLanguagePolicy.requestLanguage(config);
             result.add(new TmdbEpisode(
                     number,
                     TmdbLanguagePolicy.bestDisplayValue(string(episode, "name"), array(object(episode, "translations"), "translations"), "name", target),

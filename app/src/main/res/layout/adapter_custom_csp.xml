@@ -67,7 +67,7 @@
             android:focusable="true"
             android:padding="8dp"
             android:src="@drawable/ic_subtitle_up"
-            app:tint="?attr/colorOnSurfaceVariant" />
+            app:tint="@color/fixed_light_focus_icon" />
 
         <androidx.appcompat.widget.AppCompatImageButton
             android:id="@+id/down"
@@ -79,7 +79,7 @@
             android:focusable="true"
             android:padding="8dp"
             android:src="@drawable/ic_subtitle_down"
-            app:tint="?attr/colorOnSurfaceVariant" />
+            app:tint="@color/fixed_light_focus_icon" />
 
         <androidx.appcompat.widget.AppCompatImageButton
             android:id="@+id/delete"
@@ -91,7 +91,7 @@
             android:focusable="true"
             android:padding="8dp"
             android:src="@drawable/ic_setting_delete"
-            app:tint="?attr/colorOnSurfaceVariant" />
+            app:tint="@color/fixed_light_focus_icon" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 

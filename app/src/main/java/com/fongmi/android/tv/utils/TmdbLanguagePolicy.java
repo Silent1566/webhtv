@@ -32,6 +32,15 @@ public final class TmdbLanguagePolicy {
     private TmdbLanguagePolicy() {
     }
 
+    /**
+     * 只看配置的 TMDB 请求语言。
+     *
+     * <p>本类是纯策略（不依赖 Android），这条重载只反映用户配置，<b>不会</b>跟随界面语言。
+     * 任何「真正发请求」或「写读按语言分键的缓存」的调用点都必须用
+     * {@link #requestLanguage(TmdbConfig, int)} 并传入 {@code Setting.getLanguage()}：
+     * 请求语言与缓存键一旦不同源，繁体界面取回的 zh-TW 数据会被标成 zh-CN 落盘，
+     * 切回简体后语言守卫 {@link #matchesTarget} 认不出这份「其实是繁体」的快照。
+     */
     public static String requestLanguage(@Nullable TmdbConfig config) {
         return normalize(config == null ? null : config.getLanguage());
     }

@@ -339,6 +339,7 @@ private String mInlineLyrics;
 private long mLyricsLoopLastPlayerPosition = C.TIME_UNSET;
 private boolean mLyricsLoopLastPlaying;
 private String mPlaybackEpisodeKey;
+private String mPlaybackFlagKey = "";
 private int runtimeDetailMode = Setting.getDetailOpenMode();
 private boolean runtimeSourceOnly;
 private String mArtworkRequestUrl;
@@ -2796,6 +2797,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         clearKaraokeState();
         if (shouldUseImmersiveAudio()) setAudioStageVisible(true);
         beginPlayerContentRequest(getKey(), playFlag, episode.getUrl());
+        mPlaybackFlagKey = playbackFlagKey(flag);
         mViewModel.playerContent(getKey(), playFlag, episode.getUrl(), applyHistoryPlayerKernel());
         mBinding.control.title.setSelected(true);
         updateHistory(episode);
@@ -3096,6 +3098,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         playerContentKey = "";
         playerContentFlag = "";
         playerContentEpisode = "";
+        mPlaybackFlagKey = "";
         decodeSwitchRefreshing = false;
     }
 
@@ -3107,6 +3110,23 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
                 && TextUtils.equals(flag, currentFlag.getFlag())
                 && currentEpisode != null
                 && TextUtils.equals(episode, currentEpisode.getUrl());
+    }
+
+    private String playbackFlagKey(Flag flag) {
+        if (flag == null) return "";
+        int index = mVod == null ? -1 : com.fongmi.android.tv.ui.helper.TmdbUIAdapter.flagIndex(mVod.getFlags(), flag);
+        if (index < 0 && mFlagAdapter != null) index = mFlagAdapter.indexOf(flag);
+        if (index < 0) return "";
+        return com.fongmi.android.tv.ui.helper.TmdbUIAdapter.flagKey(flag, index);
+    }
+
+    private boolean isPlaybackFlag(Flag flag) {
+        String key = playbackFlagKey(flag);
+        return !TextUtils.isEmpty(key) && TextUtils.equals(mPlaybackFlagKey, key);
+    }
+
+    private boolean isPlayingContent(Episode episode) {
+        return episode != null && episode.isSelected() && isPlaybackFlag(getFlag());
     }
 
     private int beginPlayerContentSwitch(int requestId, String key, String flag, String episode) {
@@ -3236,7 +3256,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         int position = mFlagAdapter.indexOf(item);
         Flag resolved = mFlagAdapter.get(position < 0 ? 0 : position);
         boolean initialBinding = mEpisodeAdapter == null || mEpisodeAdapter.isEmpty();
-        if (resolved.isSelected() && !initialBinding) return;
+        if (resolved.isSelected() && isPlaybackFlag(resolved) && !initialBinding) return;
         Flag previous = getFlag();
         SpiderDebug.log("playback-action", "flag switch ui=mobile site=%s from=%s to=%s fullscreen=%s", getKey(), previous == null ? "" : previous.getFlag(), resolved.getFlag(), isFullscreen());
         mFlagAdapter.setSelected(resolved);
@@ -3566,7 +3586,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
     private boolean seamless(Flag flag) {
         Episode episode = getMark().isEmpty() ? flag.find(mHistory.getEpisode(), true) : flag.find(mHistory.getVodRemarks(), false);
         setQualityVisible(episode != null && episode.isSelected() && mQualityAdapter.getItemCount() > 1);
-        if (episode == null || episode.isSelected()) return false;
+        if (episode == null || (isPlaybackFlag(flag) && episode.isSelected())) return false;
         mHistory.setVodRemarks(getHistoryEpisodeName(episode));
         mHistory.setEpisodeUrl(episode.getUrl());
         onItemClick(episode);
@@ -5407,7 +5427,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
     }
 
     private boolean shouldEnterFullscreen(Episode item) {
-        boolean enter = !isFullscreen() && item.isSelected();
+        boolean enter = !isFullscreen() && isPlayingContent(item);
         if (enter) enterFullscreen();
         return enter;
     }
@@ -10499,6 +10519,7 @@ private void prepareImmersiveAudioPlayback(AudioPlaybackResolver.Resolved resolv
         playerStartTime = detailStartTime;
         beginPlayHealth();
         mPlaybackEpisodeKey = audioQueueEpisodeKey(episode);
+        mPlaybackFlagKey = playbackFlagKey(resolved.getFlag());
         clearLyrics();
         clearKaraokeState();
         setAudioOnly(true);
@@ -10509,6 +10530,7 @@ private void applyImmersiveAudioSelection(AudioPlaybackResolver.Resolved resolve
         Episode episode = resolved.getEpisode();
         mFlagAdapter.setSelected(flag);
         mFlagAdapter.toggle(episode);
+        mPlaybackFlagKey = playbackFlagKey(flag);
         scrollToPosition(mBinding.flag, mFlagAdapter.getPosition());
         setEpisodeAdapter(flag.getEpisodes());
         scrollEpisodeToSelected();

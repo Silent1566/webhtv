@@ -336,7 +336,7 @@
         <androidx.appcompat.widget.LinearLayoutCompat
             android:layout_width="wrap_content"
             android:layout_height="88dp"
-            android:background="@color/webhtv_color_scrim"
+            android:background="@color/fixed_light_band"
             android:gravity="center_vertical"
             android:orientation="horizontal">
             <androidx.appcompat.widget.LinearLayoutCompat
@@ -352,12 +352,14 @@
                     android:gravity="center"
                     android:maxLines="2"
                     android:text="@string/ad_log_site_name"
-                    android:textColor="@color/dialog_outlined_button_text"
+                    android:textColor="@color/fixed_light_focus_text"
                     android:textSize="12sp"
                     android:textStyle="bold" />
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/siteFilter"
                     style="@style/Widget.WebHTV.Button.Outlined"
+                    android:textColor="@color/fixed_light_focus_text"
+                    app:strokeColor="@color/fixed_light_text_muted"
                     android:layout_width="match_parent"
                     android:layout_height="44dp"
                     android:ellipsize="end"
@@ -386,12 +388,14 @@
                     android:gravity="center"
                     android:maxLines="2"
                     android:text="@string/ad_log_site_domain"
-                    android:textColor="@color/dialog_outlined_button_text"
+                    android:textColor="@color/fixed_light_focus_text"
                     android:textSize="12sp"
                     android:textStyle="bold" />
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/siteDomainFilter"
                     style="@style/Widget.WebHTV.Button.Outlined"
+                    android:textColor="@color/fixed_light_focus_text"
+                    app:strokeColor="@color/fixed_light_text_muted"
                     android:layout_width="match_parent"
                     android:layout_height="44dp"
                     android:ellipsize="end"
@@ -420,12 +424,14 @@
                     android:gravity="center"
                     android:maxLines="2"
                     android:text="@string/ad_log_playback_context"
-                    android:textColor="@color/dialog_outlined_button_text"
+                    android:textColor="@color/fixed_light_focus_text"
                     android:textSize="12sp"
                     android:textStyle="bold" />
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/vodFilter"
                     style="@style/Widget.WebHTV.Button.Outlined"
+                    android:textColor="@color/fixed_light_focus_text"
+                    app:strokeColor="@color/fixed_light_text_muted"
                     android:layout_width="match_parent"
                     android:layout_height="44dp"
                     android:ellipsize="end"
@@ -454,12 +460,14 @@
                     android:gravity="center"
                     android:maxLines="2"
                     android:text="@string/ad_log_line_name"
-                    android:textColor="@color/dialog_outlined_button_text"
+                    android:textColor="@color/fixed_light_focus_text"
                     android:textSize="12sp"
                     android:textStyle="bold" />
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/lineFilter"
                     style="@style/Widget.WebHTV.Button.Outlined"
+                    android:textColor="@color/fixed_light_focus_text"
+                    app:strokeColor="@color/fixed_light_text_muted"
                     android:layout_width="match_parent"
                     android:layout_height="44dp"
                     android:ellipsize="end"
@@ -488,12 +496,14 @@
                     android:gravity="center"
                     android:maxLines="2"
                     android:text="@string/ad_log_episode_name"
-                    android:textColor="@color/dialog_outlined_button_text"
+                    android:textColor="@color/fixed_light_focus_text"
                     android:textSize="12sp"
                     android:textStyle="bold" />
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/episodeFilter"
                     style="@style/Widget.WebHTV.Button.Outlined"
+                    android:textColor="@color/fixed_light_focus_text"
+                    app:strokeColor="@color/fixed_light_text_muted"
                     android:layout_width="match_parent"
                     android:layout_height="44dp"
                     android:ellipsize="end"
@@ -522,12 +532,14 @@
                     android:gravity="center"
                     android:maxLines="2"
                     android:text="@string/ad_log_rule_domain"
-                    android:textColor="@color/dialog_outlined_button_text"
+                    android:textColor="@color/fixed_light_focus_text"
                     android:textSize="12sp"
                     android:textStyle="bold" />
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/ruleFilter"
                     style="@style/Widget.WebHTV.Button.Outlined"
+                    android:textColor="@color/fixed_light_focus_text"
+                    app:strokeColor="@color/fixed_light_text_muted"
                     android:layout_width="match_parent"
                     android:layout_height="44dp"
                     android:ellipsize="end"
@@ -556,12 +568,14 @@
                     android:gravity="center"
                     android:maxLines="2"
                     android:text="@string/ad_log_ad_domain"
-                    android:textColor="@color/dialog_outlined_button_text"
+                    android:textColor="@color/fixed_light_focus_text"
                     android:textSize="12sp"
                     android:textStyle="bold" />
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/adDomainFilter"
                     style="@style/Widget.WebHTV.Button.Outlined"
+                    android:textColor="@color/fixed_light_focus_text"
+                    app:strokeColor="@color/fixed_light_text_muted"
                     android:layout_width="match_parent"
                     android:layout_height="44dp"
                     android:ellipsize="end"
@@ -590,7 +604,7 @@
                     android:gravity="center"
                     android:maxLines="2"
                     android:text="@string/ad_log_blocked_at"
-                    android:textColor="@color/dialog_outlined_button_text"
+                    android:textColor="@color/fixed_light_focus_text"
                     android:textSize="12sp"
                     android:textStyle="bold" />
                 <androidx.appcompat.widget.AppCompatEditText
@@ -622,7 +636,7 @@
                     android:gravity="center"
                     android:maxLines="2"
                     android:text="@string/ad_log_segment_start"
-                    android:textColor="@color/dialog_outlined_button_text"
+                    android:textColor="@color/fixed_light_focus_text"
                     android:textSize="12sp"
                     android:textStyle="bold" />
                 <androidx.appcompat.widget.AppCompatEditText
@@ -654,7 +668,7 @@
                     android:gravity="center"
                     android:maxLines="2"
                     android:text="@string/ad_log_segment_end"
-                    android:textColor="@color/dialog_outlined_button_text"
+                    android:textColor="@color/fixed_light_focus_text"
                     android:textSize="12sp"
                     android:textStyle="bold" />
                 <androidx.appcompat.widget.AppCompatEditText
@@ -686,7 +700,7 @@
                     android:gravity="center"
                     android:maxLines="2"
                     android:text="@string/ad_log_segment_duration"
-                    android:textColor="@color/dialog_outlined_button_text"
+                    android:textColor="@color/fixed_light_focus_text"
                     android:textSize="12sp"
                     android:textStyle="bold" />
                 <androidx.appcompat.widget.AppCompatEditText
@@ -718,12 +732,14 @@
                     android:gravity="center"
                     android:maxLines="2"
                     android:text="@string/ad_log_pipeline"
-                    android:textColor="@color/dialog_outlined_button_text"
+                    android:textColor="@color/fixed_light_focus_text"
                     android:textSize="12sp"
                     android:textStyle="bold" />
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/pipelineFilter"
                     style="@style/Widget.WebHTV.Button.Outlined"
+                    android:textColor="@color/fixed_light_focus_text"
+                    app:strokeColor="@color/fixed_light_text_muted"
                     android:layout_width="match_parent"
                     android:layout_height="44dp"
                     android:ellipsize="end"

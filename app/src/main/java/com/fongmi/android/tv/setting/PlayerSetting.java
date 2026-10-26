@@ -68,6 +68,8 @@ public class PlayerSetting {
     private static final String KEY_DISPLAY_PROGRESS = "display_progress";
     private static final String KEY_DISPLAY_MINI = "display_mini";
     private static final String KEY_DISPLAY_TITLE = "display_title";
+    private static final String KEY_DISPLAY_MEDIA_BADGES = "player_osd_media_badges";
+    private static final String KEY_MEDIA_BADGE_POSITION = "player_osd_media_badge_position";
     private static final String KEY_OSD_TITLE = "player_osd_title";
     private static final String KEY_OSD_RESOLUTION = "player_osd_resolution";
     private static final String KEY_OSD_TIME = "player_osd_time";
@@ -568,8 +570,36 @@ public class PlayerSetting {
         Prefers.put(KEY_DISPLAY_TITLE, displayTitle);
     }
 
+    /**
+     * 媒体信息徽标：一行只显示播放器运行时可直接证明的事实（分辨率、动态范围、编码、帧率、
+     * 码率、音频规格、容器）。发布标签与来源类型无法从事实推断，因此不提供。
+     */
+    public static boolean isDisplayMediaBadges() {
+        return Prefers.getBoolean(KEY_DISPLAY_MEDIA_BADGES);
+    }
+
+    public static void putDisplayMediaBadges(boolean value) {
+        Prefers.put(KEY_DISPLAY_MEDIA_BADGES, value);
+    }
+
+    /**
+     * 媒体徽标所在角：0 左上、1 右上、2 左下、3 右下。默认右下，
+     * 因为左下/右下的习惯位置留给进度与网速，徽标在最外侧更少冲突。
+     */
+    public static int getMediaBadgePosition() {
+        return sanitizeMediaBadgePosition(Prefers.getInt(KEY_MEDIA_BADGE_POSITION, 3));
+    }
+
+    public static void putMediaBadgePosition(int position) {
+        Prefers.put(KEY_MEDIA_BADGE_POSITION, sanitizeMediaBadgePosition(position));
+    }
+
+    private static int sanitizeMediaBadgePosition(int position) {
+        return position < 0 || position > 3 ? 3 : position;
+    }
+
     public static boolean[] getDisplayChecked() {
-        return new boolean[]{isDisplayTime(), isDisplayTraffic(), isDisplaySize(), isDisplayProgress(), isDisplayMini(), isDisplayTitle(), isOsdDiagnostics()};
+        return new boolean[]{isDisplayTime(), isDisplayTraffic(), isDisplaySize(), isDisplayProgress(), isDisplayMini(), isDisplayTitle(), isOsdDiagnostics(), isDisplayMediaBadges()};
     }
 
     public static void putDisplayChecked(boolean[] checked) {
@@ -580,6 +610,7 @@ public class PlayerSetting {
         putDisplayMini(valueAt(checked, 4, isDisplayMini()));
         putDisplayTitle(valueAt(checked, 5, isDisplayTitle()));
         putOsdDiagnostics(valueAt(checked, 6, isOsdDiagnostics()));
+        putDisplayMediaBadges(valueAt(checked, 7, isDisplayMediaBadges()));
     }
 
     public static boolean[] getLiveDisplayChecked() {
@@ -933,7 +964,7 @@ public class PlayerSetting {
     }
 
     public static boolean isOsdEnabled() {
-        return isOsdTitle() || isOsdTime() || isOsdSize() || isOsdProgress() || isOsdTraffic() || isOsdMini() || isOsdDiagnostics();
+        return isOsdTitle() || isOsdTime() || isOsdSize() || isOsdProgress() || isOsdTraffic() || isOsdMini() || isOsdDiagnostics() || isDisplayMediaBadges();
     }
 
     private static boolean valueAt(boolean[] checked, int index, boolean fallback) {

@@ -64,6 +64,27 @@ public class TmdbLanguageFollowUiTest {
     }
 
     @Test
+    public void legacyConfigWithAnExplicitNonDefaultLanguageStillWins() {
+        // 旧配置没有 languageConfigured 字段（升级后为 null）。用户此前显式填过 en-US，
+        // 中文界面下不能被静默改回 zh-CN/zh-TW —— 那正是「跟随界面」要避免的覆盖。
+        TmdbConfig legacy = TmdbConfig.objectFrom("{\"language\":\"en-US\"}");
+
+        assertTrue("非缺省语言本身就是显式偏好的证据", legacy.isLanguageConfigured());
+        assertEquals("en-US", TmdbLanguagePolicy.requestLanguage(legacy, TRADITIONAL));
+    }
+
+    @Test
+    public void legacyConfigHoldingTheDefaultValueStaysUnconfiguredAndFollowsUi() {
+        // sanitize() 只在空值时填 zh-CN，因此旧配置里的 zh-CN 无法区分「用户填的」与「缺省填充」。
+        // 按「未配置」处理：繁体界面跟随成 zh-TW，保证繁体界面用户拿到繁体 TMDB 数据。
+        TmdbConfig legacy = TmdbConfig.objectFrom("{\"language\":\"zh-CN\"}");
+
+        assertEquals(TmdbLanguagePolicy.DEFAULT_LANGUAGE, legacy.getLanguage());
+        assertFalse(legacy.isLanguageConfigured());
+        assertEquals("zh-TW", TmdbLanguagePolicy.requestLanguage(legacy, TRADITIONAL));
+    }
+
+    @Test
     public void languageForInterfaceOnlyHandlesChineseVariants() {
         assertEquals("zh-CN", TmdbLanguagePolicy.languageForInterface(SIMPLIFIED));
         assertEquals("zh-TW", TmdbLanguagePolicy.languageForInterface(TRADITIONAL));

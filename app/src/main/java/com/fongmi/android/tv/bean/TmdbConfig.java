@@ -280,11 +280,22 @@ public class TmdbConfig {
         return language;
     }
 
-    /** 用户是否显式保存过 TMDB 语言。false 时允许请求语言跟随界面语言。 */
+    /**
+     * 用户是否显式保存过 TMDB 语言。false 时允许请求语言跟随界面语言。
+     *
+     * <p>旧配置没有 {@code languageConfigured} 字段，升级后该字段为 null。如果只看标记，
+     * 那些早就把语言设成 {@code en-US}/{@code ja-JP}/{@code zh-TW} 的用户会被当成「从没配置过」，
+     * 中文界面下请求语言被静默改成 zh-CN/zh-TW —— 正是本字段要避免的覆盖。
+     *
+     * <p>所以这里再兜一条：{@code language} 与缺省值不同，本身就能证明用户表达过偏好
+     * （{@code sanitize()} 只在空值时填 {@link #DEFAULT_LANGUAGE}，不会把用户值改写回去）。
+     */
     public boolean isLanguageConfigured() {
-        return Boolean.TRUE.equals(languageConfigured);
+        if (Boolean.TRUE.equals(languageConfigured)) return true;
+        return !TextUtils.isEmpty(language) && !DEFAULT_LANGUAGE.equalsIgnoreCase(language.trim());
     }
 
+    /** 写入用户显式选择的语言，同时置位「已配置」标记，此后请求语言不再跟随界面语言。 */
     public void setLanguage(String language) {
         this.language = language;
         this.languageConfigured = true;

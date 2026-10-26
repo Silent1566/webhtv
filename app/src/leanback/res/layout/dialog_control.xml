@@ -196,6 +196,11 @@
                     style="@style/ControlSheetButton"
                     android:text="@string/play_params" />
 
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/displayMediaBadges"
+                    style="@style/ControlSheetButton"
+                    android:text="@string/display_media_badges" />
+
             </androidx.appcompat.widget.LinearLayoutCompat>
 
             <com.google.android.material.textview.MaterialTextView

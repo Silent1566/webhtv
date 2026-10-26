@@ -95,7 +95,7 @@
                 android:gravity="center"
                 android:includeFontPadding="false"
                 android:text="&#8722;"
-                android:textColor="@color/dialog_outlined_button_text"
+                android:textColor="@color/fixed_light_focus_text"
                 android:textSize="22sp" />
 
             <com.google.android.material.textview.MaterialTextView
@@ -121,7 +121,7 @@
                 android:gravity="center"
                 android:includeFontPadding="false"
                 android:text="+"
-                android:textColor="@color/dialog_outlined_button_text"
+                android:textColor="@color/fixed_light_focus_text"
                 android:textSize="22sp" />
 
         </androidx.appcompat.widget.LinearLayoutCompat>

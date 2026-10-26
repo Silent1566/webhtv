@@ -105,6 +105,28 @@
     <color name="following_danger_soft">@color/webhtv_color_error_container</color>
     <color name="following_danger">@color/webhtv_color_error</color>
     <!--
+        固定浅底上的前景：adapter_ad_block_log / adapter_ad_stats_item / dialog_ad_block_stats
+        的宿主底是字面量浅色（shape_ad_stats_content #FAFBFC、selector_ad_stats_item 的
+        #E8F0FE / #D2E3FC），adapter_mpv_config_profile / dialog_ai_recommendation_info 的
+        徽标底同样是字面量（#E8F0FE / #EAF6EE）。这些底在两张色板下都不变，所以前景必须是
+        两表恒定的深色；若跟随 ?attr/colorOnSurfaceVariant（夜间 #C4C6D0）就会变成近白压
+        近白，实测 1.13–1.66:1。取值来自日间色板的角色值，它们压上述所有固定浅底都 ≥4.5:1
+        （#202124 最低 11.73、#44474F 最低 6.77、#0B57D0 最低 4.65、#146C2E 最低 4.76）。
+    -->
+    <!--
+        日志页列头 + 筛选按钮底下的那条固定浅带。它原来是 @color/webhtv_color_scrim
+        （日间 #52000000 / 夜间 #8A000000），压在固定浅面板 #FAFBFC 上合成 #AAAAAB /
+        #737374：带内文字因此既不属于"固定浅底"也不属于"深底"，本次修复的固定深色前景
+        在夜间带上只剩 3.40:1（12sp 加粗列头），筛选项继承的 ?attr/colorPrimary
+        （夜间 #A8C7FA）更是只有 2.76:1。改用与面板同族的字面量浅灰后，带不随表变，
+        带内前景固定即可全部达标：#202124 13.00、#44474F 7.51、#174EA6 6.34、#0B57D0 5.16。
+    -->
+    <color name="fixed_light_band">#E5E7EB</color>
+    <color name="fixed_light_text_muted">#44474F</color>
+    <color name="fixed_light_accent">#0B57D0</color>
+    <color name="fixed_light_success">#146C2E</color>
+    <color name="fixed_light_error">#B3261E</color>
+    <!--
         TMDB 豆瓣评分徽标前景：徽标底是固定的半透明黑（shape_episode_card_badge /
         shape_tmdb_rating），压在任意海报图上，与调色板无关。因此前景必须是两套色板
         恒定的浅绿；若走 @color/webhtv_color_success（日间 #146C2E 深绿），日间模式下

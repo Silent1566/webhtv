@@ -107,6 +107,10 @@ Python 基类提供 `loadSpider/loadModule/regStr/removeHtmlTags/cleanText/fetch
 
 `getDependence()` 缺失时按「无依赖」处理（桥接层 `getattr` 兜底）。它不属于 TVBox/猫源 Python 契约，因此不继承 `base.spider.Spider` 的单文件 py 源可以不实现它。
 
+每个依赖名的取回规则（`app.download(path, api)`）：`http(s)` 源抓取正文（手动跟随跳转，单跳超时 10s、最多 10 跳），状态码 `>= 300` 直接报错且**不覆盖**磁盘上已有的旧文件（`4xx/5xx` 是错误页；`3xx` 只会在跳转链走不下去、响应体只是跳转占位时出现）；不带 `://` 的非 http 源把该字符串本身当作源码写入，带 scheme 的（如 `file://xxx`）则直接报错，避免把 URL 文本当成脚本写进缓存。失败只记日志（Logcat 与调试日志的「网络请求」分类），不阻断 `init`。若发起方是 Python 源自己调用 `download()`（而非桥接层取依赖），`FileNotFoundError`、`OSError` 等异常会照常抛出、不会落到「只记日志」这条路径。
+
+注意 `cache/py` **不在** `sys.path` 上（`Platform.getPath()` 只挂了 stdlib 与 bootstrap）。依赖文件只是落到缓存目录，脚本要用它必须自己 `loadModule('<name>')` 或 `loadSpider('<name>')`；直接 `import requests` 走的是 Chaquopy 随包安装的 `requirements.txt`，与 `getDependence()` 无关。
+
 ## Python 加载与缓存
 
 排查「改了 py 却不生效」时先看这里。加载链路分四层，每层都会改变你看到的地址或实例：

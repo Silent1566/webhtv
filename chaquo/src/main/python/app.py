@@ -72,6 +72,36 @@ def redirect(url, timeout=REDIRECT_TIMEOUT, maxHops=REDIRECT_MAX_HOPS, verify=Tr
     raise ValueError(f'too many redirects (limit {maxHops})')
 
 
+def download(path, api):
+    # Spider.init() calls this once for every name returned by getDependence(), so the
+    # contract is "materialise one dependency .py file at path".  Two sources exist:
+    #   * http(s): fetch it, following redirects manually (redirect() already bounds
+    #     each hop by timeout and the whole chain by maxHops).
+    #   * anything else: the api string *is* the source, matching the inline-script
+    #     convention the loader uses for non-http sites.
+    # An error body must not be written: it would replace a previously cached, valid
+    # copy with an HTML error page, and SourceFileLoader would then report a confusing
+    # SyntaxError instead of the real download failure.  writeFile() is atomic, so a
+    # raised error leaves any existing file untouched.
+    # A 3xx status without a Location header also has to be rejected here rather than
+    # written: redirect() returns that response only when there is nowhere left to go,
+    # so its body is a redirect stub, not the dependency source.
+    if api.startswith('http'):
+        rsp = redirect(api)
+        if rsp.status_code >= 300:
+            raise ValueError(f'download failed ({rsp.status_code}): {api}')
+        writeFile(path, rsp.content)
+    elif '://' in api:
+        # Such a source cannot be the script itself.  Writing the URL text would cache a
+        # file that only fails later as a SyntaxError from SourceFileLoader, so a bad
+        # getDependence() (for example one that returns a full 'file://' path) would
+        # leave a permanently broken cache entry behind.  Raise the real reason instead;
+        # Spider.init() logs it and continues.
+        raise ValueError(f'download source is not http(s): {api}')
+    else:
+        writeFile(path, str.encode(api))
+
+
 def str2json(content):
     # Deliberately strict: every caller passes JSON that the Java bridge produced, so
     # a decode failure means the contract was broken and must not be swallowed into a
@@ -102,6 +132,26 @@ def getDependence(ru):
 def getName(ru):
     result = ru.getName()
     return result
+
+
+def optionalBool(ru, name, *args):
+    # Shared rule for the optional boolean bridge extensions: Spider.java calls these
+    # from the web-sniffer path, but a spider that does not inherit base/spider.py has
+    # no such attribute, and an unguarded call raises AttributeError.  Absent (or
+    # present-but-not-callable) means "no opinion", i.e. false, while a present
+    # implementation's own exception still surfaces instead of being swallowed here.
+    getter = getattr(ru, name, None)
+    if not callable(getter):
+        return False
+    return bool(getter(*args))
+
+
+def manualVideoCheck(ru):
+    return optionalBool(ru, 'manualVideoCheck')
+
+
+def isVideoFormat(ru, url):
+    return optionalBool(ru, 'isVideoFormat', url)
 
 
 def init(ru, extend):
