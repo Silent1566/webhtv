@@ -32,7 +32,11 @@ public class PlaybackAnalyticsListener implements AnalyticsListener, VideoFrameM
 
     private static volatile Snapshot snapshot = Snapshot.empty();
     private static volatile String playbackTraceId = PlaybackTrace.NONE;
-    private static volatile long totalDroppedFrames;
+    // media3 settles its dropped-frame accumulator on every renderer stop, so a pause
+    // reports whatever tail accumulated while playing. A bare total therefore jumps when
+    // playback stops; attribute it to played time instead (see DroppedFrameAccounting).
+    private static final DroppedFrameAccounting DROPPED_FRAME_ACCOUNTING =
+            new DroppedFrameAccounting();
     private static volatile long lastBandwidthLogMs;
     private static volatile long lastMediaEstimateLogMs;
     private static volatile long lastFrameTimingLogMs;
@@ -144,6 +148,27 @@ public class PlaybackAnalyticsListener implements AnalyticsListener, VideoFrameM
         return FRAME_TIMING_METRICS.snapshot();
     }
 
+    /** Played time used as the denominator of the dropped-frame rate. */
+    public static long playTimeMs() {
+        return DROPPED_FRAME_ACCOUNTING.playTimeMs(nowElapsed());
+    }
+
+    /**
+     * Dropped frames per played second, or 0 before any played time was measured.
+     *
+     * <p>This is the comparable measure: media3 reports a dropped-frame event when the
+     * renderer stops, so the raw total grows at every pause even though the frames were
+     * dropped while playing.
+     */
+    public static double droppedFramesPerSecond() {
+        return DROPPED_FRAME_ACCOUNTING.droppedFramesPerSecond(nowElapsed());
+    }
+
+    /** The part of the total that arrived outside a playing window (pause-settled tail). */
+    public static long pauseSettledDroppedFrames() {
+        return DROPPED_FRAME_ACCOUNTING.pauseSettledDroppedFrames();
+    }
+
     public static ExoFrameSchedulingExperimentMetrics.Snapshot
     getFrameSchedulingExperimentSnapshot() {
         Snapshot current = snapshot;
@@ -227,7 +252,7 @@ public class PlaybackAnalyticsListener implements AnalyticsListener, VideoFrameM
         ExoPlaybackThresholdCoordinator.process().disrupt(
                 ExoPlaybackThresholdCoordinator.currentSession());
         snapshot = Snapshot.empty();
-        totalDroppedFrames = 0;
+        DROPPED_FRAME_ACCOUNTING.reset();
         lastBandwidthLogMs = 0;
         lastMediaEstimateLogMs = 0;
         lastFrameTimingLogMs = 0;
@@ -502,12 +527,26 @@ public class PlaybackAnalyticsListener implements AnalyticsListener, VideoFrameM
 
     @Override
     public void onDroppedVideoFrames(EventTime eventTime, int droppedFrames, long elapsedMs) {
-        long observed = Math.max(0, droppedFrames);
-        totalDroppedFrames = totalDroppedFrames > Long.MAX_VALUE - observed
-                ? Long.MAX_VALUE : totalDroppedFrames + observed;
-        snapshot = snapshot.withDroppedFrames(totalDroppedFrames);
+        // MediaCodecVideoRenderer settles its accumulator from onStopped(), which a pause
+        // triggers unconditionally; the 50-frame notification threshold never gets reached
+        // at a normal pause cadence, so every report here arrives just after playback
+        // stopped. Mark those reports so the diagnostics keep the evidence without the
+        // pause tail reading as new damage. A mis-ordered report would only lose this
+        // attribution, never change the total or the rate.
+        boolean settledWhileNotPlaying = !DROPPED_FRAME_ACCOUNTING.isPlaying();
+        long total = DROPPED_FRAME_ACCOUNTING.onDroppedFramesReported(
+                droppedFrames, settledWhileNotPlaying);
+        snapshot = snapshot.withDroppedFrames(total);
         if (!SpiderDebug.isEnabled()) return;
-        traceLog("droppedFrames=%d total=%d elapsed=%dms position=%d", droppedFrames, totalDroppedFrames, elapsedMs, eventTime.currentPlaybackPositionMs);
+        traceLog("droppedFrames=%d total=%d elapsed=%dms playTime=%dms rate=%.2f/s pauseSettled=%s pauseSettledTotal=%d position=%d",
+                droppedFrames,
+                total,
+                elapsedMs,
+                playTimeMs(),
+                droppedFramesPerSecond(),
+                settledWhileNotPlaying,
+                pauseSettledDroppedFrames(),
+                eventTime.currentPlaybackPositionMs);
     }
 
     @Override
@@ -723,8 +762,12 @@ public class PlaybackAnalyticsListener implements AnalyticsListener, VideoFrameM
 
     @Override
     public void onIsPlayingChanged(EventTime eventTime, boolean isPlaying) {
-        if (!isPlaying) return;
+        // Opens and closes the played-time window that normalizes dropped frames. This must
+        // run before the seek guard below, and it is what makes a pause-settled report
+        // recognisable: media3 delivers that report after this callback (measured 61-119ms).
         long now = nowElapsed();
+        DROPPED_FRAME_ACCOUNTING.onPlayingStateChanged(isPlaying, now);
+        if (!isPlaying) return;
         if (!activeSeek(now)) return;
         if (seekPlayingAtMs > 0) return;
         seekPlayingAtMs = now;

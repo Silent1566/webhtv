@@ -3608,9 +3608,16 @@ public class VideoActivityLayoutTest {
                     : "boolean initialBinding = mEpisodeAdapter.getItemCount() == 0;";
             assertTrue(sourcePath + " must distinguish an empty episode adapter from a user re-click",
                     click.contains(initialBinding)
-                            && click.contains("if (resolved.isSelected() && !initialBinding) return;"));
+                            && click.contains("if (resolved.isSelected() && isPlaybackFlag(resolved) && !initialBinding) return;"));
             assertTrue(sourcePath + " must start the inherited selected episode after rebuilding its list",
                     click.contains("if (initialBinding && !episodeChanged) onRefresh();"));
+            assertTrue(sourcePath + " must only treat the actually applied flag as the current stream",
+                    source.contains("private String mPlaybackFlagKey = \"\";")
+                            && source.contains("private boolean isPlaybackFlag(Flag flag) {")
+                            && source.contains("private boolean isPlayingContent(Episode episode) {"));
+            String fullscreen = methodBody(source, "private boolean shouldEnterFullscreen(Episode item)", "private void enterFullscreen()");
+            assertTrue(sourcePath + " must not infer the current stream from the episode list mark alone",
+                    fullscreen.contains("!isFullscreen() && isPlayingContent(item)"));
         }
     }
 

@@ -77,6 +77,6 @@
         android:focusableInTouchMode="true"
         android:padding="12dp"
         android:src="@drawable/ic_setting_delete"
-        app:tint="@color/dialog_outlined_button_text" />
+        app:tint="@color/fixed_light_focus_icon" />
 
 </androidx.appcompat.widget.LinearLayoutCompat>

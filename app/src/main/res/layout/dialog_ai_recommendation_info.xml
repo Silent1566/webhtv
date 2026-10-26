@@ -38,7 +38,7 @@
             android:maxWidth="150dp"
             android:paddingStart="9dp"
             android:paddingEnd="9dp"
-            android:textColor="?attr/colorPrimary"
+            android:textColor="@color/fixed_light_accent"
             android:textSize="10sp"
             android:textStyle="bold"
             tools:text="智能推荐" />
@@ -191,7 +191,7 @@
                         android:minWidth="58dp"
                         android:paddingStart="7dp"
                         android:paddingEnd="7dp"
-                        android:textColor="@color/webhtv_color_success"
+                        android:textColor="@color/fixed_light_success"
                         android:textSize="10sp"
                         android:textStyle="bold"
                         tools:text="豆瓣 9.3" />

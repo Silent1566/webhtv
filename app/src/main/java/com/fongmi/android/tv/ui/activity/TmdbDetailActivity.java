@@ -383,6 +383,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private Episode inlinePlaybackEpisode;
     private String inlinePlaybackKey = "";
     private String inlinePlaybackFlag = "";
+    private String inlinePlaybackFlagKey = "";
     private TmdbEpisodeAdapter episodeAdapter;
     private TmdbPersonAdapter castAdapter;
     private TmdbPersonAdapter creatorAdapter;
@@ -7720,7 +7721,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
                 && episode != null
                 && episode.equals(inlinePlaybackEpisode)
                 && TextUtils.equals(getKeyText(), inlinePlaybackKey)
-                && TextUtils.equals(selectedFlag.getFlag(), inlinePlaybackFlag);
+                && TextUtils.equals(selectedFlag.getFlag(), inlinePlaybackFlag)
+                && TextUtils.equals(selectedSeasonFlagKey(), inlinePlaybackFlagKey);
     }
 
     private boolean enterInlineFullscreenIfCurrentInlinePlayback(Episode episode) {
@@ -7824,6 +7826,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         inlinePlaybackEpisode = null;
         inlinePlaybackKey = "";
         inlinePlaybackFlag = "";
+        inlinePlaybackFlagKey = "";
         introSkipPlayback.reset();
         if (service() == null || player() == null || player().isEmpty()) {
             updateInlineButtons(false);
@@ -7877,6 +7880,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         inlinePlaybackEpisode = selectedEpisode;
         inlinePlaybackKey = getKeyText();
         inlinePlaybackFlag = selectedFlag == null ? "" : selectedFlag.getFlag();
+        inlinePlaybackFlagKey = selectedFlag == null ? "" : selectedSeasonFlagKey();
         pendingInlineResult = null;
         hideInlineControls();
         resetInlineShortDramaMode();
@@ -10663,6 +10667,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         inlinePlaybackEpisode = null;
         inlinePlaybackKey = "";
         inlinePlaybackFlag = "";
+        inlinePlaybackFlagKey = "";
         useParse = false;
         updateInlineButtons(false);
         DanmakuApi.cancel();

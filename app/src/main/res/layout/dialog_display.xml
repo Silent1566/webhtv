@@ -60,5 +60,11 @@
             android:text="@string/play_params"
             android:visibility="gone" />
 
+        <TextView
+            android:id="@+id/display_media_badges"
+            style="@style/DisplayControl"
+            android:text="@string/display_media_badges"
+            android:visibility="gone" />
+
     </com.google.android.flexbox.FlexboxLayout>
 </LinearLayout>

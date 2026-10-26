@@ -1257,7 +1257,8 @@ public class ExoPlayerEngine implements PlayerEngine {
                 format,
                 secure,
                 analytics.droppedFrames(),
-                PlaybackAnalyticsListener.getFrameTimingSnapshot().codecErrorCount());
+                PlaybackAnalyticsListener.getFrameTimingSnapshot().codecErrorCount(),
+                PlaybackAnalyticsListener.playTimeMs());
     }
 
     private ExoDecoderRuntimeSession.Evidence decoderRuntimeEvidence(
@@ -1274,7 +1275,8 @@ public class ExoPlayerEngine implements PlayerEngine {
                 failure.format(),
                 secure,
                 analytics.droppedFrames(),
-                PlaybackAnalyticsListener.getFrameTimingSnapshot().codecErrorCount());
+                PlaybackAnalyticsListener.getFrameTimingSnapshot().codecErrorCount(),
+                PlaybackAnalyticsListener.playTimeMs());
     }
 
     private static boolean isSecureDecoderName(String decoderName) {

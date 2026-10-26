@@ -103,6 +103,38 @@ public class PlayerDisplaySettingSyncTest {
                         && totalExpr.contains("player.getRebufferTotalMs()"));
     }
 
+    /**
+     * 媒体信息徽标的两条展示语义：
+     * 控制栏唤醒时无条件展示；控制栏隐藏时与其它常驻屏显同级，只有在
+     * 「屏显设置 → 媒体信息」开关打开时才展示（默认关闭）。
+     */
+    @Test
+    public void mediaBadgesFollowTheMediaInfoSwitchOnlyWhenTheControlBarIsHidden() throws Exception {
+        String source = read(mainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "custom", "PlayerOsdController.java")));
+        int method = source.indexOf("private void setMediaBadges(PlayerManager player)");
+        assertTrue("PlayerOsdController is missing setMediaBadges", method >= 0);
+        int methodEnd = source.indexOf("\n    }", method);
+        String body = source.substring(method, methodEnd);
+
+        assertTrue("the control bar must show media badges regardless of the media info switch",
+                !body.contains("!controlsVisible || !PlayerSetting.isDisplayMediaBadges()"));
+        assertTrue("the media info switch must only gate the persistent (control-bar-hidden) path",
+                body.contains("!controlsVisible && !PlayerSetting.isDisplayMediaBadges()"));
+
+        String persistent = source.substring(source.indexOf("// 控制栏隐藏时，按用户设置显示常驻屏显"));
+        String renderEnd = "private boolean renderMediaBadgesOnly()";
+        int end = persistent.indexOf(renderEnd);
+        assertTrue("the persistent render branch must exist before renderMediaBadgesOnly", end > 0);
+        String persistentBody = persistent.substring(0, end);
+        assertTrue("persistent OSD must render media badges like title/time/progress/traffic",
+                persistentBody.contains("setMediaBadges(player);"));
+        assertTrue("the persistent path must not force the badge strip hidden",
+                !persistentBody.contains("mediaBadges.setVisibility(View.GONE)"));
+        assertTrue("the persistent badges must raise the bottom corners to clear the persistent text line",
+                source.contains("int bottomInset = controlsVisible ? dp(80) : dp(22);")
+                        && source.contains("int topInset = controlsVisible ? dp(64) : 0;"));
+    }
+
     @Test
     public void backupIncludesPlaybackDisplayPreferences() throws Exception {
         String source = read(mainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "bean", "Backup.java")));

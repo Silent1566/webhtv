@@ -20,7 +20,7 @@
         android:paddingStart="14dp"
         android:paddingEnd="14dp"
         android:singleLine="true"
-        android:textColor="?attr/colorOnSurface"
+        android:textColor="@color/fixed_light_focus_text"
         android:textSize="13sp"
         tools:text="https://gh-proxy.com/" />
 
@@ -45,6 +45,6 @@
         android:padding="10dp"
         android:scaleType="center"
         android:src="@drawable/ic_action_delete"
-        app:tint="?attr/colorError" />
+        app:tint="@color/fixed_light_error" />
 
 </androidx.appcompat.widget.LinearLayoutCompat>

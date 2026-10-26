@@ -90,7 +90,7 @@
             android:gravity="center"
             android:singleLine="true"
             android:text="@string/dialog_negative"
-            android:textColor="?attr/colorOnSurfaceVariant"
+            android:textColor="@color/exit_confirm_secondary_text"
             android:textSize="15sp"
             android:textStyle="bold" />
 
@@ -109,7 +109,7 @@
             android:nextFocusRight="@id/positive"
             android:singleLine="true"
             android:text="@string/exit_confirm_background"
-            android:textColor="?attr/colorOnSurfaceVariant"
+            android:textColor="@color/exit_confirm_secondary_text"
             android:textSize="15sp"
             android:textStyle="bold" />
 
