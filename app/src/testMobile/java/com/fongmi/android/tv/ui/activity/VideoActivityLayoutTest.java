@@ -2315,8 +2315,11 @@ public class VideoActivityLayoutTest {
         assertTrue(sourcePath + " is missing revealTmdbDetail", !body.isEmpty());
         assertTrue("the later TMDB reveal must know whether loading actually hid the content",
                 body.contains("boolean hiddenByLoading = !mBinding.progressLayout.isContent();"));
+        // 手动播放模式（关闭「点播自动播放」）把焦点交给选集，其余模式仍把焦点交回预览窗口。
         assertTrue("focus must only be pulled back to the player when loading had hidden the content",
-                body.contains("if (hiddenByLoading) mBinding.video.post(() -> mBinding.video.requestFocus());"));
+                body.contains("if (hiddenByLoading) {")
+                        && body.contains("if (isManualPlaybackMode()) mBinding.video.post(this::requestInitialPlaybackFocus);")
+                        && body.contains("else mBinding.video.post(() -> mBinding.video.requestFocus());"));
         assertTrue("a shell revealed without an initial preview must restore focus only when nothing else is focused",
                 shell.contains("boolean hiddenByLoading = !mBinding.progressLayout.isContent();")
                         && shell.contains("if (hiddenByLoading && !mBinding.getRoot().hasFocus())")
@@ -3619,6 +3622,71 @@ public class VideoActivityLayoutTest {
             assertTrue(sourcePath + " must not infer the current stream from the episode list mark alone",
                     fullscreen.contains("!isFullscreen() && isPlayingContent(item)"));
         }
+    }
+
+    @Test
+    public void manualPlaybackModeMovesFocusToEpisodesAndShowsCover() throws Exception {
+        // 关闭「点播自动播放」= 手动播放模式：进播放页焦点交给选集、预览位显示封面、
+        // 点集直接全屏起播。这里把这三条契约钉在 leanback 源码上。
+        Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+
+        assertTrue("manual playback mode must be derived from the user VOD autoplay setting and stay TV-only",
+                source.contains("private boolean isManualPlaybackMode() {")
+                        && source.contains("return Util.isLeanback() && !PlayerSetting.isAutoPlay();"));
+
+        String focus = methodBody(source, "private void requestInitialPlaybackFocus()", "private boolean focusInitialEpisode()");
+        assertTrue("manual playback mode must hand the initial focus to the episode list",
+                focus.contains("if (isManualPlaybackMode() && focusInitialEpisode()) return;")
+                        && focus.contains("mBinding.video.requestFocus();"));
+
+        String episodeFocus = methodBody(source, "private boolean focusInitialEpisode()", "private void updateVideoCover()");
+        assertTrue("episode focus must reuse the existing scroll helper and fall back when nothing is bound",
+                episodeFocus.contains("mEpisodeAdapter == null || mEpisodeAdapter.getItemCount() == 0")
+                        && episodeFocus.contains("scrollToEpisode(position, true);")
+                        && episodeFocus.contains("return false;"));
+
+        String preview = methodBody(source, "private void showInitialPreview()", "private History createHistory(Vod item)");
+        assertTrue("the initial preview must route focus by mode instead of always grabbing the player window",
+                preview.contains("if (isManualPlaybackMode()) requestInitialPlaybackFocus();")
+                        && preview.contains("else mBinding.video.requestFocus();"));
+
+        String click = methodBody(source, "public void onItemClick(Episode item)", "private void onEpisodeLongClick(Episode item)");
+        assertTrue("manual playback mode must start the picked episode and enter fullscreen in one press",
+                click.contains("if (isManualPlaybackMode()) mExplicitPlaybackRequest = true;")
+                        && click.contains("selectEpisode(item, true);")
+                        && click.contains("if (isManualPlaybackMode() && !isFullscreen()) enterFullscreen();"));
+        assertFalse("the episode click must not trigger a second player-content refresh",
+                click.contains("onRefresh();"));
+    }
+
+    @Test
+    public void manualPlaybackCoverOnlyShowsWhileNothingIsLoaded() throws Exception {
+        Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        String cover = methodBody(source, "private void updateVideoCover()", "private String videoCoverUrl()");
+
+        assertTrue("the idle cover must be gated on manual mode, a non-audio stage and an empty player",
+                cover.contains("isManualPlaybackMode()")
+                        && cover.contains("!mAudioStageVisible")
+                        && cover.contains("player() == null || player().isEmpty()"));
+        assertTrue("an empty cover url must hide the layer instead of leaving a blank hole",
+                cover.contains("if (TextUtils.isEmpty(url)) {")
+                        && cover.contains("mBinding.videoCover.setVisibility(View.GONE);"));
+
+        String ready = methodBody(source, "protected void onStateChanged(int state)", "public void onMediaItemTransition");
+        assertTrue("a ready player must drop the idle cover again", ready.contains("updateVideoCover();"));
+
+        String layout = new String(Files.readAllBytes(findLeanbackResPath().resolve(Path.of("layout", "activity_video.xml"))), StandardCharsets.UTF_8);
+        int exo = layout.indexOf("android:id=\"@+id/exo\"");
+        int coverId = layout.indexOf("android:id=\"@+id/videoCover\"");
+        int audioStage = layout.indexOf("android:id=\"@+id/audioStage\"");
+        assertTrue("the cover must sit above the video surface and below the audio stage",
+                exo >= 0 && coverId > exo && audioStage > coverId);
+        assertTrue("the cover must never become a remote-control focus target",
+                layout.contains("android:id=\"@+id/videoCover\"")
+                        && layout.substring(coverId, audioStage).contains("android:focusable=\"false\"")
+                        && layout.substring(coverId, audioStage).contains("android:visibility=\"gone\""));
     }
 
     private static Path findMobileResPath() {

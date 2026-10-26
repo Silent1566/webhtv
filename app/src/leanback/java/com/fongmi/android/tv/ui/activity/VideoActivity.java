@@ -518,6 +518,8 @@ private boolean runtimeSourceOnly;
     private Result mAppliedPlayerResult;
     private boolean mPlaybackRequestActive;
     private boolean mPlaybackPlayerStarted;
+    // 用户主动点集（手动播放模式）时临时置位：让本次起播不受「点播自动播放」关闭影响。
+    private boolean mExplicitPlaybackRequest;
     private final ShortDramaQueueCoordinator mShortDramaQueue = new ShortDramaQueueCoordinator();
     private PlaySpec mShortDramaQueuedSpec;
     private Result mShortDramaQueuedResult;
@@ -2774,7 +2776,9 @@ private boolean runtimeSourceOnly;
         if (!loadTmdbDetail) mBinding.progressLayout.showContent();
         mBinding.name.setText(item.getName());
         mFlagAdapter.addAll(item.getFlags());
-        mBinding.video.requestFocus();
+        if (isManualPlaybackMode()) requestInitialPlaybackFocus();
+        else mBinding.video.requestFocus();
+        updateVideoCover();
         App.removeCallbacks(mR4);
         if (!checkHistory(item)) return;
         checkFlag(item);
@@ -2861,7 +2865,9 @@ private boolean runtimeSourceOnly;
         if (!mBinding.progressLayout.isContent()) mBinding.progressLayout.showContent();
         if (shouldUseTmdbLayout()) suppressTmdbNativeTextFields();
         if (hiddenByLoading && !mBinding.getRoot().hasFocus()) {
-            mBinding.video.post(() -> {
+            // 手动播放模式交给选集；其余模式保持原来的「焦点回预览窗口」。
+            if (isManualPlaybackMode()) mBinding.video.post(this::requestInitialPlaybackFocus);
+            else mBinding.video.post(() -> {
                 if (!mBinding.getRoot().hasFocus()) mBinding.video.requestFocus();
             });
         }
@@ -2886,7 +2892,10 @@ private boolean runtimeSourceOnly;
         mBinding.progressLayout.showContent();
         // 内容从 INVISIBLE 恢复为 VISIBLE 后，焦点需要重新回到播放器。
         // 骨架已经先揭开时不能再抢焦点，否则会把用户已经移到选集上的焦点拽回播放器。
-        if (hiddenByLoading) mBinding.video.post(() -> mBinding.video.requestFocus());
+        if (hiddenByLoading) {
+            if (isManualPlaybackMode()) mBinding.video.post(this::requestInitialPlaybackFocus);
+            else mBinding.video.post(() -> mBinding.video.requestFocus());
+        }
         SpiderDebug.log("tmdb-tv", "detail loading reveal (show content)");
     }
 
@@ -3831,7 +3840,21 @@ private boolean runtimeSourceOnly;
     public void onItemClick(Episode item) {
         if (shouldEnterFullscreen(item)) return;
         invalidateShortDramaQueue("manual-episode");
-        selectEpisode(item, true);
+        // 手动播放模式：本次点集即起播，并紧接全屏，省掉「先全屏、再按一次 OK」。
+        // selectEpisode 内部已经触发 onRefresh() 取流，这里只负责让那次取流必定起播。
+        if (isManualPlaybackMode()) mExplicitPlaybackRequest = true;
+        try {
+            selectEpisode(item, true);
+        } finally {
+            mExplicitPlaybackRequest = false;
+        }
+        if (isManualPlaybackMode() && !isFullscreen()) enterFullscreen();
+    }
+
+    @Override
+    protected boolean shouldAutoPlay() {
+        // 用户主动点集时必定起播；其余情况沿用「点播自动播放」设置。
+        return mExplicitPlaybackRequest || super.shouldAutoPlay();
     }
 
     private void onEpisodeLongClick(Episode item) {
@@ -4911,6 +4934,7 @@ private boolean runtimeSourceOnly;
         player().stop();
         player().clear();
         mClock.setCallback(null);
+        updateVideoCover();
         if (mFlagAdapter.getItemCount() == 0) return;
         if (mEpisodeAdapter.getItemCount() == 0) return;
         getPlayer(getFlag(), getEpisode());
@@ -5557,6 +5581,69 @@ private boolean runtimeSourceOnly;
         return ResUtil.getScreenWidth(this) >= ResUtil.getScreenHeight(this);
     }
 
+    /**
+     * 手动播放模式：关闭「点播自动播放」后，播放页收起自动起播，进入页面不再把焦点交给预览窗口，
+     * 预览位改显示影片封面，点选集直接全屏起播。
+     * <p>
+     * 仅 TV 端生效；返回值同时受 leanback 与设置项约束，手机端行为保持不变。
+     */
+    private boolean isManualPlaybackMode() {
+        return Util.isLeanback() && !PlayerSetting.isAutoPlay();
+    }
+
+    /**
+     * 进入播放页时的初始焦点：手动播放模式交给选集，其余情况沿用原行为交给预览窗口。
+     */
+    private void requestInitialPlaybackFocus() {
+        if (isManualPlaybackMode() && focusInitialEpisode()) return;
+        mBinding.video.requestFocus();
+    }
+
+    /**
+     * 把手动播放模式的初始焦点落到当前选中集；选集还没绑定好时返回 false 让调用方回退。
+     */
+    private boolean focusInitialEpisode() {
+        if (mEpisodeAdapter == null || mEpisodeAdapter.getItemCount() == 0) return false;
+        int position = Math.max(0, mEpisodeAdapter.getSelectedPosition());
+        scrollToEpisode(position, true);
+        return true;
+    }
+
+    /**
+     * 手动播放模式下、播放器尚无画面时，在预览位盖一层影片封面，避免露出没有内容的黑框。
+     */
+    private void updateVideoCover() {
+        if (mBinding == null) return;
+        boolean show = isManualPlaybackMode()
+                && !mAudioStageVisible
+                && (player() == null || player().isEmpty());
+        mBinding.videoCover.setVisibility(show ? View.VISIBLE : View.GONE);
+        if (!show) return;
+        String url = videoCoverUrl();
+        if (TextUtils.isEmpty(url)) {
+            mBinding.videoCover.setVisibility(View.GONE);
+            return;
+        }
+        ImgUtil.load(this, url, ResUtil.dp2px(480), ResUtil.dp2px(270), new CustomTarget<>() {
+            @Override
+            public void onResourceReady(@NonNull Drawable resource, @Nullable Transition<? super Drawable> transition) {
+                mBinding.videoCover.setImageDrawable(resource);
+            }
+
+            @Override
+            public void onLoadFailed(@Nullable Drawable errorDrawable) {
+                mBinding.videoCover.setImageDrawable(null);
+            }
+        });
+    }
+
+    private String videoCoverUrl() {
+        if (!TextUtils.isEmpty(getTmdbVodPic())) return getTmdbVodPic();
+        if (!TextUtils.isEmpty(getPic())) return getPic();
+        if (mVod != null && !TextUtils.isEmpty(mVod.getPic())) return mVod.getPic();
+        return mHistory == null ? "" : mHistory.getVodPic();
+    }
+
     private boolean hasInitialPreview() {
         return !getName().isEmpty() || !getPic().isEmpty() || !getWallPic().isEmpty();
     }
@@ -5567,7 +5654,10 @@ private boolean runtimeSourceOnly;
         if (!getContent().isEmpty()) mBinding.content.setTag(getContent());
         if (!getPic().isEmpty()) setArtwork(getPic());
         else if (!getWallPic().isEmpty()) setContextWall(getWallPic());
-        mBinding.video.requestFocus();
+        // 手动播放模式把初始焦点交给选集；其余模式保持原来的「焦点回预览窗口」。
+        if (isManualPlaybackMode()) requestInitialPlaybackFocus();
+        else mBinding.video.requestFocus();
+        updateVideoCover();
     }
 
     private History createHistory(Vod item) {
@@ -6182,6 +6272,7 @@ private boolean runtimeSourceOnly;
                 if (!pendingResumeSeekApplied) applyAutoIntroSkip();
                 setAdFeedbackVisible(); // 播放地址确定后按格式刷新"有广告"按钮
                 if (!mShortDramaQueueSessionActive) beginShortDramaQueue();
+                updateVideoCover();
                 break;
             case Player.STATE_ENDED:
                 if (mShortDramaQueue.shouldSuppressLegacyAutoAdvance()) {
