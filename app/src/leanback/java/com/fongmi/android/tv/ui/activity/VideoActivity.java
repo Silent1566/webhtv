@@ -520,6 +520,10 @@ private boolean runtimeSourceOnly;
     private boolean mPlaybackPlayerStarted;
     // 用户主动点集（手动播放模式）时临时置位：让本次起播不受「点播自动播放」关闭影响。
     private boolean mExplicitPlaybackRequest;
+    // 手动播放模式下选集还没绑定好时挂起的初始焦点请求，等选集就绪后再落地。
+    private boolean mPendingManualEpisodeFocus;
+    // 手动播放模式下是否已经由用户显式起播过；未起播前预览位显示封面。
+    private boolean mManualPlaybackStarted;
     private final ShortDramaQueueCoordinator mShortDramaQueue = new ShortDramaQueueCoordinator();
     private PlaySpec mShortDramaQueuedSpec;
     private Result mShortDramaQueuedResult;
@@ -2593,10 +2597,14 @@ private boolean runtimeSourceOnly;
         if (mBroken != null) mBroken.clear();
         clearDetailAdapters();
         clearTmdbDetailViews();
+        // 换条目/重新加载：手动播放状态归零，新条目的待播封面与待办焦点重新判定。
+        mManualPlaybackStarted = false;
+        mPendingManualEpisodeFocus = false;
         mBinding.scroll.scrollTo(0, 0);
         mBinding.name.setText(getName());
         mBinding.widget.title.setText(getName());
         mBinding.video.requestFocus();
+        updateVideoCover();
         if (service() != null) {
             player().reset();
             player().stop();
@@ -3756,6 +3764,7 @@ private boolean runtimeSourceOnly;
         updateFocus();
         if (scrollToCurrent) scrollToCurrentEpisode();
         setR2Callback();
+        flushPendingManualEpisodeFocus();
     }
 
     private void setUpstreamNativeEpisodeItems(List<Episode> items, boolean scrollToCurrent) {
@@ -3795,6 +3804,7 @@ private boolean runtimeSourceOnly;
         updateFocus();
         if (scrollToCurrent) scrollToCurrentEpisode();
         setR2Callback();
+        flushPendingManualEpisodeFocus();
     }
 
     // 兜底：占位符只在站源一集都没返回时出现（有集数就直接上屏了）。这里负责在 TMDB
@@ -3838,23 +3848,39 @@ private boolean runtimeSourceOnly;
 
     @Override
     public void onItemClick(Episode item) {
-        if (shouldEnterFullscreen(item)) return;
+        if (shouldEnterFullscreen(item)) {
+            // 手动播放模式：点「当前已选中集」时 shouldEnterFullscreen 只负责进全屏，
+            // 而自动播放已关闭意味着取流不会自动起播 —— 这里补一次显式起播，
+            // 否则用户会停在全屏的暂停画面上，仍要多按一次 OK。
+            if (isManualPlaybackMode() && !player().isPlaying()) {
+                mManualPlaybackStarted = true;
+                updateVideoCover();
+                onPlay();
+            }
+            return;
+        }
         invalidateShortDramaQueue("manual-episode");
         // 手动播放模式：本次点集即起播，并紧接全屏，省掉「先全屏、再按一次 OK」。
         // selectEpisode 内部已经触发 onRefresh() 取流，这里只负责让那次取流必定起播。
-        if (isManualPlaybackMode()) mExplicitPlaybackRequest = true;
-        try {
-            selectEpisode(item, true);
-        } finally {
-            mExplicitPlaybackRequest = false;
+        if (isManualPlaybackMode()) {
+            // 起播是异步的（取流结果经 LiveData 回来才调 startPlayer），所以这里只置位，
+            // 由 shouldAutoPlay() 在真正起播那一刻一次性消费，不能在此处立即复位。
+            mExplicitPlaybackRequest = true;
+            mManualPlaybackStarted = true;
+            updateVideoCover();
         }
+        selectEpisode(item, true);
         if (isManualPlaybackMode() && !isFullscreen()) enterFullscreen();
     }
 
     @Override
     protected boolean shouldAutoPlay() {
-        // 用户主动点集时必定起播；其余情况沿用「点播自动播放」设置。
-        return mExplicitPlaybackRequest || super.shouldAutoPlay();
+        // 用户主动点集时必定起播；标志在这里一次性消费（起播是异步的，不能在点集处复位）。
+        if (mExplicitPlaybackRequest) {
+            mExplicitPlaybackRequest = false;
+            return true;
+        }
+        return super.shouldAutoPlay();
     }
 
     private void onEpisodeLongClick(Episode item) {
@@ -5593,10 +5619,18 @@ private boolean runtimeSourceOnly;
 
     /**
      * 进入播放页时的初始焦点：手动播放模式交给选集，其余情况沿用原行为交给预览窗口。
+     * <p>
+     * 详情刚绑定时选集适配器可能还是空的，此时先记下待办，等 {@link #setEpisodeAdapter} 把
+     * 选集铺好后再落地 —— 否则会在选集为空的那一刻误回退到预览窗口。
      */
     private void requestInitialPlaybackFocus() {
-        if (isManualPlaybackMode() && focusInitialEpisode()) return;
-        mBinding.video.requestFocus();
+        if (!isManualPlaybackMode()) {
+            mBinding.video.requestFocus();
+            return;
+        }
+        if (focusInitialEpisode()) return;
+        // 选集未就绪：暂不抢焦点，等选集绑定完成后再交给它。
+        mPendingManualEpisodeFocus = true;
     }
 
     /**
@@ -5604,9 +5638,22 @@ private boolean runtimeSourceOnly;
      */
     private boolean focusInitialEpisode() {
         if (mEpisodeAdapter == null || mEpisodeAdapter.getItemCount() == 0) return false;
+        mPendingManualEpisodeFocus = false;
         int position = Math.max(0, mEpisodeAdapter.getSelectedPosition());
         scrollToEpisode(position, true);
         return true;
+    }
+
+    /**
+     * 选集绑定完成后补齐手动播放模式的初始焦点。只在挂起时动作，避免抢走用户已移动的焦点。
+     */
+    private void flushPendingManualEpisodeFocus() {
+        if (!mPendingManualEpisodeFocus) return;
+        if (!isManualPlaybackMode()) {
+            mPendingManualEpisodeFocus = false;
+            return;
+        }
+        focusInitialEpisode();
     }
 
     /**
@@ -5614,9 +5661,11 @@ private boolean runtimeSourceOnly;
      */
     private void updateVideoCover() {
         if (mBinding == null) return;
+        // 用「用户是否已显式起播过」判断，而不是 player().isEmpty()：
+        // 手动模式下详情页会先 prepare（播放器非空但没播），用 isEmpty 会把封面误判成该隐藏。
         boolean show = isManualPlaybackMode()
                 && !mAudioStageVisible
-                && (player() == null || player().isEmpty());
+                && !mManualPlaybackStarted;
         mBinding.videoCover.setVisibility(show ? View.VISIBLE : View.GONE);
         if (!show) return;
         String url = videoCoverUrl();
@@ -6215,6 +6264,10 @@ private boolean runtimeSourceOnly;
         clearKaraokeState();
         mPlaybackRequestActive = false;
         mPlaybackPlayerStarted = false;
+        // 起播失败：清掉一次性起播意图与已起播标记，否则之后每次取流都会被当成「用户主动起播」。
+        mExplicitPlaybackRequest = false;
+        mManualPlaybackStarted = false;
+        updateVideoCover();
         player().resetTrack();
         player().reset();
         player().stop();

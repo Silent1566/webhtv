@@ -3636,9 +3636,13 @@ public class VideoActivityLayoutTest {
                         && source.contains("return Util.isLeanback() && !PlayerSetting.isAutoPlay();"));
 
         String focus = methodBody(source, "private void requestInitialPlaybackFocus()", "private boolean focusInitialEpisode()");
-        assertTrue("manual playback mode must hand the initial focus to the episode list",
-                focus.contains("if (isManualPlaybackMode() && focusInitialEpisode()) return;")
-                        && focus.contains("mBinding.video.requestFocus();"));
+        assertTrue("manual playback mode must hand the initial focus to the episode list, and defer when the list is not bound yet",
+                focus.contains("if (!isManualPlaybackMode()) {")
+                        && focus.contains("if (focusInitialEpisode()) return;")
+                        && focus.contains("mPendingManualEpisodeFocus = true;"));
+        assertTrue("a deferred focus request must be flushed once the episode list is bound",
+                source.contains("private void flushPendingManualEpisodeFocus()")
+                        && source.contains("flushPendingManualEpisodeFocus();"));
 
         String episodeFocus = methodBody(source, "private boolean focusInitialEpisode()", "private void updateVideoCover()");
         assertTrue("episode focus must reuse the existing scroll helper and fall back when nothing is bound",
@@ -3653,9 +3657,14 @@ public class VideoActivityLayoutTest {
 
         String click = methodBody(source, "public void onItemClick(Episode item)", "private void onEpisodeLongClick(Episode item)");
         assertTrue("manual playback mode must start the picked episode and enter fullscreen in one press",
-                click.contains("if (isManualPlaybackMode()) mExplicitPlaybackRequest = true;")
+                click.contains("if (isManualPlaybackMode()) {")
+                        && click.contains("mExplicitPlaybackRequest = true;")
                         && click.contains("selectEpisode(item, true);")
                         && click.contains("if (isManualPlaybackMode() && !isFullscreen()) enterFullscreen();"));
+        assertTrue("picking the already-selected episode must also start playback instead of stopping at a paused fullscreen",
+                click.contains("if (shouldEnterFullscreen(item)) {")
+                        && click.contains("if (isManualPlaybackMode() && !player().isPlaying())")
+                        && click.contains("onPlay();"));
         assertFalse("the episode click must not trigger a second player-content refresh",
                 click.contains("onRefresh();"));
     }
@@ -3666,10 +3675,12 @@ public class VideoActivityLayoutTest {
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
         String cover = methodBody(source, "private void updateVideoCover()", "private String videoCoverUrl()");
 
-        assertTrue("the idle cover must be gated on manual mode, a non-audio stage and an empty player",
+        // 用「是否已显式起播」而不是 player().isEmpty()：手动模式下详情页会先 prepare，
+        // 播放器非空但没播，用 isEmpty 会把封面误判成该隐藏。
+        assertTrue("the idle cover must be gated on manual mode, a non-audio stage and not-yet-started playback",
                 cover.contains("isManualPlaybackMode()")
                         && cover.contains("!mAudioStageVisible")
-                        && cover.contains("player() == null || player().isEmpty()"));
+                        && cover.contains("!mManualPlaybackStarted"));
         assertTrue("an empty cover url must hide the layer instead of leaving a blank hole",
                 cover.contains("if (TextUtils.isEmpty(url)) {")
                         && cover.contains("mBinding.videoCover.setVisibility(View.GONE);"));
