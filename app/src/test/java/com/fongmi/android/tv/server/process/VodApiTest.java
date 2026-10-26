@@ -6,6 +6,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import com.fongmi.android.tv.api.config.VodConfig;
+import com.fongmi.android.tv.api.config.VodSiteCatalog;
 import com.fongmi.android.tv.bean.Class;
 import com.fongmi.android.tv.bean.Flag;
 import com.fongmi.android.tv.bean.Result;
@@ -431,6 +432,70 @@ public class VodApiTest {
         assertTrue(VodApi.supportsDirectProxy(new FixtureSpider()));
     }
 
+    /** 桥接进来的配置：站点清单来自 catalog，当前激活源必须完全不参与。 */
+    @Test
+    public void configKeyServesAnotherConfigWithoutTouchingActiveSource() throws Exception {
+        FixtureSpider other = new FixtureSpider();
+        Site site = new Site() {
+            @Override public Spider spider() { return other; }
+            @Override public Site recent() { throw new AssertionError("Catalog must not change the active loader"); }
+        };
+        site.setKey("catalog_site");
+        site.setName("订阅站");
+        site.setApi("csp_Catalog");
+        site.setType(3);
+        VodSiteCatalog.Source catalogs = interfaceKey -> {
+            assertEquals("bridge-1", interfaceKey);
+            return new VodSiteCatalog.Catalog(List.of(site), List.of(), List.of(), List.of("svip"));
+        };
+
+        try (HttpFixture fixture = new HttpFixture(catalogs)) {
+            JsonObject config = fixture.request("GET", "?ac=config&configKey=bridge-1", null).body;
+            JsonObject item = config.getAsJsonArray("sites").get(0).getAsJsonObject();
+            assertEquals("catalog_site", item.get("key").getAsString());
+            assertTrue(item.get("api").getAsString(), item.get("api").getAsString().endsWith("?key=catalog_site&configKey=bridge-1"));
+
+            String route = "?key=catalog_site&configKey=bridge-1";
+            JsonObject home = fixture.request("GET", route, null).body;
+            assertEquals("7", home.getAsJsonArray("class").get(0).getAsJsonObject().get("type_id").getAsString());
+            assertEquals("home:true", other.lastCall);
+
+            JsonObject play = fixture.request("GET", route + "&play=opaque&flag=HD", null).body;
+            assertEquals("play:HD:opaque", other.lastCall);
+            assertEquals(List.of("svip"), other.flags);
+            assertEquals(fixture.origin + "/proxy?do=fixture&token=a%2Bb&siteKey=catalog_site&configKey=bridge-1",
+                    play.get("url").getAsString());
+            assertEquals("桥接配置不能触发当前激活源", "", fixture.spider.lastCall);
+        }
+    }
+
+    @Test
+    public void unknownConfigKeyFailsWithoutFallingBackToActiveSource() throws Exception {
+        VodSiteCatalog.Source catalogs = interfaceKey -> {
+            throw new IllegalArgumentException("未知的配置标识: " + interfaceKey);
+        };
+
+        try (HttpFixture fixture = new HttpFixture(catalogs)) {
+            JsonObject body = fixture.request("GET", "?ac=config&configKey=missing", null).body;
+            assertEquals(-1, body.get("code").getAsInt());
+            assertEquals("未知的配置标识: missing", body.get("msg").getAsString());
+            assertEquals("", fixture.spider.lastCall);
+        }
+    }
+
+    @Test
+    public void proxyUrlsCarrySiteAndConfigKeyForNonActiveSources() {
+        String origin = "http://192.168.50.3:9978";
+        assertEquals(origin + "/proxy?do=x&siteKey=site&configKey=cfg%2B1",
+                VodApi.remoteUrl("http://127.0.0.1:9978/proxy?do=x", origin, "site", "cfg+1", 9978));
+        assertEquals(origin + "/proxy?do=x&siteKey=site",
+                VodApi.remoteUrl("http://127.0.0.1:9978/proxy?do=x", origin, "site", "", 9978));
+        assertEquals(origin + "/proxy?siteKey=orig&configKey=cfg",
+                VodApi.remoteUrl("http://127.0.0.1:9978/proxy?siteKey=orig&configKey=cfg", origin, "s", "cfg", 9978));
+        assertEquals("http://127.0.0.1:1234/proxy?do=x",
+                VodApi.remoteUrl("http://127.0.0.1:1234/proxy?do=x", origin, "site", "cfg", 9978));
+    }
+
     private static String encode(String value) throws Exception {
         return URLEncoder.encode(value, StandardCharsets.UTF_8.name()).replace("+", "%20");
     }
@@ -491,6 +556,10 @@ public class VodApiTest {
         final int previousPort;
 
         HttpFixture() throws Exception {
+            this(null);
+        }
+
+        HttpFixture(VodSiteCatalog.Source catalogs) throws Exception {
             Site site = new Site() {
                 @Override public Spider spider() { return spider; }
                 @Override public Site recent() { throw new AssertionError("Gateway must not change the active loader"); }
@@ -505,7 +574,7 @@ public class VodApiTest {
                 @Override public List<Rule> getRules() { return List.of(); }
                 @Override public List<String> getFlags() { return List.of("vip"); }
             };
-            VodApi gateway = new VodApi(sources);
+            VodApi gateway = new VodApi(sources, catalogs != null ? catalogs : VodSiteCatalog.database());
             server = new NanoHTTPD("127.0.0.1", 0) {
                 @Override public Response serve(IHTTPSession session) {
                     if (!gateway.isRequest(session, session.getUri())) return newFixedLengthResponse(Response.Status.NOT_FOUND, "text/plain", "Not found");

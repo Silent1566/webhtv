@@ -4,6 +4,7 @@ import android.text.TextUtils;
 
 import com.fongmi.android.tv.api.config.LiveConfig;
 import com.fongmi.android.tv.api.config.VodConfig;
+import com.fongmi.android.tv.api.config.VodSiteCatalog;
 import com.fongmi.android.tv.bean.Live;
 import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.utils.Task;
@@ -128,10 +129,28 @@ public class BaseLoader {
     }
 
     public Object[] proxy(Map<String, String> params) throws Exception {
-        if (params.containsKey("siteKey")) return getSpider(params.get("siteKey")).proxy(params);
+        if (params.containsKey("siteKey")) {
+            Spider spider = catalogSpider(params.get("configKey"), params.get("siteKey"));
+            return (spider != null ? spider : getSpider(params.get("siteKey"))).proxy(params);
+        }
         if ("js".equals(params.get("do"))) return jsLoader.proxy(params);
         if ("py".equals(params.get("do"))) return pyLoader.proxy(params);
         return jarLoader.proxy(params);
+    }
+
+    /**
+     * 非激活配置的代理站源。/proxy 带着 configKey 时用它定位站点，
+     * 避免只能从当前激活配置里找 siteKey；其它情况一律返回 null 走原有分派。
+     */
+    private Spider catalogSpider(String configKey, String siteKey) {
+        if (TextUtils.isEmpty(configKey) || TextUtils.isEmpty(siteKey)) return null;
+        try {
+            Site site = VodSiteCatalog.database().load(configKey).find(siteKey);
+            return site.isEmpty() ? null : site.spider();
+        } catch (Exception e) {
+            SpiderDebug.log("base-loader", "catalog proxy failed configKey=%s siteKey=%s error=%s:%s", configKey, siteKey, e.getClass().getSimpleName(), e.getMessage());
+            return null;
+        }
     }
 
     public void parseJar(String jar, boolean recent) {
