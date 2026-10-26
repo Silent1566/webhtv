@@ -217,7 +217,41 @@ gradlew.bat :app:compileLeanbackArm64_v8aDebugJavaWithJavac :app:compileMobileAr
 
 | P0 详情页匹配归一（本轮） | **已完成** | `app/src/main/java/com/fongmi/android/tv/ui/activity/TmdbDetailActivity.java`：详情页自动匹配是**独立于 TmdbMatcher 的另一套实现**，此前完全没有简繁归一（日志里的「候选过滤：标题不一致，关键词=喜劇之王，候选=喜剧之王」×7 就是它）。本轮把 `normalize()` 改为 `plainNormalize(canonicalTitle(text))`，新增 `canonicalTitle()`＝`Trans.s2t(false, text)` 与 `plainNormalize()`；**27 处调用点（含 `scoreTmdbTitle`、`scoreSmartTmdbCandidates`、`scoreVod`、`isCachedTmdbMatchCompatible`、`shouldSkipRawTmdbQuery`）全部受益**，未逐个改动。同时把「只为比较服务、不能吃简繁归一」的两处显式改回 `plainNormalize`：`scoreTmdbMediaType`（类型关键词与噪声词表）与 `isTmdbNoiseTag`——它们的词表是简体字形，一旦归一就会整体失配 | 新增 `app/src/test/java/com/fongmi/android/tv/ui/activity/TmdbDetailActivityHantMatchTest.java`（5 例源码契约） |
 | P1 分季缓存键语言无关（本轮） | **已完成** | `app/src/main/java/com/fongmi/android/tv/bean/TmdbSeasonMatchCache.java`：`sourceKey` 的 `normalize()` 改为 `legacyNormalize(Trans.s2t(false, text))`，分季键与界面语言解耦；旧条目按「写入时字形」存放、且 `T2S` 在 10 组「多简对一繁」上是多对一坍缩（`餘 <= 余,馀`），**不能**用 `t2s` 反推键，因此 `legacyKeyMatch` 改为遍历缓存、两侧都做同一次单向 `s2t` 后按内容比较（条目数十条量级，成本可忽略），命中仍需通过 `tmdbId`/`mediaType` 校验 | 新增 `app/src/test/java/com/fongmi/android/tv/bean/TmdbSeasonMatchCacheHantTest.java`（5 例：简写繁读、繁写简读、旧格式键仍可读、线路级键同样语言无关、不同作品不粘连）。**首次运行时 `legacyKeyWrittenBeforeNormalizationIsStillReadable` 失败**，暴露的正是「不能用 t2s 反推」这条约束 |
-| 第二层：TMDB 请求语言跟随界面语言 | **暂不实施（有据）** | `TmdbLanguagePolicy.requestLanguage()` 读的是 `TmdbConfig.language`（用户可编辑，默认 `zh-CN`）。若改成跟随界面语言：①会**覆盖用户显式选择**，而配置里无法区分「用户填了 zh-CN」与「默认值」；②`TmdbMatchCache.Entry.language` 与 `TmdbSourcePayload.language` 都是缓存分键，语言一变会让**已缓存的全部分季/详情载荷一次性失配**（`toDisplayItem` 还会清空标题）。而第一层已让匹配与字形无关，第二层只改善「繁体界面下 TMDB 数据仍是简体」的观感，收益不足以抵这两项风险 | — |
+| 第二层：TMDB 请求语言跟随界面语言 | **待办（需先做显式配置标记）** | `TmdbLanguagePolicy.requestLanguage()` 读的是 `TmdbConfig.language`（用户可编辑，默认 `zh-CN`）。若改成跟随界面语言：①会**覆盖用户显式选择**，而配置里无法区分「用户填了 zh-CN」与「默认值」；②`TmdbMatchCache.Entry.language` 与 `TmdbSourcePayload.language` 都是缓存分键，语言一变会让**已缓存的全部分季/详情载荷一次性失配**（`toDisplayItem` 还会清空标题）。而第一层已让匹配与字形无关，第二层只改善「繁体界面下 TMDB 数据仍是简体」的观感，收益不足以抵这两项风险 | — |
+
+### 10.1 设备实测（2026-10-26，决定性对照）
+
+设备 `emulator-5558`（Android 9 / mobile flavor / 1920x1080 / `language=2` 繁体 / TMDB `language=zh-CN`）——正是用户报告的那个组合。同一台设备、同一份应用日志 `http://<device>:9978/debug/logs.txt`，可直接前后对照：
+
+**修复前（旧包，10-25 09:15）** —— 站源繁体、TMDB 简体，三档全部落空：
+
+```
+tmdb-match: 候选过滤：标题不一致，关键词=蘭香如故，候选=兰香如故，候选年份=2026
+tmdb-match: 自动匹配结束：没有严格标题/年份一致的候选，交给手动选择
+tmdb-match: 详情消歧结束：没有可消歧候选
+tmdb-match: 智能匹配结束：没有可用候选
+```
+
+**修复后（本轮包，10-26 13:38）** —— 同一站点，站源标题「第二次初戀」：
+
+```
+tmdb-match: TMDB 搜索：搜索词=第二次初戀，结果数=3
+tmdb-match: 候选保留：标题=第二次初恋，媒体=tv，年份=2026，标题分=300，总分=300
+tmdb-match: 候选过滤：标题不一致，关键词=第二次初戀，候选=面包，巴士和第二次初恋，候选年份=2018
+tmdb-match: 候选过滤：标题不一致，关键词=第二次初戀，候选=HIGH POSITION ～1986年，第二次青春～，候选年份=2020
+tmdb-match: 自动匹配成功：只有一个严格候选，标题=第二次初恋，年份=2026，评分=300
+```
+
+**关键点**：繁体「第二次初戀」与简体「第二次初恋」被判为完全一致（标题分 300），而真正不同的作品（《面包，巴士和第二次初恋》《第二次青春》）仍被正确拒绝 —— 归一化没有把长尾放过。详情页据此渲染出 TMDB 简介、`China` 产地、`第 1 季 · 更新至 24 集`，TMDB 按钮进入可用态。
+
+| 指标（同设备日志） | 修复前 10-25 | 修复后 10-26 |
+| --- | --- | --- |
+| `候选过滤：标题不一致` | **34 次** | 4 次（均为真实不同作品） |
+| `自动匹配成功` | **0 次** | **2 次** |
+
+**同机顺带确认**：界面为繁体（`搜尋 / 最近觀看 / 點播 / 設定 / 線路 / 選集`），站点名显示为 `木偶[盘]`（标签 `[盘]` 冻结在原文，是 D2 修复的预期效果）。
+
+**一个必须区分的既有问题**：日志中 `115#木偶`（站点自身首页占位条目）搜索 0 条属于**混淆名清洗**问题，与简繁无关，不要混入本条根因。
 
 **实施中确认的两个补充事实**：
 
