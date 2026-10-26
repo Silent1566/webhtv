@@ -395,3 +395,22 @@ adb shell profman --dump-classes-and-methods \
 
 - 与 S1/S2/S3/S7/S9 全部叠加，互不冲突：那些是把主线程工作移出/削减，本阶段是让 ART 直接编译热点，两者相乘。
 - S8（拆 `PlaybackService.onCreate`）仍独立待办，与 profile 无关。
+
+### 13.7 真机/独立设备复测（emulator-5557 / 127.0.0.1:5557，2026-10-26 13:47–14:50）
+
+13.4 的平坦结论是在 emulator-5556 上用「同一安装、反复 `am force-stop`」测的——那种测法复用了 ART 已按 profile 完成的编译结果，profile 的实际差异被掩盖。本轮改为**每组都全新安装**（`uninstall` + `install` 触发 `speed-profile [reason=install]` 重编译），得到明确差异。
+
+两包仅差 `app/src/main/baseline-prof.txt` 是否存在，均 `-PfastRelease=true`（未混淆），同一设备串行测试：
+
+| 组 | n | 冷启动 TotalTime（ms，已排序） | 中位数 | 均值 |
+|---|---|---|---|---|
+| 对照（仅依赖库规则 4,076 B） | 10 | 1522 / 1545 / 1660 / 1668 / 2166 / 2297 / 2303 / 2378 / 3493 / 8706 | **2231** | 2774 |
+| profile 开（本应用 9,299 条） | 10 | 1273 / 1291 / 1453 / 1582 / 1751 / 1764 / 1787 / 1892 / 2591 / 3427 | **1758** | 1881 |
+
+- 中位数差：**−474 ms（−21.2%）**；均值差 −893 ms（−32.2%）。
+- 剔除每组两个最大离群值（control 3493/8706、profile 2591/3427）后：对照中位 2231 ms、profile 中位 1758 ms，**结论不变（仍为 −474 ms / −21.2%）**。
+- 两包安装后 `Dexopt state` 均为 `x86_64: [status=speed-profile] [reason=install]`，说明差异来自 profile 内容而非 dexopt 模式。
+
+**方法学修正（重要）**：验收 baseline profile 必须每次 `uninstall` + `install`，否则反复 `force-stop` 会复用既有 AOT 结果，把收益测没。13.4 的平坦数据应按此更正理解。
+
+同一轮顺带在真实设备上确认了 13.3 记录的 AGP 行为：设备上装的 debug 包（`flags=[ DEBUGGABLE ... ]`）`unzip -l` 结果**无 `assets/dexopt/` 任何条目**，与构建侧观察一致。
