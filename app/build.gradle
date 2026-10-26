@@ -54,7 +54,7 @@ android {
         }
         externalNativeBuild {
             cmake {
-                arguments "-DANDROID_PLATFORM=android-26"
+                arguments "-DANDROID_PLATFORM=android-23"
                 cppFlags "-std=c++20", "-Wall", "-Wextra", "-Werror=return-type"
             }
         }
