@@ -6,6 +6,7 @@ import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.Constant;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.api.config.VodConfig;
+import com.fongmi.android.tv.api.config.VodSiteCatalog;
 import com.fongmi.android.tv.bean.Backup;
 import com.fongmi.android.tv.bean.Config;
 import com.fongmi.android.tv.bean.Device;
@@ -403,8 +404,12 @@ public class Action implements Process {
     }
 
     public void syncHistory(Map<String, String> params, boolean force) {
-        Config config = Config.find(Config.objectFrom(params.get("config")));
         List<History> targets = History.arrayFrom(params.get("targets"));
+        if (isScopedHistoryPush(params)) {
+            pushScopedHistory(params.get("configKey"), targets, force);
+            return;
+        }
+        Config config = Config.find(Config.objectFrom(params.get("config")));
         if (config.getUrl() == null) return;
         if (config.getUrl().equals(VodConfig.getUrl())) {
             if (force) History.delete(config.getId());
@@ -413,6 +418,26 @@ public class Action implements Process {
         } else {
             VodConfig.load(config, getCallback(targets, force, config.getId()));
         }
+    }
+
+    /**
+     * 新协议：按配置标识把历史推送到<b>那一个源</b>。
+     *
+     * <p>不读也不新建 config 行之外的任何状态：不调用 VodConfig.load（那会把安卓端当前
+     * 激活源切走，用户明确要求安卓只当运行容器），历史直接写目标配置的 cid。
+     */
+    private void pushScopedHistory(String configKey, List<History> targets, boolean force) {
+        Config config = VodSiteCatalog.findConfig(configKey);
+        if (force) History.delete(config.getId());
+        History.syncTo(config.getId(), targets);
+        RefreshEvent.history();
+    }
+
+    /** configKey 非空即走按源隔离的新协议；空则表示旧客户端，仍按 config.url 解析。 */
+    static boolean isScopedHistoryPush(Map<String, String> params) {
+        if (params == null) return false;
+        String key = params.get("configKey");
+        return key != null && !key.trim().isEmpty();
     }
 
     private Callback getCallback(List<History> targets, boolean force, int cid) {

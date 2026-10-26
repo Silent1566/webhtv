@@ -123,17 +123,30 @@ public final class VodSiteCatalog {
                     Entry entry = cache.get(id);
                     if (entry != null && now - entry.at < CACHE_TTL) return entry.catalog;
                 }
-                Config config = AppDatabase.get().getConfigDao().findByInterfaceKey(id, BaseConfig.VOD);
-                if (config == null || isBlank(config.getUrl())) {
-                    throw new IllegalArgumentException("未知的配置标识: " + id);
-                }
-                Catalog catalog = catalogOf(config);
+                Catalog catalog = catalogOf(findConfig(id));
                 synchronized (cache) {
                     cache.put(id, new Entry(catalog, now));
                 }
                 return catalog;
             }
         };
+    }
+
+    /**
+     * 只读查配置行，<b>绝不新建</b>：桥接推送要落到已存在的配置上。
+     * 旧协议里 Config.find(url, type) 查不到就 insert，会在安卓库里凭空多出一个"桥接源"，
+     * 因此按配置标识定位时必须走这条纯查询路径。
+     */
+    public static Config findConfig(String interfaceKey) {
+        if (interfaceKey == null || interfaceKey.trim().isEmpty()) {
+            throw new IllegalArgumentException("缺少配置标识");
+        }
+        String id = interfaceKey.trim();
+        Config config = AppDatabase.get().getConfigDao().findByInterfaceKey(id, BaseConfig.VOD);
+        if (config == null || isBlank(config.getUrl())) {
+            throw new IllegalArgumentException("未知的配置标识: " + id);
+        }
+        return config;
     }
 
     public static List<Site> sitesOf(Config config) throws Exception {
