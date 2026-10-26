@@ -59,6 +59,18 @@ public class TmdbConfig {
     private String omdbApiKey;
     @SerializedName("language")
     private String language;
+    /**
+     * 用户是否**显式**保存过 TMDB 语言。
+     *
+     * <p>为 false 表示这个值只是 {@link #DEFAULT_LANGUAGE} 缺省填充，用户从未表达过偏好；
+     * 此时允许请求语言跟随界面语言（繁体界面 → {@code zh-TW}）。一旦用户在设置里保存过语言，
+     * 就置 true 并永久尊重用户选择，不再跟随界面。
+     *
+     * <p>之所以需要这个标记：{@code language} 经 {@code sanitize()} 后总是非空，
+     * 无法区分「用户填了 zh-CN」和「缺省值 zh-CN」。
+     */
+    @SerializedName("languageConfigured")
+    private Boolean languageConfigured;
     @SerializedName("imageBase")
     private String imageBase;
     @SerializedName("imageAuto")
@@ -268,6 +280,16 @@ public class TmdbConfig {
         return language;
     }
 
+    /** 用户是否显式保存过 TMDB 语言。false 时允许请求语言跟随界面语言。 */
+    public boolean isLanguageConfigured() {
+        return Boolean.TRUE.equals(languageConfigured);
+    }
+
+    public void setLanguage(String language) {
+        this.language = language;
+        this.languageConfigured = true;
+    }
+
     public String getImageBase() {
         TmdbProxy.RouteSelector.setAuto(TmdbProxy.RouteSelector.Kind.IMAGE, isImageAuto());
         if (isImageAuto()) {
@@ -390,6 +412,7 @@ public class TmdbConfig {
         copy.accessToken = accessToken;
         copy.omdbApiKey = omdbApiKey;
         copy.language = language;
+        copy.languageConfigured = languageConfigured;
         copy.imageBase = imageBase;
         copy.imageAuto = imageAuto;
         copy.imageRouteConfigured = imageRouteConfigured;

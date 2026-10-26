@@ -126,7 +126,8 @@ public class TmdbSourceDialog {
         tempDisabledSites = new ArrayList<>(config.getDisabledSites());
         tempAllowedSites = new ArrayList<>(config.getAllowedSites());
         apiKeyInput.setText(TextUtils.isEmpty(config.getAccessToken()) ? config.getApiKey() : config.getAccessToken());
-        languageInput.setText(config.getLanguage());
+        // 未显式配置过语言时留空，让用户看到「跟随界面」而不是一个看似已选的缺省值。
+        languageInput.setText(config.isLanguageConfigured() ? config.getLanguage() : "");
         apiHostInput.setText(apiDisplayFor(config), false);
         imageHostInput.setText(imageDisplayFor(config), false);
         apiCustomInput.setText(apiCustomValueFor(config));
@@ -531,6 +532,8 @@ public class TmdbSourceDialog {
         else sb.append("\"apiKey\":\"").append(escape(apiKey)).append("\",");
         if (!TextUtils.isEmpty(language)) {
             sb.append("\"language\":\"").append(escape(language)).append("\",");
+            // 用户在设置里保存过语言 = 明确的偏好表达；此后请求语言不再跟随界面语言。
+            sb.append("\"languageConfigured\":true,");
         }
         boolean apiAuto = TmdbProxy.isAuto(apiHost);
         boolean imageAuto = TmdbProxy.isAuto(imageHost);
