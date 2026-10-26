@@ -414,3 +414,73 @@ adb shell profman --dump-classes-and-methods \
 **方法学修正（重要）**：验收 baseline profile 必须每次 `uninstall` + `install`，否则反复 `force-stop` 会复用既有 AOT 结果，把收益测没。13.4 的平坦数据应按此更正理解。
 
 同一轮顺带在真实设备上确认了 13.3 记录的 AGP 行为：设备上装的 debug 包（`flags=[ DEBUGGABLE ... ]`）`unzip -l` 结果**无 `assets/dexopt/` 任何条目**，与构建侧观察一致。
+
+## 14. S9 回归修复：恢复备份时 `Python already started` 崩溃（2026-10-26）
+
+### 14.1 现象与根因
+
+设备 emulator-5557（`127.0.0.1:5557`）上执行「恢复备份」后进程直接崩溃：
+
+```
+FATAL EXCEPTION: pool-3-thread-1
+java.lang.NoClassDefFoundError: com.fongmi.android.tv.api.loader.BaseLoader$Loader
+  at BaseLoader.get(BaseLoader.java:42)
+  at VodConfig.clear(VodConfig.java:149)
+  at AppBackup.reload(AppBackup.java:269)
+  at AppBackup.restore(AppBackup.java:240)
+Caused by: ExceptionInInitializerError
+  at BaseConfig.loadConfig(BaseConfig.java:114)
+Caused by: java.lang.IllegalStateException: Python already started
+  at com.chaquo.python.Python.start(Python.java:46)
+  at com.fongmi.chaquo.Loader.<init>(Loader.java:23)
+  at com.fongmi.android.tv.api.loader.PyLoader.<init>(PyLoader.java:24)
+  at com.fongmi.android.tv.api.loader.BaseLoader.<init>(BaseLoader.java:35)
+  at BaseLoader$Loader.<clinit>(BaseLoader.java:165)
+```
+
+这是 **S9 引入的回归**，与 baseline profile（S10）无关。`Loader` 的构造原本是 check-then-act：
+
+```
+if (!Python.isStarted()) Python.start(Platform.create());
+```
+
+S9 把字幕 `SubtitleProviderRegistry` 放到 `App` 启动的后台线程预热，于是字幕侧（`PythonSubtitleScriptRuntime` → `Loader`）与点播配置侧（`PyLoader`/`JsLoader` → `Loader`）会**并发**构造 `Loader`。两个线程同时通过 `isStarted()` 判断后，后到者调用 `Python.start()` 抛 `IllegalStateException`。
+
+伤害被放大在两层：
+
+1. `Python.start` 的异常从 `BaseLoader$Loader.<clinit>` 抛出，JVM 会把该类的静态初始化**永久标记为失败**；
+2. 之后任何 `BaseLoader.get()` 都变成 `NoClassDefFoundError`，而 `AppBackup.reload()` 第一句就是 `VodConfig.get().clear(...)` → `BaseLoader.get()`，于是恢复备份必然崩溃。
+
+### 14.2 修复（`chaquo/src/main/java/com/fongmi/chaquo/Loader.java`）
+
+把启动 CPython 收敛成唯一入口，类级同步 + 双重检查 + 容忍败者：
+
+```java
+public Loader() {
+    startPythonOnce();
+    ...
+}
+
+private static synchronized void startPythonOnce() {
+    if (Python.isStarted()) return;
+    try {
+        Python.start(Platform.create());
+    } catch (IllegalStateException alreadyStarted) {
+        // Another thread won between the check and the call; the runtime is up either way.
+        if (!Python.isStarted()) throw alreadyStarted;
+    }
+}
+```
+
+锁加在 `Loader` 而不是 `Python` 上，因为后者属于 chaquo。catch 里必须再判一次 `isStarted()`：只有确认运行时真的起来时才吞掉异常，否则原样抛出，避免掩盖真正的启动失败。
+
+### 14.3 验证
+
+- **契约测试** `app/src/test/java/com/fongmi/android/tv/chaquo/PythonStartIdempotenceSourceTest.java`（2 例，通过）：锁住构造函数必须走 `startPythonOnce()`、不得直接调 `Python.start()`、不得恢复 `if (!Python.isStarted()) Python.start(` 形态，且 starter 必须 `static synchronized` + 捕获 `IllegalStateException` + 中途再验 `isStarted()`。
+- **相邻既有契约**：`AppStartupWarmupSourceTest`（2 例）、`SubtitleProviderRegistryLazyInitTest` 同批通过，S9 的预热语义未被破坏。
+- **字节码核对**：`javap -p -c` 确认编译产物含 `private static synchronized void startPythonOnce();`，构造函数为 `invokestatic startPythonOnce`，异常表覆盖 `Python.start` 并二次 `isStarted`。
+- **设备复验**（emulator-5557，debug 包，已 `cmd package compile -m speed`）：连续 5 次冷启动，`FATAL EXCEPTION` 计数 0/0/0/0/0，进程 pid 每次存活；`Python already started` 与 `NoClassDefFoundError: ...BaseLoader` 在 logcat 中均为 0 次。
+
+### 14.4 说明
+
+本轮未在 UI 内实跑「恢复备份」动作（设备上无现存备份文件），崩溃路径由崩溃栈直接锁定，修复由契约测试 + 字节码 + 冷启动压测三重佐证。若需端到端确认，可在有备份文件的设备上执行一次恢复。
