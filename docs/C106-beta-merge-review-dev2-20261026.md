@@ -12,10 +12,14 @@
   5. 本轮改动经任务守卫 `finish` 落盘并创建 recovery tag；推送 `dev2`；创建到 `beta` 的中文 PR（含具体改动内容）；随后拉取远端最新代码。
 - **基线**：`dev2` = `056626b2e6`（12 个未推送提交），`origin/beta` = `236a8fc02f`，
   merge-base = `dcf9828cba616f07ea7b21ebc4053b691522a208`。
-- **合并提交**：`472a71ec7a`（0 冲突，206 文件 / +5745 −131）。
-- **当前状态**：合并完成；评审完成（30 文件逐文件通读 + 两名独立评审员复核，无必修项）；编译与定向单测通过；
-  任务守卫会话已开启，待 `finish` 提交本任务文档并创建 recovery tag，随后推送 `dev2`、创建到 `beta` 的 PR。
-- **下一动作**：`task_guard.sh finish` → 推送 `dev2` → `gh pr create --base beta` → `git fetch` 拉取远端最新。
+- **合并提交（两轮，因为评审期间 beta 又前进）**：`472a71ec7a`（`origin/beta = 236a8fc02f`，0 冲突，
+  206 文件 / +5745 −131）→ 推送与 PR 后的 `git fetch` 发现 `origin/beta` 前进到 `6d0b3eb478`（PR #491）
+  → 第二轮合并 `ebcbeb9330`（0 冲突，39 文件 / +1830 −84，见 §6）。
+- **当前状态（历史记录：第二轮合并已本地提交、评审与双 flavor 验证全绿）**：两轮合并均 0 冲突且机械核验通过；
+  30 + 39 个受影响文件评审完成，无必修项，评审—修复—复评一次收敛（未产生额外代码改动）；
+  `dev2` 已推送、PR [#492](https://github.com/Silent1566/webhtv/pull/492) 已创建；
+  第二轮合并在 §6 记录后仍需一次提交与推送以更新 PR。
+- **下一动作**：把 §6 的第二轮记录经任务守卫提交并推送 `dev2`，更新 PR #492 描述，最后 `git fetch`。
 
 ---
 
@@ -189,8 +193,80 @@
 | 项 | 值 |
 | --- | --- |
 | 分支 | `dev2` |
-| 合并提交 | `472a71ec7a` — `merge: 合并远端 beta 236a8fc02f（PR #483-#489）到 dev2` |
-| 本任务提交 / recovery tag | 见 `finish` 输出（`recovery/C106-beta-merge-review-dev2-20261026/<timestamp>`） |
+| 第一轮合并提交 | `472a71ec7a` — `merge: 合并远端 beta 236a8fc02f（PR #483-#489）到 dev2` |
+| 第二轮合并提交 | `ebcbeb9330` — `merge: 合并远端 beta 6d0b3eb478（PR #491）到 dev2`（见 §6） |
+| 本任务提交 / recovery tag | `0fc6878533`；`recovery/C106-beta-merge-review-dev2-20261026/20261026171403-0fc687853310`，第二轮记录见 §6.4 |
 | 评审文档 | 本文件 |
-| PR | `dev2` → `beta`（只创建、不合并） |
-| 回滚 | `git reset --hard 056626b2e6`（回到合并前 `dev2`）；远端回滚为 revert 合并提交 |
+| PR | `dev2` → `beta`：[#492](https://github.com/Silent1566/webhtv/pull/492)（只创建、不合并） |
+| 回滚 | `git reset --hard 056626b2e6`（回到两轮合并前的 `dev2`）；远端回滚为 revert 对应合并提交 |
+
+## 6. 第二轮合并（origin/beta 前进到 `6d0b3eb478`）
+
+### 6.1 为什么还要合一次
+
+第一轮合并与推送完成后执行 `git fetch origin --prune`，发现 `origin/beta` 在评审期间又前进了：
+`236a8fc02f..6d0b3eb478`（`Merge pull request #491 from Silent1566/dev3`，11 个提交）。
+为满足「合并远端 beta 最新代码」的要求，必须在更新后的 beta 之上再做一轮合并、评审与验证。
+
+### 6.2 合并对象与结果
+
+| 项 | 值 |
+| --- | --- |
+| 合并前 `dev2` 顶端 | `0fc6878533`（§1 第一轮合并 + 评审文档） |
+| 合并目标 | `origin/beta = 6d0b3eb478`（`Merge pull request #491 from Silent1566/dev3`） |
+| 冲突预演 | `git merge-tree --write-tree HEAD origin/beta` 退出 0，无冲突 |
+| 实际结果 | `Automatic merge went well`，39 files / +1830 −84 |
+| 合并提交 | `ebcbeb9330` — `HEAD^1 = 0fc6878533`、`HEAD^2 = 6d0b3eb478` |
+
+beta 本轮带入的能力（`236a8fc02f..6d0b3eb478`）：
+
+- `9996d787ec` TMDB 未显式配置语言时请求语言跟随界面语言，并新增 `languageConfigured` 标记；
+- `024ac3f661` `App.getResources` 语言资源入口加锁并容错（受限重试 + 放弃后固化）；
+- `c9fb2731b1`/`d1616410bb`/`6c2de578dc` TMDB 匹配、缓存键与标题清洗的简繁归一；
+- `d638f6b9a9`/`adcf52019b`/`2b405b4b7b`/`07b9c20b60` 直播源身份、上次频道、分组名与站点能力标签与界面语言解耦；
+- `abaef4f1b7` 繁体界面 TMDB 匹配的设备实测证据文档。
+
+**与 dev2 改动的重叠只有 3 个文件**（`App.java`、`TmdbDetailActivity.java`、leanback `VideoActivity.java`），
+且都是行级不相交（dev2 改 `onCreate` 尾部与分帧渲染，beta 改语言判定行），这是 0 冲突的必然原因。
+
+### 6.3 第二轮评审结论（无必修项）
+
+- **合并完整性**：冲突标记正则无命中、双向 `git diff --check` 为空；dev2 侧关键符号全部在位
+  ——`TmdbDetailActivity.java:481` `renderChunks`、`:2766` `addLast`、`:2781` `clear`、`:2791` 重新调度、
+  `:2796` `clear`；`App.java:57` `MAX_RESOURCES_APPLY_ATTEMPTS`、`:59` `resourcesLock`、`:142` 调用与
+  `:154` 定义 `warmSubtitleProviders()`；`deferPlaybackServiceBinding()` 在 `PlaybackActivity.java:212/1155/1157`、
+  leanback `VideoActivity.java:6075`、mobile `VideoActivity.java:6649`；
+  分帧渲染的 `clearRenderChunks` 在 `:796/:2848/:2968/:11456`，`enqueueRenderChunk` 在 `:2872/:2877/:2882/:2889`
+  与 `:2976/:2985/:2991`，每块仍带 `if (generation != loadGeneration) return;`。
+- **请求语言与缓存同源**：`TmdbLanguagePolicy.java:58` 新增双参 `requestLanguage(TmdbConfig, int uiLanguage)`，
+  未显式配置时按界面语言给出 `zh-CN`/`zh-TW`；`TmdbService.java:662` 与 `:1008` 的缓存分键共用同一判定；
+  生产代码已无遗漏的单参调用（`History.java:1150`、`SubtitleTmdbResolver.java:27`、`MediaTitleResolver.java:137`、
+  `TmdbSourceAdapter`/`TmdbUIAdapter`/`TmdbDetailActivity` 全部调用点、leanback `VideoActivity.java:2450`），
+  仅 `TmdbLanguagePolicyTest.java:20` 与 `TmdbLanguageFollowUiTest.java:45` 保留单参调用，后者正是断言二者等价。
+- **显式配置不被覆盖**：`TmdbConfig.java:293-296` `isLanguageConfigured()` 兼容旧数据（语言非默认值即视为已配置），
+  `:299-301` `setLanguage` 置位标记，用户显式选择不会被界面语言反转。
+- **`App.getResources` 加锁容错**：快路径为一次 `volatile` 读；慢路径 `synchronized (resourcesLock)` 内双检，
+  失败时写 `resourcesLanguage = Integer.MIN_VALUE` **不认领语言**（下次重试），达到
+  `MAX_RESOURCES_APPLY_ATTEMPTS = 3` 才认领并放弃——既不会把过渡失败固化成永久降级，也不会每帧重算
+  `Configuration` 刷日志；锁内只做 `Setting.wrapLanguage` 与 `updateConfiguration`，无回调、无 UI、无重入。
+  契约测试 `AppResourcesWebViewCompatibilityTest` 两个方法逐条断言了旧行为保留与上述失败安全语义。
+- **缓存语言守卫**：`TmdbDetailCache` 入库 `normalize(language)`、命中用 `matchesTarget`，不匹配时拒绝复用，
+  简繁不会再互相冒充。
+- **既有 `[low]` 观察不变**：§3.4 的两条 `[low]` 在本轮合并后仍成立且仍不改（理由同前）。
+
+### 6.4 第二轮验证
+
+| 检查 | 命令 | 结果 |
+| --- | --- | --- |
+| 冲突预演 | `git merge-tree --write-tree HEAD origin/beta` | 退出 0，无冲突 |
+| 空白/冲突标记 | `git diff --check`（双向）+ 冲突标记正则 | 空 / 无命中 |
+| 主源码编译（双 flavor） | `./gradlew :app:compile{Mobile,Leanback}Arm64_v8aDebugJavaWithJavac` | BUILD SUCCESSFUL in 1m 13s（58 tasks，4 executed） |
+| mobile 定向单测 | `./gradlew :app:testMobileArm64_v8aDebugUnitTest --tests <21 个类>` | BUILD SUCCESSFUL in 20s，21 类全绿 |
+| leanback 定向单测 | `./gradlew :app:testLeanbackArm64_v8aDebugUnitTest --tests <20 个类>` | BUILD SUCCESSFUL in 17s，20 类全绿 |
+
+定向类覆盖本轮全部受影响测试：新增的 `GroupDisplayNameTest` 8、`LiveDisplayNameTest` 5、`SiteTransBracketTest` 9、
+`TmdbMatchCacheHantTest` 5、`TmdbSeasonMatchCacheHantTest` 5、`MediaTitleParserHantTest` 6、
+`TmdbDetailActivityHantMatchTest` 5、`TmdbLanguageFollowUiTest` 8、`TmdbLanguagePolicyTest` 4、
+`AppResourcesWebViewCompatibilityTest` 2；以及 dev2 侧 10 个契约测试与
+`TmdbUIAdapterTest` 61、`TmdbDetailCacheTest` 14、`TmdbDetailDirectPlayTransitionSourceTest` 4
+（`TmdbMatcherHantTest` 属 `testMobile` 源集，leanback 不需要）。全部 tests/failures/errors 计数为 0 或非零失败数 0。
