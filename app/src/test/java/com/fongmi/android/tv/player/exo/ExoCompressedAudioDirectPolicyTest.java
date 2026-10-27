@@ -112,16 +112,38 @@ public class ExoCompressedAudioDirectPolicyTest {
     }
 
     @Test
-    public void unknownThresholdOrRawHeadDoesNotDeclareStartupFailure() throws Exception {
+    public void unreadableStartupMetricsRecoverFromAcceptedPayloadAndPinnedHead() throws Exception {
+        // Vendor tracks can report capacity/size/threshold as zero, which leaves no threshold to
+        // compare against; accepted payload plus a head that never leaves zero must still recover.
         StartupFixture f = new StartupFixture(0);
         f.write(256 * 1024, 32);
         assertNull(f.poll(0, true));
+        assertNull(f.poll(ExoCompressedAudioDirectPolicy.ZERO_METRIC_STARTUP_STALL_MS - 1, true));
+        assertSame(f.memory.format, f.poll(1, true));
         assertNull(f.poll(10_000, true));
+        assertEquals(Long.MAX_VALUE, f.memory.policy.startupProgressIntervalUs());
+        assertTrue(f.memory.policy.consumePcmFallbackRequest());
+        assertFalse(f.memory.policy.consumePcmFallbackRequest());
+
+        // Without accepted payload there is no evidence at all, so nothing may be declared.
+        StartupFixture silent = new StartupFixture(0);
+        assertNull(silent.poll(10_000, true));
+    }
+
+    @Test
+    public void unknownRawHeadNeverDeclaresStartupFailure() throws Exception {
         StartupFixture unknownHead = new StartupFixture(4096);
         unknownHead.memory.environment.rawHead = C.LENGTH_UNSET;
         unknownHead.write(4096, 10);
         assertNull(unknownHead.poll(0, true));
         assertNull(unknownHead.poll(800, true));
+        assertEquals(Long.MAX_VALUE, unknownHead.memory.policy.startupProgressIntervalUs());
+
+        StartupFixture unreadableAndUnknownHead = new StartupFixture(0);
+        unreadableAndUnknownHead.memory.environment.rawHead = C.LENGTH_UNSET;
+        unreadableAndUnknownHead.write(256 * 1024, 32);
+        assertNull(unreadableAndUnknownHead.poll(0, true));
+        assertNull(unreadableAndUnknownHead.poll(10_000, true));
     }
 
     @Test
