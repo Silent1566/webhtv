@@ -116,15 +116,16 @@ public class PlayerDisplaySettingSyncTest {
         int methodEnd = source.indexOf("\n    }", method);
         String body = source.substring(method, methodEnd);
 
-        assertTrue("the media info switch must gate media badges instead of the control bar visibility",
-                body.contains("!PlayerSetting.isDisplayMediaBadges()")
-                        && !body.contains("!controlsVisible && !PlayerSetting.isDisplayMediaBadges()"));
+        assertTrue("media badges must stay off every non-fullscreen surface",
+                body.contains("!source.isFullscreen()"));
+        assertTrue("inside fullscreen the control bar must show badges regardless of the switch",
+                body.contains("!controlsVisible && !PlayerSetting.isDisplayMediaBadges()"));
 
         int only = source.indexOf("private boolean renderMediaBadgesOnly()");
         assertTrue("PlayerOsdController is missing renderMediaBadgesOnly", only >= 0);
         String onlyBody = source.substring(only, source.indexOf("\n    }", only));
-        assertTrue("the suppressed mobile control-bar path must also honor the media info switch",
-                onlyBody.contains("if (!PlayerSetting.isDisplayMediaBadges())"));
+        assertTrue("the suppressed mobile control-bar path must stay off outside fullscreen",
+                onlyBody.contains("if (!source.isFullscreen())"));
 
         String persistent = source.substring(source.indexOf("// 控制栏隐藏时，按用户设置显示常驻屏显"));
         String renderEnd = "private boolean renderMediaBadgesOnly()";
@@ -135,9 +136,11 @@ public class PlayerDisplaySettingSyncTest {
                 persistentBody.contains("setMediaBadges(player);"));
         assertTrue("the persistent path must not force the badge strip hidden",
                 !persistentBody.contains("mediaBadges.setVisibility(View.GONE)"));
-        assertTrue("the persistent badges must raise the bottom corners to clear the persistent text line",
-                source.contains("int bottomInset = controlsVisible ? dp(80) : dp(22);")
-                        && source.contains("int topInset = controlsVisible ? dp(64) : 0;"));
+        assertTrue("badges must clear the control bar only while it is on screen",
+                source.contains("bottomMargin = controlsVisible ? dp(80) : (stacked ? clear : edgeInset);")
+                        && source.contains("topMargin = controlsVisible ? dp(64) : (stacked ? clear : edgeInset);"));
+        assertTrue("badges must hug the screen edge when nothing else occupies their corner",
+                source.contains("int edgeInset = dp(2);") && source.contains("private View persistentNeighbour(int position)"));
     }
 
     /**
@@ -166,8 +169,8 @@ public class PlayerDisplaySettingSyncTest {
         assertTrue("choosing Off must only switch media info off and keep the remembered corner",
                 applyBody.contains("putDisplayMediaBadges(false)")
                         && !applyBody.contains("putMediaBadgePosition(MEDIA_BADGE_POSITION_OFF)"));
-        assertTrue("choosing a corner must enable media info and remember that corner",
-                applyBody.contains("putMediaBadgePosition(which)") && applyBody.contains("putDisplayMediaBadges(true)"));
+        assertTrue("choosing a corner must remember that corner without switching the persistent display on",
+                applyBody.contains("putMediaBadgePosition(which)") && !applyBody.contains("putDisplayMediaBadges(true)"));
 
         Path mobileSettingPage = Path.of("com", "fongmi", "android", "tv", "ui", "fragment", "SettingPlayerFragment.java");
         Path leanbackSettingPage = Path.of("com", "fongmi", "android", "tv", "ui", "activity", "SettingPlayerActivity.java");
@@ -194,6 +197,35 @@ public class PlayerDisplaySettingSyncTest {
             int items = array.split("<item>", -1).length - 1;
             assertTrue(locale + " media info position list must offer four corners plus Off, was " + items, items == 5);
         }
+    }
+
+    /**
+     * 需求：「只有全屏播放才显示媒体信息」。徽标开关与全屏判定是两条独立约束：
+     * Source 需要暴露 isFullscreen()，四个宿主分别接上（两个 VideoActivity 读自己的 fullscreen 字段、
+     * 详情页内嵌小窗读 inlineFullscreen），未覆盖的宿主默认 false。
+     */
+    @Test
+    public void mediaBadgesOnlyShowInFullscreenPlayback() throws Exception {
+        String controller = read(mainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "custom", "PlayerOsdController.java")));
+        int sourceIface = controller.indexOf("public interface Source");
+        String sourceBody = controller.substring(sourceIface, controller.indexOf("private static volatile", sourceIface));
+        assertTrue("the OSD source must expose the fullscreen state", sourceBody.contains("default boolean isFullscreen()"));
+
+        String host = read(mainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "player", "VodPlayerUiHost.java")));
+        assertTrue("the shared player host must forward the fullscreen state", host.contains("default boolean isFullscreen()"));
+
+        String ui = read(mainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "player", "VodPlayerUiController.java")));
+        assertTrue("the OSD controller must be fed the host fullscreen state",
+                ui.contains("public boolean isFullscreen()") && ui.contains("return host.isFullscreen();"));
+
+        Path videoActivity = Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java");
+        for (String flavor : new String[]{"mobile", "leanback"}) {
+            String page = read(sourcePath(flavor, "java").resolve(videoActivity));
+            assertTrue(flavor + " 全屏状态必须传给 OSD", page.contains("return VideoActivity.this.isFullscreen();"));
+        }
+
+        String tmdb = read(mainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java")));
+        assertTrue("详情页内嵌小窗只有真正全屏后才显示媒体信息", tmdb.contains("return inlineFullscreen;"));
     }
 
     @Test

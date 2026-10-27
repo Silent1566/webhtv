@@ -2,9 +2,13 @@
 
 **Recovery anchor**
 
-- 目标：播放器显示当前媒体的徽标（分辨率 / 动态范围 / 画面来源与画质 / 视频编码 / 音频编码 / 声道 / 帧率 / 码率 / 容器 / 特别标签 / IMAX / 流媒体平台），**同一行横排**，每条为「现成徽标牌位图 + 可选文本 + 类别色胶囊」；没有对应牌的事实（帧率 / 码率 / 容器）只显示文本，不再用语义不符的自绘图标。展示语义（第七轮起）：「媒体信息」开关是**唯一总闸**——关闭时无论控制栏是否唤醒都不显示（连 renderMediaBadgesOnly() 这条独立放行路径也一并收口）；打开时控制栏隐藏也作为常驻项显示，与标题 / 时间 / 进度 / 码率同级。开关进「屏显设置」多选（**默认关**），位置独立成行单选，**选项为 左上角 / 右上角 / 左下角 / 右下角 / 关闭（默认）**：选角位 = 记下该角并打开开关；选「关闭」= 只关开关、**保留最近一次角位**，因此再次打开开关会回到上次的角位，从未设过则回到默认右下角。
-- 验收（第七轮起）：默认「关闭」时控制栏唤醒与非全屏页面都**不显示**徽标；选角位即打开开关，控制栏隐藏时徽标仍以该角位常驻；再选「关闭」后重新打开开关要回到最近一次角位（从未设过则右下角）；Exo/MPV/IJK 三引擎均不崩溃。（第三轮起按用户明确授权打包现成徽标位图，第四轮扩到参考 JSON 全量 **100 张**，第五轮并入扩充包再补 **27 张**、共 **127 张**，其中含 Dolby / DTS / IMAX / 各家流媒体平台的商标与字标，属于**用户已知并接受**的取舍。）
-- Lane/scope：当前轮次 task_guard `osd-badges-off`（mode=standard），base HEAD `3220d20d6c3d4a9f90b192340dae06d10e512c58`，branch `dev3`；历史轮次见 §9。
+- 目标：播放器显示当前媒体的徽标（分辨率 / 动态范围 / 画面来源与画质 / 视频编码 / 音频编码 / 声道 / 帧率 / 码率 / 容器 / 特别标签 / IMAX / 流媒体平台），**同一行横排**，每条为「现成徽标牌位图 + 可选文本 + 类别色胶囊」；没有对应牌的事实（帧率 / 码率 / 容器）只显示文本，不再用语义不符的自绘图标。展示语义（**第八轮起，现行**，用户 2026-10-27 二次确认选 A/A）：
+  - **只在全屏播放出现**：半屏 / 详情页内嵌小窗（`inlineFullscreen=false`）里无论屏显开关如何都**不显示**；
+  - **全屏内两条来源分离**：控制栏唤醒时**总是显示**（用户要的是「唤醒时能看到」）；「屏显设置 → 媒体信息」开关只决定**控制栏隐藏时是否继续常驻**；
+  - **位置与开关解耦**：位置单选（左上角 / 右上角 / 左下角 / 右下角 / 关闭，默认关闭）只记角位，**选角位不再自动打开屏显**；选「关闭」只清开关、**角位键原样保留**，之后重新打开屏显就回到那个角；
+  - **贴边优先**：控制栏隐藏时，只有同角**确实还有别的常驻文本**（标题 / 时间 / 进度 / 网速）才把徽标抬起躲开，否则直接贴到画面边缘（2dp 呼吸位）。
+- 验收（第八轮起）：非全屏（详情页内嵌小窗）唤醒控制栏**不显示**徽标；全屏唤醒控制栏**总是显示**；全屏且开关打开时控制栏隐藏仍常驻；整行开关关闭后全屏唤醒仍显示、隐藏即消失；位置单选选角位**不改变**屏显开关状态、摘要仍按开关显示「关闭」；同角无邻居时徽标贴边、有邻居（如右下角网速）时抬高一行；Exo/MPV/IJK 三引擎均不崩溃。（第三轮起按用户明确授权打包现成徽标位图，第四轮扩到参考 JSON 全量 **100 张**，第五轮并入扩充包再补 **27 张**、共 **127 张**，其中含 Dolby / DTS / IMAX / 各家流媒体平台的商标与字标，属于**用户已知并接受**的取舍。）
+- Lane/scope：当前轮次 task_guard `osd-badges-fullscreen`（mode=standard），base HEAD `572af99c339c455c94eebc7079ecd2ddef8811af`，branch `dev3`；历史轮次见 §9。
 - 回滚：单一逻辑提交，回滚该提交即可完整撤销；新增键 `player_osd_media_badges` / `player_osd_media_badge_position` 未被引用时是惰性偏好项，不会影响旧版本行为。
 - 后续任务：`osd-badge-icons`（base HEAD `49e5b2c4bc05a5e1e05f2bc18327d1c02079b9f5`）把徽标从「常驻屏显」改为「控制栏可见时展示」并加图标；`osd-badge-plates`（base HEAD `7d4bee6ce1`）改为横排 + 类别色 + 现成徽标牌；`osd-badge-plates-all`（base HEAD `0dc165a9a2`）把参考 JSON 的 **100 条规则 + 100 张牌图全量入库**，并删掉语义不符的自绘兜底图标；`osd-badges-persist`（base HEAD `39e1b4a0d4`）把徽标从「只在控制栏可见时渲染」改为「控制栏唤醒无条件显示 + 开关打开后常驻显示」；`osd-badge-expansion`（base HEAD `192b55c2fc`）并入参考扩充包的媒体事实规则、把牌图扩到 127 张，并统一同行高度；`osd-badges-off`（base HEAD `3220d20d6c3d4a9f90b192340dae06d10e512c58`）新增「关闭」选项并让开关成为唯一总闸、关闭时保留最近一次角位。
 
@@ -101,14 +105,14 @@
 | 播放控件 → 屏显芯片弹窗（TV/手机） | 两 flavor `ControlDialog` 第 8 个芯片 `displayMediaBadges` | 同上 |
 | TMDB 详情页内联控件 → 屏显芯片弹窗 | `DisplayDialog`（`Mode.PLAYER_OSD`）`display_media_badges` | 同上 |
 | 设置 → 播放设置 → 媒体信息位置（单选） | `ChoiceDialog.showSingle`，5 项：左上角 / 右上角 / 左下角 / 右下角 / 关闭 | 「媒体信息位置」 |
-| 播放控件 → 屏显芯片弹窗的「媒体信息」芯片 | 两 flavor `ControlDialog` / `DisplayDialog`：拨到开 = 用最近一次角位显示；拨到关 = 等价「关闭」 | 同上 |
+| 播放控件 → 屏显芯片弹窗的「媒体信息」芯片 | 两 flavor `ControlDialog` / `DisplayDialog`：**只控制「控制栏隐藏时是否常驻」**；全屏唤醒控制栏时始终显示，与它无关 | 同上 |
 
 上表各入口都读写同一对键（`player_osd_media_badges` + `player_osd_media_badge_position`），`ControlDialog.toggleDisplaySetting(index)` 与 `DisplayDialog.setDisplay(...)` 都汇入 `PlayerSetting.putDisplayChecked(...)` / `putDisplayMediaBadges(...)`，随后调用 `onDisplayChanged()` / `inlineControlDialogDisplayChanged()`，由 `PlayerOsdController.render()` 下一次轮询生效。
 
 ## 8. 已知缺口（有意为之）
 
-- 徽标的展示路径（第七轮改写）：`setMediaBadges` 只看「媒体信息」开关，关闭时**控制栏唤醒也不再显示**（这是用户明确要求的「关闭不显示包括控制栏唤醒后」）；开关打开时才渲染，控制栏隐藏时作为常驻项。suppressed 分支里 `renderMediaBadgesOnly()` 先查同一个开关，关闭时把四角 / 诊断 / 迷你进度 / 徽标全部 GONE 并清空签名后返回 false。
-- 角位内缩按控制栏状态分支：控制栏可见时上两角 `topMargin=64dp` / 下两角 `bottomMargin=80dp`（避开顶栏按钮列与底部进度条）；控制栏隐藏时上两角 `0`（靠布局自带的 14dp padding）、下两角 `22dp`（抬高一行，避开常驻进度 / 码率文本）。
+- 徽标的展示路径（第八轮改写）：门控是 `player == null || !source.isFullscreen() || (!controlsVisible && !PlayerSetting.isDisplayMediaBadges())`——**先卡全屏**，再区分「唤醒总是显示 / 隐藏看开关」。suppressed 分支的 `renderMediaBadgesOnly()` 改为只查 `source.isFullscreen()`（它只在控制栏唤醒时进入，开关在此不参与）。
+- 角位内缩（第八轮改写）：控制栏可见时上两角 `topMargin=64dp` / 下两角 `bottomMargin=80dp`（避开顶栏按钮列与底部进度条）；控制栏隐藏时用 `persistentNeighbour(position)` 判断同角还有没有别的常驻文本——没有就 `edgeInset = dp(2)` 贴边，有就按邻居实测高度 `+ dp(4)` 抬高躲开。
 - mobile 播放器在 `showControl()` 里先 `setOsdSuppressed(true)` 隐藏整个 OSD 根，因此徽标走 `renderMediaBadgesOnly()` 这条独立放行路径。
 - 徽标与标题/分辨率/时间**允许同角共存**（用户确认）：徽标容器是独立 `FlexboxLayout`，同角重叠时由 `layout_gravity` 决定层级，二者可能相互覆盖——有意的「零侵入」取舍。
 - 文件名类牌依赖**播放器拿到的文件名/标题**：网盘直链常是随机串（如 `/d/xxxxx`），此时这类牌一律不出现；这不是缺陷，是「不编造」的边界。
@@ -133,6 +137,28 @@
 - 控制栏自动隐藏后再 dump，只剩 `@id/osd`，**没有 `@id/osdMediaBadges` 节点** → 这条是**改动前**（开关关闭）的观测；`osd-badges-persist` 之后改为：开关关闭时依旧如此，开关打开时常驻路径同样渲染徽标（见 §9 本轮实测）。
 - 全屏下位置 `1`（右上）徽标 `[1644,519][1895,735]`，与进度条不重叠。
 
+### 第八轮：只在全屏显示 + 位置与开关解耦 + 贴边（task_guard `osd-badges-fullscreen`，base HEAD `572af99c339c455c94eebc7079ecd2ddef8811af`）
+
+用户原话（四条）：「1. 只有全屏播放才显示媒体信息无论是否开启对应的屏显 2. 关闭屏显时不修改媒体信息位置，只有开启屏显时媒体信息位置是关闭的才恢复成最近的一个开启值 3. 开启媒体信息位置不自动开启对应的屏显，因为用户想要的只是唤醒控制台时能看到而不是一致能看到 4. 当用户开启屏显但又没和其他屏显重叠时应该处于最靠边缘的位置，比如右下角同时有媒体信息屏显和网速屏显时才处于截图中的位置」。
+
+第 1 条的歧义（全屏内开关还管不管）与第 3 条的摘要文案，已用提问确认，用户选：**A = 全屏唤醒控制栏就显示、开关只决定「控制栏隐藏时是否常驻」；非全屏任何情况都不显示**；**A = 摘要仍显示「关闭」，但记住刚选的角位**。
+
+#### 改动
+
+1. `PlayerOsdController.Source` 新增 `default boolean isFullscreen() { return true; }`；`PlayerOsdController.setMediaBadges` 门控改为 `player == null || !source.isFullscreen() || (!controlsVisible && !PlayerSetting.isDisplayMediaBadges())`；`renderMediaBadgesOnly()` 的首个判断由「开关」改为 `!source.isFullscreen()`。
+2. `PlayerSetting.putMediaBadgeChoice(int)` 删掉 `putDisplayMediaBadges(true)`：选角位只 `putMediaBadgePosition(which)`，屏显开关状态完全不动（需求 3）；选「关闭」仍是只 `putDisplayMediaBadges(false)`、角位键原样保留（需求 2）。
+3. 全屏态接线：`VodPlayerUiHost` 新增 `default boolean isFullscreen() { return false; }`；`VodPlayerUiController` 构造 OSD 时补 `isFullscreen() { return host.isFullscreen(); }`；mobile / leanback `VideoActivity` 各自在匿名 host 里返回 `VideoActivity.this.isFullscreen()`；`TmdbDetailActivity` 返回 `inlineFullscreen`。
+4. `applyMediaBadgePosition()` 重写：新增 `persistentNeighbour(int position)`（同角的 `topLeft/topRight/bottomLeft/bottomRight` 谁可见就返回谁）与 `isShown(View)`；控制栏隐藏时 `stacked = neighbour != null`，`edgeInset = dp(2)`，`clear = max(neighbour.getHeight(), dp(18)) + dp(4)`；无邻居时四角直接贴边（`edgeInset`），有邻居时按邻居高度抬起（需求 4）。同时把 `setMarginStart/setMarginEnd` 纳入「无变化则不 relayout」的比较。
+5. `PlayerDisplaySettingSyncTest`：改写 `mediaBadgesAreGatedByTheMediaInfoSwitchOnEveryPath`（断言含 `!source.isFullscreen()` 与 `!controlsVisible && !PlayerSetting.isDisplayMediaBadges()`；`renderMediaBadgesOnly` 断言 `if (!source.isFullscreen())`；inset 断言改为 `clear`/`edgeInset` 与 `persistentNeighbour`）；改写「选角位」断言为**不得**含 `putDisplayMediaBadges(true)`；新增 `mediaBadgesOnlyShowInFullscreenPlayback`（断言 Source 接口、host 接口、controller 转发、两 flavor VideoActivity `return VideoActivity.this.isFullscreen();`、详情页 `return inlineFullscreen;`）。
+
+#### 验证（emulator-5554，1920×1080，sdk28，zh-CN，mobileArm64-v8a debug）
+
+- 单测：`PlayerDisplaySettingSyncTest` leanback 11 例 0 失败、mobile 11 例 0 失败；`ControlDialogOsdSettingsTest` mobile 9 例 0 失败；整任务里 8 例既存环境失败（MpvFontConfigTest / MpvHlsCacheCoordinatorTest / NativeEnhancedPlaybackStyleFocusTest / ReaderPlaybackRoutingSourceTest / SearchResultDownFocusTest / TmdbSourceOnlyInteractionTest / WebThemeTokenSourceTest），读取的文件都不在本轮 diff 内。
+- 构建安装：`assembleMobileArm64_v8aDebug` BUILD SUCCESSFUL，`adb install -r -t` 到 emulator-5554 与 127.0.0.1:5559 均 Success。
+- **非全屏不显示**：详情页内嵌小窗（`TmdbDetailActivity`，`inlineFullscreen=false`）播放中，prefs `player_osd_media_badges=true`，控制栏唤醒后 dump 中无 `osdMediaBadges` 节点；画面只有内嵌控件的标题/分辨率。
+- **全屏唤醒显示**：同一 prefs 下进入 `VideoActivity` 全屏，唤醒控制栏后 `osdMediaBadges` 出现；`player_osd_diagnostics` 关闭时诊断面板不出现。
+- **选角位不改开关**：设置页「媒体信息位置」默认摘要仍是「关闭」（`getMediaBadgeChoice()` 按开关走），选左上角后 prefs 只写 `player_osd_media_badge_position=0`，`player_osd_media_badges` 保持原值。
+- 截图（`s22`/`s24` 非全屏无徽标、`s26` 全屏出现徽标）按 task guard scope 约束不进入仓库，暂存于同机 `%TEMP%`。
 ### 第七轮：关闭项 + 开关成为唯一总闸（task_guard `osd-badges-off`，base HEAD `3220d20d6c3d4a9f90b192340dae06d10e512c58`）
 
 用户原话（两段需求）：「新增一个关闭选项，默认关闭不显示包括控制栏唤醒后，关闭状态时用户开启媒体信息屏显时自动改成右下角（也就是现在的默认值），如果用户有历史设置则设置为最近一次的设置，比如用户之前设置在左上角后关闭屏显再开启屏显还是自动左上角」；「非全屏状态下唤醒控制栏不再显示媒体信息……除非是用户自己开启了屏显，没开启的时候非全屏唤醒控制栏不显示」。

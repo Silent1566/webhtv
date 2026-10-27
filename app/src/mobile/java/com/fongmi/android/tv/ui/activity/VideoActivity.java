@@ -1610,6 +1610,11 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
                 return getOsdTitle();
             }
 
+            @Override
+            public boolean isFullscreen() {
+                return VideoActivity.this.isFullscreen();
+            }
+
         }, VodPlayerChrome.fromVideo(mBinding, null, 12f), this);
         mClock = mPlayerUi.clock();
         mOsd = mPlayerUi.osd();

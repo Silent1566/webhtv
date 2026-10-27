@@ -64,6 +64,14 @@ public class PlayerOsdController {
         PlayerManager getPlayer();
 
         String getTitle();
+
+        /**
+         * 是否处于全屏播放。媒体信息徽标只属于全屏画面：半屏/小窗（详情页内嵌、竖屏小屏）里
+         * 它会和一堆控件挤在一起，因此非全屏时无论屏显开关如何都不显示。
+         */
+        default boolean isFullscreen() {
+            return true;
+        }
     }
 
     private static volatile String cachedDeviceText;
@@ -290,10 +298,11 @@ public class PlayerOsdController {
     /**
      * 控制栏出现但 OSD 根被抑制（mobile 播放器）时的渲染路径。
      * 只放行媒体信息徽标，四角文本、诊断面板与迷你进度一律隐藏；
-     * 徽标本身仍受「媒体信息」开关约束（默认关闭），关闭时控制栏唤醒不再塞进一行徽标。
+     * 徽标自身的两条约束与常驻路径一致：只有全屏画面才显示，面板里就总是显示
+     * （这条路径只在控制栏唤醒时进入，所以「开关」在这里不参与判定）。
      */
     private boolean renderMediaBadgesOnly() {
-        if (!PlayerSetting.isDisplayMediaBadges()) {
+        if (!source.isFullscreen()) {
             topLeft.setVisibility(View.GONE);
             topRight.setVisibility(View.GONE);
             bottomLeft.setVisibility(View.GONE);
@@ -448,9 +457,11 @@ public class PlayerOsdController {
      */
     private void setMediaBadges(PlayerManager player) {
         if (mediaBadges == null) return;
-        // 「屏显设置 → 媒体信息」是唯一开关，控制栏唤醒与否都看它：
-        // 关闭时（默认）控制栏唤醒也不再显示，打开时控制栏隐藏同样作为常驻项展示。
-        if (player == null || !PlayerSetting.isDisplayMediaBadges()) {
+        // 两条约束叠在一起：
+        // 1. 只在全屏画面里出现——半屏/小窗里它会把本来就拥挤的控件堆得更挤；
+        // 2. 全屏内，控制栏唤醒时总是显示（用户要的就是唤醒时能看到），
+        //    只有「控制栏隐藏时是否继续常驻」才由「屏显设置 → 媒体信息」开关决定。
+        if (player == null || !source.isFullscreen() || (!controlsVisible && !PlayerSetting.isDisplayMediaBadges())) {
             mediaBadges.setVisibility(View.GONE);
             mediaBadgeSignature = "";
             return;
@@ -477,47 +488,89 @@ public class PlayerOsdController {
     }
 
     /**
-     * 控制栏可见时，控制栏本身占据画面顶部与底部，四角都要从控制栏高度内缩，
-     * 否则徽标会压住标题栏或进度条。
-     * 控制栏隐藏时徽标是常驻项：只需让开布局自带的 14dp 内边距，
-     * 但下两角要抬高一条文本行，避免与常驻的进度 / 码率文本重叠。
+     * 徽标贴角规则：
+     * 1. 控制栏唤醒时，控制栏占据画面顶部与底部，四角都要让开它的高度，否则会压住标题栏 /
+     *    进度条；这是唯一的「无条件内缩」场景。
+     * 2. 控制栏隐藏时徽标是常驻项，此时只有在同一个角**确实还有别的常驻文本**
+     *    （同角的标题 / 时间 / 进度 / 网速）时才抬高一行躲开它；没有邻居就直接贴到画面边缘，
+     *    这才是用户要的「最靠边缘」。
+     * 3. 布局给四角留了 14dp 内边距，贴边时把 margin 压到 2dp，看起来才是「贴着边缘」；
      */
     private void applyMediaBadgePosition() {
         ViewGroup.LayoutParams params = mediaBadges.getLayoutParams();
         if (!(params instanceof FrameLayout.LayoutParams)) return;
         FrameLayout.LayoutParams layoutParams = (FrameLayout.LayoutParams) params;
-        int topInset = controlsVisible ? dp(64) : 0;
-        int bottomInset = controlsVisible ? dp(80) : dp(22);
+        int position = PlayerSetting.getMediaBadgePosition();
+        View neighbour = persistentNeighbour(position);
+        boolean stacked = !controlsVisible && neighbour != null;
+        // 邻居的实际高度 + 一点呼吸位；量不到时退回一条文本行的高度。
+        int clear = (stacked ? Math.max(neighbour.getHeight(), dp(18)) : 0) + dp(4);
+        // 贴边时只留 2dp，肉眼即「最靠边缘」；用负 margin 会顶进系统栏导致胶囊被裁切。
+        int edgeInset = dp(2);
         int gravity;
+        int marginStart;
+        int marginEnd;
         int topMargin;
         int bottomMargin;
-        switch (PlayerSetting.getMediaBadgePosition()) {
+        switch (position) {
             case 0:
                 gravity = Gravity.TOP | Gravity.START;
-                topMargin = topInset;
+                marginStart = stacked ? 0 : edgeInset;
+                marginEnd = 0;
+                topMargin = controlsVisible ? dp(64) : (stacked ? clear : edgeInset);
                 bottomMargin = 0;
                 break;
             case 1:
                 gravity = Gravity.TOP | Gravity.END;
-                topMargin = topInset;
+                marginStart = 0;
+                marginEnd = stacked ? 0 : edgeInset;
+                topMargin = controlsVisible ? dp(64) : (stacked ? clear : edgeInset);
                 bottomMargin = 0;
                 break;
             case 2:
                 gravity = Gravity.BOTTOM | Gravity.START;
+                marginStart = stacked ? 0 : edgeInset;
+                marginEnd = 0;
                 topMargin = 0;
-                bottomMargin = bottomInset;
+                bottomMargin = controlsVisible ? dp(80) : (stacked ? clear : edgeInset);
                 break;
             default:
                 gravity = Gravity.BOTTOM | Gravity.END;
+                marginStart = 0;
+                marginEnd = stacked ? 0 : edgeInset;
                 topMargin = 0;
-                bottomMargin = bottomInset;
+                bottomMargin = controlsVisible ? dp(80) : (stacked ? clear : edgeInset);
                 break;
         }
-        if (layoutParams.gravity == gravity && layoutParams.topMargin == topMargin && layoutParams.bottomMargin == bottomMargin) return;
+        if (layoutParams.gravity == gravity && layoutParams.topMargin == topMargin && layoutParams.bottomMargin == bottomMargin
+                && layoutParams.getMarginStart() == marginStart && layoutParams.getMarginEnd() == marginEnd) return;
         layoutParams.gravity = gravity;
         layoutParams.topMargin = topMargin;
         layoutParams.bottomMargin = bottomMargin;
+        layoutParams.setMarginStart(marginStart);
+        layoutParams.setMarginEnd(marginEnd);
         mediaBadges.setLayoutParams(layoutParams);
+    }
+
+    /**
+     * 徽标所在的角在控制栏隐藏时是否还有别的常驻文本。只有此时才需要把徽标抬高 / 内缩，
+     * 否则应当贴住画面边缘（用户要的「最靠边缘」）。
+     */
+    private View persistentNeighbour(int position) {
+        switch (position) {
+            case 0:
+                return isShown(topLeft) ? topLeft : null;
+            case 1:
+                return isShown(topRight) ? topRight : null;
+            case 2:
+                return isShown(bottomLeft) ? bottomLeft : null;
+            default:
+                return isShown(bottomRight) ? bottomRight : null;
+        }
+    }
+
+    private static boolean isShown(View view) {
+        return view != null && view.getVisibility() == View.VISIBLE;
     }
 
     /**

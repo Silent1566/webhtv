@@ -611,8 +611,10 @@ public class PlayerSetting {
     }
 
     /**
-     * 应用「媒体信息位置」单选结果：选四角即开启媒体信息并记住该角；选关闭只关开关、
-     * 不改位置。位置键始终保留用户最近一次的选择。
+     * 应用「媒体信息位置」单选结果。选角位**只记位置、不打开屏显**：用户要的是「唤醒控制栏时
+     * 能看到」，而不是让它长期常驻，所以开启/关闭始终由「屏显设置」里那个独立开关决定。
+     * 选关闭只清开关、不改位置；位置键始终保留用户最近一次选过的角（默认右下角），
+     * 之后重新打开屏显就回到这个角。
      */
     public static void putMediaBadgeChoice(int which) {
         if (which == MEDIA_BADGE_POSITION_OFF) {
@@ -620,7 +622,6 @@ public class PlayerSetting {
             return;
         }
         putMediaBadgePosition(which);
-        putDisplayMediaBadges(true);
     }
 
     public static boolean[] getDisplayChecked() {
