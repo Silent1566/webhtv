@@ -118,14 +118,15 @@ public class PlayerDisplaySettingSyncTest {
 
         assertTrue("media badges must stay off every non-fullscreen surface",
                 body.contains("!source.isFullscreen()"));
-        assertTrue("the media info switch must gate badges on every path, including a woken control bar",
-                body.contains("!PlayerSetting.isDisplayMediaBadges()")
-                        && !body.contains("!controlsVisible && !PlayerSetting.isDisplayMediaBadges()"));
+        assertTrue("the media info master switch must gate every path, including a woken control bar",
+                body.contains("!PlayerSetting.isDisplayMediaBadges()"));
+        assertTrue("the persistent flag may only gate the control-bar-hidden path",
+                body.contains("!controlsVisible && !PlayerSetting.isDisplayMediaBadgesPersistent()"));
 
         int only = source.indexOf("private boolean renderMediaBadgesOnly()");
         assertTrue("PlayerOsdController is missing renderMediaBadgesOnly", only >= 0);
         String onlyBody = source.substring(only, source.indexOf("\n    }", only));
-        assertTrue("the suppressed mobile control-bar path must honor both fullscreen and the switch",
+        assertTrue("the suppressed mobile control-bar path must honor fullscreen and the master switch",
                 onlyBody.contains("if (!source.isFullscreen() || !PlayerSetting.isDisplayMediaBadges())"));
 
         String persistent = source.substring(source.indexOf("// 控制栏隐藏时，按用户设置显示常驻屏显"));
@@ -137,9 +138,9 @@ public class PlayerDisplaySettingSyncTest {
                 persistentBody.contains("setMediaBadges(player);"));
         assertTrue("the persistent path must not force the badge strip hidden",
                 !persistentBody.contains("mediaBadges.setVisibility(View.GONE)"));
-        assertTrue("badges must clear the control bar only while it is on screen",
-                source.contains("bottomMargin = controlsVisible ? dp(80) : (stacked ? clear : edgeInset);")
-                        && source.contains("topMargin = controlsVisible ? dp(64) : (stacked ? clear : edgeInset);"));
+        assertTrue("badges must clear the real control bar height, never a hardcoded one",
+                source.contains("bottomMargin = controlsVisible ? barTop : (stacked ? clear : edgeInset);")
+                        && source.contains("private int controlBarTopInset()"));
         assertTrue("badges must hug the screen edge when nothing else occupies their corner",
                 source.contains("int edgeInset = dp(2);") && source.contains("private View persistentNeighbour(int position)"));
     }
@@ -170,8 +171,8 @@ public class PlayerDisplaySettingSyncTest {
         assertTrue("choosing Off must only switch media info off and keep the remembered corner",
                 applyBody.contains("putDisplayMediaBadges(false)")
                         && !applyBody.contains("putMediaBadgePosition(MEDIA_BADGE_POSITION_OFF)"));
-        assertTrue("choosing a corner must remember that corner without switching the persistent display on",
-                applyBody.contains("putMediaBadgePosition(which)") && !applyBody.contains("putDisplayMediaBadges(true)"));
+        assertTrue("choosing a corner must turn the media info master switch on so the woken control bar shows badges",
+                applyBody.contains("putMediaBadgePosition(which)") && applyBody.contains("putDisplayMediaBadges(true)"));
 
         Path mobileSettingPage = Path.of("com", "fongmi", "android", "tv", "ui", "fragment", "SettingPlayerFragment.java");
         Path leanbackSettingPage = Path.of("com", "fongmi", "android", "tv", "ui", "activity", "SettingPlayerActivity.java");
@@ -227,6 +228,36 @@ public class PlayerDisplaySettingSyncTest {
 
         String tmdb = read(mainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java")));
         assertTrue("详情页内嵌小窗只有真正全屏后才显示媒体信息", tmdb.contains("return inlineFullscreen;"));
+    }
+
+    /**
+     * 「媒体信息位置」是总开关，「屏显设置 / 播放控件芯片」只控制控制栏隐藏时是否常驻。
+     * 两者必须分开存：关掉屏显常驻时，全屏唤醒控制栏仍应能看到媒体信息。
+     */
+    @Test
+    public void mediaInfoMasterSwitchIsIndependentFromThePersistentToggle() throws Exception {
+        String setting = read(mainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "setting", "PlayerSetting.java")));
+        assertTrue("the persistent toggle needs its own key",
+                setting.contains("player_osd_media_badges_persist"));
+        assertTrue("the persistent toggle must have its own accessors",
+                setting.contains("isDisplayMediaBadgesPersistent()") && setting.contains("putDisplayMediaBadgesPersistent("));
+
+        int checked = setting.indexOf("public static boolean[] getDisplayChecked()");
+        String checkedExpr = setting.substring(checked, setting.indexOf(';', checked));
+        assertTrue("the屏显设置 media item must read the persistent toggle, not the master switch",
+                checkedExpr.contains("isDisplayMediaBadgesPersistent()"));
+
+        int putChecked = setting.indexOf("public static void putDisplayChecked(boolean[] checked)");
+        String putBody = setting.substring(putChecked, setting.indexOf("\n    }", putChecked));
+        assertTrue("ticking the display item must also turn the master switch on",
+                putBody.contains("if (persistent) putDisplayMediaBadges(true)"));
+
+        String dialog = read(mainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "dialog", "DisplayDialog.java")));
+        assertTrue("the chip must write the persistent toggle", dialog.contains("putDisplayMediaBadgesPersistent(selected)"));
+        assertTrue("the chip must also enable the master switch when ticked", dialog.contains("if (selected) PlayerSetting.putDisplayMediaBadges(true)"));
+
+        String backup = read(mainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "bean", "Backup.java")));
+        assertTrue("the persistent toggle must be part of the backup set", backup.contains("player_osd_media_badges_persist"));
     }
 
     @Test

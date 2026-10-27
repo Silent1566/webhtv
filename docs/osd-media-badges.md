@@ -2,15 +2,15 @@
 
 **Recovery anchor**
 
-- 目标：播放器显示当前媒体的徽标（分辨率 / 动态范围 / 画面来源与画质 / 视频编码 / 音频编码 / 声道 / 帧率 / 码率 / 容器 / 特别标签 / IMAX / 流媒体平台），**同一行横排**，每条为「现成徽标牌位图 + 可选文本 + 类别色胶囊」；没有对应牌的事实（帧率 / 码率 / 容器）只显示文本，不再用语义不符的自绘图标。展示语义（**第八轮起，现行**，用户 2026-10-27 二次确认选 A/A）：
+- 目标：播放器显示当前媒体的徽标（分辨率 / 动态范围 / 画面来源与画质 / 视频编码 / 音频编码 / 声道 / 帧率 / 码率 / 容器 / 特别标签 / IMAX / 流媒体平台），**同一行横排**，每条为「现成徽标牌位图 + 可选文本 + 类别色胶囊」；没有对应牌的事实（帧率 / 码率 / 容器）只显示文本，不再用语义不符的自绘图标。展示语义（**第十轮，现行**）：
   - **只在全屏播放出现**：半屏 / 详情页内嵌小窗（`inlineFullscreen=false`）里无论屏显开关如何都**不显示**；
-  - **全屏内两条来源分离**：控制栏唤醒时**总是显示**（用户要的是「唤醒时能看到」）；「屏显设置 → 媒体信息」开关只决定**控制栏隐藏时是否继续常驻**；
-  - **位置与开关解耦**：位置单选（左上角 / 右上角 / 左下角 / 右下角 / 关闭，默认关闭）只记角位，**选角位不再自动打开屏显**；选「关闭」只清开关、**角位键原样保留**，之后重新打开屏显就回到那个角；
-  - **贴边优先**：控制栏隐藏时，只有同角**确实还有别的常驻文本**（标题 / 时间 / 进度 / 网速）才把徽标抬起躲开，否则直接贴到画面边缘（2dp 呼吸位）。
-- 验收（第八轮起）：非全屏（详情页内嵌小窗）唤醒控制栏**不显示**徽标；全屏唤醒控制栏**总是显示**；全屏且开关打开时控制栏隐藏仍常驻；整行开关关闭后全屏唤醒仍显示、隐藏即消失；位置单选选角位**不改变**屏显开关状态、摘要仍按开关显示「关闭」；同角无邻居时徽标贴边、有邻居（如右下角网速）时抬高一行；Exo/MPV/IJK 三引擎均不崩溃。（第三轮起按用户明确授权打包现成徽标位图，第四轮扩到参考 JSON 全量 **100 张**，第五轮并入扩充包再补 **27 张**、共 **127 张**，其中含 Dolby / DTS / IMAX / 各家流媒体平台的商标与字标，属于**用户已知并接受**的取舍。）
-- Lane/scope：当前轮次 task_guard `osd-badges-fullscreen`（mode=standard），base HEAD `572af99c339c455c94eebc7079ecd2ddef8811af`，branch `dev3`；历史轮次见 §9。
+  - **总开关管显示、常驻开关管隐藏后**：`player_osd_media_badges` 是总开关（「媒体信息位置」单选：选角位=开、选关闭=关），`player_osd_media_badges_persist` 是屏显里的常驻开关（控制栏隐藏时是否继续留在画面上）。全屏 + 总开关开 ⇒ 唤醒控制栏显示；控制栏隐藏时还要常驻开关开。
+  - **位置与总开关解耦**：位置单选（左上角 / 右上角 / 左下角 / 右下角 / 关闭，默认关闭）选角位只记角位，不碰屏显常驻开关；选「关闭」只清总开关、**角位键原样保留**，之后重新选角位就回到那个角。
+  - **贴边优先**：控制栏隐藏时，只有同角**确实还有别的常驻文本**（标题 / 时间 / 进度 / 网速）才把徽标抬起躲开，否则直接贴到画面边缘（2dp 呼吸位）；控制栏可见时下两角按**实测控制栏高度** + dp(8) 避让（手机量 `@+id/bottom`、电视量控制栏根高），绝不写死 80dp。
+- 验收（第十轮）：非全屏唤醒控制栏**不显示**徽标；全屏 + 总开关开 ⇒ 唤醒控制栏显示、控制栏隐藏时看常驻开关；总开关关（位置=关闭）⇒ 任何情况都不显示；位置单选选角位**不改变**屏显常驻开关；电视控制栏可见时徽标整行位于控制栏顶边之上、不与按钮行重叠；同角无邻居时徽标贴边、有邻居时抬高一行；Exo/MPV/IJK 三引擎均不崩溃。（第三轮起按用户明确授权打包现成徽标位图，第四轮扩到参考 JSON 全量 **100 张**，第五轮并入扩充包再补 **27 张**、共 **127 张**，其中含 Dolby / DTS / IMAX / 各家流媒体平台的商标与字标，属于**用户已知并接受**的取舍。）
+- Lane/scope：当前轮次 task_guard `osd-badges-bar`（mode=standard），base HEAD `6feba34d3285c5e70ea2c9a77e809e1843f4eb76`，branch `dev3`；历史轮次见 §9。
 - 回滚：单一逻辑提交，回滚该提交即可完整撤销；新增键 `player_osd_media_badges` / `player_osd_media_badge_position` 未被引用时是惰性偏好项，不会影响旧版本行为。
-- 后续任务：`osd-badge-icons`（base HEAD `49e5b2c4bc05a5e1e05f2bc18327d1c02079b9f5`）把徽标从「常驻屏显」改为「控制栏可见时展示」并加图标；`osd-badge-plates`（base HEAD `7d4bee6ce1`）改为横排 + 类别色 + 现成徽标牌；`osd-badge-plates-all`（base HEAD `0dc165a9a2`）把参考 JSON 的 **100 条规则 + 100 张牌图全量入库**，并删掉语义不符的自绘兜底图标；`osd-badges-persist`（base HEAD `39e1b4a0d4`）把徽标从「只在控制栏可见时渲染」改为「控制栏唤醒无条件显示 + 开关打开后常驻显示」；`osd-badge-expansion`（base HEAD `192b55c2fc`）并入参考扩充包的媒体事实规则、把牌图扩到 127 张，并统一同行高度；`osd-badges-off`（base HEAD `3220d20d6c3d4a9f90b192340dae06d10e512c58`）新增「关闭」选项并让开关成为唯一总闸、关闭时保留最近一次角位。
+- 后续任务：`osd-badge-icons`（base HEAD `49e5b2c4bc05a5e1e05f2bc18327d1c02079b9f5`）把徽标从「常驻屏显」改为「控制栏可见时展示」并加图标；`osd-badge-plates`（base HEAD `7d4bee6ce1`）改为横排 + 类别色 + 现成徽标牌；`osd-badge-plates-all`（base HEAD `0dc165a9a2`）把参考 JSON 的 **100 条规则 + 100 张牌图全量入库**，并删掉语义不符的自绘兜底图标；`osd-badges-persist`（base HEAD `39e1b4a0d4`）把徽标从「只在控制栏可见时渲染」改为「控制栏唤醒无条件显示 + 开关打开后常驻显示」；`osd-badge-expansion`（base HEAD `192b55c2fc`）并入参考扩充包的媒体事实规则、把牌图扩到 127 张，并统一同行高度；`osd-badges-off`（base HEAD `3220d20d6c3d4a9f90b192340dae06d10e512c58`）新增「关闭」选项并让开关成为唯一总闸、关闭时保留最近一次角位；`osd-badges-fullscreen`（base HEAD `572af99c33`）改为只在全屏显示、位置与开关解耦、无重叠时贴边；`osd-badges-gate`（base HEAD `e8ccde109e21`）修掉控制栏唤醒时绕过开关的门控；`osd-badges-bar`（base HEAD `6feba34d3285`）拆开总开关与常驻开关、并让电视控制栏可见时徽标按实测栏高避让。
 
 ## 1. 需求与取舍
 
@@ -105,14 +105,14 @@
 | 播放控件 → 屏显芯片弹窗（TV/手机） | 两 flavor `ControlDialog` 第 8 个芯片 `displayMediaBadges` | 同上 |
 | TMDB 详情页内联控件 → 屏显芯片弹窗 | `DisplayDialog`（`Mode.PLAYER_OSD`）`display_media_badges` | 同上 |
 | 设置 → 播放设置 → 媒体信息位置（单选） | `ChoiceDialog.showSingle`，5 项：左上角 / 右上角 / 左下角 / 右下角 / 关闭 | 「媒体信息位置」 |
-| 播放控件 → 屏显芯片弹窗的「媒体信息」芯片 | 两 flavor `ControlDialog` / `DisplayDialog`：**只控制「控制栏隐藏时是否常驻」**；全屏唤醒控制栏时始终显示，与它无关 | 同上 |
+| 播放控件 → 屏显芯片弹窗的「媒体信息」芯片 | 两 flavor `ControlDialog` / `DisplayDialog`：写的是**常驻开关** `player_osd_media_badges_persist`（控制栏隐藏时是否留在画面上）；勾上时顺带把总开关 `player_osd_media_badges` 打开（勾选即视为要显示），取消勾选只取消常驻、不动总开关 | 同上 |
 
 上表各入口都读写同一对键（`player_osd_media_badges` + `player_osd_media_badge_position`），`ControlDialog.toggleDisplaySetting(index)` 与 `DisplayDialog.setDisplay(...)` 都汇入 `PlayerSetting.putDisplayChecked(...)` / `putDisplayMediaBadges(...)`，随后调用 `onDisplayChanged()` / `inlineControlDialogDisplayChanged()`，由 `PlayerOsdController.render()` 下一次轮询生效。
 
 ## 8. 已知缺口（有意为之）
 
-- 徽标的展示路径（第八轮修订后，现行）：门控是 `player == null || !source.isFullscreen() || !PlayerSetting.isDisplayMediaBadges()`——**全屏与屏显开关必须同时成立**，任一条不满足时控制栏唤醒也不显示。suppressed 分支的 `renderMediaBadgesOnly()` 同样查这两条（`if (!source.isFullscreen() || !PlayerSetting.isDisplayMediaBadges())`）。
-- 角位内缩（第八轮改写）：控制栏可见时上两角 `topMargin=64dp` / 下两角 `bottomMargin=80dp`（避开顶栏按钮列与底部进度条）；控制栏隐藏时用 `persistentNeighbour(position)` 判断同角还有没有别的常驻文本——没有就 `edgeInset = dp(2)` 贴边，有就按邻居实测高度 `+ dp(4)` 抬高躲开。
+- 徽标的展示路径（第十轮，现行）：门控是 `player == null || !source.isFullscreen() || !PlayerSetting.isDisplayMediaBadges() || (!controlsVisible && !PlayerSetting.isDisplayMediaBadgesPersistent())`——**全屏 + 总开关必须同时成立**，控制栏隐藏时还要常驻开关成立。suppressed 分支的 `renderMediaBadgesOnly()` 只在控制栏唤醒时进入，查 `!source.isFullscreen() || !PlayerSetting.isDisplayMediaBadges()`。
+- 角位内缩（第十轮改写）：控制栏可见时上两角 `topMargin=64dp`、下两角按 `controlBarTopInset()` **实测控制栏占位高度 + dp(8)**（不再写死 80dp——手机控制栏根是 `match_parent`，量它内部的 `@+id/bottom`；电视控制栏根本身是底部一条，量 `bar.getHeight()`；取不到或异常时回退 `dp(80)`）；控制栏隐藏时用 `persistentNeighbour(position)` 判断同角还有没有别的常驻文本——没有就 `edgeInset = dp(2)` 贴边，有就按邻居实测高度 `+ dp(4)` 抬高躲开。
 - mobile 播放器在 `showControl()` 里先 `setOsdSuppressed(true)` 隐藏整个 OSD 根，因此徽标走 `renderMediaBadgesOnly()` 这条独立放行路径。
 - 徽标与标题/分辨率/时间**允许同角共存**（用户确认）：徽标容器是独立 `FlexboxLayout`，同角重叠时由 `layout_gravity` 决定层级，二者可能相互覆盖——有意的「零侵入」取舍。
 - 文件名类牌依赖**播放器拿到的文件名/标题**：网盘直链常是随机串（如 `/d/xxxxx`），此时这类牌一律不出现；这不是缺陷，是「不编造」的边界。
@@ -159,6 +159,59 @@
 - **全屏唤醒显示**：同一 prefs 下进入 `VideoActivity` 全屏，唤醒控制栏后 `osdMediaBadges` 出现；`player_osd_diagnostics` 关闭时诊断面板不出现。
 - **选角位不改开关**：设置页「媒体信息位置」默认摘要仍是「关闭」（`getMediaBadgeChoice()` 按开关走），选左上角后 prefs 只写 `player_osd_media_badge_position=0`，`player_osd_media_badges` 保持原值。
 - 截图（`s22`/`s24` 非全屏无徽标、`s26` 全屏出现徽标）按 task guard scope 约束不进入仓库，暂存于同机 `%TEMP%`。
+
+### 第十轮：徽标抬到真实控制栏之上 + 总开关/常驻开关拆分（task_guard `osd-badges-bar`，base HEAD `6feba34d3285c5e70ea2c9a77e809e1843f4eb76`）
+
+用户反馈（截图：电视版底部控制栏按钮行「下集/上集/选集/搜索/EXO/硬解/播放参数/链路诊断/硬解能力/1x/原始/LUT/字幕/音轨」正上方紧贴着一行 FHD/AVC/AAC 44.1KHZ/2.0/TS）：「电视版的媒体信息怎么在控制栏选择框里面？应该是独立的才对，是重叠了还是放进去了？」
+
+**根因**：不是被放进控制栏，而是同一父容器下 `@+id/osd`（`include view_player_osd`）与 `@+id/control`（`include view_control_vod`）是两个兄弟层，OSD 后绘制所以盖在上层；避让值写死 `bottomMargin = controlsVisible ? dp(80) : ...`，那是按手机控制栏高度算的，电视控制栏（`app/src/leanback/res/layout/view_control_vod.xml`：vertical、paddingTop 24dp、paddingBottom 16dp、含 parse + action + seek 三行）高得多，80dp 正好落在按钮行。
+
+**修正**：新增 `private int controlBarTopInset()`——从 `root.getParent()` 找兄弟节点 `R.id.control`；手机端控制栏根是 `match_parent`，真正占位的是内部 `@+id/bottom`，故优先取 `bottom` 高度，否则 `bar.getHeight()`；`height <= 0 || height >= root.getHeight()` 时回退 `dp(80)`；返回 `height + dp(8)`。`applyMediaBadgePosition()` 里 `int barTop = controlBarTopInset();`，下两角 `bottomMargin = controlsVisible ? barTop : (stacked ? clear : edgeInset);`，上两角仍 `dp(64)`。
+
+同一提交还包含「总开关 / 常驻开关」拆分（原 `osd-badges-split` 会话并入本会话，见下一节）。
+
+#### 验证
+
+- 单测：`PlayerDisplaySettingSyncTest` leanback 12/12、mobile 12/12；`ControlDialogOsdSettingsTest` mobile 9/9；断言新增 `bottomMargin = controlsVisible ? barTop : (stacked ? clear : edgeInset);` 与 `private int controlBarTopInset()`，明确禁止写死高度。
+- 构建：`:app:assembleLeanbackArm64_v8aDebug :app:assembleMobileArm64_v8aDebug` BUILD SUCCESSFUL。
+- 设备（emulator-5554，1920×1080，sdk28）：leanback 全屏播放 `probe.mp4`，`input tap` 唤醒控制栏后同一帧里 `control` bounds `[0,854][1920,1080]`（按钮行 `action` `[48,902][1872,972]`、进度条 `seek` `[48,996][1872,1048]`），`osdMediaBadges` bounds `[889,766][1888,810]` —— 位于控制栏顶边 854 之上，**不再压住按钮行**；控制栏自动隐藏后回到 `[889,1004][1888,1048]` 贴右下角。截图 `s3.png` 同帧可见。
+- 详情页内嵌小窗（`inlineFullscreen=false`）与退出全屏后的详情页 dump 中均无 `osd` / `osdMediaBadges` 节点 → 非全屏不显示仍然成立。
+
+### 第八轮再修订：拆开「总开关」与「常驻开关」（并入 task_guard `osd-badges-bar`，base HEAD `6feba34d3285c5e70ea2c9a77e809e1843f4eb76`）
+
+用户反馈：「现在屏显设置关闭时无法设置媒体信息位置了，导致全屏唤醒控制栏时无法看到媒体信息」。
+
+**根因**：第八轮修订把同一个 `player_osd_media_badges` 既当「媒体信息总开关」又当「屏显里的常驻项」。屏显一关，总开关被连带清掉，于是「媒体信息位置」那一行被迫显示「关闭」、无法选角位，全屏唤醒控制栏也就不再有徽标。
+
+**修正**：拆成两个独立偏好。
+
+| 偏好键 | 含义 | 唯一写入口 |
+| --- | --- | --- |
+| `player_osd_media_badges` | **总开关**：是否允许显示媒体信息（全屏 + 唤醒即显示） | 设置页「媒体信息位置」单选（选角位=开 / 选关闭=关） |
+| `player_osd_media_badges_persist` | **常驻开关**：控制栏隐藏时是否继续留在画面上 | 屏显设置里的「媒体信息」项 / 播放控件里的「媒体信息」芯片 |
+
+- `setMediaBadges` 门控：`player == null || !source.isFullscreen() || !isDisplayMediaBadges() || (!controlsVisible && !isDisplayMediaBadgesPersistent())`。
+- `renderMediaBadgesOnly()`：仍只查 `!source.isFullscreen() || !isDisplayMediaBadges()`（该路径只在控制栏唤醒时进入）。
+- `getDisplayChecked()/putDisplayChecked()` 第 8 位改为读写常驻开关；勾上时额外 `putDisplayMediaBadges(true)`（勾选即视为要显示），取消勾选只取消常驻。
+- `DisplayDialog` 的 `MEDIA_BADGES` 芯片同上。
+- `isOsdEnabled()` 末尾改为 `isDisplayMediaBadges() && isDisplayMediaBadgesPersistent()`，避免总开关关闭时 OSD 循环空转。
+- `Backup.APP_PREFS` 追加 `player_osd_media_badges_persist`。
+
+**最终行为矩阵**：
+
+| 位置=关闭 | 常驻开关 | 全屏唤醒控制栏 | 控制栏隐藏 |
+| --- | --- | --- | --- |
+| 是 | 任意 | 不显示 | 不显示 |
+| 否 | 关 | **显示** | 不显示 |
+| 否 | 开 | 显示 | **常驻显示** |
+
+非全屏（详情页内嵌小窗）在任何组合下都不显示。
+
+#### 验证
+
+- 单测：新增 `mediaInfoMasterSwitchIsIndependentFromThePersistentToggle`（断言两个键/访问器、`getDisplayChecked` 读常驻开关、勾选时联动打开总开关、`DisplayDialog` 写常驻开关、备份含新键）；`PlayerDisplaySettingSyncTest` mobile/leanback 各 12 例全绿；`ControlDialogOsdSettingsTest` 9/9。
+- 构建：`assembleMobileArm64_v8aDebug` BUILD SUCCESSFUL。
+- 设备（emulator-5554）：位置=左上角、常驻开关关闭、屏显其它项全关 → 全屏唤醒控制栏，`osdMediaBadges` 出现于左上角；再选「关闭」→ 同一操作不出现。
 ### 第八轮修订：关闭屏显后控制栏唤醒仍出现徽标（task_guard `osd-badges-gate`，base HEAD `e8ccde109e21b674fc82e6db8d44f586f39eda2f`）
 
 用户反馈（截图：设置页「屏显设置」摘要只剩「时间 / 分辨率 / 进度 / 迷你 / 标题」、「媒体信息位置 = 关闭」，而全屏唤醒控制栏后右下角仍出现 `FHD / AVC / AAC 44.1KHZ / 2.0 / TS`）：「媒体信息关闭了，屏显也没开启唤醒控制栏怎么还有？」

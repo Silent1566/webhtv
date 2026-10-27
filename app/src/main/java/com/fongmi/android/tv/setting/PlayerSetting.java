@@ -69,6 +69,8 @@ public class PlayerSetting {
     private static final String KEY_DISPLAY_MINI = "display_mini";
     private static final String KEY_DISPLAY_TITLE = "display_title";
     private static final String KEY_DISPLAY_MEDIA_BADGES = "player_osd_media_badges";
+    /** 控制栏隐藏时是否继续常驻显示媒体信息；总开关是「媒体信息位置」那一行。 */
+    private static final String KEY_DISPLAY_MEDIA_BADGES_PERSIST = "player_osd_media_badges_persist";
     private static final String KEY_MEDIA_BADGE_POSITION = "player_osd_media_badge_position";
     private static final String KEY_OSD_TITLE = "player_osd_title";
     private static final String KEY_OSD_RESOLUTION = "player_osd_resolution";
@@ -571,8 +573,8 @@ public class PlayerSetting {
     }
 
     /**
-     * 媒体信息徽标：一行只显示播放器运行时可直接证明的事实（分辨率、动态范围、编码、帧率、
-     * 码率、音频规格、容器）。发布标签与来源类型无法从事实推断，因此不提供。
+     * 媒体信息徽标的**总开关**，由设置页「媒体信息位置」那一行唯一控制（选角位=开、选关闭=关）。
+     * 它与「屏显设置」里的常驻项是两件事：总开关关掉时，全屏唤醒控制栏也不显示。
      */
     public static boolean isDisplayMediaBadges() {
         return Prefers.getBoolean(KEY_DISPLAY_MEDIA_BADGES);
@@ -580,6 +582,18 @@ public class PlayerSetting {
 
     public static void putDisplayMediaBadges(boolean value) {
         Prefers.put(KEY_DISPLAY_MEDIA_BADGES, value);
+    }
+
+    /**
+     * 控制栏隐藏时媒体信息是否继续常驻（屏显设置里的那个媒体信息项 / 播放控件里的芯片）。
+     * 总开关打开时，控制栏唤醒本来就显示，这个常驻开关只是额外让它在隐藏时也留在画面上。
+     */
+    public static boolean isDisplayMediaBadgesPersistent() {
+        return Prefers.getBoolean(KEY_DISPLAY_MEDIA_BADGES_PERSIST);
+    }
+
+    public static void putDisplayMediaBadgesPersistent(boolean value) {
+        Prefers.put(KEY_DISPLAY_MEDIA_BADGES_PERSIST, value);
     }
 
     /**
@@ -611,10 +625,9 @@ public class PlayerSetting {
     }
 
     /**
-     * 应用「媒体信息位置」单选结果。选角位**只记位置、不打开屏显**：用户要的是「唤醒控制栏时
-     * 能看到」，而不是让它长期常驻，所以开启/关闭始终由「屏显设置」里那个独立开关决定。
-     * 选关闭只清开关、不改位置；位置键始终保留用户最近一次选过的角（默认右下角），
-     * 之后重新打开屏显就回到这个角。
+     * 应用「媒体信息位置」单选结果——这一行就是媒体信息的**总开关**：
+     * 选角位 = 打开（并记住该角，全屏唤醒控制栏即可看到）；选「关闭」= 彻底关闭。
+     * 它不影响「屏显设置」的其它项，也不要求屏显常驻打开：常驻是另一个独立开关。
      */
     public static void putMediaBadgeChoice(int which) {
         if (which == MEDIA_BADGE_POSITION_OFF) {
@@ -622,10 +635,11 @@ public class PlayerSetting {
             return;
         }
         putMediaBadgePosition(which);
+        putDisplayMediaBadges(true);
     }
 
     public static boolean[] getDisplayChecked() {
-        return new boolean[]{isDisplayTime(), isDisplayTraffic(), isDisplaySize(), isDisplayProgress(), isDisplayMini(), isDisplayTitle(), isOsdDiagnostics(), isDisplayMediaBadges()};
+        return new boolean[]{isDisplayTime(), isDisplayTraffic(), isDisplaySize(), isDisplayProgress(), isDisplayMini(), isDisplayTitle(), isOsdDiagnostics(), isDisplayMediaBadgesPersistent()};
     }
 
     public static void putDisplayChecked(boolean[] checked) {
@@ -636,7 +650,10 @@ public class PlayerSetting {
         putDisplayMini(valueAt(checked, 4, isDisplayMini()));
         putDisplayTitle(valueAt(checked, 5, isDisplayTitle()));
         putOsdDiagnostics(valueAt(checked, 6, isOsdDiagnostics()));
-        putDisplayMediaBadges(valueAt(checked, 7, isDisplayMediaBadges()));
+        boolean persistent = valueAt(checked, 7, isDisplayMediaBadgesPersistent());
+        // 勾上「媒体信息」等于「打开总开关并常驻」；取消只取消常驻，唤醒控制栏时仍然可见。
+        if (persistent) putDisplayMediaBadges(true);
+        putDisplayMediaBadgesPersistent(persistent);
     }
 
     public static boolean[] getLiveDisplayChecked() {
@@ -990,7 +1007,8 @@ public class PlayerSetting {
     }
 
     public static boolean isOsdEnabled() {
-        return isOsdTitle() || isOsdTime() || isOsdSize() || isOsdProgress() || isOsdTraffic() || isOsdMini() || isOsdDiagnostics() || isDisplayMediaBadges();
+        return isOsdTitle() || isOsdTime() || isOsdSize() || isOsdProgress() || isOsdTraffic() || isOsdMini() || isOsdDiagnostics()
+                || (isDisplayMediaBadges() && isDisplayMediaBadgesPersistent());
     }
 
     private static boolean valueAt(boolean[] checked, int index, boolean fallback) {

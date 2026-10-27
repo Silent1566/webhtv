@@ -17,6 +17,7 @@ import android.view.Display;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -298,8 +299,8 @@ public class PlayerOsdController {
     /**
      * 控制栏出现但 OSD 根被抑制（mobile 播放器）时的渲染路径。
      * 只放行媒体信息徽标，四角文本、诊断面板与迷你进度一律隐藏；
-     * 徽标自身的两条约束与常驻路径完全一致：必须全屏、且「屏显设置 → 媒体信息」开关打开，
-     * 否则控制栏唤醒也不显示（这正是用户反馈的「媒体信息关闭、屏显没开，唤醒控制栏还有徽标」）。
+     * 徽标自身的两条约束与常驻路径完全一致：必须全屏、且媒体信息总开关打开，
+     * 否则控制栏唤醒也不显示（「媒体信息位置 = 关闭」时正是这种情况）。
      */
     private boolean renderMediaBadgesOnly() {
         if (!source.isFullscreen() || !PlayerSetting.isDisplayMediaBadges()) {
@@ -457,10 +458,13 @@ public class PlayerOsdController {
      */
     private void setMediaBadges(PlayerManager player) {
         if (mediaBadges == null) return;
-        // 两条必须同时满足，缺一不显示：
+        // 三条判断：
         // 1. 只在全屏画面里出现——半屏/小窗里它会把本来就拥挤的控件堆得更挤；
-        // 2. 「屏显设置 → 媒体信息」开关必须打开——关闭时控制栏唤醒也不显示。
-        if (player == null || !source.isFullscreen() || !PlayerSetting.isDisplayMediaBadges()) {
+        // 2. 媒体信息总开关（设置页「媒体信息位置」）必须打开——选「关闭」时任何情况都不显示；
+        // 3. 控制栏唤醒时直接显示（用户要的就是唤醒时能看到），
+        //    控制栏隐藏时则看「屏显设置」里的常驻开关，两者互不牵连。
+        if (player == null || !source.isFullscreen() || !PlayerSetting.isDisplayMediaBadges()
+                || (!controlsVisible && !PlayerSetting.isDisplayMediaBadgesPersistent())) {
             mediaBadges.setVisibility(View.GONE);
             mediaBadgeSignature = "";
             return;
@@ -506,6 +510,10 @@ public class PlayerOsdController {
         int clear = (stacked ? Math.max(neighbour.getHeight(), dp(18)) : 0) + dp(4);
         // 贴边时只留 2dp，肉眼即「最靠边缘」；用负 margin 会顶进系统栏导致胶囊被裁切。
         int edgeInset = dp(2);
+        // 控制栏唤醒时的避让：必须按控制栏的真实高度算，不能写死。
+        // 电视端控制栏是底部一整条（按钮行 + 进度条），手机端高度也不同；写死 64/80dp 会让
+        // 徽标落到按钮行上，看起来就像「被塞进了控制栏」。
+        int barTop = controlBarTopInset();
         int gravity;
         int marginStart;
         int marginEnd;
@@ -531,14 +539,14 @@ public class PlayerOsdController {
                 marginStart = stacked ? 0 : edgeInset;
                 marginEnd = 0;
                 topMargin = 0;
-                bottomMargin = controlsVisible ? dp(80) : (stacked ? clear : edgeInset);
+                bottomMargin = controlsVisible ? barTop : (stacked ? clear : edgeInset);
                 break;
             default:
                 gravity = Gravity.BOTTOM | Gravity.END;
                 marginStart = 0;
                 marginEnd = stacked ? 0 : edgeInset;
                 topMargin = 0;
-                bottomMargin = controlsVisible ? dp(80) : (stacked ? clear : edgeInset);
+                bottomMargin = controlsVisible ? barTop : (stacked ? clear : edgeInset);
                 break;
         }
         if (layoutParams.gravity == gravity && layoutParams.topMargin == topMargin && layoutParams.bottomMargin == bottomMargin
@@ -549,6 +557,27 @@ public class PlayerOsdController {
         layoutParams.setMarginStart(marginStart);
         layoutParams.setMarginEnd(marginEnd);
         mediaBadges.setLayoutParams(layoutParams);
+    }
+
+    /**
+     * 控制栏实际占用的高度。电视端是底部一整条（按钮行 + 进度条），手机端真正占位的只是
+     * 它内部的 bottom 条；写死数值会让徽标落到按钮行上，看起来像「被塞进控制栏」。
+     * 量不到时退回旧常量，保证首帧不会跳到画面外。
+     */
+    private int controlBarTopInset() {
+        // 控制栏与 OSD 是同一父容器下的兄弟节点，不是 OSD 的子节点，所以要从父容器里找。
+        View bar = null;
+        ViewParent parent = root.getParent();
+        if (parent instanceof View) bar = ((View) parent).findViewById(R.id.control);
+        if (bar == null || bar.getVisibility() != View.VISIBLE) return dp(80);
+        // 手机端控制栏根是 match_parent（整屏铺底），真正占位的是它里面的 bottom 底部条；
+        // 电视端控制栏根本身就是底部一整条。两种都按「实际占位的那个」来量。
+        View bottom = bar.findViewById(R.id.bottom);
+        int height = bottom != null && bottom.getVisibility() == View.VISIBLE && bottom.getHeight() > 0
+                ? bottom.getHeight()
+                : bar.getHeight();
+        if (height <= 0 || height >= root.getHeight()) return dp(80);
+        return height + dp(8);
     }
 
     /**
