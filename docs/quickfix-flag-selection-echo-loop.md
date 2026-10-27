@@ -9,8 +9,9 @@
   3. 既有「同名线路按稳定键判定当前播放线路」的既得行为不变。
   4. leanback 定向单测通过 + leanback/mobile 编译通过。
 - 计划状态：**已交付**。代码 + 单测完成，三轮评审（自查 + 两路独立复评）收敛，双 flavor 编译与定向单测全绿，已提交、推送 `dev2`、创建 PR #493 到 `beta`。
-- 交付坐标：`dev2` = `b1ef0aa03a`（`168a485514` 修复 + `b1ef0aa03a` 测试强化），已推送；PR [#493](https://github.com/Silent1566/webhtv/pull/493)（4 文件 / +298 −2，只创建不合并）。
-- recovery tag：`recovery/C106-flag-selection-echo-loop/20261027085731-168a485514c6`（修复）、`recovery/C106-flag-echo-review-fixes/20261027094225-b1ef0aa03a1a`（测试强化）。
+- 交付坐标：`dev2` = `bbb6d68ff2`（`168a485514` 修复 + `b1ef0aa03a` 测试强化 + `ad285c4ad2` 文档 + `bbb6d68ff2` 覆盖缺口补测），已推送；PR [#493](https://github.com/Silent1566/webhtv/pull/493)（4 文件 / +426 −2，只创建不合并）。
+- recovery tag：`recovery/C106-flag-selection-echo-loop/20261027085731-168a485514c6`（修复）、`recovery/C106-flag-echo-review-fixes/20261027094225-b1ef0aa03a1a`（测试强化）、
+  `recovery/C106-flag-echo-coords/20261027095404-ad285c4ad2c8`（交付坐标）、`recovery/C106-flag-echo-correctness/20261027105647-bbb6d68ff2b8`（覆盖缺口补测）。
 - 回滚：`git revert 168a485514`（生产代码修复）；测试强化与文档可按需 revert `b1ef0aa03a`。
 - 剩余待办（非阻塞）：端到端设备复验需要「牛二接口 + 玩偶线路」的站点配置，当前所有可用模拟器均无该配置；代码层证据已由 Robolectric 真实 Leanback 选中派发覆盖。
 
@@ -21,8 +22,9 @@
 | 分支 | `dev2`（相对 `origin/beta` 只领先本任务 3 个提交） |
 | 修复提交 | `168a485514` — `fix(leanback): 线路行选中回声不再自激切换，刷新途中的 NO_POSITION 不再清回声窗口` |
 | 测试强化提交 | `b1ef0aa03a` — `test(leanback): 强化线路回声守卫的回归断言（存在性+顺序、取消回调、同名身份、点击边界）` |
+| 覆盖缺口补测 | `bbb6d68ff2` — `test(leanback): 补上回声窗口清除与真实切换不被吞的回归用例（变异挖出的覆盖缺口）` |
 | recovery tag | `recovery/C106-flag-selection-echo-loop/20261027085731-168a485514c6`、`recovery/C106-flag-echo-review-fixes/20261027094225-b1ef0aa03a1a` |
-| PR | `dev2` → `beta`：[#493](https://github.com/Silent1566/webhtv/pull/493)（4 文件 / +298 −2，只创建、不合并） |
+| PR | `dev2` → `beta`：[#493](https://github.com/Silent1566/webhtv/pull/493)（4 文件 / +426 −2，只创建、不合并） |
 | 合并远端 beta | 本轮 `git fetch` 后 `origin/beta` = `6db0ebab9f`；`dev2` 已包含 beta 全部代码（`git diff --name-only dev2 origin/beta` 为空，内容零差异），故**无需再合并** |
 | 回滚 | `git revert 168a485514`（必要时再 revert `b1ef0aa03a`） |
 
