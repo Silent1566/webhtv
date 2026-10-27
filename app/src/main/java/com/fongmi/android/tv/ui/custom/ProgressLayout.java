@@ -329,12 +329,26 @@ public class ProgressLayout extends RelativeLayout {
     }
 
     private void showView(View view) {
+        // 幂等：已经完整可见时不再重放淡入。
+        //
+        // 为什么必须幂等。switchState(CONTENT) 会在 EMPTY/ERROR ↔ CONTENT 之间被反复调用，
+        // 而每次切换都会走一遍 setContentVisibility(true)。旧实现每次都 setAlpha(0f) 再
+        // new 一个 ViewPropertyAnimator，两步都会请求一次绘制；加载圈期间主线程本来就紧绷
+        // （详情页/播放页要 inflate、解析、建 ExoPlayer），这些无效的 alpha 动画会把转圈
+        // 的帧挤掉——用户看到的就是「转圈卡住不动再恢复」。
+        if (view.getVisibility() == VISIBLE && view.getAlpha() == 1f) return;
+        // 取消上一轮可能还在跑的淡入，避免多个 animator 同时写同一个 alpha。
+        view.animate().cancel();
         view.setAlpha(0f);
         view.setVisibility(VISIBLE);
         view.animate().alpha(1f).setDuration(100);
     }
 
     private void hideView(View view) {
+        if (view.getVisibility() == INVISIBLE) return;
+        // 取消未完成的淡入：否则它仍会把 alpha 推到 1，下一次 show 又从 0 重来，
+        // 同样是一帧白干的请求。
+        view.animate().cancel();
         view.setVisibility(INVISIBLE);
     }
 }

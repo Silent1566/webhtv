@@ -33,7 +33,6 @@ import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.LoadControl;
 import androidx.media3.exoplayer.Renderer;
 import androidx.media3.exoplayer.RenderersFactory;
-import androidx.media3.exoplayer.audio.AudioCapabilities;
 import androidx.media3.exoplayer.audio.AudioSink;
 import androidx.media3.exoplayer.audio.AudioRendererEventListener;
 import androidx.media3.exoplayer.audio.AudioOutputProvider;
@@ -1019,20 +1018,16 @@ public class ExoUtil {
             @Nullable PlaybackMediaClock mediaClock) {
         boolean passthrough = PlayerSetting.isAudioPassThrough(PlayerSetting.EXO);
         if (SpiderDebug.isEnabled()) {
-            AudioCapabilities capabilities = AudioCapabilities.getCapabilities(
-                    context.getApplicationContext(), AudioAttributes.DEFAULT, null);
-            int speakerChannels = 0;
-            for (Integer channelMask : capabilities.getSpeakerLayoutChannelMasks()) {
-                if (channelMask != null) speakerChannels = Math.max(
-                        speakerChannels, Integer.bitCount(channelMask));
-            }
+            // 这里曾经用 AudioCapabilities.getCapabilities(...) 探测硬件通道数 / AC3 支持，
+            // 那次探测会在首次进入播放页的主线程上同步创建并释放 AudioTrack；
+            // 设备实测该行日志独占 354-757ms，正好落在首帧窗口里（见 C101 记录）。
+            // 诊断价值远小于这个代价：只记录本方法已经算好的配置量，不再触碰音频硬件。
             SpiderDebug.log("exo-audio",
-                    "configured passthrough=%s maxChannels=%d speakerChannels=%d speakerMasks=%s ac3=%s",
+                    "configured passthrough=%s floatOutput=%s playbackParams=%s offloadPolicy=%s",
                     passthrough,
-                    capabilities.getMaxChannelCount(),
-                    speakerChannels,
-                    capabilities.getSpeakerLayoutChannelMasks(),
-                    capabilities.supportsEncoding(C.ENCODING_AC3));
+                    enableFloatOutput,
+                    enableAudioOutputPlaybackParams,
+                    compressedAudioDirectPolicy != null);
         }
         ExoCompressedAudioDirectPolicy directPolicy =
                 compressedAudioDirectPolicy == null

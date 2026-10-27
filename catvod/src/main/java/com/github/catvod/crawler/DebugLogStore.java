@@ -9,6 +9,7 @@ import com.github.catvod.crawler.diagnostics.RollingDiagnosticFile;
 import com.github.catvod.crawler.diagnostics.JournaledDiagnosticFile;
 import com.github.catvod.crawler.diagnostics.InMemoryDiagnosticFile;
 import com.github.catvod.crawler.diagnostics.DiagnosticCategories;
+import com.github.catvod.crawler.diagnostics.DiagnosticText;
 import com.github.catvod.utils.Prefers;
 
 import java.io.ByteArrayInputStream;
@@ -164,6 +165,13 @@ public class DebugLogStore {
         DiagnosticLogBuffer current = buffer;
         if (!acceptsTag(tag) || current == null) return;
         current.add(tag, message, critical);
+    }
+
+    /** Capture entry for callers that already cleaned {@code message} for their own log sink. */
+    static void addCleaned(String tag, DiagnosticText.Clean clean, String raw, boolean critical) {
+        DiagnosticLogBuffer current = buffer;
+        if (clean == null || !acceptsTag(tag) || current == null) return;
+        current.addCleaned(tag, clean, raw, critical);
     }
 
     public static void event(DiagnosticEvent event) {

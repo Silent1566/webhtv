@@ -134,7 +134,7 @@ public final class MediaTitleResolver {
     }
 
     private void applyTmdbCache(MediaTitleRequest request, MediaTitleResolution resolution) {
-        TmdbItem item = Setting.getTmdbMatchCache().find(request.getSiteKey(), request.getVodId(), request.getRawTitle(), TmdbLanguagePolicy.requestLanguage(TmdbConfig.effectiveCurrent()));
+        TmdbItem item = Setting.getTmdbMatchCache().find(request.getSiteKey(), request.getVodId(), request.getRawTitle(), TmdbLanguagePolicy.requestLanguage(TmdbConfig.effectiveCurrent(), Setting.getLanguage()));
         if (item == null || item.getTitle().isEmpty()) return;
         if (!isTmdbCacheCompatible(item, resolution)) return;
         resolution.setCanonicalTitle(item.getTitle());
