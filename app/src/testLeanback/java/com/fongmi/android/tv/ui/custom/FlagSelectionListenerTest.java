@@ -172,6 +172,36 @@ public class FlagSelectionListenerTest {
     }
 
     @Test
+    public void sameNameFlagsAreDistinguishedByIdentityNotEquals() {
+        // Flag.equals 只比线路名（Flag.java 约 314 行），而「同名线路是不同的线路」是 772a25a454 的教训。
+        // 回声窗口必须按实例同一性判断：两个同名但不同实例的线路之间来回切，必须每次都派发。
+        List<Flag> sameName = Arrays.asList(flag("同名线路"), flag("同名线路"));
+        FlagAdapter sameNameAdapter = new FlagAdapter(item -> {});
+        sameNameAdapter.addAll(sameName);
+        sameNameAdapter.setSelected(sameName.get(0));
+        grid.setAdapter(sameNameAdapter);
+
+        List<Flag> dispatched = new ArrayList<>();
+        FlagSelectionListener echoGuard = new FlagSelectionListener(grid, sameNameAdapter, dispatched::add);
+
+        select(echoGuard, 0);
+        drainFrames();
+        assertEquals(1, dispatched.size());
+
+        // 同名、不同实例：必须视为「另一条线路」，既清回声窗口也必须派发。
+        select(echoGuard, 1);
+        drainFrames();
+        assertEquals("同名不同实例必须能互相切换（不能退化成按名字判等）", 2, dispatched.size());
+        assertSame(sameName.get(1), dispatched.get(1));
+
+        // 切回第一条仍要派发。
+        select(echoGuard, 0);
+        drainFrames();
+        assertEquals(3, dispatched.size());
+        assertSame(sameName.get(0), dispatched.get(2));
+    }
+
+    @Test
     public void rapidSelectionsOnlySwitchToLatestFlag() {
         select(1);
         select(2);

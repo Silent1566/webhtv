@@ -102,6 +102,31 @@
 - **`dispatchedItem` 生命周期**：仅保留最后一次派发的引用，不持有 View/Context；随 `FlagSelectionListener`（`VideoActivity` 内 new 出、随 Activity 生命周期）一起释放，无泄漏。
 - **点击重复派发**：既有轻微残留（见下节）在改动前后形态相同，未扩大，也未缩小。
 
+## 第三轮：独立复评提出的测试强度问题与处置
+
+外部复评（测试有效性角度）指出：行为用例只能证明「回声被拦 + 换线路仍派发」，**测不到**「窗口在刷新途中不被重开」；
+区分力落在源码结构断言上，而原写法有三处强度问题。逐条处置：
+
+| 复评意见 | 处置 |
+| --- | --- |
+| `!selected.contains("if (item != dispatchedItem)")` 会误红正确重构（如拆成两段 `if` 或抽方法） | **改写**：改为正向断言完整窗口条件，不再用否定字面量 |
+| `guard > run.indexOf("adapter.get(position) == item)")` 在 stale 校验被整段删除时 `indexOf = -1` 仍为真 | **改写**：先 `stale >= 0 && guard >= 0 && dispatch >= 0` 再比较顺序 |
+| 同理 `view.post(this) > pendingItem = item` 在 `pendingItem = item;` 被删时误绿 | **改写**：`pending >= 0 && post > pending` 且要求 `view.post(this)` 存在 |
+| docstring 声称钉住取消回调，但没钉 `view.removeCallbacks(this)`（删掉它现有用例全绿） | **补断言**：`cancel >= 0 && cancel < pending`，并在文案中写对 |
+| 切片依赖 `onChildViewHolderSelected` 与 `run()` 的排版顺序 | **改写**：改用该类既有的 `methodBody(...)` 取两个方法体，不再手写 `substring` |
+| `==` 身份比较没有被钉住，改成 `.equals()` 全部用例仍绿（而 `Flag.equals` 只比线路名） | **补行为用例** `sameNameFlagsAreDistinguishedByIdentityNotEquals`：两个同名不同实例必须各派发一次、切回仍派发 |
+| 点击路径不受保护只写在注释里 | **补断言**：`onItemClick` 方法体内不得出现 `dispatchedItem`（否则去重下沉会吞掉真实点击） |
+
+**关于「行为测试无法捕获 v1 变异」这一判断**：本轮已用实测反驳——把窗口条件改回 v1 后，
+`selfRefreshReselectionOfTheSameFlagDoesNotReenterTheListener` 确实在 `FlagSelectionListenerTest.java:160` 失败。
+原因是复评只推演到「`select` 后会立刻清窗口」，忽略了 v1 的实际漏点：`onItemClick` 派发后**同步**刷新整行，
+`NO_POSITION` 与「选中回到原线路」都发生在同一 `run()` 派发尚未结束的窗口里，行为层可观测。故该断言保留。
+
+**第三轮验证**：上述改写后
+`:app:testLeanbackArm64_v8aDebugUnitTest --tests FlagSelectionListenerTest --tests FlagSwitchPlaybackWiringTest`
++ `:app:testMobileArm64_v8aDebugUnitTest --tests FlagSwitchPlaybackWiringTest` → **BUILD SUCCESSFUL in 3m 6s**，
+`FlagSelectionListenerTest` **10/10**（含新增同名不同实例用例）、`FlagSwitchPlaybackWiringTest` 双 flavor **9/9**。
+
 ## 验证
 
 1. 第一轮（`bash ./gradlew`）：`:app:testLeanbackArm64_v8aDebugUnitTest --tests FlagSwitchPlaybackWiringTest --tests FlagSelectionListenerTest` → BUILD SUCCESSFUL（6m34s），两类的 tests=9 failures=0 errors=0。
