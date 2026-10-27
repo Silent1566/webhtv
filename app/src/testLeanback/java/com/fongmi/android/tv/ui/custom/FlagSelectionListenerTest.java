@@ -138,6 +138,40 @@ public class FlagSelectionListenerTest {
     }
 
     @Test
+    public void selfRefreshReselectionOfTheSameFlagDoesNotReenterTheListener() {
+        List<Flag> dispatched = new ArrayList<>();
+        FlagSelectionListener echoGuard = new FlagSelectionListener(grid, adapter, dispatched::add);
+
+        select(echoGuard, 1);
+        drainFrames();
+        assertEquals(1, dispatched.size());
+
+        // 线路切换自身会重设选中位并刷新整行（setSelectedPosition / notifyItemsChanged /
+        // setEpisodeAdapter -> updateFocus -> notifyDataSetChanged），Leanback 因此再派发一次
+        // 同一条线路。这一步若回到 onItemClick，就是 200ms 级的自激切换循环。
+        select(echoGuard, 1);
+        drainFrames();
+        // 刷新整行时 Leanback 会先派发一次 NO_POSITION，再回到原线路；这不是「换成别的线路」，
+        // 不能拿它清掉回声窗口，否则自激会重新接上。
+        echoGuard.onChildViewHolderSelected(grid, null, RecyclerView.NO_POSITION, 0);
+        mainLooper().idle();
+        select(echoGuard, 1);
+        drainFrames();
+        assertEquals("transient NO_POSITION must not reopen the echo window", 1, dispatched.size());
+        select(echoGuard, 1);
+        drainFrames();
+        assertEquals("self-refreshes must not re-enter the route switch", 1, dispatched.size());
+
+        // 改选别的线路仍要派发；之后再选回原线路同样要派发。
+        select(echoGuard, 2);
+        drainFrames();
+        assertEquals(2, dispatched.size());
+        select(echoGuard, 1);
+        drainFrames();
+        assertEquals(3, dispatched.size());
+    }
+
+    @Test
     public void rapidSelectionsOnlySwitchToLatestFlag() {
         select(1);
         select(2);
@@ -192,8 +226,12 @@ public class FlagSelectionListenerTest {
     }
 
     private void select(int position) {
+        select(listener, position);
+    }
+
+    private void select(FlagSelectionListener target, int position) {
         grid.setSelectedPosition(position);
-        listener.onChildViewHolderSelected(grid, null, position, 0);
+        target.onChildViewHolderSelected(grid, null, position, 0);
     }
 
     private void layoutGrid() {

@@ -152,6 +152,34 @@ public class FlagSwitchPlaybackWiringTest {
         }
     }
 
+    /**
+     * 线路切换自身会重设选中位并刷新整行，Leanback 因此会把「同一条线路」再派发一次；
+     * 若这次回声回到 onItemClick，就会形成 200ms 级自激切换循环（实测日志 934 次
+     * line-switch 中 918 次 from==to，且循环窗口内没有任何用户输入事件）。
+     * 取消回调必须发生在回声被拦截之后，否则它在布局中会读不到最新的 pendingItem。
+     */
+    @Test
+    public void leanbackFlagRowSuppressesItsOwnSelectionEcho() throws Exception {
+        String source = read(LEANBACK_LISTENER);
+        String run = methodBody(source, "public void run()");
+        int guard = run.indexOf("if (item == dispatchedItem) return;");
+        int dispatch = run.indexOf("listener.onItemClick(item);");
+        assertTrue("回声拦截必须发生在派发之前，且只在通过 stale 校验的分支里拦截",
+                guard >= 0 && dispatch > guard
+                        && guard > run.indexOf("adapter.get(position) == item)"));
+        assertTrue("拦截后必须记住本次派发，否则回声仍会重复进入",
+                run.indexOf("dispatchedItem = item;") > run.indexOf("if (item == dispatchedItem) return;"));
+        int selectedStart = source.indexOf("public void onChildViewHolderSelected(");
+        assertTrue("必须保留选中回调", selectedStart >= 0);
+        String selected = source.substring(selectedStart, source.indexOf("public void run()", selectedStart));
+        assertTrue("改选另一条线路必须重新打开回声窗口，否则用户再也切不回原线路",
+                selected.contains("if (item != null && item != dispatchedItem) dispatchedItem = null;"));
+        assertTrue("行刷新途中的 NO_POSITION（item == null）不得清掉回声窗口，否则自激会重新接上",
+                !selected.contains("if (item != dispatchedItem)"));
+        assertTrue("回声拦截不能以拖入取消回调为代价",
+                selected.indexOf("view.post(this)") > selected.indexOf("pendingItem = item;"));
+    }
+
     @Test
     public void detailInlinePlaybackAlsoComparesTheAppliedFlagKey() throws Exception {
         String source = read(DETAIL);
@@ -178,6 +206,7 @@ public class FlagSwitchPlaybackWiringTest {
     }
 
     private static final String DETAIL = "app/src/main/java/com/fongmi/android/tv/ui/activity/TmdbDetailActivity.java";
+    private static final String LEANBACK_LISTENER = "app/src/leanback/java/com/fongmi/android/tv/ui/custom/FlagSelectionListener.java";
 
     private static String methodBody(String source, String signature) {
         int start = source.indexOf(signature);
