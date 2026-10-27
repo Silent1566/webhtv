@@ -3,7 +3,7 @@
 ## Recovery anchor
 
 - **目标**：电视版（leanback）上，(1) 调到浅色模式后搜索那一栏的输入框与文字可见；(2) 把主题的「焦点色」改成任意颜色后，TV 上所有 `<selector>` 焦点环与 `android:foreground` 卡片环当场跟随，不再恒为原始颜色。
-- **允许路径**：`app/src/main/java/com/fongmi/android/tv/theme/ThemeBinder.java`、`app/src/leanback/res/layout/activity_search.xml`、`app/src/leanback/res/drawable/{shape,selector}_tv_search_field*.xml`、`app/src/test/java/.../theme/ThemeBinderFocusRingTest.java`、`app/src/testLeanback/java/.../activity/TvSearchSurfaceContractTest.java`、本文件。
+- **允许路径**：`app/src/main/java/com/fongmi/android/tv/theme/ThemeBinder.java`、`app/src/main/res/values/ids.xml`、`app/src/leanback/res/layout/{activity_search,activity_setting_enhance,dialog_danmaku,dialog_track}.xml`、`app/src/leanback/res/drawable/{shape,selector}_tv_search_field*.xml`、`app/src/leanback/res/drawable/selector_glass_icon_action.xml`、`app/src/leanback/res/drawable/shape_subtitle_{focused,pressed}.xml`、`app/src/main/java/com/fongmi/android/tv/ui/dialog/DanmakuDialog.java`、`app/src/test/java/.../theme/ThemeBinderFocusRingTest.java`、`app/src/testLeanback/java/.../theme/ThemeBinderFocusRingBehaviorTest.java`、`app/src/testLeanback/java/.../ui/activity/{TvSearchSurfaceContractTest,TvFocusRingContractTest,SearchFieldFocusStateTest}.java`、本文件。
 - **分支 / 基线**：`dev1` @ `02fc09ede4`，工作树干净。
 - **任务守卫**：会话 `C107-BETA-MERGE-REVIEW-DEV1`（mode=standard，scope=`app/src` + `docs`，Base HEAD `a3b7817b3f`，16 个 `--adopt-dirty` 路径）。
 - **回滚**：`git checkout -- app/src/leanback/res/layout/activity_search.xml app/src/main/java/com/fongmi/android/tv/theme/ThemeBinder.java` 并删除 3 个新 drawable 与 2 个新测试文件即回到基线；无数据迁移、无 schema 变更。
@@ -52,6 +52,7 @@
 
 - `activity_search.xml`：8 处 `@color/white` → `?attr/webhtvColorOnWallpaper`（该 attr 两张表恒为 `#FFFFFF`，**深色下零变化**）；hint 用 `@color/webhtv_color_player_control_muted`。
 - 新增 `#keywordField` 宿主（`paddingStart/End 16dp`、`paddingTop/Bottom 8dp`），背景 `@drawable/selector_tv_search_field`；输入框本身保持 `background="@null"`，由宿主绘制轮廓。
+- **焦点态必须由宿主「借」子控件的状态**：`SearchActivity` 的焦点落点全在子控件 `#keyword`（`SearchActivity.java:185,489,490,500,612` 都作用在它身上），宿主从不 `requestFocus`。若宿主自己 `android:focusable="true"`，`selector_tv_search_field` 的 `state_focused` 分支永远点不亮（浅色下「框又不见了」原症状复发），同时多出一个按下无动作的 D-pad 停靠点。因此宿主改为 `android:addStatesFromChildren="true"` 且**不可聚焦**：子输入框获得焦点时 `ViewGroup` 把子状态并入自己的 drawable 状态，焦点环才真正点亮。此不变量由 `SearchFieldFocusStateTest`（行为级）与 `TvSearchSurfaceContractTest`（源码契约）双向钉住。
 - 新增 3 个 drawable：
   - `shape_tv_search_field.xml`：`solid black_40` + 28dp 圆角 + 1dp `?attr/colorOutline`；
   - `shape_tv_search_field_focused.xml`：同底同圆角，stroke 换 `@dimen/webhtv_focus_ring_width` + `?attr/tvFocusRing`；
@@ -64,17 +65,18 @@
 | --- | --- | --- |
 | Java 编译（电视变体） | `:app:compileLeanbackArm64_v8aDebugJavaWithJavac` | BUILD SUCCESSFUL |
 | Java 编译（手机变体） | `:app:compileMobileArm64_v8aDebugJavaWithJavac` | BUILD SUCCESSFUL（`@id/loadHost` 与白名单改名两处 flavor 泄漏确认修复） |
-| 电视变体全量单测 | `:app:testLeanbackArm64_v8aDebugUnitTest` | 4691 tests / 8 failed / 3 skipped；8 条失败**全部**是既有 Windows 噪音（2 条 `File.renameTo`、6 条 CRLF 字面量匹配），本任务相关测试全部通过 |
-| 手机变体全量单测 | `:app:testMobileArm64_v8aDebugUnitTest` | 5475 tests / 6 failed / 3 skipped；6 条同上噪音类，无本任务相关失败 |
+| 电视变体全量单测 | `:app:testLeanbackArm64_v8aDebugUnitTest` | 4697 tests / 8 failed / 3 skipped；8 条失败**全部**是既有 Windows 噪音（2 条 `File.renameTo`、6 条 CRLF 字面量匹配），本任务相关测试全部通过 |
+| 手机变体全量单测 | `:app:testMobileArm64_v8aDebugUnitTest` | 5476 tests / 6 failed / 3 skipped；6 条同上噪音类，无本任务相关失败 |
 | 整包编译 | `:app:assembleLeanbackArm64_v8aDebug` | BUILD SUCCESSFUL |
-| UI token 静态门禁 | `bash scripts/check_ui_tokens.sh --strict` | `violations=4 legacy=0`，**4 处均为既有违规且不在本任务范围**（`fixed_light_focus_icon.xml`、`fixed_light_focus_text.xml`、`shape_dialog_glass_chip_focused.xml`、`shape_player_osd_badge.xml`，`git status` 核对未被本任务修改）。另已核实 **CI 不运行该脚本**（`.github/workflows/` 三个工作流均未引用，全仓库已跟踪文件 `git grep check_ui_tokens` 零命中），故不影响 PR/CI |
+| UI token 静态门禁 | `bash scripts/check_ui_tokens.sh --strict` | `violations=4 legacy=0`，**4 处均为既有违规且不在本任务范围**（`fixed_light_focus_icon.xml`、`fixed_light_focus_text.xml`、`shape_dialog_glass_chip_focused.xml`、`shape_player_osd_badge.xml`，`git status` 核对未被本任务修改）。另已核实 **CI 不运行该脚本**（`.github/workflows/` 三个工作流 `android-release.yml` / `cnb-release-sync.yml` / `delayed-dev-promotion.yml` 均未引用它），故不影响 PR/CI |
 
 > `--tests` 过滤器在本机不可用（任何取值都报 `No tests found for given includes`），因此验证一律跑整个 flavor 套件；上表就是套件级结果。
 
 新增测试：
 - `ThemeBinderFocusRingTest`（JVM，`src/test` 两 flavor 共用）：钉住 binder 进入 `StateListDrawable`、覆盖 `getForeground()`、只用公开 API（禁反射）、按 `R.attr.tvFocusRing`/`R.color.tv_item_focus_ring`/`R.dimen.webhtv_focus_ring_width` 判定。
 - `ThemeBinderFocusRingBehaviorTest`（Leanback，`src/testLeanback`）：**行为级**守卫，逐像素比较 bind 前后位图。白名单 9 项必须被改写且出现活动主题 FOCUS 槽色；排除集 16 项必须逐像素不变；`selector_video_item` 双宿主用 `ContextThemeWrapper(ThemeOverlay.WebHTV.GlassFocusRings)` 正反两种 bind 顺序验证玻璃子树保持视频层环色。
-- `TvSearchSurfaceContractTest`（Leanback）：钉住搜索页无写死白色前景、有 `#keywordField` 实体宿主、环宽/环色唯一 token、圆角与内边距。
+- `SearchFieldFocusStateTest`（Leanback，Robolectric `@GraphicsMode(NATIVE)`）：**行为级**验证 `#keywordField` 在子输入框取得焦点后真的点亮——断言宿主 `addStatesFromChildren()==true` 且不可聚焦、未挂窗时（可靠常态基准）位图不含环色且状态无 `state_focused`、`keyword.requestFocus()` 后宿主 drawable 状态含 `state_focused` 且位图出现 `?attr/tvFocusRing` 实测色。
+- `TvSearchSurfaceContractTest`（Leanback）：钉住搜索页无写死白色前景、有 `#keywordField` 实体宿主、环宽/环色唯一 token、圆角与内边距；并断言宿主含 `android:addStatesFromChildren="true"` 且该段内不得出现 `android:focusable="true"`。
 - `TvFocusRingContractTest` 增补：`shape_tv_search_field_focused`/`shape_empty_action_focused` 进 themed 数组（唯一宽度 token + `?attr/tvFocusRing`），并新增 `selectorFocus` 断言两个 selector 的焦点态指向对应 shape，防止白名单成员与色板契约静默脱钩。
 
 > 该行为测试曾放在 `src/test`，导致 **mobile 变体单测编译失败**（Robolectric 依赖只声明在 `testLeanbackImplementation`），已移到 `src/testLeanback`。
@@ -117,4 +119,4 @@
 
 ## 下一步唯一动作
 
-提交（`task_guard.sh finish` + `recovery/` tag）、推送 `dev1`、开 PR 到 `beta`、拉取远端最新。
+本任务的提交/推送/PR #494 已完成；C107-2（`#keywordField` 焦点态）待 `task_guard.sh finish` 提交并推送，随后更新 PR #494 描述。

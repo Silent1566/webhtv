@@ -66,6 +66,21 @@ public class TvSearchSurfaceContractTest {
         assertTrue("selector 必须同时提供聚焦与常态两个 item",
                 values(read(SEARCH_FIELD_SELECTOR))
                         .contains("<item android:drawable=\"@drawable/shape_tv_search_field_focused\" android:state_focused=\"true\" />"));
+        assertTrue("#keywordField 必须合并子控件状态：焦点全部落在子控件 #keyword 上"
+                        + "（SearchActivity:185/:489-:500/:612 都只 requestFocus keyword），"
+                        + "容器不合并就永远拿不到 state_focused，聚焦态分支等于死代码",
+                xml.contains("android:addStatesFromChildren=\"true\""));
+        assertFalse("#keywordField 不允许自己可聚焦：容器可聚焦只会在 D-pad 导航里多出一个按下无动作的停靠点",
+                xml.contains("android:focusable=\"true\"") && fieldHostIsFocusable(xml));
+    }
+
+    /** 只检查 {@code #keywordField} 这一段声明是否仍写着 {@code focusable=true}。 */
+    private static boolean fieldHostIsFocusable(String xml) {
+        int start = xml.indexOf("android:id=\"@+id/keywordField\"");
+        if (start < 0) return false;
+        int end = xml.indexOf('>', start);
+        if (end < 0) end = xml.length();
+        return xml.substring(start, end).contains("android:focusable=\"true\"");
     }
 
     /** 输入框底色必须与键盘同族（black_40），并给出焦点环的唯一取值来源。 */
