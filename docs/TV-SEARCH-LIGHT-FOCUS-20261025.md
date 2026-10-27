@@ -117,6 +117,16 @@
 
 **另一条重要事实**：本项目 `--tests` 过滤器在本机**完全失效**（任何 `--tests` 都报 `No tests found for given includes`，用既有已通过的类 `TvSearchSurfaceContractTest` 也能复现），因此验证只能跑整个 flavor 套件。
 
-## 下一步唯一动作
+## 交付坐标
 
-本任务的提交/推送/PR #494 已完成；C107-2（`#keywordField` 焦点态）待 `task_guard.sh finish` 提交并推送，随后更新 PR #494 描述。
+全部工作已提交并推送，无剩余动作：
+
+| 阶段 | 提交 | 任务守卫 / 标签 |
+| --- | --- | --- |
+| 合并 `origin/beta 6db0ebab9f` | `a3b7817b3f` | 会话 `C107-BETA-MERGE-REVIEW-DEV1` |
+| 评审后修复（白名单 / 搜索栏浅色 / mobile 阻断） | `c8e526321c` | 同上，标签 `recovery/C107-BETA-MERGE-REVIEW-DEV1/20261027183650-c8e526321c40` |
+| 再合并 `origin/beta d7d64f4360`（PR #493） | `c99ab92823` | — |
+| 搜索栏焦点环真正点亮（`#keywordField`） | `36ef7a63bf` | 会话 `C107-2-SEARCH-FIELD-FOCUS`，标签 `recovery/C107-2-SEARCH-FIELD-FOCUS/20261027203311-36ef7a63bf23` |
+
+PR：[#494](https://github.com/Silent1566/webhtv/pull/494)（`dev1` → `beta`）。
+本节之前记录的「下一步唯一动作」现已全部完成；后续同一问题族的新工作应另开任务文档。
