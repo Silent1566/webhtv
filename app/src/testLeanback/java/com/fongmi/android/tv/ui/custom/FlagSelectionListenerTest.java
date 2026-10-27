@@ -201,6 +201,71 @@ public class FlagSelectionListenerTest {
         assertSame(sameName.get(0), dispatched.get(2));
     }
 
+    /**
+     * 正确性/回归轴的关键一问：真实用户切换会不会被回声守卫吞掉，把界面死锁在旧线路上。
+     *
+     * <p>用真实 Leanback 派发链复刻生产里 `onItemClick` 的自我刷新（`setSelectedPosition` +
+     * `notifyDataSetChanged` 对应生产里的 `notifyItemsChanged` 与 `updateFocus`），
+     * 连续做 A→B→C→B→A 五次真实切换，每次都必须落到 listener，不能有任何一次被吞。
+     */
+    @Test
+    public void realUserSwitchesAreNeverSwallowedByTheEchoGuard() {
+        List<Flag> dispatched = new ArrayList<>();
+        // 复刻生产 onItemClick 的自我刷新：选中自己 + 刷整行（会产生回声与 NO_POSITION）。
+        FlagSelectionListener echoGuard = new FlagSelectionListener(grid, adapter, item -> {
+            dispatched.add(item);
+            adapter.setSelected(item);
+            grid.setSelectedPosition(adapter.getSelectedPosition());
+            adapter.notifyDataSetChanged();
+        });
+        grid.addOnChildViewHolderSelectedListener(echoGuard);
+
+        int[] userPath = {1, 2, 0, 2, 1};
+        for (int position : userPath) {
+            grid.setSelectedPosition(position);
+            layoutGrid();
+            drainFrames();
+        }
+
+        // 五次真实切换各派发一次；回声与 NO_POSITION 都不额外计数。
+        assertEquals("每一次真实线路切换都必须派发，且回声不得追加派发",
+                userPath.length, dispatched.size());
+        for (int i = 0; i < userPath.length; i++) {
+            assertSame("第 " + i + " 次切换必须落到用户选中的那条线路",
+                    flags.get(userPath[i]), dispatched.get(i));
+        }
+        // 收尾状态必须停在用户最后选的线路上，不能死锁在旧线路。
+        assertSame(flags.get(userPath[userPath.length - 1]), adapter.getActivated());
+    }
+
+    /**
+     * 「窗口清空」这一行唯一真正的用途：快速 A→B→A 时，B 的派发会被 `removeCallbacks` 取消，
+     * 若不清窗口，回到 A 就会被守卫当成回声吞掉，用户最后的选择被丢弃（界面停在 B）。
+     */
+    @Test
+    public void rapidSwitchAwayAndBackKeepsTheUsersFinalChoice() {
+        List<Flag> dispatched = new ArrayList<>();
+        FlagSelectionListener echoGuard = new FlagSelectionListener(grid, adapter, item -> {
+            dispatched.add(item);
+            adapter.setSelected(item);
+        });
+
+        // 先让 A 真的派发一次，把 dispatchedItem 钉在 A 上。
+        select(echoGuard, 0);
+        drainFrames();
+        assertEquals(1, dispatched.size());
+        assertSame(flags.get(0), dispatched.get(0));
+
+        // A→B→A 全部发生在同一帧内：B 的 post 会被后一次选中取消，不会派发。
+        select(echoGuard, 1);
+        select(echoGuard, 0);
+        drainFrames();
+
+        assertEquals("快速切走再切回原线路，必须补派发用户最终选中的那条", 2, dispatched.size());
+        assertSame("最终派发必须是用户最后按下的 A", flags.get(0), dispatched.get(1));
+        assertSame(flags.get(0), adapter.getActivated());
+    }
+
     @Test
     public void rapidSelectionsOnlySwitchToLatestFlag() {
         select(1);

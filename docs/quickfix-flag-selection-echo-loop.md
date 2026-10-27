@@ -141,6 +141,55 @@
 + `:app:testMobileArm64_v8aDebugUnitTest --tests FlagSwitchPlaybackWiringTest` → **BUILD SUCCESSFUL in 3m 6s**，
 `FlagSelectionListenerTest` **10/10**（含新增同名不同实例用例）、`FlagSwitchPlaybackWiringTest` 双 flavor **9/9**。
 
+## 第四轮：正确性轴独立复核 + 变异挖出的测试缺口
+
+### 4.1 正确性轴复核（独立评审员，只读）
+
+结论：**三问均不成立，无阻断项**。要点与证据：
+
+- **无人依赖回声**：`FlagSelectionListener` 全仓唯一挂载点是 `VideoActivity.java:1708`；
+  点击路径 `FlagAdapter.java:131` 直接调 `onItemClick`，不经监听器；
+  对话框线路行 `EpisodeListDialog.java:135` 只 `setAdapter`、**未挂**该监听器（仅 177/183 挂 array/episode），
+  故对话框根本没有回声问题。
+- **四处业务全部自处理**：`onItemClick`(3644-3670)、`checkFlag`(5448-5469，5465 是**直接调用**)、
+  `updateFlag`(6033-6041)、`applyImmersiveAudioSelection`(10547-10560) 都在同方法内完成刷新，
+  不读取任何「回调已发生」状态。所有线路行 `setSelectedPosition` 调用点（3659/4490/5458/10554/128）
+  均为「直接自己处理」或纯视觉对齐。
+- **A→B→A 必然派发**：`FlagAdapter.indexOf` 先按实例身份比较，监听器全程用 `==`；
+  `Flag.equals` 按线路名——两者不混用，同名不同行不会被误吞。
+- **无死锁路径**：当 `indexOf` 恰等于当前选中位时 Leanback 不派发回调、`dispatchedItem` 保持旧值，
+  但那两处（`checkFlag` 5457、`applyImmersiveAudioSelection` 10550）业务已在同方法内完成；
+  用户随后真实换行仍是另一实例，窗口照样清空。
+
+### 4.2 变异检验挖出的**真实测试缺口**（本轮最重要发现）
+
+用两个变异验证断言强度：
+
+| 变异 | 改动 | 改前结果 | 结论 |
+| --- | --- | --- | --- |
+| M1 | 窗口清除行失效（`dispatchedItem` 永不清空） | **12 个用例全绿** | ❌ **未被捕获** |
+| M2 | 核心守卫失效（回声不再被拦，即原始缺陷） | `selfRefresh...` 在 `:160` 失败 | ✅ 已捕获 |
+
+**M1 存活说明什么**：`.selfRefresh...` 用例里「连续选中同一线路」根本不会走「清窗口」那一行
+（`item == dispatchedItem` 时该行是 no-op），`sameName...` 用的是不同实例，`select 2 → select 1` 之间
+上一步已派发过 2、窗口本就被上一次选中清掉了。也就是说——**「窗口清除」这一行在补测前完全没有测试覆盖，
+把它删成永不清窗口，全部用例依旧全绿**。而这行一旦失效，真实后果是：快速 A→B→A 时 B 的 `post` 被
+`removeCallbacks` 取消，回到 A 会被守卫当成回声吞掉，**用户最后的选择被丢弃、界面停在 B**。
+
+**补测**：`rapidSwitchAwayAndBackKeepsTheUsersFinalChoice`——先让 A 真正派发一次把窗口钉在 A，
+再在同一帧内做 A→B→A，断言必须补派发用户最终选中的 A（共 2 次派发，第 2 次是 A）。
+重跑 M1 → `FlagSelectionListenerTest.java:264` **FAILED**；恢复后全绿。
+
+**另一个正确性用例**：`realUserSwitchesAreNeverSwallowedByTheEchoGuard`——用真实 Leanback 派发链复刻
+生产 `onItemClick` 的自我刷新（`setSelected` + `setSelectedPosition` + `notifyDataSetChanged`），
+连续 A→B→C→B→A 五次真实切换，断言「每次恰好派发一次、顺序与用户所按一致、收尾停在最后所选项」。
+
+### 4.3 承接 4.1 的两条非阻断观察（本轮不处理）
+
+- 点击路径不经守卫，故点击换线后由 3659 产生的首次回声仍会多派发一次 `onItemClick`；
+  位置未变时 `GridLayoutManager` 不重复派发，最多多一次且被 3651 守卫吞掉或幂等，与修复前一致。
+- `adapter.clear()/addAll()` 时 `dispatchedItem` 未复位，仅多持一个 `Flag` 引用，无正确性影响。
+
 ## 验证
 
 1. 第一轮（`bash ./gradlew`）：`:app:testLeanbackArm64_v8aDebugUnitTest --tests FlagSwitchPlaybackWiringTest --tests FlagSelectionListenerTest` → BUILD SUCCESSFUL（6m34s），两类的 tests=9 failures=0 errors=0。
