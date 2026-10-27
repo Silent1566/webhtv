@@ -258,6 +258,7 @@ import com.google.gson.JsonParser;
 import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -476,6 +477,9 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     /** 本次取详情的起始时刻，用来认出「猫源开内嵌页」是不是自己这次导航触发的。volatile：加载在后台线程发起，事件在主线程读。 */
     private volatile long detailLoadStart;
     private int inlinePlaybackGeneration;
+    /** 详情页结果应用的分帧队列：把一次主线程长任务切成每帧一片，避免加载圈停帧。 */
+    private final ArrayDeque<Runnable> renderChunks = new ArrayDeque<>();
+    private boolean renderChunkScheduled;
     private int mAdFeedbackGeneration;
     private int tmdbDialogGeneration;
     private AiEpisodeSeasonService aiSeasonService;
@@ -789,6 +793,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         currentInlineResult = null;
         activeTmdbBundle = null;
         activeSourcePayload = null;
+        clearRenderChunks();
         activeSourceItem = null;
         activeRuntimeDecision = null;
         useParse = false;
@@ -2756,6 +2761,42 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         });
     }
 
+    private void enqueueRenderChunk(Runnable chunk) {
+        if (chunk == null) return;
+        renderChunks.addLast(chunk);
+        scheduleRenderChunk();
+    }
+
+    private void scheduleRenderChunk() {
+        if (renderChunkScheduled || renderChunks.isEmpty()) return;
+        renderChunkScheduled = true;
+        View root = binding == null ? null : binding.getRoot();
+        if (root != null && root.isAttachedToWindow()) root.postOnAnimation(this::runNextRenderChunk);
+        else App.post(this::runNextRenderChunk);
+    }
+
+    private void runNextRenderChunk() {
+        renderChunkScheduled = false;
+        if (!canTouchUi()) {
+            renderChunks.clear();
+            return;
+        }
+        Runnable chunk = renderChunks.pollFirst();
+        if (chunk != null) {
+            try {
+                chunk.run();
+            } catch (Throwable ignored) {
+            }
+        }
+        if (!renderChunks.isEmpty()) scheduleRenderChunk();
+        else binding.loading.setVisibility(View.GONE);
+    }
+
+    private void clearRenderChunks() {
+        renderChunks.clear();
+        renderChunkScheduled = false;
+    }
+
     private boolean isTmdbRequestCurrent(int generation, @Nullable TmdbItem item) {
         return generation == loadGeneration && isSameTmdbItem(item, matchedTmdbItem);
     }
@@ -2804,8 +2845,9 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
 
     private void applyLoaded(Vod loadedVod, TmdbBundle bundle, List<TmdbItem> searchItems, String error, boolean allowMatchDialog) {
         long start = System.currentTimeMillis();
-        binding.loading.setVisibility(View.GONE);
+        clearRenderChunks();
         if (loadedVod == null) {
+            binding.loading.setVisibility(View.GONE);
             SpiderDebug.log("tmdb-detail-flow", "apply loaded empty cost=%dms mode=%d error=%s", System.currentTimeMillis() - start, getDetailMode(), TextUtils.isEmpty(error) ? "" : error);
             if (!TextUtils.isEmpty(error)) Notify.show(error);
             tryAutoChangeSource();
@@ -2821,17 +2863,34 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         enrichVod();
         clearEpisodeRenderCaches();
         initHistory();
-        if (history == null) return;
-        bindPage();
-        applySourceOnlyActionVisibility();
-        focusInlinePlayerPanel();
-        maybeAutoPlayInline();
-        if (bundle != null) {
-            if (isTmdbNetworkAllowed()) loadTmdbMediaBlocks(bundle);
-            else bindTmdbSection();
+        if (history == null) {
+            binding.loading.setVisibility(View.GONE);
+            return;
         }
-        if (allowMatchDialog && shouldShowAutoTmdbMatchDialog(bundle)) showTmdbMatchDialog(searchItems);
-        SpiderDebug.log("tmdb-detail-flow", "apply loaded cost=%dms mode=%d bundle=%s name=%s flags=%d", System.currentTimeMillis() - start, getDetailMode(), bundle != null, loadedVod.getName(), loadedVod.getFlags().size());
+        final int generation = loadGeneration;
+        final boolean allowDialog = allowMatchDialog;
+        enqueueRenderChunk(() -> {
+            if (generation != loadGeneration) return;
+            bindPage();
+            applySourceOnlyActionVisibility();
+        });
+        enqueueRenderChunk(() -> {
+            if (generation != loadGeneration) return;
+            focusInlinePlayerPanel();
+            maybeAutoPlayInline();
+        });
+        enqueueRenderChunk(() -> {
+            if (generation != loadGeneration) return;
+            if (bundle != null) {
+                if (isTmdbNetworkAllowed()) loadTmdbMediaBlocks(bundle);
+                else bindTmdbSection();
+            }
+        });
+        enqueueRenderChunk(() -> {
+            if (generation != loadGeneration) return;
+            if (allowDialog && shouldShowAutoTmdbMatchDialog(bundle)) showTmdbMatchDialog(searchItems);
+            SpiderDebug.log("tmdb-detail-flow", "apply loaded cost=%dms mode=%d bundle=%s name=%s flags=%d", System.currentTimeMillis() - start, getDetailMode(), bundle != null, loadedVod.getName(), loadedVod.getFlags().size());
+        });
     }
 
     private void fallbackToOriginalDetail(Vod loadedVod, String reason) {
@@ -2906,26 +2965,37 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
 
     private void applyTmdbResultNow(TmdbLoadResult result) {
         long start = System.currentTimeMillis();
+        clearRenderChunks();
         TmdbBundle bundle = result == null ? null : result.bundle();
         applyTmdbBundle(bundle);
         reloadHistoryAfterTmdbMatch();
         applyReloadedHistorySelection();
         if (bundle != null) saveTmdbMatch(bundle.item());
         enrichVod();
-        bindBackdrop();
-        bindHeader();
-        bindMeta();
-        bindRatings();
-        bindOverview();
-        renderSeasonSelection();
-        lastEpisodeMediaSeason = Integer.MIN_VALUE;
-        renderEpisodes();
-        if (selectedFlag == null || selectedFlag.getEpisodes() == null || selectedFlag.getEpisodes().isEmpty()) bindTmdbSection();
-        focusInlinePlayerPanel();
-        if (bundle != null) binding.getRoot().post(() -> loadTmdbMediaBlocks(bundle));
-        updateFollowingState();
-        if (shouldShowAutoTmdbMatchDialog(bundle)) showTmdbMatchDialog(result == null ? List.of() : result.searchItems());
-        SpiderDebug.log("tmdb-detail-flow", "apply tmdb result cost=%dms mode=%d bundle=%s search=%d", System.currentTimeMillis() - start, getDetailMode(), bundle != null, result == null ? 0 : result.searchItems().size());
+        final int generation = loadGeneration;
+        enqueueRenderChunk(() -> {
+            if (generation != loadGeneration) return;
+            bindBackdrop();
+            bindHeader();
+            bindMeta();
+            bindRatings();
+            bindOverview();
+            renderSeasonSelection();
+        });
+        enqueueRenderChunk(() -> {
+            if (generation != loadGeneration) return;
+            lastEpisodeMediaSeason = Integer.MIN_VALUE;
+            renderEpisodes();
+            if (selectedFlag == null || selectedFlag.getEpisodes() == null || selectedFlag.getEpisodes().isEmpty()) bindTmdbSection();
+        });
+        enqueueRenderChunk(() -> {
+            if (generation != loadGeneration) return;
+            focusInlinePlayerPanel();
+            if (bundle != null) binding.getRoot().post(() -> loadTmdbMediaBlocks(bundle));
+            updateFollowingState();
+            if (shouldShowAutoTmdbMatchDialog(bundle)) showTmdbMatchDialog(result == null ? List.of() : result.searchItems());
+            SpiderDebug.log("tmdb-detail-flow", "apply tmdb result cost=%dms mode=%d bundle=%s search=%d", System.currentTimeMillis() - start, getDetailMode(), bundle != null, result == null ? 0 : result.searchItems().size());
+        });
     }
 
     /**
@@ -11383,6 +11453,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
 
     @Override
     protected void onDestroy() {
+        clearRenderChunks();
         introSkipPlayback.reset();
         loadGeneration++;
         cancelAiSeasonAnalysis(false);
