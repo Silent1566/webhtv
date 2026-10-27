@@ -118,14 +118,15 @@ public class PlayerDisplaySettingSyncTest {
 
         assertTrue("media badges must stay off every non-fullscreen surface",
                 body.contains("!source.isFullscreen()"));
-        assertTrue("inside fullscreen the control bar must show badges regardless of the switch",
-                body.contains("!controlsVisible && !PlayerSetting.isDisplayMediaBadges()"));
+        assertTrue("the media info switch must gate badges on every path, including a woken control bar",
+                body.contains("!PlayerSetting.isDisplayMediaBadges()")
+                        && !body.contains("!controlsVisible && !PlayerSetting.isDisplayMediaBadges()"));
 
         int only = source.indexOf("private boolean renderMediaBadgesOnly()");
         assertTrue("PlayerOsdController is missing renderMediaBadgesOnly", only >= 0);
         String onlyBody = source.substring(only, source.indexOf("\n    }", only));
-        assertTrue("the suppressed mobile control-bar path must stay off outside fullscreen",
-                onlyBody.contains("if (!source.isFullscreen())"));
+        assertTrue("the suppressed mobile control-bar path must honor both fullscreen and the switch",
+                onlyBody.contains("if (!source.isFullscreen() || !PlayerSetting.isDisplayMediaBadges())"));
 
         String persistent = source.substring(source.indexOf("// 控制栏隐藏时，按用户设置显示常驻屏显"));
         String renderEnd = "private boolean renderMediaBadgesOnly()";

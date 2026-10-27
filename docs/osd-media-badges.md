@@ -111,7 +111,7 @@
 
 ## 8. 已知缺口（有意为之）
 
-- 徽标的展示路径（第八轮改写）：门控是 `player == null || !source.isFullscreen() || (!controlsVisible && !PlayerSetting.isDisplayMediaBadges())`——**先卡全屏**，再区分「唤醒总是显示 / 隐藏看开关」。suppressed 分支的 `renderMediaBadgesOnly()` 改为只查 `source.isFullscreen()`（它只在控制栏唤醒时进入，开关在此不参与）。
+- 徽标的展示路径（第八轮修订后，现行）：门控是 `player == null || !source.isFullscreen() || !PlayerSetting.isDisplayMediaBadges()`——**全屏与屏显开关必须同时成立**，任一条不满足时控制栏唤醒也不显示。suppressed 分支的 `renderMediaBadgesOnly()` 同样查这两条（`if (!source.isFullscreen() || !PlayerSetting.isDisplayMediaBadges())`）。
 - 角位内缩（第八轮改写）：控制栏可见时上两角 `topMargin=64dp` / 下两角 `bottomMargin=80dp`（避开顶栏按钮列与底部进度条）；控制栏隐藏时用 `persistentNeighbour(position)` 判断同角还有没有别的常驻文本——没有就 `edgeInset = dp(2)` 贴边，有就按邻居实测高度 `+ dp(4)` 抬高躲开。
 - mobile 播放器在 `showControl()` 里先 `setOsdSuppressed(true)` 隐藏整个 OSD 根，因此徽标走 `renderMediaBadgesOnly()` 这条独立放行路径。
 - 徽标与标题/分辨率/时间**允许同角共存**（用户确认）：徽标容器是独立 `FlexboxLayout`，同角重叠时由 `layout_gravity` 决定层级，二者可能相互覆盖——有意的「零侵入」取舍。
@@ -159,6 +159,23 @@
 - **全屏唤醒显示**：同一 prefs 下进入 `VideoActivity` 全屏，唤醒控制栏后 `osdMediaBadges` 出现；`player_osd_diagnostics` 关闭时诊断面板不出现。
 - **选角位不改开关**：设置页「媒体信息位置」默认摘要仍是「关闭」（`getMediaBadgeChoice()` 按开关走），选左上角后 prefs 只写 `player_osd_media_badge_position=0`，`player_osd_media_badges` 保持原值。
 - 截图（`s22`/`s24` 非全屏无徽标、`s26` 全屏出现徽标）按 task guard scope 约束不进入仓库，暂存于同机 `%TEMP%`。
+### 第八轮修订：关闭屏显后控制栏唤醒仍出现徽标（task_guard `osd-badges-gate`，base HEAD `e8ccde109e21b674fc82e6db8d44f586f39eda2f`）
+
+用户反馈（截图：设置页「屏显设置」摘要只剩「时间 / 分辨率 / 进度 / 迷你 / 标题」、「媒体信息位置 = 关闭」，而全屏唤醒控制栏后右下角仍出现 `FHD / AVC / AAC 44.1KHZ / 2.0 / TS`）：「媒体信息关闭了，屏显也没开启唤醒控制栏怎么还有？」
+
+**根因**：第八轮把门控写成 `!controlsVisible && !PlayerSetting.isDisplayMediaBadges()`——控制栏唤醒时 `controlsVisible=true`，第二项恒为 false，于是开关被完全绕过，只要全屏就显示。`renderMediaBadgesOnly()` 当时也只查全屏。这是把「全屏内唤醒总是显示」当成需求落实的结果，与用户真实意图相反。
+
+**修正**：两处都改成「全屏 + 开关」双条件：
+- `setMediaBadges`：`if (player == null || !source.isFullscreen() || !PlayerSetting.isDisplayMediaBadges())`；
+- `renderMediaBadgesOnly`：`if (!source.isFullscreen() || !PlayerSetting.isDisplayMediaBadges())`。
+
+语义最终形态（与设置页一致）：**「媒体信息位置 = 关闭」或屏显开关关闭 ⇒ 任何情况下都不显示，包括全屏唤醒控制栏**；打开后全屏唤醒显示、控制栏隐藏时按同一开关常驻。
+
+#### 验证
+
+- 单测：`PlayerDisplaySettingSyncTest` leanback 11/11、mobile 11/11；`ControlDialogOsdSettingsTest` mobile 9/9；断言改为「开关必须在每条路径上生效，且不再存在 `!controlsVisible && !isDisplayMediaBadges()` 这种绕过写法」。
+- 构建：`assembleMobileArm64_v8aDebug` BUILD SUCCESSFUL。
+- 设备（emulator-5554）：`player_osd_media_badges=false` 时进全屏并唤醒控制栏，dump 中无 `osdMediaBadges`；把开关打开后同样操作才出现。
 ### 第七轮：关闭项 + 开关成为唯一总闸（task_guard `osd-badges-off`，base HEAD `3220d20d6c3d4a9f90b192340dae06d10e512c58`）
 
 用户原话（两段需求）：「新增一个关闭选项，默认关闭不显示包括控制栏唤醒后，关闭状态时用户开启媒体信息屏显时自动改成右下角（也就是现在的默认值），如果用户有历史设置则设置为最近一次的设置，比如用户之前设置在左上角后关闭屏显再开启屏显还是自动左上角」；「非全屏状态下唤醒控制栏不再显示媒体信息……除非是用户自己开启了屏显，没开启的时候非全屏唤醒控制栏不显示」。

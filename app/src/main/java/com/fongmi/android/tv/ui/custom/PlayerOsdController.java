@@ -298,11 +298,11 @@ public class PlayerOsdController {
     /**
      * 控制栏出现但 OSD 根被抑制（mobile 播放器）时的渲染路径。
      * 只放行媒体信息徽标，四角文本、诊断面板与迷你进度一律隐藏；
-     * 徽标自身的两条约束与常驻路径一致：只有全屏画面才显示，面板里就总是显示
-     * （这条路径只在控制栏唤醒时进入，所以「开关」在这里不参与判定）。
+     * 徽标自身的两条约束与常驻路径完全一致：必须全屏、且「屏显设置 → 媒体信息」开关打开，
+     * 否则控制栏唤醒也不显示（这正是用户反馈的「媒体信息关闭、屏显没开，唤醒控制栏还有徽标」）。
      */
     private boolean renderMediaBadgesOnly() {
-        if (!source.isFullscreen()) {
+        if (!source.isFullscreen() || !PlayerSetting.isDisplayMediaBadges()) {
             topLeft.setVisibility(View.GONE);
             topRight.setVisibility(View.GONE);
             bottomLeft.setVisibility(View.GONE);
@@ -457,11 +457,10 @@ public class PlayerOsdController {
      */
     private void setMediaBadges(PlayerManager player) {
         if (mediaBadges == null) return;
-        // 两条约束叠在一起：
+        // 两条必须同时满足，缺一不显示：
         // 1. 只在全屏画面里出现——半屏/小窗里它会把本来就拥挤的控件堆得更挤；
-        // 2. 全屏内，控制栏唤醒时总是显示（用户要的就是唤醒时能看到），
-        //    只有「控制栏隐藏时是否继续常驻」才由「屏显设置 → 媒体信息」开关决定。
-        if (player == null || !source.isFullscreen() || (!controlsVisible && !PlayerSetting.isDisplayMediaBadges())) {
+        // 2. 「屏显设置 → 媒体信息」开关必须打开——关闭时控制栏唤醒也不显示。
+        if (player == null || !source.isFullscreen() || !PlayerSetting.isDisplayMediaBadges()) {
             mediaBadges.setVisibility(View.GONE);
             mediaBadgeSignature = "";
             return;
