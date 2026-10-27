@@ -4557,6 +4557,13 @@ private boolean runtimeSourceOnly;
             if (KeyUtil.isUpKey(event)) {
                 int target = TmdbEpisodeGridPolicy.verticalFocusTarget(position, spanCount, mEpisodeGridAdapter.getItemCount(), false);
                 if (target != TmdbEpisodeGridPolicy.NO_FOCUS_TARGET) return focusEpisodeGridPosition(target);
+            } else if (KeyUtil.isLeftKey(event) || KeyUtil.isRightKey(event)) {
+                // 集数卡片根视图不可聚焦、adapter 也没写水平 nextFocus，交回系统 FocusFinder 时
+                // 向左找不到同排邻居（按键无效）、向右直接跳出选集网格落到上方「简介」按钮
+                // （用户报告“再左遥控无效右遥控就跑到了简介按钮”）。这里在本排内显式移动。
+                int target = TmdbEpisodeGridPolicy.horizontalFocusTarget(position, spanCount, mEpisodeGridAdapter.getItemCount(), KeyUtil.isRightKey(event));
+                if (target == TmdbEpisodeGridPolicy.NO_FOCUS_TARGET) return true;
+                return focusEpisodeGridPosition(target);
             } else {
                 return false;
             }

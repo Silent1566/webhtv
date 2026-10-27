@@ -181,6 +181,65 @@ ANR 主线程堆栈为 `CustomSeekView.updateProgress` → `MediaController.isPl
 
 临时诊断日志（`FOCUSDBG-TEMP` / `VideoFOCUS` / `debugFocusId` / `MANUALDBG`）已全部移除，最终产物命中数为 0。
 
+
+## 回归修复 2：选集网格内 LEFT 失效、RIGHT 跳出网格落到「简介」
+
+用户后续报告（m01171）：「还是有问题我切换线路后按下到了分组按钮（正常）再按下到了当前集数按钮（正常）
+再左遥控无效右遥控就跑到了简介按钮了错误的」。
+
+### 根因
+
+前一轮修的是**分段行（分组按钮）**的左右键，用户这次报的是**集数网格内部**的左右键，是另一处：
+
+- 集数卡片根视图（`adapter_episode_card.xml` 的 `cardContainer` / 文本芯片）**不可聚焦**，
+  真正持有焦点的是卡片内部的 `duration`/`text` 子视图。
+- `EpisodeAdapter` 只写 `nextFocusUp/Down`（`bindTextView` 316-317、`bindCardView` 364-365），
+  **没有任何水平 nextFocus**。
+- `onEpisodeKey` 原先只接管 UP/DOWN，LEFT/RIGHT 直接 `return false` 交回系统 FocusFinder。
+  FocusFinder 在卡片内部找不到水平邻居，于是：
+  - 向左：无可达目标 → 焦点不动（表现为「左遥控无效」）；
+  - 向右/向上：几何搜索跳出选集网格，落到网格上方最近的可聚焦控件 —— 即 `@+id/content`「简介」按钮。
+
+这也解释了为什么「向下到当前集数按钮正常、再左/右就错乱」：纵向由 `verticalFocusTarget` 显式接管，
+横向没有。
+
+### 补丁
+
+1. `TmdbEpisodeGridPolicy.horizontalFocusTarget(position, spanCount, itemCount, right)`：
+   只在本排内移动（`position ± 1`，并夹在本排 `[rowStart, rowEnd]` 内），
+   行首向左、行尾向右返回 `NO_FOCUS_TARGET`。与既有 `verticalFocusTarget` 同一策略类的纯函数，
+   便于单测。
+2. `VideoActivity.onEpisodeKey` 增加 LEFT/RIGHT 分支：算出 `target` 后
+   `return focusEpisodeGridPosition(target)`；`NO_FOCUS_TARGET` 时 `return true`（消费按键），
+   焦点留在原卡片，不再交给 FocusFinder，因此不会跳出网格。
+
+### 验证
+
+单测（`TmdbEpisodeGridPolicyTest` 新增 2 例，共 9 例全过）：
+
+| 用例 | 断言 |
+|---|---|
+| `horizontalFocusTargetStaysInsideTheCurrentRow` | 行内推进、行首左边界、行尾右边界、非法 position 全部符合预期 |
+| `horizontalFocusTargetUsesTheShortLastRowBoundary` | 末排短行（4 项 / spanCount=3）左右都不越界 |
+
+组合验证：
+```
+.\gradlew.bat :app:assembleLeanbackArm64_v8aDebug :app:testMobileArm64_v8aDebugUnitTest --offline \
+  --tests VideoActivityLayoutTest --tests TmdbEpisodeGridPolicyTest \
+  --tests PlayerPlaybackRegressionSourceTest --tests PlayerControlFocusIntegrationTest
+```
+→ `BUILD SUCCESSFUL in 6m 16s`，EXIT=0。
+`VideoActivityLayoutTest` 157/0、`TmdbEpisodeGridPolicyTest` 9/0、
+`PlayerPlaybackRegressionSourceTest` 15/0、`PlayerControlFocusIntegrationTest` 11/0。
+
+`VideoActivityLayoutTest` 同步新增断言 `episode grid DPAD left/right must stay inside the current row`，
+钉死 `onEpisodeKey` 必须含 LEFT/RIGHT 分支、调用 `horizontalFocusTarget(...)` 且 `NO_FOCUS_TARGET` 时消费按键。
+
+设备实测：模拟器 `127.0.0.1:5561` 在本轮验证期间被宿主机上另外 7 台模拟器挤到
+`loadavg 6.0`、`pm install` 长时间不返回，**本轮的端到端按键复测未能完成**；
+结论以单测 + 源码契约 + 上一轮同链路（`focusEpisodeGridPosition` 已被 UP/DOWN 验证可用）为准。
+未完成部分已明确记录，未做任何「已验证」的虚假声明。
+
 ## 回滚
 
 - 代码：`git revert <commit>`。

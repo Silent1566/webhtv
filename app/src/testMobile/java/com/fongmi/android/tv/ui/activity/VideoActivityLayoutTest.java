@@ -1573,6 +1573,15 @@ public class VideoActivityLayoutTest {
         assertTrue("segment position sync must not fight the user while focus is inside the segment row",
                 segPosStart >= 0
                         && source.indexOf("if (focused >= 0 && focused != position && isFocusInside(mBinding.array)) return;", segPosStart) > segPosStart);
+        // 集数卡片根视图不可聚焦、adapter 也不写水平 nextFocus，左右键若交回系统 FocusFinder，
+        // 焦点会直接跳出选集网格（实测落到上方的“简介”按钮）。必须由 onEpisodeKey 接管水平移动。
+        int episodeKeyStart = source.indexOf("private boolean onEpisodeKey(KeyEvent event)", arrayKeyEnd);
+        int episodeKeyEnd = episodeKeyStart >= 0 ? source.indexOf("\n    private ", episodeKeyStart + 1) : -1;
+        String episodeKeyBody = episodeKeyStart >= 0 && episodeKeyEnd > episodeKeyStart ? source.substring(episodeKeyStart, episodeKeyEnd) : "";
+        assertTrue("episode grid DPAD left/right must stay inside the current row",
+                episodeKeyBody.contains("KeyUtil.isLeftKey(event) || KeyUtil.isRightKey(event)")
+                        && episodeKeyBody.contains("TmdbEpisodeGridPolicy.horizontalFocusTarget(position, spanCount, mEpisodeGridAdapter.getItemCount(), KeyUtil.isRightKey(event))")
+                        && episodeKeyBody.contains("if (target == TmdbEpisodeGridPolicy.NO_FOCUS_TARGET) return true;"));
 
         Path arrayAdapterPath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "adapter", "ArrayAdapter.java"));
         String arrayAdapter = new String(Files.readAllBytes(arrayAdapterPath), StandardCharsets.UTF_8);
