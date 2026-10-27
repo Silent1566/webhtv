@@ -2365,16 +2365,14 @@ public class VideoActivityLayoutTest {
         assertTrue(sourcePath + " is missing revealTmdbDetail", !body.isEmpty());
         assertTrue("the later TMDB reveal must know whether loading actually hid the content",
                 body.contains("boolean hiddenByLoading = !mBinding.progressLayout.isContent();"));
-        // 手动播放模式（关闭「点播自动播放」）把焦点交给选集，其余模式仍把焦点交回预览窗口。
+        // 进场焦点统一回预览窗口（手动播放模式不再改道选集，见 manualPlaybackMode 用例）。
         assertTrue("focus must only be pulled back to the player when loading had hidden the content",
-                body.contains("if (hiddenByLoading) {")
-                        && body.contains("if (isManualPlaybackMode()) mBinding.video.post(this::requestInitialPlaybackFocus);")
-                        && body.contains("else mBinding.video.post(() -> mBinding.video.requestFocus());"));
+                body.contains("if (hiddenByLoading) mBinding.video.post(this::requestInitialPlaybackFocus);"));
         assertTrue("a shell revealed without an initial preview must restore focus only when nothing else is focused",
                 shell.contains("boolean hiddenByLoading = !mBinding.progressLayout.isContent();")
                         && shell.contains("if (hiddenByLoading && !mBinding.getRoot().hasFocus())")
                         && shell.contains("mBinding.video.post(() -> {")
-                        && shell.contains("if (!mBinding.getRoot().hasFocus()) mBinding.video.requestFocus();"));
+                        && shell.contains("if (!mBinding.getRoot().hasFocus()) requestInitialPlaybackFocus();"));
     }
 
     @Test
@@ -3685,25 +3683,31 @@ public class VideoActivityLayoutTest {
                 source.contains("private boolean isManualPlaybackMode() {")
                         && source.contains("return Util.isLeanback() && !PlayerSetting.isAutoPlay();"));
 
-        String focus = methodBody(source, "private void requestInitialPlaybackFocus()", "private boolean focusInitialEpisode()");
-        assertTrue("manual playback mode must hand the initial focus to the episode list, and defer when the list is not bound yet",
-                focus.contains("if (!isManualPlaybackMode()) {")
-                        && focus.contains("if (focusInitialEpisode()) return;")
-                        && focus.contains("mPendingManualEpisodeFocus = true;"));
-        assertTrue("a deferred focus request must be flushed once the episode list is bound",
-                source.contains("private void flushPendingManualEpisodeFocus()")
-                        && source.contains("flushPendingManualEpisodeFocus();"));
-
-        String episodeFocus = methodBody(source, "private boolean focusInitialEpisode()", "private void updateVideoCover()");
-        assertTrue("episode focus must reuse the existing scroll helper and fall back when nothing is bound",
-                episodeFocus.contains("mEpisodeAdapter == null || mEpisodeAdapter.getItemCount() == 0")
-                        && episodeFocus.contains("scrollToEpisode(position, true);")
-                        && episodeFocus.contains("return false;"));
+        // 进场焦点：用户确认「进来的时候还是聚焦在播放器上」，手动模式不再把初始焦点送到选集。
+        // 曾经那样做会让用户按 UP 到播放器后又被拽回去，并在切线路后与 RecyclerView 的焦点回收
+        // 互相拉锯（焦点在播放器与集数按钮之间来回跳）。
+        String focus = methodBody(source, "private void requestInitialPlaybackFocus()", "private void flushPendingManualEpisodeFocus()");
+        assertTrue("the initial focus must always land on the player window, never on an episode card",
+                focus.contains("mBinding.video.requestFocus();")
+                        && !focus.contains("isManualPlaybackMode()")
+                        && !focus.contains("focusInitialEpisode"));
 
         String preview = methodBody(source, "private void showInitialPreview()", "private History createHistory(Vod item)");
-        assertTrue("the initial preview must route focus by mode instead of always grabbing the player window",
-                preview.contains("if (isManualPlaybackMode()) requestInitialPlaybackFocus();")
-                        && preview.contains("else mBinding.video.requestFocus();"));
+        assertTrue("the initial preview must focus the player window in every mode",
+                preview.contains("requestInitialPlaybackFocus();")
+                        && !preview.contains("if (isManualPlaybackMode()) requestInitialPlaybackFocus();"));
+
+        // 手动播放模式下，播放器上的确认键要一次完成「全屏 + 起播」，语义等同详情页“继续播放”按钮：
+        // 用户不必先全屏、再按一次 OK 才看到画面。
+        String video = methodBody(source, "private void onVideo()", "private void onChange()");
+        assertTrue("in manual playback mode the player confirm must start playback as well as enter fullscreen",
+                video.contains("if (isManualPlaybackMode()) {")
+                        && video.contains("mExplicitPlaybackRequest = true;")
+                        && video.contains("enterFullscreen();")
+                        && video.contains("if (player().isEmpty()) onRefresh();")
+                        && video.contains("else if (!player().isPlaying()) onPlay();"));
+        assertTrue("autoplay mode must keep the original confirm behavior of only entering fullscreen",
+                video.contains("if (isFullscreen()) return;"));
 
         String click = methodBody(source, "public void onItemClick(Episode item)", "private void onEpisodeLongClick(Episode item)");
         assertTrue("manual playback mode must start the picked episode and enter fullscreen in one press",

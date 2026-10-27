@@ -138,6 +138,45 @@ public class FlagSelectionListenerTest {
     }
 
     @Test
+    public void repeatedSelectionDispatchOfTheSameRouteIsIgnored() {
+        // VideoActivity's route switch ends in FlagAdapter.setSelected + HorizontalGridView
+        // .setSelectedPosition + notifyItemsChanged; Leanback re-dispatches selection for that same
+        // route afterwards. Without the echo guard every re-dispatch re-entered the switch (~22Hz)
+        // and kept rebuilding the episode grid, which stole focus from it after a line switch.
+        List<Flag> switched = new ArrayList<>();
+        FlagSelectionListener echo = new FlagSelectionListener(grid, adapter, switched::add);
+        grid.addOnChildViewHolderSelectedListener(echo);
+
+        // Each real selection makes VideoActivity refresh this grid (FlagAdapter.setSelected +
+        // notify), and Leanback then re-dispatches the selection already in effect. Repeating the
+        // same route therefore reproduces the mirror dispatch that used to re-enter the switch.
+        select(1);
+        drainFrames();
+        select(1);
+        drainFrames();
+        select(1);
+        drainFrames();
+
+        assertEquals(Arrays.asList("Drive B"), shows(switched));
+    }
+
+    @Test
+    public void aDifferentRouteStillSwitchesAfterTheEchoGuard() {
+        // The guard must only swallow the repeated re-dispatch of the route already switched to;
+        // picking another route is a real user selection and has to reach the listener.
+        List<Flag> switched = new ArrayList<>();
+        FlagSelectionListener echo = new FlagSelectionListener(grid, adapter, switched::add);
+        grid.addOnChildViewHolderSelectedListener(echo);
+
+        grid.setSelectedPosition(1);
+        drainFrames();
+        grid.setSelectedPosition(2);
+        drainFrames();
+
+        assertEquals(Arrays.asList("Drive B", "Drive C"), shows(switched));
+    }
+
+    @Test
     public void rapidSelectionsOnlySwitchToLatestFlag() {
         select(1);
         select(2);
@@ -183,6 +222,13 @@ public class FlagSelectionListenerTest {
         assertFalse(grid.isAttachedToWindow());
         drainFrames();
         assertTrue(selected.isEmpty());
+    }
+
+    private List<String> shows(List<Flag> items) {
+        // Flag.toString() serializes through App.gson(), which Robolectric does not initialize.
+        List<String> names = new ArrayList<>();
+        for (Flag item : items) names.add(item.getShow());
+        return names;
     }
 
     private Flag flag(String name) {

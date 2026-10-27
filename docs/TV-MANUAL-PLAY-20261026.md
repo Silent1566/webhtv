@@ -299,6 +299,139 @@ ANR 主线程堆栈为 `CustomSeekView.updateProgress` → `MediaController.isPl
 
 设备端复测同样未完成（5561 仍受宿主机 8 台模拟器争抢，`loadavg` 6~8）。
 
+## 回归修复 4：进场焦点收回播放器 + 切线路后集数网格左右键失效（回声守卫）
+
+### 4.1 用户对交互的再次纠正
+
+用户（m00406–m00432）明确了两点：进场时**不要**把焦点重定向到选集（焦点留在播放器，与改动前一致）；
+在播放器上按确认键应像详情页的「继续播放」按钮一样**先全屏再播放**。其余逻辑不动，
+只在播放器上按确认键时判断是否关闭了自动播放。
+
+前一轮的 `mPendingManualEpisodeFocus` 挂起机制、`focusInitialEpisode()`、以及
+「选集重建后回焦选集」全部是这次纠正要撤销的对象 —— **它们正是「焦点来回跳」的来源**。
+
+### 4.2 补丁（app/src/leanback/java/com/fongmi/android/tv/ui/activity/VideoActivity.java）
+
+1. `requestInitialPlaybackFocus()` 简化为单行 `mBinding.video.requestFocus();`，
+   删除 `isManualPlaybackMode` 分支、`focusInitialEpisode()` 调用与 `mPendingManualEpisodeFocus = true`。
+2. `flushPendingManualEpisodeFocus()` 变为空实现（保留方法名以维持调用点与测试契约）。
+3. 删除死代码：`focusInitialEpisode()`（含 `scrollToEpisode(position, true)`）、
+   字段 `mPendingManualEpisodeFocus` 及其在 `resetDetailState` 的赋值。
+4. 三处焦点分支统一：`revealShellWhileTmdbLoads` → `mBinding.video.post(() -> { if (!mBinding.getRoot().hasFocus()) requestInitialPlaybackFocus(); });`；
+   `revealTmdbDetail` → `if (hiddenByLoading) mBinding.video.post(this::requestInitialPlaybackFocus);`；
+   `showInitialPreview` → `requestInitialPlaybackFocus();`。
+5. `onVideo()` 承担「播放器确认键 = 全屏 + 起播」：
+
+```java
+private void onVideo() {
+    if (isFullscreen()) return;
+    if (isManualPlaybackMode()) {
+        mExplicitPlaybackRequest = true;
+        mManualPlaybackStarted = true;
+        updateVideoCover();
+    }
+    enterFullscreen();
+    if (isManualPlaybackMode() && player() != null) {
+        if (player().isEmpty()) onRefresh();
+        else if (!player().isPlaying()) onPlay();
+    }
+}
+```
+
+`mExplicitPlaybackRequest` 由 `shouldAutoPlay()` **一次性消费**（起播是异步的，
+用 `try/finally` 立即复位会被吞掉 —— 这是之前踩过的坑）。
+
+### 4.3 切线路后集数网格 LEFT 无效 / RIGHT 跳到「简介」的真正根因
+
+这已经是同一处交互的第四次返工。前三次都在**没有设备实测**的情况下凭单测宣布完成，这次先上设备取证。
+
+用临时 `EPDBG` 日志（`logcat -c` + `logcat -d -s EPDBG` 逐键切片）抓到决定性证据：
+在**完全没有按键**的空闲 4 秒里打出 **177 行**成对的
+`flagClick in focus=shortDisplay@MaterialTextView flag=LZ线路` / `flagClick out ...`
+→ **`onItemClick(Flag item)` 在以约 22Hz 自激循环**，焦点最终被「短显」按钮抢走，
+集数网格因此拿不到焦点，左右键自然失效/乱跳。
+
+闭合链路：
+
+```
+onItemClick(Flag)
+  → mBinding.flag.setSelectedPosition(newPosition) / notifyItemsChanged
+  → HorizontalGridView 派发 onChildViewHolderSelected
+  → FlagSelectionListener.post(run)
+  → listener.onItemClick(item)          ← 回声，又回到起点
+```
+
+载体是 `app/src/leanback/java/com/fongmi/android/tv/ui/custom/FlagSelectionListener.java`：
+它把「自己刚写回的选中位」当成一次新的用户选择又投递了一次。
+
+> 曾尝试在 `onItemClick` 里加 Activity 级身份守卫（字段 `mAppliedFlag`），已**全部回滚**：
+> `onItemClick` 也可能被 `FlagAdapter` 的 `getRoot().setOnClickListener` 直接调用，
+> 以「上次应用的线路身份」为键会把**用户第二次点同一条线路**误吞。
+> 回声识别必须放在唯一能区分「用户派发」与「自身写回再派发」的位置 —— 即 Listener 内部。
+
+### 4.4 补丁（FlagSelectionListener）
+
+新增字段 `private Flag deliveredItem;`，在 `run()` 里按对象身份去重：
+
+```java
+Flag item = pendingItem;
+pendingItem = null;
+int position = view.getSelectedPosition();
+// A newer selection or a refreshed route list makes the queued item stale.
+if (item == null || item == deliveredItem) return;
+if (position >= 0 && position < adapter.getItemCount() && adapter.get(position) == item) {
+    deliveredItem = item;
+    listener.onItemClick(item);
+}
+```
+
+（曾用 `private boolean delivering;` + `try/finally`，**拦不住** —— 回声在下一个 post 周期才到达，
+瞬时布尔标志早已复位。必须用对象身份，且跨帧有效。）
+
+### 4.5 验证
+
+**单测**（`app/src/testLeanback/java/com/fongmi/android/tv/ui/custom/FlagSelectionListenerTest.java` 新增 2 例，共 10 例）：
+
+| 用例 | 断言 |
+|---|---|
+| `repeatedSelectionDispatchOfTheSameRouteIsIgnored` | 同一线路连续 3 次派发只投递 1 次（`[Drive B]`） |
+| `aDifferentRouteStillSwitchesAfterTheEchoGuard` | 守卫不得误伤真实换线（`[Drive B, Drive C]`） |
+
+**双向负向对照**（证明两条断言都真的把关，不是摆设）：
+- 去掉守卫（`item == null || item == deliveredItem` → `item == null`）→ 第 1 例 **FAILED**（实际 `[Drive B, Drive B]`）；
+- 守卫过度拦截（额外加 `|| item.isSelected() == false && deliveredItem != null`）→ 第 2 例 **FAILED**。
+- 两次均已还原，最终形态为 `if (item == null || item == deliveredItem) return;`。
+
+**组合验证**：
+```
+gradlew.bat :app:assembleLeanbackArm64_v8aDebug :app:testMobileArm64_v8aDebugUnitTest :app:testLeanbackArm64_v8aDebugUnitTest --offline --console=plain
+  --tests com.fongmi.android.tv.ui.activity.VideoActivityLayoutTest
+  --tests com.fongmi.android.tv.ui.custom.FlagSelectionListenerTest
+```
+→ `BUILD SUCCESSFUL in 2m 4s`，EXIT=0。`VideoActivityLayoutTest` 157/0、`FlagSelectionListenerTest` 10/0。
+
+**设备实测（emulator-5562，影视原生 `detail_open_mode=2`、`player_auto_play=false`）**：
+
+| 项 | 证据 |
+|---|---|
+| 切线路后焦点稳定不抖 | 切到 LZ线路后 3.5s（`q3.png`）与再 1.2s（`q4.png`）焦点都停在「LZ线路」白框，22Hz 循环消失 |
+| 切线路后 DOWN 能进网格 | `r1.png` 到分段行「1-12」；`r2.png` 焦点进入 **第05集**（此前会跳回左上预览框） |
+| 网格内 LEFT 有效 | `r3.png` 焦点到 第04集 |
+| 网格内 RIGHT 不再跳「简介」 | `r4.png` 回 第05集；`r5.png` 到 第06集 |
+| 空闲无焦点漂移 | 无按键连续两帧 `s1/s2` 一致 |
+| 重新进详情页焦点在播放器 | `s3.png`（《兰香如故》）：焦点在左上角预览框，未自动播放 |
+| 播放器确认键一次全屏+起播 | 按 OK 后 `state=2, speed=0.0` → `state=3, speed=1.0`，position 117508 递增 |
+
+全部临时诊断日志（`EPDBG` / `epDbgName` / `FOCUS` 追踪 / `flagClick in|out` / `focusGrid` / `arrayKey`）
+已清除，`grep EPDBG|epDbgName` 命中数为 **0**。
+（文件中剩余 5 处 `android.util.Log.d("VideoActivity", ...)` 是全限定写法的既有代码，不属于本轮诊断。）
+
+### 4.6 四轮返工的教训
+
+同一处交互连续四次在同一根因附近打转，前三次都是「单测全绿 → 宣布完成」，而缺陷在真实设备上一直存在。
+单测能固定契约，但**不能替代在设备上把用户描述的那串按键真实按一遍**；
+这次能收敛，靠的是把 `logcat` 逐键切片、看到 22Hz 循环这个单测永远看不到的事实。
+
 ## 回滚
 
 - 代码：`git revert <commit>`。

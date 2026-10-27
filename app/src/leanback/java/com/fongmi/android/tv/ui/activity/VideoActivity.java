@@ -527,8 +527,6 @@ private boolean runtimeSourceOnly;
     private boolean mPlaybackPlayerStarted;
     // 用户主动点集（手动播放模式）时临时置位：让本次起播不受「点播自动播放」关闭影响。
     private boolean mExplicitPlaybackRequest;
-    // 手动播放模式下选集还没绑定好时挂起的初始焦点请求，等选集就绪后再落地。
-    private boolean mPendingManualEpisodeFocus;
     // 手动播放模式下是否已经由用户显式起播过；未起播前预览位显示封面。
     private boolean mManualPlaybackStarted;
     private final ShortDramaQueueCoordinator mShortDramaQueue = new ShortDramaQueueCoordinator();
@@ -2606,7 +2604,6 @@ private boolean runtimeSourceOnly;
         clearTmdbDetailViews();
         // 换条目/重新加载：手动播放状态归零，新条目的待播封面与待办焦点重新判定。
         mManualPlaybackStarted = false;
-        mPendingManualEpisodeFocus = false;
         mBinding.scroll.scrollTo(0, 0);
         mBinding.name.setText(getName());
         mBinding.widget.title.setText(getName());
@@ -2881,10 +2878,8 @@ private boolean runtimeSourceOnly;
         if (!mBinding.progressLayout.isContent()) mBinding.progressLayout.showContent();
         if (shouldUseTmdbLayout()) suppressTmdbNativeTextFields();
         if (hiddenByLoading && !mBinding.getRoot().hasFocus()) {
-            // 手动播放模式交给选集；其余模式保持原来的「焦点回预览窗口」。
-            if (isManualPlaybackMode()) mBinding.video.post(this::requestInitialPlaybackFocus);
-            else mBinding.video.post(() -> {
-                if (!mBinding.getRoot().hasFocus()) mBinding.video.requestFocus();
+            mBinding.video.post(() -> {
+                if (!mBinding.getRoot().hasFocus()) requestInitialPlaybackFocus();
             });
         }
         SpiderDebug.log("tmdb-tv", "detail shell revealed while tmdb loads (single loading layer)");
@@ -2908,10 +2903,7 @@ private boolean runtimeSourceOnly;
         mBinding.progressLayout.showContent();
         // 内容从 INVISIBLE 恢复为 VISIBLE 后，焦点需要重新回到播放器。
         // 骨架已经先揭开时不能再抢焦点，否则会把用户已经移到选集上的焦点拽回播放器。
-        if (hiddenByLoading) {
-            if (isManualPlaybackMode()) mBinding.video.post(this::requestInitialPlaybackFocus);
-            else mBinding.video.post(() -> mBinding.video.requestFocus());
-        }
+        if (hiddenByLoading) mBinding.video.post(this::requestInitialPlaybackFocus);
         SpiderDebug.log("tmdb-tv", "detail loading reveal (show content)");
     }
 
@@ -4840,7 +4832,20 @@ private boolean runtimeSourceOnly;
     }
 
     private void onVideo() {
-        if (!isFullscreen()) enterFullscreen();
+        if (isFullscreen()) return;
+        // 手动播放模式（关闭「点播自动播放」）：播放器上的确认键一次完成「全屏 + 起播」，
+        // 与详情页“继续播放”按钮的语义一致 —— 用户不必先全屏、再按一次 OK 才看到画面。
+        // 自动播放开启时保持原行为：只进全屏，起播由播放器自身负责。
+        if (isManualPlaybackMode()) {
+            mExplicitPlaybackRequest = true;
+            mManualPlaybackStarted = true;
+            updateVideoCover();
+        }
+        enterFullscreen();
+        if (isManualPlaybackMode() && player() != null) {
+            if (player().isEmpty()) onRefresh();
+            else if (!player().isPlaying()) onPlay();
+        }
     }
 
     private void onChange() {
@@ -5819,42 +5824,22 @@ private boolean runtimeSourceOnly;
     }
 
     /**
-     * 进入播放页时的初始焦点：手动播放模式交给选集，其余情况沿用原行为交给预览窗口。
+     * 进入播放页时的初始焦点：始终交给预览窗口（与自动播放开启时一致）。
      * <p>
-     * 详情刚绑定时选集适配器可能还是空的，此时先记下待办，等 {@link #setEpisodeAdapter} 把
-     * 选集铺好后再落地 —— 否则会在选集为空的那一刻误回退到预览窗口。
+     * 曾经在手动播放模式下把初始焦点送到选集，但那会让用户按 UP 到播放器后又被拽回去、
+     * 并在切线路后与 RecyclerView 的焦点回收互相拉锯（焦点来回跳）。用户确认的预期是：
+     * 进来仍然是播放器，关闭自动播放时在播放器上按确认键一次性完成「全屏 + 起播」。
      */
     private void requestInitialPlaybackFocus() {
-        if (!isManualPlaybackMode()) {
-            mBinding.video.requestFocus();
-            return;
-        }
-        if (focusInitialEpisode()) return;
-        // 选集未就绪：暂不抢焦点，等选集绑定完成后再交给它。
-        mPendingManualEpisodeFocus = true;
+        mBinding.video.requestFocus();
     }
 
     /**
-     * 把手动播放模式的初始焦点落到当前选中集；选集还没绑定好时返回 false 让调用方回退。
-     */
-    private boolean focusInitialEpisode() {
-        if (mEpisodeAdapter == null || mEpisodeAdapter.getItemCount() == 0) return false;
-        mPendingManualEpisodeFocus = false;
-        int position = Math.max(0, mEpisodeAdapter.getSelectedPosition());
-        scrollToEpisode(position, true);
-        return true;
-    }
-
-    /**
-     * 选集绑定完成后补齐手动播放模式的初始焦点。只在挂起时动作，避免抢走用户已移动的焦点。
+     * 选集绑定完成钩子。初始焦点已固定交给预览窗口（见 {@link #requestInitialPlaybackFocus()}），
+     * 这里保持空实现：手动播放模式不再需要在选集重建后补一次「回焦选集」的动作，
+     * 那正是焦点在播放器与集数按钮之间来回跳的来源。
      */
     private void flushPendingManualEpisodeFocus() {
-        if (!mPendingManualEpisodeFocus) return;
-        if (!isManualPlaybackMode()) {
-            mPendingManualEpisodeFocus = false;
-            return;
-        }
-        focusInitialEpisode();
     }
 
     /**
@@ -5904,9 +5889,7 @@ private boolean runtimeSourceOnly;
         if (!getContent().isEmpty()) mBinding.content.setTag(getContent());
         if (!getPic().isEmpty()) setArtwork(getPic());
         else if (!getWallPic().isEmpty()) setContextWall(getWallPic());
-        // 手动播放模式把初始焦点交给选集；其余模式保持原来的「焦点回预览窗口」。
-        if (isManualPlaybackMode()) requestInitialPlaybackFocus();
-        else mBinding.video.requestFocus();
+        requestInitialPlaybackFocus();
         updateVideoCover();
     }
 
