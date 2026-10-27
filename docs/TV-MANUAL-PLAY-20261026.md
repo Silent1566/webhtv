@@ -115,6 +115,72 @@ ANR 主线程堆栈为 `CustomSeekView.updateProgress` → `MediaController.isPl
 
 另：F 盘曾剩余 0GB 导致 `磁盘空间不足` 编译失败，清理 `app/build/intermediates`、`app/build/tmp` 后恢复。
 
+## 回归修复：切线路后集数分段按钮 LEFT/RIGHT 失效
+
+用户在手动播放功能上线后报告（m01153、m01160）：「集数分组按钮向左和向下无法选到对应的按钮」，
+「播放一段时候后能正常但是刚切换线路后就不行」。
+
+### 现场与取证
+
+- 设备：模拟器 `emulator-5562`（HD1910 / 1920x1080；5561、5560、5554 在验证期间陆续 `mCurrentFocus=null` 死机）。
+- 视图树取证：`adb shell dumpsys activity top`，按缩进维护祖先栈解析 flags
+  （第 3 组首字符为可见性，第 4 组含 `F` 才是 hasFocus，第 5 组为 bounds），
+  脚本 `out/fp.ps1` / `out/st.ps1`。`uiautomator dump` 在该模拟器上经常返回空 focused 节点，不可靠。
+- 稳定复现序列（seq34 / seq36）：进入详情 → UP 到分段行 → UP 到线路行 → RIGHT → OK 切线路 → DOWN 回分段行
+  → LEFT/LEFT/RIGHT 全部纹丝不动（分段行已重建：bounds 宽度由 365 变 383）。
+- 关键教训：截图里白色焦点环会滞后/残留，不能据此判断焦点；必须用 dumpsys。
+  设备启动慢会让整轮按键变成空操作，脚本必须有「等应用拿到窗口焦点」的门禁。
+
+### 根因（探针日志实证）
+
+不是 nextFocus 声明错误，也不是按键没到达分段行。`out/seq35.log` 显示 LEFT 的 ACTION_DOWN 已把选中位改到 1，
+但 25~35ms 后又被复位。`selectEpisodeSegmentPosition` 的调用栈有三条来源、交替约 20Hz：
+
+1. `setUpstreamNativeEpisodeItems → setEpisodeAdapter → onItemClick(Flag) → FlagSelectionListener.run`（线路网格布局驱动）；
+2. `selectEpisodeSegment → onSegmentFocus → ArrayAdapter 的 text OnFocusChangeListener`（分段行子项获焦驱动）；
+3. `selectEpisodeSegment → onChildViewHolderSelected`（分段行 BaseGridView 的 child-selected 监听，注册在 `setRecyclerView`）。
+
+即：线路网格布局 → 重建选集 → 分段行 `setSelectedPosition(2)`；分段行布局时 `BaseGridView.focusToViewInLayout`
+把焦点交回选中子项 2 → 触发 `onSegmentFocus(2)` → `selectEpisodeSegment` → `showEpisodeSegment` →
+`addAll`(`notifyDataSetChanged`) → 整页再布局 → 回到第一步。刚用左右键移动的选中位在这个自激循环里被反复弹回。
+
+### 补丁（app/src/leanback/java/com/fongmi/android/tv/ui/activity/VideoActivity.java）
+
+1. `showEpisodeSegment`：内容相同就直接返回（`isSegmentDisplayed(items)`），切断无意义重建。
+2. `selectEpisodeSegment`：非请求焦点且分段未变时 no-op（`isSegmentContentDisplayed(position)`）。
+3. `selectEpisodeSegmentPosition`：用户正把焦点放在分段行上时，焦点位是权威，重建回调不得改写选中位。
+4. 分段行左右键改为显式接管：`onArrayKey` 的 LEFT/RIGHT 走 `moveArraySelection(±1)`，
+   以真实焦点位（`focusedArrayPosition()`）为准，并用一次性 `OnGlobalLayoutListener` 在布局结束后复核补偿。
+5. 集数网格的焦点校正从「只等一帧」改为持久监听（`mEpisodeGridFocusTarget`）：
+   异步取流/图片加载后的第二次布局会把焦点留给预览框，只等一帧会漏。
+6. 补齐 `episodeHeader` 整条 GONE 时的可达性判断：`isEpisodeFocusTarget` 改用 `isEffectivelyVisible`
+   （逐级检查自身与全部祖先），否则 `findFocusUp/Down` 会把已隐藏的表头工具当成有效邻居。
+7. 手动模式焦点安全网：系统在退出触摸模式（`leaveTouchMode → restoreDefaultFocus`）或 RecyclerView 回收
+   持有焦点的子项时会自行把焦点交回最上方的预览框，声明式 nextFocus 覆盖不到，故在根视图焦点变化时把焦点交回当前选集。
+8. `tryStartFastTmdbPlayback`、`resetDetailForNewIntent` 两处无守卫的 `mBinding.video.requestFocus()` 改为
+   `requestInitialPlaybackFocus()`，换条目/炫彩详情直放路径不再把焦点拽回预览框。
+9. `onDestroy` 注销上述监听。
+
+### 验证（模拟器 emulator-5562）
+
+设置：`detail_open_mode=2`（影视原生）、`player_auto_play=false`。
+
+| 项 | 证据 |
+|---|---|
+| 待播不自动播、焦点在选集 | `state=2`（PAUSED）`speed=0.0`；焦点 `episodeGrid > duration > text` |
+| 预览位显示封面 | `app:id/videoCover` VISIBLE |
+| 点选集直接全屏起播 | 按 OK 后 `state=3` `speed=1.0`，position 258560 → 264562 递增 |
+| 起播后直接全屏、封面隐藏 | `app:id/video` bounds 变 `0,0-1920,1080`，`videoCover` 变 GONE |
+| 切线路后分段行左右可用 | LEFT 272,0-383 → 176,0-256 → 48,0-160；RIGHT 逐格回退 |
+| 切线路后分段行向下可用 | DOWN 落到 `episodeGrid > duration > text` |
+
+单测与构建：`./gradlew.bat :app:testMobileArm64_v8aDebugUnitTest --offline --tests VideoActivityLayoutTest --tests PlayerPlaybackRegressionSourceTest --tests PlayerControlFocusIntegrationTest --tests TmdbDetailActivityLayoutTest :app:assembleLeanbackArm64_v8aDebug -q`
+→ exit 0，无 FAILED。`VideoActivityLayoutTest` 同步新增断言覆盖上述守卫与左右键接管。
+
+自动播放模式回归（`player_auto_play=true`）：进入详情页直接 `state=3` 播放、焦点在 video、`videoCover` GONE，行为未受影响。
+
+临时诊断日志（`FOCUSDBG-TEMP` / `VideoFOCUS` / `debugFocusId` / `MANUALDBG`）已全部移除，最终产物命中数为 0。
+
 ## 回滚
 
 - 代码：`git revert <commit>`。

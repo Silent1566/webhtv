@@ -1550,6 +1550,29 @@ public class VideoActivityLayoutTest {
                 && arrayKeyBody.indexOf("focusEpisodeHeaderTool(View.FOCUS_DOWN)")
                 < arrayKeyBody.indexOf("scrollToEpisode(getSelectedEpisodePosition(mEpisodeAdapter.getItems()), true)"));
         assertTrue("segment focus handoff must preserve history fallback when no episode is marked selected", source.contains("if (requestEpisodeFocus) scrollToEpisode(getSelectedEpisodePosition(mEpisodeAdapter.getItems()), true);"));
+        // 切线路会整体重建分段行，重建后 HorizontalGridView 自身的焦点搜索不再在子项之间移动，
+        // 遥控在分段行按左右没有反应（用户报告"切线路后分组按钮选不到"），必须显式接管左右。
+        assertTrue("segment DPAD left/right must move focus explicitly after the segment row is rebuilt", source.contains("private boolean moveArraySelection(int delta)")
+                && arrayKeyBody.contains("KeyUtil.isLeftKey(event) || KeyUtil.isRightKey(event)")
+                && arrayKeyBody.contains("moveArraySelection(KeyUtil.isLeftKey(event) ? -1 : 1)"));
+        // 分段行会在布局期被 BaseGridView 的 focusToViewInLayout 反复回焦，触发
+        // onSegmentFocus -> selectEpisodeSegment -> showEpisodeSegment -> addAll 的 ~20Hz 自激循环，
+        // 循环里左右键刚移动的选中位会被立刻弹回，因此装载同一段集数必须直接返回。
+        int showSegmentStart = source.indexOf("private void showEpisodeSegment(int position)");
+        assertTrue("segment reload must be idempotent so the layout-driven relayout loop cannot reset the focused range",
+                showSegmentStart >= 0
+                        && source.contains("private boolean isSegmentDisplayed(List<Episode> items)")
+                        && source.indexOf("if (isSegmentDisplayed(items)) return;", showSegmentStart) > showSegmentStart);
+        // 同一条自激循环还会经 selectEpisodeSegment 反复回写选中位，必须整条链路都在状态未变时提前返回，
+        // 否则分段行刚拿到的焦点会在下一帧被 focusToViewInLayout 按旧选中位重新回焦。
+        assertTrue("unchanged segment selection must be a no-op so the layout loop cannot rewrite the selected position",
+                source.contains("position == mBinding.array.getSelectedPosition() && isSegmentContentDisplayed(position)")
+                        && source.contains("private boolean isSegmentContentDisplayed(int position)"));
+        // 线路/选集重建回调只允许在焦点不在分段行时校准选中位，用户正在分段行上操作时以焦点位为准。
+        int segPosStart = source.indexOf("private void selectEpisodeSegmentPosition(int position)");
+        assertTrue("segment position sync must not fight the user while focus is inside the segment row",
+                segPosStart >= 0
+                        && source.indexOf("if (focused >= 0 && focused != position && isFocusInside(mBinding.array)) return;", segPosStart) > segPosStart);
 
         Path arrayAdapterPath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "adapter", "ArrayAdapter.java"));
         String arrayAdapter = new String(Files.readAllBytes(arrayAdapterPath), StandardCharsets.UTF_8);

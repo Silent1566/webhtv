@@ -16,6 +16,7 @@ import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
+import android.view.ViewTreeObserver;
 import android.widget.HorizontalScrollView;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
@@ -489,6 +490,9 @@ private boolean runtimeSourceOnly;
     private Clock mClock;
     private PiP mPiP;
     private View mFocus1;
+    private ViewTreeObserver.OnGlobalLayoutListener mEpisodeGridFocusListener;
+    private int mEpisodeGridFocusTarget = -1;
+    private ViewTreeObserver.OnGlobalLayoutListener mArrayFocusListener;
     private PersonalRecommendationService.RecommendationPage mNativePersonalTmdbPage;
     private PersonalRecommendationService.RecommendationPage mNativePersonalDoubanPage;
     private PersonalRecommendationService.RecommendationPage mNativePersonalAiPage;
@@ -524,6 +528,7 @@ private boolean runtimeSourceOnly;
     private boolean mPendingManualEpisodeFocus;
     // 手动播放模式下是否已经由用户显式起播过；未起播前预览位显示封面。
     private boolean mManualPlaybackStarted;
+    private boolean mManualFocusRedirectPending;
     private final ShortDramaQueueCoordinator mShortDramaQueue = new ShortDramaQueueCoordinator();
     private PlaySpec mShortDramaQueuedSpec;
     private Result mShortDramaQueuedResult;
@@ -1540,6 +1545,22 @@ private boolean runtimeSourceOnly;
         mTmdbEpisodeTimeout = this::showTmdbEpisodeFallback;
         initTmdbMode();
         super.initView(savedInstanceState);
+        // 手动播放模式下焦点属于选集：系统在离开触摸模式（leaveTouchMode -> restoreDefaultFocus）或
+        // RecyclerView 回收持有焦点的子项时，会自行把焦点交回最上方的预览框，声明式 nextFocus 覆盖不到，
+        // 表现为"焦点掉进预览框后遥控再也出不来"。这里只在待播且详情已就绪时把焦点送回选集。
+        mBinding.getRoot().getViewTreeObserver().addOnGlobalFocusChangeListener((oldFocus, newFocus) -> {
+            if (newFocus != mBinding.video || mManualFocusRedirectPending) return;
+            if (!isManualPlaybackMode() || mManualPlaybackStarted || isFullscreen()) return;
+            if (!mBinding.progressLayout.isContent()) return;
+            if (mEpisodeAdapter == null || mEpisodeAdapter.getItemCount() == 0) return;
+            mManualFocusRedirectPending = true;
+            mBinding.video.post(() -> {
+                mManualFocusRedirectPending = false;
+                if (isFinishing() || isDestroyed() || getCurrentFocus() != mBinding.video) return;
+                if (!isManualPlaybackMode() || mManualPlaybackStarted || isFullscreen()) return;
+                focusInitialEpisode();
+            });
+        });
         SpiderDebug.log("video-flow", "initView after playback cost=%dms", System.currentTimeMillis() - start);
         applyPlaybackOverlay();
         mFrameParams = mBinding.video.getLayoutParams();
@@ -2261,7 +2282,7 @@ private boolean runtimeSourceOnly;
         mBinding.widget.title.setSelected(true);
         setText(item);
         hydrateFastTmdbPlaybackDetail(item);
-        mBinding.video.requestFocus();
+        requestInitialPlaybackFocus();
         showProgress();
         showFastTmdbPlaybackContent();
         SpiderDebug.log("video-flow", "fast tmdb playback reveal cost=%dms key=%s episode=%s", System.currentTimeMillis() - start, getKey(), getIntentPlaybackEpisodeName());
@@ -2603,7 +2624,8 @@ private boolean runtimeSourceOnly;
         mBinding.scroll.scrollTo(0, 0);
         mBinding.name.setText(getName());
         mBinding.widget.title.setText(getName());
-        mBinding.video.requestFocus();
+        // 手动播放模式下焦点属于选集，不能落回预览框（换条目后仍要能直接选集起播）。
+        requestInitialPlaybackFocus();
         updateVideoCover();
         if (service() != null) {
             player().reset();
@@ -4106,13 +4128,7 @@ private boolean runtimeSourceOnly;
                 } else {
                     mBinding.episodeGrid.scrollToPosition(position);
                 }
-                if (!requestFocus) return;
-                mBinding.episodeGrid.post(() -> {
-                    if (isFinishing() || isDestroyed()) return;
-                    RecyclerView.ViewHolder holder = mBinding.episodeGrid.findViewHolderForAdapterPosition(position);
-                    if (holder != null) holder.itemView.requestFocus();
-                    else mBinding.episodeGrid.requestFocus();
-                });
+                if (requestFocus) requestEpisodeGridFocus(position);
             });
         } else {
             mBinding.episode.post(() -> {
@@ -4229,7 +4245,23 @@ private boolean runtimeSourceOnly;
     }
 
     private boolean isEpisodeFocusTarget(View view) {
-        return view != null && isVisible(view) && (view.isFocusable() || view.hasFocusable());
+        return view != null && isEffectivelyVisible(view) && (view.isFocusable() || view.hasFocusable());
+    }
+
+    /**
+     * 自身与全部祖先都必须是 VISIBLE。
+     * 只看自身会误判：upstream-native 选集模式会把整条 episodeHeader（选集·第 N 季 / 倒序 / 列表 / 原文件名）
+     * 置为 GONE，而内部子项自身仍是 VISIBLE，于是 findFocusUp/findFocusDown 把它当成有效邻居，
+     * 声明式 nextFocusDown 与 requestFocus 全部指向不可达目标 —— 表现为切线路后分段行“向下/向左选不到、焦点丢失”。
+     */
+    private boolean isEffectivelyVisible(View view) {
+        View current = view;
+        while (current != null) {
+            if (current.getVisibility() != View.VISIBLE) return false;
+            ViewParent parent = current.getParent();
+            current = parent instanceof View ? (View) parent : null;
+        }
+        return true;
     }
 
     private List<Integer> getEpisodeFocusOrders() {
@@ -4388,7 +4420,84 @@ private boolean runtimeSourceOnly;
         return false;
     }
 
+    /**
+     * 分段行（倒序 / 分段按钮）的左右移动必须显式接管：切线路会整体重建分段行
+     * （{@code ArrayAdapter.addAll} -> notifyDataSetChanged），重建后 HorizontalGridView 的
+     * 焦点搜索不再在子项之间移动，遥控在分段行按左右没有反应（用户报告"切线路后分组按钮选不到"）。
+     * 注意不能用 {@code getSelectedPosition()} 当当前焦点：重建后它会弹回旧值
+     * （实测已移动到位置 1，松开按键又回到 2），因此以真正持有焦点的子项为基准。
+     */
+    private boolean moveArraySelection(int delta) {
+        if (delta == 0) return false;
+        int count = mArrayAdapter.getItemCount();
+        if (count <= 0) return false;
+        int current = focusedArrayPosition();
+        if (current < 0) current = mBinding.array.getSelectedPosition();
+        int target = Math.max(0, Math.min(count - 1, current + delta));
+        if (target == current) return false;
+        requestArrayFocus(target);
+        return true;
+    }
+
+    /**
+     * 分段行中真正持有焦点的子项位置（按子视图下标），焦点不在分段行时返回 -1。
+     */
+    private int focusedArrayPosition() {
+        View focus = getCurrentFocus();
+        while (focus != null) {
+            ViewParent parent = focus.getParent();
+            if (parent == mBinding.array) return mBinding.array.indexOfChild(focus);
+            focus = parent instanceof View ? (View) parent : null;
+        }
+        return -1;
+    }
+
+    /**
+     * 把焦点移到分段行的指定位置。分段行重建后自身会把选中位置弹回旧值，因此布局结束后再校正一次。
+     */
+    private void requestArrayFocus(int position) {
+        if (isFinishing() || isDestroyed()) return;
+        cancelPendingArrayFocus();
+        applyArrayFocus(position);
+        ViewTreeObserver observer = mBinding.array.getViewTreeObserver();
+        if (!observer.isAlive()) return;
+        mArrayFocusListener = new ViewTreeObserver.OnGlobalLayoutListener() {
+            @Override
+            public void onGlobalLayout() {
+                cancelPendingArrayFocus();
+                if (isFinishing() || isDestroyed()) return;
+                if (focusedArrayPosition() == position) return;
+                // 焦点已经离开分段行（用户继续向下/向上）时不要抢回来。
+                if (!isFocusInside(mBinding.array)) return;
+                applyArrayFocus(position);
+            }
+        };
+        observer.addOnGlobalLayoutListener(mArrayFocusListener);
+    }
+
+    private void applyArrayFocus(int position) {
+        mArrayAdapter.setSelectedPosition(position);
+        mBinding.array.setSelectedPosition(position);
+        View child = mBinding.array.getChildAt(position);
+        if (child != null && child.requestFocus()) return;
+        mBinding.array.post(() -> {
+            if (isFinishing() || isDestroyed()) return;
+            View next = mBinding.array.getChildAt(position);
+            if (next != null) next.requestFocus();
+        });
+    }
+
+    private void cancelPendingArrayFocus() {
+        if (mArrayFocusListener == null) return;
+        ViewTreeObserver observer = mBinding.array.getViewTreeObserver();
+        if (observer.isAlive()) observer.removeOnGlobalLayoutListener(mArrayFocusListener);
+        mArrayFocusListener = null;
+    }
+
     private boolean onArrayKey(KeyEvent event) {
+        if (KeyUtil.isActionDown(event) && (KeyUtil.isLeftKey(event) || KeyUtil.isRightKey(event))) {
+            return moveArraySelection(KeyUtil.isLeftKey(event) ? -1 : 1);
+        }
         if (!KeyUtil.isActionDown(event) || !KeyUtil.isDownKey(event)) return false;
         int position = mBinding.array.getSelectedPosition();
         if (position <= 1) return false;
@@ -4459,7 +4568,7 @@ private boolean runtimeSourceOnly;
         int target = findFocusUp(episodeFocusIndex(episodeGridMode ? R.id.episodeGrid : R.id.episode));
         if (target == 0) return false;
         View view = findViewById(target);
-        if (view == null || view.getVisibility() != View.VISIBLE) return false;
+        if (!isEpisodeFocusTarget(view)) return false;
         view.requestFocus();
         return true;
     }
@@ -4473,6 +4582,61 @@ private boolean runtimeSourceOnly;
             if (next != null) next.itemView.requestFocus();
         });
         return true;
+    }
+
+    /**
+     * 选集网格会随切线路/切分段整体重建，RecyclerView 在布局过程中回收仍持有焦点的子项，
+     * 焦点被 rootViewRequestFocus() 重新搜索并落到最上方的预览框，之后遥控无法再离开
+     * （用户报告"分组按钮向下/向左选不到"）。这里在布局结束后再校正一次。
+     */
+    private void requestEpisodeGridFocus(int position) {
+        if (isFinishing() || isDestroyed()) return;
+        mEpisodeGridFocusTarget = position;
+        ensureEpisodeGridFocusListener();
+        focusEpisodeGridPosition(position);
+    }
+
+    /**
+     * 持续监听布局结束而不是只等一帧：选集重建时焦点可能在第一次布局之后才被
+     * rootViewRequestFocus() 交给预览框（异步取流、图片加载都会再触发布局），
+     * 一次性回调会漏掉这种情况。目标位置在焦点真正进入选集网格、
+     * 或用户把焦点移到别处时立即失效，不会覆盖后续导航。
+     */
+    private void ensureEpisodeGridFocusListener() {
+        if (mEpisodeGridFocusListener != null) return;
+        ViewTreeObserver observer = mBinding.episodeGrid.getViewTreeObserver();
+        if (!observer.isAlive()) return;
+        mEpisodeGridFocusListener = () -> {
+            int target = mEpisodeGridFocusTarget;
+            if (target < 0) {
+                cancelPendingEpisodeGridFocus();
+                return;
+            }
+            if (isFinishing() || isDestroyed() || isFullscreen()) {
+                cancelPendingEpisodeGridFocus();
+                return;
+            }
+            if (isFocusInside(mBinding.episodeGrid)) {
+                cancelPendingEpisodeGridFocus();
+                return;
+            }
+            View focus = getCurrentFocus();
+            // 焦点已在其它行（用户自己导航过去）时不再抢回来。
+            if (focus != null && !isFocusInside(mBinding.video)) {
+                cancelPendingEpisodeGridFocus();
+                return;
+            }
+            focusEpisodeGridPosition(target);
+        };
+        observer.addOnGlobalLayoutListener(mEpisodeGridFocusListener);
+    }
+
+    private void cancelPendingEpisodeGridFocus() {
+        mEpisodeGridFocusTarget = -1;
+        if (mEpisodeGridFocusListener == null) return;
+        ViewTreeObserver observer = mBinding.episodeGrid.getViewTreeObserver();
+        if (observer.isAlive()) observer.removeOnGlobalLayoutListener(mEpisodeGridFocusListener);
+        mEpisodeGridFocusListener = null;
     }
 
     @Override
@@ -4500,13 +4664,35 @@ private boolean runtimeSourceOnly;
 
     private void selectEpisodeSegment(int position, boolean requestEpisodeFocus) {
         if (position <= 1) return;
+        // 分段位与内容都没变时必须是纯 no-op：selectEpisodeSegmentPosition 里的
+        // BaseGridView.setSelectedPosition / scrollToPosition 会再触发一次布局与选中回调，
+        // 布局里派发的 selectEpisodeSegment(position) 又会回到这里，形成持续自激循环
+        // （实测约 20Hz，日志里 onSegmentFocus / onChildViewHolderSelected /
+        // FlagSelectionListener 三路交替），把分段行刚被左右键移动的选中位冲回原分段。
+        if (!requestEpisodeFocus && position == mBinding.array.getSelectedPosition() && isSegmentContentDisplayed(position)) return;
         selectEpisodeSegmentPosition(position);
         showEpisodeSegment(position);
         if (requestEpisodeFocus) scrollToEpisode(getSelectedEpisodePosition(mEpisodeAdapter.getItems()), true);
     }
 
+    // 该分段位置对应的集数是否已经在选集适配器里展示
+    private boolean isSegmentContentDisplayed(int position) {
+        if (mArrayAdapter == null || getFlag() == null) return false;
+        List<Episode> episodes = getFlag().getEpisodes();
+        if (episodes.isEmpty()) return false;
+        int start = mArrayAdapter.getStart(position);
+        if (start < 0 || start >= episodes.size()) return false;
+        int end = Math.min(start + getEpisodeSegmentSize(episodes.size()), episodes.size());
+        return isSegmentDisplayed(episodes.subList(start, end));
+    }
+
     private void selectEpisodeSegmentPosition(int position) {
         if (position <= 1 || position >= mArrayAdapter.getItemCount()) return;
+        // 用户正在分段行上移动时，焦点位就是权威选中位；此时不要再被线路/选集重建回调
+        // 默认段位拽回去，否则刚按下的左右键会在下一帧被 BaseGridView 的
+        // focusToViewInLayout 按选中位重新回焦，表现为「分段按钮左右不动」。
+        int focused = focusedArrayPosition();
+        if (focused >= 0 && focused != position && isFocusInside(mBinding.array)) return;
         mArrayAdapter.setSelectedPosition(position);
         mBinding.array.setSelectedPosition(position);
         mBinding.array.scrollToPosition(position);
@@ -4520,9 +4706,28 @@ private boolean runtimeSourceOnly;
         int selectedPosition = getSelectedEpisodePosition(episodes);
         int positionInSegment = selectedPosition >= start && selectedPosition < end ? selectedPosition - start : 0;
         List<Episode> items = episodes.subList(start, end);
+        // 分段内容没变时绝不能再 addAll：分段行在布局期间会被 BaseGridView 的
+        // focusToViewInLayout 反复回焦，触发 onSegmentFocus -> selectEpisodeSegment ->
+        // showEpisodeSegment -> addAll(notifyDataSetChanged) -> 再次布局，形成自激循环
+        // （实测约 20Hz，且 flag 网格随之重排会再经 FlagSelectionListener 触发一次
+        // onItemClick(Flag) -> setEpisodeAdapter -> selectEpisodeSegmentPosition）。
+        // 循环里刚用左右键移动的选中位会在 25~35ms 内被弹回原分段，
+        // 表现为「切线路后分段按钮左右选不到」。内容一致就直接返回，从源头断开循环。
+        if (isSegmentDisplayed(items)) return;
         mEpisodeAdapter.addAll(items);
         mEpisodeGridAdapter.addAll(items);
         scrollToEpisode(positionInSegment);
+    }
+
+    /**
+     * 当前选集适配器是否已经在展示同一段集数（按首尾集的同一实例比较：
+     * 这些 Episode 都是同一 Flag 里 subList 出来的对象，倒序 / 换线路 / 换详情都会让首尾不同）。
+     */
+    private boolean isSegmentDisplayed(List<Episode> items) {
+        if (items.isEmpty()) return false;
+        List<Episode> shown = mEpisodeAdapter.getItems();
+        if (shown == null || shown.size() != items.size()) return false;
+        return shown.get(0) == items.get(0) && shown.get(shown.size() - 1) == items.get(items.size() - 1);
     }
 
     private boolean shouldEnterFullscreen(Episode item) {
@@ -8918,6 +9123,8 @@ private boolean runtimeSourceOnly;
     @Override
     protected void onDestroy() {
         invalidateShortDramaQueue("destroy");
+        cancelPendingEpisodeGridFocus();
+        cancelPendingArrayFocus();
         cancelTvTouch();
         mIntroSkipPlayback.reset();
         cancelAiSeasonAnalysis(false);
