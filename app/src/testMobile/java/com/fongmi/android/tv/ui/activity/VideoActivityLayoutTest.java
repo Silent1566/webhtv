@@ -1583,6 +1583,24 @@ public class VideoActivityLayoutTest {
                         && episodeKeyBody.contains("TmdbEpisodeGridPolicy.horizontalFocusTarget(position, spanCount, mEpisodeGridAdapter.getItemCount(), KeyUtil.isRightKey(event))")
                         && episodeKeyBody.contains("if (target == TmdbEpisodeGridPolicy.NO_FOCUS_TARGET) return true;"));
 
+        // 焦点校正只能补「焦点真的丢了」这一种情况。曾经允许「焦点落到预览框就抢回选集」，
+        // 与 RecyclerView 回收后 rootViewRequestFocus 把焦点交回预览框互相拉锯，
+        // 用户实测：切线路后向下到集数按钮，焦点在播放器和集数按钮之间来回跳。
+        int gridListenerStart = source.indexOf("private void ensureEpisodeGridFocusListener()");
+        int gridListenerEnd = gridListenerStart >= 0 ? source.indexOf("\n    private ", gridListenerStart + 1) : -1;
+        String gridListenerBody = gridListenerStart >= 0 && gridListenerEnd > gridListenerStart
+                ? source.substring(gridListenerStart, gridListenerEnd) : "";
+        assertTrue("episode focus correction must give up as soon as any view holds focus, so it never fights the player window",
+                gridListenerBody.contains("if (getCurrentFocus() != null) {")
+                        && gridListenerBody.contains("cancelPendingEpisodeGridFocus();")
+                        && !gridListenerBody.contains("isFocusInside(mBinding.video)"));
+        assertTrue("episode focus correction must be bounded instead of acting as a permanent watchdog",
+                gridListenerBody.contains("EPISODE_GRID_FOCUS_MAX_ATTEMPTS"));
+        // 全局焦点看门狗必须不存在：它会在任何时刻把焦点从播放器拽回选集。
+        assertFalse("no root focus watchdog may reclaim focus from the player window",
+                source.contains("addOnGlobalFocusChangeListener")
+                        && source.contains("mManualFocusRedirectPending"));
+
         Path arrayAdapterPath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "adapter", "ArrayAdapter.java"));
         String arrayAdapter = new String(Files.readAllBytes(arrayAdapterPath), StandardCharsets.UTF_8);
         Path segmentSelectorPath = findLeanbackResPath().resolve(Path.of("drawable", "selector_video_item.xml"));

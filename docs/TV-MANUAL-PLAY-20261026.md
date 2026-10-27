@@ -240,6 +240,65 @@ ANR 主线程堆栈为 `CustomSeekView.updateProgress` → `MediaController.isPl
 结论以单测 + 源码契约 + 上一轮同链路（`focusEpisodeGridPosition` 已被 UP/DOWN 验证可用）为准。
 未完成部分已明确记录，未做任何「已验证」的虚假声明。
 
+## 回归修复 3：焦点在播放器与集数按钮之间来回跳（撤销过度激进的焦点看门狗）
+
+用户报告（附截图）：切线路后向下移动到集数按钮，焦点会在**播放器和集数按钮之间来回跳**，
+并质疑「播放器聚焦后为什么要跳到集数按钮上？顶多是进入播放页默认焦点在当前集数吧？」
+
+这个质疑是对的，是我前一轮修得过头了。
+
+### 根因：两处「焦点看门狗」越权
+
+1. **根视图全局焦点看门狗**（`initView` 里的 `addOnGlobalFocusChangeListener`）：
+   只要`newFocus == mBinding.video` 就 `post` 一次 `focusInitialEpisode()` 把焦点拽回选集。
+   它**没有区分「进场初始焦点」和「用户主动移到播放器」**，所以用户按 UP 到播放器后
+   立刻被抢回选集，形成来回跳。
+2. **集数网格布局监听器**（`ensureEpisodeGridFocusListener`）同样过宽：
+   原条件 `if (focus != null && !isFocusInside(mBinding.video)) return;`
+   —— 焦点在**预览框**时不算「已在其它行」，于是每次布局都重新抢回选集。
+   RecyclerView 回收持有焦点的子项时 `rootViewRequestFocus()` 会把焦点交回预览框，
+   两者互相拉锯，正好是用户看到的闪烁。
+
+根子在于：用户的需求只是「**进场时**默认焦点落在当前集」，不是「焦点永远不许停在播放器」。
+我把一次性行为写成了常驻看门狗。
+
+### 补丁
+
+1. **删除**根视图全局焦点看门狗及其 `mManualFocusRedirectPending` 字段。进场初始焦点由
+   `requestInitialPlaybackFocus()` 在 `setDetail` / `revealShellWhileTmdbLoads` / `revealTmdbDetail` /
+   `showInitialPreview` 四处一次性决定，不需要常驻监听。
+2. **收窄** `ensureEpisodeGridFocusListener`：只在 `getCurrentFocus() == null`（焦点真的丢了）时补偿，
+   一旦焦点落在任何控件（含预览框）就 `cancelPendingEpisodeGridFocus()` 交还控制权；
+   并加 `EPISODE_GRID_FOCUS_MAX_ATTEMPTS = 3` 上限，彻底杜绝长期看门狗。
+
+### 行为对照
+
+| 场景 | 修复前（本轮 bug） | 修复后 |
+|---|---|---|
+| 进入播放页（手动模式） | 焦点在选集 | 焦点在选集（不变） |
+| 用户 UP 到播放器 | **被拽回选集** | 焦点留在播放器 |
+| 切线路后 DOWN 到集数 | **来回跳** | 焦点稳定停在集数按钮 |
+| 预览框意外获焦 | 被反复抢走 | 保持系统赋予的焦点，不再拉锯 |
+
+### 验证
+
+单测 `VideoActivityLayoutTest` 新增两条契约：
+- `episode focus correction must give up as soon as any view holds focus, so it never fights the player window`
+  —— 要求方法体含 `if (getCurrentFocus() != null) {` 且**不含** `isFocusInside(mBinding.video)`；
+- `episode focus correction must be bounded instead of acting as a permanent watchdog` —— 要求含尝试次数上限；
+- `no root focus watchdog may reclaim focus from the player window` —— 要求全局看门狗与
+  `mManualFocusRedirectPending` 都不存在。
+
+组合验证：`assembleLeanbackArm64_v8aDebug` + `testMobileArm64_v8aDebugUnitTest`
+（VideoActivityLayoutTest 157/0、TmdbEpisodeGridPolicyTest 9/0）→ `BUILD SUCCESSFUL`，EXIT=0。
+
+**负向对照**：把监听器临时改回旧的 `if (focus != null && !isFocusInside(mBinding.video)) return;`，
+`VideoActivityLayoutTest` 立刻 `FAILED`，报错正是新增断言
+`episode focus correction must give up as soon as any view holds focus...`，
+证明断言真的在管这件事，而不是摆设。随后已还原为正确实现并复跑全绿。
+
+设备端复测同样未完成（5561 仍受宿主机 8 台模拟器争抢，`loadavg` 6~8）。
+
 ## 回滚
 
 - 代码：`git revert <commit>`。

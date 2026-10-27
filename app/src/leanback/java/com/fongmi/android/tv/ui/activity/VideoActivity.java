@@ -492,6 +492,9 @@ private boolean runtimeSourceOnly;
     private View mFocus1;
     private ViewTreeObserver.OnGlobalLayoutListener mEpisodeGridFocusListener;
     private int mEpisodeGridFocusTarget = -1;
+    // 焦点校正的尝试次数上限：只补偿「进场时焦点丢失」这一种情况，冲击几次就放手。
+    private static final int EPISODE_GRID_FOCUS_MAX_ATTEMPTS = 3;
+    private int mEpisodeGridFocusAttempts;
     private ViewTreeObserver.OnGlobalLayoutListener mArrayFocusListener;
     private PersonalRecommendationService.RecommendationPage mNativePersonalTmdbPage;
     private PersonalRecommendationService.RecommendationPage mNativePersonalDoubanPage;
@@ -528,7 +531,6 @@ private boolean runtimeSourceOnly;
     private boolean mPendingManualEpisodeFocus;
     // 手动播放模式下是否已经由用户显式起播过；未起播前预览位显示封面。
     private boolean mManualPlaybackStarted;
-    private boolean mManualFocusRedirectPending;
     private final ShortDramaQueueCoordinator mShortDramaQueue = new ShortDramaQueueCoordinator();
     private PlaySpec mShortDramaQueuedSpec;
     private Result mShortDramaQueuedResult;
@@ -1545,22 +1547,6 @@ private boolean runtimeSourceOnly;
         mTmdbEpisodeTimeout = this::showTmdbEpisodeFallback;
         initTmdbMode();
         super.initView(savedInstanceState);
-        // 手动播放模式下焦点属于选集：系统在离开触摸模式（leaveTouchMode -> restoreDefaultFocus）或
-        // RecyclerView 回收持有焦点的子项时，会自行把焦点交回最上方的预览框，声明式 nextFocus 覆盖不到，
-        // 表现为"焦点掉进预览框后遥控再也出不来"。这里只在待播且详情已就绪时把焦点送回选集。
-        mBinding.getRoot().getViewTreeObserver().addOnGlobalFocusChangeListener((oldFocus, newFocus) -> {
-            if (newFocus != mBinding.video || mManualFocusRedirectPending) return;
-            if (!isManualPlaybackMode() || mManualPlaybackStarted || isFullscreen()) return;
-            if (!mBinding.progressLayout.isContent()) return;
-            if (mEpisodeAdapter == null || mEpisodeAdapter.getItemCount() == 0) return;
-            mManualFocusRedirectPending = true;
-            mBinding.video.post(() -> {
-                mManualFocusRedirectPending = false;
-                if (isFinishing() || isDestroyed() || getCurrentFocus() != mBinding.video) return;
-                if (!isManualPlaybackMode() || mManualPlaybackStarted || isFullscreen()) return;
-                focusInitialEpisode();
-            });
-        });
         SpiderDebug.log("video-flow", "initView after playback cost=%dms", System.currentTimeMillis() - start);
         applyPlaybackOverlay();
         mFrameParams = mBinding.video.getLayoutParams();
@@ -4599,15 +4585,17 @@ private boolean runtimeSourceOnly;
     private void requestEpisodeGridFocus(int position) {
         if (isFinishing() || isDestroyed()) return;
         mEpisodeGridFocusTarget = position;
+        mEpisodeGridFocusAttempts = 0;
         ensureEpisodeGridFocusListener();
         focusEpisodeGridPosition(position);
     }
 
     /**
-     * 持续监听布局结束而不是只等一帧：选集重建时焦点可能在第一次布局之后才被
-     * rootViewRequestFocus() 交给预览框（异步取流、图片加载都会再触发布局），
-     * 一次性回调会漏掉这种情况。目标位置在焦点真正进入选集网格、
-     * 或用户把焦点移到别处时立即失效，不会覆盖后续导航。
+     * 焦点校正监听。只在「焦点真的丢了」（getCurrentFocus() == null）时补偿，
+     * 一旦焦点落在任何控件（包括预览框）上就立刻注销 —— 校正的目的是把
+     * 进场初始焦点送到当前集，不是长期看门狗。之前允许「焦点在预览框就抢回选集」，
+     * 与 RecyclerView 回收后 rootViewRequestFocus 把焦点交回预览框互相拉锯，
+     * 表现为焦点在播放器和集数按钮之间来回跳（用户报告）。
      */
     private void ensureEpisodeGridFocusListener() {
         if (mEpisodeGridFocusListener != null) return;
@@ -4615,11 +4603,7 @@ private boolean runtimeSourceOnly;
         if (!observer.isAlive()) return;
         mEpisodeGridFocusListener = () -> {
             int target = mEpisodeGridFocusTarget;
-            if (target < 0) {
-                cancelPendingEpisodeGridFocus();
-                return;
-            }
-            if (isFinishing() || isDestroyed() || isFullscreen()) {
+            if (target < 0 || isFinishing() || isDestroyed() || isFullscreen()) {
                 cancelPendingEpisodeGridFocus();
                 return;
             }
@@ -4627,9 +4611,13 @@ private boolean runtimeSourceOnly;
                 cancelPendingEpisodeGridFocus();
                 return;
             }
-            View focus = getCurrentFocus();
-            // 焦点已在其它行（用户自己导航过去）时不再抢回来。
-            if (focus != null && !isFocusInside(mBinding.video)) {
+            // 焦点已经在任意控件上，说明用户或系统已经安排好焦点：交还控制权，
+            // 绝不把它从预览框或别的行拽回选集。
+            if (getCurrentFocus() != null) {
+                cancelPendingEpisodeGridFocus();
+                return;
+            }
+            if (++mEpisodeGridFocusAttempts > EPISODE_GRID_FOCUS_MAX_ATTEMPTS) {
                 cancelPendingEpisodeGridFocus();
                 return;
             }
@@ -4640,6 +4628,7 @@ private boolean runtimeSourceOnly;
 
     private void cancelPendingEpisodeGridFocus() {
         mEpisodeGridFocusTarget = -1;
+        mEpisodeGridFocusAttempts = 0;
         if (mEpisodeGridFocusListener == null) return;
         ViewTreeObserver observer = mBinding.episodeGrid.getViewTreeObserver();
         if (observer.isAlive()) observer.removeOnGlobalLayoutListener(mEpisodeGridFocusListener);
