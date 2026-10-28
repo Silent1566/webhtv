@@ -49,6 +49,12 @@ public final class ExoCompressedAudioDirectPolicy
     private static final long OFFLOAD_STALL_WINDOW_MS = 2_000;
     private static final long PCM_CONFIRMATION_MS = 2_000;
     static final long STARTUP_STALL_MS = 800;
+    /**
+     * How long a vendor output without readable buffer metrics may accept payload while its
+     * playback head stays at zero before it is treated as a startup stall. Such an output cannot be
+     * cross-checked against a start threshold, so it gets a longer window than the threshold path.
+     */
+    static final long ZERO_METRIC_STARTUP_STALL_MS = 1_200;
     private static final long STARTUP_AUDIO_US = 200_000;
     private static AudioDeviceCallback processDeviceCallback;
 
@@ -1037,9 +1043,15 @@ public final class ExoCompressedAudioDirectPolicy
         }
 
         private boolean isStartupStalled() {
+            // Some vendor tracks report capacity/size/threshold as zero, which is the only evidence a
+            // start threshold can be compared against. Accepted payload with a playback head that
+            // never leaves zero is the same conclusion, so a zero-metric output is judged on that
+            // instead of being left unprobed until the generic stuck-playing timeout fires.
+            boolean metricsAvailable = startupBuffer.effectiveThresholdBytes() > 0;
             if (!playing || startupComplete || format == null || lastPositionUs != 0
-                    || !acceptedData || startupBuffer.effectiveThresholdBytes() == 0
-                    || acceptedBytes < startupBuffer.effectiveThresholdBytes()) {
+                    || !acceptedData || acceptedBytes <= 0
+                    || (metricsAvailable
+                    && acceptedBytes < startupBuffer.effectiveThresholdBytes())) {
                 startupWindowAtMs = C.TIME_UNSET;
                 return false;
             }
@@ -1050,7 +1062,10 @@ public final class ExoCompressedAudioDirectPolicy
                 startupRoute = environment.actualRoute(raw);
                 return false;
             }
-            if (nowMs - startupWindowAtMs < STARTUP_STALL_MS) return false;
+            if (nowMs - startupWindowAtMs
+                    < (metricsAvailable ? STARTUP_STALL_MS : ZERO_METRIC_STARTUP_STALL_MS)) {
+                return false;
+            }
             // Query the raw head and route only at the decision boundary, not every render.
             // A working head with stale timestamp feedback must not be replayed as silent audio.
             long head = environment.rawPlaybackHead(raw);
@@ -1066,8 +1081,18 @@ public final class ExoCompressedAudioDirectPolicy
             }
             // Re-read the real threshold: routing/HAL changes can alter it after construction.
             StartupBuffer current = environment.startupBuffer(raw);
-            if (current.effectiveThresholdBytes() == 0
-                    || acceptedBytes < current.effectiveThresholdBytes()) {
+            if (current.effectiveThresholdBytes() == 0) {
+                if (!metricsAvailable) {
+                    // Consistently unreadable metrics: accepted payload plus a head pinned at zero is
+                    // the whole verdict, so report it instead of waiting for the generic timeout.
+                    routeAtStall = route;
+                    return true;
+                }
+                startupBuffer = current;
+                startupWindowAtMs = C.TIME_UNSET;
+                return false;
+            }
+            if (acceptedBytes < current.effectiveThresholdBytes()) {
                 startupBuffer = current;
                 startupWindowAtMs = C.TIME_UNSET;
                 return false;
