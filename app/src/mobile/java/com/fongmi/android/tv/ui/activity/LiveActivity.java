@@ -302,6 +302,12 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
             public String getTitle() {
                 return mChannel == null ? "" : mChannel.getName();
             }
+
+            @Override
+            public boolean isFullscreen() {
+                // PiP 小窗不算全屏：媒体徽标只在真全屏显示。
+                return !isEmbeddedLiveUi() && !isInPictureInPictureMode();
+            }
         }, 12f);
         setVideoView();
         setNavigation();

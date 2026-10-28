@@ -255,8 +255,12 @@ public class PlayerDisplaySettingSyncTest {
 
         int checked = setting.indexOf("public static boolean[] getDisplayChecked()");
         String checkedExpr = setting.substring(checked, setting.indexOf(';', checked));
-        assertTrue("the屏显设置 media item must read the persistent toggle, not the master switch",
-                checkedExpr.contains("isDisplayMediaBadgesPersistent()"));
+        int masterSwitch = checkedExpr.indexOf("isDisplayMediaBadges()");
+        int persistentToggle = checkedExpr.indexOf("isDisplayMediaBadgesPersistent()");
+        assertTrue("屏显设置第 8 位必须是「媒体信息总开关 AND 常驻开关」：两者以 && 相连且总开关在前，"
+                        + "实际 masterSwitch=" + masterSwitch + "、persistentToggle=" + persistentToggle,
+                masterSwitch >= 0 && persistentToggle >= 0 && masterSwitch < persistentToggle
+                        && checkedExpr.contains("isDisplayMediaBadges() && isDisplayMediaBadgesPersistent()"));
 
         int putChecked = setting.indexOf("public static void putDisplayChecked(boolean[] checked)");
         String putBody = setting.substring(putChecked, setting.indexOf("\n    }", putChecked));
@@ -269,6 +273,112 @@ public class PlayerDisplaySettingSyncTest {
 
         String backup = read(mainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "bean", "Backup.java")));
         assertTrue("the persistent toggle must be part of the backup set", backup.contains("player_osd_media_badges_persist"));
+    }
+
+    /**
+     * 拆分前 {@code player_osd_media_badges} 就是「常驻显示」的唯一键：老用户升级后新键缺失，
+     * 必须在读到新键之前把旧键值抄一次，否则常驻会静默降级成「只在控制栏唤醒时出现」。
+     * 同时锁住控制栏布局监听必须在 release() 时注销，以及徽标方法对空视图的判空。
+     */
+    @Test
+    public void legacyBadgeUpgradeKeepsPersistentDisplayAndReleasesTheBarListener() throws Exception {
+        String setting = read(mainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "setting", "PlayerSetting.java")));
+        int persistent = setting.indexOf("public static boolean isDisplayMediaBadgesPersistent()");
+        assertTrue("PlayerSetting 缺少 isDisplayMediaBadgesPersistent()", persistent >= 0);
+        String persistentBody = setting.substring(persistent, setting.indexOf("\n    }", persistent));
+        int call = persistentBody.indexOf("migrateMediaBadgePersist();");
+        String callStatement = call < 0 ? "" : persistentBody.substring(persistentBody.lastIndexOf('\n', call) + 1, persistentBody.indexOf('\n', call)).trim();
+        assertTrue("常驻开关的方法体必须真的执行迁移语句，被注释掉或无人调用的迁移都算退回原样",
+                "migrateMediaBadgePersist();".equals(callStatement));
+
+        int migrate = setting.indexOf("private static void migrateMediaBadgePersist()");
+        assertTrue("PlayerSetting 缺少 migrateMediaBadgePersist()", migrate >= 0);
+        String migrateBody = setting.substring(migrate, setting.indexOf("\n    }", migrate));
+        int containsKey = migrateBody.indexOf("Prefers.contains(KEY_DISPLAY_MEDIA_BADGES_PERSIST)");
+        int putKey = migrateBody.indexOf("Prefers.put(KEY_DISPLAY_MEDIA_BADGES_PERSIST");
+        assertTrue("迁移必须先用 contains 判空再写入，反过来会让每次读取都覆盖用户值",
+                containsKey > 0 && putKey > containsKey);
+        assertTrue("迁移必须把旧键值抄到新键",
+                migrateBody.contains("Prefers.put(KEY_DISPLAY_MEDIA_BADGES_PERSIST, Prefers.getBoolean(KEY_DISPLAY_MEDIA_BADGES))"));
+
+        Path prefers = catvodJavaPath().resolve(Path.of("com", "github", "catvod", "utils", "Prefers.java"));
+        assertTrue("catvod Prefers 源码路径不存在：" + prefers.toAbsolutePath(), Files.exists(prefers));
+        String prefs = read(prefers);
+        assertTrue("迁移需要「键是否存在」的只读判定", prefs.contains("public static boolean contains(String key)"));
+
+        String controller = read(mainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "custom", "PlayerOsdController.java")));
+        assertTrue("控制栏布局监听必须可注销", controller.contains("removeOnLayoutChangeListener"));
+        int release = controller.indexOf("public void release()");
+        assertTrue("PlayerOsdController 缺少 release()", release >= 0);
+        String releaseBody = controller.substring(release, controller.indexOf("\n    }", release));
+        assertTrue("release() 必须注销控制栏布局监听", releaseBody.contains("stopObservingControlBar()"));
+        int stopObserving = controller.indexOf("private void stopObservingControlBar()");
+        assertTrue("PlayerOsdController 缺少 stopObservingControlBar", stopObserving >= 0);
+        String stopObservingBody = controller.substring(stopObserving, controller.indexOf("\n    }", stopObserving));
+        assertTrue("stopObservingControlBar() 必须真正调用 removeOnLayoutChangeListener",
+                stopObservingBody.contains("removeOnLayoutChangeListener"));
+        assertTrue("stopObservingControlBar() 必须把两个持有引用清空，否则 OSD 释放后仍被控制栏布局回调持有",
+                stopObservingBody.contains("observedControlBar = null;")
+                        && stopObservingBody.contains("observedControlBarListener = null;"));
+
+        int firstVisible = controller.indexOf("private static View firstVisible(View... candidates)");
+        assertTrue("PlayerOsdController 缺少 firstVisible", firstVisible >= 0);
+        String firstVisibleBody = controller.substring(firstVisible, controller.indexOf("\n    }", firstVisible));
+        int visibleLoop = firstVisibleBody.indexOf("for (");
+        int visiblePick = firstVisibleBody.indexOf("View.VISIBLE");
+        int fallbackLoop = visibleLoop < 0 ? -1 : firstVisibleBody.indexOf("for (", visibleLoop + 1);
+        assertTrue("firstVisible 必须先挑可见项再退回第一个非 null，否则会选到 GONE 的容器而错误回退 dp(80)",
+                visibleLoop > 0 && visiblePick > visibleLoop && fallbackLoop > visiblePick);
+
+        int controlBar = controller.indexOf("private View controlBar()");
+        assertTrue("PlayerOsdController 缺少 controlBar()", controlBar >= 0);
+        String controlBarBody = controller.substring(controlBar, controller.indexOf("\n    }", controlBar));
+        int barControl = controlBarBody.indexOf("R.id.control");
+        int barDetail = controlBarBody.indexOf("R.id.detailControlHost");
+        int barTv = controlBarBody.indexOf("R.id.playerControls");
+        assertTrue("详情页内嵌播放器没有 @+id/control，控制栏候选顺序必须是 control -> detailControlHost -> playerControls",
+                barControl > 0 && barDetail > barControl && barTv > barDetail);
+        assertTrue("详情页内嵌播放器的底部条是 @+id/playerBottom，量高度必须二级回退",
+                controller.contains("findViewById(R.id.bottom)")
+                        && controller.contains("findViewById(R.id.playerBottom)"));
+
+        int apply = controller.indexOf("private void applyMediaBadgePosition()");
+        assertTrue("PlayerOsdController 缺少 applyMediaBadgePosition", apply >= 0);
+        assertTrue("徽标容器缺失时必须先判空再取 LayoutParams",
+                controller.substring(apply, controller.indexOf("\n    }", apply)).contains("if (mediaBadges == null) return;"));
+    }
+
+    /**
+     * 手机端竖屏内嵌直播窗格不是全屏：OSD 的 Source 必须覆写 isFullscreen()，
+     * 否则继承默认 true，媒体徽标会跟着出现在窗格上。电视端直播恒全屏，不需要覆写。
+     */
+    @Test
+    public void mobileLiveOsdSourceGatesMediaBadgesOnTheEmbeddedShelf() throws Exception {
+        Path liveActivity = Path.of("com", "fongmi", "android", "tv", "ui", "activity", "LiveActivity.java");
+
+        String mobileLive = read(sourcePath("mobile", "java").resolve(liveActivity));
+        assertTrue("手机直播的 OSD Source 必须覆写 isFullscreen()", mobileLive.contains("public boolean isFullscreen()"));
+        assertTrue("手机直播的内嵌窗格与 PiP 小窗都必须被判为非全屏",
+                mobileLive.contains("return !isEmbeddedLiveUi() && !isInPictureInPictureMode();"));
+        int overrideAt = mobileLive.indexOf("public boolean isFullscreen()");
+        String overrideBody = mobileLive.substring(overrideAt, mobileLive.indexOf("}", overrideAt));
+        assertTrue("手机直播的 isFullscreen() 必须排除 PiP：PiP 小窗不算全屏",
+                overrideBody.contains("!isInPictureInPictureMode()"));
+        assertTrue("isFullscreen() 覆写必须落在 PlayerOsdController.Source 匿名类体内",
+                mobileLive.indexOf("public boolean isFullscreen()") > mobileLive.indexOf("new PlayerOsdController.Source()"));
+
+        String leanbackLive = read(sourcePath("leanback", "java").resolve(liveActivity));
+        assertFalse("电视直播恒全屏，不应覆写 isFullscreen()", leanbackLive.contains("public boolean isFullscreen()"));
+    }
+
+    /** catvod 是仓库内的兄弟模块，测试工作目录可能是 app 模块根，也可能是仓库根。 */
+    private static Path catvodJavaPath() {
+        Path moduleSibling = Path.of("..", "catvod", "src", "main", "java");
+        if (Files.exists(moduleSibling)) return moduleSibling;
+        Path repoRelative = Path.of("catvod", "src", "main", "java");
+        assertTrue("catvod 源码目录定位失败：既不在 " + moduleSibling.toAbsolutePath() + " 也不在 " + repoRelative.toAbsolutePath(),
+                Files.exists(repoRelative));
+        return repoRelative;
     }
 
     @Test

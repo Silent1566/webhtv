@@ -119,6 +119,7 @@ public class PlayerOsdController {
     private boolean persistentSuppressed;
     private String mediaBadgeSignature = "";
     private View observedControlBar;
+    private View.OnLayoutChangeListener observedControlBarListener;
     private boolean started;
     private PlayerManager diagnosticsSamplingPlayer;
 
@@ -173,6 +174,7 @@ public class PlayerOsdController {
 
     public void release() {
         stop();
+        stopObservingControlBar();
     }
 
     public void setSuppressed(boolean suppressed) {
@@ -502,6 +504,7 @@ public class PlayerOsdController {
      *    障碍物」的肉眼间距无论控制栏在不在、手机还是电视，都正好等于 {@link #badgeGap()}。
      */
     private void applyMediaBadgePosition() {
+        if (mediaBadges == null) return;
         ViewGroup.LayoutParams params = mediaBadges.getLayoutParams();
         if (!(params instanceof FrameLayout.LayoutParams)) return;
         FrameLayout.LayoutParams layoutParams = (FrameLayout.LayoutParams) params;
@@ -572,6 +575,10 @@ public class PlayerOsdController {
     /**
      * 徽标与「正下方 / 正上方障碍物」之间要留的呼吸位。控制栏唤醒时是控制栏边缘，
      * 控制栏隐藏且同角无邻居时是画面边缘；手机与电视共用同一个值。
+     *
+     * <p>这个 16dp 是**扣除** app/src/main/res/layout/view_player_osd.xml 外层 FrameLayout 的
+     * android:padding="14dp" 之后生效的肉眼间距；改那个 padding 会同步改变肉眼距离
+     * （{@link #applyMediaBadgePosition()} 用 Math.max(0, gap - getPaddingXxx()) 折算）。
      */
     private int badgeGap() {
         return dp(16);
@@ -587,7 +594,9 @@ public class PlayerOsdController {
         if (bar == null || bar.getVisibility() != View.VISIBLE) return dp(80) + edgeGap;
         // 手机端控制栏根是 match_parent（整屏铺底），真正占位的是它里面的 bottom 底部条；
         // 电视端控制栏根本身就是底部一整条。两种都按「实际占位的那个」来量。
+        // 手机端内联控制栏的底部条是 {@code @+id/bottom}，电视端详情页内嵌播放器是 {@code @+id/playerBottom}。
         View bottom = bar.findViewById(R.id.bottom);
+        if (bottom == null) bottom = bar.findViewById(R.id.playerBottom);
         int height = bottom != null && bottom.getVisibility() == View.VISIBLE && bottom.getHeight() > 0
                 ? bottom.getHeight()
                 : bar.getHeight();
@@ -597,10 +606,26 @@ public class PlayerOsdController {
 
     /**
      * 控制栏与 OSD 是同一父容器下的兄弟节点，不是 OSD 的子节点，所以要从父容器里找。
+     * 详情页内嵌播放器没有 {@code @+id/control}：手机端的内联控件容器是
+     * {@code @+id/detailControlHost}，电视端是 {@code @+id/playerControls}。按可见性挑第一个，
+     * 避免拿到 GONE 的那个容器从而错误回退 dp(80)；都还没有时返回 null，
+     * 由 {@link #controlBarTopInset(View, int)} 回退 dp(80)。
      */
     private View controlBar() {
         ViewParent parent = root.getParent();
-        return parent instanceof View ? ((View) parent).findViewById(R.id.control) : null;
+        if (!(parent instanceof View)) return null;
+        View host = (View) parent;
+        return firstVisible(host.findViewById(R.id.control), host.findViewById(R.id.detailControlHost), host.findViewById(R.id.playerControls));
+    }
+
+    private static View firstVisible(View... candidates) {
+        for (View candidate : candidates) {
+            if (candidate != null && candidate.getVisibility() == View.VISIBLE) return candidate;
+        }
+        for (View candidate : candidates) {
+            if (candidate != null) return candidate;
+        }
+        return null;
     }
 
     /**
@@ -610,9 +635,22 @@ public class PlayerOsdController {
      */
     private void observeControlBar(View bar) {
         if (bar == null || bar == observedControlBar) return;
+        stopObservingControlBar();
         observedControlBar = bar;
-        bar.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) ->
-                root.post(this::applyMediaBadgePosition));
+        observedControlBarListener = (view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) ->
+                root.post(this::applyMediaBadgePosition);
+        bar.addOnLayoutChangeListener(observedControlBarListener);
+    }
+
+    /**
+     * 注销控制栏布局监听，避免 OSD 释放后仍被控制栏布局回调持有（回调泄漏）。
+     */
+    private void stopObservingControlBar() {
+        if (observedControlBar != null && observedControlBarListener != null) {
+            observedControlBar.removeOnLayoutChangeListener(observedControlBarListener);
+        }
+        observedControlBar = null;
+        observedControlBarListener = null;
     }
 
     /**

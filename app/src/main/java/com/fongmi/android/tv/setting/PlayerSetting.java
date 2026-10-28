@@ -589,6 +589,7 @@ public class PlayerSetting {
      * 总开关打开时，控制栏唤醒本来就显示，这个常驻开关只是额外让它在隐藏时也留在画面上。
      */
     public static boolean isDisplayMediaBadgesPersistent() {
+        migrateMediaBadgePersist();
         return Prefers.getBoolean(KEY_DISPLAY_MEDIA_BADGES_PERSIST);
     }
 
@@ -639,7 +640,7 @@ public class PlayerSetting {
     }
 
     public static boolean[] getDisplayChecked() {
-        return new boolean[]{isDisplayTime(), isDisplayTraffic(), isDisplaySize(), isDisplayProgress(), isDisplayMini(), isDisplayTitle(), isOsdDiagnostics(), isDisplayMediaBadgesPersistent()};
+        return new boolean[]{isDisplayTime(), isDisplayTraffic(), isDisplaySize(), isDisplayProgress(), isDisplayMini(), isDisplayTitle(), isOsdDiagnostics(), isDisplayMediaBadges() && isDisplayMediaBadgesPersistent()};
     }
 
     public static void putDisplayChecked(boolean[] checked) {
@@ -1026,6 +1027,16 @@ public class PlayerSetting {
         putDisplayProgress(Prefers.getBoolean(KEY_OSD_PROGRESS));
         putDisplayMini(Prefers.getBoolean(KEY_OSD_MINI));
         putDisplayTitle(Prefers.getBoolean(KEY_OSD_TITLE));
+    }
+
+    /**
+     * 拆分前 {@code player_osd_media_badges} 的语义就是「常驻显示」；新键缺失时把旧键值抄一次，
+     * 避免老用户升级后静默降级成「只在控制栏唤醒时出现」。新装用户旧键为 false，
+     * 抄过来仍是默认关闭；用户手动勾选 / 取消后新键存在，迁移不再生效。
+     */
+    private static void migrateMediaBadgePersist() {
+        if (Prefers.contains(KEY_DISPLAY_MEDIA_BADGES_PERSIST)) return;
+        Prefers.put(KEY_DISPLAY_MEDIA_BADGES_PERSIST, Prefers.getBoolean(KEY_DISPLAY_MEDIA_BADGES));
     }
 
     private static boolean hasAny(String... keys) {

@@ -454,7 +454,9 @@ public class PlaybackRecord {
 
     private static String clientKey() {
         try {
-            String uuid = Device.get().getUuid();
+            // 只取稳定身份，不构造整个 Device：Device.get() 会顺带做网卡枚举与地址拼接，
+            // 而这里每秒被进度 tick 调用一次，只需要 uuid。
+            String uuid = Device.identityUuid();
             return TextUtils.isEmpty(uuid) ? "" : sha256(uuid);
         } catch (Exception e) {
             return "";
