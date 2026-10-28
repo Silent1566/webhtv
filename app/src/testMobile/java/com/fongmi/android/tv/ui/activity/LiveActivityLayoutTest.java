@@ -543,6 +543,39 @@ public class LiveActivityLayoutTest {
                 exitBody.contains("livePortraitFullscreen = false;"));
     }
 
+    @Test
+    public void mobilePortraitLivePlayerReservesTheStatusBarArea() throws Exception {
+        Path resPath = findMobileJavaPath().getParent().resolve("res");
+        Path layoutPath = resPath.resolve(Path.of("layout", "activity_live.xml"));
+        String layout = new String(Files.readAllBytes(layoutPath), StandardCharsets.UTF_8);
+        int spacer = layout.indexOf("android:id=\"@+id/statusBar\"");
+        int video = layout.indexOf("android:id=\"@+id/video\"");
+
+        assertTrue(layoutPath + " is missing the @+id/statusBar spacer", spacer >= 0);
+        assertTrue("the status bar spacer must sit above the embedded live player", video > spacer);
+
+        Path landPath = resPath.resolve(Path.of("layout-land", "activity_live.xml"));
+        String land = new String(Files.readAllBytes(landPath), StandardCharsets.UTF_8);
+        assertFalse("fullscreen landscape live must not reserve a status bar band",
+                land.contains("android:id=\"@+id/statusBar\""));
+
+        Path sourcePath = findMobileJavaPath().resolve(Path.of(
+                "com", "fongmi", "android", "tv", "ui", "activity", "LiveActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        String setupBody = section(source, "private void setupWindowInsets()", "private void setVideoView()");
+        String insetBody = methodBody(source, "private void updateStatusBarInset(@Nullable WindowInsetsCompat insets)");
+        String applyBody = methodBody(source, "private void applyStatusBarInset()");
+        String embeddedBody = section(source, "private void updateEmbeddedUiMode()", "private void setLiveMenuOverlay(boolean overlay)");
+
+        assertTrue("the live window must hand the status bar inset to the spacer",
+                setupBody.contains("updateStatusBarInset(insets);"));
+        assertTrue("the status bar height must come from the status bar insets", insetBody.contains("Type.statusBars()).top"));
+        assertTrue("the embedded live player must reserve the status bar height and release it in fullscreen",
+                applyBody.contains("isEmbeddedLiveUi() ? statusBarInset : 0"));
+        assertTrue("switching between embedded and fullscreen live must reapply the reserved status bar area",
+                embeddedBody.contains("applyStatusBarInset();"));
+    }
+
     private static String methodBody(String source, String startMarker) {
         int start = source.indexOf(startMarker);
         if (start < 0) return "";
