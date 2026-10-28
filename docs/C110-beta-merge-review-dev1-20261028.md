@@ -184,8 +184,35 @@ docs/TV-MANUAL-PLAY-20261026.md
 
 ## 7. 交付坐标
 
-- 提交：待回填
-- recovery tag：待回填
-- 推送：待回填
-- PR：待回填
+- 提交（第一次合并）：`c7200138e58bbc03d4d097ed54075784ec44d983`
+- recovery tag：`recovery/C110-BETA-MERGE-DEV1-20261028/20261028085427-c7200138e58b`
+- 提交（第二次合并）：`f9ac1bf37ff8321ab8c8cce9ffee21e68ece89ff`
+- recovery tag：`recovery/C110-B-NEW-BETA-MERGE-20261028/20261028092110-f9ac1bf37ff8`
+- 推送：`origin dev1` → `ce2fcc2095..f9ac1bf37f`；两个 recovery tag 均已推送
+- PR：**#498** https://github.com/Silent1566/webhtv/pull/498 （base `beta` ← head `dev1`，中文描述含具体改动内容；只创建不合并）
 - 回滚锚点：`169bc59860cc9048cbe9fdce450466ad79ef4547`（合并前 `dev1` HEAD）
+- **状态**：全部完成，工作树干净，`origin/beta` 为 HEAD 祖先（left-right = 0/4）
+
+## 10. 第二次合并（beta 再次前进）
+
+第一次合并 `afdb2b92c5` 完成后，`origin/beta` 再次前进到 `93b57d4f23`（PR #497，来自 dev2）。
+为使 PR 基于真正最新的 beta，做了第二次合并：
+
+| 项 | 值 |
+| --- | --- |
+| 合并目标 | `origin/beta` = `93b57d4f23b2200d7759baa39a9f8760ac401767` |
+| merge-base | `afdb2b92c5e1e1022883df5f72efaa3daf715e42`（即第一次合并的父提交） |
+| 冲突 | **0**（`git merge-tree --write-tree` 预演干净，实际合并亦干净） |
+| 带入路径 | 4 个：`ExoCompressedAudioDirectPolicy.java`、`ExoCompressedAudioDirectPolicyTest.java`、`ExoStartupRecoveryIntegrationTest.java`、`docs/C107-audio-direct-startup-stall.md` |
+| 与 dev1 改动交集 | **0**（预演阶段逐路径核对，无 OVERLAP） |
+| 保真性 | 逐 blob 比对 4/4 一致，`mismatch_count=0`；上一次提交的文件未被触碰 |
+
+带入能力：厂商直通音频在缺少可读缓冲区指标时不再误判为不可直通，恢复 direct audio
+（`687ec4af3c`），并补「指标可读转不可读」撤销证据分支的回归用例（`47d7156c5f`）。
+
+验证：`assembleMobileArm64_v8aDebug` BUILD SUCCESSFUL in 3m 59s；
+`testMobileArm64_v8aDebugUnitTest` 中 theme **24 suites / 189 tests / 0 failures**、
+`player.exo` **82 suites / 639 tests / 0 failures**。
+
+任务守卫以**独立会话** `C110-B-NEW-BETA-MERGE-20261028` 提交（一次守卫会话一个原子变更），
+合并暂存的 4 个路径以 `--adopt-dirty` 显式归入本条任务。
