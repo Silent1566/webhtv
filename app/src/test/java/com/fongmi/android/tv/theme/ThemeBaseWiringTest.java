@@ -4,6 +4,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import org.junit.Test;
 
@@ -352,6 +353,68 @@ public class ThemeBaseWiringTest {
     }
 
     /**
+     * The quick-search row's site name ({@code #site}) must stay on the wallpaper role.
+     *
+     * <p>Commit {@code 6bef992767} changed exactly one node: {@code adapter_quick.xml}'s
+     * {@code #site} text was still {@code ?attr/colorOnSurfaceVariant}, which resolves through
+     * {@code @color/webhtv_color_on_surface_variant} to a dark day-mode {@code #44474F} that
+     * flips to a near-white {@code #C4C6D0} in the night table - a palette-following role, so it
+     * cannot serve a row on the always-dark quick-search panel. The guard meant to catch it,
+     * {@link #wallpaperPagesUseTheWallpaperForegroundRole}, is a whole-file check: it asks for
+     * the quoted value {@code android:textColor="?attr/webhtvColorOnWallpaper"} and for the
+     * absence of the complete quoted literal {@code android:textColor="?attr/colorOnSurface"},
+     * closing quote included. That literal matches the value {@code colorOnSurface} itself and
+     * nothing longer, so {@code colorOnSurfaceVariant} never matched it. The sibling
+     * {@code #name} and {@code #remark} nodes already satisfied both halves, so the stale
+     * {@code #site} value never failed it - the defect shipped green.
+     *
+     * <p>This is the per-node contract that closes that hole: the element carrying
+     * {@code @+id/site} must resolve to the wallpaper role and to nothing on the
+     * {@code colorOnSurface} family, so the wrong value cannot come back on this node while its
+     * siblings stay correct.
+     */
+    @Test
+    public void quickSearchRowSiteNodeUsesTheWallpaperForegroundRole() throws Exception {
+        String source = withoutComments(read("src/mobile/res/layout/adapter_quick.xml"));
+        String site = element("adapter_quick.xml", source, "android:id=\"@+id/site\"");
+        assertEquals("#site must paint its text with the wallpaper role",
+                "?attr/webhtvColorOnWallpaper", attribute(site, "android:textColor"));
+        assertFalse("#site must not follow the palette on-surface family",
+                site.contains("colorOnSurface"));
+    }
+
+    /**
+     * The quick-search icon button must stay a constant 6dp rounded translucent-white glass chip.
+     *
+     * <p>Commit {@code 169bc59860} replaced the opaque light blue fill {@code #E8F0FE} of
+     * {@code shape_quick_search_icon_button} with {@code #12FFFFFF} plus a {@code 1dp}
+     * {@code #40FFFFFF} hairline, because the white magnifier icon disappeared into the light
+     * blue chip that sat on the dark search panel. No existing guard covers this file:
+     * {@link #darkGlassSheetsUseAConstantLightForeground} only scans the foreground attributes of
+     * {@code DARK_GLASS_SHEETS} layouts and never opens a drawable, so a revert to the light blue
+     * fill would have stayed green.
+     *
+     * <p>Both halves of the glass look are pinned per element - fill and stroke - so a later edit
+     * cannot move one without the other, and the legacy light blue is rejected outright. The
+     * {@code 6dp} corners are deliberate rather than incidental: they are byte-identical to the
+     * neighbouring {@code shape_quick_search_input.xml}, so this is a chip, not a capsule.
+     */
+    @Test
+    public void quickSearchIconButtonKeepsTheDarkGlassFillAndStroke() throws Exception {
+        String name = "shape_quick_search_icon_button.xml";
+        String source = withoutComments(read("src/mobile/res/drawable/" + name));
+        assertEquals(name + " must fill the button with translucent white glass",
+                "#12FFFFFF", attribute(element(name, source, "<solid"), "android:color"));
+        assertFalse(name + " must not go back to the opaque light blue fill",
+                source.contains("#E8F0FE"));
+        String stroke = element(name, source, "<stroke");
+        assertEquals(name + " must keep the glass hairline stroke",
+                "#40FFFFFF", attribute(stroke, "android:color"));
+        assertEquals(name + " must keep the 1dp stroke width",
+                "1dp", attribute(stroke, "android:width"));
+    }
+
+    /**
      * The TMDB source chips must keep a constant translucent fill for the dark-page
      * variant.
      *
@@ -395,6 +458,41 @@ public class ThemeBaseWiringTest {
     /** Drops XML comments so file prose cannot satisfy or defeat a source assertion. */
     private static String withoutComments(String source) {
         return source.replaceAll("(?s)<!--.*?-->", "");
+    }
+
+    /**
+     * The single tag whose text contains {@code anchor}, from its opening {@code '<'} to its
+     * closing {@code '>'}.
+     *
+     * <p>A per-node contract needs the element itself: a whole-file {@code contains} check passes
+     * as soon as <em>any</em> node carries the wanted value, which is how a stale value on one
+     * node of {@code adapter_quick.xml} survived a green suite. Fails loudly when the anchor is
+     * missing or ambiguous, so a renamed id or element cannot turn the guard into a no-op.
+     */
+    private static String element(String name, String source, String anchor) {
+        int at = source.indexOf(anchor);
+        if (at < 0) {
+            fail(name + " no longer contains \"" + anchor
+                    + "\"; update this contract if the node was renamed or removed");
+        }
+        if (source.indexOf(anchor, at + 1) >= 0) {
+            fail(name + " contains \"" + anchor + "\" more than once; the contract needs an"
+                    + " anchor that identifies exactly one node");
+        }
+        int start = source.lastIndexOf('<', at);
+        int end = source.indexOf('>', at);
+        if (start < 0 || end < at) {
+            fail(name + " has no complete tag around \"" + anchor + "\"");
+        }
+        return source.substring(start, end + 1);
+    }
+
+    /** The value of attribute {@code attr} in {@code tag}, or {@code null} when it is not set. */
+    private static String attribute(String tag, String attr) {
+        java.util.regex.Matcher matcher = java.util.regex.Pattern
+                .compile(java.util.regex.Pattern.quote(attr) + "=\"([^\"]*)\"")
+                .matcher(tag);
+        return matcher.find() ? matcher.group(1) : null;
     }
 
     /**
