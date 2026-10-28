@@ -4,8 +4,8 @@
 
 - 目标：电视版（leanback）播放新视频时，厂家直通（vendor direct / offloaded compressed）音轨接受了第一段数据后播放头一直停在 0，界面显示 READY/isPlaying 但音视频都不前进；修复后应在约 1 秒量级内自动回退到 PCM 解码，而不是等 Media3 的 10 秒 STUCK_PLAYING_NO_PROGRESS 超时。
 - 验收：`app/src/main/java/com/fongmi/android/tv/player/exo/ExoCompressedAudioDirectPolicy.java` 的 `isStartupStalled()` 在 buffer 指标不可读（capacity/size/threshold 全为 0）时仍能以 “已接收数据 + 原始播放头仍为 0” 判定启动停滞；单测与 Robolectric 集成测试覆盖该分支且阈值路径行为不变。
-- 状态：已提交 `687ec4af3c`，已打注释标签 `recovery/C107/20261027185704-687ec4af3c95`；定向单测通过。
-- 下一个动作：dev2 上的 C107 增量（新增回归测试与本文档改动）由合并任务 guard 提交，随后推送 dev2 并向 beta 开 PR。
+- 状态：已提交 `687ec4af3c`（修复本体），已打注释标签 `recovery/C107/20261027185704-687ec4af3c95`；增量回归测试与本文档改动已提交 `47d7156c5f` 并推送 dev2（PR #497）。第二次远端 beta 合并 `8e9f8a9d3e`（PR #496 / C108）已合入 dev2，定向编译与单测在合并后复跑通过。
+- 下一个动作：推送 dev2 后确认 PR #497 已同时包含 `bebac6ed83` 与 `8e9f8a9d3e` 两次 beta 合并，并再次拉取远端确认无新增提交。
 
 ## 现场证据（G:\下载webhtv-debug-log(1).txt）
 
@@ -40,6 +40,7 @@
 - 验证命令与结果：
   - `bash ./gradlew :app:testLeanbackArm64_v8aDebugUnitTest --tests '*ExoCompressedAudioDirectPolicyTest' --tests '*ExoStartupRecoveryIntegrationTest' --no-daemon --console=plain` → BUILD SUCCESSFUL（3m37s）；`ExoCompressedAudioDirectPolicyTest` 71 tests / 0 failures / 1 skipped，`ExoStartupRecoveryIntegrationTest` 5 tests / 0 failures。
   - 增量后复跑（当前工作区，含新增回归测试）：`gradlew.bat :app:testLeanbackArm64_v8aDebugUnitTest --tests '*ExoCompressedAudioDirectPolicyTest' --tests '*ExoStartupRecoveryIntegrationTest' --console=plain` → BUILD SUCCESSFUL（45s）；`ExoCompressedAudioDirectPolicyTest` 72 tests / 0 failures / 1 skipped，`ExoStartupRecoveryIntegrationTest` 5 tests / 0 failures。
+  - 第二次 beta 合并 `8e9f8a9d3e` 后复跑：`:app:compileLeanbackArm64_v8aDebugJavaWithJavac` → BUILD SUCCESSFUL（5m2s）；`gradlew.bat :app:testLeanbackArm64_v8aDebugUnitTest --tests '*ExoCompressedAudioDirectPolicyTest' --tests '*ExoStartupRecoveryIntegrationTest' --console=plain` → BUILD SUCCESSFUL（2m24s），72 tests / 5 tests 全绿；并入的 C108 测试在 mobile 源集，另跑 `:app:testMobileArm64_v8aDebugUnitTest --tests '*VideoActivityLayoutTest' --tests '*TmdbEpisodeGridPolicyTest'` → BUILD SUCCESSFUL（2m54s），157 tests / 9 tests 全绿。
 
 ## 不做
 
