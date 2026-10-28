@@ -566,6 +566,7 @@ public class LiveActivityLayoutTest {
         String insetBody = methodBody(source, "private void updateStatusBarInset(@Nullable WindowInsetsCompat insets)");
         String applyBody = methodBody(source, "private void applyStatusBarInset()");
         String embeddedBody = section(source, "private void updateEmbeddedUiMode()", "private void setLiveMenuOverlay(boolean overlay)");
+        String pipBody = section(source, "public void onPictureInPictureModeChanged(", "private void switchToAudioBackground()");
 
         assertTrue("the live window must hand the status bar inset to the spacer",
                 setupBody.contains("updateStatusBarInset(insets);"));
@@ -574,6 +575,8 @@ public class LiveActivityLayoutTest {
                 applyBody.contains("isEmbeddedLiveUi() ? statusBarInset : 0"));
         assertTrue("switching between embedded and fullscreen live must reapply the reserved status bar area",
                 embeddedBody.contains("applyStatusBarInset();"));
+        assertTrue("the PiP window must release the reserved status bar area as well",
+                pipBody.contains("applyStatusBarInset();"));
     }
 
     private static String methodBody(String source, String startMarker) {

@@ -2122,6 +2122,8 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
             cancelPendingLivePiP(false);
         }
         setVideoView(isInPictureInPictureMode);
+        // PiP 窗口里也要按当前模式重算状态栏占位，否则嵌入式高度会把 video 往下挤。
+        applyStatusBarInset();
         if (isInPictureInPictureMode) {
             dismissLiveControlDialog();
             hideControl();
