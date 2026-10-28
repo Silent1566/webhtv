@@ -54,7 +54,7 @@
                 android:ellipsize="end"
                 android:maxWidth="112dp"
                 android:singleLine="true"
-                android:textColor="?attr/colorOnSurfaceVariant"
+                android:textColor="?attr/webhtvColorOnWallpaper"
                 android:textSize="12sp"
                 tools:text="咕噜 | APP" />
 
