@@ -46,6 +46,19 @@ public final class TmdbEpisodeGridPolicy {
         return rowStart < lastRowStart ? itemCount - 1 : NO_FOCUS_TARGET;
     }
 
+    /**
+     * 选集网格内的水平（左右）焦点目标。只在本行内移动，行首向左、行尾向右都返回
+     * {@link #NO_FOCUS_TARGET}：集数卡片根视图不可聚焦、也不声明水平 nextFocus，
+     * 系统 FocusFinder 找不到水平邻居时会让焦点跳出选集网格（例如落到上方的“简介”按钮）。
+     */
+    public static int horizontalFocusTarget(int position, int spanCount, int itemCount, boolean right) {
+        if (position < 0 || spanCount <= 0 || itemCount <= 0) return NO_FOCUS_TARGET;
+        int target = right ? position + 1 : position - 1;
+        int rowStart = position / spanCount * spanCount;
+        int rowEnd = Math.min(rowStart + spanCount, itemCount) - 1;
+        return target >= rowStart && target <= rowEnd ? target : NO_FOCUS_TARGET;
+    }
+
     public static int nativeGridCardHeightDp(boolean phoneWidth) {
         return phoneWidth ? NATIVE_MOBILE_GRID_CARD_HEIGHT_DP : NATIVE_GRID_CARD_HEIGHT_DP;
     }
