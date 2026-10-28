@@ -94,10 +94,12 @@ public class FollowingAdapter extends RecyclerView.Adapter<FollowingAdapter.Hold
         if (source != null && source.playableEpisode > 0) {
             holder.binding.source.setText(holder.itemView.getContext().getString(R.string.following_source, source.playableEpisode));
         } else {
-            holder.binding.source.setText(R.string.following_source_unknown);
+            // 探针跑过但没算出可播集数必须与「尚未检查」分开，否则失败被静默伪装成未检查。
+            holder.binding.source.setText(source != null && source.lastProbeAt > 0
+                    ? R.string.following_source_failed : R.string.following_source_unknown);
         }
         if (item.watchedEpisode > 0) holder.binding.progress.setText(holder.itemView.getContext().getString(R.string.following_watched, item.watchedEpisode));
-        else holder.binding.progress.setText(R.string.following_source_unknown);
+        else holder.binding.progress.setText(R.string.following_watched_unknown);
         if (item.unwatchedCount > 0) holder.binding.progress.append("\n" + holder.itemView.getContext().getString(R.string.following_unwatched, item.unwatchedCount));
         else if (released > 0) holder.binding.progress.append("\n" + holder.itemView.getContext().getString(R.string.following_unwatched_none));
         if (item.hasUpdate && item.unwatchedCount > 0) {

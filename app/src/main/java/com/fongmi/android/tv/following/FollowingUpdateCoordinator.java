@@ -47,6 +47,7 @@ public class FollowingUpdateCoordinator {
             FollowingMetadataSnapshot metadata = null;
             boolean metadataChanged = false;
             boolean sourceAlreadyProbed = false;
+            boolean probeFailed = false;
             Throwable metadataError = null;
             if (item.tmdbId > 0) {
                 try {
@@ -61,7 +62,8 @@ public class FollowingUpdateCoordinator {
             if (metadata != null) {
                 metadataChanged = FollowingUpdatePolicy.applyMetadata(item, metadata, now);
             } else {
-                FollowingSourceSnapshot sourceSnapshot = probeBestEffort(item, source, manual, false);
+                ProbeOutcome initial = probeBestEffort(item, source, manual, false);
+                FollowingSourceSnapshot sourceSnapshot = initial.snapshot;
                 sourceAlreadyProbed = sourceSnapshot != null;
                 if (sourceSnapshot == null || sourceSnapshot.source == null) {
                     Throwable failure = metadataError != null
@@ -75,13 +77,15 @@ public class FollowingUpdateCoordinator {
             }
             FollowingStore.reconcile(item);
             FollowingUpdatePolicy.refreshDerived(item, now);
-            if (!sourceAlreadyProbed && FollowingSettings.shouldProbe(manual, metadataChanged, source)) {
-                FollowingSourceSnapshot probed = probeBestEffort(item, source, manual, false);
-                if (probed != null) source = probed.source;
+            if (shouldProbeAgain(sourceAlreadyProbed, FollowingSettings.shouldProbe(manual, metadataChanged, source))) {
+                ProbeOutcome probed = probeBestEffort(item, source, manual, false);
+                if (probed.snapshot != null) source = probed.snapshot.source;
+                // 探针确实跑过却没拿到快照才算失败：仅凭 snapshot==null 会把「本次本不该探」误判成失败。
+                probeFailed = probed.attempted && probed.snapshot == null;
             }
             item.lastCheckedAt = now;
             item.failureCount = 0;
-            item.lastError = metadataError == null ? "" : "TMDB不可用，已回退原站";
+            item.lastError = composeLastError(metadataError, probeFailed, source);
             item.nextCheckAt = FollowingSchedulePolicy.nextCheckAt(now, item.officialStatus, item.nextAirAt, foreground);
             item.updatedAt = now;
             FollowingStore.update(item);
@@ -97,19 +101,51 @@ public class FollowingUpdateCoordinator {
         }
     }
 
-    private FollowingSourceSnapshot probeBestEffort(Following item, FollowingSource source, boolean manual, boolean required) {
+    /** 探针结果 + 是否真的调用过探针：只有 attempted && snapshot==null 才是「检查过但失败」。 */
+    private static final class ProbeOutcome {
+        static final ProbeOutcome NOT_RUN = new ProbeOutcome(false, null);
+
+        final boolean attempted;
+        final FollowingSourceSnapshot snapshot;
+
+        ProbeOutcome(boolean attempted, FollowingSourceSnapshot snapshot) {
+            this.attempted = attempted;
+            this.snapshot = snapshot;
+        }
+    }
+
+    /**
+     * item.lastError 合成优先级：TMDB 降级文案（既有断言逐字锁定）> 源侧检查失败原因 > 空。
+     * 源侧失败必须落库原因，否则 UI 只能显示「尚未检查」，用户看不到失败。
+     */
+    static String composeLastError(Throwable metadataError, boolean probeFailed, FollowingSource source) {
+        if (metadataError != null) return "TMDB不可用，已回退原站";
+        return probeFailed ? probeFailureReason(source) : "";
+    }
+
+    /** 本次 check 内探针至多跑一次：第一次已经跑出快照时不再重复探测同一来源。 */
+    static boolean shouldProbeAgain(boolean sourceAlreadyProbed, boolean due) {
+        return !sourceAlreadyProbed && due;
+    }
+
+    static String probeFailureReason(FollowingSource source) {
+        if (source == null || source.lastError == null || source.lastError.isBlank()) return "来源检查失败";
+        return source.lastError;
+    }
+
+    private ProbeOutcome probeBestEffort(Following item, FollowingSource source, boolean manual, boolean required) {
         if (source == null) source = fallbackSource(item);
-        if (source == null || !FollowingSettings.shouldProbe(manual, false, source)) return null;
+        if (source == null || !FollowingSettings.shouldProbe(manual, false, source)) return ProbeOutcome.NOT_RUN;
         try {
             FollowingSourceSnapshot result = sourceProbe.probe(item, source);
             FollowingStore.updateSource(source);
-            return result;
+            return new ProbeOutcome(true, result);
         } catch (Throwable error) {
             source.lastError = error.getMessage() == null ? "来源检查失败" : error.getMessage();
             source.lastProbeAt = System.currentTimeMillis();
             FollowingStore.updateSource(source);
             if (required) throw error instanceof RuntimeException ? (RuntimeException) error : new RuntimeException(error);
-            return null;
+            return new ProbeOutcome(true, null);
         }
     }
 
