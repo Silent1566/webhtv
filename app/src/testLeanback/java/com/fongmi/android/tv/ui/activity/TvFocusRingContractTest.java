@@ -275,6 +275,10 @@ public class TvFocusRingContractTest {
                 {"shape_vod_oval_focused.xml", "?attr/tvFocusRing"},
                 {"shape_keyboard_focused.xml", "?attr/tvFocusRing"},
                 {"shape_search_hot_word_focused.xml", "?attr/tvFocusRing"},
+                // 搜索框与空态主按钮：本批新纳入 ThemeBinder 应用表面白名单的两项，必须同样钉住
+                // 「唯一宽度 token + ?attr/tvFocusRing」，否则白名单成员与色板契约会静默脱钩。
+                {"shape_tv_search_field_focused.xml", "?attr/tvFocusRing"},
+                {"shape_empty_action_focused.xml", "?attr/tvFocusRing"},
                 // 自带主题色填充的控件：环色取焦点态填充的配对角色，同样由主题解析器保证对比度。
                 {"shape_config_history_item_focused.xml", "?attr/colorOnPrimary"},
                 {"shape_site_item_focused.xml", "?attr/colorOnPrimary"},
@@ -292,6 +296,19 @@ public class TvFocusRingContractTest {
                     body.contains("android:color=\"@color/white\"") || body.contains("android:color=\"#FFFFFF\""));
             assertFalse(path + " 不允许再写死描边宽度（1.5dp/2dp/3dp）",
                     body.matches("(?s).*android:width=\"[0-9.]+dp\".*"));
+        }
+
+        // 白名单成员的 selector 必须把焦点态指向上面已钉住的那个 shape：环宽与环色来自 shape，
+        // 若 selector 指错文件，ThemeBinder 的白名单判定仍会命中但改写的是别的图。
+        String[][] selectorFocus = {
+                {"selector_tv_search_field.xml", "@drawable/shape_tv_search_field_focused"},
+                {"selector_empty_action.xml", "@drawable/shape_empty_action_focused"},
+        };
+        for (String[] entry : selectorFocus) {
+            String path = LEANBACK_DRAWABLE + entry[0];
+            String body = values(read(path));
+            assertTrue(path + " 的焦点态必须指向 " + entry[1],
+                    body.contains("android:drawable=\"" + entry[1] + "\" android:state_focused=\"true\""));
         }
 
         // 视频层/固定明暗宿主：只统一宽度，环色保持与调色板无关。
