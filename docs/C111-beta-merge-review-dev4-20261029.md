@@ -164,10 +164,16 @@ applyStatusBarInset();
 | --- | --- |
 | 合并提交 | `f615e53e9afe8991e88ddec17997dd84a4d7bae6`（`dev4`，父提交 `7965b6fd871` + `aab55dfcca9`） |
 | 功能提交 | `7965b6fd87175a86ef5f3d0dfba3c70d5c4e0188`（已被 C111 评审；F1 修复另行提交） |
-| Recovery tag | 见下方「回填」段（提交后回填） |
+| Recovery tag | `recovery/C111-beta-merge-review-dev4-20261029/20261029012500-aa8f8a06f31e` |
 | 分支 | `dev4` |
-| PR | 见下方「回填」段（创建后回填） |
+| PR | https://github.com/Silent1566/webhtv/pull/499 （`dev4` → `beta`） |
 | 回滚 | `git reset --hard 7965b6fd871`（回到合并前），或 `git revert -m 1 f615e53e9af`（保留历史） |
 | 验证坐标 | 本文件 §5 记录的提交即被验证状态 |
 
 ### 回填（提交后补记）
+
+- F1 修复提交：`aa8f8a06f31ec9c3f5c880eb7ed0b39f41ee45b3`（`LiveActivity.java` +2、`LiveActivityLayoutTest.java` +3、本文件 +173）
+- Recovery tag：`recovery/C111-beta-merge-review-dev4-20261029/20261029012500-aa8f8a06f31e`，已随分支推送
+- PR：#499（`dev4` → `beta`），标题「merge(C111): dev4 合并 beta aab55dfcca9，评审并修复直播 PiP 状态栏占位」
+- 远端状态：`origin/dev4` = `aa8f8a06f31`，`git rev-list --left-right --count origin/beta...HEAD` = `0 3`（beta 已全部包含）
+- 收尾 `git pull --ff-only origin dev4`：Already up to date
