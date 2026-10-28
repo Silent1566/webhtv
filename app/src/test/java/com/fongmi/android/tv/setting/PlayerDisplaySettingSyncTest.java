@@ -139,10 +139,21 @@ public class PlayerDisplaySettingSyncTest {
         assertTrue("the persistent path must not force the badge strip hidden",
                 !persistentBody.contains("mediaBadges.setVisibility(View.GONE)"));
         assertTrue("badges must clear the real control bar height, never a hardcoded one",
-                source.contains("bottomMargin = controlsVisible ? barTop : (stacked ? clear : edgeInset);")
-                        && source.contains("private int controlBarTopInset()"));
+                source.contains("bottomMargin = controlsVisible ? barTop : (stacked ? clear : edgeBottom);")
+                        && source.contains("private int controlBarTopInset(View bar, int edgeGap)"));
+        assertTrue("the control bar height must be re-measured once its layout settles",
+                source.contains("private void observeControlBar(View bar)")
+                        && source.contains("addOnLayoutChangeListener")
+                        && source.contains("root.post(this::applyMediaBadgePosition)"));
         assertTrue("badges must hug the screen edge when nothing else occupies their corner",
-                source.contains("int edgeInset = dp(2);") && source.contains("private View persistentNeighbour(int position)"));
+                source.contains("private View persistentNeighbour(int position)")
+                        && source.contains("Math.max(0, gap - (badgeParent == null ? 0 : badgeParent.getPaddingBottom()))"));
+        assertTrue("one 16dp breathing gap must serve phone and TV, control bar visible or not",
+                source.contains("private int badgeGap() {")
+                        && source.contains("return dp(16);")
+                        && source.contains("int barTop = controlBarTopInset(bar, edgeBottom);")
+                        && source.contains("bottomMargin = controlsVisible ? barTop : (stacked ? clear : edgeBottom);")
+                        && !source.contains("edgeInset"));
     }
 
     /**

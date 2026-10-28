@@ -118,6 +118,7 @@ public class PlayerOsdController {
     private boolean diagnosticsVisible;
     private boolean persistentSuppressed;
     private String mediaBadgeSignature = "";
+    private View observedControlBar;
     private boolean started;
     private PlayerManager diagnosticsSamplingPlayer;
 
@@ -497,7 +498,8 @@ public class PlayerOsdController {
      * 2. 控制栏隐藏时徽标是常驻项，此时只有在同一个角**确实还有别的常驻文本**
      *    （同角的标题 / 时间 / 进度 / 网速）时才抬高一行躲开它；没有邻居就直接贴到画面边缘，
      *    这才是用户要的「最靠边缘」。
-     * 3. 布局给四角留了 14dp 内边距，贴边时把 margin 压到 2dp，看起来才是「贴着边缘」；
+     * 3. 布局给四角留了内边距，而 margin 是从内沿开始量的；所以要把它折算掉，让「徽标到正下方
+     *    障碍物」的肉眼间距无论控制栏在不在、手机还是电视，都正好等于 {@link #badgeGap()}。
      */
     private void applyMediaBadgePosition() {
         ViewGroup.LayoutParams params = mediaBadges.getLayoutParams();
@@ -508,12 +510,20 @@ public class PlayerOsdController {
         boolean stacked = !controlsVisible && neighbour != null;
         // 邻居的实际高度 + 一点呼吸位；量不到时退回一条文本行的高度。
         int clear = (stacked ? Math.max(neighbour.getHeight(), dp(18)) : 0) + dp(4);
-        // 贴边时只留 2dp，肉眼即「最靠边缘」；用负 margin 会顶进系统栏导致胶囊被裁切。
-        int edgeInset = dp(2);
+        // 贴边 / 避让控制栏用的 margin：都把容器内边距折算掉，肉眼间距才等于 badgeGap()。
+        // 用负 margin 去顶边缘会顶进系统栏导致胶囊被裁切，所以下限取 0。
+        View badgeParent = mediaBadges.getParent() instanceof View ? (View) mediaBadges.getParent() : null;
+        int gap = badgeGap();
+        int edgeTop = Math.max(0, gap - (badgeParent == null ? 0 : badgeParent.getPaddingTop()));
+        int edgeBottom = Math.max(0, gap - (badgeParent == null ? 0 : badgeParent.getPaddingBottom()));
+        int edgeStart = Math.max(0, gap - (badgeParent == null ? 0 : badgeParent.getPaddingLeft()));
+        int edgeEnd = Math.max(0, gap - (badgeParent == null ? 0 : badgeParent.getPaddingRight()));
         // 控制栏唤醒时的避让：必须按控制栏的真实高度算，不能写死。
         // 电视端控制栏是底部一整条（按钮行 + 进度条），手机端高度也不同；写死 64/80dp 会让
         // 徽标落到按钮行上，看起来就像「被塞进了控制栏」。
-        int barTop = controlBarTopInset();
+        View bar = controlBar();
+        observeControlBar(bar);
+        int barTop = controlBarTopInset(bar, edgeBottom);
         int gravity;
         int marginStart;
         int marginEnd;
@@ -522,31 +532,31 @@ public class PlayerOsdController {
         switch (position) {
             case 0:
                 gravity = Gravity.TOP | Gravity.START;
-                marginStart = stacked ? 0 : edgeInset;
+                marginStart = stacked ? 0 : edgeStart;
                 marginEnd = 0;
-                topMargin = controlsVisible ? dp(64) : (stacked ? clear : edgeInset);
+                topMargin = controlsVisible ? dp(64) : (stacked ? clear : edgeTop);
                 bottomMargin = 0;
                 break;
             case 1:
                 gravity = Gravity.TOP | Gravity.END;
                 marginStart = 0;
-                marginEnd = stacked ? 0 : edgeInset;
-                topMargin = controlsVisible ? dp(64) : (stacked ? clear : edgeInset);
+                marginEnd = stacked ? 0 : edgeEnd;
+                topMargin = controlsVisible ? dp(64) : (stacked ? clear : edgeTop);
                 bottomMargin = 0;
                 break;
             case 2:
                 gravity = Gravity.BOTTOM | Gravity.START;
-                marginStart = stacked ? 0 : edgeInset;
+                marginStart = stacked ? 0 : edgeStart;
                 marginEnd = 0;
                 topMargin = 0;
-                bottomMargin = controlsVisible ? barTop : (stacked ? clear : edgeInset);
+                bottomMargin = controlsVisible ? barTop : (stacked ? clear : edgeBottom);
                 break;
             default:
                 gravity = Gravity.BOTTOM | Gravity.END;
                 marginStart = 0;
-                marginEnd = stacked ? 0 : edgeInset;
+                marginEnd = stacked ? 0 : edgeEnd;
                 topMargin = 0;
-                bottomMargin = controlsVisible ? barTop : (stacked ? clear : edgeInset);
+                bottomMargin = controlsVisible ? barTop : (stacked ? clear : edgeBottom);
                 break;
         }
         if (layoutParams.gravity == gravity && layoutParams.topMargin == topMargin && layoutParams.bottomMargin == bottomMargin
@@ -560,24 +570,49 @@ public class PlayerOsdController {
     }
 
     /**
-     * 控制栏实际占用的高度。电视端是底部一整条（按钮行 + 进度条），手机端真正占位的只是
-     * 它内部的 bottom 条；写死数值会让徽标落到按钮行上，看起来像「被塞进控制栏」。
+     * 徽标与「正下方 / 正上方障碍物」之间要留的呼吸位。控制栏唤醒时是控制栏边缘，
+     * 控制栏隐藏且同角无邻居时是画面边缘；手机与电视共用同一个值。
+     */
+    private int badgeGap() {
+        return dp(16);
+    }
+
+    /**
+     * 下两角控制栏可见时的 bottomMargin：控制栏高度 + 呼吸位，再扣掉容器内边距。
+     * 电视端是底部一整条（按钮行 + 进度条），手机端真正占位的只是它内部的 bottom 条；
+     * 写死数值会让徽标落到按钮行上，看起来像「被塞进控制栏」。
      * 量不到时退回旧常量，保证首帧不会跳到画面外。
      */
-    private int controlBarTopInset() {
-        // 控制栏与 OSD 是同一父容器下的兄弟节点，不是 OSD 的子节点，所以要从父容器里找。
-        View bar = null;
-        ViewParent parent = root.getParent();
-        if (parent instanceof View) bar = ((View) parent).findViewById(R.id.control);
-        if (bar == null || bar.getVisibility() != View.VISIBLE) return dp(80);
+    private int controlBarTopInset(View bar, int edgeGap) {
+        if (bar == null || bar.getVisibility() != View.VISIBLE) return dp(80) + edgeGap;
         // 手机端控制栏根是 match_parent（整屏铺底），真正占位的是它里面的 bottom 底部条；
         // 电视端控制栏根本身就是底部一整条。两种都按「实际占位的那个」来量。
         View bottom = bar.findViewById(R.id.bottom);
         int height = bottom != null && bottom.getVisibility() == View.VISIBLE && bottom.getHeight() > 0
                 ? bottom.getHeight()
                 : bar.getHeight();
-        if (height <= 0 || height >= root.getHeight()) return dp(80);
-        return height + dp(8);
+        if (height <= 0 || height >= root.getHeight()) return dp(80) + edgeGap;
+        return height + edgeGap;
+    }
+
+    /**
+     * 控制栏与 OSD 是同一父容器下的兄弟节点，不是 OSD 的子节点，所以要从父容器里找。
+     */
+    private View controlBar() {
+        ViewParent parent = root.getParent();
+        return parent instanceof View ? ((View) parent).findViewById(R.id.control) : null;
+    }
+
+    /**
+     * 控制栏唤醒的那一帧，它内部的按钮行 / 进度条可能还没完成布局，此时量到的高度偏小，
+     * 徽标就会压到按钮行上（看起来像被塞进了控制栏）。所以登记一次布局监听：
+     * 控制栏每次布局定稿后重算徽标位置，保证等到的永远是最终高度。
+     */
+    private void observeControlBar(View bar) {
+        if (bar == null || bar == observedControlBar) return;
+        observedControlBar = bar;
+        bar.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) ->
+                root.post(this::applyMediaBadgePosition));
     }
 
     /**

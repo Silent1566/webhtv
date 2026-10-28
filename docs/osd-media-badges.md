@@ -212,6 +212,27 @@
 - 单测：新增 `mediaInfoMasterSwitchIsIndependentFromThePersistentToggle`（断言两个键/访问器、`getDisplayChecked` 读常驻开关、勾选时联动打开总开关、`DisplayDialog` 写常驻开关、备份含新键）；`PlayerDisplaySettingSyncTest` mobile/leanback 各 12 例全绿；`ControlDialogOsdSettingsTest` 9/9。
 - 构建：`assembleMobileArm64_v8aDebug` BUILD SUCCESSFUL。
 - 设备（emulator-5554）：位置=左上角、常驻开关关闭、屏显其它项全关 → 全屏唤醒控制栏，`osdMediaBadges` 出现于左上角；再选「关闭」→ 同一操作不出现。
+### 第十一轮：16dp 呼吸位统一 + 控制栏高度按布局定稿重测（task_guard `osd-badges-gap`，base HEAD `c5b0900c9396c89131f9d2b75083bf31b3d4a0f3`）
+
+用户要求：「调成 + dp(16) ，手机和电视版都注意，做好事能和无网速屏显是媒体信息屏显距离底部的距离一致」——即徽标到正下方障碍物的**肉眼间距**在「控制栏可见」与「控制栏隐藏且同角无邻居」两种情况下必须完全相同，手机与电视共用同一个值。
+
+**两个问题分开修**：
+
+1. **内边距折算**。徽标挂在 `app/src/main/res/layout/view_player_osd.xml` 内层那个 `android:padding="14dp"` 的 FrameLayout 里，`bottomMargin` 是从 padding **内沿**开始量的。旧代码 `height + dp(8)` 实际肉眼缝隙是 14+8=22dp，`edgeInset = dp(2)` 是 14+2=16dp，两者本来就不相等。新增 `private int badgeGap() { return dp(16); }`，并新增 `edgeTop/edgeBottom/edgeStart/edgeEnd`：`Math.max(0, gap - badgeParent.getPaddingXxx())`，把内边距折算掉；下限取 0 是因为负 margin 会顶进系统栏把胶囊裁切。
+2. **控制栏高度测量时机**。+16dp 改完后设备实测仍然压栏：控制栏顶边 y=854（高 226px），而徽标底边 y=892。反推代码量到的高度是 160px——控制栏唤醒那一帧 `action` 行已布局、`seek` 行尚未布局，之后没有任何重算。于是把 `controlBarTopInset()` 改成接收已解析的 `View bar`，新增 `controlBar()` 查找与 `observeControlBar(View bar)`：登记一次 `addOnLayoutChangeListener`，控制栏每次布局定稿后 `root.post(this::applyMediaBadgePosition)` 重算，保证等到的永远是最终高度。
+
+**行为**：控制栏可见时是「徽标底边 → 控制栏顶边」= 16dp；控制栏隐藏且同角无邻居时是「徽标底边 → 画面底边」= 16dp；同角有网速/标题/时间/进度时按邻居实测高度 + 4dp 抬起。
+
+#### 验证
+
+- 单测：`PlayerDisplaySettingSyncTest` leanback 12 例 / mobile 12 例（断言 `private int badgeGap()`、`return dp(16);`、`private int controlBarTopInset(View bar, int edgeGap)`、`observeControlBar` + `addOnLayoutChangeListener` + `root.post(this::applyMediaBadgePosition)`，且禁止任何 `edgeInset`）；`ControlDialogOsdSettingsTest` 9 例。
+- 构建：`:app:assembleLeanbackArm64_v8aDebug` BUILD SUCCESSFUL，`adb install -r -t` 到 emulator-5554 Success。
+- 设备（emulator-5554，1920×1080，sdk28，density 280，leanback flavor，全屏播放 `cold_m1.mp4`/29.8s）：
+  - 控制栏可见：`control` bounds `[0,854][1920,1080]`、`action` `[48,902][1872,972]`、`seek` `[48,996][1872,1048]`，`osdMediaBadges` `[1323,778][1888,822]` → 徽标底边 822 与栏顶 854 相差 **32px = 16dp@2.0**，整行位于按钮行之上。
+  - 控制栏隐藏且同角无邻居（屏显只开标题/媒体信息）：`osdMediaBadges` `[1323,1004][1888,1048]` → 底边 1048 与画面底 1080 相差 **32px = 16dp**，与上一场景严格相等。
+  - 修复前对照：同一操作下 `osdMediaBadges` 底边 892 / `[1327,848][1892,892]`，与栏顶 854 重叠 38px（这就是「看起来被塞进控制栏」的直接原因）。
+- 截图按 task guard scope 规则不进仓库，本轮取证文件为 `i1.png`（可见）与 `k1.png`（隐藏），暂存工作区根目录。
+
 ### 第八轮修订：关闭屏显后控制栏唤醒仍出现徽标（task_guard `osd-badges-gate`，base HEAD `e8ccde109e21b674fc82e6db8d44f586f39eda2f`）
 
 用户反馈（截图：设置页「屏显设置」摘要只剩「时间 / 分辨率 / 进度 / 迷你 / 标题」、「媒体信息位置 = 关闭」，而全屏唤醒控制栏后右下角仍出现 `FHD / AVC / AAC 44.1KHZ / 2.0 / TS`）：「媒体信息关闭了，屏显也没开启唤醒控制栏怎么还有？」
