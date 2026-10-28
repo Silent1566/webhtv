@@ -8,6 +8,7 @@ import com.fongmi.android.tv.bean.Depot;
 import com.fongmi.android.tv.bean.Rule;
 import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.db.AppDatabase;
+import com.fongmi.android.tv.playback.PlaybackConfigIdentity;
 import com.fongmi.android.tv.setting.CustomCspSetting;
 import com.fongmi.android.tv.utils.UrlUtil;
 import com.github.catvod.bean.Doh;
@@ -17,6 +18,7 @@ import com.google.gson.JsonObject;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -36,6 +38,17 @@ public final class VodSiteCatalog {
     /** 配置解析要发网络请求，/proxy 又会被逐段调用，按标识短缓存。 */
     private static final long CACHE_TTL = 60_000L;
     private static final int CACHE_SIZE = 8;
+
+    /**
+     * 解析结果缓存。进程内唯一，因此必须有 {@link #invalidate()} 这个失效入口：
+     * 配置行被改写或删除后如果还能命中，网关会继续按旧站源服务最多 {@link #CACHE_TTL} 毫秒。
+     */
+    private static final Map<String, Entry> CACHE = new LinkedHashMap<String, Entry>(16, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(java.util.Map.Entry<String, VodSiteCatalog.Entry> eldest) {
+            return size() > CACHE_SIZE;
+        }
+    };
 
     private VodSiteCatalog() {
     }
@@ -105,31 +118,40 @@ public final class VodSiteCatalog {
 
     private static Source newDatabase() {
         return new Source() {
-            private final Map<String, Entry> cache = new LinkedHashMap<String, Entry>(16, 0.75f, true) {
-                @Override
-                protected boolean removeEldestEntry(java.util.Map.Entry<String, VodSiteCatalog.Entry> eldest) {
-                    return size() > CACHE_SIZE;
-                }
-            };
-
             @Override
             public Catalog load(String interfaceKey) throws Exception {
-                if (interfaceKey == null || interfaceKey.trim().isEmpty()) {
-                    throw new IllegalArgumentException("缺少配置标识");
+                String id = namespace(interfaceKey);
+                if (id.isEmpty()) throw new IllegalArgumentException("缺少配置标识");
+                synchronized (CACHE) {
+                    Entry entry = CACHE.get(id);
+                    if (entry != null && System.currentTimeMillis() - entry.at < CACHE_TTL) return entry.catalog;
                 }
-                String id = interfaceKey.trim();
-                long now = System.currentTimeMillis();
-                synchronized (cache) {
-                    Entry entry = cache.get(id);
-                    if (entry != null && now - entry.at < CACHE_TTL) return entry.catalog;
-                }
-                Catalog catalog = catalogOf(findConfig(id));
-                synchronized (cache) {
-                    cache.put(id, new Entry(catalog, now));
+                Catalog catalog = catalogOf(findConfig(id), id);
+                // 时间戳取解析<b>之后</b>：解析慢的配置若沿用开始时间，写进缓存时可能已经接近
+                // 甚至超过 TTL，表现为"出生即过期"，每次请求都重新拉一遍订阅。
+                synchronized (CACHE) {
+                    CACHE.put(id, new Entry(catalog, System.currentTimeMillis()));
                 }
                 return catalog;
             }
         };
+    }
+
+    /** 丢弃全部已解析配置。配置行被改写或删除后必须调用，否则最多 60 秒仍在服务旧站源。 */
+    public static void invalidate() {
+        synchronized (CACHE) {
+            CACHE.clear();
+        }
+    }
+
+    /**
+     * 配置标识的规范形式（去首尾空白）。
+     *
+     * <p>同时充当 spider 缓存的命名空间来源：激活配置路径必须解析出空串，
+     * 这样它的缓存键才与改动前逐字节相同。
+     */
+    public static String namespace(String interfaceKey) {
+        return interfaceKey == null ? "" : interfaceKey.trim();
     }
 
     /**
@@ -138,11 +160,30 @@ public final class VodSiteCatalog {
      * 因此按配置标识定位时必须走这条纯查询路径。
      */
     public static Config findConfig(String interfaceKey) {
-        if (interfaceKey == null || interfaceKey.trim().isEmpty()) {
-            throw new IllegalArgumentException("缺少配置标识");
-        }
-        String id = interfaceKey.trim();
-        Config config = AppDatabase.get().getConfigDao().findByInterfaceKey(id, BaseConfig.VOD);
+        String id = namespace(interfaceKey);
+        if (id.isEmpty()) throw new IllegalArgumentException("缺少配置标识");
+        Config exact = AppDatabase.get().getConfigDao().findByInterfaceKey(id, BaseConfig.VOD);
+        // 新旧协议都把 sha256(config-url)、历史地址与 legacy key 当 configKey 发过来，
+        // 进度写入用的是 PlaybackConfigIdentity.cidForKey。两边必须认同一套标识，
+        // 否则同一个 key 在进度同步能解析、在站源/历史推送却报"未知"。
+        Config legacy = exact != null ? null : legacyConfig(id);
+        return resolve(id, exact, legacy);
+    }
+
+    /** 既有解析器的兜底：命中即按 cid 只读取行，绝不使用 Config.find(url, type) 的插入语义。 */
+    private static Config legacyConfig(String id) {
+        int cid = PlaybackConfigIdentity.cidForKey(id);
+        return cid > 0 ? Config.find(cid) : null;
+    }
+
+    /**
+     * 纯解析：精确命中优先，其次沿用既有播放身份解析出的行；都没有就是未知标识。
+     *
+     * <p>{@code exact}/{@code legacy} 由调用方只读查得，本方法不碰数据库，
+     * 因此单测能直接锁住"未知标识必须报错且绝不新建配置行"。
+     */
+    public static Config resolve(String id, Config exact, Config legacy) {
+        Config config = exact != null ? exact : legacy;
         if (config == null || isBlank(config.getUrl())) {
             throw new IllegalArgumentException("未知的配置标识: " + id);
         }
@@ -150,17 +191,38 @@ public final class VodSiteCatalog {
     }
 
     public static List<Site> sitesOf(Config config) throws Exception {
-        return catalogOf(config).getSites();
+        return catalogOf(config, "").getSites();
     }
 
     /** 解析一份配置：只读网络 + 纯函数变换，不写数据库、不切换全局状态。 */
     public static Catalog catalogOf(Config config) throws Exception {
+        return catalogOf(config, "");
+    }
+
+    /**
+     * 同上，但把 {@code namespace} 记到每个站源上，使它们的 spider 落在自己的缓存槽里。
+     *
+     * <p>激活配置走空命名空间，因此与原行为逐字节等价；只有按 configKey 桥接解析非激活配置时
+     * 才传入该 configKey。
+     */
+    public static Catalog catalogOf(Config config, String namespace) throws Exception {
         if (config == null || isBlank(config.getUrl())) throw new IllegalArgumentException("配置为空");
-        return catalogOf(objectOf(config.getUrl(), 0));
+        return catalogOf(objectOf(config.getUrl(), 0), namespace);
     }
 
     /** 由已解析的配置对象抽取站源；CustomCspSetting 只合并进传入对象。 */
     public static Catalog catalogOf(JsonObject object) {
+        return catalogOf(object, "");
+    }
+
+    /**
+     * 同上，并把 {@code namespace} 记到抽取出来的每个站源上。
+     *
+     * <p>命名空间非空时，这些 Site 的 {@link Site#spider()} 会落到该命名空间的缓存槽，
+     * 因此两条配置里的同名 siteKey 不会互相污染；空命名空间（激活配置路径）不写任何标记，
+     * 与原行为逐字节等价。
+     */
+    public static Catalog catalogOf(JsonObject object, String namespace) {
         if (object == null) throw new IllegalArgumentException("配置为空");
         CustomCspSetting.inject(object);
         String spider = Json.safeString(object, "spider");
@@ -170,12 +232,22 @@ public final class VodSiteCatalog {
             if (site == null || site.getKey().isEmpty()) continue;
             sites.add(site);
         }
+        // 与 VodConfig.initSite 对齐的两步，都只读、不写库、不切全局状态：
+        // 站源上用户改过的 searchable/changeable 要回填，自定义 CSP 站源要合并进来，
+        // 否则桥接清单与原生加载出来的不是同一份。
+        Map<String, Site> known = new HashMap<>();
+        for (Site site : Site.findAll()) known.put(site.getKey(), site);
+        for (Site site : sites) site.sync(known.get(site.getKey()));
+        CustomCspSetting.inject(sites);
+        // 打标记放在两处合并之后：自定义 CSP 站源也是这份桥接清单的一部分，必须一起带上命名空间。
+        if (!isBlank(namespace)) for (Site site : sites) site.setNamespace(namespace);
         return new Catalog(sites, dohOf(object), rulesOf(object), Json.safeListString(object, "flags"));
     }
 
     private static JsonObject objectOf(String configUrl, int depth) throws Exception {
         if (depth > MAX_DEPOT_DEPTH) throw new IllegalArgumentException("配置订阅层级过深");
-        String url = CatSource.isBundle(configUrl) ? CatSource.serve(configUrl) : UrlUtil.convert(configUrl);
+        // 猫源（bundle）只复用已在服务的那一个：换源会杀掉激活配置的子进程，见 CatSource.reuse。
+        String url = CatSource.isBundle(configUrl) ? CatSource.reuse(configUrl) : UrlUtil.convert(configUrl);
         String raw = Decoder.getJson(url, TAG);
         TmdbSourceCredentialIngress.Ingress ingress = TmdbSourceCredentialIngress.extractRootAndStrip(raw);
         JsonObject object = CatSource.normalize(url, Json.parse(ingress.getSanitizedJson()));

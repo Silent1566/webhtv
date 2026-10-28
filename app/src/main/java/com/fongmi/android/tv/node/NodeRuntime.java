@@ -200,6 +200,25 @@ public final class NodeRuntime {
         if (callback != null) callback.onError("服务未在预期时间内就绪");
     }
 
+    /**
+     * 只读判定：{@code url} 对应的 bundle 是否就是当前正在服务的那个。
+     *
+     * <p>桥接解析针对的是<b>非激活</b>配置，只能靠它决定能否复用运行时：不是同一个 bundle 时
+     * {@link #start} 会先杀掉正在服务的子进程，激活配置的全部请求随后打到另一个源上。
+     * 这里只读，不启动、不停止。
+     *
+     * <p>「在服务」必须是真实存活：只比对 {@code servingUrl} 会在两种已失效的状态上撒谎——
+     * {@link #timeout} 只把 {@code running} 置 false、{@code port} 置 0，而 {@code :node} 子进程
+     * 被系统杀掉时 {@code running} 甚至不会被改写。此时返回 true 会让调用方拿到
+     * {@code http://127.0.0.1:0/config} 这种不可用地址。因此先做三次无阻塞的 volatile 判断
+     * （running / port>0），再复用既有的 {@link #serviceAlive()} 探一次进程，语义与
+     * {@link #isRunning()} 保持同一套判据。
+     */
+    public static boolean isServing(String url) {
+        if (servingUrl.isEmpty() || !running || port <= 0) return false;
+        return serviceAlive() && same(url);
+    }
+
     /** 是否就是当前这个 bundle。 */
     private static boolean same(String url) {
         String requested = NodeBundle.bundleUrl(url);

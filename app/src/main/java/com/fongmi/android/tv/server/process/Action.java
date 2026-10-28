@@ -426,12 +426,49 @@ public class Action implements Process {
      * <p>不读也不新建 config 行之外的任何状态：不调用 VodConfig.load（那会把安卓端当前
      * 激活源切走，用户明确要求安卓只当运行容器），历史直接写目标配置的 cid。
      */
-    private void pushScopedHistory(String configKey, List<History> targets, boolean force) {
-        Config config = VodSiteCatalog.findConfig(configKey);
-        if (force) History.delete(config.getId());
-        History.syncTo(config.getId(), targets);
-        RefreshEvent.history();
+    static void pushScopedHistory(String configKey, List<History> targets, boolean force) {
+        pushScopedHistory(VodSiteCatalog.findConfig(configKey), targets, force, SCOPED_SINK);
     }
+
+    /**
+     * 落库接缝：cid 只由解析出的配置决定，绝不读 VodConfig.getCid()。
+     *
+     * <p>抽出接缝是为了让单测能在不碰 Room 的前提下断言"写到了哪个 cid"——这正是
+     * 桥接推送唯一要保证的契约，也是改回激活配置 cid 时唯一会变红的地方。
+     */
+    static void pushScopedHistory(Config config, List<History> targets, boolean force, ScopedHistorySink sink) {
+        int cid = config.getId();
+        if (force) sink.clear(cid);
+        sink.write(cid, targets);
+        sink.refresh();
+    }
+
+    /** 历史落库动作。生产实现直接写 Room；单测替换成记录器。 */
+    interface ScopedHistorySink {
+
+        void clear(int cid);
+
+        void write(int cid, List<History> targets);
+
+        void refresh();
+    }
+
+    private static final ScopedHistorySink SCOPED_SINK = new ScopedHistorySink() {
+        @Override
+        public void clear(int cid) {
+            History.delete(cid);
+        }
+
+        @Override
+        public void write(int cid, List<History> targets) {
+            History.syncTo(cid, targets);
+        }
+
+        @Override
+        public void refresh() {
+            RefreshEvent.history();
+        }
+    };
 
     /** configKey 非空即走按源隔离的新协议；空则表示旧客户端，仍按 config.url 解析。 */
     static boolean isScopedHistoryPush(Map<String, String> params) {

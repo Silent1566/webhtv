@@ -3,11 +3,16 @@ package com.fongmi.android.tv.server.process;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
+import com.fongmi.android.tv.api.CatSource;
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.api.config.VodSiteCatalog;
+import com.fongmi.android.tv.api.loader.BaseLoader;
 import com.fongmi.android.tv.bean.Class;
+import com.fongmi.android.tv.bean.Config;
 import com.fongmi.android.tv.bean.Flag;
 import com.fongmi.android.tv.bean.Result;
 import com.fongmi.android.tv.bean.Site;
@@ -494,6 +499,154 @@ public class VodApiTest {
                 VodApi.remoteUrl("http://127.0.0.1:9978/proxy?siteKey=orig&configKey=cfg", origin, "s", "cfg", 9978));
         assertEquals("http://127.0.0.1:1234/proxy?do=x",
                 VodApi.remoteUrl("http://127.0.0.1:1234/proxy?do=x", origin, "site", "cfg", 9978));
+    }
+
+    /**
+     * B1：桥接解析遇到非激活配置的猫源时必须直接失败。
+     *
+     * <p>{@link CatSource#reuse} 是唯一的放行口子；实现里一旦退回 {@code serve}，这里就会
+     * 因为「当前没有 bundle 在服务」而拿到 IllegalStateException，而不是去动全局 node。
+     */
+    @Test
+    public void nonActiveBundleIsRejectedInsteadOfRestartingNode() {
+        try {
+            CatSource.reuse("http://127.0.0.1:9988/cat/index.js");
+            fail("非激活配置的 bundle 必须被拒绝");
+        } catch (IllegalStateException e) {
+            assertTrue(e.getMessage(), e.getMessage().contains("已拒绝解析"));
+        }
+
+        String catalog = read("com/fongmi/android/tv/api/config/VodSiteCatalog.java");
+        assertTrue("桥接解析只允许复用已在服务的 bundle", catalog.contains("CatSource.reuse("));
+        assertFalse("桥接解析不得调用会换源杀进程的 CatSource.serve", catalog.contains("CatSource.serve("));
+
+        String runtime = read("com/fongmi/android/tv/node/NodeRuntime.java");
+        assertTrue("NodeRuntime 需要只读判定", runtime.contains("public static boolean isServing(String url)"));
+        assertTrue("isServing 必须复用 same() 的比对语义", runtime.indexOf("isServing") < runtime.indexOf("private static boolean same(") + 4000);
+    }
+
+    /** B2：缓存槽的命名空间前缀，空命名空间必须与改动前逐字节等价。 */
+    @Test
+    public void spiderSlotKeepsActiveCacheKeysByteIdentical() {
+        assertEquals("active_site", BaseLoader.slot("", "active_site"));
+        assertEquals("active_site", BaseLoader.slot(null, "active_site"));
+        assertEquals("cfg@@@active_site", BaseLoader.slot("cfg", "active_site"));
+        assertEquals(java.util.Set.of("active_site"), BaseLoader.baseKeys(List.of("active_site")));
+        assertEquals(java.util.Set.of("active_site"), BaseLoader.baseKeys(List.of("cfg@@@active_site")));
+        assertEquals(java.util.Set.of("a", "b"), BaseLoader.baseKeys(List.of("a", "cfg@@@b")));
+
+        String loader = read("com/fongmi/android/tv/api/loader/BaseLoader.java");
+        assertTrue("猫源站点的缓存键必须带命名空间", loader.contains("catSpiders.computeIfAbsent(slot, k -> new CatSpider(api))"));
+        assertTrue("四种 spider 都要拿到命名空间",
+                loader.contains("pyLoader.getSpider(namespace, key, api, ext)")
+                        && loader.contains("jsLoader.getSpider(namespace, key, api, ext, jar)")
+                        && loader.contains("jarLoader.getSpider(namespace, key, api, ext, jar)"));
+        assertTrue("桥接 spider 必须落在 configKey 命名空间里",
+                loader.contains("getSpider(VodSiteCatalog.namespace(configKey), site.getKey()"));
+
+        for (String name : new String[]{"JsLoader", "PyLoader", "JarLoader"}) {
+            String source = read("com/fongmi/android/tv/api/loader/" + name + ".java");
+            assertTrue(name + " 必须用 slot 建缓存键", source.contains("BaseLoader.slot(namespace, key)"));
+        }
+        String jar = read("com/fongmi/android/tv/api/loader/JarLoader.java");
+        assertTrue("jar 的 dex 缓存仍只按 jar md5 建键", jar.contains("String jaKey = Util.md5(jar)"));
+        assertTrue("插件脚本保护要看到不带命名空间的 key",
+                read("com/fongmi/android/tv/api/loader/JsLoader.java").contains("BaseLoader.baseKeys(spiders.keySet())"));
+    }
+
+    /** B3：显式带 configKey 时解析失败不许回落到激活配置。 */
+    @Test
+    public void catalogProxyNeverFallsBackToActiveLoader() {
+        String loader = read("com/fongmi/android/tv/api/loader/BaseLoader.java");
+        assertFalse("不得保留 spider 为空就回落的写法", loader.contains("spider != null ? spider :"));
+        assertTrue("带 configKey 时只走 catalogSpider",
+                loader.contains("if (!TextUtils.isEmpty(params.get(\"configKey\"))) return catalogSpider("));
+        int method = loader.indexOf("private Spider catalogSpider(");
+        assertTrue("catalogSpider 必须向调用方抛异常", method > 0 && loader.indexOf("throws Exception", method) > method);
+        assertFalse("catalogSpider 不得把异常吞成 null", loader.substring(method, loader.indexOf("public void parseJar")).contains("catch"));
+
+        String proxy = read("com/fongmi/android/tv/server/process/Proxy.java");
+        assertTrue("异常必须转成可见的错误响应", proxy.contains("return Nano.error(Objects.toString(e.getMessage(), e.toString()));"));
+    }
+
+    /** B4：配置标识的解析与既有播放身份解析器收敛成一套。 */
+    @Test
+    public void configKeyResolutionAcceptsExactAndLegacyIdentity() {
+        Config exact = config(11, "https://exact.example/config");
+        Config legacy = config(22, "https://legacy.example/config");
+
+        assertSame("精确命中优先", exact, VodSiteCatalog.resolve("k", exact, legacy));
+        assertSame("未命中精确键时沿用既有解析器", legacy, VodSiteCatalog.resolve("k", null, legacy));
+
+        for (Config[] pair : new Config[][]{{null, null}, {exact, null}}) {
+            String id = pair[0] == null ? "missing" : "blank-url";
+            if (pair[0] != null) pair[0].setUrl("  ");
+            try {
+                VodSiteCatalog.resolve(id, pair[0], pair[1]);
+                fail("未知的配置标识必须报错: " + id);
+            } catch (IllegalArgumentException e) {
+                assertEquals("未知的配置标识: " + id, e.getMessage());
+            }
+        }
+
+        String catalog = code("com/fongmi/android/tv/api/config/VodSiteCatalog.java");
+        assertTrue("必须接入既有身份解析器", catalog.contains("PlaybackConfigIdentity.cidForKey(id)"));
+        assertTrue("兜底按 cid 只读取行", catalog.contains("Config.find(cid)"));
+        assertFalse("桥接解析绝不能走会插行的 Config.find(url, type)", catalog.contains("Config.find(url"));
+    }
+
+    /** M1/M2/M3：缓存失效入口、时间戳取在解析之后、清单补齐原生加载的两步。 */
+    @Test
+    public void catalogCacheAndSiteListMatchNativeLoading() {
+        String catalog = read("com/fongmi/android/tv/api/config/VodSiteCatalog.java");
+        assertTrue("需要公开的失效入口", catalog.contains("public static void invalidate()"));
+        assertTrue("解析完成后再取时间戳",
+                catalog.indexOf("catalogOf(findConfig(id), id)") > 0
+                        && catalog.indexOf("new Entry(catalog, System.currentTimeMillis())") > catalog.indexOf("catalogOf(findConfig(id), id)"));
+        assertTrue("不得在解析前采样时间", !catalog.contains("long now = System.currentTimeMillis()"));
+        assertTrue("补齐 Site.findAll() 回填", catalog.contains("for (Site site : Site.findAll()) known.put(site.getKey(), site);"));
+        assertTrue("补齐 CustomCspSetting 合并", catalog.contains("CustomCspSetting.inject(sites)"));
+
+        String config = read("com/fongmi/android/tv/bean/Config.java");
+        int hooks = 0;
+        for (int at = config.indexOf("invalidateCatalog();"); at >= 0; at = config.indexOf("invalidateCatalog();", at + 1)) hooks++;
+        assertEquals("insert/save/delete 三处都要失效缓存", 3, hooks);
+    }
+
+    private static Config config(int id, String url) {
+        Config config = new Config();
+        config.setType(0);
+        config.setUrl(url);
+        config.setId(id);
+        return config;
+    }
+
+    private static String code(String relative) {
+        StringBuilder builder = new StringBuilder();
+        for (String line : read(relative).split("\n", -1)) {
+            String trimmed = line.trim();
+            if (trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")) continue;
+            builder.append(line).append('\n');
+        }
+        return builder.toString();
+    }
+
+    private static String read(String relative) {
+        java.nio.file.Path path = mainJava().resolve(java.nio.file.Paths.get(relative.replace('/', java.io.File.separatorChar)));
+        try {
+            return new String(java.nio.file.Files.readAllBytes(path), StandardCharsets.UTF_8);
+        } catch (java.io.IOException e) {
+            throw new AssertionError("无法读取 " + path, e);
+        }
+    }
+
+    private static java.nio.file.Path mainJava() {
+        java.nio.file.Path dir = java.nio.file.Paths.get("").toAbsolutePath();
+        for (int i = 0; i < 6 && dir != null; i++, dir = dir.getParent()) {
+            java.nio.file.Path candidate = dir.resolve(java.nio.file.Paths.get("app", "src", "main", "java"));
+            if (java.nio.file.Files.isDirectory(candidate)) return candidate;
+        }
+        throw new IllegalStateException("app/src/main/java not found from " + java.nio.file.Paths.get("").toAbsolutePath());
     }
 
     private static String encode(String value) throws Exception {
