@@ -224,6 +224,26 @@ public class ExoCompressedAudioDirectPolicyTest {
     }
 
     @Test
+    public void unreadableThresholdAfterReadableStartAbandonsEvidenceAndRenewsWindow() throws Exception {
+        StartupFixture f = new StartupFixture(4096);
+        f.write(4096, 10);
+        // Arm the startup window; nothing can be decided at the first visit.
+        assertNull(f.poll(0, true));
+        f.memory.environment.buffer = ExoCompressedAudioDirectPolicy.StartupBuffer.UNKNOWN;
+        // Metrics turned unreadable: the readable-metric budget is already spent, so the stale
+        // readable-threshold evidence is abandoned here instead of being judged as a stall.
+        assertNull(f.poll(800, true));
+        // Abandoning that evidence cleared the window; this visit re-arms it for zero metrics.
+        assertNull(f.poll(0, true));
+        // Probe inside the zero-metric budget. A window that was never cleared would still be armed
+        // at 0 ms and would already decide here, so only this poll pins the renewal itself.
+        assertNull(f.poll(400, true));
+        // The renewed window expires after the full 1200 ms zero-metric budget (800 -> 2000), so the
+        // accepted payload plus a head pinned at zero is finally reported as a startup stall.
+        assertSame(f.memory.format, f.poll(800, true));
+    }
+
+    @Test
     public void internalPcmRecoveryConfirmsWithoutNewMediaPreparation() throws Exception {
         StartupFixture f = new StartupFixture(4096);
         f.memory.policy.setSelectedAudioFormat(f.memory.format);

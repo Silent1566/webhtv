@@ -4,8 +4,8 @@
 
 - 目标：电视版（leanback）播放新视频时，厂家直通（vendor direct / offloaded compressed）音轨接受了第一段数据后播放头一直停在 0，界面显示 READY/isPlaying 但音视频都不前进；修复后应在约 1 秒量级内自动回退到 PCM 解码，而不是等 Media3 的 10 秒 STUCK_PLAYING_NO_PROGRESS 超时。
 - 验收：`app/src/main/java/com/fongmi/android/tv/player/exo/ExoCompressedAudioDirectPolicy.java` 的 `isStartupStalled()` 在 buffer 指标不可读（capacity/size/threshold 全为 0）时仍能以 “已接收数据 + 原始播放头仍为 0” 判定启动停滞；单测与 Robolectric 集成测试覆盖该分支且阈值路径行为不变。
-- 状态：已实现，目标测试通过，待提交+打 tag。
-- 下一个动作：`task_guard.sh finish` 并创建 `recovery/C107/<timestamp>` 注释 tag。
+- 状态：已提交 `687ec4af3c`，已打注释标签 `recovery/C107/20261027185704-687ec4af3c95`；定向单测通过。
+- 下一个动作：dev2 上的 C107 增量（新增回归测试与本文档改动）由合并任务 guard 提交，随后推送 dev2 并向 beta 开 PR。
 
 ## 现场证据（G:\下载webhtv-debug-log(1).txt）
 
@@ -39,6 +39,7 @@
   - 新增 `unreadableBufferMetricsStillRecoverFirstSilentDirectOutput` 与 `unreadableBufferMetricsNeverRecoverHealthyDirectOutput`，通过 `startupBuffer -> StartupBuffer.UNKNOWN` 复现厂家行为；仍断言不重开数据源、只准备一次、PCM 恢复不依赖 10 秒看门狗（零指标预算 3 s，可读指标仍为 2 s）。
 - 验证命令与结果：
   - `bash ./gradlew :app:testLeanbackArm64_v8aDebugUnitTest --tests '*ExoCompressedAudioDirectPolicyTest' --tests '*ExoStartupRecoveryIntegrationTest' --no-daemon --console=plain` → BUILD SUCCESSFUL（3m37s）；`ExoCompressedAudioDirectPolicyTest` 71 tests / 0 failures / 1 skipped，`ExoStartupRecoveryIntegrationTest` 5 tests / 0 failures。
+  - 增量后复跑（当前工作区，含新增回归测试）：`gradlew.bat :app:testLeanbackArm64_v8aDebugUnitTest --tests '*ExoCompressedAudioDirectPolicyTest' --tests '*ExoStartupRecoveryIntegrationTest' --console=plain` → BUILD SUCCESSFUL（45s）；`ExoCompressedAudioDirectPolicyTest` 72 tests / 0 failures / 1 skipped，`ExoStartupRecoveryIntegrationTest` 5 tests / 0 failures。
 
 ## 不做
 
@@ -48,4 +49,4 @@
 
 ## 回滚
 
-仅一个实现文件 + 两个测试文件；回滚本提交即可恢复原行为（零指标设备重新退回 10 秒超时后恢复）。
+一个实现文件 + 两个测试文件 + 本文档；回滚本提交即可恢复原行为（零指标设备重新退回 10 秒超时后恢复）。
