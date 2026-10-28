@@ -172,4 +172,10 @@ beta 版正确处理并把它写进了注释与回归用例。测试集 beta 也
 
 ## 8. 交付坐标
 
-提交后回填。
+| 项 | 值 |
+| --- | --- |
+| 合并提交 | `04c5d5afa79a342c69d8d4687914acac0b8130a3`（`dev4`，父提交 `fe51f3a246a` + `004b1f5d363`） |
+| Recovery tag | `recovery/C108-BETA-MERGE-DEV4-20261028/20261028115633-04c5d5afa79`（annotated，指向合并提交） |
+| 分支 | `dev4` → 推送后创建到 `beta` 的中文 PR |
+| 回滚 | `git reset --hard fe51f3a246a`（回到合并前），或 `git revert -m 1 04c5d5afa79`（保留历史） |
+| 验证坐标 | 合并提交内的 `app/` 与 `docs/TV-MANUAL-PLAY-20261026.md` 即 §5 验证过的状态；本 §8 为文档回填，不含代码改动 |
