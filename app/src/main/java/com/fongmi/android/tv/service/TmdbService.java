@@ -11,6 +11,7 @@ import com.fongmi.android.tv.bean.TmdbEpisode;
 import com.fongmi.android.tv.bean.TmdbItem;
 import com.fongmi.android.tv.bean.TmdbPerson;
 import com.fongmi.android.tv.bean.TmdbVideo;
+import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.utils.TmdbImageSelector;
 import com.fongmi.android.tv.utils.TmdbLanguagePolicy;
 import com.fongmi.android.tv.utils.TmdbProxy;
@@ -654,8 +655,12 @@ public class TmdbService {
         return null;
     }
 
+    /**
+     * 请求语言与缓存分键共用同一个判定，两者必须同源：一旦不一致，
+     * 不同语言的响应用同一个键落盘，会把简体标题当成繁体的缓存命中。
+     */
     private String requestLanguage(TmdbConfig config) {
-        return TmdbLanguagePolicy.requestLanguage(config);
+        return TmdbLanguagePolicy.requestLanguage(config, Setting.getLanguage());
     }
 
     public List<TmdbItem> personWorks(JsonObject person, @NonNull TmdbConfig config) {
@@ -1000,7 +1005,7 @@ public class TmdbService {
     }
 
     private String cacheLanguage(TmdbConfig config) {
-        return TmdbLanguagePolicy.requestLanguage(config);
+        return requestLanguage(config);
     }
 
     private boolean isOnAir(JsonObject detail) {

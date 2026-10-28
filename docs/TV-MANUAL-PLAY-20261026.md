@@ -2,8 +2,11 @@
 
 ## 目标
 
-TV 端关闭【点播自动播放】后进入手动播放模式：进入播放页不再把焦点交给左上角预览窗口，
-预览位显示影片封面；点选集直接全屏起播，省掉「先全屏、再按一次 OK」的多余步骤。
+TV 端关闭【点播自动播放】后进入手动播放模式：预览位显示影片封面而不露出黑框，
+点选集直接全屏起播；在预览框上按确认键一次完成「全屏 + 起播」，省掉「先全屏、再按一次 OK」的多余步骤。
+
+> 初始焦点：进入播放页仍落在左上角预览窗口（与自动播放开启时一致）。这一点在「回归修复 3/4」
+> 中经用户纠正后确定 —— 早期版本曾把初始焦点重定向到选集，导致焦点在播放器与集数之间来回跳。
 
 ## 关键更正：目标对象
 
@@ -37,6 +40,11 @@ private boolean isManualPlaybackMode() {
 ```
 
 ### 2. 初始焦点分流（含「选集未就绪」挂起）
+
+> **已被「回归修复 4」撤销**：用户明确要求进场焦点仍留在播放器，故 `focusInitialEpisode()`、
+> `mPendingManualEpisodeFocus` 挂起机制与「选集重建后回焦选集」全部删除，
+> `requestInitialPlaybackFocus()` 现在只有一行 `mBinding.video.requestFocus();`，
+> `flushPendingManualEpisodeFocus()` 保留为空方法以维持调用点。以下为该轮的历史实现，仅供追溯。
 
 `requestInitialPlaybackFocus()` / `focusInitialEpisode()` / `flushPendingManualEpisodeFocus()`：
 详情刚绑定时选集适配器可能为空，此时记下 `mPendingManualEpisodeFocus`，等
@@ -151,14 +159,15 @@ ANR 主线程堆栈为 `CustomSeekView.updateProgress` → `MediaController.isPl
 3. `selectEpisodeSegmentPosition`：用户正把焦点放在分段行上时，焦点位是权威，重建回调不得改写选中位。
 4. 分段行左右键改为显式接管：`onArrayKey` 的 LEFT/RIGHT 走 `moveArraySelection(±1)`，
    以真实焦点位（`focusedArrayPosition()`）为准，并用一次性 `OnGlobalLayoutListener` 在布局结束后复核补偿。
-5. 集数网格的焦点校正从「只等一帧」改为持久监听（`mEpisodeGridFocusTarget`）：
+5. 集数网格的焦点校正改为带状态的布局监听（`mEpisodeGridFocusTarget`）：
    异步取流/图片加载后的第二次布局会把焦点留给预览框，只等一帧会漏。
+   （监听范围随后在「回归修复 3」收窄为「仅 `getCurrentFocus() == null` 时补偿 + 3 次上限」。）
 6. 补齐 `episodeHeader` 整条 GONE 时的可达性判断：`isEpisodeFocusTarget` 改用 `isEffectivelyVisible`
    （逐级检查自身与全部祖先），否则 `findFocusUp/Down` 会把已隐藏的表头工具当成有效邻居。
-7. 手动模式焦点安全网：系统在退出触摸模式（`leaveTouchMode → restoreDefaultFocus`）或 RecyclerView 回收
-   持有焦点的子项时会自行把焦点交回最上方的预览框，声明式 nextFocus 覆盖不到，故在根视图焦点变化时把焦点交回当前选集。
-8. `tryStartFastTmdbPlayback`、`resetDetailForNewIntent` 两处无守卫的 `mBinding.video.requestFocus()` 改为
-   `requestInitialPlaybackFocus()`，换条目/炫彩详情直放路径不再把焦点拽回预览框。
+7. ~~手动模式焦点安全网~~：该根视图全局焦点看门狗**已在「回归修复 3」删除**，
+   它没有区分「进场初始焦点」与「用户主动移到播放器」，正是焦点来回跳的来源。
+8. `tryStartFastTmdbPlayback`、`resetDetailForNewIntent` 等处的裸 `mBinding.video.requestFocus()`
+   统一收敛到 `requestInitialPlaybackFocus()`，焦点策略只剩一个出口（当前实现即 `mBinding.video.requestFocus()`）。
 9. `onDestroy` 注销上述监听。
 
 ### 验证（模拟器 emulator-5562）

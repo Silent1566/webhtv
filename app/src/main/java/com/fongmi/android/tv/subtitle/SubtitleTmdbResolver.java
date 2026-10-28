@@ -24,7 +24,7 @@ public final class SubtitleTmdbResolver {
         TmdbItem tmdbItem = request.getTmdbItem();
         TmdbEpisode tmdbEpisode = request.getTmdbEpisode();
         if (tmdbItem == null && request.isAllowTmdbLookup() && !SubtitleStrings.isEmpty(request.getSiteKey()) && !SubtitleStrings.isEmpty(request.getVodId())) {
-            tmdbItem = Setting.getTmdbMatchCache().find(request.getSiteKey(), request.getVodId(), request.getVodName(), TmdbLanguagePolicy.requestLanguage(TmdbConfig.effectiveCurrent()));
+            tmdbItem = Setting.getTmdbMatchCache().find(request.getSiteKey(), request.getVodId(), request.getVodName(), TmdbLanguagePolicy.requestLanguage(TmdbConfig.effectiveCurrent(), Setting.getLanguage()));
         }
 
         ResolvedMediaIdentity.Builder builder = ResolvedMediaIdentity.builder();

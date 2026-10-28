@@ -377,7 +377,7 @@ public class LiveActivity extends PlaybackActivity implements GroupAdapter.OnCli
      * 按钮文案被源名取代后读屏会只剩一个孤立的源名，因此同步补回「直播源」动作语义。
      */
     private void setSource(Live live) {
-        String name = live == null ? "" : live.getName();
+        String name = live == null ? "" : live.getDisplayName();
         boolean named = !name.isEmpty();
         String label = named ? name : getString(R.string.live_control_source);
         mBinding.control.action.source.setText(label);
@@ -403,7 +403,7 @@ public class LiveActivity extends PlaybackActivity implements GroupAdapter.OnCli
 
     private void setWidth(Live live) {
         int padding = ResUtil.dp2px(52);
-        if (live.getWidth() == 0) for (Group item : live.getGroups()) live.setWidth(Math.max(live.getWidth(), ResUtil.getTextWidth(item.getName(), 16)));
+        if (live.getWidth() == 0) for (Group item : live.getGroups()) live.setWidth(Math.max(live.getWidth(), ResUtil.getTextWidth(item.getDisplayName(), 16)));
         int width = live.getWidth() == 0 ? 0 : Math.min(live.getWidth() + padding, ResUtil.getScreenWidth() / 4);
         setWidth(mBinding.group, width);
     }

@@ -2458,7 +2458,7 @@ private boolean runtimeSourceOnly;
     }
 
     private String currentTmdbLanguage() {
-        return TmdbLanguagePolicy.requestLanguage(currentTmdbConfig());
+        return TmdbLanguagePolicy.requestLanguage(currentTmdbConfig(), Setting.getLanguage());
     }
 
     private String cachedTmdbImage(JsonObject detail, String key) {
@@ -2607,7 +2607,7 @@ private boolean runtimeSourceOnly;
         mBinding.scroll.scrollTo(0, 0);
         mBinding.name.setText(getName());
         mBinding.widget.title.setText(getName());
-        // 手动播放模式下焦点属于选集，不能落回预览框（换条目后仍要能直接选集起播）。
+        // 换条目后初始焦点照旧交给预览框：手动模式下在预览框上按确认键即完成「全屏 + 起播」。
         requestInitialPlaybackFocus();
         updateVideoCover();
         if (service() != null) {
@@ -2789,8 +2789,7 @@ private boolean runtimeSourceOnly;
         if (!loadTmdbDetail) mBinding.progressLayout.showContent();
         mBinding.name.setText(item.getName());
         mFlagAdapter.addAll(item.getFlags());
-        if (isManualPlaybackMode()) requestInitialPlaybackFocus();
-        else mBinding.video.requestFocus();
+        requestInitialPlaybackFocus();
         updateVideoCover();
         App.removeCallbacks(mR4);
         if (!checkHistory(item)) return;
@@ -5814,8 +5813,8 @@ private boolean runtimeSourceOnly;
     }
 
     /**
-     * 手动播放模式：关闭「点播自动播放」后，播放页收起自动起播，进入页面不再把焦点交给预览窗口，
-     * 预览位改显示影片封面，点选集直接全屏起播。
+     * 手动播放模式：关闭「点播自动播放」后，播放页收起自动起播，预览位改显示影片封面，
+     * 点选集直接全屏起播。初始焦点仍留在预览窗口（见 {@link #requestInitialPlaybackFocus()}）。
      * <p>
      * 仅 TV 端生效；返回值同时受 leanback 与设置项约束，手机端行为保持不变。
      */
@@ -6388,6 +6387,15 @@ private boolean runtimeSourceOnly;
     @Override
     protected String getPlaybackKey() {
         return getHistoryKey();
+    }
+
+    // C101: creating PlayerManager + ExoPlayer inside PlaybackService.onCreate is a
+    // multi-hundred-millisecond main-thread stall that freezes the loading spinner.
+    // PlaybackActivity already ships this gate; waiting for the first frame lets the
+    // spinner keep animating while the service is built.
+    @Override
+    protected boolean deferPlaybackServiceBinding() {
+        return true;
     }
 
     @Override

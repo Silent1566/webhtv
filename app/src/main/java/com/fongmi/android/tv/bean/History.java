@@ -1147,7 +1147,7 @@ public class History implements Diffable<History> {
         String siteKey = getSiteKey();
         String vodId = getVodId();
         if (TextUtils.isEmpty(siteKey) || TextUtils.isEmpty(vodId)) return;
-        TmdbItem item = Setting.getTmdbMatchCache().find(siteKey, vodId, getVodName(), TmdbLanguagePolicy.requestLanguage(TmdbConfig.effectiveCurrent()));
+        TmdbItem item = Setting.getTmdbMatchCache().find(siteKey, vodId, getVodName(), TmdbLanguagePolicy.requestLanguage(TmdbConfig.effectiveCurrent(), Setting.getLanguage()));
         if (item != null && item.getTmdbId() > 0) {
             this.tmdbId = item.getTmdbId();
             this.mediaType = item.getMediaType();
