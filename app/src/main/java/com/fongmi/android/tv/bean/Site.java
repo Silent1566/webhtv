@@ -38,6 +38,10 @@ import java.util.concurrent.TimeUnit;
 @Entity
 public class Site implements Parcelable {
 
+    /** 与 {@link #TAG_CLOSE} 逐位配对，覆盖半角与常见的全角括号写法。 */
+    private static final String TAG_OPEN = "[「【〔［";
+    private static final String TAG_CLOSE = "]」】〕］";
+
     @NonNull
     @PrimaryKey
     @SerializedName("key")
@@ -426,11 +430,43 @@ public class Site implements Parcelable {
         return this;
     }
 
+    /**
+     * 方括号里的内容（{@code [采]}、{@code 「盘」}、{@code 【漫】}……）是站点的能力标签，不是普通文案：
+     * 它们既会被 {@code GroupRuleConfig} 抽成站点分组名（分组名同时是分组排序的持久化键），
+     * 也会被音频源、短剧、小说、漫画与 TMDB 的站点规则直接比对。
+     * <p>
+     * 因此这里只翻译标签之外的文案，标签本身一律原样保留。否则繁体界面下 {@code 荐片[采][广]} 会变成
+     * {@code 薦片[采][廣]}：标签与用户规则文本不再互等，分组名还会随语言漂移，把已保存的分组顺序与规则勾选态全部打散。
+     */
     public Site trans() {
         if (Trans.pass()) return this;
-        this.name = Trans.s2t(name);
+        this.name = transName(name);
         setCategories(getCategories().stream().map(Trans::s2t).toList());
         return this;
+    }
+
+    private static String transName(String name) {
+        if (TextUtils.isEmpty(name)) return name;
+        StringBuilder result = new StringBuilder(name.length());
+        int index = 0;
+        while (index < name.length()) {
+            int open = TAG_OPEN.indexOf(name.charAt(index));
+            if (open < 0) {
+                int next = index + 1;
+                while (next < name.length() && TAG_OPEN.indexOf(name.charAt(next)) < 0) next++;
+                result.append(Trans.s2t(name.substring(index, next)));
+                index = next;
+                continue;
+            }
+            int close = name.indexOf(TAG_CLOSE.charAt(open), index + 1);
+            if (close < 0) {
+                result.append(Trans.s2t(name.substring(index)));
+                break;
+            }
+            result.append(name, index, close + 1);
+            index = close + 1;
+        }
+        return result.toString();
     }
 
     public Site sync(Site item) {

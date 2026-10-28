@@ -345,6 +345,10 @@ private boolean runtimeSourceOnly;
 private String mArtworkRequestUrl;
 private String mArtworkRequestOwner;
 private Vod mPendingDetailVod;
+private java.util.ArrayList<String> episodeTitleValues;
+private boolean episodeTitleValuesReady;
+private java.util.Map<Integer, String> episodeTitles;
+private boolean episodeTitlesReady;
 private Result mPendingPlayerResult;
 private int playerContentGeneration;
 private int playerContentRequestId;
@@ -1554,6 +1558,8 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         getIntent().removeExtra(EXTRA_RESUME_HISTORY_CID);
         getIntent().removeExtra(EXTRA_RESUME_HISTORY_KEY);
         getIntent().putExtras(intent);
+        // intent 换了，缓存的集数标题必须一起失效，否则新条目会沿用上一部的标题。
+        invalidateEpisodeTitlesCache();
         resetPlaybackOwnership();
         if (mViewModel != null) mViewModel.cancelPlayerContent();
         invalidatePlayerContent();
@@ -2745,41 +2751,66 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
 
     private void applyTmdbEpisodeTitles(Vod vod) {
         java.util.Map<Integer, String> titles = getEpisodeTitles();
-        android.util.Log.d("VideoActivity", "applyTmdbEpisodeTitles - 集数标题数量: " + titles.size());
         if (vod == null || titles.isEmpty() || vod.getFlags() == null) return;
+        int applied = 0;
+        boolean includeFileSize = Setting.isTmdbEpisodeFileSize();
         for (Flag flag : vod.getFlags()) {
             for (Episode episode : flag.getEpisodes()) {
                 String title = titles.get(episode.getNumber());
                 if (android.text.TextUtils.isEmpty(title)) continue;
-                String displayName = EpisodeTitleFormatter.withSourceFileSize(episode.getName(), EpisodeTitleFormatter.formatTmdbTitle(episode.getNumber(), title), Setting.isTmdbEpisodeFileSize());
+                String displayName = EpisodeTitleFormatter.withSourceFileSize(episode.getName(), EpisodeTitleFormatter.formatTmdbTitle(episode.getNumber(), title), includeFileSize);
                 if (android.text.TextUtils.equals(episode.getDisplayName(), displayName)) continue;
                 episode.setDisplayName(displayName);
-                android.util.Log.d("VideoActivity", "应用标题: " + episode.getNumber() + " -> " + title);
+                applied++;
             }
         }
+        // 原来每集打一行日志，一部几十集的剧就是几十行主线程 logcat；合并成一行。
+        if (applied > 0) Log.d("VideoActivity", "applyTmdbEpisodeTitles applied=" + applied + "/" + titles.size());
     }
 
+    /**
+     * intent 里的集数标题在 Activity 生命周期内是不变量：只有 onNewIntent 的 putExtras 会换掉它。
+     * 但一次进入播放页这个方法会被 setDetail / 身份解析 / 历史标题解析各调一次（设备实测 3 次），
+     * 每次 getStringArrayListExtra 都是一次 Parcelable 反序列化，原来还各打一行日志。
+     * 这里缓存结果，由 onNewIntent 在 putExtras 之后失效。
+     */
     private java.util.Map<Integer, String> getEpisodeTitles() {
+        if (episodeTitlesReady) return episodeTitles;
         java.util.Map<Integer, String> titles = new java.util.HashMap<>();
-        java.util.ArrayList<String> values = getIntent().getStringArrayListExtra("tmdb_episode_titles");
-        android.util.Log.d("VideoActivity", "getEpisodeTitles - values: " + (values != null ? values.size() : "null"));
-        if (values == null) return titles;
-        for (String value : values) {
-            String[] parts = value.split("\t", 2);
-            if (parts.length != 2 || android.text.TextUtils.isEmpty(parts[1])) continue;
-            try {
-                titles.put(Integer.parseInt(parts[0]), parts[1]);
-            } catch (NumberFormatException ignored) {
+        java.util.ArrayList<String> values = episodeTitleValues();
+        if (values != null) {
+            for (String value : values) {
+                String[] parts = value.split("\t", 2);
+                if (parts.length != 2 || android.text.TextUtils.isEmpty(parts[1])) continue;
+                try {
+                    titles.put(Integer.parseInt(parts[0]), parts[1]);
+                } catch (NumberFormatException ignored) {
+                }
             }
         }
+        episodeTitles = titles;
+        episodeTitlesReady = true;
         return titles;
     }
 
+    private java.util.ArrayList<String> episodeTitleValues() {
+        if (!episodeTitleValuesReady) {
+            episodeTitleValues = getIntent().getStringArrayListExtra("tmdb_episode_titles");
+            episodeTitleValuesReady = true;
+        }
+        return episodeTitleValues;
+    }
+
+    private void invalidateEpisodeTitlesCache() {
+        episodeTitleValuesReady = false;
+        episodeTitleValues = null;
+        episodeTitlesReady = false;
+        episodeTitles = null;
+    }
+
     private boolean isIntentTmdbPlayback() {
-        java.util.ArrayList<String> values = getIntent().getStringArrayListExtra("tmdb_episode_titles");
-        boolean result = values != null && !values.isEmpty();
-        android.util.Log.d("VideoActivity", "isIntentTmdbPlayback: " + result);
-        return result;
+        java.util.ArrayList<String> values = episodeTitleValues();
+        return values != null && !values.isEmpty();
     }
 
     private void getPlayer(Flag flag, Episode episode) {
@@ -6610,6 +6641,13 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
     @Override
     protected String getPlaybackKey() {
         return getHistoryKey();
+    }
+
+    // C101: see the leanback flavor note; deferring keeps the loading spinner animating
+    // while PlaybackService builds PlayerManager and the ExoPlayer instance.
+    @Override
+    protected boolean deferPlaybackServiceBinding() {
+        return true;
     }
 
     @Override

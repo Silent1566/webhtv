@@ -62,6 +62,18 @@
             android:layout_height="match_parent"
             app:surface_type="none" />
 
+        <!-- 关闭「点播自动播放」后的待播态：预览位显示影片封面，而不是停留在没有画面的空黑框。
+             叠在 exo 之上、音频封面层之下；不可聚焦、不吞触摸，避免成为遥控器焦点死角。 -->
+        <ImageView
+            android:id="@+id/videoCover"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clickable="false"
+            android:focusable="false"
+            android:importantForAccessibility="no"
+            android:scaleType="centerCrop"
+            android:visibility="gone" />
+
         <FrameLayout
             android:id="@+id/audioStage"
             android:layout_width="match_parent"

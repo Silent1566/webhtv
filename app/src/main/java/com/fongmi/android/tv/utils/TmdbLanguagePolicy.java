@@ -32,8 +32,48 @@ public final class TmdbLanguagePolicy {
     private TmdbLanguagePolicy() {
     }
 
+    /**
+     * 只看配置的 TMDB 请求语言。
+     *
+     * <p>本类是纯策略（不依赖 Android），这条重载只反映用户配置，<b>不会</b>跟随界面语言。
+     * 任何「真正发请求」或「写读按语言分键的缓存」的调用点都必须用
+     * {@link #requestLanguage(TmdbConfig, int)} 并传入 {@code Setting.getLanguage()}：
+     * 请求语言与缓存键一旦不同源，繁体界面取回的 zh-TW 数据会被标成 zh-CN 落盘，
+     * 切回简体后语言守卫 {@link #matchesTarget} 认不出这份「其实是繁体」的快照。
+     */
     public static String requestLanguage(@Nullable TmdbConfig config) {
         return normalize(config == null ? null : config.getLanguage());
+    }
+
+    /**
+     * TMDB 请求语言：用户显式配置过就用用户的，否则跟随界面语言的中文变体。
+     *
+     * <p>为什么需要区分「显式」：{@code TmdbConfig.language} 经 sanitize 后总是非空（缺省
+     * {@code zh-CN}），单看值无法判断用户是否表达过偏好。直接无条件跟随界面语言会**覆盖
+     * 用户显式选择**（例如用户故意「繁体界面 + 简体 TMDB 数据」）。
+     *
+     * <p>只在界面语言是中文时才跟随：英文/其它语言界面下 TMDB 仍按用户配置返回，
+     * 避免把中文界面偏好意外带进非中文场景。
+     */
+    public static String requestLanguage(@Nullable TmdbConfig config, int uiLanguage) {
+        String configured = requestLanguage(config);
+        if (config != null && config.isLanguageConfigured()) return configured;
+        String ui = languageForInterface(uiLanguage);
+        return TextUtils.isEmpty(ui) ? configured : ui;
+    }
+
+    /**
+     * 界面语言 → TMDB 语言。只处理中文变体；其它情况返回空串表示「不干预」。
+     *
+     * <p>{@code 1}/{@code 2} 是 app 侧 {@code Setting.LANGUAGE_SIMPLIFIED} /
+     * {@code LANGUAGE_TRADITIONAL} 的取值。这里刻意不直接依赖 Setting，保持本类为纯策略，
+     * 便于在 JVM 单测里直接验证。
+     */
+    @Nullable
+    public static String languageForInterface(int uiLanguage) {
+        if (uiLanguage == 1) return "zh-CN";
+        if (uiLanguage == 2) return "zh-TW";
+        return "";
     }
 
     public static String normalize(@Nullable String language) {

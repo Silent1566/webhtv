@@ -52,16 +52,52 @@ public class Device implements Diffable<Device>, Comparable<Device> {
     @SerializedName("time")
     private long time;
 
+    // uuid / 名字 / 序列号 / 有线无线 MAC / 设备形态在进程生命周期内不会变化，
+    // 但原来每次 Device.get() 都要重新探测一遍：NetworkInterface.getByName("eth0"/"wlan0")
+    // 两次、Settings.Secure 一次、Build 字段一次，再由 Server.getAddress() 遍历全部网卡。
+    // 播放中的进度 tick 每秒都会经 PlaybackRecord.clientKey() 走到这里，
+    // 于是主线程每秒被这几项设备探测各扫一次。这里只把稳定身份量缓存起来，
+    // 会随网络变化的 ip（以及 time）仍然每次实时取值。
+    private static final Object IDENTITY_LOCK = new Object();
+    private static volatile boolean identityReady;
+    private static String identityUuid;
+    private static String identityName;
+    private static String identitySerial;
+    private static String identityEth;
+    private static String identityWlan;
+    private static int identityType;
+
+    private static void ensureIdentity() {
+        if (identityReady) return;
+        synchronized (IDENTITY_LOCK) {
+            if (identityReady) return;
+            identitySerial = Util.getSerial();
+            identityEth = Util.getMac("eth0");
+            identityWlan = Util.getMac("wlan0");
+            identityUuid = Util.getAndroidId();
+            identityName = Util.getDeviceName();
+            identityType = Product.getDeviceType();
+            identityReady = true;
+        }
+    }
+
+    /** 稳定设备身份里的 uuid，语义与 get().getUuid() 一致（空值归一为空串），但不做网络探测。 */
+    public static String identityUuid() {
+        ensureIdentity();
+        return identityUuid == null ? "" : identityUuid;
+    }
+
     public static Device get() {
+        ensureIdentity();
         Device device = new Device();
         device.setTime(App.time());
-        device.setSerial(Util.getSerial());
-        device.setEth(Util.getMac("eth0"));
-        device.setWlan(Util.getMac("wlan0"));
-        device.setUuid(Util.getAndroidId());
-        device.setName(Util.getDeviceName());
+        device.setSerial(identitySerial);
+        device.setEth(identityEth);
+        device.setWlan(identityWlan);
+        device.setUuid(identityUuid);
+        device.setName(identityName);
         device.setIp(Server.get().getAddress());
-        device.setType(Product.getDeviceType());
+        device.setType(identityType);
         return device;
     }
 

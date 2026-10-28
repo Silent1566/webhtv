@@ -49,6 +49,28 @@ public class TmdbEpisodeGridPolicyTest {
     }
 
     @Test
+    public void horizontalFocusTargetStaysInsideTheCurrentRow() {
+        assertEquals(1, TmdbEpisodeGridPolicy.horizontalFocusTarget(0, 4, 20, true));
+        assertEquals(0, TmdbEpisodeGridPolicy.horizontalFocusTarget(1, 4, 20, false));
+        assertEquals(TmdbEpisodeGridPolicy.NO_FOCUS_TARGET, TmdbEpisodeGridPolicy.horizontalFocusTarget(0, 4, 20, false));
+        assertEquals(TmdbEpisodeGridPolicy.NO_FOCUS_TARGET, TmdbEpisodeGridPolicy.horizontalFocusTarget(3, 4, 20, true));
+        assertEquals(5, TmdbEpisodeGridPolicy.horizontalFocusTarget(4, 4, 20, true));
+        assertEquals(6, TmdbEpisodeGridPolicy.horizontalFocusTarget(7, 4, 20, false));
+        assertEquals(TmdbEpisodeGridPolicy.NO_FOCUS_TARGET, TmdbEpisodeGridPolicy.horizontalFocusTarget(-1, 4, 20, true));
+    }
+
+    @Test
+    public void horizontalFocusTargetUsesTheShortLastRowBoundary() {
+        // 最后一行为 4 项中的第 4 项（行内只有 1 个）：左右都不应再移动。
+        assertEquals(TmdbEpisodeGridPolicy.NO_FOCUS_TARGET, TmdbEpisodeGridPolicy.horizontalFocusTarget(3, 3, 4, true));
+        assertEquals(TmdbEpisodeGridPolicy.NO_FOCUS_TARGET, TmdbEpisodeGridPolicy.horizontalFocusTarget(3, 3, 4, false));
+        // 第一行满行时向右正常推进。
+        assertEquals(1, TmdbEpisodeGridPolicy.horizontalFocusTarget(0, 3, 4, true));
+        assertEquals(2, TmdbEpisodeGridPolicy.horizontalFocusTarget(1, 3, 4, true));
+        assertEquals(TmdbEpisodeGridPolicy.NO_FOCUS_TARGET, TmdbEpisodeGridPolicy.horizontalFocusTarget(2, 3, 4, true));
+    }
+
+    @Test
     public void shouldUseFallbackImageOnlyForLegacySmallGridPolicy() {
         assertFalse(TmdbEpisodeGridPolicy.shouldUseFallbackImage(false, 120));
         assertTrue(TmdbEpisodeGridPolicy.shouldUseFallbackImage(true, 24));

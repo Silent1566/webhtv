@@ -152,6 +152,52 @@ public class FlagSwitchPlaybackWiringTest {
         }
     }
 
+    /**
+     * 线路切换自身会重设选中位并刷新整行，Leanback 因此会把「同一条线路」再派发一次；
+     * 若这次回声回到 onItemClick，就会形成 200ms 级自激切换循环（实测日志 934 次
+     * line-switch 中 918 次 from==to，且循环窗口内没有任何用户输入事件）。
+     *
+     * <p>行为层（{@code FlagSelectionListenerTest}）测得到「回声被拦」与「换线路/切回仍派发」，
+     * 但测不到「窗口在刷新途中不被重开」——该差别只在 {@code run()} 自身派发路径上才可观测。
+     * 因此这里补最小结构不变式，每条断言都先要求 token 存在（{@code indexOf} 的 −1 不得
+     * 被当成「顺序成立」），再要求相对顺序，避免「漏写关键字反而变绿」。
+     */
+    @Test
+    public void leanbackFlagRowSuppressesItsOwnSelectionEcho() throws Exception {
+        String source = read(LEANBACK_LISTENER);
+        String run = methodBody(source, "public void run()");
+        String selected = methodBody(source, "public void onChildViewHolderSelected(");
+        assertTrue("必须保留选中回调", !selected.isEmpty());
+
+        int stale = run.indexOf("adapter.get(position) == item)");
+        int guard = run.indexOf("if (item == dispatchedItem) return;");
+        int remember = run.indexOf("dispatchedItem = item;");
+        int dispatch = run.indexOf("listener.onItemClick(item);");
+        assertTrue("回声拦截必须发生在 stale 校验之后、派发之前",
+                stale >= 0 && guard >= 0 && dispatch >= 0 && stale < guard && guard < dispatch);
+        assertTrue("拦截后必须记住本次派发，否则回声仍会重复进入",
+                remember >= 0 && remember > guard);
+
+        // 窗口条件：只有「真的选中了另一条线路」才结束窗口；NO_POSITION（item == null）属于
+        // 刷新中间态，不得清窗口，否则回声会在下一次同项选中时重新接上。
+        assertTrue("改选另一条线路必须重新打开回声窗口，否则用户再也切不回原线路",
+                selected.contains("if (item != null && item != dispatchedItem) dispatchedItem = null;"));
+
+        // 取消旧回调若被顺手删掉，功能测试不会红（pendingItem 仍会被覆盖），故在此单独钉住。
+        int cancel = selected.indexOf("view.removeCallbacks(this);");
+        int pending = selected.indexOf("pendingItem = item;");
+        int post = selected.indexOf("view.post(this)");
+        assertTrue("必须保留取消旧回调，且发生在记录新 pendingItem 之前",
+                cancel >= 0 && pending >= 0 && cancel < pending);
+        assertTrue("必须仍然申请派发那一帧", post >= 0 && post > pending);
+
+        // 点击线路走 FlagAdapter 的 OnClickListener，不经过本监听器；回声去重一旦下沉进
+        // onItemClick，点击也会被吞掉。此处钉住「守卫只活在选中监听器里」这条结构边界。
+        String flagClick = methodBody(read(LEANBACK), "public void onItemClick(Flag item)");
+        assertTrue("回声去重不得下沉进 onItemClick，否则点击线路会被静默吞掉",
+                !flagClick.contains("dispatchedItem"));
+    }
+
     @Test
     public void detailInlinePlaybackAlsoComparesTheAppliedFlagKey() throws Exception {
         String source = read(DETAIL);
@@ -178,6 +224,7 @@ public class FlagSwitchPlaybackWiringTest {
     }
 
     private static final String DETAIL = "app/src/main/java/com/fongmi/android/tv/ui/activity/TmdbDetailActivity.java";
+    private static final String LEANBACK_LISTENER = "app/src/leanback/java/com/fongmi/android/tv/ui/custom/FlagSelectionListener.java";
 
     private static String methodBody(String source, String signature) {
         int start = source.indexOf(signature);
