@@ -197,6 +197,7 @@ import com.google.gson.JsonObject;
 import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
 import java.io.File;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -360,6 +361,7 @@ private boolean runtimeSourceOnly;
     private static final int TMDB_CACHED_DETAIL_APPLY_DELAY_MS = 16;
     private static final int TMDB_FAST_PLAYBACK_START_DELAY_MS = 16;
     private static final int TMDB_BIND_AFTER_REVEAL_DELAY_MS = 96;
+    private static final int INIT_VIEW_STAGE_FALLBACK_DELAY_MS = 500;
     private static final int TMDB_OVERVIEW_ROW_GAP_DP = 12;
     private static final int TMDB_OVERVIEW_BOTTOM_GUARD_DP = 6;
     private static final int OMDB_FULL_RATING_TEXT_MAX_LENGTH = 20;
@@ -433,6 +435,10 @@ private boolean runtimeSourceOnly;
     private boolean quickSearchDialogClosed;
     private boolean useParse;
     private boolean detailRequested;
+    private final ArrayDeque<Runnable> mInitViewStages = new ArrayDeque<>();
+    private boolean mInitViewStagesLaunched;
+    private boolean mInitViewStagesPumped;
+    private boolean mFlagSelectionListenerRegistered;
     private boolean detailHealthRecorded;
     private boolean playHealthRecorded;
     private int followingUiGeneration;
@@ -1488,7 +1494,7 @@ private boolean runtimeSourceOnly;
         setDecode();
         setLut();
         if (consumeImmersiveAudioLaunch()) return;
-        if (!detailRequested) checkId();
+        if (!detailRequested && mViewModel != null) checkId();
         flushPendingFastTmdbPlayback();
         if (mPendingDetail != null) {
             Result result = mPendingDetail;
@@ -1582,14 +1588,27 @@ private boolean runtimeSourceOnly;
         prepareInitialDetailShell();
         checkCast();
         SpiderDebug.log("video-flow", "initView preview ready cost=%dms", System.currentTimeMillis() - start);
-        setRecyclerView();
-        setShortDisplay();
-        SpiderDebug.log("video-flow", "initView recycler ready cost=%dms", System.currentTimeMillis() - start);
-        setVideoView();
-        SpiderDebug.log("video-flow", "initView video view ready cost=%dms", System.currentTimeMillis() - start);
+        // C111: setViewModel() must stay synchronous. Its LiveData observers are the only receivers of the
+        // detail/player results, and onServiceConnected() can arrive before the deferred stages run, where the
+        // immersive-audio path dereferences mViewModel through playerContent()/updateActionQuality().
         setViewModel();
-        checkId();
+        // C111: the spinner requested by checkCast() needs real frames before the heavy tail runs, so the
+        // tail is queued in original order and pumped one stage per frame (see launchInitViewStages()).
+        deferInitViewStage("1-recycler", () -> {
+            setRecyclerView();
+            registerFlagSelectionListener();
+        });
+        deferInitViewStage("2-chrome", () -> {
+            setShortDisplay();
+            setVideoView();
+        });
+        deferInitViewStage("3-detail", () -> {
+            // Only the detail request is left here; setViewModel() already ran on the initView tick.
+            checkId();
+        });
+        SpiderDebug.log("video-flow", "initView stages queued=%d cost=%dms sinceLaunch=%dms", mInitViewStages.size(), System.currentTimeMillis() - start, getLaunchCost(System.currentTimeMillis()));
         SpiderDebug.log("video-flow", "initView end cost=%dms sinceLaunch=%dms", System.currentTimeMillis() - start, getLaunchCost(System.currentTimeMillis()));
+        launchInitViewStages();
     }
 
     private void applyPlaybackOverlay() {
@@ -1716,7 +1735,7 @@ private boolean runtimeSourceOnly;
         mBinding.control.action.opening.setOnLongClickListener(view -> onOpeningReset());
         setActionFocusScroll();
         mBinding.video.setOnTouchListener(this::onVideoTouch);
-        mBinding.flag.addOnChildViewHolderSelectedListener(new FlagSelectionListener(mBinding.flag, mFlagAdapter, this));
+        registerFlagSelectionListener();
         mBinding.episode.addOnChildViewHolderSelectedListener(new OnChildViewHolderSelectedListener() {
             @Override
             public void onChildViewHolderSelected(@NonNull RecyclerView parent, @Nullable RecyclerView.ViewHolder child, int position, int subposition) {
@@ -2208,7 +2227,7 @@ private boolean runtimeSourceOnly;
         if (cached == null) return false;
         detailStartTime = System.currentTimeMillis();
         detailHealthRecorded = true;
-        if (!shouldRevealShellWhileLoading()) mBinding.progressLayout.showProgress();
+        if (shouldRequestCachedDetailLoading()) mBinding.progressLayout.showProgress();
         SpiderDebug.log("video-flow", "detail cache hit queued key=%s id=%s name=%s", getKey(), getId(), cached.getName());
         if (tryStartFastTmdbPlayback(cached)) {
             return true;
@@ -2228,6 +2247,101 @@ private boolean runtimeSourceOnly;
     private void queueFastTmdbPlaybackUntilServiceReady(Vod item) {
         mPendingFastTmdbPlaybackVod = item;
         SpiderDebug.log("video-flow", "fast tmdb playback pending service key=%s id=%s name=%s", getKey(), getId(), item.getName());
+    }
+
+    // C111: initView's heavy tail cannot run in the same tick that first requests the loading spinner,
+    // otherwise the spinner never gets a frame. Stages are queued in original order and pumped one per frame.
+    private void deferInitViewStage(String name, Runnable stage) {
+        mInitViewStages.addLast(() -> runInitViewStage(name, stage));
+    }
+
+    private void runInitViewStage(String name, Runnable stage) {
+        long start = System.currentTimeMillis();
+        SpiderDebug.log("video-flow", "initView stage-%s begin sinceLaunch=%dms", name, getLaunchCost(start));
+        try {
+            stage.run();
+        } finally {
+            SpiderDebug.log("video-flow", "initView stage-%s end cost=%dms", name, System.currentTimeMillis() - start);
+        }
+    }
+
+    private void launchInitViewStages() {
+        if (mInitViewStagesLaunched || mInitViewStages.isEmpty()) return;
+        mInitViewStagesLaunched = true;
+        final View root = mBinding == null ? null : mBinding.getRoot();
+        if (root == null) {
+            SpiderDebug.log("video-flow", "initView stage schedule fallback root=null left=%d", mInitViewStages.size());
+            App.post(this::pumpInitViewStage);
+            return;
+        }
+        ViewTreeObserver observer = root.getViewTreeObserver();
+        if (observer == null || !observer.isAlive()) {
+            SpiderDebug.log("video-flow", "initView stage schedule fallback observer dead left=%d", mInitViewStages.size());
+            App.post(this::pumpInitViewStage);
+            return;
+        }
+        // Wait for one real traversal so the spinner has been painted, then hand the pump to the looper
+        // queue; running inside the frame callback would still sit in front of that frame's draw.
+        observer.addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
+            @Override
+            public boolean onPreDraw() {
+                ViewTreeObserver live = root.getViewTreeObserver();
+                if (live.isAlive()) live.removeOnPreDrawListener(this);
+                SpiderDebug.log("video-flow", "initView first frame drawn sinceLaunch=%dms stages=%d", getLaunchCost(System.currentTimeMillis()), mInitViewStages.size());
+                root.post(VideoActivity.this::pumpInitViewStage);
+                return true;
+            }
+        });
+        // Safety net only: if no traversal ever arrives (e.g. the window stays hidden) the stages still run,
+        // but once the frame-paced chain has started it owns the pacing.
+        root.postDelayed(() -> {
+            if (mInitViewStagesPumped) return;
+            SpiderDebug.log("video-flow", "initView stage schedule fallback no first frame left=%d", mInitViewStages.size());
+            pumpInitViewStage();
+        }, INIT_VIEW_STAGE_FALLBACK_DELAY_MS);
+    }
+
+    private void pumpInitViewStage() {
+        Runnable stage = mInitViewStages.pollFirst();
+        mInitViewStagesPumped = true;
+        if (stage == null) return;
+        if (isFinishing() || isDestroyed()) {
+            int dropped = mInitViewStages.size() + 1;
+            mInitViewStages.clear();
+            SpiderDebug.log("video-flow", "initView stages dropped finishing=%s destroyed=%s dropped=%d key=%s id=%s", isFinishing(), isDestroyed(), dropped, getKey(), getId());
+            return;
+        }
+        stage.run();
+        scheduleNextInitViewStage();
+    }
+
+    private void scheduleNextInitViewStage() {
+        if (mInitViewStages.isEmpty()) return;
+        final View root = mBinding == null ? null : mBinding.getRoot();
+        if (root == null || !root.isAttachedToWindow()) {
+            SpiderDebug.log("video-flow", "initView stage schedule fallback attached=false left=%d", mInitViewStages.size());
+            App.post(this::pumpInitViewStage);
+            return;
+        }
+        // Two frame callbacks leave at least two drawn frames between stages; the looper post then puts the
+        // next stage after that frame's traversal instead of before it.
+        root.postOnAnimation(() -> root.postOnAnimation(() -> root.post(VideoActivity.this::pumpInitViewStage)));
+    }
+
+    private void registerFlagSelectionListener() {
+        if (mFlagSelectionListenerRegistered || mFlagAdapter == null) return;
+        mFlagSelectionListenerRegistered = true;
+        mBinding.flag.addOnChildViewHolderSelectedListener(new FlagSelectionListener(mBinding.flag, mFlagAdapter, this));
+        SpiderDebug.log("video-flow", "flag selection listener registered flags=%d", mFlagAdapter.getItemCount());
+    }
+
+    // C111: request the full-page spinner only when this tick really has nothing to reveal anyway. checkCast()
+    // already revealed the shell/preview for those branches, and the fast playback path forces the content
+    // state a few statements later, so asking for progress there would only flip the visible state back.
+    private boolean shouldRequestCachedDetailLoading() {
+        if (shouldRevealShellWhileLoading()) return false;
+        if (hasInitialPreview() || mAudioStageVisible) return false;
+        return !isIntentTmdbPlayback();
     }
 
     private void flushPendingFastTmdbPlayback() {
@@ -9145,10 +9259,12 @@ private boolean runtimeSourceOnly;
         App.removeCallbacks(mTmdbDetailTimeout);
         App.removeCallbacks(mTmdbEpisodeTimeout);
         resetPendingTmdbBind();
-        mViewModel.getResult().removeObserver(mObserveDetail);
-        mViewModel.getPlayer().removeObserver(mObservePlayer);
-        mViewModel.getSearch().removeObserver(mObserveSearch);
-        mViewModel.getSearchProgress().removeObserver(mObserveSearchProgress);
+        if (mViewModel != null) {
+            mViewModel.getResult().removeObserver(mObserveDetail);
+            mViewModel.getPlayer().removeObserver(mObservePlayer);
+            mViewModel.getSearch().removeObserver(mObserveSearch);
+            mViewModel.getSearchProgress().removeObserver(mObserveSearchProgress);
+        }
         SiteHealthStore.flush();
         super.onDestroy();
     }
