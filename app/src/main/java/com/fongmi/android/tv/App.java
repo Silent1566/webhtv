@@ -14,15 +14,18 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.os.HandlerCompat;
 
+import com.fongmi.android.tv.bean.Device;
 import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.server.proxy.MultiThreadProxy;
 import com.fongmi.android.tv.cache.CacheScheduler;
 import com.fongmi.android.tv.playback.PlaybackRemoteSyncer;
+import com.fongmi.android.tv.player.MediaBadgeCatalog;
 import com.fongmi.android.tv.player.PlaybackMemoryMonitor;
 import com.fongmi.android.tv.player.PlaybackSystemConditionMonitor;
 import com.fongmi.android.tv.player.mpv.PlaybackRecoveryMonitor;
 import com.fongmi.android.tv.remote.RemoteAgent;
 import com.fongmi.android.tv.setting.AppBranding;
+import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.ProxySetting;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.subtitle.provider.SubtitleProviderRegistry;
@@ -139,7 +142,9 @@ public class App extends Application implements Application.ActivityLifecycleCal
         registerActivityLifecycleCallbacks(this);
         registerContentHandlers();
         resumeBackgroundServices();
+        warmDeviceIdentity();
         warmSubtitleProviders();
+        warmMediaBadgePatterns();
         post(() -> CacheScheduler.get().start(), 30_000L);
     }
 
@@ -153,6 +158,28 @@ public class App extends Application implements Application.ActivityLifecycleCal
      */
     private void warmSubtitleProviders() {
         Task.execute(SubtitleProviderRegistry::get);
+    }
+
+    /**
+     * 设备身份的首次探测要 spawn 一个 shell 子进程取 ro.serialno，再枚举两次网卡读 MAC，
+     * 全是阻塞调用；过去第一次发生在播放页进场窗口里（设备实测在主线程 tid 上抓到该 shell 命令）。
+     * 现在同样提前到 App 启动的后台线程，等主线程真正需要身份时缓存已就绪。
+     */
+    private void warmDeviceIdentity() {
+        Task.execute(Device::warmIdentity);
+    }
+
+    /**
+     * 徽标清单里 127 条正则的首次编译是同步的（源码注释估约 55ms），过去发生在
+     * 播放页进场窗口的主线程上（debuggerd 栈：MediaBadgeCatalog.patterns
+     * <- MediaBadgeResolver.addSourceBadges <- resolve <- PlayerOsdController.setMediaBadges）。
+     * 现在同样提前到 App 启动的后台线程，首次渲染 OSD 时 patterns() 直接命中缓存。
+     */
+    private void warmMediaBadgePatterns() {
+        // 总开关关上时 setMediaBadges() 会在解析前就返回，127 条正则永远不会编译，
+        // 这时预热只是白白在后台跑一遍编译。
+        if (!PlayerSetting.isDisplayMediaBadges()) return;
+        Task.execute(MediaBadgeCatalog::patterns);
     }
 
     private void registerContentHandlers() {
