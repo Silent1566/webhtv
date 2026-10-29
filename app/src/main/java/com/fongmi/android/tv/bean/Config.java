@@ -440,12 +440,18 @@ public class Config {
         return "";
     }
 
+    /** 配置行变动后必须让桥接解析缓存失效，否则网关最多 60 秒仍在按旧站源服务。 */
+    private static void invalidateCatalog() {
+        com.fongmi.android.tv.api.config.VodSiteCatalog.invalidate();
+    }
+
     public Config insert() {
         if (isEmpty()) return this;
         ensureInterfaceKey();
         rememberAddressAliases(getUrls());
         if (TextUtils.isEmpty(identityResolutionState)) identityResolutionState = "unresolved";
         setId(Math.toIntExact(AppDatabase.get().getConfigDao().insert(this)));
+        invalidateCatalog();
         return this;
     }
 
@@ -455,6 +461,7 @@ public class Config {
         rememberAddressAliases(getUrls());
         if (TextUtils.isEmpty(identityResolutionState)) identityResolutionState = "unresolved";
         AppDatabase.get().getConfigDao().insertOrUpdate(this);
+        invalidateCatalog();
         return this;
     }
 
@@ -469,6 +476,7 @@ public class Config {
         AppDatabase.get().getConfigDao().delete(getUrl(), getType());
         History.delete(getId());
         Keep.delete(getId());
+        invalidateCatalog();
     }
 
     @NonNull

@@ -6,6 +6,7 @@ import androidx.collection.ArrayMap;
 
 import com.fongmi.android.tv.api.SiteApi;
 import com.fongmi.android.tv.api.config.VodConfig;
+import com.fongmi.android.tv.api.config.VodSiteCatalog;
 import com.fongmi.android.tv.bean.Class;
 import com.fongmi.android.tv.bean.Episode;
 import com.fongmi.android.tv.bean.Flag;
@@ -57,13 +58,19 @@ public class VodApi implements Process {
     /** 与 {@code App.gson()} 等价（那里就是 new Gson()），独立持有以便单元测试。 */
     private static final Gson GSON = new Gson();
     private final VodConfig sources;
+    private final VodSiteCatalog.Source catalogs;
 
     public VodApi() {
-        this(VodConfig.get());
+        this(VodConfig.get(), VodSiteCatalog.database());
     }
 
     VodApi(VodConfig sources) {
+        this(sources, VodSiteCatalog.database());
+    }
+
+    VodApi(VodConfig sources, VodSiteCatalog.Source catalogs) {
         this.sources = sources;
+        this.catalogs = catalogs;
     }
 
     @Override
@@ -85,14 +92,16 @@ public class VodApi implements Process {
             String origin = origin(session);
             String key = siteKeyFromPath(url);
             if (key.isEmpty()) key = text(input, "key");
+            String configKey = text(input, "configKey");
             if (isConfig(input) || (key.isEmpty() && input.isEmpty())) {
-                return json(configJson(sources.getSites(), origin + PATH, sources.getDoh(), sources.getRules()));
+                return json(configJson(origin, configKey));
             }
-            SpiderDebug.log("vod-api", "route=%s", route(input));
-            JsonObject result = handle(input, key, origin);
-            Site site = sources.getSite(key);
+            SpiderDebug.log("vod-api", "route=%s configKey=%s", route(input), configKey);
+            VodSiteCatalog.Catalog catalog = catalogOf(configKey);
+            JsonObject result = handle(input, key, origin, catalog);
+            Site site = findSite(catalog, key);
             String proxyKey = site != null && !site.isEmpty() && site.getType() == 3 && supportsDirectProxy(site.spider()) ? key : "";
-            externalize(result, origin, proxyKey, com.github.catvod.Proxy.getPort());
+            externalize(result, origin, proxyKey, configKey, com.github.catvod.Proxy.getPort());
             return json(result);
         } catch (Exception e) {
             SpiderDebug.log("vod-api", e);
@@ -100,9 +109,33 @@ public class VodApi implements Process {
         }
     }
 
-    private JsonObject handle(JsonObject input, String key, String origin) throws Exception {
+    /**
+     * 配置清单。带 {@code configKey} 时返回该配置的站源，解析走 {@link VodSiteCatalog}，
+     * 不加载、不保存、不切换当前激活配置；不带时保持原语义，返回当前已加载站源。
+     */
+    private JsonObject configJson(String origin, String configKey) throws Exception {
+        VodSiteCatalog.Catalog catalog = catalogOf(configKey);
+        if (catalog == null) return configJson(sources.getSites(), origin + PATH, sources.getDoh(), sources.getRules());
+        return configJson(catalog.getSites(), origin + PATH, catalog.getDoh(), catalog.getRules(), configKey);
+    }
+
+    /** 只在显式传入 configKey 时才解析目标配置；空值一律走当前激活源。 */
+    private VodSiteCatalog.Catalog catalogOf(String configKey) throws Exception {
+        if (configKey == null || configKey.isEmpty()) return null;
+        return catalogs.load(configKey);
+    }
+
+    private Site findSite(VodSiteCatalog.Catalog catalog, String key) {
+        return catalog != null ? catalog.find(key) : sources.getSite(key);
+    }
+
+    private List<String> flagsOf(VodSiteCatalog.Catalog catalog) {
+        return catalog != null ? catalog.getFlags() : sources.getFlags();
+    }
+
+    private JsonObject handle(JsonObject input, String key, String origin, VodSiteCatalog.Catalog catalog) throws Exception {
         if (key.isEmpty()) return error("缺少站点 key 参数");
-        Site site = sources.getSite(key);
+        Site site = findSite(catalog, key);
         if (site == null || site.isEmpty()) return error("site not found: " + key);
         if (isSelfGateway(site.getApi(), origin, com.github.catvod.Proxy.getPort())) return error("不能把本网关的配置作为本机源再次导入");
         int page = Math.max(1, parseInt(text(input, "pg"), 1));
@@ -127,7 +160,7 @@ public class VodApi implements Process {
                             : spider.searchContent(text(input, "wd"), quick, String.valueOf(page));
                     break;
                 case "detail": content = spider.detailContent(ids); break;
-                case "play": content = spider.playerContent(flag, id, sources.getFlags()); break;
+                case "play": content = spider.playerContent(flag, id, flagsOf(catalog)); break;
                 default:
                     content = tid.isEmpty() ? spider.homeContent(filter)
                             : spider.categoryContent(tid, String.valueOf(page), filter, extendFrom(input));
@@ -286,37 +319,46 @@ public class VodApi implements Process {
 
     /** 只改实际 URL 字段；请求头、视频 ID 和签名 query 内嵌字符串不能做全局替换。 */
     static void externalize(JsonObject out, String origin, String key, int port) {
+        externalize(out, origin, key, "", port);
+    }
+
+    static void externalize(JsonObject out, String origin, String key, String configKey, int port) {
         for (String field : new String[]{"url", "urls", "playUrl", "subs", "drm"}) {
-            if (out.has(field)) out.add(field, mediaUrls(out.get(field), origin, key, port));
+            if (out.has(field)) out.add(field, mediaUrls(out.get(field), origin, key, configKey, port));
         }
         if (out.has("list") && out.get("list").isJsonArray()) {
             for (JsonElement element : out.getAsJsonArray("list")) {
                 if (!element.isJsonObject()) continue;
                 JsonObject item = element.getAsJsonObject();
-                if (item.has("vod_pic")) item.add("vod_pic", mediaUrls(item.get("vod_pic"), origin, key, port));
+                if (item.has("vod_pic")) item.add("vod_pic", mediaUrls(item.get("vod_pic"), origin, key, configKey, port));
             }
         }
     }
 
-    private static JsonElement mediaUrls(JsonElement value, String origin, String key, int port) {
+    private static JsonElement mediaUrls(JsonElement value, String origin, String key, String configKey, int port) {
         if (value.isJsonPrimitive() && value.getAsJsonPrimitive().isString()) {
-            return new com.google.gson.JsonPrimitive(remoteUrl(value.getAsString(), origin, key, port));
+            return new com.google.gson.JsonPrimitive(remoteUrl(value.getAsString(), origin, key, configKey, port));
         }
         if (value.isJsonArray()) {
             JsonArray array = new JsonArray();
-            for (JsonElement item : value.getAsJsonArray()) array.add(mediaUrls(item, origin, key, port));
+            for (JsonElement item : value.getAsJsonArray()) array.add(mediaUrls(item, origin, key, configKey, port));
             return array;
         }
         if (value.isJsonObject()) {
             JsonObject object = value.getAsJsonObject();
             for (String field : new String[]{"url", "v", "values", "server"}) {
-                if (object.has(field)) object.add(field, mediaUrls(object.get(field), origin, key, port));
+                if (object.has(field)) object.add(field, mediaUrls(object.get(field), origin, key, configKey, port));
             }
         }
         return value;
     }
 
     static String remoteUrl(String url, String origin, String key, int port) {
+        return remoteUrl(url, origin, key, "", port);
+    }
+
+    /** 本网关代理地址回填：/proxy 同时带上 siteKey 与 configKey，非激活配置的代理也能路由回原站点。 */
+    static String remoteUrl(String url, String origin, String key, String configKey, int port) {
         try {
             URI uri = URI.create(url);
             String host = uri.getHost();
@@ -325,9 +367,13 @@ public class VodApi implements Process {
             if (!loopback(host) && !host.equalsIgnoreCase(URI.create(origin).getHost())) return url;
             String path = uri.getRawPath();
             String query = uri.getRawQuery();
-            if (("/proxy".equals(path) || path.startsWith("/proxy/")) && !key.isEmpty()
-                    && (query == null || !(query.startsWith("siteKey=") || query.contains("&siteKey=")))) {
-                query = (query == null || query.isEmpty() ? "" : query + "&") + "siteKey=" + encode(key);
+            if ("/proxy".equals(path) || path.startsWith("/proxy/")) {
+                if (!key.isEmpty() && (query == null || !(query.startsWith("siteKey=") || query.contains("&siteKey=")))) {
+                    query = (query == null || query.isEmpty() ? "" : query + "&") + "siteKey=" + encode(key);
+                }
+                if (configKey != null && !configKey.isEmpty() && (query == null || !query.contains("configKey="))) {
+                    query = (query == null || query.isEmpty() ? "" : query + "&") + "configKey=" + encode(configKey);
+                }
             }
             return origin + path + (query == null ? "" : "?" + query) + (uri.getRawFragment() == null ? "" : "#" + uri.getRawFragment());
         } catch (IllegalArgumentException ignored) {
@@ -469,6 +515,15 @@ public class VodApi implements Process {
 
     /** T4 配置：站点 {@code api} 指回本网关，因此整条链路不再依赖外部脚本。 */
     static JsonObject configJson(List<Site> sites, String baseUrl, List<Doh> doh, List<Rule> rules) {
+        return configJson(sites, baseUrl, doh, rules, "");
+    }
+
+    /**
+     * 同上，但把配置标识写进每个站点 api：网关据此服务非激活配置，
+     * 客户端后续的 /proxy 请求也能带着它回到同一条配置。
+     */
+    static JsonObject configJson(List<Site> sites, String baseUrl, List<Doh> doh, List<Rule> rules, String configKey) {
+        String suffix = configKey == null || configKey.isEmpty() ? "" : "&configKey=" + encode(configKey);
         JsonObject config = new JsonObject();
         config.addProperty("spider", "");
         config.addProperty("wallpaper", "");
@@ -480,7 +535,7 @@ public class VodApi implements Process {
                 JsonObject item = new JsonObject();
                 item.addProperty("key", site.getKey());
                 item.addProperty("name", site.getName());
-                item.addProperty("api", baseUrl + "?key=" + encode(site.getKey()));
+                item.addProperty("api", baseUrl + "?key=" + encode(site.getKey()) + suffix);
                 item.addProperty("type", "4");
                 item.addProperty("searchable", site.isSearchable() ? 1 : 0);
                 item.addProperty("quickSearch", site.isQuickSearch() ? 1 : 0);

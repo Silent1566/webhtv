@@ -215,8 +215,16 @@ public class JarLoader {
     }
 
     public Spider getSpider(String key, String api, String ext, String jar) {
+        return getSpider("", key, api, ext, jar);
+    }
+
+    /**
+     * 按 (命名空间, jar, siteKey) 取 spider：桥接解析非激活配置时不能写进激活配置的槽位。
+     * 空命名空间等于原来的行为（jar md5 + siteKey），loaders 仍只按 jar md5 建键。
+     */
+    public Spider getSpider(String namespace, String key, String api, String ext, String jar) {
         String jaKey = Util.md5(jar);
-        String spKey = jaKey + key;
+        String spKey = jaKey + BaseLoader.slot(namespace, key);
         return getOrCreateSpider(spKey, () -> {
             long start = System.currentTimeMillis();
             try {
