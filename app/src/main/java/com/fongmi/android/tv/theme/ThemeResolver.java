@@ -193,8 +193,12 @@ public final class ThemeResolver {
         // focus drifted away from primary, primary-as-text views (dialog actions) would keep
         // their compiled colour and stay unreadable. `primary` already clears 4.5:1 on the
         // surface, so it also clears the 3.0:1 focus requirement.
+        // A user-chosen focus colour is clamped exactly like primary: hue and chroma are kept
+        // and only tone moves. Snapping to black/white instead turned a legible deep red such
+        // as #8C0000 (1.86:1 on the dark surface) into pure #FFFFFF, which is why the editor
+        // showed "输入 #8C0000 / 显示 #FFFFFF" and every dark-surface ring came out white.
         int focus = hasFocus || hasSurface
-                ? ensureContrast(color(slots.focus, primary), surface, 3.0)
+                ? readableAccent(color(slots.focus, primary), 3.0, surface)
                 : base.colorFocus();
 
         int surfaceDim = hasSurface ? mix(surface, 0xFF000000, dark ? 0.06 : 0.10) : base.colorSurfaceDim();

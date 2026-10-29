@@ -256,6 +256,26 @@ public class ThemeResolverOverrideTest {
         assertAccentLegible(tokens, "white surface with near-white primary");
     }
 
+    /**
+     * 用户报告的实况：TV 主题编辑器「焦点色」输入 {@code #8C0000}、显示却是 {@code #FFFFFF}。
+     * FOCUS 槽当时走的是把前景色直接夹到纯黑/纯白的 ensureContrast，深红在深色 surface
+     * {@code #101418} 上只有 1.86:1，于是被整条改成白色。焦点色必须和 primary 一样只走明度。
+     */
+    @Test
+    public void darkSurfaceFocusKeepsTheUsersHueInsteadOfSnappingToWhite() {
+        ThemeProfile profile = ThemeProfile.defaultProfile();
+        profile.dark.focus = "#8C0000";
+
+        ThemeTokens tokens = ThemeResolver.resolve(
+                ThemeMode.DARK, ThemeSeed.NONE, 0, 0, profile, null, true);
+
+        assertNotEquals("深红焦点色不得被夹成纯白", WHITE, tokens.colorFocus());
+        double ratio = ThemeContrast.ratio(tokens.colorFocus(), tokens.colorSurface());
+        assertTrue("focus/surface = " + ratio + " must be >= 3.0", ratio + 0.0001 >= 3.0);
+        assertEquals("焦点色必须保留用户选定的色相",
+                Hct.fromInt(0xFF8C0000).getHue(), Hct.fromInt(tokens.colorFocus()).getHue(), 12.0);
+    }
+
     @Test
     public void repairedPrimaryKeepsItsForegroundReadable() {
         ThemeProfile profile = ThemeProfile.defaultProfile();
