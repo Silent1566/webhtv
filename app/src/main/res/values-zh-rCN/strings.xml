@@ -2323,6 +2323,7 @@
         <item>右上角</item>
         <item>左下角</item>
         <item>右下角</item>
+        <item>关闭</item>
     </string-array>
     <string name="play_decode_idle">解码</string>
     <string name="detail_close">关闭</string>

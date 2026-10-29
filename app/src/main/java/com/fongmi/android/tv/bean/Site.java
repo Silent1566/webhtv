@@ -130,6 +130,16 @@ public class Site implements Parcelable {
     @Ignore
     private boolean selected;
 
+    /**
+     * 该 Site 属于哪条配置（桥接解析非激活配置时的缓存命名空间）。
+     *
+     * <p>只在 {@code VodSiteCatalog} 由 configKey 构造的 Catalog 上被设置；激活配置（原生
+     * {@code VodConfig} 路径）与数据库里的 Site 一律为空，{@code transient} + {@code @Ignore}
+     * 保证它既不进 Room 也不进 Gson、不进 Parcel——纯运行时标记。
+     */
+    @Ignore
+    private transient String namespace;
+
     public Site() {
     }
 
@@ -476,13 +486,27 @@ public class Site implements Parcelable {
         return this;
     }
 
+    /** 缓存命名空间；未设置时返回空串（= 激活配置路径）。 */
+    public String getNamespace() {
+        return namespace == null ? "" : namespace.trim();
+    }
+
+    public Site setNamespace(String namespace) {
+        this.namespace = namespace == null || namespace.isEmpty() ? null : namespace;
+        return this;
+    }
+
     public Site recent() {
-        BaseLoader.get().setRecent(getKey(), getApi(), getJar());
+        // recent 是 ?do=js/?do=py 子路由唯一的定位凭据，必须和 getSpider 的槽位键同形，
+        // 否则桥接配置的脚本请求会落到别的配置（或落空）。命名空间为空时与改动前一致。
+        BaseLoader.get().setRecent(getNamespace(), getKey(), getApi(), getJar());
         return this;
     }
 
     public Spider spider() {
-        return BaseLoader.get().getSpider(getKey(), getApi(), getExt(), getJar());
+        // 带命名空间：桥接配置（非激活）的 spider 必须落在自己的缓存槽里，否则同名 siteKey
+        // 会把别的配置的实例写进激活配置的槽位。命名空间为空时键与改动前逐字节相同。
+        return BaseLoader.get().getSpider(getNamespace(), getKey(), getApi(), getExt(), getJar());
     }
 
     public void save() {

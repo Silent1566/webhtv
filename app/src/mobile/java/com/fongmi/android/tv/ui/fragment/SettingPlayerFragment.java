@@ -251,15 +251,15 @@ public class SettingPlayerFragment extends BaseFragment implements UaListener, B
     }
 
     private void onBadgePosition(View view) {
-        ChoiceDialog.showSingle(this, R.string.osd_media_badge_position, badgePosition, PlayerSetting.getMediaBadgePosition(), which -> {
-            PlayerSetting.putMediaBadgePosition(which);
+        ChoiceDialog.showSingle(this, R.string.osd_media_badge_position, badgePosition, PlayerSetting.getMediaBadgeChoice(), which -> {
+            PlayerSetting.putMediaBadgeChoice(which);
             updateBadgePositionText();
         });
     }
 
     private void updateBadgePositionText() {
-        int position = PlayerSetting.getMediaBadgePosition();
-        mBinding.osdMediaBadgePositionText.setText(badgePosition != null && badgePosition.length > position ? badgePosition[position] : getString(R.string.setting_off));
+        int which = PlayerSetting.getMediaBadgeChoice();
+        mBinding.osdMediaBadgePositionText.setText(badgePosition != null && badgePosition.length > which ? badgePosition[which] : getString(R.string.setting_off));
     }
 
     private boolean[] getOsdChecked() {

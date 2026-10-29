@@ -1558,6 +1558,11 @@ private boolean runtimeSourceOnly;
             public String osdTitle() {
                 return getOsdTitle();
             }
+
+            @Override
+            public boolean isFullscreen() {
+                return VideoActivity.this.isFullscreen();
+            }
         }, VodPlayerChrome.fromVideo(mBinding, mBinding.widget.clock, 14f), this);
         mClock = mPlayerUi.clock();
         mOsd = mPlayerUi.osd();
