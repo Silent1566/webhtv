@@ -1138,6 +1138,12 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             }
 
             @Override
+            public boolean isFullscreen() {
+                // 详情页内嵌小窗只有在用户点了小窗全屏之后才算全屏；媒体信息徽标只在全屏出现
+                return inlineFullscreen;
+            }
+
+            @Override
             public void showDanmakuDialog() {
                 showInlineDanmaku();
             }

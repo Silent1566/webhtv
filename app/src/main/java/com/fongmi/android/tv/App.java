@@ -25,6 +25,7 @@ import com.fongmi.android.tv.player.PlaybackSystemConditionMonitor;
 import com.fongmi.android.tv.player.mpv.PlaybackRecoveryMonitor;
 import com.fongmi.android.tv.remote.RemoteAgent;
 import com.fongmi.android.tv.setting.AppBranding;
+import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.ProxySetting;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.subtitle.provider.SubtitleProviderRegistry;
@@ -175,6 +176,9 @@ public class App extends Application implements Application.ActivityLifecycleCal
      * 现在同样提前到 App 启动的后台线程，首次渲染 OSD 时 patterns() 直接命中缓存。
      */
     private void warmMediaBadgePatterns() {
+        // 总开关关上时 setMediaBadges() 会在解析前就返回，127 条正则永远不会编译，
+        // 这时预热只是白白在后台跑一遍编译。
+        if (!PlayerSetting.isDisplayMediaBadges()) return;
         Task.execute(MediaBadgeCatalog::patterns);
     }
 

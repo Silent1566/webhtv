@@ -662,3 +662,50 @@ subagent da71b04c 在设备连续约 8 分钟窗口内（13:50-13:59，重启后
 - **可以宣称**（单次 run 内的插桩事实，不依赖跨组统计）：`initView` 尾部三段各 1-9ms（原为同 tick 内连续执行）、首帧在 `initView end` 后 85ms 绘出、127 条徽标正则首编与设备身份探测已移出进页窗口、`rawProfileValue` 不再整表拷贝 114324 B 偏好、`onPrepare` 的 overlay binder 查询在进页态短路。
 - **边界**：模拟器是 arm32 经 `libnb` 翻译跑在 x86_64 上（`primaryCpuAbi=armeabi-v7a`、`ro.dalvik.vm.native.bridge=libnb.so`），绝对耗时不可外推到真实 ARM 电视盒；真实盒子上 inflate 274ms 与 `PlaybackService.onCreate` 451ms 这类一次性同步成本会按 CPU 比例放大，而本机残余停帧已被 §8.3/§12.5 判定在 app 不可控面。
 - 结论：**剩下的差异要靠更长的样本量和更干净的环境才能分辨；当前证据不足以宣称用户可感知改善，也不足以判定回归。**
+
+## 14. beta 合并后的独立评审与增量修复（2026-10-29）
+
+### 14.1 合并事实
+- 合并 `origin/beta` `ba802dc432`（PR #500 from dev5）到 `dev1`，merge-base `abff821ba3`，带入 19 个提交、41 个文件、+2863/-105。
+- 唯一冲突 `app/src/main/java/com/fongmi/android/tv/bean/Config.java`：HEAD 侧是 `PlaybackConfigIdentity.invalidateAll()`，beta 侧是新增的 `invalidateCatalog()`。解决方式为两个失效都保留，`invalidateAll()` 在前，落在 `insert()`(:455-457)、`save()`(:466-468)、`delete()`(:482-484)；`VodApiTest.java:610-613` 断言的「`invalidateCatalog();` 恰 3 处」仍成立。
+
+### 14.2 评审覆盖说明（为什么不复用旧评审）
+§7.1-§7.5 与 §11 的旧评审只覆盖 `23f51a7736` 的六处改动；本次合并带入 19 个 beta 提交，其中 beta 的 OSD 媒体徽标（`PlayerSetting.java:579-591`、`PlayerOsdController.java:309/469-470`）、`VodPlayerUiHost.isFullscreen()` 覆盖（`VideoActivity.java:1583-1586`）与六处改动落在同一批文件上，且 `Config.java` 发生了真实冲突 ⇒ 旧评审不构成对当前合并结果的覆盖，必须重新评审。评审分两轴独立进行：Spec/集成轴与 Standards 轴（只读 subagent，均未修改文件）。
+
+### 14.3 第一轮结论
+- 六处改动忠实度：F1/F3 分片顺序（`VideoActivity.java:1614-1625` + `:1611` 同步 `setViewModel()`）、F2（`App.java:168-170`）、F4（`App.java:178-183`）、F5（`DesktopLyricsWindow.java:128-129`）、F7（`PlaybackConfigIdentity.java:47-70`）、F8（`PlaybackPerformanceSetting.java:962-983`）均与文档设计一致。
+- `Config.java` 冲突解决语义正确：三写点双失效齐备；beta 的网关 configKey 桥接（`VodSiteCatalog.java:165/175-176`）只读、不写配置行，既不漏失效也不新增陈旧源；`Backup.java` 直写 DAO 的既有残余经 `BaseConfig.java:119 config.update() → save()` 收敛，非合并引入。
+- 必修 1 项、建议 2 项（见 §14.4）。
+
+### 14.4 必修与建议（含证据）
+1. **必修：适配器时序窗口（分片机制引入）**。`setViewModel()` 在 `:1611` 同步 `observeForever`（`:2206-2212`），而 `mFlagAdapter` 只在 stage 1 的 `setRecyclerView()` `:1845` 创建；`setDetail(Vod)` 在 `:2910` 无守卫解引用它。leanback `AndroidManifest.xml:156-160` 的 `configChanges` 不含 `fontScale/density/uiMode/locale`，这类配置变更会重建 Activity 而 ViewModel 保留 ⇒ `observeForever` 立即回放上次 Result，此时新实例的 `mService` 必为 null（`PlaybackActivity.java:1007-1014 releaseBinding`），结果落进 `mPendingDetail`，随后 `onServiceConnected()` 消费它时 stage 1 可能还没跑。C111 之前 `setRecyclerView()` 在 `setViewModel()` 之前，不会命中。
+2. **必修（建议转必修）：`Backup` 绕过 Config 写路径**。`Backup.java:132/147/197/198` 直接写 Config 表且不调 `invalidateAll()`，恢复后 `KEY_CACHE/NAME_CACHE` 仍持有恢复前的 `cid→interfaceKey` 映射。
+3. **建议：关闭媒体徽标仍预热 127 条正则**。总开关关闭时 `PlayerOsdController.java:469-470` 在解析前就返回，`MediaBadgeCatalog.patterns()` 永不触发，`App.java` 侧无条件预热是纯浪费。
+4. **建议（未采纳）：`setViewModel()` 推迟到 stage 内**。会破坏 `:1596-1598` 记录的约束——`onServiceConnected()` 的沉浸音频路径经 `playerContent()/updateActionQuality()` 解引用 `mViewModel`。
+5. **建议（未采纳）：把 `FlagAdapter` 提前到 `initView` 同步段**。破坏 C111 的帧节奏目标（`setRecyclerView()` 正是被拆出去的重尾之一）。
+
+### 14.5 已实施的增量修复
+1. `VideoActivity.onServiceConnected()` 把尾部（`consumeImmersiveAudioLaunch` / `checkId` / `flushPendingFastTmdbPlayback` / 消费 `mPendingDetail`、`mPendingPlayer`）抽成 `applyServiceReadyResults()`；`mInitViewStages` 非空时用 `deferInitViewStage("4-service-results", …)` 排到队尾，空则原地执行 ⇒ 正常路径完全不变。
+2. `setDetail(Result)` 的等待闸从 `service() == null` 放宽为 `service() == null || mFlagAdapter == null`，`setPlayer(Result)` 同理加 `|| mQualityAdapter == null`。这两行独立覆盖观察者路径（`mObserveDetail = this::setDetail`，`:1591`），不依赖阶段队列。
+3. 500ms 安全网改为 `armInitViewStageSafetyNet()`：队列非空才重排，队列排空即停；并新增 `mInitViewLastPumpAt`，只有帧节奏链真的停满 500ms 才接手，避免慢首帧时安全网变成第二个更慢的推进源。随之删除失效字段 `mInitViewStagesPumped`。
+4. `App.warmMediaBadgePatterns()` 先判 `PlayerSetting.isDisplayMediaBadges()`。
+5. `Backup.restore(boolean)`（`:133-136` 之后）与 `restore(SyncOptions, boolean)`（`restoreConfig()` 之后 `:155-156`）补 `PlaybackConfigIdentity.invalidateAll()`，覆盖 `Backup.java` 两条整表写入路径；`:197/198` 位于 `restoreConfig()` 内部，由后者统一覆盖；`isKeep()/isHistory()` 分支不写 Config 表，无需失效。
+
+### 14.6 验证
+- `gradlew :app:compileLeanbackArmeabi_v7aDebugJavaWithJavac` → BUILD SUCCESSFUL（47s）。
+- `gradlew :app:compileMobileArm64_v8aDebugJavaWithJavac` → BUILD SUCCESSFUL。
+- `gradlew :app:testLeanbackArmeabi_v7aDebugUnitTest` → 4732 tests, 8 failed；`:app:testMobileArmeabi_v7aDebugUnitTest` → 5514 tests, 6 failed。
+- 8 个失败全部是本机 CRLF 检出导致的源码扫描断言，与本次 diff 无交集（读取路径经核对不含改动文件的行为断言）：实测 `VideoActivity.java lone_lf=0 crlf=12762`、`CollectActivity.java lone_lf=0`、`assets/reader.html lone_lf=0`、`assets/css/ui.css lone_lf=0`，断言要求的裸 `\n` 序列在这些文件里根本不存在。同一组失败在 `docs/HOME-STATE-NO-CONFIG-20261018.md:131` 已记为既有环境失败。
+- 第二轮只读评审（`a55494fc`）逐条核实 §14.5 的 4 项：Q1 窗口已消除且无重复/漏请求（`checkId` 有 `detailRequested` 幂等闸）；Q2 队列被 clear 时未消费 `mPending*` 可接受且优于修复前；Q3 指出安全网节奏回归并给出收窄方案（已按此实现 `mInitViewLastPumpAt`）；Q4 三处时机/成本/覆盖均成立（`Init.set` 在 `attachBaseContext`，`App.java:131 Setting.applyLanguage()` 已先付过 prefs 磁盘加载；`invalidateAll()` 仅 `synchronized` + 两次 `clear()`，两处 restore 都在后台线程）。
+### 14.7 收窄后的复验（2026-10-29）
+- 依第二轮评审 Q3 把安全网改为真正的"停摆"判据：新增 `INIT_VIEW_STAGE_STALL_TIMEOUT_MS = 1_000`（`VideoActivity.java:367`），`launchInitViewStages()` 在 `:2293` 以 `mInitViewLastPumpAt = System.currentTimeMillis()` 起算，`armInitViewStageSafetyNet()` 的 `:2332` 只在超过该停摆阈值时才接手。这样慢首帧（>500ms）不再让安全网越过首帧每 500ms 抽一个 stage，队列排空即自停。
+- 复验命令：`gradlew :app:compileLeanbackArmeabi_v7aDebugJavaWithJavac :app:compileMobileArm64_v8aDebugJavaWithJavac :app:testLeanbackArmeabi_v7aDebugUnitTest :app:testMobileArmeabi_v7aDebugUnitTest --offline`。两个编译任务均通过（`verify-c111-4.log:128`、`:148`）。
+- 单测结果与 §14.6 完全一致：leanback 4732 tests / 8 failed，mobile 5514 tests / 6 failed，失败集合未因本次收窄改变，仍全部是 §14.6 记录的 CRLF 检出环境失败。
+- 首次全量复验曾因 Gradle 并发 daemon 争用 `app/build/tmp/compileLeanbackArmeabi_v7aDebugJavaWithJavac/compileTransaction/stash-dir` 而报 `Unable to delete directory`；`gradlew --stop` 后删除该 tmp 目录即恢复，与被测代码无关。
+
+### 14.8 第三轮只读评审与迟到 stage 的安全网重排（2026-10-29）
+- 第三轮只读评审（针对 `VideoActivity` 阶段调度器）逐条核对了 7 条推进路径，确认 detach 只是暂停（`postOnAnimation` 回调被丢弃，但下一次泵在 `:2363-2366` 走 `App.post` 自续；安全网是 `root.postDelayed`，detached 期间的 post 记入 `ViewRootImpl` run-queue，reattach 后执行），finishing 是有意 `clear()` 放弃，`stage.run()` 抛异常会经 `CrashReport` 交回前一个 handler 使进程崩溃而非静默停摆。
+- 唯一残留窄口：`pumpInitViewStage()` 在 `:2350-2355` 因 finishing/destroyed 执行 `clear()` 后，安全网下一次 tick 见空队列在 `:2333` 直接 return 且不再自我续期；若此时 `onServiceConnected()` 尾段又 `deferInitViewStage("4-service-results", …)`，`mInitViewStagesLaunched` 已为 true（`:2296`）、`launchInitViewStages()` 在 `:2295` 早退，则这条 stage 没有调度者。
+- 修复：`deferInitViewStage()` 在 `addLast` 之后加 `if (mInitViewStagesLaunched) armInitViewStageSafetyNet();`（`:2281`），迟到 stage 自带兜底调度器；`armInitViewStageSafetyNet()` 本身在队列排空时于 `:2333` 自停，因此不会形成常驻定时器。正常路径（stage 1-3 在 launch 之前入队）不触发该分支。
+- 该评审同时确认 6 个同由 `setRecyclerView()` 创建的适配器字段（`mPartAdapter`/`mArrayAdapter`/`mEpisodeAdapter`/`mEpisodeGridAdapter`/`mQuickAdapter`/`mParseAdapter`）与 `mFlagAdapter`/`mQualityAdapter` 同生同存（全文件各只有一个创建点、无置 null 处），故 `setDetail(Result)` 与 `setPlayer(Result)` 的 `mFlagAdapter == null` / `mQualityAdapter == null` 闸通过时其余必然非空，闸本身无漏；绕过闸直调 `setDetail(Vod)` 的三处（`applyCachedTmdbDetailNextFrame`、`applyFastTmdbPlaybackFullDetailNextFrame`、`consumeImmersiveAudioLaunch`）均经 `setDetail(Result)` 入口或在服务就绪后调用，已核实安全。
+- 复验（第三处修复后，全量一次跑完）：`gradlew :app:compileLeanbackArmeabi_v7aDebugJavaWithJavac :app:compileMobileArm64_v8aDebugJavaWithJavac :app:testLeanbackArmeabi_v7aDebugUnitTest :app:testMobileArmeabi_v7aDebugUnitTest --offline`。两个编译任务均无 error；leanback `4732 tests completed, 8 failed, 3 skipped`，mobile `5514 tests completed, 6 failed, 3 skipped`，失败集合与 §14.6/§14.7 逐条相同，全部为 CRLF 检出环境失败。

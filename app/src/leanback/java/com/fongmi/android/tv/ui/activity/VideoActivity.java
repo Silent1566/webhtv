@@ -362,6 +362,9 @@ private boolean runtimeSourceOnly;
     private static final int TMDB_FAST_PLAYBACK_START_DELAY_MS = 16;
     private static final int TMDB_BIND_AFTER_REVEAL_DELAY_MS = 96;
     private static final int INIT_VIEW_STAGE_FALLBACK_DELAY_MS = 500;
+    // The safety net must not outrun a slow first frame: the frame-paced chain legitimately stays silent
+    // until the first traversal, so only a chain that has not advanced for this long counts as stalled.
+    private static final int INIT_VIEW_STAGE_STALL_TIMEOUT_MS = 1_000;
     private static final int TMDB_OVERVIEW_ROW_GAP_DP = 12;
     private static final int TMDB_OVERVIEW_BOTTOM_GUARD_DP = 6;
     private static final int OMDB_FULL_RATING_TEXT_MAX_LENGTH = 20;
@@ -437,7 +440,7 @@ private boolean runtimeSourceOnly;
     private boolean detailRequested;
     private final ArrayDeque<Runnable> mInitViewStages = new ArrayDeque<>();
     private boolean mInitViewStagesLaunched;
-    private boolean mInitViewStagesPumped;
+    private long mInitViewLastPumpAt;
     private boolean mFlagSelectionListenerRegistered;
     private boolean detailHealthRecorded;
     private boolean playHealthRecorded;
@@ -1493,6 +1496,20 @@ private boolean runtimeSourceOnly;
         setPlayerKernel();
         setDecode();
         setLut();
+        // C111: setViewModel() runs on the initView tick, but the adapters (mFlagAdapter/mQualityAdapter/...)
+        // are only created by stage 1-recycler. A retained ViewModel replays its last Result into
+        // mPendingDetail/mPendingPlayer the moment the service connects, and detail/player results then
+        // dereference a not-yet-created adapter. Queue the whole tail behind the stages instead of running it
+        // inline; a non-empty queue means stage 1 has not run yet, an empty one means it already has, so the
+        // normal path stays inline and unchanged.
+        if (!mInitViewStages.isEmpty()) {
+            deferInitViewStage("4-service-results", this::applyServiceReadyResults);
+            return;
+        }
+        applyServiceReadyResults();
+    }
+
+    private void applyServiceReadyResults() {
         if (consumeImmersiveAudioLaunch()) return;
         if (!detailRequested && mViewModel != null) checkId();
         flushPendingFastTmdbPlayback();
@@ -1563,6 +1580,11 @@ private boolean runtimeSourceOnly;
             @Override
             public String osdTitle() {
                 return getOsdTitle();
+            }
+
+            @Override
+            public boolean isFullscreen() {
+                return VideoActivity.this.isFullscreen();
             }
         }, VodPlayerChrome.fromVideo(mBinding, mBinding.widget.clock, 14f), this);
         mClock = mPlayerUi.clock();
@@ -2253,6 +2275,10 @@ private boolean runtimeSourceOnly;
     // otherwise the spinner never gets a frame. Stages are queued in original order and pumped one per frame.
     private void deferInitViewStage(String name, Runnable stage) {
         mInitViewStages.addLast(() -> runInitViewStage(name, stage));
+        // A stage queued after the chain was launched (the service-ready tail) has no scheduler of its own:
+        // the frame-paced chain may already have drained, and pumpInitViewStage() drops the queue on teardown
+        // without rescheduling. Re-arm the net so a late stage is still pumped instead of waiting forever.
+        if (mInitViewStagesLaunched) armInitViewStageSafetyNet();
     }
 
     private void runInitViewStage(String name, Runnable stage) {
@@ -2268,6 +2294,7 @@ private boolean runtimeSourceOnly;
     private void launchInitViewStages() {
         if (mInitViewStagesLaunched || mInitViewStages.isEmpty()) return;
         mInitViewStagesLaunched = true;
+        mInitViewLastPumpAt = System.currentTimeMillis();
         final View root = mBinding == null ? null : mBinding.getRoot();
         if (root == null) {
             SpiderDebug.log("video-flow", "initView stage schedule fallback root=null left=%d", mInitViewStages.size());
@@ -2292,18 +2319,33 @@ private boolean runtimeSourceOnly;
                 return true;
             }
         });
-        // Safety net only: if no traversal ever arrives (e.g. the window stays hidden) the stages still run,
-        // but once the frame-paced chain has started it owns the pacing.
+        armInitViewStageSafetyNet();
+    }
+
+    // Safety net only: the frame-paced chain owns the pacing, but it dies silently if the root detaches
+    // between two stages (postOnAnimation callbacks are then dropped) and the remaining stages never run,
+    // which would leave the detail request unissued. Re-arm while stages are left so a stalled chain still
+    // finishes; a drained queue means the chain already did its job and the net stops.
+    private void armInitViewStageSafetyNet() {
+        final View root = mBinding == null ? null : mBinding.getRoot();
+        if (root == null) return;
         root.postDelayed(() -> {
-            if (mInitViewStagesPumped) return;
-            SpiderDebug.log("video-flow", "initView stage schedule fallback no first frame left=%d", mInitViewStages.size());
+            if (mInitViewStages.isEmpty()) return;
+            // Only take over when the frame-paced chain has really stalled; otherwise the net would add a
+            // second, slower pacing source and drain one stage per 500ms on a slow first frame.
+            if (System.currentTimeMillis() - mInitViewLastPumpAt < INIT_VIEW_STAGE_STALL_TIMEOUT_MS) {
+                armInitViewStageSafetyNet();
+                return;
+            }
+            SpiderDebug.log("video-flow", "initView stage schedule fallback stalled left=%d", mInitViewStages.size());
             pumpInitViewStage();
+            armInitViewStageSafetyNet();
         }, INIT_VIEW_STAGE_FALLBACK_DELAY_MS);
     }
 
     private void pumpInitViewStage() {
+        mInitViewLastPumpAt = System.currentTimeMillis();
         Runnable stage = mInitViewStages.pollFirst();
-        mInitViewStagesPumped = true;
         if (stage == null) return;
         if (isFinishing() || isDestroyed()) {
             int dropped = mInitViewStages.size() + 1;
@@ -2843,7 +2885,10 @@ private boolean runtimeSourceOnly;
             finish();
             return;
         }
-        if (service() == null) {
+        // C111: the adapters are created by initView stage 1-recycler, which now runs after setViewModel()
+        // registered this observer. A Result that arrives before stage 1 must wait like a missing service
+        // instead of dereferencing mFlagAdapter inside setDetail(Vod).
+        if (service() == null || mFlagAdapter == null) {
             mPendingDetail = result;
             SpiderDebug.log("video-flow", "detail pending service key=%s id=%s", getKey(), getId());
             return;
@@ -3292,7 +3337,8 @@ private boolean runtimeSourceOnly;
         }
         if (isFinishing() || isDestroyed()) return;
         SpiderDebug.log("video-flow", "player finish cost=%dms useParse=%s multi=%s msg=%s", System.currentTimeMillis() - playerStartTime, result.shouldUseParse(), result.getUrl().isMulti(), result.getMsg());
-        if (service() == null) {
+        // C111: same gate as setDetail(Result) — setPlayer() writes mQualityAdapter before any other guard.
+        if (service() == null || mQualityAdapter == null) {
             mPendingPlayer = result;
             SpiderDebug.log("video-flow", "player pending service key=%s id=%s", getKey(), getId());
             return;

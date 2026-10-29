@@ -2374,6 +2374,7 @@
         <item>Top right</item>
         <item>Bottom left</item>
         <item>Bottom right</item>
+        <item>Off</item>
     </string-array>
     <string name="play_decode_idle">Decode</string>
     <string name="detail_close">Close</string>

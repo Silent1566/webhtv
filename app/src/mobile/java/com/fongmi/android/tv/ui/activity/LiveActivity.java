@@ -176,6 +176,7 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
     private int groupBasePaddingBottom;
     private int channelBasePaddingBottom;
     private int epgBasePaddingBottom;
+    private int statusBarInset;
 
     public static void start(Context context) {
         context.startActivity(new Intent(context, LiveActivity.class).putExtra("empty", LiveConfig.isEmpty()));
@@ -302,6 +303,12 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
             public String getTitle() {
                 return mChannel == null ? "" : mChannel.getName();
             }
+
+            @Override
+            public boolean isFullscreen() {
+                // PiP 小窗不算全屏：媒体徽标只在真全屏显示。
+                return !isEmbeddedLiveUi() && !isInPictureInPictureMode();
+            }
         }, 12f);
         setVideoView();
         setNavigation();
@@ -395,6 +402,7 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
 
     private void setupWindowInsets() {
         ViewCompat.setOnApplyWindowInsetsListener(mBinding.getRoot(), (view, insets) -> {
+            updateStatusBarInset(insets);
             updateLiveListBottomInset(insets);
             return insets;
         });
@@ -2120,6 +2128,8 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
             cancelPendingLivePiP(false);
         }
         setVideoView(isInPictureInPictureMode);
+        // PiP 窗口里也要按当前模式重算状态栏占位，否则嵌入式高度会把 video 往下挤。
+        applyStatusBarInset();
         if (isInPictureInPictureMode) {
             dismissLiveControlDialog();
             hideControl();
@@ -2213,6 +2223,7 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
         updateLiveMenuInsets();
         if (isEmbeddedLiveUi()) {
             Util.showSystemUI(this);
+            ViewCompat.requestApplyInsets(mBinding.getRoot());
             getWindow().setStatusBarColor(Color.TRANSPARENT);
             getWindow().setNavigationBarColor(Color.TRANSPARENT);
             WindowInsetsControllerCompat insets = WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
@@ -2236,6 +2247,7 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
             keepLiveMenuVisible();
         }
         embeddedUiMode = embedded;
+        applyStatusBarInset();
         updateControlInsets();
         updateVideoHeight(videoSize);
         applyLiveResizeMode(LiveSetting.getScale());
@@ -2290,7 +2302,7 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
         if (mBinding.getRoot() instanceof LinearLayoutCompat root) {
             LinearLayoutCompat.LayoutParams params = new LinearLayoutCompat.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0);
             params.weight = 14;
-            root.addView(mBinding.recycler, Math.min(1, root.getChildCount()), params);
+            root.addView(mBinding.recycler, Math.min(root.indexOfChild(mBinding.video) + 1, root.getChildCount()), params);
         } else if (mBinding.getRoot() instanceof FrameLayout root) {
             root.addView(mBinding.recycler, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.START));
         }
@@ -2334,6 +2346,22 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
         LinearLayoutCompat.LayoutParams params = new LinearLayoutCompat.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT);
         params.weight = weight;
         view.setLayoutParams(params);
+    }
+
+    private void updateStatusBarInset(@Nullable WindowInsetsCompat insets) {
+        int top = insets == null ? 0 : insets.getInsets(WindowInsetsCompat.Type.statusBars()).top;
+        // 全屏期间状态栏被隐藏，派发的 inset 是 0；退出全屏后仍要用最后一次可见的高度。
+        if (top > 0) statusBarInset = top;
+        applyStatusBarInset();
+    }
+
+    private void applyStatusBarInset() {
+        if (mBinding.statusBar == null) return;
+        ViewGroup.LayoutParams params = mBinding.statusBar.getLayoutParams();
+        int height = isEmbeddedLiveUi() ? statusBarInset : 0;
+        if (params.height == height) return;
+        params.height = height;
+        mBinding.statusBar.setLayoutParams(params);
     }
 
     private void updateLiveMenuInsets() {
