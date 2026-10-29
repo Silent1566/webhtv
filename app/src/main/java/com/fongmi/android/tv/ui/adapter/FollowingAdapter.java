@@ -11,6 +11,7 @@ import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.databinding.ItemFollowingBinding;
 import com.fongmi.android.tv.following.Following;
 import com.fongmi.android.tv.following.FollowingSource;
+import com.fongmi.android.tv.following.FollowingUpdateCoordinator;
 import com.fongmi.android.tv.following.FollowingUpdatePolicy;
 import com.fongmi.android.tv.utils.ImgUtil;
 
@@ -95,7 +96,8 @@ public class FollowingAdapter extends RecyclerView.Adapter<FollowingAdapter.Hold
             holder.binding.source.setText(holder.itemView.getContext().getString(R.string.following_source, source.playableEpisode));
         } else {
             // 探针跑过但没算出可播集数必须与「尚未检查」分开，否则失败被静默伪装成未检查。
-            holder.binding.source.setText(source != null && source.lastProbeAt > 0
+            // 判据必须与 FILTER_FAILED 同口径，且不能用 lastProbeAt：订阅导入会预写它，从未探过的源会误显示失败。
+            holder.binding.source.setText(FollowingUpdateCoordinator.sourceCheckFailed(item.lastError)
                     ? R.string.following_source_failed : R.string.following_source_unknown);
         }
         if (item.watchedEpisode > 0) holder.binding.progress.setText(holder.itemView.getContext().getString(R.string.following_watched, item.watchedEpisode));

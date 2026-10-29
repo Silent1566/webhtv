@@ -54,6 +54,40 @@ public class FollowingUpdateCoordinatorErrorTest {
         assertFalse(FollowingUpdateCoordinator.shouldProbeAgain(false, false));
     }
 
+    @Test
+    public void probeThatYieldedNoPlayableEpisodeCountsAsFailure() {
+        // 探针跑过但零可播集数（线路解析不出集号）此前被判成成功，必须与「没跑出快照」同判。
+        FollowingSourceProbe.FollowingSourceSnapshot zero = snapshot(0);
+        FollowingSourceProbe.FollowingSourceSnapshot some = snapshot(3);
+
+        assertTrue(FollowingUpdateCoordinator.probeYieldedNoPlayable(null));
+        assertTrue(FollowingUpdateCoordinator.probeYieldedNoPlayable(zero));
+        assertFalse(FollowingUpdateCoordinator.probeYieldedNoPlayable(some));
+    }
+
+    @Test
+    public void zeroPlayableEpisodeFallsBackToTheGenericFailureText() {
+        // 零可播集数要真的落库成失败原因，否则 FILTER_FAILED 与卡片都看不到这次失败。
+        assertEquals("来源检查失败", FollowingUpdateCoordinator.composeLastError(null,
+                FollowingUpdateCoordinator.probeYieldedNoPlayable(snapshot(0)), source("")));
+    }
+
+    @Test
+    public void sourceCheckFailedIgnoresBlankAndTmdbDegradedText() {
+        // 筛选与卡片的共同判据：空白与 TMDB 降级（来源正常）都不算来源检查失败。
+        assertFalse(FollowingUpdateCoordinator.sourceCheckFailed(null));
+        assertFalse(FollowingUpdateCoordinator.sourceCheckFailed(""));
+        assertFalse(FollowingUpdateCoordinator.sourceCheckFailed("  "));
+        assertFalse(FollowingUpdateCoordinator.sourceCheckFailed(FollowingUpdateCoordinator.TMDB_DEGRADED));
+        assertTrue(FollowingUpdateCoordinator.sourceCheckFailed("来源没有可播放线路"));
+    }
+
+    private static FollowingSourceProbe.FollowingSourceSnapshot snapshot(int playableEpisode) {
+        FollowingSourceProbe.FollowingSourceSnapshot snapshot = new FollowingSourceProbe.FollowingSourceSnapshot();
+        snapshot.playableEpisode = playableEpisode;
+        return snapshot;
+    }
+
     private static FollowingSource source(String lastError) {
         FollowingSource source = new FollowingSource();
         source.followingKey = "tmdb:tv:1:s1";

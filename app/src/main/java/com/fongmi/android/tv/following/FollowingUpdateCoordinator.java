@@ -8,6 +8,12 @@ import java.util.List;
 
 public class FollowingUpdateCoordinator {
 
+    /** TMDB 降级文案：设备层断言逐字锁定，同时它是「来源没问题」的唯一证据，故必须可复用于判据。 */
+    static final String TMDB_DEGRADED = "TMDB不可用，已回退原站";
+
+    /** 来源检查失败文案：对外逐字可见且测试已逐字锁定，因此集中一处供复用，取值不得改动。 */
+    static final String SOURCE_FAILED = "来源检查失败";
+
     private final FollowingMetadataClient metadataClient;
     private final FollowingSourceProbe sourceProbe;
 
@@ -65,11 +71,15 @@ public class FollowingUpdateCoordinator {
                 ProbeOutcome initial = probeBestEffort(item, source, manual, false);
                 FollowingSourceSnapshot sourceSnapshot = initial.snapshot;
                 sourceAlreadyProbed = sourceSnapshot != null;
-                if (sourceSnapshot == null || sourceSnapshot.source == null) {
+                if (sourceSnapshot == null || sourceSnapshot.source == null || sourceSnapshot.playableEpisode <= 0) {
                     Throwable failure = metadataError != null
-                            ? metadataError : new IllegalStateException("来源检查失败");
+                            ? metadataError : new IllegalStateException(SOURCE_FAILED);
                     FollowingUpdatePolicy.markFailure(item, failure, now);
                     FollowingStore.update(item);
+                    // 顺序不可颠倒：先让 markFailure 的 lastError/failureCount/退避时间落库，再由 reconcile 从历史重建进度。
+                    // 反过来 update(item) 会用内存里旧的 watchedEpisode 覆盖掉刚重建的结果。
+                    // 失败记录同样需要重建进度，否则「探针探不到集」的源进度会永久停更（见 FOLLOW-1 设计文档 610 行）。
+                    FollowingStore.reconcile(item);
                     FollowingScheduler.scheduleNext(App.get(), item);
                     return false;
                 }
@@ -80,8 +90,9 @@ public class FollowingUpdateCoordinator {
             if (shouldProbeAgain(sourceAlreadyProbed, FollowingSettings.shouldProbe(manual, metadataChanged, source))) {
                 ProbeOutcome probed = probeBestEffort(item, source, manual, false);
                 if (probed.snapshot != null) source = probed.snapshot.source;
-                // 探针确实跑过却没拿到快照才算失败：仅凭 snapshot==null 会把「本次本不该探」误判成失败。
-                probeFailed = probed.attempted && probed.snapshot == null;
+                // 探针确实跑过却拿不到可用来源才算失败：既包含没跑出快照，也包含跑出快照但零可播集数
+                //（线路解析不出集号），仅凭 snapshot==null 会把后者的静默零值错判成检查成功。
+                probeFailed = probed.attempted && probeYieldedNoPlayable(probed.snapshot);
             }
             item.lastCheckedAt = now;
             item.failureCount = 0;
@@ -119,7 +130,7 @@ public class FollowingUpdateCoordinator {
      * 源侧失败必须落库原因，否则 UI 只能显示「尚未检查」，用户看不到失败。
      */
     static String composeLastError(Throwable metadataError, boolean probeFailed, FollowingSource source) {
-        if (metadataError != null) return "TMDB不可用，已回退原站";
+        if (metadataError != null) return TMDB_DEGRADED;
         return probeFailed ? probeFailureReason(source) : "";
     }
 
@@ -128,8 +139,21 @@ public class FollowingUpdateCoordinator {
         return !sourceAlreadyProbed && due;
     }
 
+    /** 探针没跑出快照、或跑出快照但没有任何可播集数，都等于拿不到可用来源。 */
+    static boolean probeYieldedNoPlayable(FollowingSourceSnapshot snapshot) {
+        return snapshot == null || snapshot.playableEpisode <= 0;
+    }
+
+    /**
+     * 筛选与卡片共用的失败判据：TMDB 降级只说明元数据缺失，来源本身仍可用，不算来源检查失败。
+     * UI 在 com.fongmi.android.tv.ui.* 包内，故必须 public 才能与筛选同口径。
+     */
+    public static boolean sourceCheckFailed(String lastError) {
+        return lastError != null && !lastError.isBlank() && !TMDB_DEGRADED.equals(lastError);
+    }
+
     static String probeFailureReason(FollowingSource source) {
-        if (source == null || source.lastError == null || source.lastError.isBlank()) return "来源检查失败";
+        if (source == null || source.lastError == null || source.lastError.isBlank()) return SOURCE_FAILED;
         return source.lastError;
     }
 
@@ -141,7 +165,7 @@ public class FollowingUpdateCoordinator {
             FollowingStore.updateSource(source);
             return new ProbeOutcome(true, result);
         } catch (Throwable error) {
-            source.lastError = error.getMessage() == null ? "来源检查失败" : error.getMessage();
+            source.lastError = error.getMessage() == null ? SOURCE_FAILED : error.getMessage();
             source.lastProbeAt = System.currentTimeMillis();
             FollowingStore.updateSource(source);
             if (required) throw error instanceof RuntimeException ? (RuntimeException) error : new RuntimeException(error);

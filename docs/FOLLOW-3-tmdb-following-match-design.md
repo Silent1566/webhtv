@@ -3,7 +3,7 @@
 > 状态：设计稿，待评审；本文只定义方案与验收标准，不代表已获准实施
 > 任务编号：FOLLOW-3-TMDB-MATCH-20261029
 > 设计日期：2026-10-29
-> 评估基线 commit：dev2 @ 998172a4c8a2b3294e6300d52f7c6c5e760e6c26（fix(following): 修复追更源检查静默失败与集数进度停更）
+> 评估基线 commit：dev2 @ 3639181e3e9618f15738c95b1f1603447aa289e4（merge origin/beta ba802dc432 之后的合并提交）
 > 参考版本：WebHTV 4.x（following 模块 v3 schema，FollowingDatabase VERSION=3）
 > 适用范围：追更（following）页面与追更更新链路；不改变播放、详情页、探针、DAO 语义
 > 目标读者：实现该功能的开发者、验收者、代码评审者
@@ -12,7 +12,7 @@
 
 ## 0. 结论摘要
 
-追更卡片的「官方已更新至第 N 集」目前只依赖 `Following.tmdbId > 0`，而 tmdbId 只有两个来源：播放页 `stampHistoryTmdbId()` 与 `History.enrichTmdbId()`，两者都被 `Setting.isHistoryAggregationEffective()` 这一道门闸拦住。因此在「未配置 TMDB / 关闭『TMDB 聚合』/ 自动匹配未命中」三种常见情况下，原生模式追更的剧集永远显示「官方状态未知」，点「检查」也不会改变——这是设计缺环，不是缺陷。
+追更卡片的「官方已更新至第 N 集」目前只依赖 `Following.tmdbId > 0`。`Following.tmdbId` 共有 6 处写入路径（见 2.1），但其中只有播放页 `stampHistoryTmdbId()` 与 `History.enrichTmdbId()` 这两条会**主动补盖**身份，且都被 `Setting.isHistoryAggregationEffective()` 这一道门闸拦住；其余四条只搬运上游已有的 tmdbId 或依赖外部数据（Alist 订阅、备份/同步合并），都不经该门闸，也无法在日常原生站源路径上凭空造出身份。因此在「未配置 TMDB / 关闭『TMDB 聚合』/ 自动匹配未命中」三种常见情况下，原生模式追更的剧集永远显示「官方状态未知」，点「检查」也不会改变——这是设计缺环，不是缺陷。
 
 本设计补齐这条缺环，采用**手动匹配为主、严格自动匹配为辅**的双通道方案：
 
@@ -68,29 +68,40 @@
 
 ---
 
-## 2. 现状取证（基线 commit 998172a4c8）
+## 2. 现状取证（基线 HEAD 3639181e3e9）
+
+> 本文行号以该提交为准；`FollowingStore` / `FollowingUpdateCoordinator` / `FollowingAdapter` / `FollowingActivity` / `FollowingUpdateWorker` 五个文件正在被并行编辑、行号会漂移，因此对它们一律以符号名引用，不写行号。
 
 ### 2.1 官方状态为何为空（根因链）
 
 ```
-FollowingAdapter.onBindViewHolder (ui/adapter/FollowingAdapter.java:90-92)
+FollowingAdapter.onBindViewHolder (ui/adapter/FollowingAdapter.java)
   released = FollowingUpdatePolicy.releasedEpisode(item)
   released > 0 ? following_official : following_official_unknown
         ↑
 FollowingUpdatePolicy.releasedEpisode (following/FollowingUpdatePolicy.java:8-13)
   latestReleasedSeason == trackedSeason ? latestReleasedEpisode : seasonReleasedEpisodes
         ↑ 全部来自 FollowingMetadataSnapshot
-FollowingUpdateCoordinator.check (following/FollowingUpdateCoordinator.java:52-61)
+FollowingUpdateCoordinator.check (following/FollowingUpdateCoordinator.java)
   if (item.tmdbId > 0) metadataClient.fetch(item, manual)   ← tmdbId<=0 时完全不拉官方数据
         ↑
 FollowingMetadataClient.fetch (following/FollowingMetadataClient.java:32)
   if (item.tmdbId <= 0 || !Setting.isTmdbReady()) return null;
         ↑
-Following.tmdbId 的写入点只有两处：
+Following.tmdbId 的真实写入路径共 6 处（均不检查 Setting.isHistoryAggregationEffective()）：
+  FollowingPlaybackBridge            item.tmdbId = history.getTmdbId();                                  （播放页加追更，取自 History）
+  TmdbDetailActivity.addFollowing    item.tmdbId = tmdb == null ? 0 : tmdb.getTmdbId();                  （详情页加追更，:11968）
+  AlistSubscriptionImporter          candidate.tmdbId = parseProviderId(object, "tmdb"); item.tmdbId = candidate.tmdbId;  （Alist 订阅导入，:101/:151）
+  FollowingMergePolicy.mergeOne      result.tmdbId = remote.tmdbId > 0 ? remote.tmdbId : local.tmdbId;    （备份/同步合并，:59）
+  FollowingStore.resolveTmdb         migrated.tmdbId = tmdb.getTmdbId();                                 （身份迁移）
+  Following.copy()（Following.java:154） item.tmdbId = tmdbId;                                            （拷贝既有 tmdbId）
+上游只有 2 处会主动补盖身份，且都被门闸拦住：
   mobile/VideoActivity.java:1422-1431 stampHistoryTmdbId()  守卫 !Setting.isHistoryAggregationEffective()
-  bean/History.java:1154-1164        enrichTmdbId()         同一守卫
+  leanback/VideoActivity.java:6265   stampHistoryTmdbId()  同一守卫
+  bean/History.java:1170-1180        enrichTmdbId()        同一守卫（守卫在 :1171）
         ↑
-Setting.isHistoryAggregationEffective() (setting/Setting.java:1393-1403)
+Setting.isHistoryAggregationEffective() (setting/Setting.java:1401-1403)
+  return isHistoryAggregationByTmdb();   // 语义见 :1393-1395
   isTmdbReady() && Prefers.getBoolean("history_aggregation_by_tmdb", true)
 ```
 
@@ -104,7 +115,7 @@ Setting.isHistoryAggregationEffective() (setting/Setting.java:1393-1403)
 | 严格阈值参考（**另一套实现，不要与之混用**） | `ui/activity/TmdbDetailActivity.java:12654-12690` | 那是「详情页 bundle 级」严格匹配：标题完全一致 + 年份同年，且 `score >= 360 && gap >= 50`。追更侧复用 `TmdbMatcher.chooseStrictMatch`（:143-155），它的判据是**标题 `compareKey` 完全相等 + 年份同年 + `isUnwantedSplitSeasonMatch` 过滤**，不使用 360/50 打分 |
 | 搜索对话框 | `ui/dialog/TmdbSearchDialog.java` | `create(Activity)` 即可，`FollowingActivity` 是 Activity，可直接用 |
 | 季选择对话框 | `ui/dialog/ChoiceDialog.java:94-127 / :155` | `showTmdbSeason` 只接受 `FragmentActivity`；`showSingle(FragmentManager, ...)` 可用于 `AppCompatActivity` |
-| 身份迁移（含墓碑守卫/来源绑定迁移/合并） | `following/FollowingStore.java:62-120` + `FollowingPlaybackBridge.resolveTmdbAsync` (:134-145) | 只在 `tmdb.mediaType == tv` 且 `tmdbId > 0` 时生效；墓碑行直接返回不复活 |
+| 身份迁移（含墓碑守卫/来源绑定迁移/合并） | `following/FollowingStore.resolveTmdb` / `selectMigrationSource` / `migrateSourceToTmdb`（`FollowingStore.java`，按符号名定位）+ `FollowingPlaybackBridge.resolveTmdbAsync` (:134-145) | 只在 `tmdb.mediaType == tv` 且 `tmdbId > 0` 时生效；目标 identityKey 是墓碑时**返回该墓碑行本身**（不复活、不迁移），调用方必须用 `isDeleted()` 判定失败 |
 | 匹配缓存 + 手动锁定 | `bean/TmdbMatchCache.java:102-127 / :135-154` | `put()` 遇 `isManual` 直接 return；`putManual()` 写 manual 条目+别名 |
 | 官方状态抓取 | `following/FollowingMetadataClient.java:30-89` | `detailForFollowing`（30 分钟 TTL）+ `season`（3 天 TTL） |
 | TMDB 模式开关 | `setting/Setting.java:1121-1139` | `isTmdbSmartMatch()` / `isTmdbMatchDialog()`，追更侧目前未消费 |
@@ -119,9 +130,9 @@ Setting.isHistoryAggregationEffective() (setting/Setting.java:1393-1403)
 | TMDB 服务 | `new TmdbService()`；`public JsonObject detail(TmdbItem, TmdbConfig)`；`public JsonObject season(TmdbItem, int, TmdbConfig)` | `service/TmdbService.java:120/197` |
 | 配置 | `TmdbConfig.effectiveCurrent()`；`TmdbConfig.isReady()`；`Setting.isTmdbReady()` | `bean/TmdbConfig.java:109/354`、`setting/Setting.java:991` |
 | 语言 | `TmdbLanguagePolicy.requestLanguage(TmdbConfig, int uiLanguage)` + `Setting.getLanguage()`（返回 **int**） | `utils/TmdbLanguagePolicy.java:58`、`setting/Setting.java:415` |
-| 存储 | `FollowingStore.find(String)`、`update(Following)`、`resolveTmdb(TmdbItem, int, int, String, String, FollowingMetadataSnapshot)`、`preferredSource(String)`、`list()` | `following/FollowingStore.java:44/162/62/40/32` |
+| 存储 | `FollowingStore.find(String)`、`update(Following)`、`resolveTmdb(TmdbItem, int, int, String, String, FollowingMetadataSnapshot)`、`preferredSource(String)`、`list()` | `following/FollowingStore.java`（按符号名定位：`find` / `update` / `resolveTmdb` / `preferredSource` / `list`） |
 | 元数据 | `public FollowingMetadataClient()`；`fetch(Following, boolean refresh)` | `following/FollowingMetadataClient.java:22/30` |
-| 实体 | `Following.copy()`；`TmdbItem.isTv()` | `following/Following.java:194`、`bean/TmdbItem.java:140` |
+| 实体 | `Following.copy()`；`TmdbItem.isTv()` | `following/Following.java:154`（`copy()` 方法体在 :154，`item.tmdbId = tmdbId;` 在 :164）、`bean/TmdbItem.java:140` |
 | 季解析参考 | `private Map<Integer,Integer> seasonEpisodeCounts(JsonObject)` / `private int firstSeasonNumber(JsonObject)` / `addSeasonCount(Map, JsonElement, boolean regularOnly)`（均为 private，需复制实现到新服务） | `ui/activity/TmdbDetailActivity.java:13220/13195/13228` |
 
 ### 2.4 现有测试对改动的硬约束
@@ -209,8 +220,8 @@ public class FollowingTmdbMatchService {
   1. 守卫：`target == null || target.getTmdbId() <= 0 || !target.isTv() || season < 0` → 抛 `IllegalArgumentException`。
   2. **水位保护**（见 5.4）：若 `source.readWatermarkEpisode <= 0 && source.watchedEpisode > 0`，写一份 `readWatermarkEpisode = source.watchedEpisode`、`lastNotifiedEpisode = max(source.lastNotifiedEpisode, source.watchedEpisode)` 的副本并 `FollowingStore.update(copy)`（在调用线程写，Room DAO 调用；与 `FollowingStore.markRead` 同类）。
   3. 构造探针行取快照：`Following probe = source.copy(); probe.tmdbId = target.getTmdbId(); probe.mediaType = target.getMediaType(); probe.trackedSeason = season;` 然后 `FollowingMetadataSnapshot snapshot = new FollowingMetadataClient().fetch(probe, true);`（失败返回 null，不致命）。
-  4. `Following migrated = FollowingStore.resolveTmdb(target, season, source.cid, source.siteKey, source.vodId, snapshot);`（`FollowingStore.java:62`）。返回 null 表示：非 tv / 目标行是墓碑 → 视为失败并抛出「目标追更已取消」。
-  5. **手动绑定落盘**：`synchronized (Setting.class) { TmdbMatchCache cache = Setting.getTmdbMatchCache(); cache.putManual(source.siteKey, source.vodId, List.of(source.vodName), target, TmdbLanguagePolicy.requestLanguage(tmdbConfig, Setting.getLanguage())); Setting.putTmdbMatchCache(cache); }`（参照 `TmdbDetailActivity.saveManualTmdbMatch` :3799-3807）。**必须在迁移后写**，因为 `putManual` 用源站剧名作别名，与 `resolveTmdb` 无耦合。
+  4. `Following migrated = FollowingStore.resolveTmdb(target, season, source.cid, source.siteKey, source.vodId, snapshot);`（`FollowingStore.resolveTmdb`，按符号名定位）。真实返回语义见 6.2：`null` 只表示「非法参数（`tmdb == null` / `getTmdbId() <= 0` / 媒体类型不是 tv）」，目标行是墓碑时返回的是**该墓碑行本身**；因此本步骤的失败判据必须是 `migrated == null || migrated.isDeleted()`，为真则抛出「目标追更已取消」。
+  5. **手动绑定落盘**：`synchronized (Setting.class) { TmdbMatchCache cache = Setting.getTmdbMatchCache(); cache.putManual(source.siteKey, source.vodId, List.of(source.vodName), target, TmdbLanguagePolicy.requestLanguage(tmdbConfig, Setting.getLanguage())); Setting.putTmdbMatchCache(cache); }`（参照 `TmdbDetailActivity.saveManualTmdbMatch` :3805-3813）。**必须在迁移后写**，因为 `putManual` 用源站剧名作别名，与 `resolveTmdb` 无耦合。
   6. 返回 `migrated`。
 
 > 链式 API 注意：`TmdbSearchDialog.title/query/items/listener/searchListener/skipListener` 均返回 `TmdbSearchDialog`，但 `show()`、`loading()`、`updateItems(...)` 返回 `void`（`TmdbSearchDialog.java:101/124/130`），因此必须先持有实例再分别调用，不能把 `show().loading()` 串起来。
@@ -219,7 +230,7 @@ public class FollowingTmdbMatchService {
 
 ### 5.2 入口一：详情弹窗新增「匹配 TMDB」项
 
-文件：`app/src/main/java/com/fongmi/android/tv/ui/activity/FollowingActivity.java`，`onOpenDetail`（:366-401）。
+文件：`app/src/main/java/com/fongmi/android/tv/ui/activity/FollowingActivity.java`，`onOpenDetail`（按符号名定位）。
 
 改动（保持 which 0..4 语义不变）：
 
@@ -241,7 +252,7 @@ String[] actions = new String[]{
 
 ### 5.3 入口二：卡片「官方状态未知」行点击
 
-文件：`app/src/main/java/com/fongmi/android/tv/ui/adapter/FollowingAdapter.java`（:84-133）与 `FollowingAdapter.Listener`（:23-39）。
+文件：`app/src/main/java/com/fongmi/android/tv/ui/adapter/FollowingAdapter.java` 的 `onBindViewHolder` 与 `FollowingAdapter.Listener`（均按符号名定位）。
 
 - `Listener` 新增 `void onMatchTmdb(Following item);`（第 9 个回调）。
 - `onBindViewHolder` 内，官方行（`binding.official`）绑定：
@@ -260,7 +271,7 @@ if (item.tmdbId <= 0) {
 
 ### 5.4 水位保护（关键正确性约束）
 
-`FollowingUpdatePolicy.applyMetadata`（:26-89）在 **firstMetadata** 成立时把 `readWatermarkEpisode`、`lastNotifiedEpisode` 直接抬到 `releasedEpisode`（:59-63）：
+`FollowingUpdatePolicy.applyMetadata`（:26-67）在 **firstMetadata** 成立时把 `readWatermarkEpisode`、`lastNotifiedEpisode` 直接抬到 `releasedEpisode`（:59-63）：
 
 ```java
 boolean firstMetadata = item.metadataUpdatedAt <= 0 && item.readWatermarkEpisode <= 0 && item.lastNotifiedEpisode <= 0;
@@ -346,7 +357,8 @@ private void resolveMatch(Following item, TmdbItem target, int season) {
         Following migrated = null;
         try {
             migrated = matchService.resolve(item, target, season);
-            ok = migrated != null;
+            // resolveTmdb 在目标 identityKey 是墓碑时返回墓碑行本身，必须用 isDeleted() 判定失败。
+            ok = migrated != null && !migrated.isDeleted();
         } catch (Exception e) {
             ok = false;
         }
@@ -369,7 +381,7 @@ private void resolveMatch(Following item, TmdbItem target, int season) {
 说明：
 
 - `ChoiceDialog.showSingle(FragmentManager, CharSequence, CharSequence[], int, OnChoice)`（`ChoiceDialog.java:155`）可被 `AppCompatActivity` 使用，绕开 `showTmdbSeason` 的 `FragmentActivity` 限制。**不修改 `FollowingActivity` 的基类**（会撞壁纸/主题断言 `FollowingUiSourceTest:131-168`）。
-- `persistMatchError`：把 `lastError` 写成人类可读原因（复用 `FollowingUpdatePolicy.markFailure` 或直接 `item.lastError = msg; FollowingStore.update(item);`），使「检查失败」筛选可见（F5）。
+- `persistMatchError`：**必须**走 `FollowingUpdatePolicy.markFailure(item, new IllegalStateException(msg), System.currentTimeMillis())` + `FollowingStore.update(item)`，**不得**直接 `item.lastError = msg`。`markFailure` 是唯一同时负责 160 字符截断（`shortError`）、`failureCount` 自增与 `nextCheckAt` 退避的计算点；绕过它会写入超长文案并破坏失败计数与退避（见 6.1）。走通后「检查失败」筛选才可见（F5）。
 - 全部 IO（搜索、季清单、快照、迁移）都在 `Task.execute` 里，主线程只做 UI；这是 `FollowingUiSourceTest` 对追更页「不阻塞主线程」的一贯要求。
 
 ### 5.6 严格自动兜底（阶段 B）
@@ -400,7 +412,7 @@ public TmdbItem searchStrictMatch(String videoName) throws Exception {
 }
 ```
 
-**挂载点**：`FollowingUpdateCoordinator.check(item, manual, foreground)`（:43-102），插在方法最前面（早于 `preferredSource` 与 `if (item.tmdbId > 0)`）：
+**挂载点**：`FollowingUpdateCoordinator` 的 `check(item, manual, foreground)`（按符号名定位），插在方法最前面（早于 `preferredSource` 与 `if (item.tmdbId > 0)`）：
 
 ```java
 public boolean check(Following item, boolean manual, boolean foreground) {
@@ -412,7 +424,7 @@ public boolean check(Following item, boolean manual, boolean foreground) {
 }
 ```
 
-**为什么不「就地改写 item 继续跑」**：`FollowingStore.resolveTmdb` 迁移成功后会 `dao.delete(旧行)`（`FollowingStore.java:118`），注释 :117 `deleteForFollowing(旧 key)`。此时 `FollowingStore.update(item)` / `updateSource(source)` 作用在已删除的旧 `identityKey` 上会静默无效（`FollowingStore.java:162/167`），本轮检查的结果就丢了。因此迁移成功后**必须重新取新行并重跑一次完整检查**；递归深度恒为 1，因为迁移后 `tmdbId > 0` 使守卫立即为假。
+**为什么不「就地改写 item 继续跑」**：`FollowingStore.migrateSourceToTmdb` 迁移成功后会 `getFollowingSourceDao().deleteForFollowing(旧 key)` 再 `getFollowingDao().delete(旧行)`（均在 `FollowingStore.java`，按符号名定位）。此时 `FollowingStore.update(item)` / `updateSource(source)` 作用在已删除的旧 `identityKey` 上会静默无效（`FollowingStore.update` / `updateSource`，按符号名定位），本轮检查的结果就丢了。因此迁移成功后**必须重新取新行并重跑一次完整检查**；递归深度恒为 1，因为迁移后 `tmdbId > 0` 使守卫立即为假。
 
 ```java
 private Following autoMatch(Following item) {
@@ -430,8 +442,8 @@ private Following autoMatch(Following item) {
         else return null;                                     // 多季且对不上：不猜
         return new FollowingTmdbMatchService().resolve(item, target, season);
     } catch (Throwable e) {
-        item.lastError = "自动匹配 TMDB 失败";   // 与既有 composeLastError 的字面量风格一致（FollowingUpdateCoordinator.java:122/133）
-        FollowingStore.update(item);
+        FollowingUpdatePolicy.markFailure(item, new IllegalStateException("自动匹配 TMDB 失败"), System.currentTimeMillis());
+        FollowingStore.update(item);   // 复用 markFailure，保留 160 字符截断 / failureCount / 退避
         return null;
     }
 }
@@ -477,21 +489,29 @@ private Following autoMatch(Following item) {
 
 ### 6.2 身份迁移语义（复用既有）
 
-`FollowingStore.resolveTmdb` 已保证：
+`FollowingStore.resolveTmdb` 的真实返回语义（共四种，**返回值不是判据，语义才是**）：
+
+| 前置条件 | 返回 | 调用方应如何判定 |
+| --- | --- | --- |
+| 非法参数：`tmdb == null` 或 `getTmdbId() <= 0` 或媒体类型不是 `tv` | `null` | 失败（`following_tmdb_not_tv` / 参数错误） |
+| 目标 `tmdb:tv:<id>:s<season>` 行存在且是墓碑（`deletedAt > 0`） | **该墓碑行本身**（C9 防复活语义：不复活、不迁移） | 失败，判据 `isDeleted()`；**不能靠 null** |
+| 找不到可迁移的同源行（`selectMigrationSource` 返回 `null`） | 既有 target（可能为 `null`） | target 非空且非墓碑 → 视为「已匹配，无需再迁移」；target 为 `null` → 失败 |
+| 否则 | `migrateSourceToTmdb` 迁移后的行 | 成功 |
+
+迁移内部行为：
 
 | 场景 | 行为 |
 | --- | --- |
-| 目标 `tmdb:tv:<id>:s<season>` 行存在且是墓碑 | 直接返回目标，**不复活** |
-| 同源存在多行（`findUnmatchedBySource`） | 优先 `trackedSeason == season`，其次 `<= 0`，最后首行 |
-| 目标行已存在（此前从详情页加过追更） | `FollowingMergePolicy.mergeOne`：进度按 `updatedAt` LWW、水位取 max、开关取 AND |
+| 同源存在多行（`findUnmatchedBySource`） | `selectMigrationSource` 优先 `trackedSeason == season`，其次 `<= 0`，最后首行 |
+| 目标行已存在且非墓碑、并找到可迁移同源行 | `FollowingMergePolicy.mergeOne(target, migrated)`：进度按 `updatedAt` LWW、水位取 max、开关取 AND |
 | 来源绑定 `following_source` | 改 `followingKey` 迁到新 key；`playableSeason <= 0` 时补 `season` |
 | 旧行 | `deleteForFollowing(旧 key)` + `dao.delete(旧行)` |
 
-设计上**不做**任何额外补偿逻辑；若 `resolveTmdb` 返回 null 一律按失败处理并向用户提示。
+设计上**不做**任何额外补偿逻辑。统一失败判据：`migrated == null || migrated.isDeleted()`——只有它同时覆盖「非法参数」与「目标是墓碑」两种情况。
 
 ### 6.3 幂等与并发
 
-- 重复点「匹配 TMDB」且选同一条目：`resolveTmdb` 第二次时旧行已删除、`findUnmatchedBySource` 为空 → 返回 null → 提示失败。可接受（用户可见结果仍正确）。
+- 重复点「匹配 TMDB」且选同一条目：第二次调用时目标行已存在（上一次迁移写入），`findUnmatchedBySource` 为空，`selectMigrationSource` 返回 `null` → `resolveTmdb` 返回**既有 target**（不是 `null`）。只要它不是墓碑就视为「已匹配，无需再迁移」，提示 `following_tmdb_already_matched` 或直接 `load()` 刷新即可，不得报失败。
 - 迁移与「检查」并发：`FollowingStore.resolveTmdb` 内部 `synchronized (MIGRATION_LOCK)` + `runInTransaction`，无需额外加锁。
 - Activity 侧用 `matchSearchGeneration` 丢弃过期搜索结果，避免旧回调 `updateItems` 到已关闭对话框。
 
@@ -506,7 +526,7 @@ private Following autoMatch(Following item) {
 | 搜索抛 `TmdbService.AuthException` | 与空结果同样处理（不弹原始异常） |
 | 选中电影条目 | 提示 `following_tmdb_not_tv`，不迁移 |
 | 条目季清单为空 | 提示 `following_tmdb_not_tv` |
-| 目标追更已被取消（墓碑） | `resolveTmdb` 返回 null → 提示 `following_tmdb_match_failed` + `lastError` |
+| 目标追更已被取消（墓碑） | `resolveTmdb` 返回**该墓碑行本身**（不是 null），调用方用 `isDeleted()` 判定 → 提示 `following_tmdb_match_failed` + `lastError` |
 | 快照拉取失败 | 不致命：`snapshot = null` → `migrateSourceToTmdb` 走 `refreshDerived`，官方状态等下一次「检查」补齐 |
 | 用户取消季选择对话框 | 不做任何改动 |
 | 用户在搜索结果里手输空关键字 | 由 `TmdbSearchDialog` 既有的 searchListener 行为接管，无结果即空列表 |
@@ -533,9 +553,9 @@ private Following autoMatch(Following item) {
 | AC-12 | 自动兜底：开关开启 + `manual=true` + 严格匹配命中 → 身份迁移并立即写官方状态 | 单测 `FollowingAutoMatchTest.strictMatchMigratesOnManualCheck` |
 | AC-13 | 自动兜底：智能匹配才可命中（严格失败）的条目**不得**被自动写入 | 单测 `...smartOnlyCandidateIsRejected` |
 | AC-14 | 自动兜底：`checkDue`（后台）即使开关开启也不触发搜索 | 单测 `...periodicCheckDoesNotSearch` |
-| AC-15 | 任意匹配失败都会在卡片错误行显示原因，并能被「检查失败」筛选命中 | 单测 `FollowingUiSourceTest` 断言 `lastError` 写入路径 + 设备 S4 |
-| AC-16 | 既有回归全部通过：`FollowingSourceProbeTest`(6)、`FollowingUpdateCoordinatorDeviceTest`、`FollowingProjectionDeviceTest`、`FollowingMigrationDeviceTest`、`FollowingUiSourceTest` 全量、`HistoryPlaybackTest`、`HistorySeasonSnapshotProjectionTest`、`PlaybackProgressWriterEpisodeTest` | `.gradlew.bat` 定向单测双 flavor（基线 223 tests/flavor） |
-| AC-17 | 未新增 Room 字段/表/迁移：`FollowingDatabase.VERSION == 3`，`Following.class` 字段集合不变 | 单测 `FollowingUiSourceTest` 增补断言或代码评审 |
+| AC-15 | 任意匹配失败都会在卡片错误行显示原因，并能被「检查失败」筛选命中 | ① 源码契约断言（`FollowingUiSourceTest` 只能断言源码字符串，因此它只断言「失败分支存在 `FollowingUpdatePolicy.markFailure(...)` + `FollowingStore.update(item)` 调用点，且不存在 `item.lastError =` 直写」）+ ② 代码评审；③ **运行期落库必须另做**：新增 `FollowingTmdbMatchDeviceTest` 仪器用例断言 `stored.lastError` 非空且长度 ≤ 160、`failureCount` 自增（当前 `FollowingUiSourceTest` 无 `lastError` 断言，不能替代）+ 设备 S4 |
+| AC-16 | 既有回归全部通过：`FollowingSourceProbeTest`(6)、`FollowingUpdateCoordinatorDeviceTest`、`FollowingProjectionDeviceTest`、`FollowingMigrationDeviceTest`、`FollowingUiSourceTest` 全量、`HistoryPlaybackTest`、`HistorySeasonSnapshotProjectionTest`、`PlaybackProgressWriterEpisodeTest` | `.gradlew.bat` 双 flavor 定向单测全部通过（不预设通过用例总数，以命令零失败为准） |
+| AC-17 | 未新增 Room 字段/表/迁移：`FollowingDatabase.VERSION == 3`，`Following.class` 字段集合不变 | ① 源码契约断言（`FollowingUiSourceTest` 断言 `FollowingDatabase` 中 `VERSION = 3` 字面量与 `Following.class` 字段声明集合未变——它只是源码字符串断言，不能证明运行期实际库版本）+ ② 代码评审；③ 若需证明真机上没有触发迁移，必须另加仪器测试（打开既有库后断言 `getOpenHelper().getReadableDatabase().getVersion() == 3`） |
 | AC-18 | 追更页主线程无阻塞：所有 TMDB 调用都在 `Task.execute` 内 | 代码评审 + 单测断言 `Task.execute` 出现位置 |
 
 ---
@@ -553,7 +573,7 @@ private Following autoMatch(Following item) {
 
 - `app/src/test/java/com/fongmi/android/tv/following/FollowingTmdbMatchServiceTest.java`（AC-1/3/4/6）
 - `app/src/test/java/com/fongmi/android/tv/following/FollowingAutoMatchTest.java`（AC-11/12/13/14）
-- `app/src/test/java/com/fongmi/android/tv/ui/activity/FollowingUiSourceTest.java` 增补（AC-2/15/17/18）
+- `app/src/test/java/com/fongmi/android/tv/ui/activity/FollowingUiSourceTest.java` 增补（AC-2/15/17/18 的**源码契约部分**；AC-15 的运行期落库与 AC-17 的实际库版本不在其能力范围，见各条验证手段）
 
 ### 9.2 编译与仪器测试（真机/模拟器，跑一次）
 
@@ -562,7 +582,7 @@ private Following autoMatch(Following item) {
 .\gradlew.bat :app:connectedMobileArm64_v8aDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.fongmi.android.tv.following.FollowingTmdbMatchDeviceTest
 ```
 
-新增仪器测试：`app/src/androidTest/java/com/fongmi/android/tv/following/FollowingTmdbMatchDeviceTest.java`（AC-5/7/8/9/10）。
+新增仪器测试：`app/src/androidTest/java/com/fongmi/android/tv/following/FollowingTmdbMatchDeviceTest.java`（AC-5/7/8/9/10，并承载 AC-15 的运行期 `lastError` 落库断言与 AC-17 的实际库版本断言）。
 
 ### 9.3 设备手工场景（一次性）
 
@@ -580,7 +600,7 @@ private Following autoMatch(Following item) {
 | --- | --- | --- |
 | 误匹配写错官方集数 | 高 | 手动确认 + 自动通道严格匹配 + 默认关闭 + 不做智能自动写入 |
 | 首次元数据吞掉未看集数 | 高 | 5.4 水位预置 + AC-9 专项用例 |
-| 迁移破坏既有追更行（墓碑/重复行） | 中 | 复用 `resolveTmdb` 的墓碑守卫与 `mergeOne`，仅在其返回 null 时报失败 |
+| 迁移破坏既有追更行（墓碑/重复行） | 中 | 复用 `resolveTmdb` 的墓碑守卫与 `mergeOne`；失败判据统一为 `migrated == null \|\| migrated.isDeleted()`（见 6.2），不能只看 null |
 | `checkNow` 内身份变更导致后续操作指向旧 key | 中 | 迁移后立即 `FollowingStore.find(newKey)` 重新取行；失败则本条检查返回 false |
 | 请求放大（后台 15min/6h 定时） | 中 | 自动通道仅 `manual == true` 触发；`TmdbService` 搜索缓存 1 天兜底 |
 | 破坏 `FollowingUiSourceTest` 字符串断言 | 中 | 不新增卡片按钮、不改 `checkAll` 语句、不删除既有 5 个 action 字符串；改后立即跑该测试 |
