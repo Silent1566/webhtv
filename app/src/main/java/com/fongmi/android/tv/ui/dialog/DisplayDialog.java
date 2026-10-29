@@ -74,7 +74,7 @@ public class DisplayDialog extends BaseAlertDialog {
         binding.displayParams.setVisibility(View.VISIBLE);
         binding.displayParams.setSelected(PlayerSetting.isOsdDiagnostics());
         binding.displayMediaBadges.setVisibility(View.VISIBLE);
-        binding.displayMediaBadges.setSelected(PlayerSetting.isDisplayMediaBadges());
+        binding.displayMediaBadges.setSelected(PlayerSetting.isDisplayMediaBadges() && PlayerSetting.isDisplayMediaBadgesPersistent());
     }
 
     @Override
@@ -129,7 +129,9 @@ public class DisplayDialog extends BaseAlertDialog {
                 PlayerSetting.putDisplayTitle(selected);
                 break;
             case MEDIA_BADGES:
-                PlayerSetting.putDisplayMediaBadges(selected);
+                // 勾上 = 打开总开关并常驻；取消 = 只取消常驻（唤醒控制栏时仍可见）
+                if (selected) PlayerSetting.putDisplayMediaBadges(true);
+                PlayerSetting.putDisplayMediaBadgesPersistent(selected);
                 break;
         }
         if (callback != null) callback.run();

@@ -69,7 +69,7 @@ public class ControlDialogOsdSettingsTest {
         assertMethodContains(dialog, "private void initPlayerOsdEvent()", "PlayerSetting.putOsdDiagnostics");
         assertMethodContains(dialog, "private void initPlayerOsdView()", "PlayerSetting.isDisplayMediaBadges()");
         assertMethodContains(dialog, "private void initPlayerOsdEvent()", "Display.MEDIA_BADGES");
-        assertMethodContains(dialog, "private void setDisplay(TextView view, Display display)", "PlayerSetting.putDisplayMediaBadges(selected);");
+        assertMethodContains(dialog, "private void setDisplay(TextView view, Display display)", "PlayerSetting.putDisplayMediaBadgesPersistent(selected);");
     }
 
     private static void assertControlDialogEmbedsOsdSettings(String flavor) throws Exception {
