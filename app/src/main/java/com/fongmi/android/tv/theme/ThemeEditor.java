@@ -26,7 +26,11 @@ public final class ThemeEditor {
         /**
          * 播放菜单遮盖层强度。只缩放黑幕 alpha、不改色相，所以仍走 opacity 分支。
          */
-        PLAYER_SCRIM_OPACITY;
+        PLAYER_SCRIM_OPACITY,
+        /**
+         * 直播页频道抽屉遮盖层强度。只缩放黑幕 alpha、不改色相，所以仍走 opacity 分支。
+         */
+        LIVE_LIST_SCRIM_OPACITY;
 
         public boolean isColor() {
             return ordinal() <= WARNING.ordinal();
@@ -159,6 +163,7 @@ public final class ThemeEditor {
             case DIALOG_OPACITY -> slots.dialogOpacity == null ? null : String.valueOf(slots.dialogOpacity);
             case OVERLAY_OPACITY -> slots.overlayOpacity == null ? null : String.valueOf(slots.overlayOpacity);
             case PLAYER_SCRIM_OPACITY -> slots.playerScrimOpacity == null ? null : String.valueOf(slots.playerScrimOpacity);
+            case LIVE_LIST_SCRIM_OPACITY -> slots.liveListScrimOpacity == null ? null : String.valueOf(slots.liveListScrimOpacity);
         };
     }
 
@@ -188,6 +193,7 @@ public final class ThemeEditor {
             case DIALOG_OPACITY -> slots.dialogOpacity = value;
             case OVERLAY_OPACITY -> slots.overlayOpacity = value;
             case PLAYER_SCRIM_OPACITY -> slots.playerScrimOpacity = value;
+            case LIVE_LIST_SCRIM_OPACITY -> slots.liveListScrimOpacity = value;
             default -> throw new IllegalArgumentException("not an opacity slot");
         }
     }
@@ -200,6 +206,7 @@ public final class ThemeEditor {
             case DIALOG_OPACITY -> inRange(value, ThemeProfileValidator.MIN_DIALOG_OPACITY, ThemeProfileValidator.MAX_DIALOG_OPACITY);
             case OVERLAY_OPACITY -> inRange(value, ThemeProfileValidator.MIN_OVERLAY_OPACITY, ThemeProfileValidator.MAX_OVERLAY_OPACITY);
             case PLAYER_SCRIM_OPACITY -> inRange(value, ThemeProfileValidator.MIN_PLAYER_SCRIM_OPACITY, ThemeProfileValidator.MAX_PLAYER_SCRIM_OPACITY);
+            case LIVE_LIST_SCRIM_OPACITY -> inRange(value, ThemeProfileValidator.MIN_LIVE_LIST_SCRIM_OPACITY, ThemeProfileValidator.MAX_LIVE_LIST_SCRIM_OPACITY);
             default -> null;
         };
     }

@@ -130,6 +130,23 @@ public final class ThemeController {
     }
 
     /**
+     * The user's explicit live-list (channel drawer) scrim strength for one mode, or {@code null}.
+     *
+     * <p>直播页频道抽屉的遮盖层与播放菜单遮盖层同构：没有 ThemeTokens 分量，由宿主在创建时
+     * 通过本方法读取；未设置时由 {@link LiveListScrim} 回落到它自己的 DEFAULT_OPACITY，
+     * 因此老 profile 的默认观感与 shape_live_list.xml 逐值一致。
+     */
+    public static Float configuredLiveListScrimOpacity(boolean light) {
+        ThemeProfile active = profile;
+        if (active == null) return null;
+        ThemeProfile.SlotSet slots = light ? active.light : active.dark;
+        if (slots == null) return null;
+        Float value = slots.liveListScrimOpacity;
+        if (value == null || !Float.isFinite(value)) return null;
+        return Math.max(0f, Math.min(1f, value));
+    }
+
+    /**
      * Applies a scrim opacity to a surface's own scrim colour, replacing only the alpha.
      *
      * <p>{@code null} (the user never set the slot) returns {@code base} untouched, which

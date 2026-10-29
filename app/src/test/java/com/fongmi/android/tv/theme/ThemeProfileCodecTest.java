@@ -93,4 +93,26 @@ public class ThemeProfileCodecTest {
                 () -> ThemeProfileCodec.encode(profile));
         assertTrue(error.getMessage().contains("light.primary"));
     }
+
+    @Test
+    public void liveListScrimOpacityRoundTripsAndRejectsOutOfRange() {
+        ThemeProfile profile = ThemeProfileCodec.parse("{\"light\":{\"liveListScrimOpacity\":0.65}}");
+        assertEquals(0.65f, profile.light.liveListScrimOpacity, 0.0001f);
+        assertEquals(0.65f, ThemeProfileCodec.parse(ThemeProfileCodec.encode(profile)).light.liveListScrimOpacity, 0.0001f);
+        assertThrows(IllegalArgumentException.class, () -> ThemeProfileCodec.parse(
+                "{\"light\":{\"liveListScrimOpacity\":0.19}}"));
+        assertThrows(IllegalArgumentException.class, () -> ThemeProfileCodec.parse(
+                "{\"light\":{\"liveListScrimOpacity\":1.01}}"));
+    }
+
+    @Test
+    public void anUnsetLiveListScrimSlotStaysUnsetInsteadOfDefaultingToANumber() {
+        ThemeProfile profile = ThemeProfile.defaultProfile();
+        assertNull(profile.light.liveListScrimOpacity);
+        assertNull(profile.dark.liveListScrimOpacity);
+        // A round trip must not bake a number into the slot: the shipped look comes from
+        // the DEFAULT_OPACITY fallback inside LiveListScrim, not from the profile.
+        assertNull(ThemeProfileCodec.parse(ThemeProfileCodec.encode(profile)).light.liveListScrimOpacity);
+        assertNull(ThemeProfileCodec.parse(ThemeProfileCodec.encode(profile)).dark.liveListScrimOpacity);
+    }
 }

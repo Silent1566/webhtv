@@ -52,6 +52,7 @@ import com.fongmi.android.tv.player.Source;
 import com.fongmi.android.tv.service.PlaybackService;
 import com.fongmi.android.tv.setting.LiveSetting;
 import com.fongmi.android.tv.setting.Setting;
+import com.fongmi.android.tv.theme.LiveListScrim;
 import com.fongmi.android.tv.theme.PlaybackMenuScrim;
 import com.fongmi.android.tv.setting.PlayerButtonSetting;
 import com.fongmi.android.tv.setting.PlayerSetting;
@@ -196,6 +197,7 @@ public class LiveActivity extends PlaybackActivity implements GroupAdapter.OnCli
     protected void initView(Bundle savedInstanceState) {
         super.initView(savedInstanceState);
         applyPlaybackOverlay();
+        applyLiveListScrim();
         mClock = Clock.create(mBinding.widget.clock);
         mKeyDown = CustomKeyDownLive.create(this);
         mObserveEpg = this::setEpg;
@@ -318,6 +320,10 @@ public class LiveActivity extends PlaybackActivity implements GroupAdapter.OnCli
     private void applyPlaybackOverlay() {
         if (Setting.isPlaybackOverlayEnabled()) mBinding.control.getRoot().setBackground(PlaybackMenuScrim.create(this));
         else mBinding.control.getRoot().setBackgroundResource(R.color.transparent);
+    }
+
+    private void applyLiveListScrim() {
+        mBinding.recycler.setBackground(LiveListScrim.create(this));
     }
 
     private void setDecode() {
