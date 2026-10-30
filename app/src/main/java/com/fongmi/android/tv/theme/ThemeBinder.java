@@ -81,6 +81,53 @@ public final class ThemeBinder {
             "selector_empty_action",
     };
 
+    /**
+     * 装载 {@link #ITEM_OVERLAY_FILLS} 的宿主 selector：生产上这些 shape 都是作为它们的
+     * {@code <item>} 子项被取到的。
+     *
+     * <p>为什么指纹必须同时收录**两条**取图路径：同一个 XML 在「直接 {@code getDrawable}」与
+     * 「作为 {@code <selector>} 子项解析」两种上下文中，{@code ?attr/colorOutline} 这类属性可能解析到
+     * 不同取值（实测 {@code shape_tv_search_field} 的常态子项在两条路径下栅格化结果不同，而
+     * {@code shape_tv_search_field_focused} 因描边走 {@code ?attr/tvFocusRing} 恰好相同）。
+     * 只收一条路径，另一条路径上的宿主就永远匹配不上、功能静默失效。
+     */
+    private static final String[] ITEM_OVERLAY_PARENTS = {
+            "selector_item",
+            "selector_item_round",
+            "selector_search_hot_word",
+            "selector_tv_search_field",
+    };
+
+    /**
+     * 唯一允许改写**实心填充**的「条目遮罩」drawable 名字。
+     *
+     * <p>为什么需要一条独立的名单，而不是按颜色反查角色：这七个 drawable 的填充是
+     * {@code @color/black_40}（{@code #66000000}），而这个取值在 leanback 里被 28 个 drawable
+     * 共用——键盘键底（{@code shape_keyboard_normal}）、卡片信息条带（{@code shape_vod_name}）、
+     * 控件底座（{@code shape_widget}）、实验区玻璃族都在用它。按颜色反查（{@link ThemeColorIndex}）
+     * 会把它们一起改掉，而那几族正是「刻意固定在不可控底材上的半透明黑」，跟随主题就是可读性回归。
+     * 因此这里只认资源名字，并且与焦环族一样用「签名 + 像素指纹」两级判定来确认身份。
+     *
+     * <p>为什么 normal 态（{@code shape_item_normal} / {@code shape_item_round_normal} /
+     * {@code shape_search_hot_word_normal}）不在名单里：它们的填充是 {@code @color/black_20}
+     * （{@code #33000000}）。一旦接上同一个遮罩槽位，空档案下的默认外观就会从 20% 黑变成 40% 黑，
+     * 那是外观变化而不是主题化。{@code shape_item_selected}（{@code black_30}）、
+     * {@code shape_keyboard_focused}（{@code black_30}）同理排除。
+     *
+     * <p>与 {@link #APP_SURFACE_FOCUS_RINGS} 一样按名字解析（{@code getIdentifier}）：这些资源只在
+     * leanback 源集，本类在 main 源集会被 mobile 变体一起编译，硬引用 R.drawable.* 会让 mobile
+     * javac 失败；mobile 上解析为 0，名单为空，行为与现状一致。
+     */
+    private static final String[] ITEM_OVERLAY_FILLS = {
+            "shape_item_focused",
+            "shape_item_activated",
+            "shape_item_round_focused",
+            "shape_item_round_activated",
+            "shape_search_hot_word_focused",
+            "shape_tv_search_field",
+            "shape_tv_search_field_focused",
+    };
+
     private static final Map<View, Long> APPLIED = new WeakHashMap<>();
     /**
      * 视图的白名单判定缓存（命中与未命中都记）。只有「背景实例没换且环色 token 没变」时
@@ -105,6 +152,29 @@ public final class ThemeBinder {
      * 指纹把描边也计入，用于排除"填充/圆角/内边距相同但描边不同"的资源（描边无公开 getter）。
      */
     private static final Map<Resources, Map<Integer, Map<String, java.util.Set<Long>>>> WHITELIST_FINGERPRINTS = new WeakHashMap<>();
+    /**
+     * 条目遮罩白名单的「签名 → 像素指纹」集合，按 {@code (Resources, 描边相关主题属性)} 解析一次后缓存。
+     *
+     * <p>缓存键与 {@link #whitelistFingerprints} 同源：白名单成员带描边，而描边色由视图主题解析
+     * （{@code ?attr/tvFocusRing} / {@code ?attr/colorOutline}）。只按 {@link Resources} 做键会让结果
+     * 与首次调用顺序绑定——先到的主题写入，后到的主题永远拿不到自己的指纹，功能静默失效。
+     */
+    private static final Map<Resources, Map<Integer, Map<String, java.util.Set<Long>>>> ITEM_OVERLAY_FINGERPRINTS = new WeakHashMap<>();
+    /**
+     * 每个 {@link GradientDrawable} 实例的白名单归属结论。
+     *
+     * <p>为什么要按**实例**记忆而不再每次重算：判定用像素指纹，而指纹里必然包含填充色
+     * （{@code shape_item_focused} 与 {@code shape_item_selected} 的圆角、内边距、焦点环完全
+     * 相同，只有填充 {@code black_40} vs {@code black_30} 不同——漏掉填充就会误改后者）。本类自己
+     * 会把成员的填充改写成用户槽位的颜色，于是第二轮判定时它已经「不像自己」了。实例不变，
+     * 归属就不变，所以记住第一次（尚未被本类改写时）的结论即可；只有背景实例被换掉
+     * （RecyclerView 复用、重新充气）才会重新判定。
+     */
+    private static final Map<GradientDrawable, ItemOverlayDecision> ITEM_OVERLAY_MEMBER = new WeakHashMap<>();
+
+    /** 一次条目遮罩归属判定的输入与结论（与 {@link RingDecision} 同一用意：结论必须可失效）。 */
+    private record ItemOverlayDecision(int strokeKey, boolean member) {
+    }
     /** 指纹位图边长（px）：足够容纳描边差异，又足够便宜。 */
     private static final int FINGERPRINT_SIZE = 48;
     private static final Map<RecyclerView, RecyclerView.OnChildAttachStateChangeListener> WATCHED = new WeakHashMap<>();
@@ -412,9 +482,12 @@ public final class ThemeBinder {
             return bindDrawable(wrapper.getDrawable(), explicit, index, active, owner);
         }
         if (owner != null && drawable instanceof StateListDrawable states) {
-            return bindFocusRingStates(owner, states, explicit, index, active);
+            return bindStateList(owner, states, explicit, active);
         }
         if (drawable instanceof GradientDrawable shape) {
+            // 条目遮罩白名单必须先判：成员完全由用户槽位拥有，不允许再落到「按基线色反查角色」
+            // 那条通用路径上——否则用户把遮罩设成某个角色色时，通用路径会按角色表改写它。
+            if (owner != null && isItemOverlayFill(owner, shape)) return setItemOverlayFill(shape, active.colorItemOverlay());
             ColorStateList color = rewrite(shape.getColor(), explicit, index, active);
             if (color == null) return false;
             shape.setColor(color);
@@ -430,37 +503,79 @@ public final class ThemeBinder {
     }
 
     /**
-     * The only focus-ring selectors this binder may rewrite: the "app surface" family.
+     * 一次状态列表上的两条白名单改写（焦点环 + 条目遮罩）。
      *
-     * <p>白名单是**资源名字**而不是 {@code R.drawable.*}：这些 selector 只存在于
-     * {@code app/src/leanback/res}，而本类位于 {@code app/src/main}（两个 flavor 共享），
-     * 直接引用 {@code R.drawable.selector_item} 会让 mobile 变体的 javac 直接失败
-     * （与 {@code DanmakuDialog} 的 {@code @id/loadHost} 泄漏同属一类）。因此按名字解析：
-     * mobile 上解析为 0 → 白名单为空 → 一律不改写，行为与该 flavor 现状一致。
-     *
-     * <p>为什么必须白名单而不是「按视图主题判定」：{@code webhtv_styles.xml} 把所有相关主题的
-     * {@code tvFocusRing} 都绑到 {@code tv_item_focus_ring}，于是「视图主题解析出应用表面环色」
-     * 这个判据对几乎所有宿主恒为真，会把下面这些**刻意不同**的族一并改写：
+     * <p>两条判定**都必须在本方法改写任何东西之前**完成，因为两者的身份判据都取自 drawable 的
+     * 原始外观，而各自的改写会破坏对方的判据：
      * <ul>
-     *   <li>使用 {@code ?attr/tvPlayerRing} 的固定深色玻璃族（{@code selector_glass_icon_action}、
-     *       {@code selector_control_sheet_button}、{@code shape_subtitle_focused/pressed}）——
-     *       浅色表 FOCUS 深蓝 {@code #0B57D0} 画在深靛玻璃上只有 1.83:1，改了等于不可见；</li>
-     *   <li>焦点态宽度尚未收敛到 token 的 3dp 卡片族（{@code selector_episode_card} 等）——
-     *       它们的声明圆角是按「宿主圆角 − 环宽/2」以 3dp 推导并经栅格化验算的，改宽度会重新
-     *       露出「卡片圆角外的月牙」；</li>
-     *   <li>本来就没有描边的焦点态（如实心填充 + layer-list 的图标按钮）——改了就凭空多出一圈环。</li>
+     *   <li>焦点环改写 {@code setStroke} 会改掉描边色，而遮罩族的像素指纹里含描边；</li>
+     *   <li>遮罩改写 {@code setColor} 会改掉填充，而环族的形状签名里含填充。</li>
      * </ul>
-     *
-     * <p>白名单内每个 selector 的焦点态宽度都已经是 {@code @dimen/webhtv_focus_ring_width}
-     * （由 {@code TvFocusRingContractTest} 钉住），因此读不到旧宽度也没有关系：重新写入同一
-     * token 就是无变化，唯一真正变化的是环色（跟随用户 FOCUS 槽），这正是用户要的效果。
-     *
-     * @return true when at least one state item was rewritten
+     * 先判后改，两边结论就都与调用顺序无关。
      */
-    private static boolean bindFocusRingStates(View view, StateListDrawable states, ThemeRole explicit, ThemeColorIndex index, ThemeTokens active) {
-        int color = active.colorFocus();
+    private static boolean bindStateList(View view, StateListDrawable states, ThemeRole explicit, ThemeTokens active) {
+        int ringColor = active.colorFocus();
+        boolean ringMember = ringColor != 0
+                && (explicit == ThemeRole.FOCUS || isAppSurfaceFocusRing(view, states));
+        java.util.Set<Integer> overlays = active.colorItemOverlay() == 0
+                ? java.util.Set.of() : itemOverlayStates(view, states);
+        if (!ringMember && overlays.isEmpty()) return false;
+        boolean changed = false;
+        if (ringMember) changed |= bindFocusRingStates(states, view, ringColor);
+        changed |= applyItemOverlay(states, overlays, active.colorItemOverlay());
+        return changed;
+    }
+
+    /**
+     * 把 {@code states} 里每一个子项的实心填充改写成用户选定的条目遮罩色。
+     *
+     * <p>覆盖**全部**状态子项而不是只有 focused：{@code selector_item} 的 selected 分支是
+     * {@code shape_item_activated}，它同样是「压在条目上的那层半透明深色」，用户改遮罩槽时必须
+     * 一起变，否则同一行按钮在聚焦态和选中态会露出两种底色。normal 分支
+     * （{@code shape_item_normal}）不在白名单里，因为它的填充是 {@code black_20}，接线会让默认
+     * 外观从 20% 黑跳到 40% 黑。
+     */
+    private static boolean applyItemOverlay(StateListDrawable states, java.util.Set<Integer> overlays, int color) {
+        if (overlays.isEmpty() || color == 0) return false;
+        // 容器先 mutate：子 drawable 可能与其他视图共享 ConstantState，不先切断会让首个宿主的
+        // 改写连带影响其它宿主（与 setRingStroke 路径同一理由）。注意 mutate 之后必须**按索引重新
+        // 取子 drawable**：StateListDrawable.mutate() 会逐个 mutate 子项，而被 mutate 过的
+        // GradientDrawable 不再保证还是先前那个实例，抓住旧引用会静默漏改（实测：聚焦态漏改、
+        // 选中态改对了，因为只有前者先被焦点环路径 mutate 过）。
+        states.mutate();
+        boolean changed = false;
+        for (int index : overlays) {
+            changed |= setItemOverlayFill(states.getStateDrawable(index), color);
+        }
+        return changed;
+    }
+
+    /**
+     * 判定 {@code states} 里哪些状态子项属于 {@link #ITEM_OVERLAY_FILLS}。
+     *
+     * <p>判定在 {@code mutate()} 之前进行：填充在指纹里，被本类改写之后就认不出来了。
+     */
+    private static java.util.Set<Integer> itemOverlayStates(View view, StateListDrawable states) {
+        java.util.Set<Integer> members = new java.util.LinkedHashSet<>();
+        for (int i = 0; i < states.getStateCount(); i++) {
+            Drawable child = unwrap(states.getStateDrawable(i));
+            if (child instanceof GradientDrawable shape && isItemOverlayFill(view, shape)) members.add(i);
+        }
+        return members;
+    }
+
+    /**
+     * 应用焦点环：只改 {@code state_focused} 子项的描边。
+     *
+     * <p><b>调用方必须先完成白名单判定</b>（见 {@link #bindStateList}），因为本方法会
+     * {@code mutate()} 并改掉描边，之后像素指纹就不再匹配，任何后置判定都会失效。
+     *
+     * <p>环宽按唯一 token {@code @dimen/webhtv_focus_ring_width} 重写：{@code GradientDrawable}
+     * 没有公开的 stroke getter，而白名单内每个 selector 的焦点态宽度本就等于该 token，
+     * 重写同一 token 是无变化，真正变化的只有环色。
+     */
+    private static boolean bindFocusRingStates(StateListDrawable states, View view, int color) {
         if (color == 0) return false;
-        if (explicit != ThemeRole.FOCUS && !isAppSurfaceFocusRing(view, states)) return false;
         boolean changed = false;
         // 容器先 mutate：StateListDrawable 的子 drawable 可能与其他视图共享 ConstantState，
         // 不先切断会让首个宿主的改写连带影响其它宿主。
@@ -492,6 +607,25 @@ public final class ThemeBinder {
      *
      * <p>这条判据单独使用会**恒真**（所有相关主题都把 {@code tvFocusRing} 绑到该资源），
      * 所以只能作为白名单的必要条件（AND），用来把玻璃子树挡在外面。
+     *
+     * <p>白名单本身为什么是**资源名字**而不是 {@code R.drawable.*}：这些 selector 只存在于
+     * {@code app/src/leanback/res}，而本类位于 {@code app/src/main}（两个 flavor 共享），
+     * 直接引用 {@code R.drawable.selector_item} 会让 mobile 变体的 javac 直接失败
+     * （与 {@code DanmakuDialog} 的 {@code @id/loadHost} 泄漏同属一类）。因此按名字解析：
+     * mobile 上解析为 0 → 白名单为空 → 一律不改写，行为与该 flavor 现状一致。
+     *
+     * <p>白名单之外必须排除的族，以及它们为什么不能跟随主题：
+     * <ul>
+     *   <li>使用 {@code ?attr/tvPlayerRing} 的固定深色玻璃族（{@code selector_glass_icon_action}、
+     *       {@code selector_control_sheet_button}、{@code shape_subtitle_focused/pressed}）——
+     *       浅色表 FOCUS 深蓝 {@code #0B57D0} 画在深靛玻璃上只有 1.83:1，改了等于不可见；</li>
+     *   <li>焦点态宽度尚未收敛到 token 的 3dp 卡片族（{@code selector_episode_card} 等）——
+     *       它们的声明圆角是按「宿主圆角 − 环宽/2」以 3dp 推导并经栅格化验算的，改宽度会重新
+     *       露出「卡片圆角外的月牙」；</li>
+     *   <li>本来就没有描边的焦点态（如实心填充 + layer-list 的图标按钮）——改了就凭空多出一圈环。</li>
+     * </ul>
+     * 白名单内每个 selector 的焦点态宽度都已经是 {@code @dimen/webhtv_focus_ring_width}
+     * （由 {@code TvFocusRingContractTest} 钉住），因此读不到旧宽度也没有关系。
      */
     private static boolean isAppSurfaceFocusRing(View view, StateListDrawable states) {
         if (view == null || states == null) return false;
@@ -658,6 +792,172 @@ public final class ThemeBinder {
         return resolved;
     }
 
+    // ------------------------------------------------------------------ 条目遮罩（ITEM_OVERLAY）
+
+    /** 取到真正持有填充的那层 drawable（selector 子项可能是 InsetDrawable/包装器）。 */
+    private static Drawable unwrap(Drawable drawable) {
+        if (drawable instanceof DrawableWrapper wrapper) return unwrap(wrapper.getDrawable());
+        return drawable;
+    }
+
+    /**
+     * Writes the user's overlay colour into one drawable's fill.
+     *
+     * <p>只用公开方法（{@code mutate} + {@code setColor}）：{@code GradientDrawable} 没有公开的
+     * {@code getStroke*}，但填充有公开 getter，因此这里不需要重写任何读不到的量。
+     */
+    private static boolean setItemOverlayFill(Drawable drawable, int color) {
+        if (color == 0) return false;
+        if (drawable instanceof InsetDrawable inset) return setItemOverlayFill(inset.getDrawable(), color);
+        if (drawable instanceof DrawableWrapper wrapper) return setItemOverlayFill(wrapper.getDrawable(), color);
+        if (drawable instanceof GradientDrawable shape) {
+            ColorStateList current = shape.getColor();
+            if (current != null && current.getDefaultColor() == color) return false;
+            shape.mutate();
+            shape.setColor(color);
+            return true;
+        }
+        if (drawable instanceof MaterialShapeDrawable shape) {
+            ColorStateList current = shape.getFillColor();
+            if (current != null && current.getDefaultColor() == color) return false;
+            shape.setFillColor(ColorStateList.valueOf(color));
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Whether {@code shape} is one of {@link #ITEM_OVERLAY_FILLS}.
+     *
+     * <p>两级判定，与 {@link #isAppSurfaceFocusRing} 同构但**不共用**：环族的签名取自焦点态描边，
+     * 遮罩族的签名取自填充本身，两者放进同一个集合会互相污染。
+     * <ol>
+     *   <li>形状签名（填充 + 圆角 + 内边距 + 是否椭圆）先做廉价预筛；</li>
+     *   <li>签名命中后做一次 48×48 的像素指纹确认——{@code shape_search_hot_word_focused} 与
+     *       {@code shape_tv_search_field_focused} 的填充/圆角/内边距完全相同（{@code black_40}
+     *       + 28dp + 无内边距中有差异），只有描边宽度/颜色不同，而描边没有公开 getter，
+     *       只能靠栅格化把它们区分开。</li>
+     * </ol>
+     *
+     * <p>这里不像环族那样再加一道「视图主题解析出的取值」前置判定：条目遮罩是单一用户槽位，
+     * 在两类宿主（页面内容区、固定深色玻璃）上语义相同，不存在 {@code selector_video_item} 那种
+     * 双宿主分流问题。
+     */
+    private static boolean isItemOverlayFill(View view, Drawable drawable) {
+        if (!(drawable instanceof GradientDrawable shape)) return false;
+        if (view == null || view.getContext() == null) return false;
+        int strokeKey = itemOverlayStrokeKey(view.getContext());
+        ItemOverlayDecision cached = ITEM_OVERLAY_MEMBER.get(shape);
+        if (cached != null && cached.strokeKey() == strokeKey) return cached.member();
+        boolean member = matchesItemOverlayWhitelist(view, shape, strokeKey);
+        ITEM_OVERLAY_MEMBER.put(shape, new ItemOverlayDecision(strokeKey, member));
+        return member;
+    }
+
+    /** 条目遮罩白名单成员的描边取值指纹：两个随主题解析的描边属性 + 环宽 token。 */
+    private static int itemOverlayStrokeKey(Context context) {
+        return 31 * (31 * ringColorToken(context) + outlineColorToken(context))
+                + focusRingWidthPx(context);
+    }
+
+    private static boolean matchesItemOverlayWhitelist(View view, GradientDrawable shape, int strokeKey) {
+        if (view == null) return false;
+        Context context = view.getContext();
+        if (context == null) return false;
+        String probe = ringSignature(shape);
+        if (probe == null) return false;
+        java.util.Set<Long> expected = itemOverlayFingerprints(context, strokeKey).get(probe);
+        if (expected == null) return false;
+        Long actual = fingerprint(shape);
+        return actual != null && expected.contains(actual);
+    }
+
+    /**
+     * 白名单成员的「签名 → 指纹」集合，按 {@code (Resources, 描边相关主题属性)} 解析一次后缓存。
+     *
+     * <p>签名与指纹都取自**未经本类改写**的实例：{@code mutate()} 之前取，因此填充仍是
+     * {@code black_40}。指纹内部自己复制一份再绘制，不会污染共享的 ConstantState。
+     */
+    private static Map<String, java.util.Set<Long>> itemOverlayFingerprints(Context context, int strokeKey) {
+        Resources resources = context.getResources();
+        Map<Integer, Map<String, java.util.Set<Long>>> byStroke = ITEM_OVERLAY_FINGERPRINTS.get(resources);
+        if (byStroke == null) {
+            byStroke = new java.util.HashMap<>();
+            ITEM_OVERLAY_FINGERPRINTS.put(resources, byStroke);
+        }
+        Map<String, java.util.Set<Long>> cached = byStroke.get(strokeKey);
+        if (cached != null) return cached;
+        Map<String, java.util.Set<Long>> resolved = new java.util.HashMap<>();
+        for (String name : ITEM_OVERLAY_FILLS) {
+            int id = resources.getIdentifier(name, "drawable", context.getPackageName());
+            if (id == 0) continue;
+            Drawable candidate;
+            try {
+                candidate = context.getDrawable(id);
+            } catch (RuntimeException ignored) {
+                continue;
+            }
+            if (!(candidate instanceof GradientDrawable shape)) continue;
+            String signature = ringSignature(shape);
+            Long print = fingerprint(shape);
+            if (signature == null || print == null) continue;
+            resolved.computeIfAbsent(signature, key -> new java.util.HashSet<>()).add(print);
+        }
+        // 第二条路径：作为 selector 子项解析（生产上宿主就是这么拿到这些 shape 的）。
+        collectSelectorChildren(context, resolved);
+        byStroke.put(strokeKey, resolved);
+        return resolved;
+    }
+
+    /**
+     * 把 {@link #ITEM_OVERLAY_PARENTS} 每个 selector 的**状态子项**的签名与指纹收进 {@code into}。
+     *
+     * <p>只收子项里确实是 {@link #ITEM_OVERLAY_FILLS} 成员的形状：用名字集合反查，所以
+     * {@code selector_item} 的 normal 子项（{@code shape_item_normal}）不会被收进来——
+     * 它的填充是 {@code black_20}，接线会造成默认外观跳挡。
+     */
+    private static void collectSelectorChildren(Context context, Map<String, java.util.Set<Long>> into) {
+        for (String parent : ITEM_OVERLAY_PARENTS) {
+            int id = context.getResources().getIdentifier(parent, "drawable", context.getPackageName());
+            if (id == 0) continue;
+            Drawable loaded;
+            try {
+                loaded = context.getDrawable(id);
+            } catch (RuntimeException ignored) {
+                continue;
+            }
+            if (!(loaded instanceof StateListDrawable states)) continue;
+            for (int i = 0; i < states.getStateCount(); i++) {
+                Drawable child = unwrap(states.getStateDrawable(i));
+                if (!(child instanceof GradientDrawable shape)) continue;
+                // 只收白名单成员的子项：它们的编译期填充一律是 black_40，而 selector 里的
+                // normal 子项是 black_20（shape_item_normal）、选中子项是 black_30
+                // （shape_item_selected / shape_keyboard_focused），因此这条判据正好把它们排除。
+                ColorStateList fill = shape.getColor();
+                if (fill == null || fill.getDefaultColor() != 0x66000000) continue;
+                String signature = ringSignature(shape);
+                Long print = fingerprint(shape);
+                if (signature == null || print == null) continue;
+                into.computeIfAbsent(signature, key -> new java.util.HashSet<>()).add(print);
+            }
+        }
+    }
+
+    /** 视图主题解析出的 {@code ?attr/colorOutline}；解析不出时返回 0（与「未设置」区分开即可）。 */
+    private static int outlineColorToken(Context context) {
+        android.util.TypedValue value = new android.util.TypedValue();
+        try {
+            // colorOutline 由 Material 定义，main 源集的 R 不生成该符号；用 Material 的 R 解析。
+            if (!context.getTheme().resolveAttribute(com.google.android.material.R.attr.colorOutline, value, true)) return 0;
+            if (value.type >= android.util.TypedValue.TYPE_FIRST_COLOR_INT
+                    && value.type <= android.util.TypedValue.TYPE_LAST_COLOR_INT) return value.data;
+            if (value.resourceId != 0) return context.getResources().getColor(value.resourceId, null);
+        } catch (RuntimeException ignored) {
+            return 0;
+        }
+        return 0;
+    }
+
     /**
      * Applies the themed focus ring colour to one state drawable.
      *
@@ -682,6 +982,10 @@ public final class ThemeBinder {
     /** The single TV ring width token, in pixels, resolved through the view's own resources. */
     private static int focusRingWidthPx(View view) {
         return Math.max(1, Math.round(view.getResources().getDimension(R.dimen.webhtv_focus_ring_width)));
+    }
+
+    private static int focusRingWidthPx(Context context) {
+        return Math.max(1, Math.round(context.getResources().getDimension(R.dimen.webhtv_focus_ring_width)));
     }
 
     /**

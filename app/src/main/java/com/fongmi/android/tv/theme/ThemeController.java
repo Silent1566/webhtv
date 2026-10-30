@@ -313,6 +313,9 @@ public final class ThemeController {
             case ON_ERROR -> R.color.webhtv_color_on_error;
             case ON_SUCCESS -> R.color.webhtv_color_on_success;
             case ON_WARNING -> R.color.webhtv_color_on_warning;
+            // 条目遮罩族没有编译期颜色资源（遮罩取 @color/black_40，文字取 onPrimary），
+            // 因此这里如实返回 0，与「角色没有资源」的既有语义一致。
+            case ITEM_OVERLAY, ON_ITEM_OVERLAY -> 0;
         };
     }
 
