@@ -233,10 +233,10 @@ public final class FollowingStore {
                     item.cid, FollowingIdentity.normalizeMediaType(item.mediaType), item.tmdbId);
             History latest = null;
             for (History history : histories) {
-                if (history.getTmdbSeasonNumber() != item.trackedSeason) continue;
+                if (!seasonMatches(history.getTmdbSeasonNumber(), item.trackedSeason)) continue;
                 if (latest == null || history.getCreateTime() > latest.getCreateTime()) latest = history;
             }
-            if (latest != null) projectHistory(latest);
+            if (latest != null) projectHistory(latest, item.trackedSeason);
         } else {
             History history = History.find(item.cid, sourceHistoryKey(item.siteKey, item.vodId));
             if (history != null) projectHistory(history);
@@ -251,7 +251,7 @@ public final class FollowingStore {
             History preferred = null;
             History anySource = null;
             for (History history : histories) {
-                if (history.getTmdbSeasonNumber() != item.trackedSeason) continue;
+                if (!seasonMatches(history.getTmdbSeasonNumber(), item.trackedSeason)) continue;
                 if (anySource == null || history.getCreateTime() > anySource.getCreateTime()) anySource = history;
                 if (source == null || TextUtils.equals(history.getSiteKey(), source.siteKey)) {
                     if (preferred == null || history.getCreateTime() > preferred.getCreateTime()) preferred = history;
@@ -293,21 +293,35 @@ public final class FollowingStore {
         });
     }
 
+    /** 未知季（-1）不能归零后去匹配，否则会漏掉 trackedSeason>=1 的追更记录，必须回落到记录自身的季号。 */
+    static int resolveSeason(int historySeason, int trackedSeason) {
+        return historySeason >= 0 ? historySeason : Math.max(0, trackedSeason);
+    }
+
+    /** 未知季（-1）无法判定归属，对任何追踪季都算候选，否则这些历史会被季号比较直接过滤掉，进度永久停更。 */
+    static boolean seasonMatches(int historySeason, int trackedSeason) {
+        return historySeason < 0 || historySeason == trackedSeason;
+    }
+
     private static void projectHistory(History history) {
+        projectHistory(history, -1);
+    }
+
+    private static void projectHistory(History history, int trackedSeasonHint) {
         if (history == null) return;
         int episodeNumber = history.getTmdbEpisodeNumber();
         if (episodeNumber <= 0) episodeNumber = Episode.create(history.getVodRemarks(), history.getEpisodeUrl()).getNumber();
         if (episodeNumber <= 0) return;
+        int season = resolveSeason(history.getTmdbSeasonNumber(), trackedSeasonHint);
         Following item = null;
         if (history.getTmdbId() > 0 && "tv".equals(FollowingIdentity.normalizeMediaType(history.getMediaType()))) {
             item = database().getFollowingDao().findByTmdb(
-                    history.getTmdbId(), FollowingIdentity.normalizeMediaType(history.getMediaType()),
-                    Math.max(0, history.getTmdbSeasonNumber()));
+                    history.getTmdbId(), FollowingIdentity.normalizeMediaType(history.getMediaType()), season);
         }
         if (item == null) {
             item = database().getFollowingDao().findBySource(
                     history.getCid(), FollowingIdentity.normalize(history.getSiteKey()),
-                    FollowingIdentity.normalize(history.getVodId()), Math.max(0, history.getTmdbSeasonNumber()));
+                    FollowingIdentity.normalize(history.getVodId()), season);
         }
         if (item == null) return;
         if (item.isDeleted()) return;
@@ -316,11 +330,11 @@ public final class FollowingStore {
             changed = history.getPosition() != item.position || history.getDuration() != item.duration;
         }
         if (!changed) return;
-        item.watchedSeason = Math.max(0, history.getTmdbSeasonNumber());
+        item.watchedSeason = season;
         item.watchedEpisode = episodeNumber;
         item.position = Math.max(0, history.getPosition());
         item.duration = Math.max(0, history.getDuration());
-        item.trackedSeason = Math.max(0, history.getTmdbSeasonNumber());
+        item.trackedSeason = season;
         if (item.trackedEpisode <= 0) item.trackedEpisode = item.watchedEpisode;
         FollowingUpdatePolicy.refreshDerived(item, System.currentTimeMillis());
         database().getFollowingDao().insertOrUpdate(item);

@@ -11,6 +11,7 @@ import androidx.room.PrimaryKey;
 
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.db.AppDatabase;
+import com.fongmi.android.tv.playback.PlaybackConfigIdentity;
 import com.github.catvod.utils.Prefers;
 import com.google.gson.annotations.SerializedName;
 import com.google.gson.reflect.TypeToken;
@@ -93,10 +94,12 @@ public class Config {
 
     public static void delete(String url) {
         AppDatabase.get().getConfigDao().delete(url);
+        PlaybackConfigIdentity.invalidateAll();
     }
 
     public static void delete(String url, int type) {
         AppDatabase.get().getConfigDao().delete(url, type);
+        PlaybackConfigIdentity.invalidateAll();
     }
 
     /**
@@ -451,6 +454,7 @@ public class Config {
         rememberAddressAliases(getUrls());
         if (TextUtils.isEmpty(identityResolutionState)) identityResolutionState = "unresolved";
         setId(Math.toIntExact(AppDatabase.get().getConfigDao().insert(this)));
+        PlaybackConfigIdentity.invalidateAll();
         invalidateCatalog();
         return this;
     }
@@ -461,6 +465,7 @@ public class Config {
         rememberAddressAliases(getUrls());
         if (TextUtils.isEmpty(identityResolutionState)) identityResolutionState = "unresolved";
         AppDatabase.get().getConfigDao().insertOrUpdate(this);
+        PlaybackConfigIdentity.invalidateAll();
         invalidateCatalog();
         return this;
     }
@@ -476,6 +481,7 @@ public class Config {
         AppDatabase.get().getConfigDao().delete(getUrl(), getType());
         History.delete(getId());
         Keep.delete(getId());
+        PlaybackConfigIdentity.invalidateAll();
         invalidateCatalog();
     }
 
