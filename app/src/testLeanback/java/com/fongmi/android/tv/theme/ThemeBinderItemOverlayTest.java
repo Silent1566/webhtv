@@ -45,10 +45,19 @@ import static org.junit.Assert.assertTrue;
  *   <li>{@link #defaultProfileLeavesTheItemHostAtTheCompiledOverlay}：空档案下必须是
  *       {@code #66000000}（{@code @color/black_40}）——这是「默认外观字节不变」的机器化表述；</li>
  *   <li>{@link #overlayExcludedDrawablesAreNotRewritten}：{@code shape_vod_name} /
- *       {@code shape_widget} / {@code shape_keyboard_normal} 与 {@code shape_item_normal}
- *       虽然填充同为 {@code #66000000} / {@code #33000000}，但它们在**不可控底材**上或属刻意固定的
- *       键底，必须逐像素不变——按颜色反查角色会让它们全部跟着变，本测试就是那条边界的钉子。</li>
+ *       {@code shape_widget} / {@code shape_keyboard_normal} 虽然与白名单成员同为
+ *       {@code #66000000}，但它们在**不可控底材**上或属刻意固定的键底，必须逐像素不变——
+ *       按颜色反查角色会让它们全部跟着变，本测试就是那条边界的钉子。</li>
+ *   <li>{@link #onItemOverlaySlotDrivesTheItemHostText}：遮罩上的文字色同样只有运行时才能生效
+ *       （宿主的文字在布局里直接写 {@code ?attr/webhtvColorOnWallpaper}，没有任何颜色状态列表
+ *       可以改），{@link #overlayTextIsNotWrittenOnExcludedHosts} 则钉住这条改写只落在白名单宿主上。</li>
  * </ol>
+ *
+ * <p><b>两档强度</b>：{@code shape_item_normal} / {@code shape_item_round_normal} /
+ * {@code shape_search_hot_word_normal} 的编译期填充是 {@code black_20}（{@code #33000000}），
+ * 比白名单成员的 {@code black_40} 浅一半。它们同样跟随槽位，但写的是**半强度**（
+ * {@code ThemeBinder} 的 {@code ITEM_OVERLAY_REST}）：{@code #66000000} 的一半逐位等于
+ * {@code #33000000}，所以空档案下字节不变，而用户改槽位后「常态比聚焦浅一半」的层次也仍在。
  *
  * <p>{@code adapter_func.xml} 是电视首页功能按钮行（搜索/历史）的真实条目宿主：
  * {@code android:background="@drawable/selector_item"}，即
@@ -63,7 +72,7 @@ public class ThemeBinderItemOverlayTest {
 
     /** 编译期条目遮罩底色：{@code @color/black_40}。 */
     private static final int COMPILED_OVERLAY = 0x66000000;
-    /** 编译期常态底色：{@code @color/black_20}，刻意不接线，因此永远不该变。 */
+    /** 编译期常态底色：{@code @color/black_20}。它恰好是 {@code black_40} 的一半 alpha。 */
     private static final int COMPILED_NORMAL = 0x33000000;
     /** 编译期选中/焦点描边之外的第三档：{@code @color/black_30}（{@code shape_item_selected} 等）。 */
     private static final int COMPILED_SELECTED = 0x4D000000;
@@ -71,6 +80,16 @@ public class ThemeBinderItemOverlayTest {
     /** 用户在编辑器里选的遮罩色（不含 alpha，解析后按不透明处理）。 */
     private static final String USER_OVERLAY_HEX = "#8A2040";
     private static final int USER_OVERLAY = 0xFF8A2040;
+    /** 常态底座拿到的是同一颜色的<b>半强度</b>：{@code 0xFF * 50 / 100 = 0x7F}。 */
+    private static final int USER_OVERLAY_REST = 0x7F8A2040;
+
+    /**
+     * 用户在编辑器里选的选中文字色。
+     *
+     * <p>刻意选暖色：解析器会对它做 4.5:1 的明度夹取，所以断言必须读**解析后的 token**，
+     * 而不是把这个十六进制直接当成期望值——否则夹取一发生，测试就会错怪实现。
+     */
+    private static final String USER_TEXT_HEX = "#FFE082";
 
     private static final int SIZE = 96;
 
@@ -80,7 +99,8 @@ public class ThemeBinderItemOverlayTest {
      * 改过 {@code itemOverlay} 槽的档案必须真的改变电视首页功能按钮行的底色。
      *
      * <p>断言三层：聚焦态与选中态都变成用户色；两者同色（同一行按钮不该在两种状态露出两种底）；
-     * 常态仍是编译期的 20% 黑（{@code shape_item_normal} 刻意不接线，接线会让默认外观跳挡）。
+     * 常态拿到同一颜色的半强度——{@code shape_item_normal} 的编译期填充是 {@code black_20}，
+     * 整块写入会让空档案从 20% 黑跳到 40% 黑，半强度下默认取值与编译期逐位相同。
      */
     @Test
     public void itemOverlaySlotDrivesTheRealItemHost() {
@@ -105,9 +125,9 @@ public class ThemeBinderItemOverlayTest {
                 USER_OVERLAY, fillOfState(host.getBackground(), android.R.attr.state_focused));
         assertEquals("选中态条目底色必须一起变，否则同一行按钮在聚焦/选中态露出两种底",
                 USER_OVERLAY, fillOfState(host.getBackground(), android.R.attr.state_selected));
-        assertEquals("常态必须保持编译期的 20% 黑：shape_item_normal 刻意不接线，"
-                        + "接到遮罩槽会让「没改过主题」的默认外观从 20% 黑跳到 40% 黑",
-                COMPILED_NORMAL, fillOfState(host.getBackground(), 0));
+        assertEquals("常态必须拿到用户色的半强度：shape_item_normal 的编译期填充是 black_20，"
+                        + "整块写入会让「没改过主题」的默认外观从 20% 黑跳到 40% 黑",
+                USER_OVERLAY_REST, fillOfState(host.getBackground(), 0));
 
         // 栅格化复核：用户色必须真的画出来，而不只是 getColor() 里的数字。
         assertTrue("改过的底色必须真的栅格化出用户色 " + Integer.toHexString(USER_OVERLAY),
@@ -128,8 +148,8 @@ public class ThemeBinderItemOverlayTest {
 
         assertEquals("搜索热词胶囊的聚焦态同样必须跟随条目遮罩槽",
                 USER_OVERLAY, fillOfState(host.getBackground(), android.R.attr.state_focused));
-        assertEquals("热词胶囊的常态仍是编译期的 20% 黑",
-                COMPILED_NORMAL, fillOfState(host.getBackground(), 0));
+        assertEquals("热词胶囊的常态同样跟随槽位，但写半强度（编译期它是 black_20）",
+                USER_OVERLAY_REST, fillOfState(host.getBackground(), 0));
     }
 
     /**
@@ -154,6 +174,111 @@ public class ThemeBinderItemOverlayTest {
                 USER_OVERLAY, fillOfState(host.getBackground(), 0));
         assertEquals("搜索输入框聚焦态必须跟随遮罩槽",
                 USER_OVERLAY, fillOfState(host.getBackground(), android.R.attr.state_focused));
+    }
+
+    // --------------------------------------------------- 交付物 C：选中文字色也真的生效
+
+    /**
+     * 改过 {@code onItemOverlay} 槽的档案必须真的改变条目宿主上的文字色。
+     *
+     * <p>为什么这条不能靠「改 {@code res/color/} 里的 focused 态」实现：条目宿主的文字在布局里
+     * 直接写 {@code ?attr/webhtvColorOnWallpaper}（单色、无状态），仓库里没有任何「条目宿主 +
+     * {@code ?attr/colorOnPrimary}} 的颜色状态列表可改；反过来硬改 {@code home_menu_text} /
+     * {@code site_item_text} 会把 colorPrimary 实心底上的文字换成遮罩色文字，那是可读性回归。
+     * 因此这里断言的是运行时通道：{@link ThemeBinder#bind} 把新色写进 {@code adapter_func.xml}
+     * 的 {@code @id/text}（它是「容器挂 selector_item、文字是子 TextView」的形状，所以判定必须
+     * 允许向上看一层父容器）。
+     *
+     * <p>断言取值用**解析后的 token** 而不是用户输入的十六进制：{@code ThemeResolver} 会对
+     * {@code onItemOverlay} 做 4.5:1 的明度夹取，硬编码用户输入会把夹取误判成缺陷。
+     */
+    @Test
+    public void onItemOverlaySlotDrivesTheItemHostText() {
+        Context context = themedContext();
+        ThemeTokens baseline = ThemeTokens.light();
+        ThemeTokens active = resolveWithOverlayText(context);
+        assertNotEquals("测试前提：活动 tokens 必须与基线不同，否则 binder 整体 no-op", baseline, active);
+        assertNotEquals("测试前提：选中文字色槽必须真的解析出新颜色",
+                baseline.colorOnItemOverlay(), active.colorOnItemOverlay());
+
+        View host = inflateHost(context, R.layout.adapter_func);
+        View text = host.findViewById(R.id.text);
+        assertNotNull("条目宿主必须带文字子视图", text);
+        assertEquals("测试前提：宿主文字在布局里是 ?attr/webhtvColorOnWallpaper（单色、无状态）",
+                context.getColor(R.color.webhtv_on_wallpaper),
+                ((android.widget.TextView) text).getTextColors().getDefaultColor());
+
+        FrameLayout root = new FrameLayout(context);
+        root.addView(host);
+        ThemeBinder.bind(root, baseline, active);
+
+        assertEquals("条目宿主上的文字必须变成解析后的选中文字色（功能未生效就是这里失败）",
+                active.colorOnItemOverlay(),
+                ((android.widget.TextView) text).getTextColors().getDefaultColor());
+        assertNotEquals("文字必须真的离开编译期的 on_wallpaper，否则「生效」是假的",
+                context.getColor(R.color.webhtv_on_wallpaper),
+                ((android.widget.TextView) text).getTextColors().getDefaultColor());
+    }
+
+    /**
+     * 只改文字色槽之外的东西时，条目宿主文字必须逐位保持编译期取值。
+     *
+     * <p>这一条钉住「默认外观字节不变」在文字上的一半：夜间表 {@code on_item_overlay} 是
+     * {@code #062E6F}，而条目宿主的实际文字是 {@code on_wallpaper}（{@code #FFFFFF}）。
+     * 若 binder 无条件把文字改写成 {@code colorOnItemOverlay()}，用户哪怕只调了一个无关槽位，
+     * 条目文字也会突然变深——这正是 {@link ThemeBinder#bind} 里那条
+     * 「{@code colorOnItemOverlay} 与基线比较」的前置判定存在的理由。
+     */
+    @Test
+    public void itemHostTextStaysCompiledWhenOnlyOtherSlotsChange() {
+        Context context = themedContext();
+        ThemeTokens baseline = ThemeTokens.light();
+        ThemeProfile profile = ThemeProfile.defaultProfile();
+        profile.light.focus = "#33AA55";
+        ThemeTokens active = resolveWithProfile(context, profile);
+        assertNotEquals("测试前提：档案必须真的改动了一个槽位", baseline, active);
+        assertEquals("测试前提：本档案没有改选中文字色槽，token 必须与基线相同",
+                baseline.colorOnItemOverlay(), active.colorOnItemOverlay());
+
+        View host = inflateHost(context, R.layout.adapter_func);
+        View text = host.findViewById(R.id.text);
+        assertNotNull("条目宿主必须带文字子视图", text);
+        int compiled = ((android.widget.TextView) text).getTextColors().getDefaultColor();
+
+        FrameLayout root = new FrameLayout(context);
+        root.addView(host);
+        ThemeBinder.bind(root, baseline, active);
+
+        assertEquals("没改选中文字色槽时，条目文字必须仍是编译期取值",
+                compiled, ((android.widget.TextView) text).getTextColors().getDefaultColor());
+        assertEquals("且必须就是 on_wallpaper 的编译期色，不是 on_item_overlay",
+                context.getColor(R.color.webhtv_on_wallpaper), compiled);
+    }
+
+    /**
+     * 遮罩文字色的改写只允许落在白名单宿主上：键底（{@code shape_keyboard_normal}）上的文字
+     * 虽然与条目底色同为 {@code #66000000}，语义却是「压在用户画布上的键」，必须保持原样。
+     *
+     * <p>与 {@link #overlayExcludedDrawablesAreNotRewritten} 配对：那一条钉的是填充不被改写，
+     * 这一条钉的是**文字**不被改写——两条一起才排除了「按 {@code black_40} 反查」的实现。
+     */
+    @Test
+    public void overlayTextIsNotWrittenOnExcludedHosts() {
+        Context context = themedContext();
+        ThemeTokens baseline = ThemeTokens.light();
+        ThemeTokens active = resolveWithOverlayText(context);
+
+        FrameLayout root = new FrameLayout(context);
+        android.widget.TextView text = new android.widget.TextView(context);
+        text.setTextColor(context.getColor(R.color.webhtv_on_wallpaper));
+        text.setBackground(context.getDrawable(R.drawable.shape_keyboard_normal));
+        root.addView(text);
+        ThemeBinder.bind(root, baseline, active);
+
+        assertEquals("键底不在条目遮罩白名单内，压在它上面的文字必须保持编译期颜色",
+                context.getColor(R.color.webhtv_on_wallpaper),
+                text.getTextColors().getDefaultColor());
+        assertEquals("键底填充也不允许被改写", COMPILED_OVERLAY, fillOf(text.getBackground()));
     }
 
     // ------------------------------------------------------- 交付物 A：默认外观字节不变
@@ -299,6 +424,7 @@ public class ThemeBinderItemOverlayTest {
     public void itemOverlayWhitelistResolvesOnTheTvSourceSet() {
         Context context = themedContext();
         String[] whitelisted = {
+                // 全强度档：编译期填充 black_40。
                 "shape_item_focused",
                 "shape_item_activated",
                 "shape_item_round_focused",
@@ -306,11 +432,35 @@ public class ThemeBinderItemOverlayTest {
                 "shape_search_hot_word_focused",
                 "shape_tv_search_field",
                 "shape_tv_search_field_focused",
+                // 半强度档：编译期填充 black_20，写半强度才能保持默认字节不变。
+                "shape_item_normal",
+                "shape_item_round_normal",
+                "shape_search_hot_word_normal",
         };
         for (String name : whitelisted) {
             assertNotEquals(name + " 必须能在 leanback 源集解析（否则 ThemeBinder 静默不改写它）",
                     0, drawableId(context, name));
         }
+    }
+
+    /**
+     * 半强度档成立的<b>前提</b>必须是资源层事实，而不是本类的一厢情愿：
+     * 遮罩 token 的半 alpha 必须逐位等于常态底座的编译期填充 {@code @color/black_20}。
+     *
+     * <p>为什么单独钉这一条：{@code ITEM_OVERLAY_REST} 的取值（50%）是从「{@code 0x66} 除以 2
+     * 等于 {@code 0x33}」推出来的。哪天有人把 {@code webhtv_color_item_overlay} 的 alpha 从
+     * {@code 0x66} 改掉、或者把 {@code shape_item_normal} 的填充换成别的档位，默认外观就会在
+     * 无人察觉的情况下跳挡——这里用两条资源取值把那个前提钉住。
+     */
+    @Test
+    public void restTierHalvesTheOverlayTokenIntoTheCompiledNormalFill() {
+        Context context = themedContext();
+        int overlay = context.getColor(R.color.webhtv_color_item_overlay);
+        int compiledNormal = context.getColor(R.color.black_20);
+        assertEquals("半强度档的前提：遮罩 token 必须仍是 @color/black_40", COMPILED_OVERLAY, overlay);
+        assertEquals("半强度档的前提：常态底座必须仍是 @color/black_20", COMPILED_NORMAL, compiledNormal);
+        assertEquals("遮罩 token 的一半 alpha 必须逐位等于常态底座的编译期填充",
+                compiledNormal, ((overlay >>> 24) / 2) << 24);
     }
 
     // ------------------------------------------------------------------ helpers
@@ -331,6 +481,14 @@ public class ThemeBinderItemOverlayTest {
     private static ThemeTokens resolveWithOverlay(Context context) {
         ThemeProfile profile = ThemeProfile.defaultProfile();
         profile.light.itemOverlay = USER_OVERLAY_HEX;
+        return resolveWithProfile(context, profile);
+    }
+
+    /** 改过 {@code onItemOverlay}（选中文字色）槽的档案。 */
+    private static ThemeTokens resolveWithOverlayText(Context context) {
+        ThemeProfile profile = ThemeProfile.defaultProfile();
+        // 刻意选一个与遮罩底色反差极大的暖色：解析器会把它夹到 4.5:1，夹取后的值才是真实交付色。
+        profile.light.onItemOverlay = USER_TEXT_HEX;
         return resolveWithProfile(context, profile);
     }
 

@@ -108,11 +108,11 @@ public final class ThemeBinder {
      * 会把它们一起改掉，而那几族正是「刻意固定在不可控底材上的半透明黑」，跟随主题就是可读性回归。
      * 因此这里只认资源名字，并且与焦环族一样用「签名 + 像素指纹」两级判定来确认身份。
      *
-     * <p>为什么 normal 态（{@code shape_item_normal} / {@code shape_item_round_normal} /
-     * {@code shape_search_hot_word_normal}）不在名单里：它们的填充是 {@code @color/black_20}
-     * （{@code #33000000}）。一旦接上同一个遮罩槽位，空档案下的默认外观就会从 20% 黑变成 40% 黑，
-     * 那是外观变化而不是主题化。{@code shape_item_selected}（{@code black_30}）、
-     * {@code shape_keyboard_focused}（{@code black_30}）同理排除。
+     * <p>名单只收编译期填充就是 {@code @color/black_40} 的那几个：它们接上遮罩槽后取值不变，
+     * 接线本身不改变外观。常态底座（{@code shape_item_normal} 一族，填充 {@code @color/black_20}）
+     * 是另一档强度，单独见 {@link #ITEM_OVERLAY_REST_FILLS}。
+     * {@code shape_item_selected}（{@code black_30}）、{@code shape_keyboard_focused}
+     * （{@code black_30}）仍然排除：它们是选中档/键底的固定取值，不是条目底座。
      *
      * <p>与 {@link #APP_SURFACE_FOCUS_RINGS} 一样按名字解析（{@code getIdentifier}）：这些资源只在
      * leanback 源集，本类在 main 源集会被 mobile 变体一起编译，硬引用 R.drawable.* 会让 mobile
@@ -127,6 +127,36 @@ public final class ThemeBinder {
             "shape_tv_search_field",
             "shape_tv_search_field_focused",
     };
+
+    /**
+     * 常态（未聚焦、未选中）的条目底座：{@code shape_item_normal} /
+     * {@code shape_item_round_normal} / {@code shape_search_hot_word_normal}。
+     *
+     * <p>为什么要单独一张名单、单独一档强度：它们的编译期填充是 {@code @color/black_20}
+     * （{@code #33000000}），恰好是遮罩底色 {@code @color/black_40}（{@code #66000000}）的
+     * <b>一半 alpha</b>。把它们并进 {@link #ITEM_OVERLAY_FILLS} 后整块写入遮罩色，空档案下的
+     * 默认外观就会从 20% 黑跳到 40% 黑——那是外观变化而不是主题化，违反「默认外观字节不变」。
+     * 因此这一档按<b>半强度</b>跟随遮罩槽：默认 {@code 0x66 / 2 = 0x33} 与编译期取值逐位相等，
+     * 用户改过槽位时又整体跟着走，「常态比聚焦态浅一半」的层次也不会丢。
+     *
+     * <p>与 {@link #ITEM_OVERLAY_FILLS} 分成两张表而不是一张表加权重字段：指纹集合必须按强度
+     * 分开缓存，否则 {@code shape_item_normal}（{@code black_20}）与 {@code shape_item_focused}
+     * （{@code black_40}）的指纹会落进同一格，判定时再无从区分强度。
+     */
+    private static final String[] ITEM_OVERLAY_REST_FILLS = {
+            "shape_item_normal",
+            "shape_item_round_normal",
+            "shape_search_hot_word_normal",
+    };
+
+    /** 条目遮罩的两档强度（百分比 alpha）：全强度（聚焦/选中）与半强度（常态底座）。 */
+    private static final int ITEM_OVERLAY_FULL = 100;
+    private static final int ITEM_OVERLAY_REST = 50;
+
+    /** 编译期条目遮罩填充 {@code @color/black_40}：全强度成员的身份判据。 */
+    private static final int COMPILED_OVERLAY_FILL = 0x66000000;
+    /** 编译期常态底座填充 {@code @color/black_20}：半强度成员的身份判据。 */
+    private static final int COMPILED_REST_FILL = 0x33000000;
 
     private static final Map<View, Long> APPLIED = new WeakHashMap<>();
     /**
@@ -159,7 +189,8 @@ public final class ThemeBinder {
      * （{@code ?attr/tvFocusRing} / {@code ?attr/colorOutline}）。只按 {@link Resources} 做键会让结果
      * 与首次调用顺序绑定——先到的主题写入，后到的主题永远拿不到自己的指纹，功能静默失效。
      */
-    private static final Map<Resources, Map<Integer, Map<String, java.util.Set<Long>>>> ITEM_OVERLAY_FINGERPRINTS = new WeakHashMap<>();
+    private static final Map<Resources, Map<Integer, Map<Integer, Map<String, java.util.Set<Long>>>>>
+            ITEM_OVERLAY_FINGERPRINTS = new WeakHashMap<>();
     /**
      * 每个 {@link GradientDrawable} 实例的白名单归属结论。
      *
@@ -172,8 +203,14 @@ public final class ThemeBinder {
      */
     private static final Map<GradientDrawable, ItemOverlayDecision> ITEM_OVERLAY_MEMBER = new WeakHashMap<>();
 
-    /** 一次条目遮罩归属判定的输入与结论（与 {@link RingDecision} 同一用意：结论必须可失效）。 */
-    private record ItemOverlayDecision(int strokeKey, boolean member) {
+    /**
+     * 一次条目遮罩归属判定的输入与结论（与 {@link RingDecision} 同一用意：结论必须可失效）。
+     *
+     * <p>{@code weight} 是强度而不是布尔值：{@link #ITEM_OVERLAY_FULL}（填充写整块遮罩色）/
+     * {@link #ITEM_OVERLAY_REST}（填充写半强度，见 {@link #ITEM_OVERLAY_REST_FILLS}）/ {@code 0}
+     * （不是成员）。用强度一档表达，判定的缓存键与焦点环那条路径保持同构。
+     */
+    private record ItemOverlayDecision(int strokeKey, int weight) {
     }
     /** 指纹位图边长（px）：足够容纳描边差异，又足够便宜。 */
     private static final int FINGERPRINT_SIZE = 48;
@@ -217,13 +254,17 @@ public final class ThemeBinder {
             cachedSignature = signature;
         }
         ThemeColorIndex index = ThemeColorIndex.of(baseline);
-        int bound = walk(root, index, active, signature);
-        watchRoot(root, index, active, signature);
+        // 选中文字色只有「真的被档案改过」才往下传：空档案与只改了别的槽位的档案都必须
+        // 逐位保持编译期文字色，否则夜间表（on_item_overlay = #062E6F，而条目宿主实际文字
+        // 是 on_wallpaper = #FFFFFF）会在用户仅调整无关槽位时突然变深。
+        int overlayText = active.colorOnItemOverlay() == baseline.colorOnItemOverlay() ? 0 : active.colorOnItemOverlay();
+        int bound = walk(root, index, active, signature, overlayText);
+        watchRoot(root, index, active, signature, overlayText);
         lastBoundViews = bound;
         lastBindMillis = (SystemClock.elapsedRealtimeNanos() - started) / 1_000_000L;
     }
 
-    private static int walk(View root, ThemeColorIndex index, ThemeTokens active, long signature) {
+    private static int walk(View root, ThemeColorIndex index, ThemeTokens active, long signature, int overlayText) {
         int bound = 0;
         int walked = 0;
         Deque<View> queue = new ArrayDeque<>();
@@ -233,8 +274,8 @@ public final class ThemeBinder {
             if (view == null) continue;
             walked++;
             if (isExempt(view)) continue;
-            if (bindView(view, index, active, signature)) bound++;
-            if (view instanceof RecyclerView recyclerView) watchChildren(recyclerView, index, active, signature);
+            if (bindView(view, index, active, signature, overlayText)) bound++;
+            if (view instanceof RecyclerView recyclerView) watchChildren(recyclerView, index, active, signature, overlayText);
             if (view instanceof ViewGroup group) {
                 for (int child = 0; child < group.getChildCount(); child++) {
                     queue.add(group.getChildAt(child));
@@ -250,14 +291,14 @@ public final class ThemeBinder {
      * is re-walked only when its descendant count actually changed, which keeps the
      * scroll path free of repeated traversals.
      */
-    private static void watchRoot(View root, ThemeColorIndex index, ThemeTokens active, long signature) {
+    private static void watchRoot(View root, ThemeColorIndex index, ThemeTokens active, long signature, int overlayText) {
         if (ROOTS.containsKey(root)) return;
         int[] state = {countDescendants(root)};
         ROOTS.put(root, state);
         root.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
             if (state[0] == countDescendants(view)) return;
             state[0] = countDescendants(view);
-            walk(view, index, active, signature);
+            walk(view, index, active, signature, overlayText);
         });
     }
 
@@ -268,12 +309,12 @@ public final class ThemeBinder {
         return count;
     }
 
-    private static void watchChildren(RecyclerView recyclerView, ThemeColorIndex index, ThemeTokens active, long signature) {
+    private static void watchChildren(RecyclerView recyclerView, ThemeColorIndex index, ThemeTokens active, long signature, int overlayText) {
         if (WATCHED.containsKey(recyclerView)) return;
         RecyclerView.OnChildAttachStateChangeListener listener = new RecyclerView.OnChildAttachStateChangeListener() {
             @Override
             public void onChildViewAttachedToWindow(View view) {
-                walk(view, index, active, signature);
+                walk(view, index, active, signature, overlayText);
             }
 
             @Override
@@ -285,12 +326,12 @@ public final class ThemeBinder {
         recyclerView.addOnChildAttachStateChangeListener(listener);
     }
 
-    private static boolean bindView(View view, ThemeColorIndex index, ThemeTokens active, long signature) {
+    private static boolean bindView(View view, ThemeColorIndex index, ThemeTokens active, long signature, int overlayText) {
         Long applied = APPLIED.get(view);
         if (applied != null && applied == signature) return false;
         ThemeRole explicit = ThemeRole.fromTag(view.getTag());
         boolean changed = false;
-        if (view instanceof TextView textView) changed |= bindText(textView, explicit, index, active);
+        if (view instanceof TextView textView) changed |= bindText(textView, explicit, index, active, overlayText);
         if (view instanceof ImageView imageView) changed |= bindImageTint(imageView, explicit, index, active);
         if (view instanceof MaterialCardView cardView) changed |= bindCard(cardView, explicit, index, active);
         if (view instanceof MaterialButton button) changed |= bindButton(button, explicit, index, active);
@@ -301,7 +342,7 @@ public final class ThemeBinder {
         return changed;
     }
 
-    private static boolean bindText(TextView view, ThemeRole explicit, ThemeColorIndex index, ThemeTokens active) {
+    private static boolean bindText(TextView view, ThemeRole explicit, ThemeColorIndex index, ThemeTokens active, int overlayText) {
         boolean changed = false;
         ColorStateList colors = rewrite(view.getTextColors(), explicit, index, active);
         if (colors != null) {
@@ -313,7 +354,80 @@ public final class ThemeBinder {
             view.setHintTextColor(hint);
             changed = true;
         }
+        // 选中文字色排在角色改写之后：两者都可能落在同一个 TextView 上，遮罩宿主的文字
+        // 语义优先（它压在遮罩上，而不是压在调色板表面）。
+        if (overlayText != 0 && sitsOnItemOverlay(view)) {
+            ColorStateList overlayColors = rewriteOverlayText(view.getTextColors(), overlayText);
+            if (overlayColors != null) {
+                view.setTextColor(overlayColors);
+                changed = true;
+            }
+            ColorStateList overlayHint = rewriteOverlayText(view.getHintTextColors(), overlayText);
+            if (overlayHint != null) {
+                view.setHintTextColor(overlayHint);
+                changed = true;
+            }
+        }
         return changed;
+    }
+
+    /**
+     * 判定一段文字是不是画在条目遮罩上：自身是遮罩宿主，或自身无背景而**直接**父容器是遮罩宿主。
+     *
+     * <p>为什么要看父容器：电视首页的功能按钮行（{@code adapter_func.xml}）、设置页条目
+     * （{@code activity_setting.xml}）、搜索页范围按钮（{@code activity_search.xml}）都是
+     * 「容器挂 {@code selector_item}、文字是子 {@code TextView}」的形状——只认自身背景会漏掉
+     * 它们中的绝大多数。只向上看一层，不递归到任意祖先：再往上就可能走出条目、落进整页背景，
+     * 那时「文字压在遮罩上」的前提已经不成立。
+     *
+     * <p>判定复用{@link #itemOverlayFillWeight}那条填充白名单，而**不是**按颜色反查
+     * {@code @color/black_40}：{@code black_40} 被 28 个 drawable 共用，按色反查会连带把
+     * 键盘键底、搜索框与玻璃面板的文字一起改掉。名单外一律返回 false。
+     */
+    private static boolean sitsOnItemOverlay(View view) {
+        if (isItemOverlayHost(view)) return true;
+        if (view.getBackground() != null) return false;
+        return view.getParent() instanceof View parent && isItemOverlayHost(parent);
+    }
+
+    /** 背景是不是条目 selector，且至少一个状态子项命中遮罩白名单。 */
+    private static boolean isItemOverlayHost(View view) {
+        Drawable background = unwrap(view.getBackground());
+        if (!(background instanceof StateListDrawable states)) return false;
+        for (int i = 0; i < states.getStateCount(); i++) {
+            Drawable child = unwrap(states.getStateDrawable(i));
+            if (child instanceof GradientDrawable shape && itemOverlayFillWeight(view, shape) != 0) return true;
+        }
+        return false;
+    }
+
+    /**
+     * 把条目宿主文字色里的选中/聚焦态换成用户设定的遮罩文字色，其余状态保持原值。
+     *
+     * <p>为什么必须在运行时做：条目宿主的文字在 XML 里直接写 {@code ?attr/webhtvColorOnWallpaper}
+     * （单色、无状态），仓库里没有任何「条目宿主 + {@code ?attr/colorOnPrimary}」的颜色状态列表
+     * 可改——引擎在 layout 里直接写字面属性，绕开了 {@code res/color/} 那一层。反过来硬改
+     * {@code home_menu_text} / {@code site_item_text} 会把 colorPrimary 实心底上的文字换掉，
+     * 那些文件的注释已说明必须用 colorOnPrimary，改了就是对比度回归。
+     */
+    private static ColorStateList rewriteOverlayText(ColorStateList source, int color) {
+        if (source == null || color == 0) return null;
+        if (!source.isStateful()) {
+            return source.getDefaultColor() == color ? null : ColorStateList.valueOf(color);
+        }
+        int[][] states = ThemeColorIndex.stateSkeleton();
+        int[] colors = new int[states.length];
+        boolean changed = false;
+        for (int position = 0; position < states.length; position++) {
+            int original = resolvedColor(source, states[position]);
+            boolean onOverlay = false;
+            for (int state : states[position]) {
+                if (state == android.R.attr.state_focused || state == android.R.attr.state_selected) onOverlay = true;
+            }
+            colors[position] = onOverlay ? color : original;
+            changed |= onOverlay;
+        }
+        return changed ? new ColorStateList(states, colors) : null;
     }
 
     private static boolean bindImageTint(ImageView view, ThemeRole explicit, ThemeColorIndex index, ThemeTokens active) {
@@ -487,7 +601,12 @@ public final class ThemeBinder {
         if (drawable instanceof GradientDrawable shape) {
             // 条目遮罩白名单必须先判：成员完全由用户槽位拥有，不允许再落到「按基线色反查角色」
             // 那条通用路径上——否则用户把遮罩设成某个角色色时，通用路径会按角色表改写它。
-            if (owner != null && isItemOverlayFill(owner, shape)) return setItemOverlayFill(shape, active.colorItemOverlay());
+            if (owner != null) {
+                int weight = itemOverlayFillWeight(owner, shape);
+                if (weight != 0) {
+                    return setItemOverlayFill(shape, overlayFillColor(active.colorItemOverlay(), weight));
+                }
+            }
             ColorStateList color = rewrite(shape.getColor(), explicit, index, active);
             if (color == null) return false;
             shape.setColor(color);
@@ -517,8 +636,8 @@ public final class ThemeBinder {
         int ringColor = active.colorFocus();
         boolean ringMember = ringColor != 0
                 && (explicit == ThemeRole.FOCUS || isAppSurfaceFocusRing(view, states));
-        java.util.Set<Integer> overlays = active.colorItemOverlay() == 0
-                ? java.util.Set.of() : itemOverlayStates(view, states);
+        java.util.Map<Integer, Integer> overlays = active.colorItemOverlay() == 0
+                ? java.util.Map.of() : itemOverlayStates(view, states);
         if (!ringMember && overlays.isEmpty()) return false;
         boolean changed = false;
         if (ringMember) changed |= bindFocusRingStates(states, view, ringColor);
@@ -532,10 +651,11 @@ public final class ThemeBinder {
      * <p>覆盖**全部**状态子项而不是只有 focused：{@code selector_item} 的 selected 分支是
      * {@code shape_item_activated}，它同样是「压在条目上的那层半透明深色」，用户改遮罩槽时必须
      * 一起变，否则同一行按钮在聚焦态和选中态会露出两种底色。normal 分支
-     * （{@code shape_item_normal}）不在白名单里，因为它的填充是 {@code black_20}，接线会让默认
-     * 外观从 20% 黑跳到 40% 黑。
+     * （{@code shape_item_normal}）按<b>半强度</b>写入（见 {@link #ITEM_OVERLAY_REST_FILLS}）：
+     * 它的编译期填充是 {@code black_20}，整块写入会让默认外观从 20% 黑跳到 40% 黑，而半强度下
+     * 默认取值 {@code 0x33} 与编译期逐位相同。
      */
-    private static boolean applyItemOverlay(StateListDrawable states, java.util.Set<Integer> overlays, int color) {
+    private static boolean applyItemOverlay(StateListDrawable states, java.util.Map<Integer, Integer> overlays, int color) {
         if (overlays.isEmpty() || color == 0) return false;
         // 容器先 mutate：子 drawable 可能与其他视图共享 ConstantState，不先切断会让首个宿主的
         // 改写连带影响其它宿主（与 setRingStroke 路径同一理由）。注意 mutate 之后必须**按索引重新
@@ -544,22 +664,26 @@ public final class ThemeBinder {
         // 选中态改对了，因为只有前者先被焦点环路径 mutate 过）。
         states.mutate();
         boolean changed = false;
-        for (int index : overlays) {
-            changed |= setItemOverlayFill(states.getStateDrawable(index), color);
+        for (java.util.Map.Entry<Integer, Integer> entry : overlays.entrySet()) {
+            changed |= setItemOverlayFill(states.getStateDrawable(entry.getKey()),
+                    overlayFillColor(color, entry.getValue()));
         }
         return changed;
     }
 
     /**
-     * 判定 {@code states} 里哪些状态子项属于 {@link #ITEM_OVERLAY_FILLS}。
+     * 判定 {@code states} 里哪些状态子项属于条目遮罩白名单，以及各自属于哪一档强度。
      *
      * <p>判定在 {@code mutate()} 之前进行：填充在指纹里，被本类改写之后就认不出来了。
+     * 返回「子项下标 → 强度」的映射，正常态子项因此在同一个宿主里拿到与聚焦态不同的强度。
      */
-    private static java.util.Set<Integer> itemOverlayStates(View view, StateListDrawable states) {
-        java.util.Set<Integer> members = new java.util.LinkedHashSet<>();
+    private static java.util.Map<Integer, Integer> itemOverlayStates(View view, StateListDrawable states) {
+        java.util.Map<Integer, Integer> members = new java.util.LinkedHashMap<>();
         for (int i = 0; i < states.getStateCount(); i++) {
             Drawable child = unwrap(states.getStateDrawable(i));
-            if (child instanceof GradientDrawable shape && isItemOverlayFill(view, shape)) members.add(i);
+            if (!(child instanceof GradientDrawable shape)) continue;
+            int weight = itemOverlayFillWeight(view, shape);
+            if (weight != 0) members.put(i, weight);
         }
         return members;
     }
@@ -827,7 +951,11 @@ public final class ThemeBinder {
     }
 
     /**
-     * Whether {@code shape} is one of {@link #ITEM_OVERLAY_FILLS}.
+     * 判定 {@code shape} 属于条目遮罩白名单的哪一档强度，不属于时返回 {@code 0}。
+     *
+     * <p>返回值是强度而不是布尔值（{@link #ITEM_OVERLAY_FULL} / {@link #ITEM_OVERLAY_REST}）：
+     * 同一份用户遮罩色在「聚焦/选中底座」上写整块、在「常态底座」上写半块，见
+     * {@link #overlayFillColor}。
      *
      * <p>两级判定，与 {@link #isAppSurfaceFocusRing} 同构但**不共用**：环族的签名取自焦点态描边，
      * 遮罩族的签名取自填充本身，两者放进同一个集合会互相污染。
@@ -843,15 +971,29 @@ public final class ThemeBinder {
      * 在两类宿主（页面内容区、固定深色玻璃）上语义相同，不存在 {@code selector_video_item} 那种
      * 双宿主分流问题。
      */
-    private static boolean isItemOverlayFill(View view, Drawable drawable) {
-        if (!(drawable instanceof GradientDrawable shape)) return false;
-        if (view == null || view.getContext() == null) return false;
+    private static int itemOverlayFillWeight(View view, Drawable drawable) {
+        if (!(drawable instanceof GradientDrawable shape)) return 0;
+        if (view == null || view.getContext() == null) return 0;
         int strokeKey = itemOverlayStrokeKey(view.getContext());
         ItemOverlayDecision cached = ITEM_OVERLAY_MEMBER.get(shape);
-        if (cached != null && cached.strokeKey() == strokeKey) return cached.member();
-        boolean member = matchesItemOverlayWhitelist(view, shape, strokeKey);
-        ITEM_OVERLAY_MEMBER.put(shape, new ItemOverlayDecision(strokeKey, member));
-        return member;
+        if (cached != null && cached.strokeKey() == strokeKey) return cached.weight();
+        int weight = matchesItemOverlayWhitelist(view, shape, strokeKey);
+        ITEM_OVERLAY_MEMBER.put(shape, new ItemOverlayDecision(strokeKey, weight));
+        return weight;
+    }
+
+    /**
+     * 按强度把用户选的遮罩色换算成这一档的实际填充色。
+     *
+     * <p>只缩放 alpha、保持色相与彩度：默认 {@code 0x66} 的半强度正好是 {@code 0x33}，
+     * 与编译期 {@code @color/black_20} 逐位相等——「默认外观字节不变」是靠这条换算成立的。
+     * 用户设了不透明色（{@code #RRGGBB} 解析后 alpha=0xFF）时，常态底座拿到 50% 的同色，
+     * 聚焦/选中态拿到整色，条目「常态比聚焦浅」的层次随之保留。
+     */
+    private static int overlayFillColor(int color, int weight) {
+        if (color == 0 || weight >= ITEM_OVERLAY_FULL) return color;
+        int alpha = (color >>> 24) * weight / ITEM_OVERLAY_FULL;
+        return (color & 0x00FFFFFF) | (alpha << 24);
     }
 
     /** 条目遮罩白名单成员的描边取值指纹：两个随主题解析的描边属性 + 环宽 token。 */
@@ -860,16 +1002,24 @@ public final class ThemeBinder {
                 + focusRingWidthPx(context);
     }
 
-    private static boolean matchesItemOverlayWhitelist(View view, GradientDrawable shape, int strokeKey) {
-        if (view == null) return false;
+    private static int matchesItemOverlayWhitelist(View view, GradientDrawable shape, int strokeKey) {
+        if (view == null) return 0;
         Context context = view.getContext();
-        if (context == null) return false;
+        if (context == null) return 0;
         String probe = ringSignature(shape);
-        if (probe == null) return false;
-        java.util.Set<Long> expected = itemOverlayFingerprints(context, strokeKey).get(probe);
-        if (expected == null) return false;
+        if (probe == null) return 0;
         Long actual = fingerprint(shape);
-        return actual != null && expected.contains(actual);
+        if (actual == null) return 0;
+        java.util.Map<Integer, Map<String, java.util.Set<Long>>> tiers = itemOverlayFingerprints(context, strokeKey);
+        // 两档按固定顺序命中：同一张指纹不可能同时属于两档（填充分别是 black_40 / black_20），
+        // 固定顺序只是让结论与 Map 的遍历顺序无关。
+        for (int weight : new int[] {ITEM_OVERLAY_FULL, ITEM_OVERLAY_REST}) {
+            Map<String, java.util.Set<Long>> tier = tiers.get(weight);
+            if (tier == null) continue;
+            java.util.Set<Long> expected = tier.get(probe);
+            if (expected != null && expected.contains(actual)) return weight;
+        }
+        return 0;
     }
 
     /**
@@ -878,18 +1028,29 @@ public final class ThemeBinder {
      * <p>签名与指纹都取自**未经本类改写**的实例：{@code mutate()} 之前取，因此填充仍是
      * {@code black_40}。指纹内部自己复制一份再绘制，不会污染共享的 ConstantState。
      */
-    private static Map<String, java.util.Set<Long>> itemOverlayFingerprints(Context context, int strokeKey) {
+    private static Map<Integer, Map<String, java.util.Set<Long>>> itemOverlayFingerprints(Context context, int strokeKey) {
         Resources resources = context.getResources();
-        Map<Integer, Map<String, java.util.Set<Long>>> byStroke = ITEM_OVERLAY_FINGERPRINTS.get(resources);
+        Map<Integer, Map<Integer, Map<String, java.util.Set<Long>>>> byStroke = ITEM_OVERLAY_FINGERPRINTS.get(resources);
         if (byStroke == null) {
             byStroke = new java.util.HashMap<>();
             ITEM_OVERLAY_FINGERPRINTS.put(resources, byStroke);
         }
-        Map<String, java.util.Set<Long>> cached = byStroke.get(strokeKey);
+        Map<Integer, Map<String, java.util.Set<Long>>> cached = byStroke.get(strokeKey);
         if (cached != null) return cached;
-        Map<String, java.util.Set<Long>> resolved = new java.util.HashMap<>();
-        for (String name : ITEM_OVERLAY_FILLS) {
-            int id = resources.getIdentifier(name, "drawable", context.getPackageName());
+        Map<Integer, Map<String, java.util.Set<Long>>> resolved = new java.util.HashMap<>();
+        collectWhitelistDrawables(context, ITEM_OVERLAY_FILLS, ITEM_OVERLAY_FULL, resolved);
+        collectWhitelistDrawables(context, ITEM_OVERLAY_REST_FILLS, ITEM_OVERLAY_REST, resolved);
+        // 第二条路径：作为 selector 子项解析（生产上宿主就是这么拿到这些 shape 的）。
+        collectSelectorChildren(context, resolved);
+        byStroke.put(strokeKey, resolved);
+        return resolved;
+    }
+
+    /** 按名字把一条白名单解析成「签名 → 指纹」集合并收进对应强度格；解析不到的名字跳过（mobile 变体）。 */
+    private static void collectWhitelistDrawables(Context context, String[] names, int weight,
+            Map<Integer, Map<String, java.util.Set<Long>>> into) {
+        for (String name : names) {
+            int id = context.getResources().getIdentifier(name, "drawable", context.getPackageName());
             if (id == 0) continue;
             Drawable candidate;
             try {
@@ -901,22 +1062,23 @@ public final class ThemeBinder {
             String signature = ringSignature(shape);
             Long print = fingerprint(shape);
             if (signature == null || print == null) continue;
-            resolved.computeIfAbsent(signature, key -> new java.util.HashSet<>()).add(print);
+            into.computeIfAbsent(weight, key -> new java.util.HashMap<>())
+                    .computeIfAbsent(signature, key -> new java.util.HashSet<>()).add(print);
         }
-        // 第二条路径：作为 selector 子项解析（生产上宿主就是这么拿到这些 shape 的）。
-        collectSelectorChildren(context, resolved);
-        byStroke.put(strokeKey, resolved);
-        return resolved;
     }
 
     /**
      * 把 {@link #ITEM_OVERLAY_PARENTS} 每个 selector 的**状态子项**的签名与指纹收进 {@code into}。
      *
-     * <p>只收子项里确实是 {@link #ITEM_OVERLAY_FILLS} 成员的形状：用名字集合反查，所以
-     * {@code selector_item} 的 normal 子项（{@code shape_item_normal}）不会被收进来——
-     * 它的填充是 {@code black_20}，接线会造成默认外观跳挡。
+     * <p>这里不收名字、只按<b>编译期填充</b>归一档：{@code black_40} 归全强度、{@code black_20}
+     * 归半强度，其余（{@code black_30} 的选中档等）直接跳过。之所以在 selector 子项路径上能用
+     * 填充当判据，是因为这四个父 selector 的状态子项只有自己那几档形状：{@code selector_item} /
+     * {@code selector_item_round} 是 focused+activated+normal，{@code selector_search_hot_word} 是
+     * focused+normal，{@code selector_tv_search_field} 两态都是 {@code black_40} 成员。
+     * 形状签名（填充 + 圆角 + 内边距）随后再区分具体是哪一个，因此这条判据只决定强度、不决定身份。
      */
-    private static void collectSelectorChildren(Context context, Map<String, java.util.Set<Long>> into) {
+    private static void collectSelectorChildren(Context context,
+            Map<Integer, Map<String, java.util.Set<Long>>> into) {
         for (String parent : ITEM_OVERLAY_PARENTS) {
             int id = context.getResources().getIdentifier(parent, "drawable", context.getPackageName());
             if (id == 0) continue;
@@ -930,17 +1092,26 @@ public final class ThemeBinder {
             for (int i = 0; i < states.getStateCount(); i++) {
                 Drawable child = unwrap(states.getStateDrawable(i));
                 if (!(child instanceof GradientDrawable shape)) continue;
-                // 只收白名单成员的子项：它们的编译期填充一律是 black_40，而 selector 里的
-                // normal 子项是 black_20（shape_item_normal）、选中子项是 black_30
-                // （shape_item_selected / shape_keyboard_focused），因此这条判据正好把它们排除。
+                // 只收白名单成员的子项：编译期填充决定强度档，形状签名随后区分具体身份。
+                // black_30 的选中档（shape_item_selected / shape_keyboard_focused）在这里被排除。
                 ColorStateList fill = shape.getColor();
-                if (fill == null || fill.getDefaultColor() != 0x66000000) continue;
+                if (fill == null) continue;
+                int weight = overlayWeightOfCompiledFill(fill.getDefaultColor());
+                if (weight == 0) continue;
                 String signature = ringSignature(shape);
                 Long print = fingerprint(shape);
                 if (signature == null || print == null) continue;
-                into.computeIfAbsent(signature, key -> new java.util.HashSet<>()).add(print);
+                into.computeIfAbsent(weight, key -> new java.util.HashMap<>())
+                        .computeIfAbsent(signature, key -> new java.util.HashSet<>()).add(print);
             }
         }
+    }
+
+    /** 编译期填充 ⇒ 条目遮罩强度：{@code black_40} 全强度、{@code black_20} 常态半强度，其余 0。 */
+    private static int overlayWeightOfCompiledFill(int fill) {
+        if (fill == COMPILED_OVERLAY_FILL) return ITEM_OVERLAY_FULL;
+        if (fill == COMPILED_REST_FILL) return ITEM_OVERLAY_REST;
+        return 0;
     }
 
     /** 视图主题解析出的 {@code ?attr/colorOutline}；解析不出时返回 0（与「未设置」区分开即可）。 */
