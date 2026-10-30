@@ -128,4 +128,40 @@ public class ThemeProfileValidatorTest {
         assertEquals("#155DFC", ThemeProfileValidator.formatColor(0xFF155DFC));
         assertNull(ThemeProfileValidator.normalizeColor("nope"));
     }
+
+    @Test
+    public void enforcesTheLiveListScrimRangeOnEveryMode() {
+        assertEquals(0.20f, ThemeProfileValidator.MIN_LIVE_LIST_SCRIM_OPACITY, 0.0001f);
+        assertEquals(1f, ThemeProfileValidator.MAX_LIVE_LIST_SCRIM_OPACITY, 0.0001f);
+        ThemeProfile profile = ThemeProfile.defaultProfile();
+        profile.light.liveListScrimOpacity = ThemeProfileValidator.MIN_LIVE_LIST_SCRIM_OPACITY;
+        profile.dark.liveListScrimOpacity = ThemeProfileValidator.MAX_LIVE_LIST_SCRIM_OPACITY;
+        assertTrue(ThemeProfileValidator.validate(profile).valid());
+
+        profile.light.liveListScrimOpacity = 0.19f;
+        assertFalse(ThemeProfileValidator.validate(profile).valid());
+        profile.light.liveListScrimOpacity = 1.01f;
+        assertFalse(ThemeProfileValidator.validate(profile).valid());
+        profile.light.liveListScrimOpacity = Float.NaN;
+        assertFalse(ThemeProfileValidator.validate(profile).valid());
+
+        ThemeProfile dark = ThemeProfile.defaultProfile();
+        dark.dark.liveListScrimOpacity = 0.19f;
+        assertFalse(ThemeProfileValidator.validate(dark).valid());
+        dark = ThemeProfile.defaultProfile();
+        dark.dark.liveListScrimOpacity = 1.01f;
+        assertFalse(ThemeProfileValidator.validate(dark).valid());
+        dark = ThemeProfile.defaultProfile();
+        dark.dark.liveListScrimOpacity = Float.NaN;
+        assertFalse(ThemeProfileValidator.validate(dark).valid());
+    }
+
+    @Test
+    public void anUnsetLiveListScrimSlotStaysNullThroughValidation() {
+        ThemeProfile profile = ThemeProfile.defaultProfile();
+        ThemeProfileValidator.Result result = ThemeProfileValidator.validate(profile);
+        assertTrue(result.message(), result.valid());
+        assertNull(result.profile().light.liveListScrimOpacity);
+        assertNull(result.profile().dark.liveListScrimOpacity);
+    }
 }

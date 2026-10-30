@@ -959,6 +959,7 @@
     <string name="theme_editor_slot_dialog_opacity">对话框透明度</string>
     <string name="theme_editor_slot_overlay_opacity">浮层透明度（仅 Web 主题生效）</string>
     <string name="theme_editor_slot_player_scrim_opacity">播放菜单遮盖层不透明度</string>
+    <string name="theme_editor_slot_live_list_scrim_opacity">直播列表遮盖层不透明度</string>
     <string name="theme_editor_import">导入配色</string>
     <string name="theme_editor_palette_style">配色风格 · 保留手动修改</string>
     <string name="theme_editor_palette_tonal">柔和</string>
