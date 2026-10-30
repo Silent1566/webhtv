@@ -3003,7 +3003,9 @@
     <string name="following_official_unknown">官方状态未知</string>
     <string name="following_source">当前源可播至第 %1$d 集</string>
     <string name="following_source_unknown">当前源尚未检查</string>
+    <string name="following_source_failed">当前源检查失败</string>
     <string name="following_watched">看到第 %1$d 集</string>
+    <string name="following_watched_unknown">尚未记录观看进度</string>
     <string name="following_unwatched">还有 %1$d 集未看</string>
     <string name="following_unwatched_none">已看完当前更新</string>
     <string name="following_new_count">新 %1$d 集</string>

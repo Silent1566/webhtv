@@ -961,10 +961,22 @@ public class PlaybackPerformanceSetting {
 
     private static int rawProfileValue(String key, int fallback) {
         try {
-            Object value = Prefers.getPrefers().getAll().get(key);
-            return value instanceof Number
-                    ? clampProfile(((Number) value).intValue())
-                    : clampProfile(fallback);
+            SharedPreferences prefs = Prefers.getPrefers();
+            if (prefs.contains(key)) {
+                try {
+                    return clampProfile(prefs.getInt(key, fallback));
+                } catch (ClassCastException ignored) {
+                }
+                try {
+                    return clampProfile((int) prefs.getLong(key, fallback));
+                } catch (ClassCastException ignored) {
+                }
+                try {
+                    return clampProfile((int) prefs.getFloat(key, fallback));
+                } catch (ClassCastException ignored) {
+                }
+            }
+            return clampProfile(fallback);
         } catch (Throwable ignored) {
             return clampProfile(fallback);
         }
