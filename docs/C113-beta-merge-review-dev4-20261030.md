@@ -269,3 +269,20 @@ gradlew.bat :app:testLeanbackArm64_v8aDebugUnitTest --tests "com.fongmi.android.
 - `app/src/main/baseline-prof.txt` 未补 `LiveListScrim` 四条 profile 规则。该缺口已由功能任务文档
   记录为"性能基线维护、超出该任务 guard scope"；本轮评审**确认它不构成正确性缺陷**（缺失只影响
   ART baseline profile 命中率，不影响渲染结果），故不纳入本轮修复，避免扩大改动面。
+
+## 8. 交付坐标回填（已发生的实际事实）
+
+| 项 | 值 |
+| --- | --- |
+| 评审提交 | `8a093c73638466599f646edb85963e35077d672b`（2 files changed, +273 −2） |
+| recovery tag | `recovery/C113-beta-merge-review-dev4-20261030/20261030-1240-8a093c73638`（指向上述提交） |
+| 推送 | `git push origin dev4` → `553570b3a38..8a093c73638  dev4 -> dev4`，exit 0 |
+| Pull Request | **#504** → `https://github.com/Silent1566/webhtv/pull/504`，`dev4` → `beta`，state OPEN，19 个文件 |
+| 拉取远端最新 | `git fetch origin --prune` exit 0；`git pull --ff-only origin dev4` → **Already up to date**，exit 0 |
+| 终态一致性 | `git rev-parse HEAD` = `git rev-parse origin/dev4` = `8a093c73638466599f646edb85963e35077d672b` |
+| beta 祖先关系 | `git merge-base --is-ancestor 66b40a1338f HEAD` → **exit 0（是祖先）**；`origin/beta...HEAD` = **0 / 4** |
+| 工作区 | `git status --porcelain` 为空 |
+
+发布后再次核对合并完整性：`origin/beta` 已是 HEAD 祖先，落后 0 个提交；领先 4 个提交为
+`8a093c73638`（评审）+ `f6aea3c4b01`（合并）+ `d039c39f331` + `bcdd344ec5c`（本轮评审的功能与文档两笔）。
+
