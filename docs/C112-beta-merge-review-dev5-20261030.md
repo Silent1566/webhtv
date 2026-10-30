@@ -122,4 +122,15 @@ RecyclerView 随后在 `dispatchLayoutStep1` 崩溃。
 
 ## 8. 交付坐标
 
-（提交后回填）
+| 项 | 值 |
+| --- | --- |
+| 合并提交 | `8566ea696a0b0d78e8347a4fbcacf82c223d638a` |
+| 修复提交 | `448d33d7a4`（HomeActivity + GuardTest + 本任务文档） |
+| Recovery tag | `recovery/C112-beta-merge-review-dev5-20261030/20261030-192522-448d33d7a4` |
+| 推送 | `git push origin dev5` → `40bb057562..448d33d7a4` |
+| PR | #505 → `dev5` → `beta` |
+
+## 9. 下一动作
+
+等待 PR #505 评审合入；合入后 dev5 相对 beta 落后归零。
+
