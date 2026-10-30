@@ -102,6 +102,47 @@
 - 两个 `LiveActivity` 的 diff 均为最小面：leanback `+6`（import / initView 一行 / 新私有方法），mobile `+2/−1`（import / overlay 分支一行）；`applyPlaybackOverlay()` 方法体与 mobile 的 classic / embedded 分支、`liveCurrent` 逻辑一字未改。
 - `git grep -n shape_live_list -- app/src` 改后仅剩 3 条：两处 layout 静态引用（保留作 XML 回落）+ `shape_live_focused.xml:7` 的注释文字，Java 侧零引用。
 
+## 真机验证（emulator-5560, Android 9 / HD1910, 1080x1920 竖屏）
+
+已验证的构建：设备上安装的 `com.silent.android.webhtv` base.apk = 204991032 字节，与
+`app/build/outputs/apk/leanbackArm64_v8a/debug/app-leanback-arm64_v8a-debug.apk` 字节数一致，
+安装时间 2026-10-30 00:46:30 晚于该 APK 的 00:45:36，即 HEAD `bcdd344ec5c` 的产物。
+
+**入口**：直播页抽屉不是 DPAD_LEFT 打开，而是 `LiveActivity.onKeyCenter()`（`LiveActivity.java:1361-1364`）调 `showUI()`（`:610-616`）；`onToggle()`（`:850-855`）是另一条切换路径。
+
+**像素量化**（截图 y=30 行，抽屉右端 bg G=133 处反解合成 alpha = 1 − G/133）：
+
+| profile `liveListScrimOpacity` | x=0 | x=400 | x=1000 |
+|---|---|---|---|
+| `1.0`（设备原值） | 1.000 | 0.624 | 0.113 |
+| `null`（未设置 → 回落 0.80） | 0.797 | 0.496 | 0.083 |
+| `0.5` | 0.504 | 0.308 | 0.053 |
+
+结论：
+1. 三档单调可调，且 `null` 档左端实测 0.797 ≈ `shape_live_list` 的 `black_80`(0xCC=204/255=0.800)，即**默认路径与改动前逐值一致**，零观感回归。
+2. 抽屉背景确实由 `LiveListScrim` 在 Java 层绘制，不再是 XML 静态绑定——`1.0` 档左端实测 1.000 只可能来自 `LiveListScrim.withAlpha(1.0)`，XML 的 `black_80` 上限是 0.80。
+
+**编辑器滑块**：设置 → 外观与语言 → 主题色彩 → 滚到底「透明度与浮层」组，第 5 行「直播列表遮盖层不透明度」可见。设备原值显示 `100%`（profile 已存 1.0，故无「· 自动」后缀；相邻的播放菜单滑块显示 `80% · 自动`）。点按轨道后显示 `68%`，状态栏由「正在编辑已保存的配色·修改后可直接预览」变为「仅在本页预览，尚未保存」，说明滑块双向可写且脏标记生效。
+
+**设备状态复原**：验证期间通过替换 shared_prefs 制造了 `null` / `0.5` 两档，结束时已把原始 prefs 推回；比对 `theme_profile_v2_json` 字段得 `profileEqual=True`、无 `0.68` 残留，即设备主题配置与验证前逐字节一致。本地 `.dsh-verify/` 临时目录已删除，`git status --porcelain` 为空。
+### mobile flavor（emulator-5560，同一提交 `bcdd344ec5c` 的 mobile-arm64 APK）
+
+实测结论：**embedded 分支行为不变，overlay 分支无法在本机触发**。
+
+- 安装 `app-mobile-arm64_v8a-debug.apk`（`adb install -r`）后启动 `LiveActivity`，竖屏进入
+  `isEmbeddedLiveUi()` = true 的分支（`LiveActivity.java:1023-1025`：非横屏且非旋转且非画中画）。
+  截图确认左列分组是各自带圆角背景的卡片（`selector_live`），**容器上没有黑渐变遮罩**，
+  与 `applyLiveListStyle()` 的 else 分支（`LiveActivity.java:2280-2282`，classic→`R.color.transparent`、
+  非 classic→`shape_live_embedded_list`）一致，即 embedded 形态未被新槽位影响。
+- overlay 分支（`LiveActivity.java:2278-2279` 调 `LiveListScrim.create(this)`）只在横屏生效，
+  本机无法验证：`settings put system user_rotation 1` 无效（`SurfaceOrientation` 恒为 0）、
+  `adb emu rotate` 连不上 5560 控制台（连接被拒）、`wm size 1920x1080` 只产生黑边 letterbox
+  而不改变 `mAppBounds`（仍为 1080x1920 port）。该分支目前仅经代码审查 + 单元测试覆盖。
+
+**设备复原**：验证后已 `adb install -r` 装回 leanback APK（`lastUpdateTime=10:48:10`）、
+把 leanback 的 prefs 推回、`user_rotation` 复位 0、`wm size` 已 reset（`Physical size: 1080x1920` 无 Override）、
+删除 `/sdcard/*.png` 与本地 `.dsh-verify/`。复原后 profile 中 `liveListScrimOpacity` 仍为 `1.0`，与验证前一致。
+
 ## 后续可选
 
 - `app/src/main/baseline-prof.txt` 未补 `LiveListScrim` 条目（性能基线维护，不在本次 guard scope）。
