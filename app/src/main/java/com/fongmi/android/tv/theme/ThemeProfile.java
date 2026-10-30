@@ -2,7 +2,7 @@ package com.fongmi.android.tv.theme;
 
 import java.util.Locale;
 
-/** Persisted B-safe theme profile limited to the 18 user-editable semantic slots. */
+/** Persisted B-safe theme profile limited to the 19 user-editable semantic slots. */
 public final class ThemeProfile {
 
     public static final int SCHEMA_VERSION = 2;
@@ -76,7 +76,7 @@ public final class ThemeProfile {
         return SEED_NONE;
     }
 
-    /** The 13 color slots plus 5 opacity slots a user may edit. */
+    /** The 14 color slots plus 5 opacity slots a user may edit. */
     public static final class SlotSet {
         public String primary;
         public String primaryContainer;
