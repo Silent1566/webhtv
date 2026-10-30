@@ -119,6 +119,59 @@ public class PlaybackProgressWriterEpisodeTest {
         assertEquals("", PlaybackProgressWriter.resolveEpisodeUrl(null, input, false));
     }
 
+    @Test
+    public void episodeWithoutTmdbIdentityKeepsTheConfirmedLocalSeason() {
+        // 入参没有 TMDB 季集身份但集号可解析时，不得把本地已确认季号抹成 0。
+        History local = history("源站第5集", "https://cdn.example.com/ep05.m3u8", 2, 5);
+        History history = local.copy();
+        PlaybackProgressInput input = input("源站第6集", "https://cdn.example.com/ep06.m3u8");
+        input.episodeNumber = 6;
+
+        PlaybackProgressWriter.applyEpisodePosition(history, local, input, false);
+
+        assertFalse(input.hasTmdbEpisodeIdentity());
+        assertEquals(2, history.getTmdbSeasonNumber());
+        assertEquals(6, history.getTmdbEpisodeNumber());
+    }
+
+    @Test
+    public void episodeWithoutTmdbIdentityFallsBackToTheIncomingSeasonWhenLocalHasNone() {
+        History local = history("源站第5集", "https://cdn.example.com/ep05.m3u8", -1, -1);
+        History history = local.copy();
+        PlaybackProgressInput input = input("源站第6集", "https://cdn.example.com/ep06.m3u8");
+        input.seasonNumber = 4;
+        input.episodeNumber = 6;
+
+        PlaybackProgressWriter.applyEpisodePosition(history, local, input, false);
+
+        assertEquals(4, history.getTmdbSeasonNumber());
+        assertEquals(6, history.getTmdbEpisodeNumber());
+    }
+
+    @Test
+    public void episodeWithoutTmdbIdentityAndWithoutNumberStillClearsThePosition() {
+        History local = history("源站第5集", "https://cdn.example.com/ep05.m3u8", 2, 5);
+        History history = local.copy();
+        PlaybackProgressInput input = input("下一集", "https://cdn.example.com/ep06.m3u8");
+
+        PlaybackProgressWriter.applyEpisodePosition(history, local, input, false);
+
+        assertEquals(0, history.getTmdbSeasonNumber());
+        assertEquals(0, history.getTmdbEpisodeNumber());
+    }
+
+    @Test
+    public void sameEpisodeKeepsThePersistedTmdbPositionUntouched() {
+        History local = history("源站第5集", "https://cdn.example.com/ep05.m3u8", 2, 5);
+        History history = local.copy();
+        PlaybackProgressInput input = input("源站第5集", "");
+
+        PlaybackProgressWriter.applyEpisodePosition(history, local, input, true);
+
+        assertEquals(2, history.getTmdbSeasonNumber());
+        assertEquals(5, history.getTmdbEpisodeNumber());
+    }
+
     private static History history(String remarks, String url, int season, int episode) {
         History history = new History();
         history.setVodRemarks(remarks);
