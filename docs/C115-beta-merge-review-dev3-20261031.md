@@ -195,12 +195,83 @@ PR #509（base `beta` ← head `dev3`）已于 2026-10-31T05:58:57Z **MERGED**�
 
 | 项 | 值 |
 | --- | --- |
-| 合并远端 beta | 无需合并：`origin/beta` = `a5469c5ceac0…68b7` 已是 HEAD 祖先，`rev-list --left-right --count origin/beta...HEAD` = 0 / 1 |
 | 评审提交 | `d1686cb44d9f84371a65a34aed709426701c549c`（2 files, +136 −0） |
 | 评审结论 | **通过，无必修项**（根因认定成立、位置正确、非回归论证见 §4.3、守卫经变异验证非空转） |
-| 验证 | 定向单测 4/4 通过（34s）；变异态 1 失败（55s，AssertionError at `SpeedAdjustKeyContractTest.java:73`） |
+| 验证（评审时） | 定向单测 4/4 通过（34s）；变异态 1 失败（55s，AssertionError at `SpeedAdjustKeyContractTest.java:73`） |
 | 遗留项 | `onSpeedAdd/onSpeedSub/onSpeedLong/saveUserSpeed` 缺播放服务守卫（既有、非本次引入），仅记录，见 §6 |
-| 本轮修正产物 | 本文件 `docs/C115-beta-merge-review-dev3-20261031.md`（代码零改动） |
-| 推送 dev3 | 见提交后的回填 |
-| PR 到 beta | 见提交后的回填 |
-| 拉取远端 | 见提交后的回填 |
+| 评审文档提交 | `a2ffd76d459116ae6269575e787568c5aa1dd1cb` "docs(C115): 评审 dev3 倍速 UP 键修复 d1686cb44d 并回填交付坐标"（1 file, +206） |
+| 恢复标签 1 | `recovery/C115-beta-merge-review-dev3-20261031/20261031103431-a2ffd76d4591` |
+| 推送 dev3（第一次） | `d1686cb44d..a2ffd76d45  dev3 -> dev3` |
+| PR 到 beta | **#511** OPEN，`dev3` → `beta`，`mergeable=MERGEABLE`，https://github.com/Silent1566/webhtv/pull/511 |
+| 拉取远端 | `git fetch --all --prune --tags` → `origin/beta` `a5469c5cea..9c695e9982`、`origin/dev2` `7f4e148892..cddb92832b`、新增 tag `v5.6.0-beta-202610311359` 与 `recovery/beta-sync-review-dev4-20260913/20260913181725-d67e92aab666` |
+
+### 7.1 拉取后发现 beta 已前进，补做第二次合并（§8）
+
+`git fetch` 让 `origin/beta` 从评审基线 `a5469c5cea` 前进到 `9c695e9982`，本节第 1 版写的「无需再合并」在那一刻已经过期。
+用户裁定「合并最新 3 提交、验证后推送」，据此补做合并，详见 §8。
+
+---
+
+## 8. 补做合并：评审之后 beta 又前进 3 个提交
+
+### 8.1 发生了什么
+
+评审基线取的是 `origin/beta` = `a5469c5ceac088d824fbd79df8a80e49580a6887`。交付末尾执行 `git fetch --all --prune --tags`
+时 `origin/beta` 已前进到 `9c695e998298b178dc216a54b6e9e19832ae7133`，多出 3 个提交（merge-base 仍是 `a5469c5cea`）：
+
+| 提交 | 标题 |
+| --- | --- |
+| `9c695e998298b178dc216a54b6e9e19832ae7133` | Merge pull request #510 from Silent1566/dev2 |
+| `cddb92832b41ed467c0376385c4c0538cf8a9fe4` | fix: end TV hold-speed only on the up-key release |
+| `7174df94571585e8c65adc907affb7ff332e32b8` | fix: keep TV hold-speed release from opening the playback menu |
+
+此时 `git rev-list --left-right --count origin/beta...HEAD` = **3 / 2**。用户明确要求「合并远端 beta 最新代码」，
+且这 3 个提交不改 `dispatchSpeedAdjust` 本身，故按用户裁定补做合并，而不是让 PR 基于过期基线。
+
+### 8.2 冲突与自动合并
+
+`git merge-tree --write-tree HEAD origin/beta` → **exit 0，零冲突**；随后 `git merge --no-ff --no-edit origin/beta`
+由 ort 策略自动合并成功，产出 `5bcb9a3838c4b580583ccb9cf175b08d2628b6d8`，工作区无 `U` 状态文件：
+
+```
+ app/src/leanback/java/com/fongmi/android/tv/ui/activity/VideoActivity.java             |   3 +-
+ app/src/testMobile/java/com/fongmi/android/tv/ui/activity/VideoActivityLayoutTest.java |  12 ++-
+ docs/C115-tv-speed-hold-residue-20261031.md                                            | 114 +++++++++++++++++++++
+ 3 files changed, 127 insertions(+), 2 deletions(-)
+```
+
+### 8.3 合并后按键链路的交互复核（关键）
+
+beta 侧把 `dispatchKeyEvent` 第 8826 行改成
+`if (mKeyDown.isChangingSpeed() && KeyUtil.isActionUp(event) && KeyUtil.isUpKey(event)) { ... return true; }`。
+它与本次 `dispatchSpeedAdjust` 的关系必须逐条确认，否则两条修复可能互相吃掉：
+
+| 键位 / 状态 | 合并后的实际走向 | 结论 |
+| --- | --- | --- |
+| 控制栏可见、焦点在 speed、UP **按下**（ACTION_DOWN） | 8826 行 `isActionUp` 为假 → 不拦截；进入 8838 块 → **8841 `dispatchSpeedAdjust` 接管 → `onSpeedAdd()`** | 本次修复仍然生效 |
+| 控制栏可见、焦点在 speed、UP **抬起**（ACTION_UP） | 若 `mKeyDown.isChangingSpeed()`（长按加速态）为真且是 UP 键 → 8826 行 `releaseSpeed()` 后 `return true`，不再落到 `onKeyUp` 的 `showControl`（beta #510 的修复）；否则继续向下 | 两个修复分别负责按下/抬起，不重叠 |
+| 控制栏隐藏时的长按加速 | 8850 行的 `isGone(control)` 分支走 `mKeyDown.onKeyDown`，与 8826 行配合 | 不受本次改动影响 |
+| 焦点不在 speed、UP 按下 | 8826 行 `isActionUp` 为假；8841 第二道门禁返回 false → 仍由 8842 `handleKey` 处理 | 不变 |
+| speed 上按 DOWN | 8841 走 `onSpeedSub`；8826 行只认 UP 键 | 不变 |
+
+即：**UP 的 ACTION_DOWN 归 `dispatchSpeedAdjust`，UP 的 ACTION_UP 归 beta 的 `isChangingSpeed` 分支**，两者按 action 天然分离。
+
+### 8.4 合并后验证
+
+| 项 | 命令 | 结果 |
+| --- | --- | --- |
+| leanback 编译 | `:app:compileLeanbackArm64_v8aDebugJavaWithJavac` | BUILD SUCCESSFUL |
+| 本次契约测试 | `:app:testLeanbackArm64_v8aDebugUnitTest --tests ...SpeedAdjustKeyContractTest` | `tests=4 failures=0 errors=0 skipped=0` |
+| beta 带来的回归测试 | `:app:testMobileArm64_v8aDebugUnitTest --tests *VideoActivityLayoutTest*` | `tests=157 failures=0 errors=0 skipped=0` |
+| 整体 | 三条目标一次跑完 | **BUILD SUCCESSFUL in 2m 58s**，exit 0 |
+
+### 8.5 第二次交付坐标
+
+| 项 | 值 |
+| --- | --- |
+| 合并提交 | `5bcb9a3838c4b580583ccb9cf175b08d2628b6d8` "Merge remote-tracking branch 'origin/beta' into dev3" |
+| 恢复标签 2 | `recovery/C115-beta-merge-followup-20261031/20261031190323-5bcb9a3838c4` |
+| 任务守卫 | 该合并由 `git merge` 直接产生提交，守卫检出 HEAD 漂移后以 `abort` 归档（工作区未受影响） |
+| 推送 dev3（第二次） | 见提交后的回填 |
+| PR | #511 自动纳入该合并（`dev3` → `beta`），无需新建 |
+| 文档编号说明 | beta 侧同日另有 `docs/C115-tv-speed-hold-residue-20261031.md`（#510 的文档）；主题不同、文件名不冲突，本文件保留 C115 前缀 |
