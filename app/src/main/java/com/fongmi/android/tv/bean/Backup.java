@@ -21,6 +21,7 @@ import com.fongmi.android.tv.following.FollowingBackupCodec;
 import com.fongmi.android.tv.following.FollowingDatabase;
 import com.fongmi.android.tv.following.FollowingSource;
 import com.fongmi.android.tv.impl.Callback;
+import com.fongmi.android.tv.playback.PlaybackConfigIdentity;
 import com.fongmi.android.tv.web.HomeWebController;
 import com.fongmi.android.tv.web.ext.WebHomeExtensionRegistry;
 import com.github.catvod.utils.Prefers;
@@ -130,6 +131,9 @@ public class Backup {
         AppDatabase.get().getLiveDao().insertOrUpdate(getLive());
         AppDatabase.get().getKeepDao().insertOrUpdate(getKeep());
         AppDatabase.get().getConfigDao().insertOrUpdate(getConfig());
+        // 恢复是直接写 DAO 的整表替换，绕开了 Config 的写路径，必须自己失效播放身份缓存，
+        // 否则 KEY_CACHE/NAME_CACHE 会一直回放恢复前的 cid→interfaceKey 映射。
+        PlaybackConfigIdentity.invalidateAll();
         AppDatabase.get().getHistoryDao().insertOrUpdate(getHistory());
         restoreTmdbSeasonProgress(Collections.emptyMap());
         AppDatabase.get().getTrackDao().insertOrUpdate(getTrack());
@@ -149,6 +153,7 @@ public class Backup {
             AppDatabase.get().getSiteDao().insertOrUpdate(getSite());
             AppDatabase.get().getLiveDao().insertOrUpdate(getLive());
             cids.putAll(restoreConfig());
+            PlaybackConfigIdentity.invalidateAll();
         }
         if (options.isKeep()) {
             if (force) AppDatabase.get().getKeepDao().deleteAll();

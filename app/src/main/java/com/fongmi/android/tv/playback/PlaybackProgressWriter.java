@@ -214,13 +214,7 @@ public final class PlaybackProgressWriter {
         applySourceBindingKey(history, input);
         history.setVodRemarks(input.episodeName);
         history.setEpisodeUrl(resolveEpisodeUrl(local, input, sameEpisode));
-        if (input.hasTmdbEpisodeIdentity()) {
-            history.setTmdbId(input.tmdbId);
-            history.setMediaType(input.mediaType);
-            history.setTmdbEpisodePosition(input.seasonNumber, input.episodeNumber);
-        } else if (!sameEpisode) {
-            history.setTmdbEpisodePosition(null);
-        }
+        applyEpisodePosition(history, local, input, sameEpisode);
         history.setPosition(input.positionMs);
         history.setDuration(input.durationMs);
         applySpeed(history, input.speed, input.speedOverride);
@@ -240,6 +234,29 @@ public final class PlaybackProgressWriter {
         RefreshEvent.history();
         return local == null ? PlaybackProgressApplyResult.created(input, history.getKey()) : PlaybackProgressApplyResult.updated(input, history.getKey());
         }
+    }
+
+    /**
+     * 写入季集位置。入参没有 TMDB 季集身份时不把已确认的季号抹成 0（FollowingDao 按季号精确匹配，
+     * 归零会让追更的 watchedEpisode 永远停住）：集号可解析时沿用本地已确认季号，其次入参季号；
+     * 集号也解析不出时才保持原有清除语义。
+     */
+    static void applyEpisodePosition(History history, History local, PlaybackProgressInput input, boolean sameEpisode) {
+        if (input.hasTmdbEpisodeIdentity()) {
+            history.setTmdbId(input.tmdbId);
+            history.setMediaType(input.mediaType);
+            history.setTmdbEpisodePosition(input.seasonNumber, input.episodeNumber);
+            return;
+        }
+        if (sameEpisode) return;
+        if (input.episodeNumber <= 0) {
+            history.setTmdbEpisodePosition(null);
+            return;
+        }
+        boolean localSeasonConfirmed = local != null && (local.getTmdbSeasonNumber() > 0
+                || local.getTmdbSeasonNumber() == 0 && local.getTmdbEpisodeNumber() > 0);
+        int season = localSeasonConfirmed ? local.getTmdbSeasonNumber() : input.seasonNumber;
+        history.setTmdbEpisodePosition(season, input.episodeNumber);
     }
 
     static boolean hasMediaIdentityChanged(History before, History after) {

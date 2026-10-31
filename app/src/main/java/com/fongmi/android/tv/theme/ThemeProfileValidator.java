@@ -19,6 +19,8 @@ public final class ThemeProfileValidator {
     public static final float MAX_OVERLAY_OPACITY = 0.60f;
     public static final float MIN_PLAYER_SCRIM_OPACITY = 0.20f;
     public static final float MAX_PLAYER_SCRIM_OPACITY = 1f;
+    public static final float MIN_LIVE_LIST_SCRIM_OPACITY = 0.20f;
+    public static final float MAX_LIVE_LIST_SCRIM_OPACITY = 1f;
     /**
      * 条目遮罩强度的取值范围。上限是 1（而不是环境遮罩槽的 0.60）：遮罩色由用户自选，选浅色
      * 时往往需要压满才能盖住封面上的杂色，而强度只是缩放 alpha，压满等于「遮罩色说了算」；
@@ -81,6 +83,7 @@ public final class ThemeProfileValidator {
         slots.dialogOpacity = opacity(slots.dialogOpacity, MIN_DIALOG_OPACITY, MAX_DIALOG_OPACITY, errors, path + ".dialogOpacity");
         slots.overlayOpacity = opacity(slots.overlayOpacity, MIN_OVERLAY_OPACITY, MAX_OVERLAY_OPACITY, errors, path + ".overlayOpacity");
         slots.playerScrimOpacity = opacity(slots.playerScrimOpacity, MIN_PLAYER_SCRIM_OPACITY, MAX_PLAYER_SCRIM_OPACITY, errors, path + ".playerScrimOpacity");
+        slots.liveListScrimOpacity = opacity(slots.liveListScrimOpacity, MIN_LIVE_LIST_SCRIM_OPACITY, MAX_LIVE_LIST_SCRIM_OPACITY, errors, path + ".liveListScrimOpacity");
         slots.itemOverlayOpacity = opacity(slots.itemOverlayOpacity, MIN_ITEM_OVERLAY_OPACITY, MAX_ITEM_OVERLAY_OPACITY, errors, path + ".itemOverlayOpacity");
     }
 

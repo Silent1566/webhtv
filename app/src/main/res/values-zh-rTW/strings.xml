@@ -914,6 +914,7 @@
     <string name="theme_editor_slot_dialog_opacity">對話框透明度</string>
     <string name="theme_editor_slot_overlay_opacity">浮層透明度（僅 Web 主題生效）</string>
     <string name="theme_editor_slot_player_scrim_opacity">播放選單遮罩不透明度</string>
+    <string name="theme_editor_slot_live_list_scrim_opacity">直播列表遮罩不透明度</string>
     <string name="theme_editor_import">匯入配色</string>
     <string name="theme_editor_palette_style">配色風格 · 保留手動修改</string>
     <string name="theme_editor_palette_tonal">柔和</string>
@@ -2946,7 +2947,9 @@
     <string name="following_official_unknown">官方狀態未知</string>
     <string name="following_source">目前來源可播至第 %1$d 集</string>
     <string name="following_source_unknown">目前來源尚未檢查</string>
+    <string name="following_source_failed">目前來源檢查失敗</string>
     <string name="following_watched">看到第 %1$d 集</string>
+    <string name="following_watched_unknown">尚未記錄觀看進度</string>
     <string name="following_unwatched">還有 %1$d 集未看</string>
     <string name="following_unwatched_none">已看完目前更新</string>
     <string name="following_new_count">新 %1$d 集</string>

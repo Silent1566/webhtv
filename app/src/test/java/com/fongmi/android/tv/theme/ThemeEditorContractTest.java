@@ -234,4 +234,26 @@ public class ThemeEditorContractTest {
             }
         }
     }
+
+    @Test
+    public void theLiveListScrimSlotIsTheLastSlotAndUsesItsOwnRange() {
+        ThemeEditor.Slot[] slots = ThemeEditor.Slot.values();
+        ThemeEditor.Slot last = slots[slots.length - 1];
+        assertEquals("LIVE_LIST_SCRIM_OPACITY", last.name());
+        // 位置仍是守卫的一部分：isColor() 现在显式列出不透明度槽，但末尾这个槽必须继续读作强度而不是颜色。
+        assertFalse(last.isColor());
+
+        ThemeEditor editor = new ThemeEditor(ThemeProfile.defaultProfile());
+        assertTrue(editor.set(ThemeEditor.Slot.LIVE_LIST_SCRIM_OPACITY, false, null, 0.20f).success());
+        assertTrue(editor.set(ThemeEditor.Slot.LIVE_LIST_SCRIM_OPACITY, false, null, 1.00f).success());
+        assertTrue(editor.set(ThemeEditor.Slot.LIVE_LIST_SCRIM_OPACITY, true, null, 0.20f).success());
+        assertTrue(editor.set(ThemeEditor.Slot.LIVE_LIST_SCRIM_OPACITY, true, null, 1.00f).success());
+
+        assertFalse(editor.set(ThemeEditor.Slot.LIVE_LIST_SCRIM_OPACITY, false, null, 0.19f).success());
+        assertFalse(editor.set(ThemeEditor.Slot.LIVE_LIST_SCRIM_OPACITY, false, null, 1.01f).success());
+        assertFalse(editor.set(ThemeEditor.Slot.LIVE_LIST_SCRIM_OPACITY, false, null, Float.NaN).success());
+        assertFalse(editor.set(ThemeEditor.Slot.LIVE_LIST_SCRIM_OPACITY, true, null, 0.19f).success());
+        assertFalse(editor.set(ThemeEditor.Slot.LIVE_LIST_SCRIM_OPACITY, true, null, 1.01f).success());
+        assertFalse(editor.set(ThemeEditor.Slot.LIVE_LIST_SCRIM_OPACITY, true, null, Float.NaN).success());
+    }
 }

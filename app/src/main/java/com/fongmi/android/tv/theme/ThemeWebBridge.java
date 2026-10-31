@@ -26,7 +26,7 @@ public final class ThemeWebBridge {
                 + ",\"dialogOpacity\":" + decimal(safe.dialogOpacity())
                 + ",\"overlayOpacity\":" + decimal(alpha(safe.colorOverlayLight()))
                 // 条目遮罩是本轮新增的用户可编辑机制，页面只拿 overlayOpacity 画不出原生列表的
-                // 聚焦遮罩，所以补三个只读派生字段（共 19 个，仍远低于"固定上限"约定的 24）。
+                // 聚焦遮罩，所以补三个只读派生字段（一共 20 个字段，字段集合仍由本类固定，页面只读）。
                 + ",\"itemOverlay\":\"" + hex(safe.colorItemOverlay()) + "\""
                 + ",\"onItemOverlay\":\"" + hex(safe.colorOnItemOverlay()) + "\""
                 + ",\"itemOverlayOpacity\":" + decimal(alpha(safe.colorItemOverlay())) + "}";

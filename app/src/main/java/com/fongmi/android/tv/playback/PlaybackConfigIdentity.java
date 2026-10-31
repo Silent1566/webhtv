@@ -16,6 +16,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /** Stable playback identity and protocol-v1 address matching helpers. */
 public final class PlaybackConfigIdentity {
@@ -24,7 +25,48 @@ public final class PlaybackConfigIdentity {
     public static final String IDENTITY_VERSION = "2";
     public static final String ADDRESS_MATCH_VERSION = "1";
 
+    /**
+     * cid 到播放身份的进程内缓存。播放事件快照在主线程调用 {@link #keyForCid(int)} /
+     * {@link #nameForCid(int)}，原先每次都要同步走 Room（ConfigDao_Impl.findById），
+     * 会在主线程上阻塞。只缓存「数据库中确有该行」时解析出的值：config 为 null 时
+     * 回落的 key 依赖当前 VodConfig URL、回落的名字依赖当前 desc，都是易变的，不入缓存。
+     *
+     * <p>失效由 {@link com.fongmi.android.tv.bean.Config} 的每个写路径调用
+     * {@link #invalidateAll()} 完成；因此缓存值恒等于「最近一次写入后的数据库值」。
+     */
+    private static final ConcurrentHashMap<Integer, String> KEY_CACHE = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<Integer, String> NAME_CACHE = new ConcurrentHashMap<>();
+    /** 只在发布缓存项与失效时持有；命中路径不加锁。 */
+    private static final Object CACHE_LOCK = new Object();
+    private static long cacheEpoch;
+
     private PlaybackConfigIdentity() {
+    }
+
+    /** 丢弃全部 cid 身份缓存；Config 的每个写路径都必须调用。 */
+    public static void invalidateAll() {
+        synchronized (CACHE_LOCK) {
+            cacheEpoch++;
+            KEY_CACHE.clear();
+            NAME_CACHE.clear();
+        }
+    }
+
+    private static long cacheEpoch() {
+        synchronized (CACHE_LOCK) {
+            return cacheEpoch;
+        }
+    }
+
+    /**
+     * 只在「读取快照之后没有任何写入发生」时发布，避免读到旧行的一方把过期值
+     * 写回刚被清空的缓存（清空与发布互斥，且用 epoch 判定先后）。
+     */
+    private static void publish(ConcurrentHashMap<Integer, String> cache, int cid, String value, long epoch) {
+        if (TextUtils.isEmpty(value)) return;
+        synchronized (CACHE_LOCK) {
+            if (cacheEpoch == epoch) cache.put(cid, value);
+        }
     }
 
     public static String currentKey() {
@@ -36,19 +78,33 @@ public final class PlaybackConfigIdentity {
     }
 
     public static String keyForCid(int cid) {
+        String cached = KEY_CACHE.get(cid);
+        if (cached != null) return cached;
+        long epoch = cacheEpoch();
         Config config = Config.find(cid);
         if (config == null) return keyForUrl(VodConfig.getUrl());
         String key = normalizeKey(config.getInterfaceKey());
-        if (!TextUtils.isEmpty(key)) return key;
-        key = config.ensureInterfaceKey();
+        if (!TextUtils.isEmpty(key)) {
+            publish(KEY_CACHE, cid, key, epoch);
+            return key;
+        }
+        // 首次仍要走原有的写库副作用；save() 会 invalidateAll()，所以本次不发布，
+        // 下一次调用以库里的新 key 正常命中。
+        key = normalizeKey(config.ensureInterfaceKey());
         config.save();
-        return normalizeKey(key);
+        return key;
     }
 
     public static String nameForCid(int cid) {
+        String cached = NAME_CACHE.get(cid);
+        if (cached != null) return cached;
+        long epoch = cacheEpoch();
         Config config = Config.find(cid);
-        if (config == null || TextUtils.isEmpty(config.getDesc())) return currentName();
-        return config.getDesc();
+        if (config == null) return currentName();
+        String name = config.getDesc();
+        if (TextUtils.isEmpty(name)) return currentName();
+        publish(NAME_CACHE, cid, name, epoch);
+        return name;
     }
 
     public static int cidForKey(String configKey) {

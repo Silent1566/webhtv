@@ -226,7 +226,7 @@ public class FollowingActivity extends AppCompatActivity implements FollowingAda
             case FILTER_UNWATCHED -> item.unwatchedCount > 0;
             case FILTER_ENDED -> FollowingMetadataSnapshot.ENDED.equals(item.officialStatus)
                     || FollowingMetadataSnapshot.CANCELED.equals(item.officialStatus);
-            case FILTER_FAILED -> item.lastError != null && !item.lastError.isBlank();
+            case FILTER_FAILED -> FollowingUpdateCoordinator.sourceCheckFailed(item.lastError);
             default -> true;
         };
     }
@@ -372,9 +372,10 @@ public class FollowingActivity extends AppCompatActivity implements FollowingAda
         message.append('\n');
         message.append(source != null && source.playableEpisode > 0
                 ? getString(R.string.following_source, source.playableEpisode)
-                : getString(R.string.following_source_unknown));
+                : getString(FollowingUpdateCoordinator.sourceCheckFailed(item.lastError)
+                        ? R.string.following_source_failed : R.string.following_source_unknown));
         message.append('\n');
-        message.append(item.watchedEpisode > 0 ? getString(R.string.following_watched, item.watchedEpisode) : getString(R.string.following_source_unknown));
+        message.append(item.watchedEpisode > 0 ? getString(R.string.following_watched, item.watchedEpisode) : getString(R.string.following_watched_unknown));
         if (item.unwatchedCount > 0) message.append('\n').append(getString(R.string.following_unwatched, item.unwatchedCount));
         else if (released > 0) message.append('\n').append(getString(R.string.following_unwatched_none));
         if (item.lastError != null && !item.lastError.isBlank()) message.append('\n').append(item.lastError);

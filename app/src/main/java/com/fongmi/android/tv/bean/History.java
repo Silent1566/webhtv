@@ -921,8 +921,17 @@ public class History implements Diffable<History> {
 
     public boolean setTmdbEpisodePosition(Episode episode) {
         TmdbEpisode tmdbEpisode = episode == null ? null : episode.getTmdbEpisode();
-        int episodeNumber = tmdbEpisode == null ? 0 : tmdbEpisode.getNumber();
-        return setTmdbEpisodePosition(tmdbEpisode, episodeNumber);
+        if (tmdbEpisode == null) {
+            // 上游解析不出 TMDB 集号时不能把已确认的季号一并抹成 0：追更按季号精确匹配，
+            // 归零后 watchedEpisode 永远不前进。集号可解析时沿用已确认季号（无确认则为未知季）。
+            // 「已确认」= 正季号，或特别篇季 0 且本记录已有集号；裸 0/0 只是未写过，不能当成特别篇。
+            int sourceNumber = episode == null ? 0 : episode.getNumber();
+            if (sourceNumber <= 0) return setTmdbEpisodePosition(null, 0);
+            boolean seasonConfirmed = tmdbSeasonNumber > 0
+                    || tmdbSeasonNumber == 0 && tmdbEpisodeNumber > 0;
+            return setTmdbEpisodePosition(seasonConfirmed ? tmdbSeasonNumber : -1, sourceNumber);
+        }
+        return setTmdbEpisodePosition(tmdbEpisode, tmdbEpisode.getNumber());
     }
 
     public boolean setTmdbEpisodePositionWithUnknownSeason(int episodeNumber) {

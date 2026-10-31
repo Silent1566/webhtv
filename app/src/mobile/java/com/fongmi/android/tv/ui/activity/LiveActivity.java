@@ -75,6 +75,7 @@ import com.fongmi.android.tv.setting.PlayerButtonSetting;
 import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.CustomCspSetting;
 import com.fongmi.android.tv.setting.Setting;
+import com.fongmi.android.tv.theme.LiveListScrim;
 import com.fongmi.android.tv.theme.PlaybackMenuScrim;
 import com.fongmi.android.tv.ui.adapter.ChannelAdapter;
 import com.fongmi.android.tv.ui.helper.PipExitDecision;
@@ -2275,7 +2276,7 @@ public class LiveActivity extends PlaybackActivity implements CustomKeyDown.List
     private void applyLiveListStyle() {
         if (mBinding == null) return;
         if (liveMenuOverlay) {
-            mBinding.recycler.setBackgroundResource(R.drawable.shape_live_list);
+            mBinding.recycler.setBackground(LiveListScrim.create(this));
         } else {
             mBinding.recycler.setBackgroundResource(LiveSetting.isListStyleClassic() ? R.color.transparent : R.drawable.shape_live_embedded_list);
         }

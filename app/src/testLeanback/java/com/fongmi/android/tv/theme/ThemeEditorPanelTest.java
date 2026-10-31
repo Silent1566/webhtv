@@ -45,6 +45,9 @@ public class ThemeEditorPanelTest {
         SeekBar playerScrim = panel[0].findViewWithTag("theme-opacity:PLAYER_SCRIM_OPACITY");
         assertNotNull("the playback menu overlay slider must exist", playerScrim);
         assertEquals("auto strength is 80% of the 20..100 range", 75, playerScrim.getProgress());
+        SeekBar liveListScrim = panel[0].findViewWithTag("theme-opacity:LIVE_LIST_SCRIM_OPACITY");
+        assertNotNull("the live channel drawer scrim slider must exist", liveListScrim);
+        assertEquals("live list overlay defaults to the shipped 80% of the 20..100 range", 75, liveListScrim.getProgress());
         assertTrue(bar.requestFocus());
         int before = bar.getProgress();
         bar.dispatchKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT));

@@ -55,7 +55,8 @@ public final class ThemePreviewView extends LinearLayout {
         Group layers = group(R.string.theme_editor_group_layers);
         for (ThemeEditor.Slot slot : new ThemeEditor.Slot[]{ThemeEditor.Slot.SCRIM_OPACITY,
                 ThemeEditor.Slot.DIALOG_OPACITY, ThemeEditor.Slot.OVERLAY_OPACITY,
-                ThemeEditor.Slot.PLAYER_SCRIM_OPACITY}) {
+                ThemeEditor.Slot.PLAYER_SCRIM_OPACITY,
+                ThemeEditor.Slot.LIVE_LIST_SCRIM_OPACITY}) {
             OpacityRow row = new OpacityRow(slot);
             opacities.put(slot, row);
             layers.view.addView(row.view, ThemeEditorUi.fullWidth(context, 8));
@@ -250,6 +251,7 @@ public final class ThemePreviewView extends LinearLayout {
                 case SCRIM_OPACITY -> ThemeEditorUi.alpha(tokens.colorScrim());
                 case DIALOG_OPACITY -> tokens.dialogOpacity();
                 case PLAYER_SCRIM_OPACITY -> PlaybackMenuScrim.DEFAULT_OPACITY;
+                case LIVE_LIST_SCRIM_OPACITY -> LiveListScrim.DEFAULT_OPACITY;
                 // 遮罩强度就是遮罩色的 alpha，所以「自动」时的取值直接读解析后的 alpha，
                 // 不另立一个默认常量，避免两处默认值漂移。
                 case ITEM_OVERLAY_OPACITY -> ThemeEditorUi.alpha(tokens.colorItemOverlay());
@@ -312,6 +314,7 @@ public final class ThemePreviewView extends LinearLayout {
             case SCRIM_OPACITY -> ThemeProfileValidator.MIN_SCRIM_OPACITY;
             case DIALOG_OPACITY -> ThemeProfileValidator.MIN_DIALOG_OPACITY;
             case PLAYER_SCRIM_OPACITY -> ThemeProfileValidator.MIN_PLAYER_SCRIM_OPACITY;
+            case LIVE_LIST_SCRIM_OPACITY -> ThemeProfileValidator.MIN_LIVE_LIST_SCRIM_OPACITY;
             // 条目遮罩的有效区间是 5%..100%（见 ThemeProfileValidator），与 OVERLAY_OPACITY 的
             // 5%..60% 不同；不显式列出就会落到 default 分支，滑杆永远推不到 100%。
             case ITEM_OVERLAY_OPACITY -> ThemeProfileValidator.MIN_ITEM_OVERLAY_OPACITY;
@@ -324,6 +327,7 @@ public final class ThemePreviewView extends LinearLayout {
             case SCRIM_OPACITY -> ThemeProfileValidator.MAX_SCRIM_OPACITY;
             case DIALOG_OPACITY -> ThemeProfileValidator.MAX_DIALOG_OPACITY;
             case PLAYER_SCRIM_OPACITY -> ThemeProfileValidator.MAX_PLAYER_SCRIM_OPACITY;
+            case LIVE_LIST_SCRIM_OPACITY -> ThemeProfileValidator.MAX_LIVE_LIST_SCRIM_OPACITY;
             case ITEM_OVERLAY_OPACITY -> ThemeProfileValidator.MAX_ITEM_OVERLAY_OPACITY;
             default -> ThemeProfileValidator.MAX_OVERLAY_OPACITY;
         };
@@ -349,6 +353,7 @@ public final class ThemePreviewView extends LinearLayout {
             case DIALOG_OPACITY -> R.string.theme_editor_slot_dialog_opacity;
             case OVERLAY_OPACITY -> R.string.theme_editor_slot_overlay_opacity;
             case PLAYER_SCRIM_OPACITY -> R.string.theme_editor_slot_player_scrim_opacity;
+            case LIVE_LIST_SCRIM_OPACITY -> R.string.theme_editor_slot_live_list_scrim_opacity;
             case ITEM_OVERLAY -> R.string.theme_editor_slot_item_overlay;
             case ON_ITEM_OVERLAY -> R.string.theme_editor_slot_on_item_overlay;
             case ITEM_OVERLAY_OPACITY -> R.string.theme_editor_slot_item_overlay_opacity;

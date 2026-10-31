@@ -963,6 +963,7 @@
     <string name="theme_editor_slot_dialog_opacity">Dialog opacity</string>
     <string name="theme_editor_slot_overlay_opacity">Overlay opacity (web theme only)</string>
     <string name="theme_editor_slot_player_scrim_opacity">Playback menu overlay opacity</string>
+    <string name="theme_editor_slot_live_list_scrim_opacity">Live list overlay opacity</string>
     <string name="theme_editor_import">Import palette</string>
     <string name="theme_editor_palette_style">Palette style · keeps manual edits</string>
     <string name="theme_editor_palette_tonal">Tonal</string>
@@ -3013,7 +3014,9 @@
     <string name="following_official_unknown">Official status unknown</string>
     <string name="following_source">Current source: episode %1$d</string>
     <string name="following_source_unknown">Current source not checked</string>
+    <string name="following_source_failed">Current source check failed</string>
     <string name="following_watched">Watched to episode %1$d</string>
+    <string name="following_watched_unknown">No watch progress yet</string>
     <string name="following_unwatched">%1$d episodes remaining</string>
     <string name="following_unwatched_none">Up to date</string>
     <string name="following_new_count">New %1$d</string>
