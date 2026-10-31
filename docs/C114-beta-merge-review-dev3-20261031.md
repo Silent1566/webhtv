@@ -190,10 +190,11 @@ JSON 里出现 `"itemOverlay":"#80203040"`、强度 `0.50`），并在 `:105` �
 
 | 项 | 值 |
 | --- | --- |
-| 合并提交 | 待回填 |
-| 恢复标签 | 待回填 |
-| 推送 | 待回填 |
-| PR | 待回填 |
-| 拉取远端 | 待回填 |
+| 合并提交 | `a2d4a04faa62d9ec4f5997f7527825692e87c4e4`（"merge: 合并 origin/beta 134bb29dc4 并完成 dev3 未推送代码评审, 主题槽位并集解冲突 + 2 项必修修复"），父提交 `dccfa6b79b…` + `134bb29dc4…`，相对第一父 37 个路径 / +1905 −88 |
+| 恢复标签 | `recovery/C114-beta-merge-review-dev3-20261031/20261031043140-a2d4a04faa62`（本地 + 已推送） |
+| 推送 | `git push origin dev3` → `5fc26a8990..a2d4a04faa  dev3 -> dev3` |
+| PR | **#509** <https://github.com/Silent1566/webhtv/pull/509>（base `beta` ← head `dev3`，`changedFiles=37`、`additions=1905`、`deletions=88`，中文描述含合并内容/冲突判定/必修项/变异验证；**只创建，不合并**，状态 OPEN） |
+| 拉取远端 | `git fetch --all --prune --tags`；收尾时 HEAD = `a2d4a04faa…`，`git rev-list --left-right --count origin/beta...HEAD` = **0 / 4**，工作区只剩 3 个任务前既有的未跟踪路径 |
+| 本轮修正产物 | `app/src/main/java/com/fongmi/android/tv/theme/ThemeEditor.java`、`app/src/main/java/com/fongmi/android/tv/theme/ThemeWebBridge.java`、`app/src/test/java/com/fongmi/android/tv/theme/ThemeEditorContractTest.java`、`app/src/test/java/com/fongmi/android/tv/theme/ThemeWebBridgeTokenTest.java`、`docs/C114-beta-merge-review-dev3-20261031.md` |
 
 `gh` 未设默认仓库（`origin` 是 `Silent1566/webhtv`、`upstream` 是 `fish2018/webhtv`），所有 `gh` 命令需显式带 `-R Silent1566/webhtv`。
