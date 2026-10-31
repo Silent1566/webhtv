@@ -81,6 +81,17 @@ public class Device implements Diffable<Device>, Comparable<Device> {
         }
     }
 
+    /**
+     * 把首次设备身份探测的成本提前付掉：ensureIdentity() 里的 Util.getSerial() 会 spawn
+     * 一个 shell 子进程取 ro.serialno，另外还有两次网卡枚举和一次 Settings.Secure 读取，
+     * 都是阻塞调用。它过去第一次发生在播放页进场窗口里（设备实测在主线程 tid 上抓到该
+     * shell 命令），这里由 App 启动时的后台线程先走一遍，用户点进播放页时这份成本已经付完。
+     * 只是提前触发同一段双检锁缓存，不改变任何取值逻辑与返回值语义。
+     */
+    public static void warmIdentity() {
+        ensureIdentity();
+    }
+
     /** 稳定设备身份里的 uuid，语义与 get().getUuid() 一致（空值归一为空串），但不做网络探测。 */
     public static String identityUuid() {
         ensureIdentity();
