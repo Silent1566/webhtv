@@ -420,7 +420,6 @@ private boolean runtimeSourceOnly;
     private static final long TV_TOUCH_SEEK_SCALE = 50L;
 
     private CustomKeyDownVod mKeyDown;
-    private boolean mSpeedBoostEngaged;
     private AudioManager mTvAudioManager;
     private int mTvTouchAxis;
     private boolean mTvTouchMulti;
@@ -8803,11 +8802,10 @@ private boolean runtimeSourceOnly;
     public boolean dispatchKeyEvent(KeyEvent event) {
         if (dispatchDiscMenuKey(event)) return true;
         if (KeyUtil.isActionUp(event) && KeyUtil.isBackKey(event) && mBinding.lutQuick.hideIfVisible()) return true;
-        if (mKeyDown.isChangingSpeed() && KeyUtil.isActionUp(event)) {
-            boolean boostEngaged = mSpeedBoostEngaged;
+        if (mKeyDown.isChangingSpeed() && KeyUtil.isActionUp(event) && KeyUtil.isUpKey(event)) {
             mKeyDown.releaseSpeed();
             if (isVisible(mBinding.lutQuick)) return dispatchLutQuickKey(event);
-            if (boostEngaged && KeyUtil.isUpKey(event)) return true;
+            return true;
         }
         if (isVisible(mBinding.lutQuick)) return dispatchLutQuickKey(event);
         if (isFullscreen() && KeyUtil.isMenuKey(event)) {
@@ -8980,7 +8978,6 @@ private boolean runtimeSourceOnly;
     @Override
     public void onSpeedUp() {
         if (!player().isPlaying()) return;
-        mSpeedBoostEngaged = true;
         mBinding.widget.speed.setVisibility(View.VISIBLE);
         mBinding.widget.speed.startAnimation(ResUtil.getAnim(R.anim.forward));
         mBinding.control.action.speed.setText(player().setSpeed(PlayerSetting.getSpeed()));
@@ -8988,7 +8985,6 @@ private boolean runtimeSourceOnly;
 
     @Override
     public void onSpeedEnd() {
-        mSpeedBoostEngaged = false;
         mBinding.widget.speed.clearAnimation();
         mBinding.widget.speed.setVisibility(View.GONE);
         mBinding.control.action.speed.setText(player().setSpeed(getPlaybackSpeed()));
