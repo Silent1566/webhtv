@@ -83,7 +83,7 @@ public class LiveListScrimRenderTest {
     }
 
     @Test
-    public void unsetSlotRendersTheSamePixelsAsTheStaticFallback() {
+    public void theUnsetSlotRendersOneFlatBlockWithoutARightEdgeFade() {
         try (var host = Robolectric.buildActivity(Host.class).setup()) {
             ThemeController.applyFromPreferences(host.get());
             Bitmap bitmap = rasterize(LiveListScrim.create(host.get()));

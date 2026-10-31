@@ -10,7 +10,7 @@
   4. 只缩放 alpha，色相恒为纯黑 —— `shape_live_focused.xml` 的白色焦点环对比度前提不变（整块 80% 黑只会比原来的右侧 5% 更暗，对比度更好）。
   5. leanback 与 mobile overlay（横屏）两个宿主继续走 `LiveListScrim.create(this)`；mobile 的 classic / embedded 形态不变。
 - 分支 dev5，base HEAD `5daef84b85be953b5374ff5fcf17dbef60f95c22`。
-- guard scope：`LiveListScrim.java`、`LiveListScrimTest.java`、`LiveListScrimWiringTest.java`、两个 `shape_live_list.xml`、`shape_live_focused.xml`、本文件。
+- guard scope：`LiveListScrim.java`、`LiveListScrimTest.java`、`LiveListScrimWiringTest.java`、`LiveListScrimRenderTest.java`、两个 `shape_live_list.xml`、`shape_live_focused.xml`、本文件。
 
 ## 问题定位
 
@@ -38,10 +38,11 @@ BASE_ALPHAS = {0.80, 0.40, 0.05}
 | --- | --- |
 | `app/src/main/java/com/fongmi/android/tv/theme/LiveListScrim.java` | 删 `BASE_ALPHAS`；`create()` 改 `new ColorDrawable(withAlpha(opacity))`；删 `gradientColors()`；`withAlpha` / `resolveOpacity` 不变 |
 | `app/src/test/java/com/fongmi/android/tv/theme/LiveListScrimTest.java` | 三处数值断言改成单值断言；源码断言从 `GradientDrawable.Orientation.LEFT_RIGHT` 改为 `new ColorDrawable(` + 反向断言 `GradientDrawable`/`BASE_ALPHAS` 不存在 |
-| `app/src/test/java/com/fongmi/android/tv/theme/LiveListScrimWiringTest.java` | 新增 `theStaticDrawableFallbackIsOneFlatBlackInBothHosts`（两份 XML 必须是 `<solid>`、不得含 `<gradient>`）；类注释同步 |
+| `app/src/test/java/com/fongmi/android/tv/theme/LiveListScrimWiringTest.java` | 新增 `theStaticDrawableFallbackIsOneFlatBlackInBothHosts`（两份 XML 必须是 `<solid>`、必须含 `@color/black_80`、不得含 `<gradient>`）；类注释同步 |
 | `app/src/leanback/res/drawable/shape_live_list.xml` | `<gradient angle=0 ...>` → `<solid android:color="@color/black_80" />` |
 | `app/src/mobile/res/drawable/shape_live_list.xml` | 同上 |
 | `app/src/leanback/res/drawable/shape_live_focused.xml` | 只改注释（宿主描述从"固定深色渐变"改为"整块 black_80 纯黑"） |
+| `app/src/testLeanback/java/com/fongmi/android/tv/theme/LiveListScrimRenderTest.java` | 新增：Robolectric @GraphicsMode(NATIVE) 把 drawable 栅格化到 400x8 Bitmap，逐列断言整块 alpha（0xCC / 0xFF / 0x33），4 个用例 |
 
 ## 验证
 

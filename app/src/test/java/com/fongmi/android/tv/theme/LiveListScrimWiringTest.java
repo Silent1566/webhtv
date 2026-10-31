@@ -47,6 +47,7 @@ public class LiveListScrimWiringTest {
                 "src/mobile/res/drawable/shape_live_list.xml"}) {
             String drawable = read(path);
             assertTrue(path + " must stay a flat solid", drawable.contains("<solid"));
+            assertTrue(path + " must stay black_80", drawable.contains("@color/black_80"));
             assertFalse(path + " must not fade out", drawable.contains("<gradient"));
         }
     }
