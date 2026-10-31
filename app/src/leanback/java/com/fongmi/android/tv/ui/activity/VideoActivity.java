@@ -8823,9 +8823,10 @@ private boolean runtimeSourceOnly;
     public boolean dispatchKeyEvent(KeyEvent event) {
         if (dispatchDiscMenuKey(event)) return true;
         if (KeyUtil.isActionUp(event) && KeyUtil.isBackKey(event) && mBinding.lutQuick.hideIfVisible()) return true;
-        if (mKeyDown.isChangingSpeed() && KeyUtil.isActionUp(event)) {
+        if (mKeyDown.isChangingSpeed() && KeyUtil.isActionUp(event) && KeyUtil.isUpKey(event)) {
             mKeyDown.releaseSpeed();
             if (isVisible(mBinding.lutQuick)) return dispatchLutQuickKey(event);
+            return true;
         }
         if (isVisible(mBinding.lutQuick)) return dispatchLutQuickKey(event);
         if (isFullscreen() && KeyUtil.isMenuKey(event)) {
