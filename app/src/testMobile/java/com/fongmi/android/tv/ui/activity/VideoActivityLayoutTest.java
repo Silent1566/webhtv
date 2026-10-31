@@ -855,9 +855,16 @@ public class VideoActivityLayoutTest {
 
         assertTrue("CustomKeyDownVod must expose the guarded speed release state", keyDown.contains("public boolean isChangingSpeed()") && keyDown.contains("public void releaseSpeed()"));
         assertTrue("releaseSpeed must clear the flag and end the boost", releaseBody.contains("changeSpeed = false;") && releaseBody.contains("listener.onSpeedEnd();"));
-        assertTrue("dispatchKeyEvent must release the boost when a key is released outside the state machine", methodBody(leanback, "public boolean dispatchKeyEvent(KeyEvent event)", "private boolean dispatchLutQuickKey(KeyEvent event)").contains("mKeyDown.releaseSpeed()"));
+        String dispatchBody = methodBody(leanback, "public boolean dispatchKeyEvent(KeyEvent event)", "private boolean dispatchLutQuickKey(KeyEvent event)");
+        String speedUpBody = methodBody(leanback, "public void onSpeedUp()", "public void onSpeedEnd()");
+        String speedEndBody = methodBody(leanback, "public void onSpeedEnd()", "public void onKeyUp()");
+
+        assertTrue("dispatchKeyEvent must release the boost when a key is released outside the state machine", dispatchBody.contains("mKeyDown.releaseSpeed()"));
         assertTrue("onWindowFocusChanged must release the boost when window focus is lost", methodBody(leanback, "public void onWindowFocusChanged(boolean hasFocus)", "private boolean isInitAuto()").contains("mKeyDown.releaseSpeed()"));
         assertTrue("onStop must release the boost", methodBody(leanback, "protected void onStop()", "protected void onBackInvoked()").contains("mKeyDown.releaseSpeed()"));
+        assertTrue("a released speed boost must not fall through to the menu-opening key-up path", dispatchBody.contains("boolean boostEngaged = mSpeedBoostEngaged;") && dispatchBody.contains("if (boostEngaged && KeyUtil.isUpKey(event)) return true;"));
+        assertTrue("the boost flag must track a real speed boost instead of a pending key release", speedUpBody.contains("mSpeedBoostEngaged = true;") && speedEndBody.contains("mSpeedBoostEngaged = false;"));
+        assertTrue("a plain up key press must still open the menu", methodBody(leanback, "public void onKeyUp()", "public void onKeyDown()").contains("showControl(getFocus2());"));
     }
 
     @Test
