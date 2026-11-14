@@ -70,7 +70,7 @@ import com.google.gson.JsonObject;
 import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
 
-public class HomeActivity extends BaseActivity implements NavigationBarView.OnItemSelectedListener, WebHomeChromeController.Host, VodFragment.ConfigRetry {
+public class HomeActivity extends BaseActivity implements NavigationBarView.OnItemSelectedListener, WebHomeChromeController.Host {
 
     public static final String EXTRA_NAV_POSITION = "nav_position";
     private static final String STATE_RETURN_VOD_FROM_ENHANCE = "returnVodFromEnhance";
@@ -206,19 +206,6 @@ public class HomeActivity extends BaseActivity implements NavigationBarView.OnIt
         WallConfig.get().init();
     }
 
-    /**
-     * 首页错误态的重试动作。
-     *
-     * <p>失败的那一步是这里的**内容源配置加载**（{@link #initConfig()}），所以重试必须回到它——
-     * 由 VodFragment 通过 {@link VodFragment.ConfigRetry} 回调过来。重试期间先把状态浮层切回
-     * 加载态，避免错误态一直停在屏幕上。
-     */
-    @Override
-    public void retryConfig() {
-        StateEvent.progress();
-        initConfig();
-    }
-
     private Callback getCallback() {
         return new Callback() {
             @Override
@@ -246,8 +233,8 @@ public class HomeActivity extends BaseActivity implements NavigationBarView.OnIt
             public void error(String msg) {
                 resetVodChrome();
                 checkAction(getIntent());
-                // 失败要发 ERROR（带原因），不能发 EMPTY：消费方对 EMPTY 的处理只是
-                // "隐藏转圈"，于是加载失败后首页是一片空白，用户只看到一个会消失的吐司。
+                // 失败发 ERROR（带原因），不发 EMPTY（EMPTY 现在渲染全屏空态）：消费方收到
+                // ERROR 只收起浮层与转圈、回到原生首页，顶栏与切换内容源照常可用，失败由吐司提示。
                 StateEvent.error(msg);
                 Notify.show(msg);
             }
