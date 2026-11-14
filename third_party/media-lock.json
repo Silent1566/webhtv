@@ -206,7 +206,8 @@
       "third_party/patches/nextlib-ffmpeg-soft-load-shedding.patch",
       "third_party/patches/nextlib-av3a.patch",
       "third_party/patches/nextlib-ape-support.patch",
-      "third_party/patches/nextlib-avs3.patch"
+      "third_party/patches/nextlib-avs3.patch",
+      "third_party/patches/nextlib-av3a-diag.patch"
     ],
     "ffmpeg_repo": "https://github.com/FongMi/FFmpeg.git",
     "ffmpeg_commit": "177f090e0503b7e013922ca903bde14b1c375f18",

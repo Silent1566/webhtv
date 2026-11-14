@@ -154,6 +154,7 @@ public final class ExoDiagnosticCollector implements AnalyticsListener {
                         videoCounters == null ? Double.NaN : videoCounters.renderedOutputBufferCount, gate,
                         "renderer submitted buffers; known cadence >= 1 fps; three 5-second samples");
                 SystemAudioDiagnosticCollector.snapshot(log, owner);
+                NativeAudioLogTap.request(log);
                 // media3 only delivers the per-frame lateness histogram on renderer stop, so a
                 // report exported mid-playback would carry none. Ride the existing tick (the
                 // listener throttles to one line per interval); no extra timer or thread.

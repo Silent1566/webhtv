@@ -282,6 +282,7 @@ apply_nextlib_patches() {
     "$THIRD_PARTY_DIR/patches/nextlib-av3a.patch"
     "$THIRD_PARTY_DIR/patches/nextlib-ape-support.patch"
     "$THIRD_PARTY_DIR/patches/nextlib-avs3.patch"
+    "$THIRD_PARTY_DIR/patches/nextlib-av3a-diag.patch"
   )
   for patch_file in "${patches[@]}"; do
     if [[ ! -f "$patch_file" ]]; then
