@@ -20,9 +20,9 @@ import static org.junit.Assert.assertTrue;
  * <p>本契约钉住三件事：
  * <ol>
  *   <li><b>失败与"没有内容"必须分开表达</b>：失败发 {@code ERROR}（带原因），
- *       {@code EMPTY} 保持原义；</li>
- *   <li><b>错误态要有三要素</b>：错误色标题 + 原因 + 重试动作（§9.9）；</li>
- *   <li><b>不新写加载路径</b>：重试必须复用首次加载那条 {@code homeContent()}。</li>
+ *       {@code EMPTY} 保持原义（全屏空态）；</li>
+ *   <li><b>失败不接管整屏</b>：收起浮层与转圈、回到原生首页，顶栏与切换内容源照常可用；</li>
+ *   <li><b>其余状态不变</b>：EMPTY / NO_CONFIG 的既有处理保持原样。</li>
  * </ol>
  */
 public class MobileHomeStateContractTest {
@@ -49,54 +49,42 @@ public class MobileHomeStateContractTest {
     }
 
     /**
-     * 失败必须发 ERROR 而不是 EMPTY：否则消费方只会隐藏转圈，首页留空白。
+     * 失败仍要带上原因，但**不得改发会接管整屏的状态**。
+     *
+     * <p>EMPTY 现在渲染全屏空态、NO_CONFIG 表示"没配接口"，两者都会盖掉首页；失败只能继续发
+     * ERROR，由消费方收起浮层与转圈、回到原生首页。原因本身仍要传下去（日志与吐司都依赖它）。
      */
     @Test
-    public void homeConfigFailurePostsErrorNotEmpty() throws Exception {
+    public void homeConfigFailureCarriesItsReasonWithoutTakingOverTheHome() throws Exception {
         String body = methodBody(read(HOME), "public void error(String msg)");
         assertTrue("配置加载失败必须发 StateEvent.error(msg)", body.contains("StateEvent.error(msg)"));
-        assertFalse("配置加载失败不得再发 StateEvent.empty()", body.contains("StateEvent.empty()"));
-        // 崩溃重启那次是"本次跳过加载"，不是失败，应保持 EMPTY。
-        String init = methodBody(read(HOME), "private void initConfig()");
-        assertTrue("崩溃重启跳过加载仍应是 EMPTY（它不是失败）", init.contains("StateEvent.empty()"));
-    }
-
-    @Test
-    public void homeFragmentRendersAnErrorStateWithReasonAndRetry() throws Exception {
-        String source = read(FRAGMENT);
-        String handler = methodBody(source, "public void onStateEvent(StateEvent event)");
-        assertTrue("必须处理 ERROR 分支", handler.contains("case ERROR:"));
-        assertTrue("ERROR 必须显示错误态而不是只隐藏转圈", handler.contains("showError(event.message())"));
-
-        String showError = methodBody(source, "private void showError(String message)");
-        assertTrue("错误态标题必须是 error_config_load", showError.contains("R.string.error_config_load"));
-        assertTrue("错误态必须有重试按钮文案", showError.contains("R.string.error_retry"));
-        assertTrue("错误态必须用 ProgressLayout 的 showError", showError.contains("mBinding.state.showError("));
-        assertTrue("错误态的重试必须回到失败的那一步", showError.contains("retryConfig()"));
+        assertFalse("配置加载失败不得改发 EMPTY（EMPTY 现在渲染全屏空态）", body.contains("StateEvent.empty()"));
+        assertFalse("配置加载失败不得改发 NO_CONFIG（那是'没配接口'）", body.contains("StateEvent.noConfig()"));
     }
 
     /**
-     * 重试必须回到**失败的那一步**。
+     * 首页配置加载失败**不得接管整屏**：收起浮层与转圈、回到原生首页。
      *
-     * <p>实机验证时发现：首页的错误来自承载它的 Activity 的内容源配置加载，最初把重试接成
-     * {@code homeContent()}（重新加载首页内容）时，点了重试页面毫无变化——配置根本没被重新拉取。
-     * 因此重试必须通过回调交回 Activity。
+     * <p>全屏「内容源加载失败 / 重试」会把顶栏（含切换内容源）一起盖掉，用户既切不了源也进不去
+     * 设置，而吐司几秒后消失，页面上没有任何恢复入口。失败因此退回原生内容态。
      */
     @Test
-    public void retryGoesBackToTheStepThatActuallyFailed() throws Exception {
-        String fragment = read(FRAGMENT);
-        assertTrue("必须声明 ConfigRetry 回调接口", fragment.contains("interface ConfigRetry"));
-        String retry = methodBody(fragment, "private void retryConfig()");
-        assertTrue("重试必须优先交给实现了 ConfigRetry 的 Activity",
-                retry.contains("activity instanceof ConfigRetry"));
-        assertTrue("重试必须调用 Activity 的 retryConfig", retry.contains("retryConfig()"));
-
-        String home = read(HOME);
-        assertTrue("HomeActivity 必须实现该回调",
-                home.contains("VodFragment.ConfigRetry"));
-        String impl = methodBody(home, "public void retryConfig()");
-        assertTrue("HomeActivity 的重试必须重新加载内容源配置", impl.contains("initConfig()"));
-        assertTrue("重试期间应切回加载态，避免错误态一直停在屏幕上", impl.contains("StateEvent.progress()"));
+    public void homeFragmentRestoresTheNormalHomeWhenConfigLoadFails() throws Exception {
+        String source = read(FRAGMENT);
+        String handler = methodBody(source, "public void onStateEvent(StateEvent event)");
+        assertTrue("必须处理 ERROR 分支", handler.contains("case ERROR:"));
+        int start = handler.indexOf("case ERROR:");
+        int end = handler.indexOf("case NO_CONFIG:");
+        assertTrue("ERROR 之后必须有 NO_CONFIG 分支以便按 case 切分", end > start);
+        String errorCase = handler.substring(start, end);
+        assertTrue("失败必须收起转圈", errorCase.contains("hideProgress()"));
+        assertTrue("失败必须收起状态浮层", errorCase.contains("hideState()"));
+        assertTrue("失败必须回到原生首页（顶栏与切换内容源可用）", errorCase.contains("showNativeContent()"));
+        assertFalse("失败不得用全屏错误态接管首页", errorCase.contains("showError("));
+        // 全屏错误态的私有实现、重试接口与 Activity 侧重试一并移除。
+        assertFalse("不得再保留全屏错误态实现", source.contains("private void showError(String message)"));
+        assertFalse("不得再保留重试回调接口", source.contains("interface ConfigRetry"));
+        assertFalse("Activity 不得再实现重试回调", read(HOME).contains("VodFragment.ConfigRetry"));
     }
 
     @Test
