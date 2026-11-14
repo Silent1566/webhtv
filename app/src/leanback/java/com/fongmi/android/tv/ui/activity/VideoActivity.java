@@ -4801,13 +4801,13 @@ private boolean runtimeSourceOnly;
     }
 
     /**
-     * 分段行中真正持有焦点的子项位置（按子视图下标），焦点不在分段行时返回 -1。
+     * 分段行中真正持有焦点的子项适配器位置，焦点不在分段行时返回 -1。
      */
     private int focusedArrayPosition() {
         View focus = getCurrentFocus();
         while (focus != null) {
             ViewParent parent = focus.getParent();
-            if (parent == mBinding.array) return mBinding.array.indexOfChild(focus);
+            if (parent == mBinding.array) return mBinding.array.getChildAdapterPosition(focus);
             focus = parent instanceof View ? (View) parent : null;
         }
         return -1;
@@ -4839,12 +4839,13 @@ private boolean runtimeSourceOnly;
     private void applyArrayFocus(int position) {
         mArrayAdapter.setSelectedPosition(position);
         mBinding.array.setSelectedPosition(position);
-        View child = mBinding.array.getChildAt(position);
-        if (child != null && child.requestFocus()) return;
+        RecyclerView.ViewHolder holder = mBinding.array.findViewHolderForAdapterPosition(position);
+        if (holder != null && holder.itemView.requestFocus()) return;
         mBinding.array.post(() -> {
             if (isFinishing() || isDestroyed()) return;
-            View next = mBinding.array.getChildAt(position);
-            if (next != null) next.requestFocus();
+            if (!isFocusInside(mBinding.array) || mBinding.array.getSelectedPosition() != position) return;
+            RecyclerView.ViewHolder next = mBinding.array.findViewHolderForAdapterPosition(position);
+            if (next != null) next.itemView.requestFocus();
         });
     }
 
