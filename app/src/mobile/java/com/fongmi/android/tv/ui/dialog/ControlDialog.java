@@ -29,6 +29,7 @@ import com.fongmi.android.tv.databinding.ActivityVideoBinding;
 import com.fongmi.android.tv.databinding.DialogControlBinding;
 import com.fongmi.android.tv.player.PlayerManager;
 import com.fongmi.android.tv.player.lut.LutPreset;
+import com.fongmi.android.tv.setting.PlayerButtonSetting;
 import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.activity.TmdbDetailActivity;
@@ -295,6 +296,7 @@ public class ControlDialog extends BaseBottomSheetDialog implements ParseAdapter
         binding.timer.setSelected(Timer.get().isRunning());
         setTrackVisible();
         setTitleVisible();
+        setActionRowVisible();
         setScaleText();
         setEpisodeColumn();
         setPlayer();
@@ -495,6 +497,7 @@ if (binding == null || controls == null || player == null) return;
         // setTitleVisible 会带上 setTrackVisible；章节可见性也参与轨道行的计算，
         // 只抄轨道不抄章节的话，回退后弹窗会拿旧章节状态算出错的轨道行。
         setTitleVisible();
+        setActionRowVisible();
     }
 
     public void setLut() {
@@ -517,8 +520,10 @@ if (binding == null || controls == null || player == null) return;
     }
 
     public void setParseVisible(boolean visible) {
-        binding.parse.setVisibility(visible ? View.VISIBLE : View.GONE);
-        binding.parseText.setVisibility(visible ? View.VISIBLE : View.GONE);
+        // visible 是宿主的「本次可解析」功能态，隐藏开关必须再与一次：否则用户隐藏的解析行会被点亮。
+        boolean shown = visible && PlayerButtonSetting.isVisible(PlayerButtonSetting.PARSE);
+        binding.parse.setVisibility(shown ? View.VISIBLE : View.GONE);
+        binding.parseText.setVisibility(shown ? View.VISIBLE : View.GONE);
     }
 
     public void setTrackVisible() {
@@ -533,7 +538,29 @@ if (binding == null || controls == null || player == null) return;
     private void setImmersiveAudioVisible() {
         FragmentActivity activity = getActivity();
         boolean visible = activity instanceof Listener listener && listener.isControlAudioContent();
+        // 移动端控件栏没有沉浸音频按钮，用户隐藏后弹层里同样不能再出现。
+        visible = visible && PlayerButtonSetting.isVisible(PlayerButtonSetting.IMMERSIVE_AUDIO);
         binding.immersiveAudio.setVisibility(visible ? View.VISIBLE : View.GONE);
+    }
+
+    /**
+     * 弹层里的目录内按钮整行跟随隐藏开关：宿主控件栏已收敛到「功能可用 && 未被隐藏」的行直接镜像宿主，
+     * 移动端控件栏没有对应宿主 view 的行（计时、网络诊断、解码能力）用目录判据兜底。
+     */
+    private void setActionRowVisible() {
+        if (binding == null) return;
+        if (controls != null) {
+            binding.player.setVisibility(controls.player.getVisibility());
+            binding.opening.setVisibility(controls.opening.getVisibility());
+            binding.ending.setVisibility(controls.ending.getVisibility());
+            binding.lut.setVisibility(controls.lut.getVisibility());
+            binding.reset.setVisibility(controls.reset.getVisibility());
+            binding.repeat.setVisibility(controls.repeat.getVisibility());
+            binding.scale.setVisibility(controls.scale.getVisibility());
+        }
+        binding.timer.setVisibility(PlayerButtonSetting.isVisible(PlayerButtonSetting.TIMER) ? View.VISIBLE : View.GONE);
+        binding.panDiagnostic.setVisibility(PlayerButtonSetting.isVisible(PlayerButtonSetting.PAN_DIAGNOSTIC) ? View.VISIBLE : View.GONE);
+        binding.codecCapability.setVisibility(PlayerButtonSetting.isVisible(PlayerButtonSetting.CODEC_CAPABILITY) ? View.VISIBLE : View.GONE);
     }
 
     @Override

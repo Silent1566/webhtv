@@ -3618,9 +3618,9 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         updateEpisodeSeasonContext();
         int size = items.size();
         boolean useTmdbCard = shouldUseTmdbEpisodeCards(items);
-        mBinding.control.action.episodes.setVisibility(size < 2 ? View.GONE : View.VISIBLE);
-        mBinding.control.action.next.setVisibility(size < 2 ? View.GONE : View.VISIBLE);
-        mBinding.control.action.prev.setVisibility(size < 2 ? View.GONE : View.VISIBLE);
+        PlayerButtonSetting.apply(mBinding.control.action.episodes, PlayerButtonSetting.EPISODES, size >= 2);
+        PlayerButtonSetting.apply(mBinding.control.action.next, PlayerButtonSetting.NEXT, size >= 2);
+        PlayerButtonSetting.apply(mBinding.control.action.prev, PlayerButtonSetting.PREV, size >= 2);
         applyActionButtonVisibility();
         // 中间悬浮的上集/下集按钮只根据集数显示，不受底部动作栏设置影响。
         mBinding.control.next.setVisibility(size < 2 ? View.GONE : View.VISIBLE);
@@ -3877,7 +3877,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         mQualityVisible = visible;
         mBinding.qualityText.setVisibility(visible ? View.VISIBLE : View.GONE);
         mBinding.quality.setVisibility(visible ? View.VISIBLE : View.GONE);
-        mBinding.control.action.actionQuality.setVisibility(visible ? View.VISIBLE : View.GONE);
+        PlayerButtonSetting.apply(mBinding.control.action.actionQuality, PlayerButtonSetting.QUALITY, visible);
         applyActionButtonVisibility();
         updateActionQuality(mViewModel.getPlayer().getValue());
         // 短剧 dock 的画质图标与 action 栏按钮同源。未 dock 时这个图标还在顶部栏里，
@@ -6783,9 +6783,9 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         boolean showViewMode = size > 1;
         if (showViewMode) mEpisodeGridMode = Setting.getTmdbEpisodeGridMode();
         if (!showViewMode) mEpisodeGridMode = true;
-        mBinding.control.action.episodes.setVisibility(size < 2 ? View.GONE : View.VISIBLE);
-        mBinding.control.action.next.setVisibility(size < 2 ? View.GONE : View.VISIBLE);
-        mBinding.control.action.prev.setVisibility(size < 2 ? View.GONE : View.VISIBLE);
+        PlayerButtonSetting.apply(mBinding.control.action.episodes, PlayerButtonSetting.EPISODES, size >= 2);
+        PlayerButtonSetting.apply(mBinding.control.action.next, PlayerButtonSetting.NEXT, size >= 2);
+        PlayerButtonSetting.apply(mBinding.control.action.prev, PlayerButtonSetting.PREV, size >= 2);
         applyActionButtonVisibility();
         mBinding.control.next.setVisibility(size < 2 ? View.GONE : View.VISIBLE);
         mBinding.control.prev.setVisibility(size < 2 ? View.GONE : View.VISIBLE);
@@ -8658,9 +8658,9 @@ private void checkOrientation() {
     private void setTrackVisible() {
         mBinding.control.action.discMenu.setVisibility(hasDiscMenu() ? View.VISIBLE : View.GONE);
         updateDiscMenuTools();
-        mBinding.control.action.text.setVisibility(player().haveTrack(C.TRACK_TYPE_TEXT) || player().isVod() ? View.VISIBLE : View.GONE);
-        mBinding.control.action.audio.setVisibility(player().haveTrack(C.TRACK_TYPE_AUDIO) ? View.VISIBLE : View.GONE);
-        mBinding.control.action.video.setVisibility(player().haveTrack(C.TRACK_TYPE_VIDEO) ? View.VISIBLE : View.GONE);
+        PlayerButtonSetting.apply(mBinding.control.action.text, PlayerButtonSetting.TEXT, player().haveTrack(C.TRACK_TYPE_TEXT) || player().isVod());
+        PlayerButtonSetting.apply(mBinding.control.action.audio, PlayerButtonSetting.AUDIO, player().haveTrack(C.TRACK_TYPE_AUDIO));
+        PlayerButtonSetting.apply(mBinding.control.action.video, PlayerButtonSetting.VIDEO, player().haveTrack(C.TRACK_TYPE_VIDEO));
         applyActionButtonVisibility();
     }
 
@@ -8683,7 +8683,7 @@ private void checkOrientation() {
     }
 
     private void setTitleVisible() {
-        mBinding.control.action.title.setVisibility(player().haveTitle() ? View.VISIBLE : View.GONE);
+        PlayerButtonSetting.apply(mBinding.control.action.title, PlayerButtonSetting.TITLE, player().haveTitle());
         applyActionButtonVisibility();
     }
 
