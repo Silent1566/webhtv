@@ -313,17 +313,31 @@ public final class LabActions {
                 .setMessage("确定卸载该环境吗？")
                 .setNegativeButton("取消", null)
                 .setPositiveButton("卸载", (d, w) -> {
-                    LabEnv.uninstall(activity, item);
-                    Notify.show(item.name + " 已卸载");
-                    if (done != null) done.onDone();
+                    // 详情页的确认文案承诺"停止所有运行中的命令"：先停进程再删文件，
+                    // 否则 proot 还开着 rootfs 里的文件时删除更容易失败。
+                    stopItem(item);
+                    Context context = activity.getApplicationContext();
+                    new Thread(() -> {
+                        // rootfs 动辄几万个文件，删完再报结果：主线程删会把界面卡死，
+                        // 而且"已卸载"的提示必须和真实结果一致。
+                        boolean removed = LabEnv.uninstall(context, item);
+                        App.post(() -> {
+                            Notify.show(removed ? item.name + " 已卸载" : item.name + " 卸载失败，请重试");
+                            if (done != null) done.onDone();
+                        });
+                    }).start();
                 })
                 .show();
     }
 
     public static void stopItem(LabModels.Item item) {
-        if (item.commands == null) return;
-        for (LabModels.Command command : item.commands) {
-            LabRunner.stop(item.name + "/" + command.id);
+        if (item.commands != null) {
+            for (LabModels.Command command : item.commands) {
+                LabRunner.stop(item.name + "/" + command.id);
+            }
+        }
+        for (LabCustomCommands.CustomCommand custom : LabCustomCommands.list(item.name)) {
+            if (custom.id != null) LabRunner.stop(item.name + "/" + custom.id);
         }
     }
 
