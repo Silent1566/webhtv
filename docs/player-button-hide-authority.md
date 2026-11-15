@@ -93,6 +93,23 @@
 单 commit，改动集中在 6 个源文件 + 3 个测试文件 + 本文件；
 回滚执行 `git revert <commit>` 即可，无数据迁移、无偏好键变更（`player_button_hidden` 语义不变）。
 
+## 8. 交付后补充（2026-11-15 21:2x）
+
+1. **直播页无需改动**（子代理的「边界外发现」是误报）：`LiveActivity` 两个 flavor 都有
+   `setupActionButtons()` 把点播同名按钮登记进 `mActionButtons`（mobile 449-461 / leanback 282-296），
+   且 `applyActionButtonVisibility()` 就是「先恢复无动态条件的 5 个按钮、最后
+   `PlayerButtonSetting.applyVisibility(mActionButtons)`」的顺序（mobile 471-479 / leanback 303-310，
+   源码里还写了顺序理由的注释）。隐藏项在末尾被 GONE，因此直播页本来就受控。
+2. **投屏页不接目录，属新能力而非缺陷**：`app/src/leanback/.../activity/CastActivity.java` 全文件没有
+   `PlayerButtonSetting` / `mActionButtons` / `applyActionButtonVisibility`，`setTrackVisible()`（337-341）
+   只做功能态门控。让投屏页跟随「播放器按钮」需要先把它纳入目录，是行为扩展，未做。
+3. **设备运行时验证受阻（未完成）**：设备 `192.168.50.3` 上的 `com.silent.android.webhtv`
+   （debug 版 5.6.0，今日 16:20 安装）与本机 debug keystore 签名不一致，
+   `adb install -r` 返回 `INSTALL_FAILED_UPDATE_INCOMPATIBLE`；本仓库 `local.properties` 没有 release 签名配置
+   （`hasReleaseSigning` 为 false），因此无法用 release 签名覆盖安装。
+   要完成运行时验收必须先卸载（会清掉站点接口 / 历史 / 播放器按钮偏好），需用户明确同意后走
+   「备份 shared_prefs+databases+files+base.apk → 卸载 → 装本构建 → 验证 → 还原」流程。
+
 ## Recovery anchor
 
 - 目标：控制栏按钮隐藏开关在手机原生 / TV 原生 / 沉浸融合三面成为最终权威，弹层跟随。
