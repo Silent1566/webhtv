@@ -334,6 +334,8 @@ public class PlayerManager implements ParseCallback {
     private int mpvOutputEvaluationSeq;
     private int mpvAutoOutputProbeAttempts;
     private float userPlaybackSpeed = 1f;
+    /** Guards the one speed-change audio rebuild; {@link #rebuildAudioPipeline()} re-applies speed. */
+    private boolean speedChangeAudioRebuildInProgress;
     private float networkProtectionSpeed = 1f;
     private float networkProtectionSupportedSpeed = 1f;
     private long networkProtectionMediaBitrate;
@@ -1643,10 +1645,40 @@ public class PlayerManager implements ParseCallback {
                 "apply request reason=%s requested=%.3f current=%.3f user=%.3f state=%d playing=%s loading=%s",
                 reason, speed, current, userPlaybackSpeed, player.getPlaybackState(), player.isPlaying(), player.isLoading()));
         if (Math.abs(current - speed) < 0.001f) return;
+        prepareExoAudioForSpeed(speed, current, reason);
         player.setPlaybackParameters(player.getPlaybackParameters().withSpeed(speed));
         logNetworkGuard(String.format(java.util.Locale.US,
                 "apply result reason=%s requested=%.3f actual=%.3f", reason, speed, player.getPlaybackParameters().speed));
         PlaybackTrace.log("exo-network-protection", playbackTrace.current(), "speed %.3f->%.3f reason=%s user=%.2f", current, speed, reason, userPlaybackSpeed);
+    }
+
+    /**
+     * Tells the EXO engine the rate before the player applies it, and gives an already running
+     * compressed output the chance to become PCM once. A vendor compressed track is decoded by the
+     * device, so neither the sink's processors nor a later speed value can change its rate; only a
+     * pipeline that selects the format again at this rate can. Rebuilding on every change would
+     * reload the media for nothing, hence the one-shot guards: the rate has to leave 1x, the
+     * current output still has to be that compressed output, and a rebuild that re-applies the
+     * speed must not arrive here again.
+     */
+    private void prepareExoAudioForSpeed(float speed, float current, String reason) {
+        if (!(engine instanceof ExoPlayerEngine exo)) return;
+        exo.setPlaybackSpeed(speed);
+        if (speedChangeAudioRebuildInProgress
+                || Math.abs(speed - 1f) < 0.001f
+                || Math.abs(current - 1f) >= 0.001f
+                || player.getPlaybackState() != Player.STATE_READY) return;
+        AudioPlaybackDiagnostics.OutputMode mode = getAudioPlaybackDiagnostics().outputMode();
+        if (mode != AudioPlaybackDiagnostics.OutputMode.PASSTHROUGH
+                && mode != AudioPlaybackDiagnostics.OutputMode.COMPRESSED_DIRECT) return;
+        speedChangeAudioRebuildInProgress = true;
+        try {
+            PlaybackTrace.log("exo-audio-direct", playbackTrace.current(),
+                    "speed %.3f->%.3f reason=%s rebuild=pcm", current, speed, reason);
+            rebuildAudioPipeline();
+        } finally {
+            speedChangeAudioRebuildInProgress = false;
+        }
     }
 
     private void resetNetworkProtectionSession(String reason) {
