@@ -99,16 +99,16 @@ public class PlayerPlaybackRegressionSourceTest {
 
         assertFocusRefreshAfter(leanback,
                 "private void setEpisodeAdapter(List<Episode> items, boolean scrollToCurrent)",
-                "mBinding.control.action.episodes.setVisibility");
+                "PlayerButtonSetting.apply(mBinding.control.action.episodes, PlayerButtonSetting.EPISODES,");
         assertFocusRefreshAfter(leanback,
                 "private void setQualityVisible(boolean visible)",
-                "mBinding.control.action.actionQuality.setVisibility");
+                "PlayerButtonSetting.apply(mBinding.control.action.actionQuality, PlayerButtonSetting.QUALITY,");
         assertFocusRefreshAfter(leanback,
                 "private void setAdFeedbackVisible()",
                 "mBinding.control.action.adFeedback.setVisibility");
         assertFocusRefreshAfter(mobile,
                 "private void setQualityVisible(boolean visible)",
-                "mBinding.control.action.actionQuality.setVisibility");
+                "PlayerButtonSetting.apply(mBinding.control.action.actionQuality, PlayerButtonSetting.QUALITY,");
         assertFocusRefreshAfter(mobile,
                 "private void setAdFeedbackVisible()",
                 "mBinding.control.action.adFeedback.setVisibility");
@@ -399,6 +399,89 @@ public class PlayerPlaybackRegressionSourceTest {
                 method >= 0 && methodEnd > method
                         && mutation > method && mutation < methodEnd
                         && refresh > mutation && refresh < methodEnd);
+    }
+
+    @Test
+    public void playerButtonHiddenSwitchOwnsEveryCatalogManagedView() throws Exception {
+        String setting = readMainJava("com", "fongmi", "android", "tv", "setting", "PlayerButtonSetting.java");
+        String mobile = readMobileJava("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java");
+        String leanback = readLeanbackJava("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java");
+        String tmdb = readMainJava("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java");
+        String mobileSheet = readMobileJava("com", "fongmi", "android", "tv", "ui", "dialog", "ControlDialog.java");
+        String leanbackSheet = readLeanbackJava("com", "fongmi", "android", "tv", "ui", "dialog", "ControlDialog.java");
+
+        assertTrue("PlayerButtonSetting must expose the single visibility judge",
+                setting.contains("public static void apply(View view, String id, boolean available) {"));
+        assertTrue("the judge must AND the feature state with the user's hidden preference",
+                setting.contains("view.setVisibility(available && isVisible(id) ? View.VISIBLE : View.GONE);"));
+
+        assertUsesSharedSwitch("mobile", mobile, new String[]{
+                "PlayerButtonSetting.apply(mBinding.control.action.episodes, PlayerButtonSetting.EPISODES, size >= 2);",
+                "PlayerButtonSetting.apply(mBinding.control.action.next, PlayerButtonSetting.NEXT, size >= 2);",
+                "PlayerButtonSetting.apply(mBinding.control.action.prev, PlayerButtonSetting.PREV, size >= 2);",
+                "PlayerButtonSetting.apply(mBinding.control.action.actionQuality, PlayerButtonSetting.QUALITY, visible);",
+                "PlayerButtonSetting.apply(mBinding.control.action.text, PlayerButtonSetting.TEXT,",
+                "PlayerButtonSetting.apply(mBinding.control.action.audio, PlayerButtonSetting.AUDIO,",
+                "PlayerButtonSetting.apply(mBinding.control.action.video, PlayerButtonSetting.VIDEO,",
+                "PlayerButtonSetting.apply(mBinding.control.action.title, PlayerButtonSetting.TITLE,"
+        }, new String[]{
+                "mBinding.control.action.title.setVisibility(",
+                "mBinding.control.action.actionQuality.setVisibility("
+        });
+
+        assertUsesSharedSwitch("leanback", leanback, new String[]{
+                "PlayerButtonSetting.apply(mBinding.control.action.episodes, PlayerButtonSetting.EPISODES, items.size() >= 2);",
+                "PlayerButtonSetting.apply(mBinding.control.action.actionQuality, PlayerButtonSetting.QUALITY, visible);",
+                "PlayerButtonSetting.apply(mBinding.control.action.text, PlayerButtonSetting.TEXT,",
+                "PlayerButtonSetting.apply(mBinding.control.action.audio, PlayerButtonSetting.AUDIO,",
+                "PlayerButtonSetting.apply(mBinding.control.action.video, PlayerButtonSetting.VIDEO,",
+                "PlayerButtonSetting.apply(mBinding.control.action.title, PlayerButtonSetting.TITLE,",
+                "PlayerButtonSetting.apply(mBinding.control.action.cast, PlayerButtonSetting.CAST,",
+                "PlayerButtonSetting.apply(mBinding.control.action.panDiagnostic, PlayerButtonSetting.PAN_DIAGNOSTIC,",
+                "PlayerButtonSetting.apply(mBinding.control.action.immersiveAudio, PlayerButtonSetting.IMMERSIVE_AUDIO,",
+                "PlayerButtonSetting.apply(mBinding.control.action.fullscreen, PlayerButtonSetting.FULLSCREEN,"
+        }, new String[]{
+                "mBinding.control.action.title.setVisibility(",
+                "mBinding.control.action.cast.setVisibility(",
+                "mBinding.control.action.panDiagnostic.setVisibility(",
+                "mBinding.control.action.immersiveAudio.setVisibility(",
+                "mBinding.control.action.fullscreen.setVisibility("
+        });
+
+        assertUsesSharedSwitch("fusion inline", tmdb, new String[]{
+                "PlayerButtonSetting.apply(binding.playerParse, PlayerButtonSetting.PARSE,",
+                "PlayerButtonSetting.apply(binding.playerAdFeedback, PlayerButtonSetting.AD_FEEDBACK, inlineAdFeedback);",
+                "PlayerButtonSetting.apply(binding.playerQuality, PlayerButtonSetting.QUALITY, inlineQuality);",
+                // 融合模式悬浮图标按钮（上/下集、投屏、弹幕）按既有契约不随「播放器按钮」变，TmdbDetailActivityLayoutTest 已单独钉住。
+                "detailControlView(R.id.prev, View.class).setVisibility(!locked && hasPlayer && episodeCount >= 2 ? View.VISIBLE : View.GONE);",
+                "detailControlView(R.id.cast, View.class).setVisibility(!locked && hasInlineCast() ? View.VISIBLE : View.GONE);"
+        }, new String[]{});
+
+        assertTrue("mobile control sheet parser row must obey the hidden switch",
+                mobileSheet.contains("PlayerButtonSetting.isVisible(PlayerButtonSetting.PARSE)"));
+        assertTrue("mobile control sheet immersive-audio row must obey the hidden switch",
+                mobileSheet.contains("PlayerButtonSetting.isVisible(PlayerButtonSetting.IMMERSIVE_AUDIO)"));
+        assertTrue("mobile control sheet timer row must obey the hidden switch",
+                mobileSheet.contains("binding.timer.setVisibility(PlayerButtonSetting.isVisible(PlayerButtonSetting.TIMER)"));
+        assertTrue("leanback control sheet parser row must obey the hidden switch",
+                leanbackSheet.contains("PlayerButtonSetting.isVisible(PlayerButtonSetting.PARSE)"));
+        assertFalse("leanback control sheet must gate immersive audio by the hidden switch, not by its own feature state alone",
+                leanbackSheet.contains("boolean visible = activity instanceof Listener listener && listener.isControlAudioContent();\n        binding.immersiveAudio.setVisibility("));
+        assertTrue("the sheet fullscreen row may only be removed by the user's own choice",
+                leanbackSheet.contains("PlayerButtonSetting.apply(binding.fullscreen, PlayerButtonSetting.FULLSCREEN, true);"));
+        assertFalse("the sheet must not copy the control bar's fullscreen display rule into its own row",
+                leanbackSheet.contains("binding.fullscreen.setVisibility(parent.control.action.fullscreen.getVisibility());"));
+    }
+
+    private static void assertUsesSharedSwitch(String label, String source, String[] required, String[] forbidden) {
+        for (String snippet : required) {
+            assertTrue(label + " must route catalog-managed visibility through the shared judge: " + snippet,
+                    source.contains(snippet));
+        }
+        for (String snippet : forbidden) {
+            assertFalse(label + " must not write visibility directly, bypassing the hidden switch: " + snippet,
+                    source.contains(snippet));
+        }
     }
 
     private static String readLeanbackJava(String... parts) throws Exception {

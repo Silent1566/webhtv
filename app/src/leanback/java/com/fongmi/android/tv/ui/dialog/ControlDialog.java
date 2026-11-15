@@ -29,6 +29,7 @@ import com.fongmi.android.tv.databinding.ActivityVideoBinding;
 import com.fongmi.android.tv.databinding.DialogControlBinding;
 import com.fongmi.android.tv.player.PlayerManager;
 import com.fongmi.android.tv.player.lut.LutPreset;
+import com.fongmi.android.tv.setting.PlayerButtonSetting;
 import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.adapter.ParseAdapter;
@@ -136,8 +137,7 @@ public class ControlDialog extends BaseBottomSheetDialog implements ParseAdapter
         binding.repeat.setSelected(parent.control.action.repeat.isSelected());
         binding.karaoke.setSelected(PlayerSetting.isKaraokeMode());
         binding.immersiveAudio.setSelected(parent.control.action.immersiveAudio.isSelected());
-        setKaraokeVisible();
-        setImmersiveAudioVisible();
+        setActionRowVisible();
         binding.timer.setSelected(Timer.get().isRunning());
         setTrackVisible();
         setTitleVisible();
@@ -387,10 +387,8 @@ public class ControlDialog extends BaseBottomSheetDialog implements ParseAdapter
         setEpisodeColumn();
         // 播放失败回退会同时改内核和软硬解，两个标签都得跟着宿主刷新，否则弹窗里只有内核在变。
         binding.decode.setText(parent.control.action.decode.getText());
-        binding.decode.setVisibility(parent.control.action.decode.getVisibility());
-        binding.danmaku.setVisibility(parent.control.action.danmaku.getVisibility());
-        setKaraokeVisible();
-        setImmersiveAudioVisible();
+        // 弹层不跟引擎重建刷新时这些行会停在旧状态，目录内按钮每次都整行重新镜像宿主。
+        setActionRowVisible();
         // setTitleVisible 会带上 setTrackVisible；章节可见性也参与轨道行的计算，
         // 只抄轨道不抄章节的话，回退后弹窗会拿旧章节状态算出错的轨道行。
         setTitleVisible();
@@ -402,8 +400,10 @@ public class ControlDialog extends BaseBottomSheetDialog implements ParseAdapter
     }
 
     public void setParseVisible(boolean visible) {
-        binding.parse.setVisibility(visible ? View.VISIBLE : View.GONE);
-        binding.parseText.setVisibility(visible ? View.VISIBLE : View.GONE);
+        // visible 是宿主的「本次可解析」功能态，隐藏开关必须再与一次：否则用户隐藏的解析行会被重新点亮。
+        boolean shown = visible && PlayerButtonSetting.isVisible(PlayerButtonSetting.PARSE);
+        binding.parse.setVisibility(shown ? View.VISIBLE : View.GONE);
+        binding.parseText.setVisibility(shown ? View.VISIBLE : View.GONE);
     }
 
     public void setTrackVisible() {
@@ -415,14 +415,33 @@ public class ControlDialog extends BaseBottomSheetDialog implements ParseAdapter
         binding.trackRow.setVisibility(visible ? View.VISIBLE : View.GONE);
     }
 
-    private void setKaraokeVisible() {
-        binding.karaoke.setVisibility(parent.control.action.karaoke.getVisibility());
-    }
-
-    private void setImmersiveAudioVisible() {
+    /**
+     * 弹层每行可见性 = 该行本来的功能态 && 用户隐藏开关。
+     * 不能一律镜像宿主控件栏：宿主的功能态里混着「控件栏何时该出这个按钮」的展示规则
+     * （全屏按钮在全屏时收起、网络诊断入口限定全屏），照抄会把弹层入口直接移除。
+     */
+    private void setActionRowVisible() {
+        if (binding == null || parent == null) return;
+        // 这 12 行宿主没有功能态门（宿主可见性的唯一来源就是隐藏开关），可用性恒为 true。
+        PlayerButtonSetting.apply(binding.fullscreen, PlayerButtonSetting.FULLSCREEN, true);
+        PlayerButtonSetting.apply(binding.panDiagnostic, PlayerButtonSetting.PAN_DIAGNOSTIC, true);
+        PlayerButtonSetting.apply(binding.lut, PlayerButtonSetting.LUT, true);
+        PlayerButtonSetting.apply(binding.reset, PlayerButtonSetting.RESET, true);
+        PlayerButtonSetting.apply(binding.repeat, PlayerButtonSetting.REPEAT, true);
+        PlayerButtonSetting.apply(binding.timer, PlayerButtonSetting.TIMER, true);
+        PlayerButtonSetting.apply(binding.karaoke, PlayerButtonSetting.KARAOKE, true);
+        PlayerButtonSetting.apply(binding.player, PlayerButtonSetting.PLAYER, true);
+        PlayerButtonSetting.apply(binding.decode, PlayerButtonSetting.DECODE, true);
+        PlayerButtonSetting.apply(binding.opening, PlayerButtonSetting.OPENING, true);
+        PlayerButtonSetting.apply(binding.ending, PlayerButtonSetting.ENDING, true);
+        PlayerButtonSetting.apply(binding.scale, PlayerButtonSetting.SCALE, true);
+        // 弹幕行的宿主功能态就是弹层本来的可用性条件（DanmakuSetting.isLoad()，旧代码镜像的也是它），可以照抄。
+        // 沉浸音行不能抄宿主 view：宿主还叠了「全屏才显示」，那是控件栏展示规则；
+        // 弹层这行原本跟随的只是「音频内容」，所以保留原功能态再与隐藏开关相与。
+        binding.danmaku.setVisibility(parent.control.action.danmaku.getVisibility());
         FragmentActivity activity = getActivity();
-        boolean visible = activity instanceof Listener listener && listener.isControlAudioContent();
-        binding.immersiveAudio.setVisibility(visible ? View.VISIBLE : View.GONE);
+        boolean audioContent = activity instanceof Listener listener && listener.isControlAudioContent();
+        PlayerButtonSetting.apply(binding.immersiveAudio, PlayerButtonSetting.IMMERSIVE_AUDIO, audioContent);
     }
 
     @Override

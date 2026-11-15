@@ -8454,12 +8454,12 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         binding.playerInfo.setVisibility(View.GONE); // 始终隐藏信息按钮
         binding.playerActionRow.setVisibility(View.VISIBLE);
         binding.playerDanmakuToggle.setVisibility(View.GONE);
-        binding.playerEpisodes.setVisibility(episodeCount < 2 ? View.GONE : View.VISIBLE);
-        binding.playerQuality.setVisibility(inlineQuality ? View.VISIBLE : View.GONE);
-        binding.playerVideoTrack.setVisibility(hasPlayer && player().haveTrack(C.TRACK_TYPE_VIDEO) ? View.VISIBLE : View.GONE);
-        binding.playerParse.setVisibility(useParse && !VodConfig.get().getParses().isEmpty() ? View.VISIBLE : View.GONE);
-        binding.playerDanmaku.setVisibility(hasPlayer && inlineControlController.hasDanmakuControl() ? View.VISIBLE : View.GONE);
-        binding.playerAdFeedback.setVisibility(inlineAdFeedback ? View.VISIBLE : View.GONE);
+        PlayerButtonSetting.apply(binding.playerEpisodes, PlayerButtonSetting.EPISODES, episodeCount >= 2);
+        PlayerButtonSetting.apply(binding.playerQuality, PlayerButtonSetting.QUALITY, inlineQuality);
+        PlayerButtonSetting.apply(binding.playerVideoTrack, PlayerButtonSetting.VIDEO, hasPlayer && player().haveTrack(C.TRACK_TYPE_VIDEO));
+        PlayerButtonSetting.apply(binding.playerParse, PlayerButtonSetting.PARSE, useParse && !VodConfig.get().getParses().isEmpty());
+        PlayerButtonSetting.apply(binding.playerDanmaku, PlayerButtonSetting.DANMAKU, hasPlayer && inlineControlController.hasDanmakuControl());
+        PlayerButtonSetting.apply(binding.playerAdFeedback, PlayerButtonSetting.AD_FEEDBACK, inlineAdFeedback);
         binding.playerChapter.setVisibility(View.GONE); // 始终隐藏信息按钮
         binding.playerRepeat.setSelected(hasPlayer && player().isRepeatOne());
         binding.playerPlayParams.setSelected(hasPlayer && inlineOsd != null && inlineOsd.isDiagnosticsVisible());
