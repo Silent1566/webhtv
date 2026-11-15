@@ -110,6 +110,30 @@
    要完成运行时验收必须先卸载（会清掉站点接口 / 历史 / 播放器按钮偏好），需用户明确同意后走
    「备份 shared_prefs+databases+files+base.apk → 卸载 → 装本构建 → 验证 → 还原」流程。
 
+## 9. 真机运行时验收（2026-11-15 21:4x，LIO-AN00 / Android 9 / 192.168.50.3）
+
+流程：备份 `shared_prefs`+`databases`+`files`+ 现有 `base.apk` → 卸载 → 装本构建（mobile debug）→
+把备份数据写回 → 逐面验 → 把原始 prefs 原样写回。
+
+| 场面 | 设置 | 实测结果 |
+| --- | --- | --- |
+| 视频播放的 ⚙ 弹层 | `player_button_hidden=danmaku,multi_thread_proxy` | 弹层无「弹幕」行 |
+| 视频播放的 ⚙ 弹层 | 追加 `timer,pan_diagnostic,codec_capability,lut,repeat,title,play_params` | 「LUT / 定时 / 循环 / 硬解能力 / 链路诊断」五行全部消失，未隐藏的「播放 / 片头 / 片尾 / 缩放 / 刷新 / 硬解 / 屏显设置」照常显示 |
+| 音频播放的 ⚙ 弹层 | hidden 不含 `immersive_audio` | 有「沉浸音频模式」行 |
+| 音频播放的 ⚙ 弹层 | hidden 只含 `immersive_audio` | 该行消失 |
+| 播放本身 | — | 本构建可正常起播 http mp4/m4a，无崩溃、无 ANR |
+
+未覆盖：原生全屏动作栏（倍速/比例/画质/字幕-音轨-视频轨/标题那些按钮）没有在真机上逐项点验——
+该布局需先进入全屏，adb 盲点不稳定；这一面由源码契约测试
+`PlayerPlaybackRegressionSourceTest.playerButtonHiddenSwitchOwnsEveryCatalogManagedView` 覆盖。
+
+设备现状：设备上装的是本构建（debug）；用户原始 prefs 已按备份原样写回
+（`player_button_hidden=danmaku,multi_thread_proxy`），`databases`/`files` 也在。
+原安装包与完整数据备份：`/home/maple/Workspace/webhtv/device-backup-20261115-2140/`
+（`installed-base.apk`、`appdata.tar`），需要换回原包时可用。
+
+截图与 UI dump：`/tmp/htv-shots/09-sheet-before.png`、`10-sheet-after.png`、`12-audio-sheet.png`。
+
 ## Recovery anchor
 
 - 目标：控制栏按钮隐藏开关在手机原生 / TV 原生 / 沉浸融合三面成为最终权威，弹层跟随。
