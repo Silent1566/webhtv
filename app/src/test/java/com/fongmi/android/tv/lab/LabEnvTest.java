@@ -2,9 +2,13 @@ package com.fongmi.android.tv.lab;
 
 import org.junit.Test;
 
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.util.Arrays;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
@@ -73,5 +77,64 @@ public final class LabEnvTest {
 
         assertSame(arm64, LabEnv.findDownload(item, selectedArch));
         assertEquals("3.12", LabEnv.displayVersion(item));
+    }
+
+    private static File tempDir(String name) {
+        File dir = new File(System.getProperty("java.io.tmpdir"), "lab-env-" + name + "-" + System.nanoTime());
+        dir.mkdirs();
+        return dir;
+    }
+
+    @Test
+    public void usableRootfsRejectsResidueThatOnlyKeepsSkeletonDirs() throws IOException {
+        File rootfs = tempDir("rootfs");
+        assertFalse(LabEnv.usableRootfs(rootfs));
+        File etc = new File(rootfs, "etc");
+        etc.mkdirs();
+        assertTrue(new File(etc, "resolv.conf").createNewFile());
+        assertFalse(LabEnv.usableRootfs(rootfs));
+        new File(rootfs, "usr/bin").mkdirs();
+        assertTrue(LabEnv.usableRootfs(rootfs));
+    }
+
+    @Test
+    public void usableRootfsAcceptsSystemTreeBehindSymlinkedBin() throws IOException {
+        File rootfs = tempDir("rootfs-link");
+        new File(rootfs, "usr/bin").mkdirs();
+        Files.createSymbolicLink(new File(rootfs, "bin").toPath(), new File("usr/bin").toPath());
+        assertTrue(LabEnv.usableRootfs(rootfs));
+    }
+
+    @Test
+    public void deleteTreeRemovesDanglingSymlinkThatBlocksParentRemoval() throws IOException {
+        File dir = tempDir("pkg");
+        File etc = new File(dir, "rootfs/etc");
+        etc.mkdirs();
+        File link = new File(etc, "alternatives-editor");
+        Files.createSymbolicLink(link.toPath(), new File("/dsh-lab-missing-target").toPath());
+        assertFalse(link.exists());
+        assertTrue(LabEnv.deleteTree(dir));
+        assertFalse(dir.exists());
+    }
+
+    @Test
+    public void deleteTreeTerminatesOnSymlinkCycle() throws IOException {
+        File dir = tempDir("cycle");
+        File inner = new File(dir, "a");
+        inner.mkdirs();
+        Files.createSymbolicLink(new File(inner, "loop").toPath(), inner.toPath());
+        assertTrue(LabEnv.deleteTree(dir));
+        assertFalse(dir.exists());
+    }
+
+    @Test
+    public void deleteTreeUnlocksReadOnlyDirectory() throws IOException {
+        File dir = tempDir("locked");
+        File locked = new File(dir, "rootfs/locked");
+        locked.mkdirs();
+        assertTrue(new File(locked, "payload").createNewFile());
+        assertTrue(locked.setWritable(false));
+        assertTrue(LabEnv.deleteTree(dir));
+        assertFalse(dir.exists());
     }
 }
