@@ -42,6 +42,7 @@
     <string name="keep">收藏</string>
     <string name="keep_add">已收藏</string>
     <string name="keep_del">已取消收藏</string>
+    <string name="keep_not_ready">详情还没加载完，请稍后再收藏</string>
     <!-- 收藏页空态：设计文档 §9.9 要求「标题 + 解释 + 一个主动作」。 -->
     <string name="keep_empty_title">还没有收藏</string>
     <string name="keep_empty_description">在任意详情页按「收藏」，就会出现在这里。</string>
