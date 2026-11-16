@@ -42,6 +42,7 @@
     <string name="keep">收藏</string>
     <string name="keep_add">已收藏</string>
     <string name="keep_del">已取消收藏</string>
+    <string name="keep_not_ready">詳情還沒載入完，請稍後再收藏</string>
     <!-- 收藏頁空態：設計文件 §9.9 要求「標題 + 解釋 + 一個主動作」。 -->
     <string name="keep_empty_title">還沒有收藏</string>
     <string name="keep_empty_description">在任意詳情頁按「收藏」，就會出現在這裡。</string>

@@ -43,6 +43,8 @@
     <string name="keep">Keep</string>
     <string name="keep_add">Added</string>
     <string name="keep_del">Removed</string>
+    <!-- 详情还没回来时按收藏：不静默吞键，也不写入缺封面/片名的半条收藏。 -->
+    <string name="keep_not_ready">Details are still loading. Try again in a moment.</string>
     <!-- 收藏页空态：设计文档 §9.9 要求「标题 + 解释 + 一个主动作」。 -->
     <string name="keep_empty_title">Nothing saved yet</string>
     <string name="keep_empty_description">Press Keep on any detail page and it will show up here.</string>
