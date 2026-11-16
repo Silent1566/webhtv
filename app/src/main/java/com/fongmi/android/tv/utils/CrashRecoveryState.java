@@ -10,6 +10,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.channels.FileLock;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -31,8 +32,14 @@ final class CrashRecoveryState {
      * died and is the only cross-channel identity this platform offers: a reused pid, a wall-clock
      * window or a reason code cannot attribute a record to another death. An empty runId still proves
      * a death, so it is reported as its own event rather than guessed into an existing one.
+     * {@code trace} is whatever bounded text the platform exit record could be reduced to; it is
+     * derived evidence, never a parsed native stack, and empty when the platform kept none.
      */
-    record Exit(String process, int pid, long timestamp, int reason, int status, String description, String runId) { }
+    record Exit(String process, int pid, long timestamp, int reason, int status, String description, String runId, String trace) {
+        Exit(String process, int pid, long timestamp, int reason, int status, String description, String runId) {
+            this(process, pid, timestamp, reason, status, description, runId, "");
+        }
+    }
 
     private final File file;
     private File selectedGeneration;
@@ -207,6 +214,47 @@ final class CrashRecoveryState {
                 + ":" + exit.reason() + ":" + safe(exit.runId(), 128);
     }
 
+    private static final int MAX_TRACE_CHARS = 4096;
+
+    /**
+     * Bounded text reduction of a platform exit trace.
+     *
+     * <p>An ANR trace is text, so it survives as-is. A native crash trace is a protobuf tombstone
+     * whose readable facts — signal line, thread names, backtrace symbols — exist only as printable
+     * runs of bytes; those runs are evidence, while the enclosing framing is not. Nothing here
+     * parses a stack, so the result is labelled derived rather than reported as a native stack.
+     */
+    static String traceText(byte[] raw, int reason) {
+        if (raw == null || raw.length == 0) return "";
+        String text = reason == REASON_ANR ? new String(raw, StandardCharsets.UTF_8) : printableRuns(raw);
+        return safe(text, MAX_TRACE_CHARS);
+    }
+
+    private static String printableRuns(byte[] raw) {
+        StringBuilder out = new StringBuilder(Math.min(raw.length, MAX_TRACE_CHARS));
+        StringBuilder run = new StringBuilder();
+        for (byte value : raw) {
+            char c = (char) (value & 0xFF);
+            if (c >= 0x20 && c < 0x7F) {
+                run.append(c);
+                continue;
+            }
+            flushRun(out, run);
+            if (out.length() >= MAX_TRACE_CHARS) break;
+        }
+        flushRun(out, run);
+        return out.toString();
+    }
+
+    /** A run shorter than the printable minimum is protobuf framing noise, not evidence. */
+    private static void flushRun(StringBuilder out, StringBuilder run) {
+        if (run.length() >= 4) {
+            if (out.length() > 0) out.append(' ');
+            out.append(run);
+        }
+        run.setLength(0);
+    }
+
     private static String exitDetails(Exit exit) {
         String reason = switch (exit.reason()) {
             case REASON_CRASH -> "CRASH";
@@ -214,11 +262,24 @@ final class CrashRecoveryState {
             case REASON_ANR -> "ANR";
             default -> "UNKNOWN";
         };
+        String trace = safe(exit.trace(), 4096);
         return "# previous-process-recovery v1\nprocess=" + exit.process() + "\npid=" + exit.pid()
                 + "\ntimestamp=" + exit.timestamp() + "\nreason=" + reason + "\nstatus=" + exit.status()
                 + "\ndescription=" + safe(exit.description(), 2048)
-                + "\n# Confirmed platform exit; not a report from the current process.\n"
-                + "# Native/ANR trace unavailable or binary; no native trace parsing performed.\n";
+                + "\ntraceFormat=" + (trace.isEmpty() ? "unavailable" : traceFormat(exit.reason()))
+                + "\ntrace=" + (trace.isEmpty() ? "none" : oneLine(trace))
+                + (trace.isEmpty()
+                        ? "\n# The platform kept no trace for this exit; the failure site is not known.\n"
+                        : "\n# Trace reduced from the platform exit record; no native stack was parsed.\n")
+                + "# Confirmed platform exit; not a report from the current process.\n";
+    }
+
+    private static String traceFormat(int reason) {
+        return switch (reason) {
+            case REASON_ANR -> "anr-text-prefix";
+            case REASON_CRASH_NATIVE -> "tombstone-derived-strings";
+            default -> "platform-trace-strings";
+        };
     }
 
     private interface Change<T> { T apply(Properties state) throws IOException; }
@@ -322,6 +383,11 @@ final class CrashRecoveryState {
     private static long number(Properties state, String key, long fallback) {
         String value = state.getProperty(key);
         return value == null ? fallback : Long.parseLong(value);
+    }
+
+    /** Keeps a derived trace on one line so the surrounding {@code key=value} block stays parseable. */
+    private static String oneLine(String value) {
+        return value.replace('\r', ' ').replace('\n', ' ');
     }
 
     private static String safe(String value, int limit) {
