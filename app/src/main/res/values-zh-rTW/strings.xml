@@ -1474,8 +1474,12 @@
     <string name="player_osd">屏顯設定</string>
     <string name="player_subtitle_auto_match">自動匹配字幕</string>
     <string name="player_subtitle_language">字幕偏好語言</string>
-    <string name="player_subtitle_source_environment">環境變數（JSON）</string>
-    <string name="player_subtitle_source_environment_invalid">請輸入有效的 JSON 物件</string>
+    <string name="player_subtitle_source_environment">字幕源設定（JSON）</string>
+    <string name="player_subtitle_source_environment_helper">填寫 JSON 物件，例如 {\"TOKEN\":\"你的 API Key\"}。欄位名稱以字幕源說明為準；留空可清除設定。</string>
+    <string name="player_subtitle_source_environment_invalid">請輸入 JSON 物件，例如 {\"TOKEN\":\"你的 API Key\"}；欄位名稱和文字值需使用英文雙引號。</string>
+    <string name="player_subtitle_source_assrt_key">assrt API Key</string>
+    <string name="player_subtitle_source_assrt_helper">直接貼上 assrt 的 API Key，無需填寫 JSON。留空可清除 API Key。</string>
+    <string name="player_subtitle_source_assrt_invalid">請直接貼上 API Key；若填寫 JSON，請使用 {\"ASSRT_TOKEN\":\"你的 API Key\"}。</string>
     <string name="player_subtitle_ai_max_concurrency">AI字幕最大並發數</string>
     <string name="player_subtitle_ai_chunk_count">AI字幕分塊數量</string>
     <string name="subtitle_auto_match_hit">已自動匹配字幕：%1$s</string>
