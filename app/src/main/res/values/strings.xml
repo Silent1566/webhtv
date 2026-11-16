@@ -1524,8 +1524,12 @@
     <string name="player_osd">On-screen display</string>
     <string name="player_subtitle_auto_match">Auto subtitle match</string>
     <string name="player_subtitle_language">Preferred subtitle language</string>
-    <string name="player_subtitle_source_environment">Environment variables (JSON)</string>
-    <string name="player_subtitle_source_environment_invalid">Enter a valid JSON object</string>
+    <string name="player_subtitle_source_environment">Source configuration (JSON)</string>
+    <string name="player_subtitle_source_environment_helper">Enter a JSON object, e.g. {\"TOKEN\":\"your API Key\"}. Use the field names specified by the source. Leave blank to clear the configuration.</string>
+    <string name="player_subtitle_source_environment_invalid">Enter a JSON object, e.g. {\"TOKEN\":\"your API Key\"}. Use double quotes around field names and text values.</string>
+    <string name="player_subtitle_source_assrt_key">assrt API Key</string>
+    <string name="player_subtitle_source_assrt_helper">Paste your assrt API Key directly; no JSON required. Leave blank to remove the API Key.</string>
+    <string name="player_subtitle_source_assrt_invalid">Paste the API Key directly, or use {\"ASSRT_TOKEN\":\"your API Key\"} for JSON.</string>
     <string name="player_subtitle_source">Subtitle sources</string>
     <string name="player_subtitle_source_count">%1$d loaded</string>
     <string name="player_subtitle_source_empty">No subtitle sources available</string>

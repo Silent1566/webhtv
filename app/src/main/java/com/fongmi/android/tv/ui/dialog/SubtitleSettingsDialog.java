@@ -14,6 +14,9 @@ import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.android.material.textfield.TextInputLayout;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 
 public final class SubtitleSettingsDialog {
 
@@ -64,13 +67,26 @@ public final class SubtitleSettingsDialog {
     }
 
     private static void showSourceEnvironment(FragmentActivity activity, com.fongmi.android.tv.subtitle.provider.SubtitleProvider provider, Runnable onSaved) {
+        String sourceKey = provider.getKey();
+        boolean assrt = "assrt".equals(sourceKey);
+        String currentValue = Setting.getSubtitleSourceEnvironment(sourceKey);
+        JsonObject environment = assrt ? loadSourceEnvironment(currentValue) : null;
         TextInputEditText input = new TextInputEditText(activity);
-        input.setSingleLine(false);
-        input.setMinLines(4);
-        input.setText(Setting.getSubtitleSourceEnvironment(provider.getKey()));
+        input.setSingleLine(assrt);
+        input.setMinLines(assrt ? 1 : 4);
+        if (assrt) {
+            input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+            JsonElement token = environment.get("ASSRT_TOKEN");
+            input.setText(token != null && token.isJsonPrimitive() && token.getAsJsonPrimitive().isString() ? token.getAsString() : "");
+        } else {
+            input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+            input.setText(currentValue);
+        }
         TextInputLayout layout = new TextInputLayout(activity);
-        layout.setHint(activity.getString(R.string.player_subtitle_source_environment));
+        layout.setHint(activity.getString(assrt ? R.string.player_subtitle_source_assrt_key : R.string.player_subtitle_source_environment));
         layout.setBoxBackgroundMode(TextInputLayout.BOX_BACKGROUND_OUTLINE);
+        layout.setHelperText(activity.getString(assrt ? R.string.player_subtitle_source_assrt_helper : R.string.player_subtitle_source_environment_helper));
+        if (assrt) layout.setEndIconMode(TextInputLayout.END_ICON_PASSWORD_TOGGLE);
         layout.addView(input, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         LinearLayout container = new LinearLayout(activity);
         container.setOrientation(LinearLayout.VERTICAL);
@@ -85,17 +101,40 @@ public final class SubtitleSettingsDialog {
                 .show();
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(view -> {
             String value = input.getText() == null ? "" : input.getText().toString().trim();
+            layout.setError(null);
             try {
-                if (!value.isEmpty() && !com.google.gson.JsonParser.parseString(value).isJsonObject()) throw new IllegalArgumentException();
+                if (assrt) {
+                    JsonObject updated;
+                    if (value.startsWith("{") || value.startsWith("[")) {
+                        updated = JsonParser.parseString(value).getAsJsonObject();
+                        JsonElement token = updated.get("ASSRT_TOKEN");
+                        if (token != null && (!token.isJsonPrimitive() || !token.getAsJsonPrimitive().isString())) throw new IllegalArgumentException();
+                    } else {
+                        updated = environment.deepCopy();
+                        if (value.isEmpty()) updated.remove("ASSRT_TOKEN");
+                        else updated.addProperty("ASSRT_TOKEN", value);
+                    }
+                    value = updated.size() == 0 ? "" : updated.toString();
+                } else if (!value.isEmpty() && !JsonParser.parseString(value).isJsonObject()) {
+                    throw new IllegalArgumentException();
+                }
             } catch (RuntimeException e) {
-                layout.setError(activity.getString(R.string.player_subtitle_source_environment_invalid));
+                layout.setError(activity.getString(assrt ? R.string.player_subtitle_source_assrt_invalid : R.string.player_subtitle_source_environment_invalid));
                 return;
             }
-            Setting.putSubtitleSourceEnvironment(provider.getKey(), value);
+            Setting.putSubtitleSourceEnvironment(sourceKey, value);
             if (onSaved != null) onSaved.run();
             dialog.dismiss();
         });
         LightDialog.apply(dialog);
+    }
+
+    private static JsonObject loadSourceEnvironment(String value) {
+        try {
+            return JsonParser.parseString(value).getAsJsonObject();
+        } catch (RuntimeException ignored) {
+            return new JsonObject();
+        }
     }
 
     public static void showRealtimeModel(FragmentActivity activity, String[] labels, int checked, boolean canDelete, IntCallback selection, Runnable deleteAction) {

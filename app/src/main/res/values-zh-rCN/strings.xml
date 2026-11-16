@@ -1519,8 +1519,12 @@
     <string name="player_osd">屏显设置</string>
     <string name="player_subtitle_auto_match">自动匹配字幕</string>
     <string name="player_subtitle_language">字幕偏好语言</string>
-    <string name="player_subtitle_source_environment">环境变量（JSON）</string>
-    <string name="player_subtitle_source_environment_invalid">请输入有效的 JSON 对象</string>
+    <string name="player_subtitle_source_environment">字幕源配置（JSON）</string>
+    <string name="player_subtitle_source_environment_helper">填写 JSON 对象，例如 {\"TOKEN\":\"你的 API Key\"}。字段名以字幕源说明为准；留空可清除配置。</string>
+    <string name="player_subtitle_source_environment_invalid">请输入 JSON 对象，例如 {\"TOKEN\":\"你的 API Key\"}；字段名和文本值需使用英文双引号。</string>
+    <string name="player_subtitle_source_assrt_key">assrt API Key</string>
+    <string name="player_subtitle_source_assrt_helper">直接粘贴 assrt 的 API Key，无需填写 JSON。留空可清除 API Key。</string>
+    <string name="player_subtitle_source_assrt_invalid">请直接粘贴 API Key；若填写 JSON，请使用 {\"ASSRT_TOKEN\":\"你的 API Key\"}。</string>
     <string name="player_subtitle_source">字幕源</string>
     <string name="player_subtitle_source_count">已加载 %1$d 个</string>
     <string name="player_subtitle_source_empty">暂无可用字幕源</string>
