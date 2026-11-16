@@ -3,6 +3,9 @@ package com.fongmi.android.tv.utils;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
+import android.os.Build;
+
+import com.fongmi.android.tv.setting.PlayerSetting;
 
 import com.github.catvod.crawler.DebugLogStore;
 
@@ -43,7 +46,8 @@ public final class CrashLogSession {
             // itself is that Java death; a platform recovery has no report of its own.
             if (discardReport(history, report)) report = null;
             List<String> logcat = logcatTail(historyPid > 0 ? historyPid : reportPid);
-            String body = withHistory(CrashLogText.composeSession(report, logcat, logcat != null && !logcat.isEmpty(), report != null, !temporary), history);
+            String body = withHistory(CrashLogText.composeSession(report, logcat, logcat != null && !logcat.isEmpty(),
+                    report != null, !temporary, environment(context)), history);
             for (String line : body.split("\n", -1)) {
                 if (!line.isEmpty()) DebugLogStore.appendCrashContext(line);
             }
@@ -54,6 +58,46 @@ public final class CrashLogSession {
                 // The debug service still starts; the page then reports the original state.
             }
         }
+    }
+
+    /**
+     * Environment of the dying process, collected here because the crash screen runs in another
+     * process and no report exists for a native death.
+     */
+    private static CrashLogText.Environment environment(Context context) {
+        try {
+            String abi = Build.SUPPORTED_ABIS == null || Build.SUPPORTED_ABIS.length == 0 ? "" : Build.SUPPORTED_ABIS[0];
+            return new CrashLogText.Environment(
+                    AppVersion.fullName(),
+                    (safe(Build.MANUFACTURER) + " " + safe(Build.MODEL)).trim(),
+                    "Android " + Build.VERSION.RELEASE + " (API " + Build.VERSION.SDK_INT + ")",
+                    abi,
+                    process(context),
+                    kernel());
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    /** Default playback kernel of this install; the dying process no longer has its live session. */
+    private static String kernel() {
+        return switch (PlayerSetting.getPlayer()) {
+            case PlayerSetting.EXO -> "exo";
+            case PlayerSetting.IJK -> "ijk";
+            case PlayerSetting.MPV -> "mpv";
+            case PlayerSetting.SYSTEM -> "system";
+            default -> "unknown";
+        };
+    }
+
+    /** The default process's name: this page runs in {@code :error_activity}, not in the dead one. */
+    private static String process(Context context) {
+        String name = context.getApplicationInfo() == null ? null : context.getApplicationInfo().processName;
+        return name == null || name.isEmpty() ? context.getPackageName() : name;
+    }
+
+    private static String safe(String value) {
+        return value == null ? "" : value;
     }
 
     /** The crash screen passes itself; its intent carries the recovery history of this entry. */

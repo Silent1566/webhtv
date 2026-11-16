@@ -22,6 +22,55 @@ public class CrashRecoveryStateTest {
         return new CrashRecoveryState.Exit("actual.main", pid, timestamp, reason, 0, "fatal", runId);
     }
 
+    @Test
+    public void nativeTraceReachesTheRecoveryDetailsInsteadOfBeingDeclaredUnavailable() throws Exception {
+        File file = new File(temporary.newFolder(), "state");
+        CrashRecoveryState.Exit nativeCrash = new CrashRecoveryState.Exit("actual.main", 10, 100_000, 5, 6, "crash", "run",
+                "Fatal signal 6 in libmpv.so; backtrace: #00 pc 0012a3c4 libmpv.so");
+
+        CrashRecoveryState.Recovery recovery = new CrashRecoveryState(file).begin(run("next", 20, 200_000), 30, List.of(nativeCrash));
+
+        assertNotNull(recovery);
+        assertTrue(recovery.details().contains("traceFormat=tombstone-derived-strings"));
+        assertTrue(recovery.details().contains("Fatal signal 6 in libmpv.so"));
+        assertFalse(recovery.details().contains("unavailable"));
+    }
+
+    @Test
+    public void missingTraceIsStatedAsMissingRatherThanClaimed() throws Exception {
+        File file = new File(temporary.newFolder(), "state");
+
+        CrashRecoveryState.Recovery recovery = new CrashRecoveryState(file).begin(run("next", 20, 200_000), 30,
+                List.of(exit(10, 100_000, 5, "run")));
+
+        assertNotNull(recovery);
+        assertTrue(recovery.details().contains("traceFormat=unavailable"));
+        assertTrue(recovery.details().contains("trace=none"));
+        assertTrue(recovery.details().contains("The platform kept no trace"));
+    }
+
+    @Test
+    public void traceReductionKeepsReadableRunsAndDropsFramingNoise() {
+        byte[] binary = new byte[]{0x0A, (byte) 0x9F, 0x01, 0x00, 'a', 'b', (byte) 0xFF,
+                'F', 'a', 't', 'a', 'l', ' ', 's', 'i', 'g', 'n', 'a', 'l', ' ', '6', 0x00, 0x1D, 0x2B};
+
+        String text = CrashRecoveryState.traceText(binary, 5);
+
+        assertEquals("Fatal signal 6", text);
+        assertEquals("", CrashRecoveryState.traceText(null, 5));
+        assertEquals("", CrashRecoveryState.traceText(new byte[0], 5));
+    }
+
+    @Test
+    public void anrTraceStaysTextAndIsBounded() {
+        byte[] raw = "ANR in com.silent.android.webhtv\nReason: Input dispatching timed out".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+
+        String text = CrashRecoveryState.traceText(raw, 6);
+
+        assertTrue(text.startsWith("ANR in com.silent.android.webhtv"));
+        assertTrue(CrashRecoveryState.traceText(new byte[20000], 3).length() <= 4096);
+    }
+
     /** One persisted generation, written exactly the way save() shapes it. */
     private static void generation(File file, long gen, long start, long time, String event, boolean consumed) throws Exception {
         Files.writeString(file.toPath(), String.join("\n",

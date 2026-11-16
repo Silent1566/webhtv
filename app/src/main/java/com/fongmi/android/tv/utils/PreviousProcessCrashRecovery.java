@@ -9,6 +9,8 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Process;
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
@@ -38,6 +40,7 @@ public final class PreviousProcessCrashRecovery {
     private static final String STATE_NAME = "previous-process.state";
     private static final long GATE_TIMEOUT_MS = 3000;
     private static final int MAX_DETAILS_CHARS = 64 * 1024;
+    private static final int TRACE_BYTES = 8 * 1024;
 
     private static final Gate GATE = new Gate();
     private static final Gate.Liveness ACTIVITY_ALIVE = owner -> owner instanceof Activity
@@ -301,9 +304,33 @@ public final class PreviousProcessCrashRecovery {
         for (ApplicationExitInfo info : reasons) {
             if (info == null) continue;
             list.add(new CrashRecoveryState.Exit(info.getProcessName(), info.getPid(), info.getTimestamp(),
-                    info.getReason(), info.getStatus(), safe(info.getDescription()), summary(info)));
+                    info.getReason(), info.getStatus(), safe(info.getDescription()), summary(info), trace(info)));
         }
         return list;
+    }
+
+    /**
+     * Bounded read of whatever trace the platform kept for this exit.
+     *
+     * <p>API31+ returns a protobuf tombstone for a native crash and text for an ANR; older releases
+     * may return nothing or throw. A missing, unreadable or empty stream is not an error worth
+     * aborting the decision over: the death itself is already proven by the exit record.
+     */
+    @RequiresApi(Build.VERSION_CODES.R)
+    private static String trace(ApplicationExitInfo info) {
+        try (InputStream input = info.getTraceInputStream()) {
+            if (input == null) return "";
+            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+            byte[] part = new byte[1024];
+            int read;
+            while (bytes.size() < TRACE_BYTES && (read = input.read(part, 0, Math.min(part.length, TRACE_BYTES - bytes.size()))) > 0) {
+                bytes.write(part, 0, read);
+            }
+            return CrashRecoveryState.traceText(bytes.toByteArray(), info.getReason());
+        } catch (Throwable error) {
+            SpiderDebug.log("crash-recovery", "trace unavailable error=%s", error.getClass().getSimpleName());
+            return "";
+        }
     }
 
     @RequiresApi(Build.VERSION_CODES.R)
