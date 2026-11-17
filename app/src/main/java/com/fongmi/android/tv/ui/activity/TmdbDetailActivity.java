@@ -2894,6 +2894,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         if (requested != null) return requested;
         String requestedName = getIntentPlaybackEpisodeName();
         for (Episode item : episodes) if (!TextUtils.isEmpty(requestedName) && (TextUtils.equals(requestedName, item.getName()) || TextUtils.equals(requestedName, item.getDisplayName()))) return item;
+        Episode folderEpisode = findFolderPlaybackEpisode(episodes);
+        if (folderEpisode != null) return folderEpisode;
         try {
             History saved = isResumeFromHistory() ? getIntentResumeHistory() : null;
             if (saved == null && !isResumeFromHistory()) saved = History.findPlayback(getHistoryKey(), List.of(loadedVod.getName(), getNameText()), loadedVod.getFlags(), null, sourceTitleSeasonNumber());
@@ -13751,7 +13753,22 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         if (TextUtils.isEmpty(requestedFlagKey) && !TextUtils.isEmpty(requestedFlag)
                 && !TextUtils.equals(requestedFlag, flag.getFlag())) return null;
         String requestedName = getIntentPlaybackEpisodeName();
-        return TextUtils.isEmpty(requestedName) ? null : flag.find(requestedName, false);
+        return TextUtils.isEmpty(requestedName) ? findFolderPlaybackEpisode(flag.getEpisodes()) : flag.find(requestedName, false);
+    }
+
+    private Episode findFolderPlaybackEpisode(List<Episode> episodes) {
+        String mark = getMarkText();
+        if (isResumeFromHistory() || TextUtils.isEmpty(mark)
+                || !TextUtils.isEmpty(getIntentPlaybackFlag()) || !TextUtils.isEmpty(getIntentPlaybackFlagKey())
+                || !TextUtils.isEmpty(getIntentPlaybackEpisodeName()) || !TextUtils.isEmpty(getIntentPlaybackEpisodeUrl())) return null;
+        // 普通备注不是选集请求；同名不同 URL 也不能仅凭文件名确定版本。
+        Episode matched = null;
+        for (Episode episode : episodes) {
+            if (!mark.equalsIgnoreCase(episode.getName())) continue;
+            if (matched != null && !TextUtils.equals(matched.getUrl(), episode.getUrl())) return null;
+            matched = episode;
+        }
+        return matched;
     }
 
     private MaterialButton createChipButton(String text) {
