@@ -203,9 +203,14 @@ public class PlaybackSelectionLocatorSourceTest {
             for (ClassLoader loader = PlaybackSelectionLocatorSourceTest.class.getClassLoader(); loader != null; loader = loader.getParent()) {
                 if (loader instanceof java.net.URLClassLoader urls) for (java.net.URL entry : urls.getURLs()) if (entry.getProtocol().equals("file")) paths.add(Path.of(entry.toURI()).toString());
             }
+            // javax.tools 不在 Android 单测编译期类路径上，按仓库既有写法用反射取 JDK 编译器。
             java.io.ByteArrayOutputStream errors = new java.io.ByteArrayOutputStream();
-            int result = javax.tools.ToolProvider.getSystemJavaCompiler().run(null, null, errors,
-                    "-proc:none", "-classpath", String.join(java.io.File.pathSeparator, paths), "-d", output.toString(), sourceFile.toString());
+            Object compiler = java.lang.Class.forName("javax.tools.ToolProvider").getMethod("getSystemJavaCompiler").invoke(null);
+            assertTrue("existing JDK compiler", compiler != null);
+            String[] compilerArgs = {"-proc:none", "-classpath", String.join(java.io.File.pathSeparator, paths), "-d", output.toString(), sourceFile.toString()};
+            int result = (Integer) java.lang.Class.forName("javax.tools.Tool").getMethod("run",
+                    java.io.InputStream.class, java.io.OutputStream.class, java.io.OutputStream.class, String[].class)
+                    .invoke(compiler, null, errors, errors, compilerArgs);
             assertEquals(errors.toString(StandardCharsets.UTF_8), 0, result);
             try (java.util.stream.Stream<Path> artifacts = Files.walk(output)) {
                 artifacts.forEach(path -> path.toFile().deleteOnExit());
