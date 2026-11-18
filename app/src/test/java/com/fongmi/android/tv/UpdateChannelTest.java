@@ -72,7 +72,7 @@ public class UpdateChannelTest {
     @Test
     public void releaseWorkflowCanRepairAnExistingReleaseOnRetry() throws Exception {
         String workflow = read(findRepoPath().resolve(Path.of(".github", "workflows", "android-release.yml")));
-        String resolveStep = between(workflow, "- name: Resolve release tag", "- name: Configure release signing");
+        String resolveStep = between(workflow, "- name: Resolve release tag", "\n  test:");
         String releaseStep = between(workflow, "- name: Create GitHub Release", "- name: Publish update channel manifests");
 
         assertFalse("An existing tag at the same commit should be reusable",
@@ -84,9 +84,9 @@ public class UpdateChannelTest {
         assertTrue("A retry must reject an existing tag that targets another commit",
                 resolveStep.contains("Existing release tag targets another commit"));
         assertTrue("A retry must detect an already-created GitHub Release",
-                releaseStep.contains("if gh release view \"${{ steps.meta.outputs.tag }}\""));
+                releaseStep.contains("if gh release view \"${{ needs.meta.outputs.tag }}\""));
         assertTrue("A retry must repair partially uploaded release assets",
-                releaseStep.contains("gh release upload \"${{ steps.meta.outputs.tag }}\" dist/*.apk dist/*.json --clobber"));
+                releaseStep.contains("gh release upload \"${{ needs.meta.outputs.tag }}\" dist/*.apk dist/*.json --clobber"));
     }
 
     private static String between(String source, String start, String end) {
