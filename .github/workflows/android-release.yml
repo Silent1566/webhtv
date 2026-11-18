@@ -369,9 +369,16 @@ jobs:
           fi
           ls -lh dist/
 
+      # publish_oci defaults to true, so an unconfigured registry must not fail the
+      # release: the input only promises OCI artifacts when a registry is set up.
+      - name: Report OCI publishing state
+        if: ${{ inputs.publish_oci && vars.OCI_REPOSITORY == '' }}
+        run: |
+          echo "::notice title=OCI publishing skipped::publish_oci is enabled but vars.OCI_REPOSITORY is not configured. APKs are published to GitHub Releases only."
+
       - name: Set up ORAS
         id: oras
-        if: ${{ inputs.publish_oci }}
+        if: ${{ inputs.publish_oci && vars.OCI_REPOSITORY != '' }}
         uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1
         with:
           url: https://github.com/oras-project/oras/releases/download/v1.3.4/oras_1.3.4_linux_amd64.tar.gz
@@ -379,7 +386,7 @@ jobs:
 
       - name: Publish APKs to OCI Registry
         id: oci
-        if: ${{ inputs.publish_oci && steps.oras.outcome == 'success' }}
+        if: ${{ inputs.publish_oci && vars.OCI_REPOSITORY != '' && steps.oras.outcome == 'success' }}
         env:
           DIST_DIR: dist
           OCI_METADATA_FILE: build/oci-metadata.json
