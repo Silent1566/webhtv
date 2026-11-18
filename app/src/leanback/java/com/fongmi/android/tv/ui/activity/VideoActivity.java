@@ -6173,7 +6173,8 @@ private boolean runtimeSourceOnly;
                 : isOriginSession() ? resumeHistory : resumeHistory.forPlaybackKey(getHistoryKey(), VodConfig.getCid());
         mHistory = mHistory == null ? createHistory(item) : mHistory;
         if (!TextUtils.isEmpty(getWallPic())) mHistory.setWallPic(getWallPic());
-        if (!TextUtils.isEmpty(getMark())) mHistory.setVodRemarks(getMark());
+        // 文件夹点选需保留旧集身份，交给显式选集链路判断是否重置进度。
+        if (!TextUtils.isEmpty(getMark()) && findFolderPlaybackEpisode(item) == null) mHistory.setVodRemarks(getMark());
         applyIntentPlaybackSelection(item);
         if (resumeHistory == null && Setting.isIncognito() && mHistory.getKey().equals(getHistoryKey())) mHistory.delete();
         setOpeningEndingText();
@@ -6372,7 +6373,12 @@ private boolean runtimeSourceOnly;
         String playName = getIntentPlaybackEpisodeName();
         String playUrl = getIntentPlaybackEpisodeUrl();
         if (TextUtils.isEmpty(playFlag) && TextUtils.isEmpty(playFlagKey)
-                && TextUtils.isEmpty(playName) && TextUtils.isEmpty(playUrl)) return;
+                && TextUtils.isEmpty(playName) && TextUtils.isEmpty(playUrl)) {
+            Episode folderEpisode = findFolderPlaybackEpisode(item);
+            if (folderEpisode == null) return;
+            playName = folderEpisode.getName();
+            playUrl = folderEpisode.getUrl();
+        }
         Flag flag = findIntentPlaybackFlag(item.getFlags(), playFlagKey, playFlag, playUrl);
         if (flag == null) return;
         Episode episode = findIntentPlaybackEpisode(flag, playName, playUrl);
@@ -6395,6 +6401,20 @@ private boolean runtimeSourceOnly;
         mHistory.setVodRemarks(getHistoryEpisodeName(historyEpisode));
         mHistory.setEpisodeUrl(episode.getUrl());
         if (historyEpisode.getTmdbEpisode() != null || !sameEpisode) mHistory.setTmdbEpisodePosition(historyEpisode);
+    }
+
+    private Episode findFolderPlaybackEpisode(Vod item) {
+        String mark = getMark();
+        if (isResumeFromHistory() || TextUtils.isEmpty(mark)) return null;
+        Episode matched = null;
+        for (Flag flag : item.getFlags()) {
+            for (Episode episode : flag.getEpisodes()) {
+                if (!mark.equalsIgnoreCase(episode.getName())) continue;
+                if (matched != null && !TextUtils.equals(matched.getUrl(), episode.getUrl())) return null;
+                matched = episode;
+            }
+        }
+        return matched;
     }
 
     private Flag findIntentPlaybackFlag(List<Flag> flags, String playFlagKey, String playFlag, String playUrl) {
