@@ -1069,9 +1069,8 @@ public class PlayerManager implements ParseCallback {
      *   <li>{@code kind=kernel|decode|none} 区分换内核、换软硬解，以及两者都没变
      *       （{@code none}：调用方只是想记一条原因，实际切换参数与当前一致）；</li>
      *   <li>{@code cause=} 机器可读原因（见各调用点）；</li>
-     *   <li>{@code chosen=} 本次切换是否把用户选定的内核记为会话内核
-     *       （即是否执行 {@code PlayerSetting.putActivePlayer(type)}），
-     *       不是「是否由用户发起」——用户手动换软硬解时它是 {@code false}；</li>
+     *   <li>{@code chosen=} 本次切换是否由用户选定（仅归因，与会话内核无关——会话内核
+     *       一律跟随实际引擎，自动回退也写），因此用户手动换软硬解时它同样是 {@code false}；</li>
      *   <li>{@code from/to} 同时给出内核名与软硬解，避免只看到其中一个维度。</li>
      * </ul>
      *
@@ -2459,9 +2458,11 @@ public void resetTrack(int type) {
     }
 
     /**
-     * chosen 区分「用户为本次播放选定的内核」与「当前实际在跑的引擎」：
-     * 手动切换要更新会话内核（供取播放地址、写历史使用），
-     * 而播放失败后的自动回退只换引擎，不能改写用户的选择。
+     * 会话内核（{@link PlayerSetting#putActivePlayer}）一律跟随本次实际建起来的引擎，
+     * 自动回退也不例外：取播放地址、IJK 运行时判定、LUT 资格都读它，
+     * 保留旧值只会让「以为在跑 A、实际在跑 B」的分叉继续传播。
+     * 用户选定的内核由历史记录承载（{@code rememberPlayerKernel}），不靠这里保留。
+     * {@code chosen} 只用于归因日志：本次切换是否由用户选定。
      */
     private void switchEngine(int type, boolean chosen, boolean preserveState, boolean notifyPrepare) {
         int decode = engine.getDecode();
@@ -2492,7 +2493,11 @@ public void resetTrack(int type) {
         stopNativeAudioSession();
         engine.release();
         playerType = type;
-        if (chosen) PlayerSetting.putActivePlayer(type);
+        // 会话内核必须等于刚建起来的这个引擎。自动回退（失败换核、内核不可用）也走这里：
+        // 留下旧值会让取播放地址、IJK 运行时判定、LUT 资格继续按已放弃的内核分叉，
+        // 于是「以为在跑 A、实际在跑 B」被后续每一次取址放大。用户的选择由历史记录承载，
+        // 每次起播 applyHistoryPlayerKernel() 会重新写回它。
+        PlayerSetting.putActivePlayer(type);
         logSwitchCause(cause, previousType, type, previousDecode, sanitizeDecode(decode), chosen, position);
         if (SpiderDebug.isEnabled()) SpiderDebug.log("player", "switch player type=%d chosen=%s position=%d spec=%s", type, chosen, position, debugSpec());
         engine = buildEngine(playerType, sanitizeDecode(decode));
