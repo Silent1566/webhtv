@@ -47,8 +47,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @Database(entities = {Keep.class, Site.class, Live.class, Track.class, Config.class, Device.class, History.class, PlaybackDeleteTombstone.class, TmdbSeasonProgress.class}, version = AppDatabase.VERSION, exportSchema = true)
 public abstract class AppDatabase extends RoomDatabase {
 
-    // VERSION = 47 was the pre-identity-alias schema; 48 adds migration clues.
-    public static final int VERSION = 48;
+    // VERSION = 47 was the pre-identity-alias schema; 48 adds migration clues;
+    // 49 remembers the playback kernel per line instead of once per show.
+    public static final int VERSION = 49;
     public static final String NAME = "tv";
     public static final String SYMBOL = "@@@";
     private static final int BACKUP_KEEP_COUNT = 7;
@@ -200,6 +201,7 @@ public abstract class AppDatabase extends RoomDatabase {
                 .addMigrations(Migrations.MIGRATION_45_46)
                 .addMigrations(Migrations.MIGRATION_46_47)
                 .addMigrations(Migrations.MIGRATION_47_48)
+                .addMigrations(Migrations.MIGRATION_48_49)
                 .openHelperFactory(new IntegrityRecoveringOpenHelperFactory(new FrameworkSQLiteOpenHelperFactory()))
                 .fallbackToDestructiveMigration(true)
                 .allowMainThreadQueries().build();
