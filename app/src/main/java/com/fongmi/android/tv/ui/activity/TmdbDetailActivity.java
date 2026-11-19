@@ -12029,12 +12029,17 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
      */
     private void rememberInlinePlayerKernel(int type) {
         if (history == null || !PlayerSetting.isPlayer(type)) return;
-        history.setPlayer(type);
+        history.setKernelForFlag(inlineKernelFlag(), type);
     }
 
-    /** 本剧记住的内核；没有记录、或记录是跨源聚合来的，退回设置页的全局默认。 */
+    /** 本剧当前线路记住的内核；该线路没有记录、或记录是跨源聚合来的，退回设置页的全局默认。 */
     private int inlineHistoryPlayerKernel() {
-        return history == null ? PlayerSetting.getPlayer() : history.getPlaybackPlayerOrDefault();
+        return history == null ? PlayerSetting.getPlayer() : history.getPlaybackPlayerOrDefault(inlineKernelFlag());
+    }
+
+    /** 内联播放当前线路名：内核记忆按线路存，读写都必须带它。 */
+    private String inlineKernelFlag() {
+        return selectedFlag == null ? "" : selectedFlag.getFlag();
     }
 
     private void requestIntroSkipPlan() {

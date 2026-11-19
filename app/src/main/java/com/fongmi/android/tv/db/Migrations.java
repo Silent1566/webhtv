@@ -242,6 +242,24 @@ public class Migrations {
         }
     };
 
+    /**
+     * 内核记忆从「整剧一个值」改成「按线路一张表」。
+     *
+     * <p>旧值不能归到某一条线路上：它写入时的线路会被之后的换线路改写成 {@code vodFlag}，
+     * 硬塞回去就是把「线路1 选的内核」记到「线路2」名下——正是这次要修的 bug。
+     * 所以升级时直接丢弃旧值，迁移后每条线路从零开始，用户下一次换内核就按线路记住。
+     */
+    public static final Migration MIGRATION_48_49 = new Migration(48, 49) {
+        @Override
+        public void migrate(@NonNull SupportSQLiteDatabase database) {
+            // 列必须可空：实体是 String 且未标 @NonNull，Room 的期望表里 notNull=false，
+            // 加 NOT NULL 会在 upgrade 后的 validateMigration 里直接抛异常。
+            addColumnIfMissing(database, "History", "kernelByFlag",
+                    "ALTER TABLE History ADD COLUMN `kernelByFlag` TEXT DEFAULT ''");
+            database.execSQL("UPDATE History SET player = -1 WHERE player <> -1");
+        }
+    };
+
     private static void addColumnIfMissing(
             SupportSQLiteDatabase database,
             String table,
