@@ -2320,11 +2320,11 @@ private boolean runtimeSourceOnly;
 
     /**
      * 起播前把内核切到本剧记住的选择，并返回该内核给取址用——取播放地址要按内核区分线路。
-     * 没有记录时 getPlayerOrDefault 会退回设置页的全局默认。
+     * 记住的内核只对当前线路自己的记录生效；跨源聚合来的记录回落到设置页的全局默认。
      * 播放服务还没连上时先只记会话内核（取址在工作线程上读它），引擎由 onServiceConnected 补齐。
      */
     private int applyHistoryPlayerKernel(boolean forcePrepare) {
-        int kernel = mHistory == null ? PlayerSetting.getPlayer() : mHistory.getPlayerOrDefault();
+        int kernel = mHistory == null ? PlayerSetting.getPlayer() : mHistory.getPlaybackPlayerOrDefault();
         PlayerSetting.putActivePlayer(kernel);
         if (service() == null) {
             mPendingPlayerKernel = kernel;

@@ -817,6 +817,16 @@ public class History implements Diffable<History> {
         return PlayerSetting.resolvePlayer(player);
     }
 
+    /**
+     * 本次播放可沿用的内核：记住的内核只属于「当前线路自己的记录」。
+     * 跨源聚合（{@link #copyForPlaybackKey}）与跨源续播（{@link #forPlaybackKey}）都会复制一条
+     * 改写了 key 的记录并留下 playbackSourceKey，内核不该跟着这条记录跨源走，
+     * 否则在源 A 选的内核会被带到源 B，看起来就像设置页的默认内核没生效。
+     */
+    public int getPlaybackPlayerOrDefault() {
+        return isCrossSourcePlayback() ? PlayerSetting.getPlayer() : getPlayerOrDefault();
+    }
+
     public boolean hasPlayer() {
         return PlayerSetting.isPlayer(player);
     }

@@ -12032,9 +12032,9 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         history.setPlayer(type);
     }
 
-    /** 本剧记住的内核；没有记录时退回设置页的全局默认。 */
+    /** 本剧记住的内核；没有记录、或记录是跨源聚合来的，退回设置页的全局默认。 */
     private int inlineHistoryPlayerKernel() {
-        return history == null ? PlayerSetting.getPlayer() : history.getPlayerOrDefault();
+        return history == null ? PlayerSetting.getPlayer() : history.getPlaybackPlayerOrDefault();
     }
 
     private void requestIntroSkipPlan() {
