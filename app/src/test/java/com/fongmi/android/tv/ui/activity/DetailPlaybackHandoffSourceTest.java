@@ -45,6 +45,21 @@ public class DetailPlaybackHandoffSourceTest {
     }
 
     @Test
+    public void folderClickIsResolvedBeforeHistoryInBothDetailEntryPaths() throws Exception {
+        String detail = read(DETAIL);
+        String standalone = method(detail, "private Episode initialStandaloneEpisode(Vod loadedVod, List<Episode> episodes)");
+        int folder = standalone.indexOf("findFolderPlaybackEpisode(episodes)");
+        int history = standalone.indexOf("History saved =");
+        assertTrue("preloaded detail must not play history before resolving a folder click", folder >= 0 && history > folder);
+        String intent = method(detail, "private Episode findIntentPlaybackEpisode(Flag flag)");
+        assertTrue(intent.contains("findFolderPlaybackEpisode(flag.getEpisodes())"));
+        String lookup = method(detail, "private Episode findFolderPlaybackEpisode(List<Episode> episodes)");
+        assertTrue(lookup.contains("isResumeFromHistory()"));
+        assertTrue(lookup.contains("mark.equalsIgnoreCase(episode.getName())"));
+        assertFalse("general remarks must not be parsed as episode numbers", lookup.contains("flag.find("));
+    }
+
+    @Test
     public void renderEpisodesNeverReplacesTheSelectedEpisodeWithTheFirstVisibleOne() throws Exception {
         String render = method(read(DETAIL), "private void renderEpisodes()");
 

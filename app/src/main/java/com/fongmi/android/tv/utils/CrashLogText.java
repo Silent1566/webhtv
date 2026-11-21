@@ -162,12 +162,35 @@ public final class CrashLogText {
         return value > 0 ? value : -1;
     }
 
+    /**
+     * The environment facts that decide whether a crash is reproducible at all.
+     *
+     * <p>A native death leaves no Java report, so the build, the ABI and the playback kernel are the
+     * only things that can connect it to a known failure. Every field is a caller-supplied string so
+     * the assembly stays free of Android types and unit-testable.
+     */
+    public record Environment(String appVersion, String device, String system, String abi,
+                              String process, String kernel) {
+    }
+
     /** Body injected into the existing diagnostic log buffer for the crash session. */
     public static String composeSession(String report, List<String> logcat, boolean logcatAvailable,
                                         boolean reportFresh, boolean debugLogEnabled) {
+        return composeSession(report, logcat, logcatAvailable, reportFresh, debugLogEnabled, null);
+    }
+
+    public static String composeSession(String report, List<String> logcat, boolean logcatAvailable,
+                                        boolean reportFresh, boolean debugLogEnabled, Environment environment) {
         StringBuilder out = new StringBuilder(4096);
         line(out, SESSION_HEADER);
         line(out, "# 崩溃会话日志：由崩溃界面自动开启，仅在本界面存活期间提供下载。");
+        if (environment != null) {
+            line(out, "# environment: app=" + oneLine(environment.appVersion())
+                    + " abi=" + oneLine(environment.abi())
+                    + " kernel=" + oneLine(environment.kernel())
+                    + " process=" + oneLine(environment.process()));
+            line(out, "# device: " + oneLine(environment.device()) + " / " + oneLine(environment.system()));
+        }
         line(out, "# coverage: report=" + (reportFresh && report != null && !report.isEmpty() ? "fresh" : "missing-or-stale")
                 + " logcat=" + (logcatAvailable ? "own-uid-tail" : "unavailable")
                 + " debugLog=" + (debugLogEnabled ? "on" : "off"));

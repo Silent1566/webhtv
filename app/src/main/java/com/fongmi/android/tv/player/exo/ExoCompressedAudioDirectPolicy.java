@@ -118,6 +118,13 @@ public final class ExoCompressedAudioDirectPolicy
     private final ExoAudioDirectFailureMemory failureMemory;
     private final OutputEnvironment environment;
     private volatile boolean audioPassthroughEnabled = true;
+    /**
+     * The rate the app asked playback to run at. Compressed direct frames are decoded by the
+     * device, outside Media3's PCM processors, so the rate has to be known while an encoded
+     * format is still being admitted; applying it afterwards cannot change a track that never
+     * leaves the HAL.
+     */
+    private volatile float playbackSpeed = 1f;
     private final AtomicReference<OutputKey> pendingPcmFallback = new AtomicReference<>();
     private final AtomicBoolean initializationFailureNotified = new AtomicBoolean();
     private final AtomicReference<Runnable> initializationFailureListener =
@@ -174,6 +181,20 @@ public final class ExoCompressedAudioDirectPolicy
             vendorDirectConfigs.clear();
             failedOffloadConfigs.clear();
         }
+    }
+
+    /**
+     * Sets the rate the next output selection must serve. A non-1.0 rate cannot run on the vendor
+     * compressed output: nothing in that path implements rate change (this build leaves Media3's
+     * output playback-parameters path disabled), so the decoder plus PCM path is the only one
+     * where the requested speed actually happens.
+     */
+    public void setPlaybackSpeed(float speed) {
+        playbackSpeed = speed > 0f && !Float.isInfinite(speed) ? speed : 1f;
+    }
+
+    private boolean speedRequiresPcm() {
+        return Math.abs(playbackSpeed - 1f) > 0.001f;
     }
 
     @Override
@@ -252,6 +273,12 @@ public final class ExoCompressedAudioDirectPolicy
                     return standard;
                 }
 
+                if (speedRequiresPcm()) {
+                    if (directKey != null) vendorDirectConfigs.remove(directKey);
+                    logDecision(config.format, key, "vendor-direct-speed-requires-pcm");
+                    return standard;
+                }
+
                 // Do not let a failed vendor-direct configuration fall through to
                 // the delegate's generic passthrough/direct claim. Media3 must see
                 // it as unsupported on the next selection and choose decoder + PCM.
@@ -285,8 +312,15 @@ public final class ExoCompressedAudioDirectPolicy
                 }
                 OutputKey key = OutputKey.from(config.format);
                 AudioAttributes attributes = effectiveAttributes(config.audioAttributes);
+                DirectKey directKey = key == null ? null : new DirectKey(key, attributes);
+                if (speedRequiresPcm()) {
+                    // A direct admission cached before the rate changed must not outlive it; the
+                    // standard configuration below is the PCM one that can change rate.
+                    if (directKey != null) vendorDirectConfigs.remove(directKey);
+                    logDecision(config.format, key, "vendor-direct-speed-requires-pcm");
+                }
                 if (config.enableTunneling || key == null
-                        || !vendorDirectConfigs.containsKey(new DirectKey(key, attributes))) {
+                        || !vendorDirectConfigs.containsKey(directKey)) {
                     try {
                         return super.getOutputConfig(config);
                     } catch (RuntimeException error) {

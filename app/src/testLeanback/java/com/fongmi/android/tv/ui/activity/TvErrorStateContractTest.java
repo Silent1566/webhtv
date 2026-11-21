@@ -126,25 +126,30 @@ public class TvErrorStateContractTest {
     }
 
     /**
-     * 首页配置加载失败必须进入错误态，而不是只弹吐司后留一个空页面。
+     * 首页配置加载失败**不得接管整屏**：回到正常首页，失败只由吐司提示。
+     *
+     * <p>全屏「内容源加载失败 / 重试」会把点播/直播/设置那一整行隐藏——那一行不是独立导航栏，
+     * 而是首页列表的第一行，{@code ProgressLayout} 一旦接管就把内容视图置为 INVISIBLE，
+     * 用户连切换内容源和进设置都做不到；吐司又会在几秒后消失，页面上没有任何恢复入口。
+     * 电视端因此退回改动前就验证过的行为：吐司 + {@code showContent()}。
      */
     @Test
-    public void homeConfigFailureEntersTheErrorStateWithAWorkingRetry() throws Exception {
+    public void homeConfigFailureRestoresTheNormalHomeInsteadOfTakingItOver() throws Exception {
         String source = read(HOME);
-        assertTrue("失败回调必须进入错误态", source.contains("showConfigError(msg)"));
-        assertTrue("错误态标题必须是 error_config_load",
-                source.contains("R.string.error_config_load"));
-        assertTrue("必须有重试按钮文案", source.contains("R.string.error_retry"));
-        assertTrue("重试必须真的重新加载配置", source.contains("initConfig();"));
-        // 吐司是既有行为，不删。
-        assertTrue("应保留原有的吐司提示", source.contains("Notify.show(msg);"));
-        // 失败后不能再走 showContent()，否则又回到"空页面"。
         int handler = source.indexOf("public void error(String msg)");
         assertTrue("必须存在配置失败回调", handler > 0);
-        // 注释里会解释"改动前是 showContent()"，所以先剥掉注释再查，
+        // 注释里会解释"改动前/改动后"的行为，所以先剥掉注释再查，
         // 否则负向断言会命中说明文字（本仓库已踩过两次同类坑）。
         String body = withoutJavaComments(source.substring(handler, source.indexOf("};", handler)));
-        assertFalse("失败回调不得再调用 showContent()", body.contains("showContent()"));
+        // 吐司是既有行为，不删。
+        assertTrue("应保留原有的吐司提示", body.contains("Notify.show(msg);"));
+        assertTrue("失败后必须回到正常首页（切换内容源与进入设置可用）", body.contains("showContent()"));
+        for (String banned : new String[]{"showConfigError", "showError(", "R.string.error_config_load", "R.string.error_retry"}) {
+            assertFalse("首页配置失败不得再进入全屏错误态：" + banned, body.contains(banned));
+        }
+        assertFalse("全屏错误态的私有辅助方法必须一并删除",
+                withoutJavaComments(source).contains("private void showConfigError("));
+        assertTrue("成功路径的跳过标记行为保持", source.contains("skipNextVodConfigRefresh = true;"));
     }
 
     /**

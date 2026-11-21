@@ -42,6 +42,7 @@
     <string name="keep">收藏</string>
     <string name="keep_add">已收藏</string>
     <string name="keep_del">已取消收藏</string>
+    <string name="keep_not_ready">详情还没加载完，请稍后再收藏</string>
     <!-- 收藏页空态：设计文档 §9.9 要求「标题 + 解释 + 一个主动作」。 -->
     <string name="keep_empty_title">还没有收藏</string>
     <string name="keep_empty_description">在任意详情页按「收藏」，就会出现在这里。</string>
@@ -1052,7 +1053,9 @@
     <string name="cache_total_limit_title">总缓存上限</string>
     <string name="cache_total_limit_summary">总上限：%1$s</string>
     <string name="cache_limit_title_exo">播放缓存上限</string>
-    <string name="cache_management_playback_budget">播放缓存 %1$s（退出播放后收至 %2$s）</string>
+    <string name="cache_management_total_limit">总上限 %1$s（全部模块合计 · 退出播放后收敛）</string>
+    <string name="cache_management_total_unlimited">总上限 不限（全部模块合计 · 退出播放后收敛）</string>
+    <string name="cache_management_total_blocked">仍超限 %1$s（受保护内容）</string>
     <string name="cache_cleanup_confirm_title">确认清理缓存？</string>
     <string name="cache_cleanup_confirm_light">清理过期节目单、临时文件和遗留缓存？</string>
     <string name="cache_cleanup_confirm_standard">清理图片、歌词、K 歌和 WebHome 等可重建缓存？\n\n收藏、历史和设置不会受影响。</string>
@@ -1516,8 +1519,12 @@
     <string name="player_osd">屏显设置</string>
     <string name="player_subtitle_auto_match">自动匹配字幕</string>
     <string name="player_subtitle_language">字幕偏好语言</string>
-    <string name="player_subtitle_source_environment">环境变量（JSON）</string>
-    <string name="player_subtitle_source_environment_invalid">请输入有效的 JSON 对象</string>
+    <string name="player_subtitle_source_environment">字幕源配置（JSON）</string>
+    <string name="player_subtitle_source_environment_helper">填写 JSON 对象，例如 {\"TOKEN\":\"你的 API Key\"}。字段名以字幕源说明为准；留空可清除配置。</string>
+    <string name="player_subtitle_source_environment_invalid">请输入 JSON 对象，例如 {\"TOKEN\":\"你的 API Key\"}；字段名和文本值需使用英文双引号。</string>
+    <string name="player_subtitle_source_assrt_key">assrt API Key</string>
+    <string name="player_subtitle_source_assrt_helper">直接粘贴 assrt 的 API Key，无需填写 JSON。留空可清除 API Key。</string>
+    <string name="player_subtitle_source_assrt_invalid">请直接粘贴 API Key；若填写 JSON，请使用 {\"ASSRT_TOKEN\":\"你的 API Key\"}。</string>
     <string name="player_subtitle_source">字幕源</string>
     <string name="player_subtitle_source_count">已加载 %1$d 个</string>
     <string name="player_subtitle_source_empty">暂无可用字幕源</string>
@@ -3063,7 +3070,7 @@
     <string name="plugin_manager_entry_meta">版本 %1$s · 运行时 %2$s · %3$s</string>
     <string name="plugin_manager_params">参数</string>
     <string name="plugin_manager_params_title">“%1$s”的参数</string>
-    <string name="plugin_manager_params_hint">JSON 对象，例如 {&quot;DOUBAN_TOKEN&quot;:&quot;abc&quot;}</string>
+    <string name="plugin_manager_params_hint">JSON 对象，例如 {\&quot;DOUBAN_TOKEN\&quot;:\&quot;abc\&quot;}</string>
     <string name="plugin_manager_params_invalid">参数必须是 JSON 对象</string>
     <string name="plugin_manager_params_too_large">参数量超出保存上限</string>
     <string name="plugin_manager_remote_import">从地址导入</string>
@@ -3103,4 +3110,5 @@
     <string name="plugin_manager_perm_events">播放事件（plugin.events）</string>
     <string name="plugin_manager_perm_episode_data">剧集数据（plugin.data.episode）</string>
     <string name="plugin_panel_title">插件面板</string>
+    <string name="crash_action_failed">操作失败，请重试。</string>
 </resources>
