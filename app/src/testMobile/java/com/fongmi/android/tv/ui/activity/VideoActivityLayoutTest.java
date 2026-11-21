@@ -895,13 +895,29 @@ public class VideoActivityLayoutTest {
         assertTrue("ending playback must drop the session kernel so the global default applies again", player.contains("PlayerSetting.clearActivePlayer();"));
 
         assertTrue("the per-show kernel must be persisted, not a transient field", history.contains("@SerializedName(\"player\")") && !history.contains("private transient int player"));
+        assertTrue("the remembered kernel must be stored per line, not once per show",
+                history.contains("@SerializedName(\"kernelByFlag\")")
+                        && history.contains("public int getKernelForFlag(String flag)")
+                        && history.contains("public void setKernelForFlag(String flag, int kernel)"));
+        assertTrue("the remembered kernel must stay scoped to the record's own source and the current line",
+                history.contains("public int getPlaybackPlayerOrDefault(String flag)")
+                        && history.contains("if (isCrossSourcePlayback()) return PlayerSetting.getPlayer();"));
+        assertFalse("the legacy whole-show value must not be used as a per-line fallback",
+                history.contains("legacyKernelForFlag"));
+        assertFalse("a playback-failure kernel fallback must never write the kernel memory; PlayerManager "
+                        + "can only do that by holding a History reference, so it must hold none",
+                player.contains("com.fongmi.android.tv.bean.History"));
 
         for (String source : new String[]{leanback, mobile}) {
             assertTrue("playback must restore the show's remembered kernel before resolving the play url",
                     source.contains("player().preparePlayer(kernel);"));
-            assertTrue("the remembered kernel must fall back to the global default", source.contains("mHistory.getPlayerOrDefault()"));
-            assertTrue("the show's history must remember the user's selection, not an engine/session state",
-                    source.contains("private void rememberPlayerKernel(int type)") && source.contains("mHistory.setPlayer(type);"));
+            assertTrue("the kernel must be resolved for the line being started",
+                    source.contains("mHistory.getPlaybackPlayerOrDefault(kernelFlag())"));
+            assertTrue("the show's history must remember the user's selection for that line, not an engine/session state",
+                    source.contains("private void rememberPlayerKernel(String flag, int type)")
+                            && source.contains("mHistory.setKernelForFlag(flag, type);"));
+            assertFalse("the kernel memory must never be written from an engine/session state or for the whole show",
+                    source.contains("mHistory.setPlayer("));
             // 播放页会重叠存在：上一部剧的收尾存档若也写内核，就会用别人的会话内核
             // 覆盖本剧记住的选择，历史回归点。
             assertFalse("routine history saves must not rewrite the show's kernel",
@@ -917,8 +933,11 @@ public class VideoActivityLayoutTest {
                 tmdb.contains("SiteApi.playerContent(key, flag, episodeUrl, playerKernel)"));
         assertTrue("inline TMDB playback must restore the show's remembered kernel",
                 tmdb.contains("player().preparePlayer(inlineHistoryPlayerKernel());"));
-        assertTrue("inline TMDB playback must remember only the user's selection",
-                tmdb.contains("private void rememberInlinePlayerKernel(int type)") && tmdb.contains("history.setPlayer(type);"));
+        assertTrue("inline TMDB playback must scope the remembered kernel to the current line",
+                tmdb.contains("history.getPlaybackPlayerOrDefault(inlineKernelFlag())"));
+        assertTrue("inline TMDB playback must remember only the user's selection, for that line",
+                tmdb.contains("private void rememberInlinePlayerKernel(int type)")
+                        && tmdb.contains("history.setKernelForFlag(inlineKernelFlag(), type);"));
         assertFalse("inline progress sync must not rewrite the show's kernel",
                 tmdb.contains("history.setPlayer(PlayerSetting.getActivePlayer());"));
     }
@@ -3083,12 +3102,22 @@ public class VideoActivityLayoutTest {
     }
 
     @Test
+    public void tmdbDetailThemeDefaultsToDarkWhenPreferenceIsAbsent() throws Exception {
+        Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "setting", "Setting.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        String getter = methodBody(source, "public static int getTmdbDetailTheme()", "public static void putTmdbDetailTheme(int theme)");
+
+        assertTrue("TMDB detail theme must default to dark when no preference has been saved",
+                getter.contains("Prefers.getInt(\"tmdb_detail_theme\", 1)"));
+    }
+
+    @Test
     public void mobileVideoFusionThemeToggleActuallyChangesThemeMode() throws Exception {
         Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
 
         assertTrue("fusion theme button must switch light to dark and dark to light",
-                source.contains("int theme = isFusionLightTheme() ? 2 : 1;"));
+                source.contains("int theme = isFusionLightTheme() ? 1 : 2;"));
     }
 
     @Test

@@ -493,6 +493,10 @@ public final class LabConfig {
         return sp().getString("installed_" + pkg, "");
     }
 
+    public void clearInstalledVersion(String pkg) {
+        sp().edit().remove("installed_" + pkg).apply();
+    }
+
     private LabModels.LabRoot parse(String text) {
         String json = extractJson(text);
         if (json == null) throw new IllegalArgumentException("配置解析失败");

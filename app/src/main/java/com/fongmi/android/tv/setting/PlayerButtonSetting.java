@@ -113,6 +113,15 @@ public class PlayerButtonSetting {
         return !getHidden().contains(id);
     }
 
+    /**
+     * 控制栏按钮的唯一显示判据：功能可用且用户没有在「播放设置-播放器按钮」里隐藏。
+     * 凡按播放状态刷新按钮显隐的地方都必须走这里，否则会盖掉用户的隐藏选择。
+     */
+    public static void apply(View view, String id, boolean available) {
+        if (view == null) return;
+        view.setVisibility(available && isVisible(id) ? View.VISIBLE : View.GONE);
+    }
+
     public static void putVisible(String id, boolean visible) {
         Set<String> hidden = getHidden();
         if (visible) hidden.remove(id);

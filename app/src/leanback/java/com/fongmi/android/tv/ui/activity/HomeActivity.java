@@ -81,6 +81,7 @@ import com.fongmi.android.tv.ui.presenter.ProgressPresenter;
 import com.fongmi.android.tv.ui.presenter.VodPresenter;
 import com.fongmi.android.tv.utils.Clock;
 import com.fongmi.android.tv.utils.CrashRestartMode;
+import com.fongmi.android.tv.utils.PreviousProcessCrashRecovery;
 import com.fongmi.android.tv.utils.FileChooser;
 import com.fongmi.android.tv.utils.KeyUtil;
 import com.fongmi.android.tv.utils.Notify;
@@ -644,6 +645,10 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     }
 
     private void checkAction(Intent intent) {
+        PreviousProcessCrashRecovery.checkBeforeConfig(this, () -> handleAction(intent));
+    }
+
+    private void handleAction(Intent intent) {
         if (Intent.ACTION_SEND.equals(intent.getAction())) {
             VideoActivity.push(this, intent.getStringExtra(Intent.EXTRA_TEXT));
         } else if (Intent.ACTION_VIEW.equals(intent.getAction()) && intent.getData() != null) {
@@ -672,7 +677,9 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
         // 此前是硬编码 16dp，而 webhtv_size_tv_card_gap 只声明、从未被引用。
         int tvCardGap = ResUtil.dpOf(R.dimen.webhtv_size_tv_card_gap);
         selector.addPresenter(ListRow.class, new CustomRowPresenter(tvCardGap), VodPresenter.class);
-        selector.addPresenter(ListRow.class, new CustomRowPresenter(tvCardGap), FuncPresenter.class);
+        // 功能区按钮少且默认就溢出一屏，左右到头环绕才能连续换焦；点播/历史行是长列表，
+        // 环绕会把滚动位置甩回另一端，所以只有这一行开启。
+        selector.addPresenter(ListRow.class, new CustomRowPresenter(tvCardGap).setWrapFocus(true), FuncPresenter.class);
         selector.addPresenter(ListRow.class, new CustomRowPresenter(tvCardGap, FocusHighlight.ZOOM_FACTOR_SMALL, HorizontalGridView.FOCUS_SCROLL_ALIGNED), HistoryPresenter.class);
         mBinding.recycler.setAdapter(new ItemBridgeAdapter(mAdapter = new ArrayObjectAdapter(selector)));
         mBinding.recycler.setVerticalSpacing(ResUtil.dp2px(16));
@@ -758,6 +765,10 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     }
 
     private void initConfig() {
+        PreviousProcessCrashRecovery.checkBeforeConfig(this, this::loadConfig);
+    }
+
+    private void loadConfig() {
         if (CrashRestartMode.consume()) {
             SpiderDebug.log("startup", "skip config load once after crash restart");
             showContent();
@@ -799,25 +810,13 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
                 SpiderDebug.log("startup", "config load error cost=%sms msg=%s", System.currentTimeMillis() - App.time(), msg);
                 Notify.show(msg);
                 skipNextVodConfigRefresh = true;
-                // 设计文档 §9.9：错误态要给出「错误色 + 原因 + 重试动作」。
-                // 改动前这里只弹一个会消失的吐司，然后 showContent() 留一个没有任何内容源的
-                // 空首页——用户既不知道原因，也没有重试入口。吐司保留（不删既有行为），
-                // 页面改为进入错误态。
-                showConfigError(msg);
+                // 失败不接管首页：点播/直播/设置这一行是首页列表的第一行，全屏状态浮层会把它
+                // 整块藏起来（ProgressLayout 把内容视图置为 INVISIBLE），用户连切换内容源和进
+                // 设置都做不到；吐司几秒后消失，页面上也没有任何恢复入口。这里回到内容态，
+                // 失败只由吐司提示。
+                showContent();
             }
         };
-    }
-
-    /** 内容源加载失败：进入错误态，原因取服务端返回的 message，主动作是重新加载配置。 */
-    private void showConfigError(String msg) {
-        mBinding.progressLayout.showError(
-                R.string.error_config_load,
-                msg,
-                R.string.error_retry,
-                view -> {
-                    mBinding.progressLayout.showProgress();
-                    initConfig();
-                });
     }
 
     /**
@@ -1609,6 +1608,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
 
     @Override
     protected void onDestroy() {
+        PreviousProcessCrashRecovery.release(this);
         invalidatePendingFocusRequests();
         if (mFolder != null) mFolder.clearContentFocusRequest();
         mBinding.typeRecycler.removeCallbacks(mTypeSwitch);

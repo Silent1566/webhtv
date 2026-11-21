@@ -898,6 +898,15 @@ public class ExoPlayerEngine implements PlayerEngine {
                 output.sampleRate(), output.tunneling(), reason);
     }
 
+    /**
+     * Forwards the rate the app is applying so the compressed-direct policy can refuse a vendor
+     * output that cannot implement it. Must happen before the player applies the parameters: the
+     * format/output claim is decided during configuration, not by the rate value seen later.
+     */
+    public void setPlaybackSpeed(float speed) {
+        compressedAudioDirectPolicy.setPlaybackSpeed(speed);
+    }
+
     private boolean isAudioDiagnosticsFailure(PlaybackException error, Format selectedAudio) {
         if (error == null) return false;
         if (isAudioOutputFailure(error)) return true;

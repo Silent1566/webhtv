@@ -268,7 +268,7 @@ public final class LabEnv {
 
     public static boolean installed(Context context, LabModels.Item item) {
         if (isRootfs(item)) {
-            return nonEmpty(new File(packageRoot(context, item), "rootfs"));
+            return usableRootfs(new File(packageRoot(context, item), "rootfs"));
         }
         File bin = binary(context, item);
         if (bin != null && bin.exists()) return true;
@@ -282,6 +282,16 @@ public final class LabEnv {
         if (!dir.exists() || !dir.isDirectory()) return false;
         File[] files = dir.listFiles();
         return files != null && files.length > 0;
+    }
+
+    /**
+     * rootfs 类包必须解出可用的系统树才算装好。只看"rootfs 非空"会把卸载删了一半的残骸
+     * （哪怕只剩 etc/resolv.conf 这种安装时自己写进去的文件）永久当成已安装：详情页据此
+     * 隐藏安装按钮，用户既装不上也用不了。
+     */
+    static boolean usableRootfs(File rootfs) {
+        if (!nonEmpty(rootfs)) return false;
+        return nonEmpty(new File(rootfs, "usr")) || nonEmpty(new File(rootfs, "bin"));
     }
 
     /**
@@ -392,6 +402,7 @@ public final class LabEnv {
                 if (download == null) throw new IOException(downloadError(item));
                 File packageDir = packageRoot(context, item);
                 packageDir.mkdirs();
+                deleteTree(uninstallResidue(context, item));
                 for (String dir : item.mkdirList()) {
                     try {
                         new File(expandPath(dir)).mkdirs();
@@ -400,6 +411,8 @@ public final class LabEnv {
                 }
                 boolean ubuntuRootfs = isRootfs(item);
                 File root = ubuntuRootfs ? new File(packageDir, "rootfs") : packageDir;
+                // 上次卸载/安装留下的残骸既跑不起来也解不干净，先清掉，保证重装落在干净的目录上。
+                if (ubuntuRootfs && !usableRootfs(root)) deleteTree(root);
                 root.mkdirs();
                 String url = download.getUrlByMirror(mirror);
                 File archive = new File(context.getCacheDir(), "lab_" + item.name + "_" + sanitizeFileName(fileName(url)));
@@ -579,20 +592,44 @@ public final class LabEnv {
                 .replace("{sdcard}", "/storage/emulated/0");
     }
 
-    public static void uninstall(Context context, LabModels.Item item) {
-        File packageDir = packageRoot(context, item);
-        deleteQuietly(packageDir);
-        File shared = sharedBin(context);
-        File[] links = shared.listFiles();
-        if (links != null) {
-            for (File link : links) {
-                try {
-                    Process process = Runtime.getRuntime().exec(new String[]{"readlink", link.getAbsolutePath()});
-                    String target = new String(readAll(process.getInputStream()), StandardCharsets.UTF_8).trim();
-                    process.waitFor();
-                    if (target.startsWith(packageDir.getAbsolutePath())) link.delete();
-                } catch (Exception ignored) {
-                }
+    /** 卸载残留目录：递归删除失败时把整包挪到这里，让已安装状态立刻消失。 */
+    public static File uninstallResidue(Context context, LabModels.Item item) {
+        return new File(baseRoot(context), item.name + ".removed");
+    }
+
+    /**
+     * 卸载必须"删干净，或者明确报告失败"。旧实现忽略 {@link File#delete()} 的返回值，
+     * 删不掉的残骸继续被 {@link #installed} 当成已安装：详情页随即隐藏安装按钮，
+     * 用户既卸载不掉也装不回来。删除失败时先把整包改名挪开——改名只要求父目录可写，
+     * 几乎一定成功，这样已安装状态会立刻消失，用户可以直接重装，残留留给下次清理。
+     *
+     * @return 包目录是否已经真的不存在
+     */
+    public static boolean uninstall(Context context, LabModels.Item item) {
+        File packageDir = new File(baseRoot(context), item.name);
+        File residue = uninstallResidue(context, item);
+        deleteTree(residue);
+        boolean removed = deleteTree(packageDir);
+        if (!removed && packageDir.exists() && packageDir.renameTo(residue)) {
+            removed = !packageDir.exists();
+            deleteTree(residue);
+        }
+        removeSharedLinks(context, packageDir);
+        if (removed) LabConfig.get().clearInstalledVersion(item.name);
+        return removed;
+    }
+
+    private static void removeSharedLinks(Context context, File packageDir) {
+        File[] links = sharedBin(context).listFiles();
+        if (links == null) return;
+        String prefix = packageDir.getAbsolutePath();
+        for (File link : links) {
+            try {
+                Process process = Runtime.getRuntime().exec(new String[]{"readlink", link.getAbsolutePath()});
+                String target = new String(readAll(process.getInputStream()), StandardCharsets.UTF_8).trim();
+                process.waitFor();
+                if (target.startsWith(prefix)) link.delete();
+            } catch (Exception ignored) {
             }
         }
     }
@@ -1245,6 +1282,64 @@ public final class LabEnv {
             if (files != null) for (File f : files) deleteQuietly(f);
         }
         file.delete();
+    }
+
+    private static final int MAX_DELETE_DEPTH = 64;
+
+    /**
+     * 递归删除，返回这条路径是否真的消失了。
+     *
+     * <p>和 {@link #deleteQuietly} 的两点差别都是为"删干净"：解压出来的 rootfs 与 apt 装出来的
+     * 目录里到处都是符号链接，其中指向宿主机绝对路径（/usr/bin/...、/proc/...）的那些在
+     * Android 沙箱里是悬空的。悬空链接 {@code exists()} 为 false，旧实现直接跳过不删，
+     * 父目录随之删不掉，残骸就永久留在 rootfs 里。这里按路径本身判断并逐个 unlink；
+     * 同时链接只删链接本身，不跟进目标目录，避免顺着绝对链接误删宿主目录，
+     * 深度上限则兜住链接成环的情况。
+     */
+    static boolean deleteTree(File file) {
+        return deleteTree(file, 0);
+    }
+
+    private static boolean deleteTree(File file, int depth) {
+        if (file == null || depth > MAX_DELETE_DEPTH) return false;
+        boolean link = isLink(file);
+        if (!link && !file.exists()) return true;
+        boolean directory = !link && file.isDirectory();
+        if (directory) {
+            File[] files = file.listFiles();
+            if (files != null) for (File child : files) deleteTree(child, depth + 1);
+        }
+        if (!file.delete() && directory) {
+            unlockTree(file, depth);
+            File[] files = file.listFiles();
+            if (files != null) for (File child : files) deleteTree(child, depth + 1);
+            file.delete();
+        }
+        return !file.exists() && !isLink(file);
+    }
+
+    /** 解压时带回的只读目录/文件是删除失败最常见的原因，重试前先把整棵树放开。 */
+    private static void unlockTree(File file, int depth) {
+        if (file == null || depth > MAX_DELETE_DEPTH) return;
+        file.setWritable(true);
+        file.setReadable(true);
+        file.setExecutable(true);
+        if (isLink(file) || !file.isDirectory()) return;
+        File[] files = file.listFiles();
+        if (files != null) for (File child : files) unlockTree(child, depth + 1);
+    }
+
+    /** 只判断这条路径本身是不是符号链接：JVM 单元测试走 nio，Android 低版本退回 lstat。 */
+    private static boolean isLink(File file) {
+        try {
+            return java.nio.file.Files.isSymbolicLink(file.toPath());
+        } catch (Throwable ignored) {
+        }
+        try {
+            return android.system.OsConstants.S_ISLNK(android.system.Os.lstat(file.getAbsolutePath()).st_mode);
+        } catch (Throwable ignored) {
+        }
+        return false;
     }
 
     public static void toastError(String message) {

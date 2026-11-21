@@ -1,0 +1,241 @@
+diff --git a/ffmpeg/setup.sh b/ffmpeg/setup.sh
+--- a/ffmpeg/setup.sh
++++ b/ffmpeg/setup.sh
+@@ -111,6 +111,8 @@
+       -DANDROID_ABI=$ABI \
+       -DCMAKE_TOOLCHAIN_FILE=${ANDROID_NDK_HOME}/build/cmake/android.toolchain.cmake \
+       -DCMAKE_INSTALL_PREFIX=$BUILD_DIR/external/$ABI \
++      -DCMAKE_BUILD_TYPE=Release \
++      -DCMAKE_C_FLAGS_RELEASE="-O3 -UNDEBUG" \
+       -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+       -DBUILD_SHARED_LIBS=OFF
+ 
+diff --git a/media3ext/src/main/cpp/ffaudio.cpp b/media3ext/src/main/cpp/ffaudio.cpp
+--- a/media3ext/src/main/cpp/ffaudio.cpp
++++ b/media3ext/src/main/cpp/ffaudio.cpp
+@@ -63,6 +63,16 @@
+  */
+ int transformError(int errorNumber);
+ 
++// Reuses one AVFrame per decode call instead of allocating one per output buffer.
++// Frees on every exit path, including the error returns inside the decode loop.
++struct FrameGuard {
++    AVFrame *frame;
++    explicit FrameGuard(AVFrame *value) : frame(value) {}
++    ~FrameGuard() { if (frame) av_frame_free(&frame); }
++    FrameGuard(const FrameGuard &) = delete;
++    FrameGuard &operator=(const FrameGuard &) = delete;
++};
++
+ struct GrowOutputBufferCallback {
+     uint8_t *operator()(int requiredSize) const;
+ 
+@@ -140,13 +150,53 @@
+     return context;
+ }
+ 
++// AV3A/AVS3-P3 diagnostics: per-window decode, resample and delivery timing.
++// Prints one bounded line per window instead of per frame so playback is not perturbed.
++#include <ctime>
++namespace {
++struct DecodeStats {
++    long long sendNs = 0, recvNs = 0, swrNs = 0, packetGapNs = 0;
++    long long lastPacketNs = 0, windowStartNs = 0;
++    long frames = 0, inSamples = 0, outBytes = 0;
++    long inChannels = 0, inOrder = -1, sampleRate = 0, outChannels = 0;
++};
++DecodeStats gStats;
++inline long long nowNs() {
++    timespec ts{};
++    clock_gettime(CLOCK_MONOTONIC, &ts);
++    return static_cast<long long>(ts.tv_sec) * 1000000000LL + ts.tv_nsec;
++}
++inline void reportDecodeStats() {
++    long long now = nowNs();
++    if (gStats.windowStartNs == 0) { gStats.windowStartNs = now; return; }
++    long long elapsed = now - gStats.windowStartNs;
++    if (elapsed < 2000000000LL) return;
++    double secs = static_cast<double>(elapsed) / 1e9;
++    double audioSecs = gStats.sampleRate > 0
++            ? static_cast<double>(gStats.inSamples) / static_cast<double>(gStats.sampleRate) : 0.0;
++    LOGD("av3a-stats win=%.2fs frames=%ld audio=%.3fs ratio=%.2f send_ms=%.1f recv_ms=%.1f "
++         "swr_ms=%.1f out_kb=%.1f in_ch=%ld in_order=%ld sr=%ld out_ch=%ld gap_ms=%.1f",
++         secs, gStats.frames, audioSecs, secs > 0 ? audioSecs / secs : 0.0,
++         gStats.sendNs / 1e6, gStats.recvNs / 1e6, gStats.swrNs / 1e6,
++         gStats.outBytes / 1024.0, gStats.inChannels, gStats.inOrder, gStats.sampleRate,
++         gStats.outChannels, gStats.packetGapNs / 1e6);
++    gStats.sendNs = gStats.recvNs = gStats.swrNs = gStats.packetGapNs = 0;
++    gStats.frames = gStats.inSamples = gStats.outBytes = 0;
++    gStats.windowStartNs = now;
++}
++}  // namespace
++
+ int decodePacket(AVCodecContext *context, AVPacket *packet,
+                  uint8_t *outputBuffer, int outputSize,
+                  int requestedOutputChannelCount,
+                  GrowOutputBufferCallback growBuffer) {
+     int result = 0;
++    long long packetAt = nowNs();
++    if (gStats.lastPacketNs != 0) gStats.packetGapNs += packetAt - gStats.lastPacketNs;
++    gStats.lastPacketNs = packetAt;
+     // Queue input data.
+     result = avcodec_send_packet(context, packet);
++    gStats.sendNs += nowNs() - packetAt;
+     if (result) {
+         logError("avcodec_send_packet", result);
+         return transformError(result);
+@@ -154,15 +204,19 @@
+ 
+     // Dequeue output data until it runs out.
+     int outSize = 0;
++    FrameGuard frameGuard{av_frame_alloc()};
++    AVFrame *frame = frameGuard.frame;
++    if (!frame) {
++        LOGE("Failed to allocate output frame.");
++        return AUDIO_DECODER_ERROR_INVALID_DATA;
++    }
+     while (true) {
+-        AVFrame *frame = av_frame_alloc();
+-        if (!frame) {
+-            LOGE("Failed to allocate output frame.");
+-            return AUDIO_DECODER_ERROR_INVALID_DATA;
+-        }
++        av_frame_unref(frame);
++        long long recvAt = nowNs();
+         result = avcodec_receive_frame(context, frame);
++        gStats.recvNs += nowNs() - recvAt;
+         if (result) {
+-            av_frame_free(&frame);
++            av_frame_unref(frame);
+             if (result == AVERROR(EAGAIN)) {
+                 break;
+             }
+@@ -179,11 +233,41 @@
+         if (inputChannelCount <= 0 || sampleRate <= 0) {
+             LOGE("Invalid decoded audio format: channels=%d sampleRate=%d.",
+                  inputChannelCount, sampleRate);
+-            av_frame_free(&frame);
++            av_frame_unref(frame);
+             return AUDIO_DECODER_ERROR_INVALID_DATA;
+         }
+         int outputChannelCount = requestedOutputChannelCount > 0
+                                  ? requestedOutputChannelCount : inputChannelCount;
++        gStats.inChannels = inputChannelCount;
++        gStats.inOrder = static_cast<long>(frame->ch_layout.order);
++        gStats.sampleRate = sampleRate;
++        gStats.outChannels = outputChannelCount;
++        gStats.inSamples += sampleCount;
++        gStats.frames++;
++        // Fast path adapted from the OK 5.1.6 decoder layout: when the frame is already
++        // interleaved in the requested output format at the same rate and the channel count
++        // needs no change, copy it straight through instead of spinning up swr.
++        if (!av_sample_fmt_is_planar(sampleFormat) &&
++            sampleFormat == context->request_sample_fmt &&
++            outputChannelCount == inputChannelCount) {
++            int directSize = av_samples_get_buffer_size(
++                    nullptr, outputChannelCount, sampleCount, sampleFormat, 1);
++            if (directSize > 0) {
++                if (outSize + directSize > outputSize) {
++                    outputSize = outSize + directSize;
++                    outputBuffer = growBuffer(outputSize);
++                    if (!outputBuffer) {
++                        LOGE("Failed to reallocate buffer for direct copy.");
++                        return AUDIO_DECODER_ERROR_OTHER;
++                    }
++                }
++                std::memcpy(outputBuffer + outSize, frame->data[0],
++                            static_cast<size_t>(directSize));
++                outSize += directSize;
++                gStats.outBytes += directSize;
++                continue;
++            }
++        }
+         SwrContext *resampleContext = nullptr;
+         if (context->opaque) {
+             resampleContext = (SwrContext *) context->opaque;
+@@ -194,7 +278,7 @@
+             result = av_channel_layout_copy(&inputLayout, &frame->ch_layout);
+             if (result < 0) {
+                 logError("av_channel_layout_copy", result);
+-                av_frame_free(&frame);
++                av_frame_unref(frame);
+                 return transformError(result);
+             }
+             if (outputChannelCount == inputChannelCount) {
+@@ -279,7 +363,7 @@
+             if (result < 0) {
+                 logError("swr initialization", result);
+                 swr_free(&resampleContext);
+-                av_frame_free(&frame);
++                av_frame_unref(frame);
+                 return transformError(result);
+             }
+             context->opaque = resampleContext;
+@@ -293,7 +377,7 @@
+                 1);
+         if (requiredFrameSize < 0) {
+             logError("av_samples_get_buffer_size", requiredFrameSize);
+-            av_frame_free(&frame);
++            av_frame_unref(frame);
+             return transformError(requiredFrameSize);
+         }
+         if (outSize + requiredFrameSize > outputSize) {
+@@ -305,18 +389,20 @@
+             outputBuffer = growBuffer(outputSize);
+             if (!outputBuffer) {
+                 LOGE("Failed to reallocate output buffer.");
+-                av_frame_free(&frame);
++                av_frame_unref(frame);
+                 return AUDIO_DECODER_ERROR_OTHER;
+             }
+         }
+         uint8_t *outputPlanes[] = {outputBuffer + outSize};
++        long long swrAt = nowNs();
+         result = swr_convert(
+                 resampleContext,
+                 outputPlanes,
+                 outSamples,
+                 (const uint8_t **) frame->extended_data,
+                 sampleCount);
+-        av_frame_free(&frame);
++        gStats.swrNs += nowNs() - swrAt;
++        av_frame_unref(frame);
+         if (result < 0) {
+             logError("swr_convert", result);
+             return AUDIO_DECODER_ERROR_INVALID_DATA;
+@@ -332,7 +418,35 @@
+             return transformError(convertedSize);
+         }
+         outSize += convertedSize;
++        gStats.outBytes += convertedSize;
++        // Drain samples the resampler still holds. Without this the tail of every frame
++        // stays buffered inside swr and surfaces late on seek/stop transitions.
++        while (swr_get_out_samples(resampleContext, 0) >= 1) {
++            int pending = swr_get_out_samples(resampleContext, 0);
++            int drainSize = av_samples_get_buffer_size(
++                    nullptr, outputChannelCount, pending, context->request_sample_fmt, 1);
++            if (drainSize < 0) break;
++            if (outSize + drainSize > outputSize) {
++                outputSize = outSize + drainSize;
++                outputBuffer = growBuffer(outputSize);
++                if (!outputBuffer) {
++                    LOGE("Failed to reallocate output buffer for swr drain.");
++                    return AUDIO_DECODER_ERROR_OTHER;
++                }
++            }
++            uint8_t *drainPlanes[] = {outputBuffer + outSize};
++            long long drainAt = nowNs();
++            int drained = swr_convert(resampleContext, drainPlanes, pending, nullptr, 0);
++            gStats.swrNs += nowNs() - drainAt;
++            if (drained <= 0) break;
++            int drainedSize = av_samples_get_buffer_size(
++                    nullptr, outputChannelCount, drained, context->request_sample_fmt, 1);
++            if (drainedSize < 0) break;
++            outSize += drainedSize;
++            gStats.outBytes += drainedSize;
++        }
+     }
++    reportDecodeStats();
+     return outSize;
+ }
+ 

@@ -31,11 +31,13 @@ import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.TmdbLanguagePolicy;
 import com.fongmi.android.tv.utils.Util;
+import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 import com.google.gson.reflect.TypeToken;
 
 import java.lang.reflect.Type;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -48,6 +50,8 @@ import java.util.concurrent.TimeUnit;
 public class History implements Diffable<History> {
 
     private static final long HISTORY_REFRESH_DEBOUNCE = 500;
+    /** 线路内核表用独立 Gson：历史记录在无 App 上下文的单元测试里也会被构造。 */
+    private static final Gson KERNEL_JSON = new Gson();
     private static final Runnable HISTORY_REFRESH = RefreshEvent::history;
     private static final long NEAR_END_MIN_MS = TimeUnit.SECONDS.toMillis(5);
     private static final long NEAR_END_MAX_MS = TimeUnit.SECONDS.toMillis(30);
@@ -122,6 +126,16 @@ public class History implements Diffable<History> {
     @ColumnInfo(defaultValue = "-1")
     private int player = PlayerSetting.NONE;
     /**
+     * 按线路（flag）记住的内核，JSON：{@code {"高清线路1":0,"高清线路2":3}}，空串表示没有线路级记录。
+     *
+     * <p>必须按线路分：一条历史记录只有一个 {@link #vodFlag} 且会随用户换线路改写，
+     * 只存一个整剧值就会把线路 A 的选择带到线路 B。存整张表而不拆列的理由同
+     * {@link #subtitleSource}——它不进 WHERE / ORDER BY，也不参与去重。
+     */
+    @SerializedName("kernelByFlag")
+    @ColumnInfo(defaultValue = "")
+    private String kernelByFlag = "";
+    /**
      * 外挂字幕来源的 JSON（{@link SubtitleSource}），空串表示这条记录没有外部字幕偏好。
      *
      * <p>存整个值对象而不是拆五列：这几个字段没有一个会进 WHERE 或 ORDER BY，
@@ -178,6 +192,7 @@ public class History implements Diffable<History> {
         item.tmdbSeasonNumber = tmdbSeasonNumber;
         item.tmdbEpisodeNumber = tmdbEpisodeNumber;
         item.player = player;
+        item.kernelByFlag = kernelByFlag;
         item.subtitleSource = subtitleSource;
         item.updateTime = updateTime;
         item.playbackSourceKey = playbackSourceKey;
@@ -813,16 +828,60 @@ public class History implements Diffable<History> {
         return player;
     }
 
-    public int getPlayerOrDefault() {
-        return PlayerSetting.resolvePlayer(player);
-    }
-
-    public boolean hasPlayer() {
-        return PlayerSetting.isPlayer(player);
-    }
-
+    /**
+     * 实体/Gson 反序列化用的写入点，原样保存不做净化。
+     * 这个字段已降级为旧版整剧值：新写入走 {@link #setKernelForFlag(String, int)}，
+     * 它不再参与内核判定（v48→v49 迁移会把它清空），只为升级与备份兼容保留形状。
+     */
     public void setPlayer(int player) {
-        this.player = PlayerSetting.sanitizePlayer(player);
+        this.player = player;
+    }
+
+    public String getKernelByFlag() {
+        return kernelByFlag;
+    }
+
+    public void setKernelByFlag(String kernelByFlag) {
+        this.kernelByFlag = kernelByFlag == null ? "" : kernelByFlag;
+    }
+
+    /** 该线路记住的内核；没有记录返回 {@link PlayerSetting#NONE}。 */
+    public int getKernelForFlag(String flag) {
+        Integer kernel = kernelByFlagMap().get(Objects.toString(flag, ""));
+        return kernel != null && PlayerSetting.isPlayer(kernel) ? kernel : PlayerSetting.NONE;
+    }
+
+    /** 记录用户为该线路选定的内核。 */
+    public void setKernelForFlag(String flag, int kernel) {
+        if (!PlayerSetting.isPlayer(kernel)) return;
+        LinkedHashMap<String, Integer> map = kernelByFlagMap();
+        map.put(Objects.toString(flag, ""), kernel);
+        setKernelByFlagMap(map);
+    }
+
+    /**
+     * 本次播放可沿用的内核：跨源聚合来的记录不沿用（内核不该跟着记录跨源走），
+     * 该线路没有记录就回落到设置页的全局默认。
+     */
+    public int getPlaybackPlayerOrDefault(String flag) {
+        if (isCrossSourcePlayback()) return PlayerSetting.getPlayer();
+        int kernel = getKernelForFlag(flag);
+        return PlayerSetting.isPlayer(kernel) ? kernel : PlayerSetting.getPlayer();
+    }
+
+    private LinkedHashMap<String, Integer> kernelByFlagMap() {
+        if (kernelByFlag == null || kernelByFlag.trim().isEmpty()) return new LinkedHashMap<>();
+        try {
+            LinkedHashMap<String, Integer> map = KERNEL_JSON.fromJson(kernelByFlag, new TypeToken<LinkedHashMap<String, Integer>>() {}.getType());
+            return map == null ? new LinkedHashMap<>() : map;
+        } catch (Exception e) {
+            // 一条脏数据不能让整条历史不可用。
+            return new LinkedHashMap<>();
+        }
+    }
+
+    private void setKernelByFlagMap(LinkedHashMap<String, Integer> map) {
+        kernelByFlag = map == null || map.isEmpty() ? "" : KERNEL_JSON.toJson(map);
     }
 
     public String getSubtitleSource() {
@@ -1184,6 +1243,29 @@ public class History implements Diffable<History> {
         return cid(cid).merge(true).save();
     }
 
+    /**
+     * 原源租约进度写回：只按本行显式 cid/key 落库，保留删除墓碑／季进度事务，
+     * 但不走当前配置的 TMDB enrich，也不新建已被删除的记录。
+     */
+    public History saveOriginProgress(long originPosition, long originDuration) {
+        if (originPosition < 0 && originDuration <= 0) return this;
+        boolean[] saved = {false};
+        TmdbSeasonProgressStore.runInTransaction(() -> {
+            History before = find(getCid(), getKey());
+            if (before == null || before.getTmdbId() != getTmdbId()) return null;
+            long deletedAt = latestDeletion(PlaybackDeleteTombstoneStore.snapshot(), getKey());
+            if (!writeSurvivesDeletion(getCreateTime(), deletedAt)) return null;
+            position = Math.max(0, originPosition);
+            if (originDuration > 0) duration = originDuration;
+            createTime = updateTime = System.currentTimeMillis();
+            AppDatabase.get().getHistoryDao().insertOrUpdate(this);
+            TmdbSeasonProgressStore.write(this);
+            saved[0] = true;
+            return null;
+        });
+        if (saved[0]) notifyChanged();
+        return this;
+    }
     private void enrichTmdbId() {
         if (tmdbId > 0 || !Setting.isHistoryAggregationEffective()) return;
         String siteKey = getSiteKey();

@@ -121,6 +121,13 @@ public class PlayerManagerSwitchCauseSourceTest {
         // Automatic fallbacks pass chosen=false so they never look like a user selection.
         assertTrue(source.contains("switchEngine(playerType, false, true, true, PlayerEngine.SOFT, \"fallback-decode:\""));
         assertTrue(source.contains("switchEngine(next, false, true, true, fallbackDecode("));
+        // chosen 只影响归因日志：会话内核必须等于刚建起来的引擎，自动回退同样要写，
+        // 否则取播放地址、IJK 运行时判定、LUT 资格会继续按被放弃的内核分叉。
+        // 用户选定的内核由历史记录承载（rememberPlayerKernel），不靠会话内核保留。
+        assertTrue("every engine switch must publish the kernel it actually built",
+                engineSwitch.contains("PlayerSetting.putActivePlayer(type);"));
+        assertFalse("an automatic fallback must not leave the session kernel on the kernel it abandoned",
+                engineSwitch.contains("if (chosen) PlayerSetting.putActivePlayer(type);"));
     }
 
     @Test

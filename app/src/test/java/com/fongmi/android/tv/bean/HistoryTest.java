@@ -1,5 +1,8 @@
 package com.fongmi.android.tv.bean;
 
+import com.fongmi.android.tv.setting.PlayerSetting;
+import com.google.gson.Gson;
+
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -64,6 +67,55 @@ public class HistoryTest {
         updated.setVodRemarks("Episode 2");
 
         assertFalse(history.isSameContent(updated));
+    }
+
+    @Test
+    public void kernelForFlag_keepsEachLineSeparate() {
+        History history = new History();
+        history.setVodFlag("高清线路2");
+
+        history.setKernelForFlag("高清线路1", PlayerSetting.EXO);
+        history.setKernelForFlag("高清线路2", PlayerSetting.MPV);
+
+        assertEquals(PlayerSetting.EXO, history.getKernelForFlag("高清线路1"));
+        assertEquals(PlayerSetting.MPV, history.getKernelForFlag("高清线路2"));
+        assertEquals("a line nobody picked must not inherit another line's core",
+                PlayerSetting.NONE, history.getKernelForFlag("高清线路3"));
+    }
+
+    @Test
+    public void kernelForFlag_ignoresTheLegacyWholeShowValue() {
+        // 旧版把用户的选择写在整剧 player 上，而 vodFlag 会被之后的换线路改写，
+        // 那份值无法可靠归到某条线路上，迁移后一律不再参与判定。
+        History legacy = new Gson().fromJson("{\"player\":0,\"vodFlag\":\"高清线路2\"}", History.class);
+
+        assertEquals(PlayerSetting.NONE, legacy.getKernelForFlag("高清线路2"));
+        assertEquals(PlayerSetting.NONE, legacy.getKernelForFlag("高清线路1"));
+
+        legacy.setKernelForFlag("高清线路1", PlayerSetting.MPV);
+
+        assertEquals(PlayerSetting.MPV, legacy.getKernelForFlag("高清线路1"));
+        assertEquals("a per-line pick must not resurrect the legacy whole-show value",
+                PlayerSetting.NONE, legacy.getKernelForFlag("高清线路2"));
+    }
+
+    @Test
+    public void kernelForFlag_survivesCopyAndJsonRoundTrip() {
+        History history = new History();
+        history.setKernelForFlag("高清线路1", PlayerSetting.MPV);
+
+        assertEquals(PlayerSetting.MPV, history.copy().getKernelForFlag("高清线路1"));
+
+        History restored = new Gson().fromJson(new Gson().toJson(history), History.class);
+        assertEquals(PlayerSetting.MPV, restored.getKernelForFlag("高清线路1"));
+    }
+
+    @Test
+    public void kernelForFlag_toleratesCorruptStorage() {
+        History history = new Gson().fromJson("{\"kernelByFlag\":\"not json\"}", History.class);
+
+        assertEquals("a corrupt line table must behave like no memory instead of throwing",
+                PlayerSetting.NONE, history.getKernelForFlag("高清线路1"));
     }
 
     private static History coverHistory() {

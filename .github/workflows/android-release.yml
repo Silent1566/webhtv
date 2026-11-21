@@ -1,5 +1,15 @@
 name: Android Release
 
+# One release variant is assembled per matrix job instead of all four in a single
+# Gradle invocation. In the single-invocation layout four concurrent
+# mergeResources tasks shared one runner's CPU budget, so on a degraded host a
+# single AAPT2 compile request exceeded AGP's fixed 2-minute
+# Aapt2DaemonTimeouts.compile limit and aborted the whole build before any APK
+# existed (run 44227901940: the build step ran 58 min, failed at 39 min, and
+# published nothing). Per-variant jobs
+# keep one resource merge per runner, run in parallel, and retry the assemble
+# step once, so a slow host costs one variant attempt instead of the release.
+
 on:
   workflow_dispatch:
     inputs:
@@ -52,67 +62,24 @@ env:
   UPDATE_CHANNEL_TAG: update-channel
 
 jobs:
-  release:
-    name: Build and publish
+  meta:
+    name: Resolve release tag
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 10
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      title: ${{ steps.meta.outputs.title }}
+      version_name: ${{ steps.meta.outputs.version_name }}
+      version_code: ${{ steps.meta.outputs.version_code }}
+      short_sha: ${{ steps.meta.outputs.short_sha }}
+      channel: ${{ steps.meta.outputs.channel }}
+      apk_suffix: ${{ steps.meta.outputs.apk_suffix }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "21"
-          cache: gradle
-
-      - name: Set up Python 3.10
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
-
-      - name: Verify bundled MPV native assets
-        run: bash scripts/verify_mpv_native_assets.sh --require-elf
-
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-        with:
-          packages: platform-tools
-
-      - name: Install Android packages
-        run: |
-          # API 37 is not published in sdkmanager's stable channel; install the platform archive directly.
-          sdkmanager "platform-tools" "platforms;android-28" "build-tools;36.0.0"
-          curl -fsSL -o /tmp/platform-37.zip https://dl.google.com/android/repository/platform-37.0_r01.zip
-          rm -rf /tmp/platform-37 "$ANDROID_HOME/platforms/android-37"
-          mkdir -p /tmp/platform-37 "$ANDROID_HOME/platforms"
-          unzip -q /tmp/platform-37.zip -d /tmp/platform-37
-          platform_jar="$(find /tmp/platform-37 -name android.jar -print -quit)"
-          test -n "$platform_jar"
-          mv "$(dirname "$platform_jar")" "$ANDROID_HOME/platforms/android-37"
-
-      - name: Run release-critical tests
-        run: |
-          chmod +x ./gradlew
-          ./gradlew \
-            :app:testMobileArm64_v8aDebugUnitTest \
-            --tests 'com.fongmi.android.tv.player.danmaku.*' \
-            --tests 'com.fongmi.android.tv.UpdateChannelTest' \
-            --tests 'com.fongmi.android.tv.UpdaterFutureTest' \
-            --tests 'com.fongmi.android.tv.utils.GithubTest' \
-            --tests 'com.fongmi.android.tv.utils.GithubProxyTest' \
-            --tests 'com.fongmi.android.tv.ui.dialog.AboutDialogLayoutTest' \
-            --tests 'com.fongmi.android.tv.ui.dialog.UpdateDialogChannelVisibilityTest' \
-            --tests 'com.fongmi.android.tv.ui.adapter.VodAdapterLayoutTest' \
-            --no-daemon
-          ./gradlew \
-            :app:testLeanbackArm64_v8aDebugUnitTest \
-            --tests 'com.fongmi.android.tv.ui.dialog.UpdateDialogLayoutTest' \
-            --no-daemon
 
       - name: Resolve release tag
         id: meta
@@ -165,6 +132,126 @@ jobs:
             echo "apk_suffix=$APK_SUFFIX"
           } >> "$GITHUB_OUTPUT"
 
+  test:
+    name: Release-critical tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      # Chaquopy pins buildPython to 3.10 (chaquo/build.gradle) and fails on a
+      # different interpreter, so 3.10 must be the python3 on PATH for Gradle.
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      - name: Install Android packages
+        run: |
+          # API 37 is not published in sdkmanager's stable channel; install the platform archive directly.
+          sdkmanager "platform-tools" "platforms;android-28" "build-tools;36.0.0"
+          curl -fsSL -o /tmp/platform-37.zip https://dl.google.com/android/repository/platform-37.0_r01.zip
+          rm -rf /tmp/platform-37 "$ANDROID_HOME/platforms/android-37"
+          mkdir -p /tmp/platform-37 "$ANDROID_HOME/platforms"
+          unzip -q /tmp/platform-37.zip -d /tmp/platform-37
+          platform_jar="$(find /tmp/platform-37 -name android.jar -print -quit)"
+          test -n "$platform_jar"
+          mv "$(dirname "$platform_jar")" "$ANDROID_HOME/platforms/android-37"
+
+      - name: Run release-critical tests
+        timeout-minutes: 25
+        run: |
+          chmod +x ./gradlew
+          ./gradlew \
+            :app:testMobileArm64_v8aDebugUnitTest \
+            --tests 'com.fongmi.android.tv.player.danmaku.*' \
+            --tests 'com.fongmi.android.tv.UpdateChannelTest' \
+            --tests 'com.fongmi.android.tv.UpdaterFutureTest' \
+            --tests 'com.fongmi.android.tv.utils.GithubTest' \
+            --tests 'com.fongmi.android.tv.utils.GithubProxyTest' \
+            --tests 'com.fongmi.android.tv.ui.dialog.AboutDialogLayoutTest' \
+            --tests 'com.fongmi.android.tv.ui.dialog.UpdateDialogChannelVisibilityTest' \
+            --tests 'com.fongmi.android.tv.ui.adapter.VodAdapterLayoutTest' \
+            --no-daemon
+          ./gradlew \
+            :app:testLeanbackArm64_v8aDebugUnitTest \
+            --tests 'com.fongmi.android.tv.ui.dialog.UpdateDialogLayoutTest' \
+            --no-daemon
+
+  build:
+    name: Build ${{ matrix.variant }} APK
+    needs: meta
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    strategy:
+      fail-fast: false
+      matrix:
+        variant:
+          - MobileArm64_v8a
+          - MobileArmeabi_v7a
+          - LeanbackArm64_v8a
+          - LeanbackArmeabi_v7a
+
+    env:
+      WEBHTV_RELEASE_TAG: ${{ needs.meta.outputs.tag }}
+      WEBHTV_APK_SUFFIX: ${{ needs.meta.outputs.apk_suffix }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      # Chaquopy pins buildPython to 3.10 (chaquo/build.gradle) and fails on a
+      # different interpreter, so 3.10 must be the python3 on PATH for Gradle.
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Verify bundled MPV native assets
+        run: bash scripts/verify_mpv_native_assets.sh --require-elf
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      - name: Install Android packages
+        run: |
+          # API 37 is not published in sdkmanager's stable channel; install the platform archive directly.
+          sdkmanager "platform-tools" "platforms;android-28" "build-tools;36.0.0"
+          curl -fsSL -o /tmp/platform-37.zip https://dl.google.com/android/repository/platform-37.0_r01.zip
+          rm -rf /tmp/platform-37 "$ANDROID_HOME/platforms/android-37"
+          mkdir -p /tmp/platform-37 "$ANDROID_HOME/platforms"
+          unzip -q /tmp/platform-37.zip -d /tmp/platform-37
+          platform_jar="$(find /tmp/platform-37 -name android.jar -print -quit)"
+          test -n "$platform_jar"
+          mv "$(dirname "$platform_jar")" "$ANDROID_HOME/platforms/android-37"
+
       - name: Configure release signing
         env:
           RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
@@ -193,30 +280,105 @@ jobs:
           } > local.properties
           echo "Release signing configured"
 
-      - name: Build four release APKs
+      - name: Assemble release APK
+        timeout-minutes: 55
         env:
-          WEBHTV_RELEASE_TAG: ${{ steps.meta.outputs.tag }}
-          WEBHTV_APK_SUFFIX: ${{ steps.meta.outputs.apk_suffix }}
+          VARIANT: ${{ matrix.variant }}
+          BUILD_ATTEMPTS: "2"
+          ATTEMPT_TIMEOUT_SECONDS: "1500"
         run: |
           chmod +x ./gradlew
-          rm -rf Release/apk
-          ./gradlew \
-            :app:assembleMobileArm64_v8aRelease \
-            :app:assembleMobileArmeabi_v7aRelease \
-            :app:assembleLeanbackArm64_v8aRelease \
-            :app:assembleLeanbackArmeabi_v7aRelease \
-            --no-daemon
+          attempt=1
+          while true; do
+            rm -rf Release/apk
+            # Bound the attempt here, not at the step level: a wedged or starved
+            # build must fail inside this loop so the retry below can still run.
+            set +e
+            timeout --signal=TERM --kill-after=60s "${ATTEMPT_TIMEOUT_SECONDS}s" \
+              ./gradlew ":app:assemble${VARIANT}Release" --no-daemon
+            status=$?
+            set -e
+            if [ "$status" -eq 0 ]; then
+              exit 0
+            fi
+            if [ "$status" -eq 124 ] || [ "$status" -eq 125 ]; then
+              # 124 = GNU timeout expired; 125 = the timeout wrapper itself failed or terminated the attempt.
+              echo "::warning title=Build attempt timed out::assemble${VARIANT}Release did not finish within ${ATTEMPT_TIMEOUT_SECONDS}s on attempt ${attempt} (exit ${status})."
+            fi
+            if [ "$attempt" -ge "$BUILD_ATTEMPTS" ]; then
+              echo "::error title=Release build failed::assemble${VARIANT}Release failed on attempt ${attempt} of ${BUILD_ATTEMPTS} (last exit status ${status})."
+              exit 1
+            fi
+            echo "::warning title=Retrying ${VARIANT} build::Attempt ${attempt} exited with ${status}; retrying once. This covers transient runner saturation, network, and AAPT2 daemon failures, not deterministic build errors."
+            attempt=$((attempt + 1))
+            sleep 20
+          done
+
+      - name: Collect APK
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          mapfile -t apks < <(find Release/apk -maxdepth 1 -name '*.apk')
+          if [ "${#apks[@]}" -ne 1 ]; then
+            echo "::error title=Unexpected APK count::Expected exactly one APK for ${{ matrix.variant }}, found ${#apks[@]}."
+            exit 1
+          fi
+          cp "${apks[0]}" dist/
+          ls -lh dist/
+
+      - name: Upload ${{ matrix.variant }} APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-${{ matrix.variant }}
+          path: dist/*.apk
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish release
+    needs: [meta, test, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Download release APKs
+        uses: actions/download-artifact@v4
+        with:
+          pattern: apk-*
+          path: dist
+          merge-multiple: true
 
       - name: Collect artifacts
         run: |
-          rm -rf dist
-          mkdir -p dist
-          cp Release/apk/*.apk dist/
+          set -euo pipefail
+          apk_count="$(find dist -maxdepth 1 -name '*.apk' | wc -l)"
+          if [ "$apk_count" -ne 4 ]; then
+            echo "::error title=Missing release APKs::Expected 4 APKs, found $apk_count."
+            find dist -maxdepth 1 -name '*.apk' -printf '%f\n' || true
+            exit 1
+          fi
           ls -lh dist/
+
+      # publish_oci defaults to true, so an unconfigured registry must not fail the
+      # release: the input only promises OCI artifacts when a registry is set up.
+      - name: Report OCI publishing state
+        if: ${{ inputs.publish_oci && vars.OCI_REPOSITORY == '' }}
+        run: |
+          echo "::notice title=OCI publishing skipped::publish_oci is enabled but vars.OCI_REPOSITORY is not configured. APKs are published to GitHub Releases only."
 
       - name: Set up ORAS
         id: oras
-        if: ${{ inputs.publish_oci }}
+        if: ${{ inputs.publish_oci && vars.OCI_REPOSITORY != '' }}
         uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1
         with:
           url: https://github.com/oras-project/oras/releases/download/v1.3.4/oras_1.3.4_linux_amd64.tar.gz
@@ -224,11 +386,11 @@ jobs:
 
       - name: Publish APKs to OCI Registry
         id: oci
-        if: ${{ inputs.publish_oci && steps.oras.outcome == 'success' }}
+        if: ${{ inputs.publish_oci && vars.OCI_REPOSITORY != '' && steps.oras.outcome == 'success' }}
         env:
           DIST_DIR: dist
           OCI_METADATA_FILE: build/oci-metadata.json
-          RELEASE_TAG: ${{ steps.meta.outputs.tag }}
+          RELEASE_TAG: ${{ needs.meta.outputs.tag }}
           OCI_REPOSITORY: ${{ vars.OCI_REPOSITORY }}
           OCI_USERNAME: ${{ secrets.OCI_USERNAME }}
           OCI_TOKEN: ${{ secrets.OCI_TOKEN }}
@@ -266,7 +428,7 @@ jobs:
       - name: Generate update manifests
         env:
           RELEASE_NOTES: ${{ steps.release_notes.outputs.notes }}
-          GITHUB_RELEASE_DOWNLOAD_BASE: https://github.com/${{ github.repository }}/releases/download/${{ steps.meta.outputs.tag }}
+          GITHUB_RELEASE_DOWNLOAD_BASE: https://github.com/${{ github.repository }}/releases/download/${{ needs.meta.outputs.tag }}
           OCI_PUBLISH_OUTCOME: ${{ steps.oci.outcome }}
         run: |
           python3 - <<'PY'
@@ -275,7 +437,7 @@ jobs:
           import json
           import os
 
-          tag = "${{ steps.meta.outputs.tag }}"
+          tag = "${{ needs.meta.outputs.tag }}"
           notes = os.environ.get("RELEASE_NOTES", "").strip()
           release_download_base = os.environ["GITHUB_RELEASE_DOWNLOAD_BASE"]
           oci = {}
@@ -289,10 +451,10 @@ jobs:
                   content = fh.read()
               data = {
                   "name": tag,
-                  "versionName": "${{ steps.meta.outputs.version_name }}",
-                  "desc": f"{tag} - ${{ steps.meta.outputs.short_sha }}",
-                  "channel": "${{ steps.meta.outputs.channel }}",
-                  "code": int("${{ steps.meta.outputs.version_code }}"),
+                  "versionName": "${{ needs.meta.outputs.version_name }}",
+                  "desc": f"{tag} - ${{ needs.meta.outputs.short_sha }}",
+                  "channel": "${{ needs.meta.outputs.channel }}",
+                  "code": int("${{ needs.meta.outputs.version_code }}"),
                   "apk": f"{release_download_base}/{base}.apk",
                   "size": len(content),
                   "sha256": hashlib.sha256(content).hexdigest(),
@@ -319,16 +481,16 @@ jobs:
           RELEASE_NOTES: ${{ steps.release_notes.outputs.notes }}
         run: |
           PRERELEASE_FLAG=""
-          if [ "${{ inputs.prerelease }}" = "true" ] || [ "${{ steps.meta.outputs.channel }}" = "beta" ]; then
+          if [ "${{ inputs.prerelease }}" = "true" ] || [ "${{ needs.meta.outputs.channel }}" = "beta" ]; then
             PRERELEASE_FLAG="--prerelease"
           fi
           NOTES="${RELEASE_NOTES:-手动触发 GitHub Actions 构建发布。}"
-          if gh release view "${{ steps.meta.outputs.tag }}" >/dev/null 2>&1; then
-            gh release upload "${{ steps.meta.outputs.tag }}" dist/*.apk dist/*.json --clobber
+          if gh release view "${{ needs.meta.outputs.tag }}" >/dev/null 2>&1; then
+            gh release upload "${{ needs.meta.outputs.tag }}" dist/*.apk dist/*.json --clobber
           else
-            gh release create "${{ steps.meta.outputs.tag }}" \
+            gh release create "${{ needs.meta.outputs.tag }}" \
               --target "$GITHUB_SHA" \
-              --title "${{ steps.meta.outputs.title }}" \
+              --title "${{ needs.meta.outputs.title }}" \
               --notes "$NOTES" \
               $PRERELEASE_FLAG \
               dist/*.apk dist/*.json
@@ -343,7 +505,7 @@ jobs:
           mkdir -p channel-manifests other-channel-manifests
           cp dist/*.json channel-manifests/
 
-          if [ "${{ steps.meta.outputs.channel }}" = "stable" ]; then
+          if [ "${{ needs.meta.outputs.channel }}" = "stable" ]; then
             OTHER_TAG="$(gh release list --limit 100 --json tagName,isDraft,isPrerelease \
               --jq '[.[] | select((.isDraft == false) and (.isPrerelease == true) and (.tagName | test("-beta-[0-9]{12}$")))] | first | .tagName // ""')"
             OTHER_PATTERN="*-beta.json"
@@ -357,7 +519,7 @@ jobs:
             if gh release download "$OTHER_TAG" --pattern "$OTHER_PATTERN" --dir other-channel-manifests; then
               for manifest in other-channel-manifests/*.json; do
                 [ -e "$manifest" ] || continue
-                if [ "${{ steps.meta.outputs.channel }}" = "beta" ] && [[ "$(basename "$manifest")" == *-beta.json ]]; then
+                if [ "${{ needs.meta.outputs.channel }}" = "beta" ] && [[ "$(basename "$manifest")" == *-beta.json ]]; then
                   continue
                 fi
                 cp "$manifest" channel-manifests/
@@ -380,18 +542,18 @@ jobs:
         if: ${{ inputs.sync_cnb }}
         env:
           CNB_TOKEN: ${{ secrets.CNB_TOKEN }}
-          CNB_RELEASE_TAG: ${{ steps.meta.outputs.tag }}
-          CNB_RELEASE_TITLE: ${{ steps.meta.outputs.title }}
+          CNB_RELEASE_TAG: ${{ needs.meta.outputs.tag }}
+          CNB_RELEASE_TITLE: ${{ needs.meta.outputs.title }}
           CNB_RELEASE_NOTES: ${{ steps.release_notes.outputs.notes }}
-          CNB_RELEASE_PRERELEASE: ${{ inputs.prerelease == true || steps.meta.outputs.channel == 'beta' }}
-          CNB_RELEASE_LATEST: ${{ steps.meta.outputs.channel == 'stable' }}
+          CNB_RELEASE_PRERELEASE: ${{ inputs.prerelease == true || needs.meta.outputs.channel == 'beta' }}
+          CNB_RELEASE_LATEST: ${{ needs.meta.outputs.channel == 'stable' }}
         run: |
           .github/scripts/sync-cnb-release.sh
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: webhtv-${{ steps.meta.outputs.tag }}
+          name: webhtv-${{ needs.meta.outputs.tag }}
           path: dist/*
           if-no-files-found: error
           retention-days: 30

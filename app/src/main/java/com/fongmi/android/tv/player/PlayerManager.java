@@ -142,6 +142,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.Consumer;
 import java.util.function.LongSupplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -303,6 +304,11 @@ public class PlayerManager implements ParseCallback {
     private boolean mpvAutoOutputEvaluationScheduled;
     private boolean mpvAutoOutputProbeGaveUp;
     private boolean mpvExplicitSubtitlePreference;
+    private Sub pendingSubtitleApply;
+    private boolean pendingSubtitleSelectionIssued;
+    private Consumer<Boolean> subtitleApplyListener;
+    /** 主线程观察到的最近一次已知总时长；未知或直播时为 0。 */
+    private volatile long lastKnownDurationMs;
     private boolean mpvAutoGpuPinnedForSession;
     private boolean mpvAutoVulkanPinnedForItem;
     private boolean mpvAutoVulkanDisabledForItem;
@@ -328,6 +334,8 @@ public class PlayerManager implements ParseCallback {
     private int mpvOutputEvaluationSeq;
     private int mpvAutoOutputProbeAttempts;
     private float userPlaybackSpeed = 1f;
+    /** Guards the one speed-change audio rebuild; {@link #rebuildAudioPipeline()} re-applies speed. */
+    private boolean speedChangeAudioRebuildInProgress;
     private float networkProtectionSpeed = 1f;
     private float networkProtectionSupportedSpeed = 1f;
     private long networkProtectionMediaBitrate;
@@ -409,6 +417,7 @@ public class PlayerManager implements ParseCallback {
     }
 
     public void release() {
+        resetKnownDuration();
         mediaSession.beforeRelease();
         PlayerSetting.clearActivePlayer();
         prepareSeq++;
@@ -435,6 +444,7 @@ public class PlayerManager implements ParseCallback {
         danmakuController = null;
         endPlaybackTelemetrySession("release");
         clearPlaybackAutoContext();
+        clearPendingSubtitleApply();
         ijkRuntimeTemporaryFallback = false;
         ijkRuntimeManualOverride = false;
         pendingIjkRuntimeFallbackReparse = false;
@@ -1059,9 +1069,8 @@ public class PlayerManager implements ParseCallback {
      *   <li>{@code kind=kernel|decode|none} 区分换内核、换软硬解，以及两者都没变
      *       （{@code none}：调用方只是想记一条原因，实际切换参数与当前一致）；</li>
      *   <li>{@code cause=} 机器可读原因（见各调用点）；</li>
-     *   <li>{@code chosen=} 本次切换是否把用户选定的内核记为会话内核
-     *       （即是否执行 {@code PlayerSetting.putActivePlayer(type)}），
-     *       不是「是否由用户发起」——用户手动换软硬解时它是 {@code false}；</li>
+     *   <li>{@code chosen=} 本次切换是否由用户选定（仅归因，与会话内核无关——会话内核
+     *       一律跟随实际引擎，自动回退也写），因此用户手动换软硬解时它同样是 {@code false}；</li>
      *   <li>{@code from/to} 同时给出内核名与软硬解，避免只看到其中一个维度。</li>
      * </ul>
      *
@@ -1155,8 +1164,9 @@ public class PlayerManager implements ParseCallback {
         return TextUtils.isEmpty(format.sampleMimeType) || TextUtils.isEmpty(sub.getFormat()) || TextUtils.equals(format.sampleMimeType, sub.getFormat());
     }
 
+    /** Media3 把轨道语言标签规范成小写 BCP-47，与字幕里的写法大小写不敏感地比较。 */
     private static boolean languageMatches(Sub sub, Format format) {
-        return TextUtils.isEmpty(format.language) || TextUtils.isEmpty(sub.getLang()) || TextUtils.equals(format.language, sub.getLang());
+        return TextUtils.isEmpty(format.language) || TextUtils.isEmpty(sub.getLang()) || format.language.equalsIgnoreCase(sub.getLang());
     }
 
     private static void append(StringBuilder builder, String name, String value) {
@@ -1259,6 +1269,30 @@ public class PlayerManager implements ParseCallback {
         this.durationFallback = durationFallback;
     }
 
+    /** 最近一次在主线程观察到的总时长；0 表示未知（直播或尚未就绪）。 */
+    public long getLastKnownDurationMs() {
+        return lastKnownDurationMs;
+    }
+
+    void resetKnownDuration() {
+        lastKnownDurationMs = 0L;
+    }
+
+    private void rememberDuration() {
+        if (player == null) return;
+        long duration = player.getDuration();
+        if (duration <= 0 && durationFallback != null) duration = fallbackDuration();
+        if (duration > 0) lastKnownDurationMs = duration;
+    }
+
+    private long fallbackDuration() {
+        try {
+            return durationFallback.getAsLong();
+        } catch (Exception ignored) {
+            return 0L;
+        }
+    }
+
     private long resolveDuration() {
         long duration = getDuration();
         if (duration > 0) return duration;
@@ -1276,7 +1310,29 @@ public class PlayerManager implements ParseCallback {
     }
 
     public void setSub(Sub sub) {
-        if (sub == null || spec == null) return;
+        setSub(sub, false);
+    }
+
+    /**
+     * 挂载外挂字幕。
+     *
+     * <p>{@code expectSelected} 为真时，重启后必须确认这条字幕真的成了当前选中轨，
+     * 否则通过 {@code subtitleApplyListener} 回报失败。自动匹配过去只检查「调用过
+     * setSub」，而 setSub 只给 Media3 打 SELECTION_FLAG_DEFAULT 就等待自动选轨，
+     * 语言标签不合法或残留的禁用轨都会让选轨落空，界面却已经提示「已匹配」。
+     */
+    public void setSub(Sub sub, boolean expectSelected) {
+        if (sub == null || spec == null) {
+            if (expectSelected) notifySubtitleApplyResult(false);
+            return;
+        }
+        if (expectSelected) {
+            pendingSubtitleApply = sub;
+            pendingSubtitleSelectionIssued = false;
+            armSubtitleApplyTimeout();
+        } else {
+            clearPendingSubtitleApply();
+        }
         Track.delete(getKey(), C.TRACK_TYPE_TEXT);
         engine.resetTrack(C.TRACK_TYPE_TEXT);
         spec.setSub(sub);
@@ -1291,6 +1347,144 @@ public class PlayerManager implements ParseCallback {
         } else {
             restartCurrentItemWithState();
         }
+    }
+
+    /** 登记一次性回调：期待的字幕是否真的成为了当前选中轨。 */
+    public void setSubtitleApplyListener(Consumer<Boolean> listener) {
+        subtitleApplyListener = listener;
+    }
+
+    /** 超时调度；生产实现走 App 主线程队列，测试注入假实现以便驱动到期行为。 */
+    interface SubtitleApplyTimer {
+        void schedule(Runnable runnable, long delayMs);
+
+        void cancel(Runnable runnable);
+    }
+
+    private static final SubtitleApplyTimer APP_SUBTITLE_APPLY_TIMER = new SubtitleApplyTimer() {
+        @Override
+        public void schedule(Runnable runnable, long delayMs) {
+            App.removeCallbacks(runnable);
+            App.post(runnable, delayMs);
+        }
+
+        @Override
+        public void cancel(Runnable runnable) {
+            App.removeCallbacks(runnable);
+        }
+    };
+
+    private SubtitleApplyTimer subtitleApplyTimer;
+    private Runnable subtitleApplyTimeoutFallback;
+
+    private SubtitleApplyTimer subtitleApplyTimer() {
+        return subtitleApplyTimer == null ? APP_SUBTITLE_APPLY_TIMER : subtitleApplyTimer;
+    }
+
+    private void armSubtitleApplyTimeout() {
+        subtitleApplyTimer().schedule(subtitleApplyTimeoutRunnable(), Constant.TIMEOUT_PLAY);
+    }
+
+    /** 供 arm 与 cancel 复用的同一个 Runnable 实例；Unsafe 构造的测试实例没有初始化 final 字段。 */
+    private Runnable subtitleApplyTimeoutRunnable() {
+        if (subtitleApplyTimeoutRunnable != null) return subtitleApplyTimeoutRunnable;
+        if (subtitleApplyTimeoutFallback == null) subtitleApplyTimeoutFallback = this::onSubtitleApplyTimeout;
+        return subtitleApplyTimeoutFallback;
+    }
+
+    /** 丢弃「待确认字幕」的登记：它绑定的是当前 item 的轨道，换集/换源/release 后即失效。 */
+    void clearPendingSubtitleApply() {
+        subtitleApplyTimer().cancel(subtitleApplyTimeoutRunnable());
+        pendingSubtitleApply = null;
+        pendingSubtitleSelectionIssued = false;
+        subtitleApplyListener = null;
+    }
+
+    private void notifySubtitleApplyResult(boolean applied) {
+        Consumer<Boolean> listener = subtitleApplyListener;
+        clearPendingSubtitleApply();
+        if (listener != null) listener.accept(applied);
+    }
+
+
+    /**
+     * 轨道就绪后把待校验的外挂字幕选成当前轨道，并复核真实结果。
+     *
+     * <p>只有确认选中才允许报到成功；定位不到目标轨道、或选中项还没变成目标，一律保持
+     * 登记，由下一次轨道回调或到期检查按真实状态收口。轨道表为空、或只到了别的轨道组，
+     * 都不能当作失败证据——那一刻的轨道信息本来就不完整。
+     */
+    void resolvePendingSubtitleApply() {
+        Sub target = pendingSubtitleApply;
+        if (target == null || engine == null) return;
+        if (pendingSubtitleSelectionIssued) {
+            if (isSubtitleSelected(target)) notifySubtitleApplyResult(true);
+            return;
+        }
+        Track track = findTrackForSub(target);
+        if (track == null) return;
+        pendingSubtitleSelectionIssued = true;
+        armSubtitleApplyTimeout();
+        applyTrackSelection(Collections.singletonList(track));
+        if (pendingSubtitleApply == target && isSubtitleSelected(target)) notifySubtitleApplyResult(true);
+    }
+
+    private final Runnable subtitleApplyTimeoutRunnable = this::onSubtitleApplyTimeout;
+
+    /** 到期不再假设失败：读一次实际选中状态，确认不了才判未生效。 */
+    void onSubtitleApplyTimeout() {
+        Sub target = pendingSubtitleApply;
+        if (target == null) return;
+        notifySubtitleApplyResult(isSubtitleSelected(target));
+    }
+
+    private Track findTrackForSub(Sub sub) {
+        if (sub == null || engine == null) return null;
+        Format selected = getSelectedFormat(getCurrentTracks(), C.TRACK_TYPE_TEXT);
+        Format match = findSubtitleFormat(engine.getCurrentTracks(), sub, selected);
+        if (match == null) return null;
+        return selectionTrack(match, sub);
+    }
+
+    /**
+     * 构造一条「要选中的字幕轨」。
+     *
+     * <p>{@code Track.selected} 默认是 false，而 Exo 的 {@code TrackUtil.setTrackSelection}
+     * 只对 {@code isSelected()} 为真的轨道写选中索引：漏掉这一位会得到空索引 override，
+     * 等价于把字幕组整个清空——界面表现为「关闭字幕」被选中，正是自动匹配后
+     * 字幕不进画面的直接原因。MPV 侧同理由 {@code hasRequestedSubtitle} 依赖该标志。
+     */
+    static Track selectionTrack(Format format, Sub sub) {
+        Track track = new Track(C.TRACK_TYPE_TEXT, describeSubtitleName(format, sub), PlayerHelper.describeFormat(format)).playerId(format.id);
+        track.setSelected(true);
+        return track;
+    }
+
+    private static String describeSubtitleName(Format format, Sub sub) {
+        return TextUtils.isEmpty(format.label) ? sub.getName() : format.label;
+    }
+
+    static Format findSubtitleFormat(Tracks tracks, Sub sub, Format selectedFallback) {
+        if (tracks == null || tracks.isEmpty() || sub == null) return null;
+        List<Format> candidates = new ArrayList<>();
+        for (Tracks.Group group : tracks.getGroups()) {
+            if (group.getType() != C.TRACK_TYPE_TEXT) continue;
+            for (int i = 0; i < group.length; i++) candidates.add(group.getTrackFormat(i));
+        }
+        if (candidates.isEmpty()) return null;
+        for (Format format : candidates) {
+            if (!TextUtils.isEmpty(format.label) && TextUtils.equals(format.label, sub.getName()) && mimeMatches(sub, format)) return format;
+        }
+        // 无匹配 label 就无法确认外挂身份；选中标志、唯一候选或同 mime/语言均不足以证明。
+        return null;
+    }
+
+    private boolean isSubtitleSelected(Sub sub) {
+        if (sub == null || engine == null) return false;
+        Tracks tracks = getCurrentTracks();
+        Format selected = getSelectedFormat(tracks, C.TRACK_TYPE_TEXT);
+        if (selected == null) return false;
+        return findSubtitleFormat(tracks, sub, selected) == selected;
     }
 
     /**
@@ -1450,10 +1644,40 @@ public class PlayerManager implements ParseCallback {
                 "apply request reason=%s requested=%.3f current=%.3f user=%.3f state=%d playing=%s loading=%s",
                 reason, speed, current, userPlaybackSpeed, player.getPlaybackState(), player.isPlaying(), player.isLoading()));
         if (Math.abs(current - speed) < 0.001f) return;
+        prepareExoAudioForSpeed(speed, current, reason);
         player.setPlaybackParameters(player.getPlaybackParameters().withSpeed(speed));
         logNetworkGuard(String.format(java.util.Locale.US,
                 "apply result reason=%s requested=%.3f actual=%.3f", reason, speed, player.getPlaybackParameters().speed));
         PlaybackTrace.log("exo-network-protection", playbackTrace.current(), "speed %.3f->%.3f reason=%s user=%.2f", current, speed, reason, userPlaybackSpeed);
+    }
+
+    /**
+     * Tells the EXO engine the rate before the player applies it, and gives an already running
+     * compressed output the chance to become PCM once. A vendor compressed track is decoded by the
+     * device, so neither the sink's processors nor a later speed value can change its rate; only a
+     * pipeline that selects the format again at this rate can. Rebuilding on every change would
+     * reload the media for nothing, hence the one-shot guards: the rate has to leave 1x, the
+     * current output still has to be that compressed output, and a rebuild that re-applies the
+     * speed must not arrive here again.
+     */
+    private void prepareExoAudioForSpeed(float speed, float current, String reason) {
+        if (!(engine instanceof ExoPlayerEngine exo)) return;
+        exo.setPlaybackSpeed(speed);
+        if (speedChangeAudioRebuildInProgress
+                || Math.abs(speed - 1f) < 0.001f
+                || Math.abs(current - 1f) >= 0.001f
+                || player.getPlaybackState() != Player.STATE_READY) return;
+        AudioPlaybackDiagnostics.OutputMode mode = getAudioPlaybackDiagnostics().outputMode();
+        if (mode != AudioPlaybackDiagnostics.OutputMode.PASSTHROUGH
+                && mode != AudioPlaybackDiagnostics.OutputMode.COMPRESSED_DIRECT) return;
+        speedChangeAudioRebuildInProgress = true;
+        try {
+            PlaybackTrace.log("exo-audio-direct", playbackTrace.current(),
+                    "speed %.3f->%.3f reason=%s rebuild=pcm", current, speed, reason);
+            rebuildAudioPipeline();
+        } finally {
+            speedChangeAudioRebuildInProgress = false;
+        }
     }
 
     private void resetNetworkProtectionSession(String reason) {
@@ -1746,7 +1970,25 @@ public class PlayerManager implements ParseCallback {
         return SPEED_PRESETS[0];
     }
 
+    /**
+     * 用户/界面选轨入口。
+     *
+     * <p>字幕相关的手动选择优先于自动匹配：用户点了别的字幕或关掉字幕，就不能再被
+     * 后到的自动目标覆盖，所以这里先丢掉待确认登记。音轨/视轨选择不动字幕登记，
+     * 免得无关操作中断正在进行的字幕匹配。
+     */
     public void setTrack(List<Track> tracks) {
+        if (tracks != null && containsSubtitleTrack(tracks)) clearPendingSubtitleApply();
+        applyTrackSelection(tracks);
+    }
+
+    private static boolean containsSubtitleTrack(List<Track> tracks) {
+        for (Track track : tracks) if (track != null && track.getType() == C.TRACK_TYPE_TEXT) return true;
+        return false;
+    }
+
+    /** 内部选轨通道：不清待确认登记，自动匹配的两阶段确认依赖它。 */
+    private void applyTrackSelection(List<Track> tracks) {
         mpvExplicitSubtitlePreference = hasRequestedSubtitle(tracks);
         if (mpvExplicitSubtitlePreference && engine instanceof MpvPlayerEngine mpv) {
             mpv.retainSubtitleSurfaceForCurrentItem();
@@ -1856,6 +2098,7 @@ public class PlayerManager implements ParseCallback {
     }
 
     public void clear() {
+        resetKnownDuration();
         prepareSeq++;
         if (engine != null) engine.cancelPendingPrepare();
         lutApplySeq++;
@@ -1868,6 +2111,8 @@ public class PlayerManager implements ParseCallback {
         // （DRM 不支持、阅读器路由、地址为空），登记会留在这里；不清掉的话
         // 会被后续某次无关起播（例如音频迷你播放器）取走并挂上。
         pendingRestoreSub = null;
+        // 切集换媒体后，上一条字幕的待确认登记与它的到期检查都不该再落地。
+        clearPendingSubtitleApply();
         clearPendingSwitchRestore();
         clearDanmaku("clear");
         lutAppliedForItem = false;
@@ -2213,9 +2458,11 @@ public void resetTrack(int type) {
     }
 
     /**
-     * chosen 区分「用户为本次播放选定的内核」与「当前实际在跑的引擎」：
-     * 手动切换要更新会话内核（供取播放地址、写历史使用），
-     * 而播放失败后的自动回退只换引擎，不能改写用户的选择。
+     * 会话内核（{@link PlayerSetting#putActivePlayer}）一律跟随本次实际建起来的引擎，
+     * 自动回退也不例外：取播放地址、IJK 运行时判定、LUT 资格都读它，
+     * 保留旧值只会让「以为在跑 A、实际在跑 B」的分叉继续传播。
+     * 用户选定的内核由历史记录承载（{@code rememberPlayerKernel}），不靠这里保留。
+     * {@code chosen} 只用于归因日志：本次切换是否由用户选定。
      */
     private void switchEngine(int type, boolean chosen, boolean preserveState, boolean notifyPrepare) {
         int decode = engine.getDecode();
@@ -2246,7 +2493,11 @@ public void resetTrack(int type) {
         stopNativeAudioSession();
         engine.release();
         playerType = type;
-        if (chosen) PlayerSetting.putActivePlayer(type);
+        // 会话内核必须等于刚建起来的这个引擎。自动回退（失败换核、内核不可用）也走这里：
+        // 留下旧值会让取播放地址、IJK 运行时判定、LUT 资格继续按已放弃的内核分叉，
+        // 于是「以为在跑 A、实际在跑 B」被后续每一次取址放大。用户的选择由历史记录承载，
+        // 每次起播 applyHistoryPlayerKernel() 会重新写回它。
+        PlayerSetting.putActivePlayer(type);
         logSwitchCause(cause, previousType, type, previousDecode, sanitizeDecode(decode), chosen, position);
         if (SpiderDebug.isEnabled()) SpiderDebug.log("player", "switch player type=%d chosen=%s position=%d spec=%s", type, chosen, position, debugSpec());
         engine = buildEngine(playerType, sanitizeDecode(decode));
@@ -6072,6 +6323,8 @@ public void resetTrack(int type) {
     public void start(PlaySpec spec, long timeout, boolean playWhenReady, long positionMs) {
         mediaSession.begin(0L);
         endPlaybackTelemetrySession("replace-start");
+        resetKnownDuration();
+        clearPendingSubtitleApply();
         prepareIjkRuntimeForUserPlayback();
         clearPendingSwitchRestore();
         clearDanmaku("start");
@@ -6101,6 +6354,8 @@ public void resetTrack(int type) {
                       boolean playWhenReady, long positionMs) {
         mediaSession.begin(0L);
         endPlaybackTelemetrySession("replace-parse");
+        resetKnownDuration();
+        clearPendingSubtitleApply();
         prepareIjkRuntimeForUserPlayback();
         stopParse();
         clearPendingSwitchRestore();
@@ -8629,6 +8884,7 @@ public void resetTrack(int type) {
             if (SpiderDebug.isEnabled()) SpiderDebug.log("player", "state=%s spec=%s", stateName(state), debugSpec());
             publishPlaybackAutoContext(state != Player.STATE_IDLE);
             if (state == Player.STATE_READY) {
+                rememberDuration();
                 cancelBufferingStallWatchdog();
                 completeMpvDirectFirstFrame(state);
                 manualPlayerSwitchPending = false;
@@ -8672,6 +8928,7 @@ public void resetTrack(int type) {
 
         @Override
         public void onTimelineChanged(@NonNull Timeline timeline, int reason) {
+            if (!timeline.isEmpty()) rememberDuration();
             if (isExo()) scheduleNetworkProtection(0);
             if (!(engine instanceof IjkPlayerEngine)) return;
             int index = player == null ? C.INDEX_UNSET : player.getCurrentMediaItemIndex();
@@ -8731,6 +8988,7 @@ public void resetTrack(int type) {
         @Override
         public void onTracksChanged(@NonNull Tracks tracks) {
             if (playbackTrackSequence < Long.MAX_VALUE) playbackTrackSequence++;
+            rememberDuration();
             publishPlaybackAutoContext(false);
             if (isExo()) scheduleNetworkProtection(0);
             if (!tracks.isEmpty() && !initTrack) {
@@ -8742,6 +9000,9 @@ public void resetTrack(int type) {
                 callback.onTracksChanged();
                 initTrack = true;
             }
+            // 放在 initTrack 守卫之外：显式选轨会再次触发本回调，而那时 initTrack 已是
+            // true。留在守卫内会让「选轨已下发」永远等不到复核，最终只能靠超时兜底。
+            if (pendingSubtitleApply != null) resolvePendingSubtitleApply();
             markStartupCompletion(player != null && player.getPlaybackState() == Player.STATE_READY, tracks);
             publishPlaybackTelemetry();
             applyLutForCurrentItem();

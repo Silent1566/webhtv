@@ -106,6 +106,26 @@ public class CrashLogTextTest {
     }
 
     @Test
+    public void sessionCarriesTheEnvironmentThatDecidesReproducibility() {
+        CrashLogText.Environment environment = new CrashLogText.Environment(
+                "5.6.0-20261116", "Xiaomi MI TV", "Android 12 (API 31)", "arm64-v8a", "com.silent.android.webhtv", "mpv");
+
+        String body = CrashLogText.composeSession(null, List.of(), false, false, false, environment);
+
+        assertTrue(body.startsWith(CrashLogText.SESSION_HEADER));
+        assertTrue(body.contains("app=5.6.0-20261116 abi=arm64-v8a kernel=mpv process=com.silent.android.webhtv"));
+        assertTrue(body.contains("Xiaomi MI TV / Android 12 (API 31)"));
+    }
+
+    @Test
+    public void sessionWithoutEnvironmentStillReportsCoverage() {
+        String body = CrashLogText.composeSession(null, List.of(), false, false, false);
+
+        assertFalse(body.contains("# environment:"));
+        assertTrue(body.contains("# coverage: report=missing-or-stale"));
+    }
+
+    @Test
     public void sessionStatesMissingEvidenceInsteadOfClaimingCoverage() {
         String body = CrashLogText.composeSession(null, List.of(), false, false, false);
 
