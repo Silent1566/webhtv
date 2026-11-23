@@ -579,10 +579,26 @@ public class VodFragment extends BaseFragment implements ConfigListener, SiteLis
         getFragment().setFilter(key, value);
     }
 
+    /**
+     * 当前首页列表是否未处于顶部（供 HomeActivity 返回键优先回顶使用）。
+     */
+    public boolean canScrollToTop() {
+        return mBinding != null && mBinding.pager.getAdapter() != null
+                && mBinding.pager.getAdapter().getCount() > 0 && getFragment().canScrollToTop();
+    }
+
+    /**
+     * 首页列表回到顶部（供 HomeActivity 返回键优先回顶使用）。
+     * 与 {@link #onTop(View)} 的悬浮按钮走同一条路径。
+     */
+    public void scrollToTop() {
+        if (mBinding == null || mBinding.pager.getAdapter() == null || mBinding.pager.getAdapter().getCount() == 0) return;
+        getFragment().scrollToTop();
+    }
+
     @Override
     public boolean canBack() {
-        if (mWeb != null && mWeb.handleBack()) return false;
-        if (isNativeChromeHidden()) {
+        if (mWeb != null && mWeb.handleBack()) return false;        if (isNativeChromeHidden()) {
             requestNormalChrome();
             return false;
         }

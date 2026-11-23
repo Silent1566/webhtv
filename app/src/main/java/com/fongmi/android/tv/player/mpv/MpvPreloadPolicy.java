@@ -1,6 +1,7 @@
 package com.fongmi.android.tv.player.mpv;
 
 import com.fongmi.android.tv.player.PlaybackAutoContext;
+import com.fongmi.android.tv.setting.PreloadSetting;
 
 /** Pure admission policy for MPV automatic HLS VOD proxy preloading. */
 public final class MpvPreloadPolicy {
@@ -102,7 +103,7 @@ public final class MpvPreloadPolicy {
 
     public static int resolveExecutorThreads(boolean automatic, int configuredThreads) {
         if (automatic) return 1;
-        return Math.clamp(configuredThreads, 1, 4);
+        return Math.clamp(configuredThreads, PreloadSetting.MIN_THREADS, PreloadSetting.MAX_THREADS);
     }
 
     public static boolean ownsProxyControl(

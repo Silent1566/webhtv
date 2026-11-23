@@ -91,9 +91,57 @@ public class AdRuleManageDialog extends BaseAlertDialog implements AdRuleAdapter
     protected void initEvent() {
         binding.add.setOnClickListener(v -> onAddManual());
         binding.stats.setOnClickListener(v -> onStats());
+        binding.exportRules.setOnClickListener(v -> onExportRules());
+        binding.importRules.setOnClickListener(v -> onImportRules());
         binding.importCandidates.setOnClickListener(v -> onImportCandidates());
         binding.enableImported.setOnClickListener(v -> onEnableImported());
         binding.disableImported.setOnClickListener(v -> onDisableImported());
+    }
+
+    private void onExportRules() {
+        android.content.ClipboardManager manager = (android.content.ClipboardManager) requireActivity().getSystemService(Context.CLIPBOARD_SERVICE);
+        String json = com.fongmi.android.tv.api.config.AdRuleTransfer.exportPackage();
+        if (manager != null) manager.setPrimaryClip(android.content.ClipData.newPlainText("honey_ad_rules", json));
+        int count = com.fongmi.android.tv.api.config.UserAdRuleStore.load().size();
+        android.widget.Toast.makeText(requireContext(), getString(R.string.ad_rule_export_done, count), android.widget.Toast.LENGTH_LONG).show();
+    }
+
+    private void onImportRules() {
+        android.widget.EditText input = new android.widget.EditText(requireContext());
+        input.setHint(R.string.ad_rule_import_hint);
+        input.setMinLines(3);
+        input.setTextSize(13);
+        int pad = (int) (getResources().getDisplayMetrics().density * 8);
+        input.setPadding(pad * 2, pad, pad * 2, 0);
+        android.widget.FrameLayout container = new android.widget.FrameLayout(requireContext());
+        int side = (int) (getResources().getDisplayMetrics().density * 24);
+        container.setPadding(side, side / 2, side, 0);
+        container.addView(input, new android.widget.FrameLayout.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT));
+        new WebHtvAlertDialogBuilder(requireActivity(), R.style.Theme_WebHTV_Dialog)
+                .setTitle(R.string.ad_rule_import)
+                .setView(container)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(android.R.string.ok, (dialog, which) -> {
+                    String text = input.getText().toString().trim();
+                    if (text.isEmpty()) return;
+                    com.fongmi.android.tv.utils.Task.executor().submit(() -> {
+                        try {
+                            int count = com.fongmi.android.tv.api.config.AdRuleTransfer.importFrom(text);
+                            App.post(() -> {
+                                if (!isAdded()) return;
+                                android.widget.Toast.makeText(requireContext(), getString(R.string.ad_rule_import_done, count), android.widget.Toast.LENGTH_LONG).show();
+                                loadData();
+                                if (callback != null) callback.onRuleChanged();
+                            });
+                        } catch (Throwable e) {
+                            App.post(() -> {
+                                if (!isAdded()) return;
+                                android.widget.Toast.makeText(requireContext(), getString(R.string.ad_rule_import_fail, e.getMessage()), android.widget.Toast.LENGTH_LONG).show();
+                            });
+                        }
+                    });
+                })
+                .show();
     }
 
     private void loadData() {

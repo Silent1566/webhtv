@@ -132,9 +132,22 @@
                 android:layout_height="52dp"
                 android:layout_marginStart="14dp"
                 android:minHeight="52dp"
-                android:nextFocusDown="@id/close"
+                android:nextFocusDown="@id/cleanupEpisodes"
                 android:nextFocusUp="@id/totalLimit"
                 android:text="@string/cache_cleanup_deep"
+                app:strokeColor="@color/focus_ring_secondary"
+                app:strokeWidth="@dimen/webhtv_focus_ring_width" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/cleanupEpisodes"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="wrap_content"
+                android:layout_height="52dp"
+                android:layout_marginStart="14dp"
+                android:minHeight="52dp"
+                android:nextFocusDown="@id/close"
+                android:nextFocusUp="@id/totalLimit"
+                android:text="@string/episode_cache_clear_title"
                 app:strokeColor="@color/focus_ring_secondary"
                 app:strokeWidth="@dimen/webhtv_focus_ring_width" />
         </androidx.appcompat.widget.LinearLayoutCompat>

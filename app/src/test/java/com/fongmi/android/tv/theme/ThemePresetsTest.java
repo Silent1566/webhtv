@@ -66,8 +66,12 @@ public class ThemePresetsTest {
                 assertTrue("success remains green: " + greenHue, greenHue >= 100 && greenHue <= 190);
                 assertTrue("warning remains amber: " + amberHue, amberHue >= 40 && amberHue <= 110);
             }
-            assertEquals(7, surfaces.size());
-            assertEquals(7, secondary.size());
+            // 每个完整预设都应有自己的表面/次级容器色；此前 HONEY 因校验回退而与默认表重合，
+            // 修复焦点环校验后 8 个预设各自独立。
+            int complete = 0;
+            for (ThemePresets.Preset preset : ThemePresets.Preset.values()) if (preset.isComplete()) complete++;
+            assertEquals(complete, surfaces.size());
+            assertEquals(complete, secondary.size());
             assertTrue(success.size() >= 6);
             assertTrue(warning.size() >= 6);
         }

@@ -404,7 +404,13 @@ public class FollowingActivity extends AppCompatActivity implements FollowingAda
     public void onContinue(Following item, FollowingSource source) {
         Task.execute(() -> {
             FollowingStore.reconcile(item);
-            History history = FollowingStore.historyFor(item, source);
+            // Clearing playback history must not forget the watched episode of a followed series.
+            // Rebuild a History from the Following snapshot when the authoritative row is gone,
+            // and persist it: VideoActivity restores the resume payload from the database.
+            History found = FollowingStore.historyFor(item, source);
+            History rebuilt = found == null ? FollowingPlaybackBridge.restoreHistory(item, source) : null;
+            if (rebuilt != null) FollowingPlaybackBridge.persist(rebuilt);
+            final History history = found != null ? found : rebuilt;
             App.post(() -> {
                 if (isFinishing() || isDestroyed()) return;
                 if (history != null) {

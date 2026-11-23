@@ -136,6 +136,18 @@
                 app:strokeColor="@color/focus_ring_secondary"
                 app:strokeWidth="@dimen/webhtv_focus_ring_width"
                 android:text="@string/cache_cleanup_deep" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/cleanupEpisodes"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                android:layout_marginBottom="4dp"
+                android:minHeight="48dp"
+                app:strokeColor="@color/focus_ring_secondary"
+                app:strokeWidth="@dimen/webhtv_focus_ring_width"
+                android:text="@string/episode_cache_clear_title" />
         </com.google.android.flexbox.FlexboxLayout>
 
         <com.google.android.flexbox.FlexboxLayout

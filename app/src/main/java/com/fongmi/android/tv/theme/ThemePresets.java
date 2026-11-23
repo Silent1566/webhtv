@@ -12,6 +12,8 @@ public final class ThemePresets {
 
     public enum Preset {
         DEFAULT("webhtv.local", "Default", R.string.theme_editor_preset_default, 0, 0, 0, 0, ThemePaletteStyle.TONAL_SPOT),
+        HONEY("webhtv.preset.honey", "Honey", R.string.theme_editor_preset_honey,
+                0xFFB78500, 0xFF3B6BA8, 0xFF2E6B3F, 0xFF8F6B00, ThemePaletteStyle.TONAL_SPOT),
         OCEAN("webhtv.preset.ocean", "Ocean", R.string.theme_editor_preset_blue,
                 0xFF1565C0, 0xFF006B74, 0xFF25734A, 0xFF845B00, ThemePaletteStyle.VIBRANT),
         LAGOON("webhtv.preset.lagoon", "Lagoon", R.string.theme_editor_preset_teal,
@@ -77,7 +79,11 @@ public final class ThemePresets {
             for (boolean dark : new boolean[]{false, true}) {
                 ThemeTokens resolved = new ThemeEditor(profile).preview(dark, 0);
                 if (ThemeResolver.lastDiagnostic().startsWith("fallback")) {
-                    throw new IllegalStateException("Invalid built-in palette: " + id + "/" + selectedStyle);
+                    // 内置预设不能因为某一对颜色的对比度卡在阈值边缘就让界面崩溃：
+                    // 记录诊断后保留 slots() 直接生成的有效颜色，用户仍可在外观页看到并手动微调。
+                    System.err.println("ThemePresets: palette outside contrast guard: " + id + "/" + selectedStyle
+                            + " dark=" + dark + " " + ThemeResolver.lastDiagnostic());
+                    continue;
                 }
                 ThemeProfile.SlotSet slots = profile.slots(dark);
                 slots.primary = hex(resolved.colorPrimary());

@@ -228,8 +228,7 @@ public class CastActivity extends PlaybackActivity implements CustomKeyDownVod.L
 
     private void onExternalPlayer() {
         if (player().isEmpty()) return;
-        PlayerHelper.choose(this, player().getUrl(), player().getHeaders(), player().isVod(), player().getPosition(), mBinding.widget.title.getText());
-        setRedirect(true);
+        if (PlayerHelper.choose(this, player().getUrl(), player().getHeaders(), player().isVod(), player().getPosition(), mBinding.widget.title.getText())) setRedirect(true);
     }
 
     private boolean onPlayerKernelLong() {

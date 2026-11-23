@@ -43,7 +43,7 @@ import pl.droidsonroids.gif.GifDrawable;
 
 public class CustomWallView extends FrameLayout implements DefaultLifecycleObserver {
 
-    private static final int DEFAULT_WALL_COLOR = Setting.getBuiltInWallColor(Setting.WALL_DREAM_PURPLE);
+    private static final int DEFAULT_WALL_COLOR = Setting.getBuiltInWallColor(Setting.WALL_HONEY);
     private static final int GREEN_WALL_COLOR = 0xFF40C090;
     private static final int MAX_WALL_BITMAP_SIDE = 1920;
     private static final int TYPE_RES = WallMotionPolicy.TYPE_RES;
@@ -184,6 +184,7 @@ public class CustomWallView extends FrameLayout implements DefaultLifecycleObser
 
     public static int getDesignResId(int wall) {
         return switch (wall) {
+            case Setting.WALL_HONEY -> R.drawable.wallpaper_1;
             case Setting.WALL_AURORA_GLASS -> R.drawable.wallpaper_design_10_aurora_glass;
             case Setting.WALL_SUNSET_PRISM -> R.drawable.wallpaper_design_11_sunset_prism;
             case Setting.WALL_MINT_GLACIER -> R.drawable.wallpaper_design_12_mint_glacier;

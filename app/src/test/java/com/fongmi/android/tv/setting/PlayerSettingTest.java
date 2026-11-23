@@ -12,14 +12,16 @@ public class PlayerSettingTest {
     @Test
     public void nativeVideoOutput_includesNativePlayers() {
         assertFalse(PlayerSetting.useNativeVideoOutput(PlayerSetting.EXO));
-        assertTrue(PlayerSetting.useNativeVideoOutput(PlayerSetting.IJK));
+        // IJK 的画面经 SDL 输出，SurfaceView 与 TextureView 都支持，不算 native 直渲；
+        // TV 上部分设备 SurfaceView 黑屏，IJK 必须保留换 TextureView 的自救路径。
+        assertFalse(PlayerSetting.useNativeVideoOutput(PlayerSetting.IJK));
         assertTrue(PlayerSetting.useNativeVideoOutput(PlayerSetting.SYSTEM));
         assertTrue(PlayerSetting.useNativeVideoOutput(PlayerSetting.MPV));
     }
 
     @Test
     public void nativeVideoOutput_forcesSurfaceRender() {
-        assertEquals(0, PlayerSetting.getRender(PlayerSetting.IJK));
+        assertEquals(PlayerSetting.getRender(), PlayerSetting.getRender(PlayerSetting.IJK));
         assertEquals(0, PlayerSetting.getRender(PlayerSetting.SYSTEM));
         assertEquals(0, PlayerSetting.getRender(PlayerSetting.MPV));
     }

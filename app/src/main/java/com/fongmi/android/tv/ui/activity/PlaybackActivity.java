@@ -384,6 +384,10 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
     protected void onPlayerRebuilt() {
     }
 
+    /** 手动换核失败后已恢复原内核，子类可同步内核文案但不应改写用户记住的选择。 */
+    protected void onManualSwitchRestored(int player) {
+    }
+
     /**
      * 保证「当前引擎」此刻确实挂在 PlayerView 上，必要时补一次绑定。
      *
@@ -976,8 +980,12 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
     }
 
     private int getRender() {
-        if (mService != null && player().isNativePlayer()) return 0;
-        if (mService != null && player().requiresTextureRenderForLut()) return PlayerSetting.RENDER_TEXTURE;
+        if (mService != null) {
+            // SYSTEM/MPV 是内核直渲，只能 SurfaceView；IJK 画面经 SDL 输出，
+            // 受「渲染方式」控制——TV 部分设备 SurfaceView 黑屏，换 TextureView 才有画面。
+            if (player().useNativeVideoOutput()) return 0;
+            if (player().requiresTextureRenderForLut()) return PlayerSetting.RENDER_TEXTURE;
+        }
         return PlayerSetting.getRender();
     }
 
@@ -1154,6 +1162,11 @@ public abstract class PlaybackActivity extends BaseActivity implements MediaCont
                 applyResizeMode(requestedAspectMode);
                 PlaybackActivity.this.onPlayerRebuilt();
             }
+        }
+
+        @Override
+        public void onManualSwitchRestored(int player) {
+            PlaybackActivity.this.onManualSwitchRestored(player);
         }
     };
 
@@ -1367,6 +1380,25 @@ public void onPlayWhenReadyChanged(boolean playWhenReady, int reason) {
         if (player() != null) player().setDurationFallback(null);
         mService = null;
         preparedPlaybackKey = null;
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        // 外调播放器被取消、没接住 Intent 或用户直接返回时，之前为跳转设置的
+        // redirect 会让 onPause 暂停内部播放，而 Surface 又停留在摘除状态。
+        // 这里把画面和播放一起收回来，避免「切外置失败就黑屏」。
+        com.fongmi.android.tv.player.PlaybackSwitchLog.log("external", "onActivityResult req=%d result=%d redirect=%s service=%s finishing=%s",
+                requestCode, resultCode, isRedirect(), mService != null, isFinishing() || isDestroyed());
+        if (requestCode != 1001 || !isRedirect()) return;
+        setRedirect(false);
+        if (mService == null || isFinishing() || isDestroyed()) {
+            com.fongmi.android.tv.player.PlaybackSwitchLog.log("external", "restore SKIPPED reason=no-service-or-finishing");
+            return;
+        }
+        setRender();
+        com.fongmi.android.tv.player.PlaybackSwitchLog.log("external", "restore setRender done, resumeInternal=%s", resultCode != RESULT_OK && mController != null);
+        if (resultCode != RESULT_OK && mController != null) mController.play();
     }
 
     @Override

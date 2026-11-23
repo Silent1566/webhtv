@@ -27,6 +27,33 @@
         android:textSize="15sp"
         app:strokeWidth="1dp" />
 
+    <androidx.appcompat.widget.LinearLayoutCompat
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:orientation="horizontal">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/exportRules"
+            style="@style/Widget.WebHTV.Button.Outlined"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/ad_rule_export"
+            android:textSize="12sp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/importRules"
+            style="@style/Widget.WebHTV.Button.Outlined"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:text="@string/ad_rule_import"
+            android:textSize="12sp" />
+
+    </androidx.appcompat.widget.LinearLayoutCompat>
+
     <com.google.android.material.button.MaterialButton
         android:id="@+id/importCandidates"
         style="@style/Widget.WebHTV.Button.Outlined"

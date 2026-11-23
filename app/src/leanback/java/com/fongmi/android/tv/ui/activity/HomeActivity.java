@@ -4,6 +4,7 @@ import android.annotation.SuppressLint;
 import android.app.SearchManager;
 import android.content.Intent;
 import android.os.Bundle;
+import android.os.SystemClock;
 import android.text.TextUtils;
 import android.view.KeyEvent;
 import android.view.View;
@@ -115,6 +116,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     private static final String TV_FULL = "tv-full";
     private static final long TYPE_SWITCH_DELAY_MS = 100;
     private static final long CONFIRM_LONG_PRESS_MS = 550;
+    private static final long BACK_EXIT_INTERVAL_MS = 2000;
 
     private ActivityHomeBinding mBinding;
     private ArrayObjectAdapter mHistoryAdapter;
@@ -135,6 +137,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     private String mCategorySiteKey = "";
     private String webChromeMode = TV_NORMAL;
     private String webDefaultChromeMode = TV_FULL;
+    private long mLastBackTime;
     private boolean webToolbarVisible = true;
     private boolean toolbarRequestedVisible = true;
     private boolean loadingHomeCategory;
@@ -736,7 +739,8 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
                 setTypes(mHomeResult = result);
             }
             mResult = result;
-            addVideo(result);
+            // "更新推荐"关闭时，跳过首页推荐内容的追加；分类浏览结果不受影响。
+            if (categoryResult || Setting.isHomeRecommend()) addVideo(result);
             // 如果用户手动点击了"点播"按钮，数据加载完成后自动进入分类页
             if (pendingOpenVod && !result.getTypes().isEmpty()) {
                 pendingOpenVod = false;
@@ -753,7 +757,23 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
         mHistoryAdapter = new ArrayObjectAdapter(mPresenter = new HistoryPresenter(this));
         mAdapter.add(new ListRow(mFuncAdapter = new ArrayObjectAdapter(new FuncPresenter(this))));
         if (Setting.isHomeHistory()) mAdapter.add(R.string.home_history);
-        mAdapter.add(R.string.home_recommend);
+        if (Setting.isHomeRecommend()) mAdapter.add(R.string.home_recommend);
+    }
+
+    /**
+     * Keeps the "recent updates" header in sync with the setting at runtime.
+     * Recommendation rows always live after the header at the end of the adapter, so removing the
+     * header also removes every recommendation content row under it.
+     */
+    private void syncRecommendHeader() {
+        int index = mAdapter.indexOf(R.string.home_recommend);
+        if (Setting.isHomeRecommend()) {
+            if (index < 0) mAdapter.add(R.string.home_recommend);
+        } else if (index >= 0) {
+            int contentStart = index + 1;
+            if (mAdapter.size() > contentStart) mAdapter.removeItems(contentStart, mAdapter.size() - contentStart);
+            mAdapter.removeItems(index, 1);
+        }
     }
 
     private void setTitle() {
@@ -877,6 +897,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
 
     private void getVideo(boolean forceNative) {
         syncCategorySite();
+        syncRecommendHeader();
         // 这次刷新打给的是一个已经过去（已保存状态）的窗口：重建后的实例会由
         // initAfterFirstFrame → initConfig 自己加载。继续重排只会再撞一次事务守卫。
         if (!canCommitFragmentTransaction()) {
@@ -992,7 +1013,9 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
 
     private void clearRecommendRows() {
         mAdapter.remove("progress");
-        int index = getRecommendIndex();
+        int header = getRecommendHeaderIndex();
+        if (header < 0) return;
+        int index = header + 1;
         if (mAdapter.size() > index) mAdapter.removeItems(index, mAdapter.size() - index);
     }
 
@@ -1026,16 +1049,27 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     }
 
     private void getHistory(boolean renew) {
+        syncRecommendHeader();
         if (!Setting.isHomeHistory()) {
             removeHistoryRows();
             return;
         }
         int headerIndex = mAdapter.indexOf(R.string.home_history);
-        if (headerIndex == -1) mAdapter.add(getRecommendHeaderIndex(), R.string.home_history);
+        if (headerIndex == -1) {
+            int recommendHeader = getRecommendHeaderIndex();
+            if (recommendHeader < 0) recommendHeader = mAdapter.size();
+            mAdapter.add(recommendHeader, R.string.home_history);
+        }
         List<History> items = History.getForDisplay();
         int historyIndex = getHistoryIndex();
-        int recommendIndex = getRecommendIndex();
-        boolean exist = recommendIndex - historyIndex == 2;
+        boolean exist;
+        if (Setting.isHomeRecommend()) {
+            int recommendIndex = getRecommendIndex();
+            exist = recommendIndex - historyIndex == 2;
+        } else {
+            // No recommend header: the history ListRow, if present, directly follows the history header.
+            exist = historyIndex > 0 && historyIndex < mAdapter.size() && mAdapter.get(historyIndex) instanceof ListRow;
+        }
         if (renew) mHistoryAdapter = new ArrayObjectAdapter(mPresenter = new HistoryPresenter(this));
         if ((items.isEmpty() && exist) || (renew && exist)) mAdapter.removeItems(historyIndex, 1);
         if ((!items.isEmpty() && !exist) || (renew && exist)) mAdapter.add(historyIndex, new ListRow(mHistoryAdapter));
@@ -1046,6 +1080,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
         int headerIndex = mAdapter.indexOf(R.string.home_history);
         if (headerIndex == -1) return;
         int recommendIndex = mAdapter.indexOf(R.string.home_recommend);
+        if (recommendIndex < 0) recommendIndex = mAdapter.size();
         mAdapter.removeItems(headerIndex, recommendIndex - headerIndex);
         mHistoryAdapter.clear();
         mPresenter.setDelete(false);
@@ -1590,7 +1625,14 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     }
 
     private void exitHome() {
-        ExitConfirmDialog.create(PlaybackService.canContinueInBackground()).show(this);
+        // 首页返回两次退出：第一次提示，时间窗内第二次直接完全退出，不再弹确认对话框。
+        long now = SystemClock.elapsedRealtime();
+        if (now - mLastBackTime < BACK_EXIT_INTERVAL_MS) {
+            exitCompletely();
+        } else {
+            mLastBackTime = now;
+            Notify.show(R.string.app_exit_confirm);
+        }
     }
 
     private void continueInBackground() {

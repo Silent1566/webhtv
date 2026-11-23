@@ -84,6 +84,7 @@ import com.fongmi.android.tv.impl.CustomTarget;
 import com.fongmi.android.tv.model.SiteViewModel;
 import com.fongmi.android.tv.model.SearchProgress;
 import com.fongmi.android.tv.playback.PlaybackEventCollector;
+import com.fongmi.android.tv.playback.ProgressVault;
 import com.fongmi.android.tv.playback.HistoryResumePayload;
 import com.fongmi.android.tv.playback.origin.OriginHistoryPlayback;
 import com.fongmi.android.tv.playback.SubtitleRestoreCoordinator;
@@ -2318,6 +2319,13 @@ private boolean runtimeSourceOnly;
         mBinding.control.action.player.setText(player().getPlayerText());
     }
 
+    @Override
+    protected void onManualSwitchRestored(int player) {
+        super.onManualSwitchRestored(player);
+        setPlayerKernel();
+        setDecode();
+    }
+
     /**
      * 起播前把内核切到本剧记住的选择，并返回该内核给取址用——取播放地址要按内核区分线路。
      * 记住的内核只对当前线路自己的记录生效；跨源聚合来的记录回落到设置页的全局默认。
@@ -2851,6 +2859,11 @@ private boolean runtimeSourceOnly;
 
     private void prepareFastTmdbPlaybackHistory(Vod item, Flag flag, Episode episode) {
         mHistory = History.findPlayback(getHistoryKey(), List.of(item.getName(), getName()), item.getFlags(), getHistoryTmdbItem(), currentSourceSeasonNumber(item));
+        // 收藏夹（Keep）入口不带续播载荷：历史被清空时从进度保险库反建，保住集数与进度。
+        if (mHistory == null) {
+            mHistory = ProgressVault.resume(VodConfig.getCid(), getHistoryKey());
+            if (mHistory != null) FollowingPlaybackBridge.persist(mHistory);
+        }
         mHistory = mHistory == null ? createHistory(item) : mHistory;
         if (!TextUtils.isEmpty(getWallPic())) mHistory.setWallPic(getWallPic());
         if (!TextUtils.isEmpty(getMark())) mHistory.setVodRemarks(getMark());
@@ -3683,8 +3696,12 @@ private boolean runtimeSourceOnly;
     }
 
     private boolean isShortDramaQueueEligible(Result result) {
-        if (!PlaybackExperimentSetting.isAllowed(PlaybackExperimentPolicy.Action.EXO_SHORT_DRAMA_QUEUE)) return false;
-        if (!isShortDramaSource() || service() == null || player() == null || !player().isExo()
+        boolean shortDrama = isShortDramaSource();
+        // Ordinary series can also use the seamless pre-buffer queue when the depth setting is > 0.
+        boolean seamlessSeries = !shortDrama && PreloadSetting.getSeamlessQueueDepth() > 0;
+        if (!shortDrama && !seamlessSeries) return false;
+        if (shortDrama && !PlaybackExperimentSetting.isAllowed(PlaybackExperimentPolicy.Action.EXO_SHORT_DRAMA_QUEUE)) return false;
+        if (service() == null || player() == null || !player().isExo()
                 || !player().supportsPlaylistQueue() || !PreloadSetting.isPreload(PlayerSetting.EXO)) return false;
         if (MultiThreadProxySetting.get().enabled() || player().isRepeatOne() || mHistory == null
                 || mHistory.getOpening() > 0 || mHistory.getEnding() > 0
@@ -3800,7 +3817,7 @@ private boolean runtimeSourceOnly;
         mShortDramaQueuedSpec = spec;
         mShortDramaQueuedResult = result;
         mShortDramaQueuedEpisode = target;
-        player().setPlaylistPreloadDurationMs(5_000L);
+        player().setPlaylistPreloadDurationMs(Math.max(5_000L, PreloadSetting.getPreloadDurationMs()));
         if (SpiderDebug.isEnabled()) SpiderDebug.log("short-drama-queue", "append generation=%d index=%d kind=%s", generation, target.getIndex(), resolved.kind());
     }
 
@@ -4904,6 +4921,18 @@ private boolean runtimeSourceOnly;
 
 
     private boolean onEpisodeKey(KeyEvent event) {
+        // 详情页选集区按返回：先把「当前正在播放的剧集」滚回列表顶部并聚焦，再按一次才退出页面。
+        // 只限非全屏且焦点确实落在选集卡片上，避免吞掉全屏/预览框既有的返回语义。
+        if (KeyUtil.isActionUp(event) && KeyUtil.isBackKey(event)) {
+            if (isFullscreen()) return false;
+            RecyclerView backView = episodeGridMode ? mBinding.episodeGrid : mBinding.episode;
+            if (!isFocusInside(backView)) return false;
+            int anchor = getSelectedEpisodePosition(mEpisodeAdapter == null ? List.of() : mEpisodeAdapter.getItems());
+            int current = backView instanceof androidx.leanback.widget.BaseGridView grid ? grid.getSelectedPosition() : RecyclerView.NO_POSITION;
+            if (current == anchor) return false;
+            scrollToEpisode(anchor, true);
+            return true;
+        }
         if (!KeyUtil.isActionUp(event) && !KeyUtil.isActionDown(event)) return false;
         if (KeyUtil.isActionUp(event)) {
             mEpisodeHoldTarget = RecyclerView.NO_POSITION;
@@ -5699,19 +5728,29 @@ private boolean runtimeSourceOnly;
     }
 
     private void onExternalPlayer() {
-        PlayerHelper.choose(this, player().getUrl(), player().getHeaders(), player().isVod(), player().getPosition(), mBinding.widget.title.getText());
-        setRedirect(true);
+        if (PlayerHelper.choose(this, player().getUrl(), player().getHeaders(), player().isVod(), player().getPosition(), mBinding.widget.title.getText())) setRedirect(true);
     }
 
     private void switchPlayerKernel(int type) {
         cancelKeySeek();
         if (refreshAndSwitchPlayerKernel(type)) return;
+        switchPlayerKernelDirectly(type);
+    }
+
+    /**
+     * 直接用当前已解析的播放源换内核，不依赖 spider 重新取址。
+     * 用于 reparse 失败/返回无效的兜底：B站合集这类 type=3 线路重新取址容易失败，
+     * 但当前正在播的 URL 与 headers 已经可用，换引擎无需再取一次址。
+     * 与手机端保持一致的手动切换语义（失败时明确报错，不自动换回别的内核）。
+     */
+    private void switchPlayerKernelDirectly(int type) {
         mClock.setCallback(null);
         clearLyrics();
-        player().switchPlayer(type);
+        int next = PlayerSetting.sanitizePlayer(type);
+        player().switchPlayerManually(next);
         setPlayerKernel();
         setDecode();
-        rememberPlayerKernel(kernelFlag(), type);
+        rememberPlayerKernel(kernelFlag(), next);
     }
 
     private boolean onPlayerKernelLong() {
@@ -5747,9 +5786,9 @@ private boolean runtimeSourceOnly;
                 App.post(() -> {
                     if (!isCurrentPlayerContentRequest(requestId, generation, key, flag, episode)) return;
                     playerKernelSwitchRefreshing = false;
-                    setPlayerKernel();
-                    setDecode();
-                    Notify.show(e.getMessage());
+                    // 重新取址失败不代表内核切不了：当前源已经可用，直接换引擎保证任意线路都能切。
+                    SpiderDebug.log("video-flow", "switch player refresh failed, fallback to direct switch type=%d err=%s", nextType, e.getMessage());
+                    switchPlayerKernelDirectly(nextType);
                 });
             }
         });
@@ -5763,7 +5802,9 @@ private boolean runtimeSourceOnly;
         playerKernelSwitchRefreshing = false;
         if (!canApplyPlayerContentRequest(requestId, generation, key, flag, episode)) return;
         if (result == null || result.hasMsg() || result.getRealUrl().isEmpty()) {
-            Notify.show(result != null && result.hasMsg() ? result.getMsg() : getString(R.string.error_play_url));
+            // 取址返回空/报错同样回退到当前源直接切，避免「切内核报错」弹窗中断切换。
+            SpiderDebug.log("video-flow", "switch player refresh invalid result, fallback to direct switch type=%d msg=%s", type, result == null ? "null" : result.getMsg());
+            switchPlayerKernelDirectly(type);
         } else {
             cancelKeySeek();
             PlayerManager danmakuManager = player();
@@ -6177,6 +6218,11 @@ private boolean runtimeSourceOnly;
         mHistory = resumeHistory == null
                 ? History.findPlayback(getHistoryKey(), List.of(item.getName(), getName()), item.getFlags(), tmdbItem, currentSourceSeasonNumber(item))
                 : isOriginSession() ? resumeHistory : resumeHistory.forPlaybackKey(getHistoryKey(), VodConfig.getCid());
+        // 收藏夹入口从进度保险库恢复续播。
+        if (mHistory == null && resumeHistory == null) {
+            mHistory = ProgressVault.resume(VodConfig.getCid(), getHistoryKey());
+            if (mHistory != null) FollowingPlaybackBridge.persist(mHistory);
+        }
         mHistory = mHistory == null ? createHistory(item) : mHistory;
         if (!TextUtils.isEmpty(getWallPic())) mHistory.setWallPic(getWallPic());
         // 文件夹点选需保留旧集身份，交给显式选集链路判断是否重置进度。

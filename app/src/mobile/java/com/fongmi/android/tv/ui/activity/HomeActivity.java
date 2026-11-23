@@ -5,6 +5,7 @@ import android.app.SearchManager;
 import android.content.Intent;
 import android.content.res.Configuration;
 import android.os.Bundle;
+import android.os.SystemClock;
 import android.text.TextUtils;
 import android.view.MenuItem;
 import android.view.View;
@@ -505,6 +506,9 @@ public class HomeActivity extends BaseActivity implements NavigationBarView.OnIt
         }
     }
 
+    private static final long BACK_EXIT_INTERVAL_MS = 2000;
+    private long mLastBackTime;
+
     @Override
     protected void onBackInvoked() {
         if (mChrome != null && mChrome.consumeBack()) {
@@ -515,12 +519,52 @@ public class HomeActivity extends BaseActivity implements NavigationBarView.OnIt
             returnVodFromEnhance = false;
             change(0);
         } else if (isSettingSubPageVisible()) {
+            // 设置子页：先让当前设置页回到顶部，再退回设置首页。
+            if (scrollVisibleSettingToTop()) return;
             change(1);
         } else if (mManager.isVisible(1)) {
+            // 设置首页：先回顶，再退回首页。
+            if (scrollVisibleSettingToTop()) return;
             change(0);
         } else if (mManager.canBack(0)) {
+            // VodFragment 已退到底层（筛选/搜索均已关闭）：先让首页列表回顶，
+            // 已在顶部时再交给双击退出。canBack 为 false 时由其内部 goBack 消费返回。
+            if (!scrollHomeToTop()) exitHome();
+        }
+    }
+
+    /**
+     * 让当前可见的设置 Fragment 的 NestedScrollView 回到顶部。
+     */
+    private boolean scrollVisibleSettingToTop() {
+        for (int i = 1; i <= 9; i++) {
+            if (!mManager.isVisible(i)) continue;
+            return scrollViewToTop(mManager.getFragment(i) == null ? null : mManager.getFragment(i).getView());
+        }
+        return false;
+    }
+
+    /**
+     * 首页列表回到顶部（复用 VodFragment 的回到顶部悬浮按钮能力）。
+     */
+    private boolean scrollHomeToTop() {
+        VodFragment vod = (VodFragment) mManager.getFragment(0);
+        if (vod == null || !vod.canScrollToTop()) return false;
+        vod.scrollToTop();
+        return true;
+    }
+
+    /**
+     * 首页双击返回才退出：第一次提示，时间窗内第二次才真正退出。
+     */
+    private void exitHome() {
+        long now = SystemClock.elapsedRealtime();
+        if (now - mLastBackTime < BACK_EXIT_INTERVAL_MS) {
             if (PlaybackService.isRunning()) Util.moveToBackground(this);
             else super.onBackInvoked();
+        } else {
+            mLastBackTime = now;
+            Notify.show(R.string.app_exit_confirm);
         }
     }
 

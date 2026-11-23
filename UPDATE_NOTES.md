@@ -1,0 +1,113 @@
+# WebHTV 更新说明
+
+## v5.6.39（versionCode 599）
+
+发布日期：2026-11-23
+
+### 本次修复
+
+- **彻底修复普通线路切 IJK 失败（含瓜子等所有线路）**：真机 native 日志首次给出真实报错——`detected format mpegts extension none mismatches allowed extensions in url` / `Error when loading first segment` / `Invalid data found when processing input`，对应 `what=-10000 extra=0`。根因是 FFmpeg 7.x 的 hls 解复用器新增分片扩展名严格校验（`extension_picky`，默认开启）：本地代理把分片改写成 `/mpv/item?...` 这类无扩展名 URL，mpegts 的扩展名判定恒为 0；此前设置的 `allowed_extensions=ALL` 只能绕过前一道判定，因此 595/596 均无效。现对非 DASH 线路设置 `extension_picky=0` 关闭该校验，IJK 可正常打开本地代理 HLS。
+- 默认内核已生效（598 修复，真机日志验证）：每条新播放 trace 起始内核均为设置的默认值（IJK），失败后才回退；自动回退产生的内核不再粘滞到下一集，用户手动选择仍然保持。
+- 回退顺序：IJK 失败 → **EXO** → MPV（MPV 仅最后兜底），真机日志全程未见自动回退到 MPV。
+- `max-buffer-size` 选项钳制到 blbl FFmpeg7 合法上限 15MB，消除选项设置失败报错（行为不变）。
+- 严格隔离（第一原则）：B 站哔哩哔哩 DASH 播放逻辑逐字未动；网盘代理/缓存播放逻辑（PlaybackRoute/PreCache/本地代理）零改动；`extension_picky` 只作用于 IJK 本路的 hls 解复用器实例。
+
+### 安装包
+
+| 设备 | ABI | 文件 |
+| --- | --- | --- |
+| 手机 / 平板 64 位 | arm64-v8a | `mobile-arm64_v8a.apk` |
+| 电视 / 盒子 32 位 | armeabi-v7a | `leanback-armeabi_v7a.apk` |
+
+### 更新清单
+
+发布时把 APK 和对应 JSON 清单上传到 Release 标签 `v5.6.39`：
+
+- `mobile-arm64_v8a.apk` + `mobile-arm64_v8a.json`（本版仅重编手机 64 位）
+
+清单中 `name` 为 `v5.6.39`、`code` 为 `599`，`downloads.github.url` 指向该 Release 下同名 APK 的下载地址。
+
+## v5.6.22（versionCode 582）
+
+发布日期：2026-11-21
+
+### 本次修复
+
+- 修复点击「外观 / 语言」后应用直接退出：
+  - 新增统一界面重建入口，语言、主题、UI 缩放切换统一推迟到下一帧重建，不再在对话框点击回调栈里同步重建。
+  - 重建失败时自动重新拉起当前页面，避免整进程退出。
+  - 切换主题模式时不再重复触发两次重建。
+  - 语言上下文包装、主题配色解析增加兜底，重建阶段的异常不再中断启动。
+- 加固对话框：恢复态空弹窗自动关闭，按钮关闭改用允许状态丢失的事务，回调异常单独记录不再向上抛。
+- 外观对话框对资源数组缺失、偏好索引越界做保护。
+- 版本号提升到 `5.6.22 / 582`，便于应用内更新识别。
+
+### 遥控器交互（双端）
+
+- 设置页面遥控器按返回键先回到当前页面顶部，再按才返回上一级。
+- 首页遥控器按返回键先回到列表顶部；已在顶部时连按两次才退出应用。
+- 退出应用去掉「确认退出」弹窗，第二次返回直接退出。
+- TV 剧集播放详情页的选集区，遥控器按返回先回到当前播放剧集所在的列表顶部焦点项，再按才退出页面。
+- 修复手机端首页回顶方法缺失（`VodFragment.scrollToTop()`）导致的编译失败。
+
+### 播放修复
+
+- 修复哔哩哔哩等线路切换播放器内核后失败、报错、黑屏的问题：切换内核时先把新的播放规格（spec）与归属令牌发布出去，再通知页面重建，确保 `onPlayerRebuild` 的归属判定拿到新 key，EXO → IJK 的渲染面/Surface 重绑不再被跳过。
+- 加固 IJK 视频输出绑定：`setVideoOutput` 在 SurfaceHolder/SurfaceTexture 已销毁时不再抛异常中断切换，改为记录日志并保留当前输出，交给后续重绑点补齐。
+- 修复哔哩哔哩合集等自定义 spider 线路切换 IJK 报错：切换内核不再因重新取址失败或返回错误而中断；取址失败时回退到当前已解析源直接换引擎（`switchPlayerKernelDirectly`），保证任意线路都能切到所选内核。
+- 修复「设为默认播放器」不生效：修改默认内核时清除历史记录里按线路记忆的内核（`clearPlayerKernelMemory`），新默认立即生效；播放中手动换核仍按线路单独记忆。
+- 统一双端切换语义：TV 与手机端均使用手动强制切换（`switchPlayerManually`），不再因失败自动回退到其它内核。
+
+## v5.6.21（versionCode 581）
+
+发布日期：2026-11-21
+
+### 本次更新
+
+- 合并上游 `Silent1566/webhtv` 最新源码 `v5.6.0-202611211059`。
+- 以 `v5.6.0-202611081126` 为共同基线做三方合并，上游新增 108 个文件、修改 180 个文件。
+- 保留本分支已有定制，不覆盖主题、详情页行为、焦点性能、更新地址、壁纸和版本配置。
+
+### 上游新增与修复
+
+- 新增 Origin 跨配置续播：会话隔离、历史解析、媒体中继、进度写入与回退策略。
+- 新增插件管理器界面与插件权限、参数管理。
+- 新增崩溃恢复：上一进程崩溃检测、崩溃日志会话与恢复状态。
+- 增强字幕自动匹配：候选排序、上下文构建、迅雷字幕源与手动搜索。
+- 增强缓存管理：总上限收敛、清理策略、播放缓存预算与调度。
+- 增强本地代理：上游 URL 防护、请求覆盖、分段 Range 与多线程代理。
+- 修复播放器内核记忆、Exo 压缩音频直通、STRM HTTP 播放与 IJK 首帧看门狗。
+- 同步上游相关资源、数据库 schema、测试与文档。
+
+### 本分支保留的定制
+
+- 全局选中焦点与播放器焦点环使用近白色 `#F5F7FF`，对齐 FongMi/TV 默认配色。
+- 进入剧集详情默认播放当前集数线路，不自动全站搜索；仅在用户开启自动换源时兜底搜索。
+- 集数卡焦点切换、横向滚动与遥控方向键卡顿优化，卡片焦点 drawable 增加缓存。
+- 修复语言、外观切换时 `ChoiceDialog` 退出崩溃。
+- 应用内更新地址指向 `AZHUZHITAN/webhtv`。
+- 双端内置默认壁纸与版本号 `5.6.21 / 581`。
+- 保留无缝缓存、预加载、解码方式等本分支设置项及补齐的字符串资源。
+
+### 安装包
+
+| 设备 | ABI | 文件 |
+| --- | --- | --- |
+| 手机 / 平板 64 位 | arm64-v8a | `mobile-arm64_v8a.apk` |
+| 电视 / 盒子 32 位 | armeabi-v7a | `leanback-armeabi_v7a.apk` |
+
+### 更新清单
+
+发布时把两个 APK 和两个 JSON 清单一起上传到 Release 标签 `v5.6.22`：
+
+- `mobile-arm64_v8a.apk` + `mobile-arm64_v8a.json`
+- `leanback-armeabi_v7a.apk` + `leanback-armeabi_v7a.json`
+
+清单中的 `name` 为 Release 标签 `v5.6.22`，`apk` 字段与实际上传的 APK 文件名一致，`code` 为 582；`downloads.github.url` 指向该 Release 下同名 APK 的下载地址。
+
+### 构建验证
+
+- `assembleMobileArm64_v8aRelease`：通过。
+- `assembleLeanbackArmeabi_v7aRelease`：通过。
+- APK ABI 已核验：手机包仅含 `lib/arm64-v8a/`，电视包仅含 `lib/armeabi-v7a/`。
+- 运行时播放、遥控焦点和更新流程仍需真机确认。

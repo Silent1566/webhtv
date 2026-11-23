@@ -55,6 +55,10 @@ public class IjkPlayerEngine implements PlayerEngine {
         return player = buildPlayer(decode, listener);
     }
 
+    public boolean hasRenderedFirstFrame() {
+        return player != null && player.hasRenderedFirstFrame();
+    }
+
     @Override
     public int getDecode() {
         return decode;

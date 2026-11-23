@@ -63,4 +63,12 @@ public abstract class HistoryDao extends BaseDao<History> {
 
     @Query("DELETE FROM History")
     public abstract int delete();
+
+    /**
+     * 用户在设置页改了全局默认播放器后调用：清掉所有历史按线路记住的内核。
+     * 否则 getPlaybackPlayerOrDefault() 会继续用旧记忆覆盖新默认，用户会看到
+     * 「默认播放器设了不生效」。播放器内手动换核仍会按线路重新记忆。
+     */
+    @Query("UPDATE History SET kernelByFlag = ''")
+    public abstract int clearPlayerKernelMemory();
 }

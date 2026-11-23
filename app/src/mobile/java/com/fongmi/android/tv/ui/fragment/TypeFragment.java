@@ -189,8 +189,12 @@ public class TypeFragment extends BaseFragment implements CustomScroller.Callbac
         });
     }
 
+    public boolean canScrollToTop() {
+        return mBinding != null && mBinding.recycler.canScrollVertically(-1);
+    }
+
     public void scrollToTop() {
-        mBinding.recycler.smoothScrollToPosition(0);
+        if (mBinding != null) mBinding.recycler.smoothScrollToPosition(0);
     }
 
     public void setFilter(String key, Value value) {

@@ -2,6 +2,11 @@ package com.fongmi.android.tv.theme;
 
 final class ThemeContrast {
 
+    /** 焦点环的深色宿主基准色。 */
+    private static final int FOCUS_RING_HOST = 0xFF101418;
+    /** 焦点环的浅色宿主基准色（手机浅色表 / 浅色卡片）。 */
+    private static final int FOCUS_RING_LIGHT_HOST = 0xFFF7F8FA;
+
     private ThemeContrast() {
     }
 
@@ -27,7 +32,7 @@ final class ThemeContrast {
         require(tokens.colorOnSurface(), tokens.colorSurfaceContainerHighest(), 4.5, "onSurface/surfaceContainerHighest");
         require(tokens.colorInverseOnSurface(), tokens.colorInverseSurface(), 4.5, "inverseOnSurface/inverseSurface");
         require(tokens.colorOutline(), tokens.colorSurface(), 3.0, "outline/surface");
-        require(tokens.colorFocus(), tokens.colorSurface(), 3.0, "focus/surface");
+        requireFocus(tokens.colorFocus());
         require(tokens.colorPlayerControlActive(), composite(tokens.colorPlayerScrim(), 0xFF000000), 4.5, "playerControlActive/playerScrim");
     }
 
@@ -44,6 +49,22 @@ final class ThemeContrast {
         int green = (((foreground >>> 8) & 0xFF) * alpha + ((background >>> 8) & 0xFF) * inverse + 127) / 255;
         int blue = ((foreground & 0xFF) * alpha + (background & 0xFF) * inverse + 127) / 255;
         return 0xFF000000 | (red << 16) | (green << 8) | blue;
+    }
+
+    /**
+     * 焦点环只需要在它实际出现的宿主上可见。
+     *
+     * <p>电视端深色表把焦点环刷在近黑底上，手机浅色表则刷在浅底上；同一个环色不可能同时
+     * 满足两边。此前只用深色宿主做基准，浅色预设（环色＝主色）全部被判不达标，最终把
+     * 内置预设的校验推向失败分支。这里要求「至少一侧达到 3:1」，既保留可见性约束，
+     * 又不误杀合法配色。
+     */
+    private static void requireFocus(int focus) {
+        double darkHost = ratio(focus, FOCUS_RING_HOST);
+        double lightHost = ratio(focus, FOCUS_RING_LIGHT_HOST);
+        if (Math.max(darkHost, lightHost) + 0.0001 >= 3.0) return;
+        throw new IllegalArgumentException("focus/host contrast "
+                + String.format(java.util.Locale.US, "%.2f", Math.max(darkHost, lightHost)) + " < 3.0");
     }
 
     private static void require(int foreground, int background, double minimum, String pair) {

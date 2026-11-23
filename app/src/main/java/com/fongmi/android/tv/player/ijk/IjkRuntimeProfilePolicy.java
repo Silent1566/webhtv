@@ -141,8 +141,8 @@ public final class IjkRuntimeProfilePolicy {
                 && !seen.contains(Path.IJK_SOFT)) {
             return Path.IJK_SOFT;
         }
-        if (applied != Path.MPV && !seen.contains(Path.MPV)) return Path.MPV;
         if (applied != Path.EXO && !seen.contains(Path.EXO)) return Path.EXO;
+        if (applied != Path.MPV && !seen.contains(Path.MPV)) return Path.MPV;
         return null;
     }
 

@@ -289,6 +289,19 @@ class SystemSimplePlayer extends SimpleBasePlayer implements MediaPlayer.OnPrepa
 
     private void openCurrent() {
         if (mediaItem == null || mediaItem.localConfiguration == null) return;
+        // Android MediaPlayer 不支持 DASH MPD：直接喂 MPD 会探测挂起十几秒后报
+        // what=1, extra=-2147483648，用户看到的就是「切系统加载缓慢再回退」。
+        // 识别到 MPD 立即失败，让上层瞬间回退 EXO（对 MPD 的正常处理路径）。
+        if (isUnsupportedDashMpd(mediaItem)) {
+            playerError = new PlaybackException(
+                    "System player does not support DASH MPD",
+                    null,
+                    PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED);
+            playbackState = Player.STATE_IDLE;
+            loading = false;
+            invalidateState();
+            return;
+        }
         try {
             playbackState = Player.STATE_BUFFERING;
             loading = true;
@@ -308,6 +321,15 @@ class SystemSimplePlayer extends SimpleBasePlayer implements MediaPlayer.OnPrepa
             loading = false;
             invalidateState();
         }
+    }
+
+    private boolean isUnsupportedDashMpd(MediaItem item) {
+        if (item.localConfiguration == null) return false;
+        String mimeType = item.localConfiguration.mimeType;
+        if (mimeType != null && (mimeType.contains("dash") || mimeType.contains("mpd"))) return true;
+        String lower = item.localConfiguration.uri.toString().toLowerCase(java.util.Locale.US);
+        return lower.contains(".mpd") || lower.contains("type=mpd") || lower.contains("format=mpd")
+                || lower.contains("/mpv/index.mpd");
     }
 
     private Map<String, String> headersWithRange() {

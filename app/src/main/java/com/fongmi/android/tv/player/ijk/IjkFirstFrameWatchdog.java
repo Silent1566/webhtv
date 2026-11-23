@@ -9,7 +9,9 @@ import com.fongmi.android.tv.player.PlaybackAutoContext;
  */
 public final class IjkFirstFrameWatchdog {
 
-    static final long TIMEOUT_ACTIVE_MS = 10_000L;
+    // 首帧等待期内音频通常已出声，黑屏体感明显；6 秒无任何视频输出已足以判定
+    // 渲染路径失败（软解性能再差首帧也远小于此），给后续自动兜底留出快速反应窗口。
+    static final long TIMEOUT_ACTIVE_MS = 6_000L;
 
     private PlaybackAutoContext.SessionToken session =
             PlaybackAutoContext.SessionToken.none();

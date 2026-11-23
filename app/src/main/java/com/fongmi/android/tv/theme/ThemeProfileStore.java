@@ -16,10 +16,34 @@ public final class ThemeProfileStore {
 
     /** Reads the active profile; corrupted or missing data never blocks the caller. */
     public static ThemeProfile load() {
+        try {
+            return loadInternal();
+        } catch (RuntimeException ignored) {
+            // 任何主题档损坏或内置预设异常都不应该阻断界面：回落到出厂档。
+            return ThemeProfile.defaultProfile();
+        }
+    }
+
+    private static ThemeProfile loadInternal() {
         ThemeProfile current = parse(Prefers.getString(KEY_PROFILE));
         if (current != null) return current;
         ThemeProfile lastGood = parse(Prefers.getString(KEY_LAST_GOOD));
-        return lastGood != null ? lastGood : migrateLegacy(Setting.getThemeColor(), Prefers.getString(LEGACY_KEY_PROFILE));
+        if (lastGood != null) return lastGood;
+        String legacyJson = Prefers.getString(LEGACY_KEY_PROFILE);
+        int legacyColor = Setting.getThemeColor();
+        // 蜂蜜影视产品默认：用户从未做过任何主题选择（无存储档、无 legacy 镜像）时，
+        // 首次安装的默认配色直接采用蜂蜜金预设，而不是上游的编译期基线。
+        if (legacyColor == -1 && (legacyJson == null || legacyJson.isBlank())) return honeyDefault();
+        return migrateLegacy(legacyColor, legacyJson);
+    }
+
+    /** The shipped honey-gold palette used as the product default theme. */
+    public static ThemeProfile honeyDefault() {
+        try {
+            return ThemePresets.Preset.HONEY.profile();
+        } catch (RuntimeException ignored) {
+            return ThemeProfile.defaultProfile();
+        }
     }
 
     /** Returns the last successfully persisted profile, or null when none is usable. */
@@ -49,7 +73,7 @@ public final class ThemeProfileStore {
     }
 
     public static ApplyResult reset() {
-        return apply(ThemeProfile.defaultProfile());
+        return apply(honeyDefault());
     }
 
     /** Maps the legacy theme_color mirror and, when present, bounded v1 profile fields. */

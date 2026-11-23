@@ -345,6 +345,17 @@ public final class ThemeController {
      * existing immersive layouts.
      */
     public static void applyFromPreferences(AppCompatActivity activity) {
+        try {
+            applyFromPreferencesInternal(activity);
+        } catch (RuntimeException ignored) {
+            // 外观只是装饰层：解析失败时回落到出厂浅色表，而不是让界面重建失败退出。
+            profile = ThemeProfile.defaultProfile();
+            baseline = ThemeTokens.light();
+            current = baseline;
+        }
+    }
+
+    private static void applyFromPreferencesInternal(AppCompatActivity activity) {
         ThemeProfile stored = null;
         try {
             stored = ThemeProfileStore.load();
@@ -373,7 +384,11 @@ public final class ThemeController {
      * default Layer 1 path is byte-identical and costs nothing.
      */
     public static void bindTheme(View root) {
-        ThemeBinder.bind(root, baseline, current);
+        try {
+            ThemeBinder.bind(root, baseline, current);
+        } catch (RuntimeException ignored) {
+            // 某个视图的颜色改写失败不应该让整棵视图树创建失败。
+        }
     }
 
     /** Same controlled channel for a dialog or bottom-sheet window. */

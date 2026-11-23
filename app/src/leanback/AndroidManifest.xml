@@ -98,7 +98,7 @@
         <activity-alias
             android:name=".ui.activity.HomeActivityCurrent"
             android:banner="@mipmap/ic_banner"
-            android:enabled="true"
+            android:enabled="false"
             android:exported="true"
             android:icon="@mipmap/ic_launcher"
             android:label="@string/app_name"
@@ -113,8 +113,8 @@
 
         <activity-alias
             android:name=".ui.activity.HomeActivityHistory"
-            android:banner="@drawable/ic_banner_history"
-            android:enabled="false"
+            android:banner="@mipmap/ic_banner"
+            android:enabled="true"
             android:exported="true"
             android:icon="@drawable/ic_launcher_history"
             android:label="@string/app_name"

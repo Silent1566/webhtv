@@ -407,6 +407,7 @@ public final class PlaybackProgressWriter {
 
         // Persist the marker before touching History. If a playback write races this
         // deletion, the marker makes the stale write lose deterministically.
+        if (userInitiated) backupCollectedBeforeDelete(input, cid, filter);
         PlaybackDeleteTombstoneStore.record(input, cid, filter);
         if (input.isSeasonScope()) {
             if (remote) {
@@ -582,6 +583,30 @@ public final class PlaybackProgressWriter {
         if (!input.isAllScope() && !input.isSiteScope() && TextUtils.isEmpty(input.historyKey)
                 && (TextUtils.isEmpty(input.siteKey) || TextUtils.isEmpty(input.vodId))) result.clear();
         return new ArrayList<>(result.values());
+    }
+
+    /**
+     * 用户主动删除/清空历史前，把"被收藏"的剧集进度同步镜像进保险库。
+     * 收藏夹（Keep）独立于历史存储：清空历史后从收藏夹点播时仍能续播到上次看到的集数与进度。
+     * 必须同步写入：删除动作紧随其后，异步镜像存在落盘竞态（这正是历史版本进度丢失复现的根因）。
+     */
+    private static void backupCollectedBeforeDelete(PlaybackProgressDeleteInput input, int cid, RemoteSyncConfig filter) {
+        try {
+            HistoryDao dao = AppDatabase.get().getHistoryDao();
+            List<History> victims = candidates(dao, cid, input);
+            if (victims.isEmpty()) return;
+            for (History history : victims) {
+                if (history == null || history.getPosition() <= 0) continue;
+                if (filter != null && !filter.matchesSite(history.getSiteKey())) continue;
+                try {
+                    if (com.fongmi.android.tv.bean.Keep.find(cid, history.getKey()) == null) continue;
+                } catch (Throwable ignored) {
+                    continue;
+                }
+                ProgressVault.recordSync(history);
+            }
+        } catch (Throwable ignored) {
+        }
     }
 
     private static void addByItem(HistoryDao dao, int cid, PlaybackProgressDeleteInput input, Map<String, History> result) {

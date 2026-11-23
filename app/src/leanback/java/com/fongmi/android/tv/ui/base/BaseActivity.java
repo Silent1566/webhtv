@@ -30,6 +30,7 @@ import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.theme.ThemeController;
 import com.fongmi.android.tv.ui.custom.CustomWallView;
 import com.fongmi.android.tv.ui.helper.TouchOptimizationHelper;
+import com.fongmi.android.tv.utils.UiRestart;
 import com.fongmi.android.tv.utils.Util;
 
 import org.greenrobot.eventbus.EventBus;
@@ -43,6 +44,8 @@ public abstract class BaseActivity extends AppCompatActivity {
 
     private static final int DESIGN_WIDTH_IN_DP = 960;
     private static final int DESIGN_HEIGHT_IN_DP = 540;
+
+    private float mUiScaleFactor;
 
     protected abstract ViewBinding getBinding();
 
@@ -185,15 +188,17 @@ public abstract class BaseActivity extends AppCompatActivity {
     }
 
     private void applyUiScale() {
+        // getResources() 每次测量/绘制都会调用，缓存缩放系数避免每次读 SharedPreferences；
+        // UI 缩放变更会通过 RefreshEvent 触发 recreate，新实例重新读取即可生效。
+        if (mUiScaleFactor <= 0) mUiScaleFactor = Setting.getUiScaleFactor(Setting.getUiScale());
         AutoSizeConfig config = AutoSizeConfig.getInstance();
-        float factor = Setting.getUiScaleFactor(Setting.getUiScale());
-        config.setDesignWidthInDp(Math.round(DESIGN_WIDTH_IN_DP / factor));
-        config.setDesignHeightInDp(Math.round(DESIGN_HEIGHT_IN_DP / factor));
+        config.setDesignWidthInDp(Math.round(DESIGN_WIDTH_IN_DP / mUiScaleFactor));
+        config.setDesignHeightInDp(Math.round(DESIGN_HEIGHT_IN_DP / mUiScaleFactor));
     }
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onSubscribe(Object o) {
-        if (o instanceof RefreshEvent event && (event.getType() == RefreshEvent.Type.LANGUAGE || event.getType() == RefreshEvent.Type.UI_SCALE || event.getType() == RefreshEvent.Type.THEME)) recreate();
+        if (o instanceof RefreshEvent event && (event.getType() == RefreshEvent.Type.LANGUAGE || event.getType() == RefreshEvent.Type.UI_SCALE || event.getType() == RefreshEvent.Type.THEME)) UiRestart.rebuild(this);
     }
 
     @Override
@@ -214,7 +219,50 @@ public abstract class BaseActivity extends AppCompatActivity {
     }
 
     protected void onBackInvoked() {
+        // 设置页由多个 Setting*Activity 承载，布局根为 NestedScrollView。按返回键时若内容
+        // 已滚动，先平滑回到顶部并消费本次返回；再次按返回才真正退出。首页/播放页各自
+        // 覆写了 onBackInvoked()，不受此逻辑影响。
+        if (isSettingScreen() && scrollRootToTop()) return;
         finish();
+    }
+
+    /**
+     * 当前是否为设置类页面。设置页统一以 Setting 命名（SettingActivity、
+     * SettingPlayerActivity、…），用类名前缀识别，避免改动 10 个子类。
+     */
+    protected boolean isSettingScreen() {
+        return getClass().getSimpleName().startsWith("Setting");
+    }
+
+    /**
+     * 把当前页面根布局中第一个可垂直滚动的容器滚回顶部。
+     *
+     * @return 是否真的发生了回顶（容器存在且原本不在顶部）
+     */
+    protected boolean scrollRootToTop() {
+        View content = findViewById(android.R.id.content);
+        return content != null && scrollViewToTop(content);
+    }
+
+    private static boolean scrollViewToTop(View view) {
+        if (view instanceof androidx.core.widget.NestedScrollView && ((androidx.core.widget.NestedScrollView) view).getScrollY() > 0) {
+            ((androidx.core.widget.NestedScrollView) view).smoothScrollTo(0, 0);
+            return true;
+        }
+        if (view instanceof android.widget.ScrollView && ((android.widget.ScrollView) view).getScrollY() > 0) {
+            ((android.widget.ScrollView) view).smoothScrollTo(0, 0);
+            return true;
+        }
+        if (view instanceof RecyclerView && ((RecyclerView) view).canScrollVertically(-1)) {
+            ((RecyclerView) view).smoothScrollToPosition(0);
+            return true;
+        }
+        if (view instanceof ViewGroup group) {
+            for (int i = 0; i < group.getChildCount(); i++) {
+                if (scrollViewToTop(group.getChildAt(i))) return true;
+            }
+        }
+        return false;
     }
 
     @Override

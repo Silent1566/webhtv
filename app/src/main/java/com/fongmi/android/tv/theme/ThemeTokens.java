@@ -114,15 +114,14 @@ public record ThemeTokens(
             0xFFA8C7FA,
             0x52000000,
             0xFF000000,
-            0xFF0B57D0,
+            0xFFF5F7FF,
             // 焦点缩放倍率与明暗模式无关：它是**动效**属性，不是配色属性。此前浅色表为
             // 1.0、深色表为 1.1，而各适配器一律写死 1.1，于是浅色主题的电视一旦改走 token
             // 就会丢掉缩放反馈。这里统一为 1.1（= 既有实机行为，也是 Android TV 按钮
             // 指南与设计文档 §5.2 记录的取值）。
             1.1f,
-            // 浅色表视频层环：FOCUS 深蓝在固定深靛玻璃上仅 1.83:1，
-            // 取 ThemeResolver 夹取到 ≥3:1 的派生值（与 values/webhtv_tokens.xml 同步）。
-            0xFF447BF5,
+            // 浅色表视频层环改为近白，与全局焦点色一致（FongMi/TV 默认白色焦点环）。
+            0xFFF5F7FF,
             0xFF00A95A,
             1.0f,
             0xFFFFFFFF,
