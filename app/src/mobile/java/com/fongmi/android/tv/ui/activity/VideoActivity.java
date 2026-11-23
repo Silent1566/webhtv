@@ -1998,6 +1998,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
     }
 
     private void updateEpisodeTouchHandling() {
+        mBinding.episode.setNestedScrollingEnabled(shouldUseUpstreamNativeEpisodeModule());
         mBinding.episode.setOnTouchListener((view, event) -> {
             if (!usesOuterEpisodePageScroll()) return false;
             int action = event.getActionMasked();
