@@ -7,6 +7,7 @@ import com.fongmi.android.tv.Constant;
 import com.fongmi.android.tv.api.config.WallConfig;
 import com.fongmi.android.tv.api.config.LiveConfig;
 import com.fongmi.android.tv.api.config.VodConfig;
+import com.fongmi.android.tv.api.config.VodSiteCatalog;
 import com.fongmi.android.tv.bean.Backup;
 import com.fongmi.android.tv.bean.Config;
 import com.fongmi.android.tv.db.AppDatabase;
@@ -398,6 +399,9 @@ public class Manage implements Process {
             JsonObject object = new JsonObject();
             object.addProperty("code", 0);
             object.add("data", ConfigImport.data(result, currentConfig(parsed.getType())));
+            // 固定地址下内容会变：登记成功后立刻丢掉这项的解析缓存，避免重新导入后
+            // 仍按旧 JSON 服务最多 60 秒（只清目标标识，不动其它配置）。
+            VodSiteCatalog.invalidate(result.getConfig().getInterfaceKey());
             return json(object);
         } catch (IllegalStateException e) {
             return Nano.error(Status.INTERNAL_ERROR, e.getMessage());

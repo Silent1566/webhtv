@@ -137,6 +137,21 @@ public final class VodSiteCatalog {
         };
     }
 
+    /**
+     * 只丢弃某一个配置标识解析出的结果。
+     *
+     * <p>PC 下发的配置用**固定地址**（token 路径不变），内容更新时 URL 不变，
+     * 因此不能靠「换了地址」自然失效；不丢这一项就会出现「重新导入后仍按旧 JSON
+     * 服务最多 60 秒」。只清目标命名空间，不影响其它配置的缓存命中。
+     */
+    public static void invalidate(String interfaceKey) {
+        String id = namespace(interfaceKey);
+        if (id.isEmpty()) return;
+        synchronized (CACHE) {
+            CACHE.remove(id);
+        }
+    }
+
     /** 丢弃全部已解析配置。配置行被改写或删除后必须调用，否则最多 60 秒仍在服务旧站源。 */
     public static void invalidate() {
         synchronized (CACHE) {

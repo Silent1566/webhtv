@@ -31,3 +31,7 @@ Accepted Android unit (Lead, 2026-11-24)
 - PC execution will preserveoriginalrecord/sourceKey andbuildoverlay; importedAndroidrows32–34 remainnonactive withoffline temporaryURLs. These are disclosedspikecopies, not a finishedPC runtime UI.
 - Correct site-count:204active, never18878(the earlier user-facing number was a transcription error).
 - Exactly next action after atomicclosure: implementPCsnapshotpublisher + verifiedADBreverse + stablebinding/overlay.
+
+Targeted catalog invalidation (2026-11-24, Lead-Core)
+- PC publishes a fixed URL per binding; content changes without URL change, so the 60s catalog TTL could serve stale JSON after re-import. Added VodSiteCatalog.invalidate(String interfaceKey) (namespace-scoped remove only) and call it in /manage/config/import right after registration. Global invalidate() and all other callers unchanged.
+- Verification: testMobileArm64_v8aDebugUnitTest ConfigImportTest 15/0/0 and existing VodApiTest 39/0/0 BUILD SUCCESSFUL. No device-level re-import/stale-cache proof yet; it is scheduled in the final R6 after the PC publisher exists (do not claim it as verified).
