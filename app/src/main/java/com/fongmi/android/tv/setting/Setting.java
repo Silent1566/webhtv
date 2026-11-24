@@ -924,6 +924,16 @@ public class Setting {
         Prefers.put("adblock", adblock);
     }
 
+    // 广告拦截成功提示：开启时在成功拦截后弹出「已跳过 N 个广告片段，时长 X」。
+    // 默认 true 保持增强版既有观感（原逻辑无条件提示），用户可关闭。
+    public static boolean isAdBlockNotice() {
+        return Prefers.getBoolean("ad_block_notice", true);
+    }
+
+    public static void putAdBlockNotice(boolean enabled) {
+        Prefers.put("ad_block_notice", enabled);
+    }
+
     public static boolean isZhuyin() {
         return Prefers.getBoolean("zhuyin");
     }

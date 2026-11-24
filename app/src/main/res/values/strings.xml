@@ -3001,6 +3001,7 @@
     <string name="setting_ad_group_rule">Rules and stats</string>
     <string name="setting_ad_group_segment">Segment skipping</string>
     <string name="setting_ad_master">Ad blocking master switch</string>
+    <string name="setting_ad_notice">Ad-block success notice</string>
     <string name="dialog_tmdb_test_config">Test configuration</string>
     <string name="dialog_tmdb_test_result_title">Configuration test</string>
     <string name="dialog_tmdb_test_api_success">TMDB API: connected and returned valid data (%1$d ms)</string>

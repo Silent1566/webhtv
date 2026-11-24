@@ -114,6 +114,7 @@ public class M3u8 implements Process {
         long fallbackCount = clean.legacy() ? Math.max(1, clean.removedSegments()) : 0;
         AdBlockStatsStore.recordBlocks(url.host(), "HLS", clean.ruleCounts(), fallbackCount,
                 url.host(), clean.removedDurationSec(), clean.removedSegmentDetails());
+        if (!Setting.isAdBlockNotice()) return;
         if (!HlsAdblockNotice.shouldNotify(url.toString(), System.currentTimeMillis())) return;
         int removed = clean.removedSegments() > 0 ? clean.removedSegments() : (int) fallbackCount;
         String message = HlsAdblockNotice.message(removed, clean.removedDurationSec());

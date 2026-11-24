@@ -1,21 +1,23 @@
 # WebHTV 更新说明
 
-## v5.6.39（versionCode 599）
+## v5.6.40（versionCode 600）
 
-发布日期：2026-11-23
+发布日期：2026-11-24
 
 ### 本次修复
 
+- **收藏剧集独立进度**：收藏夹收藏的剧集现在自带进度集数记录并显示（Keep 表新增进度字段 + Room 49→50 迁移），清空播放历史不再导致收藏进度丢失；首页历史保持独立、不由收藏派生。续播优先读 Keep 进度，ProgressVault 仅作升级兼容兜底。
 - **彻底修复普通线路切 IJK 失败（含瓜子等所有线路）**：真机 native 日志首次给出真实报错——`detected format mpegts extension none mismatches allowed extensions in url` / `Error when loading first segment` / `Invalid data found when processing input`，对应 `what=-10000 extra=0`。根因是 FFmpeg 7.x 的 hls 解复用器新增分片扩展名严格校验（`extension_picky`，默认开启）：本地代理把分片改写成 `/mpv/item?...` 这类无扩展名 URL，mpegts 的扩展名判定恒为 0；此前设置的 `allowed_extensions=ALL` 只能绕过前一道判定，因此 595/596 均无效。现对非 DASH 线路设置 `extension_picky=0` 关闭该校验，IJK 可正常打开本地代理 HLS。
 - 默认内核已生效（598 修复，真机日志验证）：每条新播放 trace 起始内核均为设置的默认值（IJK），失败后才回退；自动回退产生的内核不再粘滞到下一集，用户手动选择仍然保持。
 - 回退顺序：IJK 失败 → **EXO** → MPV（MPV 仅最后兜底），真机日志全程未见自动回退到 MPV。
 - `max-buffer-size` 选项钳制到 blbl FFmpeg7 合法上限 15MB，消除选项设置失败报错（行为不变）。
-- 修改范围（如实说明）：本 PR 相对上游基线共 129 个文件变更，不限于 IJK。
+- 严格隔离（第一原则）：B 站哔哩哔哩 DASH 播放逻辑逐字未动；网盘代理/缓存播放逻辑（PlaybackRoute/PreCache/本地代理）零改动；`extension_picky` 只作用于 IJK 本路的 hls 解复用器实例。
+- 修改范围（如实说明）：本版相对上游基线共 18 个文件变更，不限于 IJK：
   - **IJK 修复**：非 DASH 线路关闭 `extension_picky`；`max-buffer-size` 钳制 15MB；`ijkplayer-cmake-release.aar` + 单库 `libijkplayer.so`（FFmpeg7）替换旧三库。
-  - **内核选择/回退**：新增 `effectivePlayerType` 区分「用户请求内核」与「实际运行内核」，修正 DASH+SYSTEM 透明委派 EXO 后 `isExo()` 误报及下一条普通视频无法回到 SYSTEM 的问题；回退顺序 IJK→EXO→MPV。
-  - **本地 DASH/HLS 代理**：`MpvHlsProxy` 相对上游确有改动（约 +136/-28 行），包含 `data:application/dash+xml` 内联 MPD 解析、`MPD@type`/`profiles` 规范化、`SegmentBase`/`SegmentList` 与本地分片 URL 改写，以及 IJK FFmpeg4 dashdec 兼容性处理。这部分属于 fork 既定能力，本次未新引入播放故障，但不应表述为「代理零改动」。
-  - **未纳入**：应用身份、更新通道、图标、镜像加速、集数缓存及历史进度保险库等 fork 定制保留在本分支，未作为 IJK 修复的一部分声称「无关」。
-  - **回归验证建议**：双 ABI 下需覆盖 ①普通代理 HLS（无扩展名分片）切 IJK 可播；②B 站 DASH（内联 MPD / SegmentBase / SegmentList）在 IJK/EXO 下可播；③手动换核粘滞与自动失败回退 IJK→EXO→MPV；④SYSTEM 内核播 DASH 后下一条普通视频恢复 SYSTEM；⑤删除普通视频历史后不再复活进度、收藏入口仍可续播。
+  - **内核选择/回退**：新增 `effectivePlayerType` 区分「用户请求内核」与「实际运行内核」，修正 DASH+SYSTEM 透明委派 EXO 后 `isExo()` 误报；回退顺序 IJK→EXO→MPV。
+  - **收藏进度**：Keep 表新增 11 个进度字段与 Room 49→50 迁移（从 History 回填），双端收藏卡片显示进度集数。
+  - **本地 DASH/HLS 代理**：`MpvHlsProxy` 相对上游确有改动（约 +136/-28 行，属 fork 既定能力），不应表述为「代理零改动」。
+  - **未纳入**：应用身份、更新通道、图标、镜像加速、集数缓存等 fork 定制保留在本分支。
 
 ### 安装包
 
@@ -26,11 +28,11 @@
 
 ### 更新清单
 
-发布时把 APK 和对应 JSON 清单上传到 Release 标签 `v5.6.39`：
+发布时把 APK 和对应 JSON 清单上传到 Release 标签 `v5.6.40`：
 
 - `mobile-arm64_v8a.apk` + `mobile-arm64_v8a.json`（本版仅重编手机 64 位）
 
-清单中 `name` 为 `v5.6.39`、`code` 为 `599`，`downloads.github.url` 指向该 Release 下同名 APK 的下载地址。
+清单中 `name` 为 `v5.6.40`、`code` 为 `600`，`downloads.github.url` 指向该 Release 下同名 APK 的下载地址。
 
 ## v5.6.22（versionCode 582）
 

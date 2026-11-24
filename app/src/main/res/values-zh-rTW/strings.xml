@@ -2933,6 +2933,7 @@
     <string name="setting_ad_group_rule">規則與統計</string>
     <string name="setting_ad_group_segment">片段跳過</string>
     <string name="setting_ad_master">去廣告總開關</string>
+    <string name="setting_ad_notice">廣告攔截成功提示</string>
     <string name="dialog_tmdb_test_config">測試配置</string>
     <string name="dialog_tmdb_test_result_title">配置測試結果</string>
     <string name="dialog_tmdb_test_api_success">TMDB API：連線成功並傳回有效資料（%1$d 毫秒）</string>

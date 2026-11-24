@@ -50,6 +50,7 @@ public class SettingAdFragment extends BaseFragment {
     @Override
     protected void initEvent() {
         mBinding.adblock.setOnClickListener(this::setAdblock);
+        mBinding.adBlockNotice.setOnClickListener(this::setAdBlockNotice);
         mBinding.aiAdDetection.setOnClickListener(this::setAiAdDetection);
         mBinding.adRuleManage.setOnClickListener(view -> AdRuleManageDialog.create().show(requireActivity(), this::setText));
         mBinding.adBlockStats.setOnClickListener(view -> AdBlockStatsDialog.create(requireActivity()).show());
@@ -61,6 +62,7 @@ public class SettingAdFragment extends BaseFragment {
         if (mBinding == null) return;
         if (!canSetText()) return;
         safeSet("adblock", mBinding.adblockText, () -> getSwitch(Setting.isAdblock()));
+        safeSet("adBlockNotice", mBinding.adBlockNoticeText, () -> getSwitch(Setting.isAdBlockNotice()));
         safeRun("aiAdDetection", () -> {
             mBinding.aiAdDetection.setVisibility(Setting.isAiConfigReady() ? View.VISIBLE : View.GONE);
             setSummary(mBinding.aiAdDetectionText, getSwitch(Setting.isAiAdDetection()));
@@ -137,6 +139,11 @@ public class SettingAdFragment extends BaseFragment {
 
     private void setAdblock(View view) {
         Setting.putAdblock(!Setting.isAdblock());
+        setText();
+    }
+
+    private void setAdBlockNotice(View view) {
+        Setting.putAdBlockNotice(!Setting.isAdBlockNotice());
         setText();
     }
 

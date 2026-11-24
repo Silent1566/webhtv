@@ -49,6 +49,7 @@ public class SettingAdActivity extends BaseActivity {
     @Override
     protected void initEvent() {
         mBinding.adblock.setOnClickListener(this::setAdblock);
+        mBinding.adBlockNotice.setOnClickListener(this::setAdBlockNotice);
         mBinding.aiAdDetection.setOnClickListener(this::setAiAdDetection);
         mBinding.adRuleManage.setOnClickListener(view -> AdRuleManageDialog.create().show(this, this::setText));
         mBinding.adBlockStats.setOnClickListener(view -> AdBlockStatsDialog.create(this).show());
@@ -59,6 +60,7 @@ public class SettingAdActivity extends BaseActivity {
     private void setText() {
         if (!canSetText()) return;
         safeSet("adblock", mBinding.adblockText, () -> getSwitch(Setting.isAdblock()));
+        safeSet("adBlockNotice", mBinding.adBlockNoticeText, () -> getSwitch(Setting.isAdBlockNotice()));
         mBinding.aiAdDetection.setVisibility(Setting.isAiConfigReady() ? View.VISIBLE : View.GONE);
         safeSet("aiAdDetection", mBinding.aiAdDetectionText, () -> getSwitch(Setting.isAiAdDetection()));
         safeSet("adRuleManage", mBinding.adRuleManageText, () -> getString(R.string.ad_rule_count_with_pending,
@@ -138,6 +140,11 @@ public class SettingAdActivity extends BaseActivity {
 
     private void setAdblock(View view) {
         Setting.putAdblock(!Setting.isAdblock());
+        setText();
+    }
+
+    private void setAdBlockNotice(View view) {
+        Setting.putAdBlockNotice(!Setting.isAdBlockNotice());
         setText();
     }
 

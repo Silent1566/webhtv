@@ -1078,6 +1078,7 @@ public final class MpvHlsProxy extends NanoHTTPD {
         String pipeline = kernel == PlayerSetting.IJK ? "IJK" : "MPV";
         AdBlockStatsStore.recordBlocks(parsed.host(), pipeline, outcome.ruleCounts(), fallbackCount,
                 parsed.host(), outcome.removedDurationSec(), outcome.removedSegmentDetails());
+        if (!Setting.isAdBlockNotice()) return;
         if (!HlsAdblockNotice.shouldNotify(url, System.currentTimeMillis())) return;
         int removed = outcome.removedSegments() > 0 ? outcome.removedSegments() : (int) fallbackCount;
         String message = HlsAdblockNotice.message(removed, outcome.removedDurationSec());

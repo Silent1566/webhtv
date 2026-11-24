@@ -195,6 +195,7 @@ final class ExoHlsAdblockDataSource implements DataSource {
         long fallbackCount = outcome.legacy() ? Math.max(1, outcome.removedSegments()) : 0;
         AdBlockStatsStore.recordBlocks(uri.getHost(), "EXO", outcome.ruleCounts(), fallbackCount,
                 uri.getHost(), outcome.removedDurationSec(), outcome.removedSegmentDetails());
+        if (!Setting.isAdBlockNotice()) return;
         if (!HlsAdblockNotice.shouldNotify(uri.toString(), System.currentTimeMillis())) return;
         String message = notice(outcome);
         App.post(() -> Notify.show(message));
