@@ -6286,8 +6286,9 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         mHistory = resumeHistory == null
                 ? History.findPlayback(getHistoryKey(), List.of(item.getName(), getName()), item.getFlags(), tmdbItem, currentSourceSeasonNumber(item))
                 : isOriginSession() ? resumeHistory : resumeHistory.forPlaybackKey(getHistoryKey(), VodConfig.getCid());
-        // 收藏夹入口从进度保险库恢复续播。
-        if (mHistory == null && resumeHistory == null) {
+        // 仅收藏夹入口从进度保险库恢复续播。普通视频历史被用户删除后，
+        // 从详情再次打开不得走保险库反建（否则删掉的进度会被复活并重新入库）。
+        if (isFromCollect() && mHistory == null && resumeHistory == null) {
             mHistory = ProgressVault.resume(VodConfig.getCid(), getHistoryKey());
             if (mHistory != null) FollowingPlaybackBridge.persist(mHistory);
         }

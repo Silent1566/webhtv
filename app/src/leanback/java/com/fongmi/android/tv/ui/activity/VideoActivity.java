@@ -2859,8 +2859,8 @@ private boolean runtimeSourceOnly;
 
     private void prepareFastTmdbPlaybackHistory(Vod item, Flag flag, Episode episode) {
         mHistory = History.findPlayback(getHistoryKey(), List.of(item.getName(), getName()), item.getFlags(), getHistoryTmdbItem(), currentSourceSeasonNumber(item));
-        // 收藏夹（Keep）入口不带续播载荷：历史被清空时从进度保险库反建，保住集数与进度。
-        if (mHistory == null) {
+        // 仅收藏夹（Keep）入口从进度保险库反建续播；普通视频删除历史后不走此路径。
+        if (isFromCollect() && mHistory == null) {
             mHistory = ProgressVault.resume(VodConfig.getCid(), getHistoryKey());
             if (mHistory != null) FollowingPlaybackBridge.persist(mHistory);
         }
@@ -6218,8 +6218,9 @@ private boolean runtimeSourceOnly;
         mHistory = resumeHistory == null
                 ? History.findPlayback(getHistoryKey(), List.of(item.getName(), getName()), item.getFlags(), tmdbItem, currentSourceSeasonNumber(item))
                 : isOriginSession() ? resumeHistory : resumeHistory.forPlaybackKey(getHistoryKey(), VodConfig.getCid());
-        // 收藏夹入口从进度保险库恢复续播。
-        if (mHistory == null && resumeHistory == null) {
+        // 仅收藏夹入口从进度保险库恢复续播。普通视频历史被用户删除后，
+        // 从详情再次打开不得走保险库反建（否则删掉的进度会被复活并重新入库）。
+        if (isFromCollect() && mHistory == null && resumeHistory == null) {
             mHistory = ProgressVault.resume(VodConfig.getCid(), getHistoryKey());
             if (mHistory != null) FollowingPlaybackBridge.persist(mHistory);
         }

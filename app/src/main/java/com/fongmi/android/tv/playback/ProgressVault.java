@@ -29,6 +29,8 @@ public final class ProgressVault {
     private static final Type TYPE = new com.google.gson.reflect.TypeToken<LinkedHashMap<String, Entry>>() {}.getType();
     private static final int MAX_ENTRIES = 800;
     private static final ExecutorService EXECUTOR = Executors.newSingleThreadExecutor();
+    /** 整表 load→改→save 必须原子：异步镜像与删除兜底同步写入会并发，无锁会互相覆盖整张表。 */
+    private static final Object LOCK = new Object();
 
     private ProgressVault() {
     }
@@ -48,12 +50,16 @@ public final class ProgressVault {
         if (entry == null) return;
         String siteKey = safe(history.getSiteKey());
         String vodId = safe(history.getVodId());
-        try {
-            Map<String, Entry> map = load();
-            map.put(vaultKey(history.getCid(), siteKey, vodId), entry);
-            prune(map);
-            save(map);
-        } catch (Throwable ignored) {
+        // 完整读改写加统一锁：避免异步 record() 与删除兜底 recordSync() 并发时，
+        // 一方基于旧表读、另一方刚写入的删除前备份被随后的 save 覆盖。
+        synchronized (LOCK) {
+            try {
+                Map<String, Entry> map = load();
+                map.put(vaultKey(history.getCid(), siteKey, vodId), entry);
+                prune(map);
+                save(map);
+            } catch (Throwable ignored) {
+            }
         }
     }
 
@@ -94,10 +100,12 @@ public final class ProgressVault {
         if (TextUtils.isEmpty(siteKey) || TextUtils.isEmpty(vodId)) return null;
         if (SiteApi.PUSH.equals(siteKey)) return null;
         Entry entry;
-        try {
-            entry = load().get(vaultKey(cid, siteKey, vodId));
-        } catch (Throwable e) {
-            return null;
+        synchronized (LOCK) {
+            try {
+                entry = load().get(vaultKey(cid, siteKey, vodId));
+            } catch (Throwable e) {
+                return null;
+            }
         }
         if (entry == null || (entry.episodeNumber <= 0 && entry.position <= 0 && TextUtils.isEmpty(entry.episodeUrl))) return null;
         History history = new History();

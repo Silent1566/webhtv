@@ -331,7 +331,10 @@ public class PlayerManager implements ParseCallback {
     private boolean autoKernelOverride;
     private boolean playbackForeground;
     private boolean exoDecoderResourceRecoveryInProgress;
+    /** 用户请求/记录的内核（设置页或历史记忆），不等于实际运行的内核。 */
     private int playerType;
+    /** 实际创建并运行的引擎内核。DASH+SYSTEM 会被透明委派给 EXO，此时 playerType=SYSTEM 而本值=EXO。 */
+    private int effectivePlayerType;
     private int retry;
     private int localProxyRetry;
     private int transientSourceRetry;
@@ -418,6 +421,7 @@ public class PlayerManager implements ParseCallback {
         // 播放页可能在服务起来之前就定好了本次要用的内核（按剧集记住的选择），
         // 所以这里读会话内核；没有会话时它自然退回设置页的全局默认。
         this.playerType = PlayerSetting.getActivePlayer();
+        this.effectivePlayerType = this.playerType;
         PlayerSetting.putActivePlayer(this.playerType);
         this.playerFallbackTried = new boolean[PLAYER_COUNT];
         migrateIjkTvPlaybackDefaults();
@@ -1076,7 +1080,7 @@ public class PlayerManager implements ParseCallback {
     }
 
     public boolean isIjk() {
-        return playerType == PlayerSetting.IJK;
+        return effectivePlayerType == PlayerSetting.IJK;
     }
 
     public boolean useNativeVideoOutput() {
@@ -1214,7 +1218,7 @@ public class PlayerManager implements ParseCallback {
     }
 
     public boolean isMpv() {
-        return playerType == PlayerSetting.MPV;
+        return effectivePlayerType == PlayerSetting.MPV;
     }
 
     public boolean sendMpvCustomButton(String id, boolean longPress) {
@@ -1263,7 +1267,7 @@ public class PlayerManager implements ParseCallback {
     }
 
     public boolean isExo() {
-        return playerType == PlayerSetting.EXO;
+        return effectivePlayerType == PlayerSetting.EXO;
     }
 
     public boolean requiresTextureRenderForLut() {
@@ -2217,7 +2221,7 @@ public void resetTrack(int type) {
         beginIjkRuntimeManualOverride();
         int previousDecode = engine.getDecode();
         int next = engine.isHard() ? PlayerEngine.SOFT : PlayerEngine.HARD;
-        boolean resetVideoSurface = playerType == PlayerSetting.EXO && next == PlayerEngine.HARD;
+        boolean resetVideoSurface = isExo() && next == PlayerEngine.HARD;
         hardDecodeSwitchRetryArmed = next == PlayerEngine.HARD;
         beginPlaybackTrace("switch-decode");
         // The control bar's decode button is the primary manual soft/hard switch, so it must be
@@ -2288,7 +2292,7 @@ public void resetTrack(int type) {
         beginPlaybackTrace("switch-decode-fresh");
         int next = engine.isHard() ? PlayerEngine.SOFT : PlayerEngine.HARD;
         logSwitchCause("decode", "user-choice", playerType, playerType, engine.getDecode(), next, false, position);
-        boolean resetVideoSurface = playerType == PlayerSetting.EXO && next == PlayerEngine.HARD;
+        boolean resetVideoSurface = isExo() && next == PlayerEngine.HARD;
         boolean wasPlayWhenReady = player.getPlayWhenReady();
         prepareSeq++;
         resetLutRuntimeState("switch_decode_fresh", true);
@@ -2314,7 +2318,7 @@ public void resetTrack(int type) {
         beginPlaybackTrace("switch-decode-result");
         int next = engine.isHard() ? PlayerEngine.SOFT : PlayerEngine.HARD;
         logSwitchCause("decode", "user-choice", playerType, playerType, engine.getDecode(), next, false, position);
-        boolean resetVideoSurface = playerType == PlayerSetting.EXO && next == PlayerEngine.HARD;
+        boolean resetVideoSurface = isExo() && next == PlayerEngine.HARD;
         boolean wasPlayWhenReady = player.getPlayWhenReady();
         prepareSeq++;
         resetLutRuntimeState("switch_decode_result", true);
@@ -2378,7 +2382,9 @@ public void resetTrack(int type) {
         PlayerSetting.putActivePlayer(next);
         // 历史内核起播是用户意图的直接体现：清除自动回退标记。
         autoKernelOverride = false;
-        if (engine == null || player == null || (next == playerType && !force)) return;
+        // 同核心不重建也要看「实际运行内核」：DASH 委派后 playerType=SYSTEM 但实际是 EXO，
+        // 若仅比较 playerType 会把下一条普通视频误判为同核心，一直留在 EXO，无法回到用户选的 SYSTEM。
+        if (engine == null || player == null || (next == playerType && next == effectivePlayerType && !force)) return;
         int decode = engine.getDecode();
         int previousType = playerType;
         resetPlayerFallback();
@@ -6417,6 +6423,9 @@ public void resetTrack(int type) {
             case PlayerSetting.MPV -> new MpvPlayerEngine(decode, lutAllowed, listener, this::onMpvVideoSizeProbed);
             default -> new ExoPlayerEngine(decode, listener, mediaSignals, mediaClock);
         };
+        // type 已含 DASH 委派结果：记录实际运行内核，与用户请求的 playerType 区分开。
+        // 这样 isExo() 等引擎能力判断反映真实引擎，而不是用户当初选的内核。
+        this.effectivePlayerType = type;
         return next;
     }
 
