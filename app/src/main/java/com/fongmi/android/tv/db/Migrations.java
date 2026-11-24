@@ -260,6 +260,57 @@ public class Migrations {
         }
     };
 
+    /**
+     * 收藏（Keep）自身持有续播进度：清空历史后收藏剧集仍能显示/恢复"看到第几集"。
+     *
+     * <p>新增列全部可空或带默认值（实体用 @ColumnInfo(defaultValue) 声明），避免 validateMigration 失败。
+     * 回填以 History 为准（它保存着最新进度），按 (cid, key) 匹配当前收藏项；
+     * 已被用户删掉历史的收藏无法从 History 回填，这部分继续由 ProgressVault 兜底恢复。
+     */
+    public static final Migration MIGRATION_49_50 = new Migration(49, 50) {
+        @Override
+        public void migrate(@NonNull SupportSQLiteDatabase database) {
+            addColumnIfMissing(database, "Keep", "episodeRemarks",
+                    "ALTER TABLE Keep ADD COLUMN `episodeRemarks` TEXT DEFAULT ''");
+            addColumnIfMissing(database, "Keep", "episodeUrl",
+                    "ALTER TABLE Keep ADD COLUMN `episodeUrl` TEXT DEFAULT ''");
+            addColumnIfMissing(database, "Keep", "episodeNumber",
+                    "ALTER TABLE Keep ADD COLUMN `episodeNumber` INTEGER NOT NULL DEFAULT 0");
+            addColumnIfMissing(database, "Keep", "position",
+                    "ALTER TABLE Keep ADD COLUMN `position` INTEGER NOT NULL DEFAULT 0");
+            addColumnIfMissing(database, "Keep", "duration",
+                    "ALTER TABLE Keep ADD COLUMN `duration` INTEGER NOT NULL DEFAULT 0");
+            addColumnIfMissing(database, "Keep", "vodFlag",
+                    "ALTER TABLE Keep ADD COLUMN `vodFlag` TEXT DEFAULT ''");
+            addColumnIfMissing(database, "Keep", "mediaType",
+                    "ALTER TABLE Keep ADD COLUMN `mediaType` TEXT DEFAULT ''");
+            addColumnIfMissing(database, "Keep", "tmdbId",
+                    "ALTER TABLE Keep ADD COLUMN `tmdbId` INTEGER NOT NULL DEFAULT 0");
+            addColumnIfMissing(database, "Keep", "tmdbSeasonNumber",
+                    "ALTER TABLE Keep ADD COLUMN `tmdbSeasonNumber` INTEGER NOT NULL DEFAULT 0");
+            addColumnIfMissing(database, "Keep", "tmdbEpisodeNumber",
+                    "ALTER TABLE Keep ADD COLUMN `tmdbEpisodeNumber` INTEGER NOT NULL DEFAULT 0");
+            addColumnIfMissing(database, "Keep", "progressTime",
+                    "ALTER TABLE Keep ADD COLUMN `progressTime` INTEGER NOT NULL DEFAULT 0");
+
+            // 按 (cid, key) 从 History 回填当前收藏项的进度（History 无 type 列，只有 Keep 有）。
+            database.execSQL(
+                    "UPDATE Keep SET " +
+                            "episodeRemarks = COALESCE((SELECT h.vodRemarks FROM History h WHERE h.cid = Keep.cid AND h.`key` = Keep.`key`), ''), " +
+                            "episodeUrl = COALESCE((SELECT h.episodeUrl FROM History h WHERE h.cid = Keep.cid AND h.`key` = Keep.`key`), ''), " +
+                            "episodeNumber = COALESCE((SELECT h.tmdbEpisodeNumber FROM History h WHERE h.cid = Keep.cid AND h.`key` = Keep.`key`), 0), " +
+                            "position = COALESCE((SELECT h.position FROM History h WHERE h.cid = Keep.cid AND h.`key` = Keep.`key`), 0), " +
+                            "duration = COALESCE((SELECT h.duration FROM History h WHERE h.cid = Keep.cid AND h.`key` = Keep.`key`), 0), " +
+                            "vodFlag = COALESCE((SELECT h.vodFlag FROM History h WHERE h.cid = Keep.cid AND h.`key` = Keep.`key`), ''), " +
+                            "mediaType = COALESCE((SELECT h.mediaType FROM History h WHERE h.cid = Keep.cid AND h.`key` = Keep.`key`), ''), " +
+                            "tmdbId = COALESCE((SELECT h.tmdbId FROM History h WHERE h.cid = Keep.cid AND h.`key` = Keep.`key`), 0), " +
+                            "tmdbSeasonNumber = COALESCE((SELECT h.tmdbSeasonNumber FROM History h WHERE h.cid = Keep.cid AND h.`key` = Keep.`key`), 0), " +
+                            "tmdbEpisodeNumber = COALESCE((SELECT h.tmdbEpisodeNumber FROM History h WHERE h.cid = Keep.cid AND h.`key` = Keep.`key`), 0), " +
+                            "progressTime = COALESCE((SELECT h.createTime FROM History h WHERE h.cid = Keep.cid AND h.`key` = Keep.`key`), 0) " +
+                            "WHERE type = 0 AND EXISTS (SELECT 1 FROM History h WHERE h.cid = Keep.cid AND h.`key` = Keep.`key`)");
+        }
+    };
+
     private static void addColumnIfMissing(
             SupportSQLiteDatabase database,
             String table,

@@ -1239,6 +1239,7 @@ public class History implements Diffable<History> {
         if (saved[0] && recommendationSignalsChanged(before[0], this)) notifyChanged();
         if (saved[0]) FollowingStore.project(this);
         if (saved[0]) ProgressVault.record(this);
+        if (saved[0]) Keep.mirrorProgress(this);
     }
 
     public History save(int cid) {
@@ -1300,6 +1301,7 @@ public class History implements Diffable<History> {
         if (saved[0] && recommendationSignalsChanged(before[0], this)) notifyChanged();
         if (saved[0]) FollowingStore.project(this);
         if (saved[0]) ProgressVault.record(this);
+        if (saved[0]) Keep.mirrorProgress(this);
         return this;
     }
 

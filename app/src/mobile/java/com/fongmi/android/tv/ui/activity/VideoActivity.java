@@ -6286,10 +6286,12 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         mHistory = resumeHistory == null
                 ? History.findPlayback(getHistoryKey(), List.of(item.getName(), getName()), item.getFlags(), tmdbItem, currentSourceSeasonNumber(item))
                 : isOriginSession() ? resumeHistory : resumeHistory.forPlaybackKey(getHistoryKey(), VodConfig.getCid());
-        // 仅收藏夹入口从进度保险库恢复续播。普通视频历史被用户删除后，
-        // 从详情再次打开不得走保险库反建（否则删掉的进度会被复活并重新入库）。
+        // 收藏夹入口续播优先级：Keep 自身进度 > 旧保险库兜底。
+        // Keep 已自带进度后，清空历史不会影响收藏；Vault 仅为升级前老数据兜底。
+        // 普通视频历史被删除后不走此路径，避免删掉的进度被复活。
         if (isFromCollect() && mHistory == null && resumeHistory == null) {
-            mHistory = ProgressVault.resume(VodConfig.getCid(), getHistoryKey());
+            mHistory = com.fongmi.android.tv.bean.Keep.resumeProgress(VodConfig.getCid(), getHistoryKey());
+            if (mHistory == null) mHistory = ProgressVault.resume(VodConfig.getCid(), getHistoryKey());
             if (mHistory != null) FollowingPlaybackBridge.persist(mHistory);
         }
         mHistory = mHistory == null ? createHistory(item) : mHistory;

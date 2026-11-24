@@ -73,8 +73,15 @@ public class KeepAdapter extends BaseDiffAdapter<Keep, KeepAdapter.ViewHolder> {
         setClickListener(holder.itemView, item);
         holder.binding.name.setText(item.getVodName());
         holder.setMarquee(holder.itemView.hasFocus());
-        holder.binding.progress.setVisibility(View.GONE);
-        holder.binding.remark.setVisibility(View.GONE);
+        // 收藏剧集显示进度集数与播放进度条（Keep 自身持有，清空历史不丢）。
+        String label = item.getProgressLabel();
+        holder.binding.remark.setVisibility(label.isEmpty() || label.equals(item.getVodName()) ? View.GONE : View.VISIBLE);
+        holder.binding.remark.setText(label);
+        long duration = item.getDuration();
+        long pos = item.getPosition();
+        holder.binding.progress.setVisibility(!delete && (duration > 0 || pos > 0) ? View.VISIBLE : View.GONE);
+        holder.binding.progress.setMax(duration > 0 ? (int) Math.min(Integer.MAX_VALUE, duration) : 1);
+        holder.binding.progress.setProgress(duration > 0 ? (int) Math.min(Math.min(pos, duration), Integer.MAX_VALUE) : 0, false);
         holder.binding.site.setVisibility(View.VISIBLE);
         holder.binding.site.setText(item.getSiteName());
         holder.binding.playback.setVisibility(View.GONE);

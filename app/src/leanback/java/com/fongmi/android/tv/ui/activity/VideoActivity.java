@@ -2859,9 +2859,10 @@ private boolean runtimeSourceOnly;
 
     private void prepareFastTmdbPlaybackHistory(Vod item, Flag flag, Episode episode) {
         mHistory = History.findPlayback(getHistoryKey(), List.of(item.getName(), getName()), item.getFlags(), getHistoryTmdbItem(), currentSourceSeasonNumber(item));
-        // 仅收藏夹（Keep）入口从进度保险库反建续播；普通视频删除历史后不走此路径。
+        // 仅收藏夹（Keep）入口续播：优先 Keep 自身进度，旧保险库兜底。
         if (isFromCollect() && mHistory == null) {
-            mHistory = ProgressVault.resume(VodConfig.getCid(), getHistoryKey());
+            mHistory = com.fongmi.android.tv.bean.Keep.resumeProgress(VodConfig.getCid(), getHistoryKey());
+            if (mHistory == null) mHistory = ProgressVault.resume(VodConfig.getCid(), getHistoryKey());
             if (mHistory != null) FollowingPlaybackBridge.persist(mHistory);
         }
         mHistory = mHistory == null ? createHistory(item) : mHistory;
@@ -6218,10 +6219,10 @@ private boolean runtimeSourceOnly;
         mHistory = resumeHistory == null
                 ? History.findPlayback(getHistoryKey(), List.of(item.getName(), getName()), item.getFlags(), tmdbItem, currentSourceSeasonNumber(item))
                 : isOriginSession() ? resumeHistory : resumeHistory.forPlaybackKey(getHistoryKey(), VodConfig.getCid());
-        // 仅收藏夹入口从进度保险库恢复续播。普通视频历史被用户删除后，
-        // 从详情再次打开不得走保险库反建（否则删掉的进度会被复活并重新入库）。
+        // 收藏夹入口续播优先级：Keep 自身进度 > 旧保险库兜底；普通视频删历史后不走此路径。
         if (isFromCollect() && mHistory == null && resumeHistory == null) {
-            mHistory = ProgressVault.resume(VodConfig.getCid(), getHistoryKey());
+            mHistory = com.fongmi.android.tv.bean.Keep.resumeProgress(VodConfig.getCid(), getHistoryKey());
+            if (mHistory == null) mHistory = ProgressVault.resume(VodConfig.getCid(), getHistoryKey());
             if (mHistory != null) FollowingPlaybackBridge.persist(mHistory);
         }
         mHistory = mHistory == null ? createHistory(item) : mHistory;
