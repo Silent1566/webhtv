@@ -73,6 +73,8 @@ public class Manage implements Process {
     public Response doResponse(IHTTPSession session, String url, Map<String, String> files) {
         try {
             ManageService.touch();
+            // 先于通用 forward 拦截：带 target 的请求也不能把导入改道或跳过本机校验。
+            if (ConfigImport.PATH.equals(url)) return configImport(session, files);
             if (url.equals("/manage/session")) return session(session.getParms());
             if (url.equals("/manage/background/settings")) return backgroundSettings(session);
             if (url.equals("/manage/devices")) return devices(session.getParms());
@@ -365,6 +367,46 @@ public class Manage implements Process {
         }
         object.add("items", items);
         return json(object);
+    }
+
+    /**
+     * 只登记 PC 下发的配置；不下载、不解析、不切换当前配置。
+     * 仅接受本机 ADB 转发来的 POST，且不经过通用 forward。
+     */
+    private Response configImport(IHTTPSession session, Map<String, String> files) {
+        ConfigImport.Rejection rejection = ConfigImport.writeGuard(
+                session.getMethod().name(), session.getRemoteIpAddress(), session.getHeaders(), session.getParms());
+        if (rejection != null) return Nano.error(status(rejection.getStatus()), rejection.getMessage());
+        ConfigImport.Parsed parsed;
+        try {
+            parsed = ConfigImport.parse(ConfigImport.withBody(session.getParms(), files.get("postData")));
+        } catch (IllegalArgumentException e) {
+            return Nano.error(Status.BAD_REQUEST, e.getMessage());
+        }
+        try {
+            ConfigImport.Result result = ConfigImport.importConfig(parsed, new ConfigImport.Store() {
+                @Override
+                public Config find(String url, int type) {
+                    return AppDatabase.get().getConfigDao().find(url, type);
+                }
+
+                @Override
+                public Config create(int type, String url, String name) {
+                    return Config.create(type, url, name);
+                }
+            });
+            JsonObject object = new JsonObject();
+            object.addProperty("code", 0);
+            object.add("data", ConfigImport.data(result, currentConfig(parsed.getType())));
+            return json(object);
+        } catch (IllegalStateException e) {
+            return Nano.error(Status.INTERNAL_ERROR, e.getMessage());
+        }
+    }
+
+    private Status status(int code) {
+        Status status = Status.lookup(code);
+        return status == null ? Status.BAD_REQUEST : status;
     }
 
     private Response configUse(Map<String, String> params) {
