@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# NOTE (v5.6.39): This script builds the LEGACY FFmpeg 4.0 three-library IJK variant
+# (libijkffmpeg.so + libijksdl.so + libijkplayer.so) from ShikinChen/ijkplayer-android.
+# It does NOT reproduce the FFmpeg7 single-library artifact currently shipped in
+# app/libs/ijkplayer-cmake-release.aar and app/src/main/jniLibs/*/libijkplayer.so.
+# The shipped single-lib AAR is consumed verbatim from https://github.com/cat3399/blbl
+# (upstream build project: https://github.com/debugly/ijkplayer, FFmpeg n7.1.1-4-g834d732).
+# See docs/ijk-single-lib-provenance.md and third_party/ijk-single-lib-lock.json before
+# running this script; do not use its --install to overwrite the current jniLibs .so.
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 SOURCE_DIR="${IJK_BUILD_DIR:-$ROOT_DIR/third_party/sources/ijkplayer-android}"
 IJK_REPO="https://github.com/ShikinChen/ijkplayer-android.git"
