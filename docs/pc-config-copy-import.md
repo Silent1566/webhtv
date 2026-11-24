@@ -35,3 +35,7 @@ Accepted Android unit (Lead, 2026-11-24)
 Targeted catalog invalidation (2026-11-24, Lead-Core)
 - PC publishes a fixed URL per binding; content changes without URL change, so the 60s catalog TTL could serve stale JSON after re-import. Added VodSiteCatalog.invalidate(String interfaceKey) (namespace-scoped remove only) and call it in /manage/config/import right after registration. Global invalidate() and all other callers unchanged.
 - Verification: testMobileArm64_v8aDebugUnitTest ConfigImportTest 15/0/0 and existing VodApiTest 39/0/0 BUILD SUCCESSFUL. No device-level re-import/stale-cache proof yet; it is scheduled in the final R6 after the PC publisher exists (do not claim it as verified).
+
+Direct cache regression follow-up
+- Added CatalogInvalidateTest 3 actual-cache tests: selected namespace removed while other catalog identity retained, null/blank/unknown key no-op, legacy global invalidate still clears all. MobileArm64Debug targeted run also included ConfigImportTest15 and VodApiTest39:57tests/0failures.
+- Test order disclosure: cache behavior was implemented before these direct regression tests (earlier54tests only protected callers); these3 tests are post-hoc contract checks, not represented as original RED-first evidence. No further production changes in this follow-up.
