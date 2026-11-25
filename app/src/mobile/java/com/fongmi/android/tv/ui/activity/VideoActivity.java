@@ -8265,6 +8265,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
                 showProgress();
                 break;
             case Player.STATE_READY:
+                hideError();
                 // seek 窗口未关时不能因为一次 READY 读数就收圈：引擎在 seek 真正生效前
                 // 仍可能宣称 READY，那正是「拖拽后先卡画面」的那一帧。圈已由 onSeekStarted
                 // 亮起，这里不收它就仍在屏上，由最小可见计时器与网速 ticker 收尾。
