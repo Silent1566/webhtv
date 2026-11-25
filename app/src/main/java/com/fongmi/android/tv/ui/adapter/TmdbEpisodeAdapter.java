@@ -60,7 +60,7 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
     private boolean pageHasTmdbEpisodeData;
     private boolean showScrapedName = Setting.getTmdbEpisodeShowScrapedName();
     private boolean showFileSize = Setting.isTmdbEpisodeFileSize();
-    private int activeStrokeColor = 0xFF2CC56F;
+    private int activeStrokeColor = 0xFFFFFFFF;
     private int gridSpanCount = 2;
     private String fallbackStillUrl = "";
     private View.OnKeyListener keyListener;
@@ -534,11 +534,13 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
             });
             return;
         }
+        // 2026-11-25 对齐 FongMi/TV：白描边只跟随焦点；「当前集」用填充色区分，
+        // 未选中卡片不再有任何常驻描边轮廓。
         TmdbCardFocusHelper.bind(
                 holder.binding.getRoot(),
                 activated ? (light ? 0xFFE5F7EC : 0x6630A86B) : (light ? 0xEEFFFFFF : 0xCC16202A),
-                activated ? activeStrokeColor : (light ? 0x33647480 : 0x33FFFFFF),
-                activated ? 2 : 1,
+                0x00000000,
+                0,
                 focused -> {
                     setMarquee(holder, activated, focused);
                     if (focusChangeListener != null) focusChangeListener.onFocusChange(holder.binding.getRoot(), focused);
@@ -559,13 +561,14 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
         holder.binding.getRoot().setChecked(false);
         holder.binding.getRoot().setForeground(null);
         holder.binding.getRoot().setCardBackgroundColor(0xFF141A20);
-        holder.binding.getRoot().setStrokeColor(focused ? focusStroke : activated ? activeStrokeColor : 0x00000000);
-        holder.binding.getRoot().setStrokeWidth(focused ? focusWidth : ResUtil.dp2px(activated ? ACTIVE_STROKE_DP : 0));
+        holder.binding.getRoot().setStrokeColor(focused ? focusStroke : 0x00000000);
+        holder.binding.getRoot().setStrokeWidth(focused ? focusWidth : 0);
         holder.binding.getRoot().setCardElevation(ResUtil.dp2px(focused ? FOCUS_ELEVATION_DP : 0));
         holder.binding.getRoot().setTranslationZ(ResUtil.dp2px(focused ? FOCUS_ELEVATION_DP : 0));
+        // 2026-11-25 对齐 FongMi/TV：activated（当前集）不再画常驻描边，只用填充区分。
         Drawable foreground = focused
                 ? TmdbCardFocusHelper.foregroundBorder(holder.binding.getRoot(), focusStroke, focusWidth)
-                : activated ? TmdbCardFocusHelper.foregroundBorder(holder.binding.getRoot(), activeStrokeColor, ResUtil.dp2px(ACTIVE_STROKE_DP)) : null;
+                : null;
         holder.binding.getRoot().setForeground(foreground);
         holder.binding.getRoot().animate().cancel();
         holder.binding.getRoot().setScaleX(1f);

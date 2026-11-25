@@ -43,8 +43,8 @@ android {
         applicationId "com.fongmi.android.tv.plus"
         minSdk libs.versions.minSdk.get().toInteger()
         targetSdk libs.versions.targetSdk.get().toInteger()
-        versionCode 600
-        versionName "5.6.40"
+        versionCode 603
+        versionName "5.6.43"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField "String", "BUILD_TIME", "\"${buildTime}\""
         buildConfigField "String", "BUILD_TAG", "\"${releaseTag}\""

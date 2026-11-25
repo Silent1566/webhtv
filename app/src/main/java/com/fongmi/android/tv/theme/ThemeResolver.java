@@ -197,9 +197,9 @@ public final class ThemeResolver {
         // and only tone moves. Snapping to black/white instead turned a legible deep red such
         // as #8C0000 (1.86:1 on the dark surface) into pure #FFFFFF, which is why the editor
         // showed "输入 #8C0000 / 显示 #FFFFFF" and every dark-surface ring came out white.
-        int focus = hasFocus || hasSurface
-                ? readableAccent(color(slots.focus, primary), 3.0, surface)
-                : base.colorFocus();
+        // 用户定稿：焦点环颜色不再由主题编辑器控制，冻结为基线纯白。
+        // 保留 FOCUS 槽位解析兼容旧档案，但解析结果不再改变环色。
+        int focus = (dark ? ThemeTokens.dark() : ThemeTokens.light()).colorFocus();
 
         int surfaceDim = hasSurface ? mix(surface, 0xFF000000, dark ? 0.06 : 0.10) : base.colorSurfaceDim();
         int surfaceBright = hasSurface ? mix(surface, 0xFFFFFFFF, dark ? 0.14 : 0.08) : base.colorSurfaceBright();
@@ -209,11 +209,10 @@ public final class ThemeResolver {
         // focus：浅色表的 focus #0B57D0 在固定深靛玻璃上只有 1.83:1（实机 dev1 复核），
         // 焦点不可见。因此用仓库已有的 readableAccent：保持用户 FOCUS 槽的色相与彩度、
         // 只走明度，直到在固定玻璃上达到 MIN_PLAYER_RING_CONTRAST(3.0)。
-        // 深色表的 focus 本身就是近白 #F5F7FF，对深玻璃与深色 video 都远远达标，夹取是
+        // 深色表的 focus 本身就是纯白 #FFFFFFFF（2026-11-25 起两表统一），对深玻璃与深色
+        // video 都远远达标，夹取是
         // 恒等变换——这正是用户要的「播放页只有一种高亮色」：深色表下视频层环 = 应用表面环。
-        int playerFocusRing = hasFocus
-                ? readableAccent(focus, MIN_PLAYER_RING_CONTRAST, PLAYER_RING_BACKDROPS)
-                : base.colorPlayerFocusRing();
+        int playerFocusRing = (dark ? ThemeTokens.dark() : ThemeTokens.light()).colorPlayerFocusRing();
         // 「当前播放」有独立的用户槽位（默认绿）；同样做固定玻璃上的可读性夹取。
         boolean hasPlayerCurrent = slots.playerCurrent != null;
         int playerCurrentRing = hasPlayerCurrent

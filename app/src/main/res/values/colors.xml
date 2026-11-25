@@ -48,7 +48,9 @@
         主题编辑器的焦点色。此前写死 #FFD166，用户改主题时焦点环纹丝不动。
     -->
     <color name="tv_item_focus_ring">@color/webhtv_color_focus</color>
-    <color name="tv_item_current_ring">#2CC56F</color>
+    <!-- 当前播放/当前生效环：默认关闭主题配色时与焦点环同为白色；主题配色开启时由 ThemeBinder
+         把 activated 态描边改写为 colorFocus()，因此这里只需给出关闭态的静态白色基线。 -->
+    <color name="tv_item_current_ring">#FFFFFFFF</color>
     <color name="tv_item_normal_stroke">#33FFFFFF</color>
     <!--
         播放页（视频层）环色 = 叠在固定深色玻璃/视频上的控件（播控条、解析线路芯片、
@@ -68,15 +70,26 @@
 
         配对按“焦点态填充家族”各一条，错配会让环贴在近似色上而完全看不见
         （实机曾把 FOCUS 填充配成 on_secondary_container，环与填充仅 1.33:1）：
-          primary / focus 填充  -> on_primary
+          primary 填充         -> on_primary
           primaryContainer      -> on_primary_container
           secondaryContainer    -> on_secondary_container
           errorContainer        -> on_error_container
-        注意 `following_button_*_bg` 的焦点态填充就是 FOCUS 色(== primary)，追更页
-        “全部已读/显示全部/导入订阅/标记已读”因此取 on_primary；只有填充不随焦点变化的
-        “检查/提醒开/换源/下季”才取 on_secondary_container。
+          FOCUS 填充            -> on_focus（见下方 focus_ring_on_focus）
+
+        注意 `following_button_*_bg` 的焦点态填充就是 FOCUS 色，追更页
+        “全部已读/显示全部/导入订阅/标记已读”因此取 focus_ring_on_focus；
+        只有填充不随焦点变化的“检查/提醒开/换源/下季”才取 on_secondary_container。
     -->
     <color name="focus_ring_on_primary">@color/webhtv_color_on_primary</color>
+    <!--
+        `focus_ring_on_focus` 是 2026-11-25 补的：产品把默认 FOCUS 槽改为近白
+        （所有焦点色默认白色）之后，「FOCUS 填充」不再是 primary 族——近白填充配
+        on_primary 白环只剩 1.07:1，焦点位置完全看不见。FOCUS 填充的配对环改取
+        **恒定深色**：{@code webhtv_color_shadow} 在两张表里都是 #000000，
+        对近白填充 20:1，浅/深两表都清晰；且它不随主题焦点色变化（ThemeBinder 的
+        白名单本就不覆盖这类成对语义环），改焦点色时环/填充仍保持成对可读。
+    -->
+    <color name="focus_ring_on_focus">@color/webhtv_color_shadow</color>
     <!--
         `focus_ring_on_primary_container` 是 2026-10-19 第二轮补的：主按钮的**默认**填充
         是浅色 colorPrimary，环取 on_primary 时对填充有 7.50:1，但环的外沿贴在弹窗面板上
@@ -102,6 +115,12 @@
     <color name="following_button_focus_pressed">@color/webhtv_color_primary</color>
     <color name="following_button_secondary">@color/webhtv_color_surface_container</color>
     <color name="following_button_text">@color/webhtv_color_primary</color>
+    <!--
+        2026-11-25：FOCUS 槽改为纯白后，追更页按钮的焦点/按下填充（following_button_focus
+        = 纯白）配 on_primary 文本只剩 1.00:1（两张表的 on_primary 都是白）。焦点/按下
+        文本改取恒定深色墨色：对纯白填充 ≥14:1，浅/深两表都成立，且不随主题变化。
+    -->
+    <color name="following_button_focus_text">#1A1C1E</color>
     <color name="following_danger_soft">@color/webhtv_color_error_container</color>
     <color name="following_danger">@color/webhtv_color_error</color>
     <!--

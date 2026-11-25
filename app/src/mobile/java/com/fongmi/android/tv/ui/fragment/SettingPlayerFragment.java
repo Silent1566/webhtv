@@ -450,7 +450,7 @@ public class SettingPlayerFragment extends BaseFragment implements UaListener, B
         int side = (int) (getResources().getDisplayMetrics().density * 24);
         container.setPadding(side, side / 2, side, pad);
         container.addView(input, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        new AlertDialog.Builder(requireContext())
+        new com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder(requireContext())
                 .setTitle(titleRes)
                 .setView(container)
                 .setNegativeButton(android.R.string.cancel, null)

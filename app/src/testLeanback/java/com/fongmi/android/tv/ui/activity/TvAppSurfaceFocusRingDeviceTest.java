@@ -219,14 +219,10 @@ public class TvAppSurfaceFocusRingDeviceTest {
         int nightColour = ringColour(render(night, CARD_SELECTOR));
         int nightSlot = focusSlot(night);
 
-        assertEquals("浅色表下环色必须等于浅色 FOCUS 槽", daySlot, dayColour);
-        assertEquals("深色表下环色必须等于深色 FOCUS 槽", nightSlot, nightColour);
-        assertNotEquals("浅色表与深色表的 FOCUS 槽本身就不同，测试前提必须成立", daySlot, nightSlot);
-        assertNotEquals("换色板后焦点环颜色必须跟着变，否则主题控制无效", dayColour, nightColour);
-
-        // 回归钉子：修复前这里写死 @color/white，两张表都会渲染成同一个白色。
-        assertNotEquals("焦点环不允许再渲染成与调色板无关的固定白色",
-                0xFFFFFFFF, nightColour);
+        assertEquals("浅色表下环色必须是编译期白环", 0xFFFFFFFF, dayColour);
+        assertEquals("深色表下环色必须是编译期白环", 0xFFFFFFFF, nightColour);
+        assertEquals("用户定稿：焦点环不随色板变化，浅/深必须都是同一白色", dayColour, nightColour);
+        assertEquals("测试前提：编译期 token 两表本来就是同一白色", daySlot, nightSlot);
     }
 
     /** 环必须完全不透明，否则焦点不可见。 */

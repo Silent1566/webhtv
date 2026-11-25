@@ -633,7 +633,9 @@ public final class ThemeBinder {
      * 先判后改，两边结论就都与调用顺序无关。
      */
     private static boolean bindStateList(View view, StateListDrawable states, ThemeRole explicit, ThemeTokens active) {
-        int ringColor = active.colorFocus();
+        // 环色恒取冻结基线的白色 token：用户定稿「去掉全局色环颜色，保留白色焦点」，
+        // 即任何主题档案都不再改写焦点环颜色，selector 描边结构本身保留。
+        int ringColor = ThemeController.baseline().colorFocus();
         boolean ringMember = ringColor != 0
                 && (explicit == ThemeRole.FOCUS || isAppSurfaceFocusRing(view, states));
         java.util.Map<Integer, Integer> overlays = active.colorItemOverlay() == 0
@@ -707,8 +709,15 @@ public final class ThemeBinder {
         for (int i = 0; i < states.getStateCount(); i++) {
             int[] stateSet = states.getStateSet(i);
             boolean focusedState = false;
-            for (int state : stateSet) if (state == android.R.attr.state_focused) focusedState = true;
-            if (!focusedState) continue;
+            boolean activatedState = false;
+            for (int state : stateSet) {
+                if (state == android.R.attr.state_focused) focusedState = true;
+                if (state == android.R.attr.state_activated) activatedState = true;
+            }
+            // 当前态（activated）描边在默认关闭主题配色时是静态白色 token（tv_item_current_ring），
+            // 主题配色开启时同样要跟随焦点色，否则同页出现「白焦点 + 绿当前」两种高亮。
+            // 只对同时命中焦点态或当前态、且宽度已收敛到统一 token 的白名单 selector 改写。
+            if (!focusedState && !activatedState) continue;
             if (setRingStroke(states.getStateDrawable(i), view, color)) changed = true;
         }
         return changed;
@@ -722,15 +731,21 @@ public final class ThemeBinder {
      * 签名随即变化，之后再比就永远不匹配了。
      *
      * <p>白名单之外还有一道**主题前置判定**：视图自身主题解析出的 {@code ?attr/tvFocusRing}
-     * 必须就是 {@code R.color.tv_item_focus_ring}。原因是白名单里的
+     * 必须就是 {@code R.color.tv_item_focus_ring}。历史原因是白名单里的
      * {@code selector_video_item} 是**双宿主**资源——选集芯片在普通页面用它，而
      * {@code dialog_episode_list} / {@code dialog_quick_search} 两处固定深色玻璃对话框的根节点
      * 用 {@code @style/ThemeOverlay.WebHTV.GlassFocusRings} 把 {@code tvFocusRing} 重绑到了
-     * {@code tv_player_focus_ring}。玻璃子树里只看内容签名会命中并改写成 {@code colorFocus()}
-     * （浅色表深蓝 {@code #0B57D0} 贴在深靛玻璃上仅 1.83:1，等于不可见）。
+     * {@code tv_player_focus_ring}；浅色表 FOCUS 深蓝贴在深靛玻璃上只有 1.83:1，
+     * 当时靠这条判据把玻璃子树挡在外面。
+     *
+     * <p><b>2026-11-25 更新</b>：产品把两表 FOCUS 槽与视频层环统一为近白后，
+     * {@code tv_player_focus_ring == tv_item_focus_ring}，这条判据在玻璃子树里也恒真——
+     * 即玻璃子树与应用表面**一致跟随**主题焦点色。这是预期行为：用户改焦点色时，
+     * 玻璃对话框里若不跟随，就会在同一对话框里出现两种高亮（2026-10-11 用户报告的旧形态）。
+     * 该判据因此退化为普通的前置校验，不再承担玻璃分流职责。
      *
      * <p>这条判据单独使用会**恒真**（所有相关主题都把 {@code tvFocusRing} 绑到该资源），
-     * 所以只能作为白名单的必要条件（AND），用来把玻璃子树挡在外面。
+     * 所以只能作为白名单的必要条件（AND）。
      *
      * <p>白名单本身为什么是**资源名字**而不是 {@code R.drawable.*}：这些 selector 只存在于
      * {@code app/src/leanback/res}，而本类位于 {@code app/src/main}（两个 flavor 共享），

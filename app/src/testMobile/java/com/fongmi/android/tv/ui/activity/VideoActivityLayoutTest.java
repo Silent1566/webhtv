@@ -1386,7 +1386,7 @@ public class VideoActivityLayoutTest {
         String setPlayer = methodBody(source, "private void setPlayer(Result result)", "private int danmakuTmdbId()");
         String state = methodBody(source, "protected void onStateChanged(int state)", "public void onMediaItemTransition");
         String error = methodBody(source, "protected void onError(String msg)", "protected void onReload(String msg)");
-        int startPlayer = setPlayer.indexOf("startPlayer(getHistoryKey(), result");
+        int startPlayer = setPlayer.indexOf("startPlayer(getPlaybackKey(), result");
         int markStarted = setPlayer.indexOf("mPlaybackPlayerStarted = true;");
 
         assertTrue("a new TV episode request must enter the loading state before the player result arrives",
@@ -2661,7 +2661,7 @@ public class VideoActivityLayoutTest {
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
         int selected = source.indexOf("private void scrollToSelectedEpisode()");
         int selectedEnd = source.indexOf("private void scrollToSegment(int episodePosition)", selected);
-        int focus = source.indexOf("private void focusPosition(BaseGridView grid, int position)");
+        int focus = source.indexOf("private boolean focusPosition(BaseGridView grid, int position)");
         int focusEnd = source.indexOf("\n    private ", focus + 1);
         int scroll = source.indexOf("private void scrollToEpisode(int position, boolean requestFocus)");
         int scrollEnd = source.indexOf("\n    @Override", scroll);
@@ -2805,8 +2805,8 @@ public class VideoActivityLayoutTest {
                 lowerBody.contains("if (position == RecyclerView.NO_POSITION || position + column < count) return false;"));
         assertTrue("playback episode grid must reuse the shared grid policy so a short last row stays reachable",
                 lowerBody.contains("TmdbEpisodeGridPolicy.verticalFocusTarget(position, column, count, true)")
-                        && lowerBody.contains("if (target == TmdbEpisodeGridPolicy.NO_FOCUS_TARGET) return false;")
-                        && lowerBody.contains("focusPosition(binding.episode, target);"));
+                        && lowerBody.contains("if (target != TmdbEpisodeGridPolicy.NO_FOCUS_TARGET) return focusPosition(binding.episode, target);")
+                        && lowerBody.contains("return appendNextEpisodeSegment();"));
     }
 
     @Test

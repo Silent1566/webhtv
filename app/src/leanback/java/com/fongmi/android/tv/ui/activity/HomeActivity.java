@@ -891,6 +891,33 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
         if (!mBinding.title.hasFocus()) mBinding.recycler.requestFocus();
     }
 
+    /**
+     * 从设置页返回时把焦点明确送回 Func 行第一个按钮「点播」。
+     * 主 recycler 第 0 行是 Func 行（见 setFunc 与 mAdapter 的组装顺序）；先选中该行，
+     * 待 holder 就绪后聚焦其第一个可聚焦子项，避免落回布局默认控件。
+     */
+    private void focusVodOnReturn() {
+        if (mAdapter.size() == 0) return;
+        mBinding.recycler.setSelectedPosition(0, holder -> {
+            if (holder == null || holder.itemView == null) return;
+            android.view.View target = firstFocusable(holder.itemView);
+            if (target != null) target.requestFocus();
+            else holder.itemView.requestFocus();
+        });
+    }
+
+    private static android.view.View firstFocusable(android.view.View view) {
+        if (view instanceof android.view.ViewGroup group) {
+            for (int i = 0; i < group.getChildCount(); i++) {
+                android.view.View child = group.getChildAt(i);
+                if (child.isFocusable() && child.getVisibility() == android.view.View.VISIBLE) return child;
+                android.view.View nested = firstFocusable(child);
+                if (nested != null) return nested;
+            }
+        }
+        return null;
+    }
+
     private void getVideo() {
         getVideo(false);
     }
@@ -1556,6 +1583,10 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
         syncTypeItems();
         resumeTypeSwitch();
         resumeDeferredFragmentWork();
+        // 设置页返回：把焦点送回 Func 行「点播」（一次性意图）。
+        if (com.fongmi.android.tv.ui.custom.ReturnFocusHint.consumeVodOnHomeReturn()) {
+            mBinding.recycler.post(this::focusVodOnReturn);
+        }
     }
 
     /** 回到前台后补做在「已保存状态」窗口里被推迟的分类页清理与首页内容刷新。 */
@@ -1602,6 +1633,8 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
             setHistoryDelete(false);
         } else if (mBinding.recycler.getSelectedPosition() != 0) {
             mBinding.recycler.scrollToPosition(0);
+            // 回到列表顶部后把焦点交给顶部「首页」分类 chip，而不是停在内容行。
+            selectHomeType();
         } else {
             exitHome();
         }

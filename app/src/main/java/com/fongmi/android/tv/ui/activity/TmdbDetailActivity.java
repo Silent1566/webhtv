@@ -9983,7 +9983,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             }
         });
         adapter.setLight(lightTheme);
-        adapter.setActiveStrokeColor(0xFF2CC56F);
+        // 产品决策（2026-11-25）：所有焦点/当前态描边默认纯白，主题开启时由 ThemeBinder 跟随焦点色。
+        adapter.setActiveStrokeColor(0xFFFFFFFF);
         adapter.setNativeEnhanced(true);
         recycler.setAdapter(adapter);
         LinearLayout.LayoutParams recyclerParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);

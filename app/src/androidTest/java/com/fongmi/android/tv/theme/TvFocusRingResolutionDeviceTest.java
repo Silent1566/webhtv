@@ -76,7 +76,7 @@ public class TvFocusRingResolutionDeviceTest {
      * 这是主题编辑器"焦点色"可改的底层保证；环色是槽的编译取值，槽位本身必须可覆写。
      */
     @Test
-    public void focusRingFollowsTheThemeFocusSlot() {
+    public void focusSlotNoLongerChangesResolvedRingColor() {
         ThemeController.applyFromPreferences(null);
         int before = ThemeController.resolveFromPreferences().colorFocus();
 
@@ -87,9 +87,9 @@ public class TvFocusRingResolutionDeviceTest {
         assertTrue("测试用的主题配置必须能保存: " + applied.error(), applied.success());
 
         ThemeController.applyFromPreferences(null);
-        int slot = ThemeController.resolveFromPreferences().colorFocus();
-        assertNotEquals("改 FOCUS 槽后解析值必须变化，否则主题设置对焦点环无效", before, slot);
-        assertEquals("active 快照的 FOCUS 槽必须等于解析结果", slot, ThemeController.current().colorFocus());
+        int resolved = ThemeController.resolveFromPreferences().colorFocus();
+        assertEquals("全局色环颜色已封顶为白色，用户 FOCUS 槽不得再改写解析结果", before, resolved);
+        assertEquals("active 快照的 FOCUS 槽必须等于解析结果", resolved, ThemeController.current().colorFocus());
     }
 
     /**
@@ -100,7 +100,7 @@ public class TvFocusRingResolutionDeviceTest {
      * 让「焦点色」对卡片描边永久失效——这正是用户实机反馈的现象。
      */
     @Test
-    public void codeRingPathFollowsAnExplicitFocusOverride() {
+    public void codeRingPathAlwaysUsesCompiledWhite() {
         int compiledRing = themedContext().getColor(R.color.tv_item_focus_ring);
         assertEquals("未覆写时代码路径必须保持编译期环色",
                 compiledRing, ThemeController.focusRingColor(themedContext()));
@@ -112,22 +112,19 @@ public class TvFocusRingResolutionDeviceTest {
         ThemeController.applyFromPreferences(null);
 
         Context context = themedContext();
-        int codePath = ThemeController.focusRingColor(context);
-        assertEquals("代码路径必须跟随用户设置的 FOCUS 槽",
-                ThemeController.current().colorFocus(), codePath);
-        assertNotEquals("覆写后代码路径不得仍等于编译期静态环色", compiledRing, codePath);
+        assertEquals("用户改 FOCUS 槽后代码路径仍必须是编译期白色",
+                compiledRing, ThemeController.focusRingColor(context));
 
         final int[] bound = new int[1];
         InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
             FrameLayout root = new FrameLayout(context);
             MaterialCardView card = new MaterialCardView(context);
-            card.setStrokeColor(codePath);
+            card.setStrokeColor(ThemeController.focusRingColor(context));
             root.addView(card);
             ThemeController.bindTheme(root);
             bound[0] = card.getStrokeColor();
         });
-        assertTrue("描边经 binder 后必须仍等于代码路径取值",
-                bound[0] == codePath || bound[0] == ThemeController.current().colorFocus());
+        assertEquals("描边经 binder 后必须仍等于编译期白环", compiledRing, bound[0]);
     }
 
     /** 应用真实主题（Theme.App -> Theme.Base 声明了 tvFocusRing）的 Context。 */

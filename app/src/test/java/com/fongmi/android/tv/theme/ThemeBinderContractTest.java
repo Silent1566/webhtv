@@ -47,10 +47,11 @@ public class ThemeBinderContractTest {
         assertFalse(index.isEmpty());
         assertEquals(ThemeRole.ERROR, index.uniqueRoleFor(baseline.colorError()));
         assertEquals(ThemeRole.SURFACE, index.uniqueRoleFor(baseline.colorSurface()));
-        // The light palette deliberately shares one blue between primary and focus,
-        // so that value is ambiguous and the binder requires both to agree.
-        assertTrue(index.rolesFor(baseline.colorFocus()).contains(ThemeRole.PRIMARY));
-        assertTrue(index.rolesFor(baseline.colorFocus()).contains(ThemeRole.FOCUS));
+        // 2026-11-25 起 FOCUS 槽为纯白（FongMi/TV 白色焦点方案），与 webhtv_on_wallpaper
+        // 的恒定白字同值；FOCUS 因此不再参与「按基线色反查」索引（改写走环白名单专用通道）。
+        // 白色仍被 on-色前景角色合法共享，但其中绝不包含 FOCUS，也就没有唯一角色可反查。
+        assertFalse(index.rolesFor(baseline.colorFocus()).contains(ThemeRole.FOCUS));
+        assertNull(index.uniqueRoleFor(baseline.colorFocus()));
         assertNull(index.uniqueRoleFor(0xFF123456));
         assertNull(ThemeColorIndex.of(null).uniqueRoleFor(0xFF123456));
         assertTrue(ThemeColorIndex.of(null).isEmpty());

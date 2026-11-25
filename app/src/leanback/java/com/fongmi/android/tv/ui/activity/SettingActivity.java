@@ -117,6 +117,39 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
     }
 
     @Override
+    protected void onBackInvoked() {
+        // 用户定稿：设置页按返回先把焦点送回左侧第一项「点播」，再按一次才退出。
+        // 否则从下方菜单按返回时焦点会停在原处或直接退出，与截图期待不一致。
+        if (mBinding != null && !isVodFocused()) {
+            scrollRootToTop();
+            mBinding.vod.requestFocus();
+            return;
+        }
+        super.onBackInvoked();
+    }
+
+    private boolean isVodFocused() {
+        android.view.View focus = getCurrentFocus();
+        while (focus != null) {
+            if (focus == mBinding.vod) return true;
+            android.view.ViewParent parent = focus.getParent();
+            focus = parent instanceof android.view.View ? (android.view.View) parent : null;
+        }
+        return false;
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // 从子设置页（去广告/播放/字幕等）按返回回到本页时，把焦点明确送回左侧菜单
+        // 「点播」。系统默认会保留子页返回时的焦点位置或落到首个可聚焦控件，
+        // 与用户来时的位置不符。post 到布局完成后再聚焦，避免过早聚焦被覆盖。
+        if (mBinding != null) mBinding.vod.post(() -> {
+            if (!isFinishing() && !isDestroyed() && mBinding != null) mBinding.vod.requestFocus();
+        });
+    }
+
+    @Override
     protected void initEvent() {
         mBinding.vod.setOnClickListener(this::onVod);
         mBinding.doh.setOnClickListener(this::setDoh);

@@ -2,12 +2,14 @@
 <!--
     原生增强播放页「文本按钮/芯片」的统一外观：线路、分段(分组)、清晰度、选集文本、播放模式等。
 
-    统一规范（与卡片类 selector_*_card 一致；应用表面走 ?attr/tvFocusRing/tvCurrentRing，
-    视频层走 ?attr/tvPlayerRing/tvPlayerCurrentRing，两组都受主题控制）：
-    - 获得焦点：@dimen/webhtv_focus_ring_width ?attr/tvFocusRing
-    - 当前播放/当前生效：@dimen/webhtv_focus_ring_width ?attr/tvCurrentRing
-    - 常态：1dp ?attr/tvNormalStroke
+    统一规范（2026-11-25 对齐 FongMi/TV 上游 selector_item）：
+    - 获得焦点：@dimen/webhtv_focus_ring_width ?attr/tvFocusRing（全局唯一白色焦点环）
+    - 当前播放/当前生效：仅加深填充（activated 与 focused 同档填充），**无描边**
+    - 常态：浅填充，**无描边轮廓**
     - 圆角：8dp
+    白环只跟随遥控焦点：此前 activated 常驻 tvCurrentRing 白环 + 常态 1dp tvNormalStroke
+    轮廓，导致「当前线路/当前分段/当前集数」三处白环与焦点环同屏并存、未选中控件也带
+    浅白轮廓（用户截图确认），现全部去掉。
 
     **本文件是「应用表面」一族**（与 selector_episode_card / selector_tmdb_cast_focus 同族）：
     它的宿主都画在页面背景（壁纸/磨砂底）上，不是叠在视频画面或固定深色玻璃上——
@@ -52,9 +54,6 @@
                 android:left="12dp"
                 android:right="12dp"
                 android:top="8dp" />
-            <stroke
-                android:width="@dimen/webhtv_focus_ring_width"
-                android:color="?attr/tvCurrentRing" />
         </shape>
     </item>
     <item android:state_selected="true">
@@ -77,9 +76,6 @@
                 android:left="12dp"
                 android:right="12dp"
                 android:top="8dp" />
-            <stroke
-                android:width="1dp"
-                android:color="?attr/tvNormalStroke" />
         </shape>
     </item>
 </selector>

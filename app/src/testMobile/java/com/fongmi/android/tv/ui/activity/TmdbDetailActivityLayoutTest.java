@@ -660,7 +660,9 @@ public class TmdbDetailActivityLayoutTest {
 
         assertTrue("detail page must decide whether its mode owns an inline player", method >= 0);
         assertTrue("colorful detail must leave PlaybackService ownership to each standalone VideoActivity",
-                body.contains("return modeController.shouldBindPlaybackService();")
+                // 换源会话（isOriginSession）在详情页内联播放，必须自己绑服务；
+                // 其余模式一律把服务归属交给独立 VideoActivity。
+                body.contains("return isOriginSession() || modeController.shouldBindPlaybackService();")
                         && !body.contains("isFusionMode()")
                         && !body.contains("isPlayerMode()"));
     }
@@ -2345,12 +2347,18 @@ public class TmdbDetailActivityLayoutTest {
                 helper.contains("R.dimen.webhtv_focus_ring_width")
                         && !helper.contains("private static final int FOCUS_STROKE_DP")
                         && helper.contains("int focus = ThemeController.focusRingColor(card.getContext());")
-                        && helper.contains("card.setStrokeColor(focused ? focus : strokeColor);")
-                        && helper.contains("card.setForeground(focused ? foregroundBorder(card, focus, focusWidth) : null);")
+                        && helper.contains("card.setStrokeColor(focused ? state.focus : strokeColor);")
+                        // 焦点前景按卡片缓存（state.focusForeground），颜色/宽度变化才重建，
+                        // 避免每次焦点切换新建 drawable；切换时只做引用赋值。
+                        && helper.contains("state.focusForeground = foregroundBorder(card, focus, state.focusWidth);")
+                        && helper.contains("card.setForeground(focused ? state.focusForeground : null);")
                         && helper.contains("drawable.setColor(Color.TRANSPARENT);")
+                        // 焦点反馈只允许「边框环」：显式重置缩放并取消残留动画，
+                        // 与「焦点缩放倍率」体系的 scaleX(focused*1.1) 写法互斥。
                         && !helper.contains("FOCUS_SCALE")
-                        && !helper.contains("scaleX(")
-                        && !helper.contains("scaleY("));
+                        && helper.contains("card.setScaleX(1f);")
+                        && helper.contains("card.setScaleY(1f);")
+                        && helper.contains("card.animate().cancel();"));
 
         String castAdapter = readJava("com", "fongmi", "android", "tv", "ui", "adapter", "TmdbCastAdapter.java");
         assertTrue("cast/creator cards should use the same stroke-only helper instead of foreground activation",
@@ -2438,7 +2446,9 @@ public class TmdbDetailActivityLayoutTest {
                 alignHorizontal.contains("binding.episodeContainer.getPaddingLeft()")
                         && alignHorizontal.contains("binding.episodeContainer.getPaddingRight()")
                         && alignHorizontal.contains("focusedView.getLeft() + focusedView.getWidth() / 2")
-                        && alignHorizontal.contains("binding.episodeContainer.smoothScrollBy(delta, 0);"));
+                        // 2026-11-25：遥控连续切集时 smoothScroll 动画会堆积导致卡顿，
+                        // 聚焦对齐改为 scrollBy 即时定位（对齐量 ≤2dp 时跳过）。
+                        && alignHorizontal.contains("binding.episodeContainer.scrollBy(delta, 0);"));
     }
 
     @Test
@@ -3180,8 +3190,8 @@ public class TmdbDetailActivityLayoutTest {
                         && adapter.indexOf("TmdbCardFocusHelper.foregroundBorder(holder.binding.getRoot(), focusStroke, focusWidth)", method) > method
                         && !adapter.contains("private static final int FOCUS_STROKE_DP")
                         && adapter.indexOf("holder.binding.getRoot().setForeground(foreground);", method) > method);
-        assertTrue("currently playing episode cards must keep the green active border when not focused",
-                adapter.contains("private int activeStrokeColor = 0xFF2CC56F;")
+        assertTrue("currently playing episode cards must use the white focus-colored active border when not focused",
+                adapter.contains("private int activeStrokeColor = 0xFFFFFFFF;")
                         && adapter.indexOf("activated ? ACTIVE_STROKE_DP : 0", method) > method);
         assertTrue("focused episode cards must avoid scale focus because detail rows clip enlarged cards",
                 !adapter.contains("FOCUS_SCALE")

@@ -431,7 +431,7 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
         int side = (int) (getResources().getDisplayMetrics().density * 24);
         container.setPadding(side, side / 2, side, pad);
         container.addView(input, new FrameLayout.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT));
-        new AlertDialog.Builder(this)
+        new com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder(this)
                 .setTitle(titleRes)
                 .setView(container)
                 .setNegativeButton(android.R.string.cancel, null)

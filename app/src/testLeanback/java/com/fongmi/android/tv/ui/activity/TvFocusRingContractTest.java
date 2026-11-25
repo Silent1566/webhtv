@@ -97,11 +97,16 @@ public class TvFocusRingContractTest {
 
     /**
      * 环色只能配对**焦点态实际填充色**。这是实机验收暴露出的一类真缺陷：
-     * `following_button_*_bg` 聚焦时填充会变成 FOCUS 色（冻结色板里 == primary），
-     * 若环仍取 `on_secondary_container`，环与填充只有 1.33:1，焦点依旧看不见；
+     * `following_button_*_bg` 聚焦时填充会变成 FOCUS 色，若环仍取
+     * `on_secondary_container`，环与填充只有 1.33:1，焦点依旧看不见；
      * 同理 `?attr/colorErrorContainer` 填充配 `on_error` 只有 1.40:1。
      *
-     * <p>逐对计算对比度，取 light / night / leanback 三套生效 token 各验一遍，
+     * <p>2026-11-25：默认 FOCUS 槽改为近白（所有焦点色默认白色）后，「FOCUS 填充」
+     * 不再与 primary 同族，配 on_primary 白环只剩 1.07:1——本条正是当年钉住的
+     * 那类「环贴在近似色上」回归。FOCUS 填充因此改配恒定深色
+     * {@code focus_ring_on_focus}（两张表都是 #000000，对近白填充 20:1）。
+     *
+     * <p>逐对计算对比度，取 light / night 两套生效 token 各验一遍，
      * 避免以后换色板或换环色时静默退化到“环贴在近似色上”。门槛取 WCAG 2.2
      * SC 1.4.11 非文本对比度的 3:1。
      */
@@ -109,8 +114,8 @@ public class TvFocusRingContractTest {
     public void everyRingColourKeepsNonTextContrastAgainstItsFocusFill() throws Exception {
         // {说明, 焦点态填充 token, 环色别名}
         String[][] pairs = {
-                {"primary / 焦点填充", "webhtv_color_primary", "focus_ring_on_primary"},
-                {"FOCUS 填充", "webhtv_color_focus", "focus_ring_on_primary"},
+                {"primary 填充", "webhtv_color_primary", "focus_ring_on_primary"},
+                {"FOCUS 填充", "webhtv_color_focus", "focus_ring_on_focus"},
                 // 主按钮聚焦态填充翻成 primary_container，环随之取 on_primary_container。
                 // 这一对必须同时满足"对填充 ≥3:1"和"对外层面板 ≥3:1"，否则焦点环会被
                 // 看成按钮自带的深边（旧 on_primary 环对外层面板只有 1.05:1，即用户报告）。
@@ -213,7 +218,8 @@ public class TvFocusRingContractTest {
     @Test
     public void everyRingColourListResolvesThroughThemeTokens() throws Exception {
         String[][] cases = {
-                {RING_PRIMARY, "focus_ring_on_primary"},
+                // 2026-11-25 起 FOCUS 填充默认近白，追更页按钮环改配恒定深色 on_focus。
+                {RING_PRIMARY, "focus_ring_on_focus"},
                 {RING_PRIMARY_CONTAINER, "focus_ring_on_primary_container"},
                 {RING_SECONDARY, "focus_ring_on_secondary_container"},
                 {RING_ERROR, "focus_ring_on_error_container"},
@@ -643,7 +649,7 @@ public class TvFocusRingContractTest {
      * <p>实机实测（1920×1080，2.35px/dp）：播放页同时存在两族环——
      * {@code selector_chip}（14+26 个 Control 按钮）走 1.5dp 写死白，
      * {@code selector_video_item}（11 个文本按钮）走 3dp {@code ?attr/tvFocusRing}，
-     * 而「当前播放」走 2dp 写死绿 {@code #2CC56F}；同一屏上三种宽度、三种颜色。
+     * 而「当前播放」走 2dp 当前态环（默认关闭主题配色时为白色，开启时跟随焦点色）；同一屏上三种宽度、两种颜色。
      *
      * <p>本测试把播放页的两族环钉死（宿主分层：谁叠在视频/固定玻璃上，谁在页面背景上）：
      * <ol>
@@ -696,7 +702,8 @@ public class TvFocusRingContractTest {
         String chip = values(read(LEANBACK_DRAWABLE + "selector_video_item.xml"));
         assertTrue(LEANBACK_DRAWABLE + "selector_video_item.xml 的焦点环必须走应用表面属性 ?attr/tvFocusRing",
                 chip.contains("?attr/tvFocusRing"));
-        assertTrue(LEANBACK_DRAWABLE + "selector_video_item.xml 的当前态环必须走应用表面属性 ?attr/tvCurrentRing",
+        // 2026-11-25 对齐 FongMi/TV：白环只跟随焦点，selector_video_item 的当前态不再有常驻描边。
+        assertFalse(LEANBACK_DRAWABLE + "selector_video_item.xml 的当前态不允许再有常驻描边（白环只跟焦点）",
                 chip.contains("?attr/tvCurrentRing"));
         assertFalse("播放页内容区芯片不允许再用视频层环色（会造成同页两种高亮色）",
                 chip.contains("?attr/tvPlayerRing") || chip.contains("?attr/tvPlayerCurrentRing"));
@@ -726,11 +733,12 @@ public class TvFocusRingContractTest {
             assertTrue(path + " 的当前态环必须走 tvPlayerCurrentRing", body.contains("?attr/tvPlayerCurrentRing"));
             assertTrue(path + " 的当前态环宽度必须引用唯一 token", body.contains("android:width=\"" + WIDTH + "\""));
         }
+        // 2026-11-25 对齐 FongMi/TV：selector_video_item 当前态与常态描边全部移除，白环只跟焦点。
         for (String name : new String[]{"selector_video_item.xml"}) {
             String path = LEANBACK_DRAWABLE + name;
             String body = values(read(path));
-            assertTrue(path + " 的当前态环必须走 tvCurrentRing", body.contains("?attr/tvCurrentRing"));
-            assertTrue(path + " 的当前态环宽度必须引用唯一 token", body.contains("android:width=\"" + WIDTH + "\""));
+            assertFalse(path + " 的当前态不允许再有常驻描边（白环只跟焦点）", body.contains("?attr/tvCurrentRing"));
+            assertFalse(path + " 的常态不允许再有描边轮廓", body.contains("?attr/tvNormalStroke"));
         }
 
         // 两个属性必须在 attrs 里声明、并在两个 flavor 的 Theme.Base 里绑定，否则解析不到会崩。
@@ -767,8 +775,8 @@ public class TvFocusRingContractTest {
         double minimum = 3.0;
         // 与 ThemeTokens.light()/dark() 的 colorPlayerFocusRing/colorPlayerCurrentRing 同步。
         int[][] rings = {
-                {0xFF447BF5, 0xFF00A95A},   // light
-                {0xFFF5F7FF, 0xFF00A95A},   // dark（与应用表面焦点环同值）
+                {0xFFFFFFFF, 0xFFFFFFFF},   // light（2026-11-25 起与 FOCUS 槽统一纯白，当前态环默认白色）
+                {0xFFFFFFFF, 0xFFFFFFFF},   // dark（当前态环默认白色）
         };
         for (int[] pair : rings) {
             for (int colour : pair) {
@@ -787,20 +795,22 @@ public class TvFocusRingContractTest {
     }
 
     /**
-     * 播放页只允许一种高亮色：深色表的视频层环必须与应用表面焦点环同值。
+     * 播放页只允许一种高亮色：视频层环必须与应用表面焦点环同值。
      *
      * <p>用户报告（2026-10-11，实机截图）：播放页同时出现近白环（应用表面元素）与灰蓝环
-     * （视频层元素：分段/排序芯片、控制条、画面框）。深色表下两类宿主的底色都是深色，
-     * 没有任何可读性理由保留第二种高亮色，所以两者相等；浅色表则**必须不同**：
-     * 深蓝 FOCUS 画在固定玻璃上只有 1.83:1，此时并存是为了可读性而不是配色随意。
+     * （视频层元素：分段/排序芯片、控制条、画面框），深色表因此先统一为近白。
+     * 2026-11-25 产品进一步要求**所有焦点色默认白色**（对齐上游 FongMi/TV 的白色焦点环）：
+     * 浅色表的视频层环不再保留固定玻璃上的派生夹取色（旧值 #447BF5），与 FOCUS 槽一并
+     * 统一为纯白 #FFFFFFFF，两张表都是同一种高亮色。焦点落在亮场景画面框/播控条上的
+     * 对比度代价与 {@code playerRingColoursClearNonTextContrastOnGlassBackdrops} 记录的一致。
      */
     @Test
     public void playerRingColoursStayOneUnifiedHighlightInTheDarkTable() throws Exception {
         String night = read(TOKENS_NIGHT);
         String day = read(TOKENS_LIGHT);
-        assertEquals("深色表：视频层焦点环必须与应用表面焦点环同值（近白），否则同页会出现两种高亮色",
+        assertEquals("深色表：视频层焦点环必须与应用表面焦点环同值（纯白），否则同页会出现两种高亮色",
                 colour(night, "webhtv_color_focus"), colour(night, "webhtv_color_player_focus_ring"));
-        assertNotEquals("浅色表：视频层环必须仍是固定玻璃上的派生色，不能直接等于 FOCUS 槽",
+        assertEquals("浅色表：2026-11-25 起所有焦点色默认白色，视频层环与应用表面焦点环也必须统一",
                 colour(day, "webhtv_color_focus"), colour(day, "webhtv_color_player_focus_ring"));
         // frozen 色板必须与 XML token 同步（ThemeContractTest 逐字段校验 51 个颜色，此处只钉这一项）。
         assertEquals("深色 frozen 色板的 video 层环必须与 night token 同步",

@@ -49,7 +49,7 @@ public class ThemeResolverOverrideTest {
         assertEquals(BLACK, tokens.colorPrimary());
         assertEquals(BLACK, tokens.colorPrimaryContainer());
         assertEquals(BLACK, tokens.colorSecondaryContainer());
-        assertEquals(BLACK, tokens.colorFocus());
+        assertEquals(base.colorFocus(), tokens.colorFocus());
         assertEquals(WHITE, tokens.colorSurface());
         assertEquals(0xFFF7F7F7, tokens.colorSurfaceContainer());
         assertEquals(0xFFEFEFEF, tokens.colorSurfaceContainerHigh());
@@ -186,7 +186,8 @@ public class ThemeResolverOverrideTest {
 
         ThemeTokens seeded = ThemeResolver.resolve(
                 ThemeMode.LIGHT, ThemeSeed.EXPLICIT, 0xFF0B57D0, 0, profile, null, false);
-        assertEquals(0xFFFF00AA, seeded.colorFocus());
+        // 焦点槽已封顶为编译期白色，不再跟随 profile/seed；其余槽仍按既有优先级叠加。
+        assertEquals(ThemeTokens.light().colorFocus(), seeded.colorFocus());
         assertTrue(ThemeResolver.lastDiagnostic().contains("profile"));
         // The seed still owns every slot the profile did not override.
         ThemeTokens seedOnly = ThemeResolver.resolve(
@@ -263,18 +264,18 @@ public class ThemeResolverOverrideTest {
      * {@code #101418} 上只有 1.86:1，于是被整条改成白色。焦点色必须和 primary 一样只走明度。
      */
     @Test
-    public void darkSurfaceFocusKeepsTheUsersHueInsteadOfSnappingToWhite() {
+    public void focusSlotIsLockedToCompiledWhiteRegardlessOfProfile() {
         ThemeProfile profile = ThemeProfile.defaultProfile();
         profile.dark.focus = "#8C0000";
 
         ThemeTokens tokens = ThemeResolver.resolve(
                 ThemeMode.DARK, ThemeSeed.NONE, 0, 0, profile, null, true);
 
-        assertNotEquals("深红焦点色不得被夹成纯白", WHITE, tokens.colorFocus());
+        assertEquals("用户定稿：焦点环颜色不再由主题编辑器的 FOCUS 槽控制",
+                ThemeTokens.dark().colorFocus(), tokens.colorFocus());
+        assertEquals(0xFFFFFFFF, tokens.colorFocus());
         double ratio = ThemeContrast.ratio(tokens.colorFocus(), tokens.colorSurface());
         assertTrue("focus/surface = " + ratio + " must be >= 3.0", ratio + 0.0001 >= 3.0);
-        assertEquals("焦点色必须保留用户选定的色相",
-                Hct.fromInt(0xFF8C0000).getHue(), Hct.fromInt(tokens.colorFocus()).getHue(), 12.0);
     }
 
     @Test

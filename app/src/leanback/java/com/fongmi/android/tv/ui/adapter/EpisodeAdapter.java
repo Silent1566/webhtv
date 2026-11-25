@@ -85,6 +85,18 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
         notifyDataSetChanged();
     }
 
+    /**
+     * 追加一段集数到列表末尾。用 notifyItemRangeInserted 而不是 notifyDataSetChanged，
+     * 让已聚焦/已绑定的卡片保持不变，焦点不会因为全量重绑被甩回列表顶部。
+     */
+    public void append(List<Episode> items) {
+        if (items == null || items.isEmpty()) return;
+        EpisodeTitleCompact.apply(items);
+        int start = mItems.size();
+        mItems.addAll(items);
+        notifyItemRangeInserted(start, items.size());
+    }
+
     public void setUseTmdbCard(boolean useTmdbCard) {
         if (this.useTmdbCard == useTmdbCard) return;
         this.useTmdbCard = useTmdbCard;

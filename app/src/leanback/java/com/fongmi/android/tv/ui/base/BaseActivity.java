@@ -223,6 +223,9 @@ public abstract class BaseActivity extends AppCompatActivity {
         // 已滚动，先平滑回到顶部并消费本次返回；再次按返回才真正退出。首页/播放页各自
         // 覆写了 onBackInvoked()，不受此逻辑影响。
         if (isSettingScreen() && scrollRootToTop()) return;
+        // 设置页真正退出：通知首页回到前台时把焦点送回 Func 行「点播」，
+        // 否则系统默认焦点会落到布局第一个可聚焦控件，与用户来时的位置不符。
+        if (isSettingScreen()) com.fongmi.android.tv.ui.custom.ReturnFocusHint.requestVodOnHomeReturn();
         finish();
     }
 

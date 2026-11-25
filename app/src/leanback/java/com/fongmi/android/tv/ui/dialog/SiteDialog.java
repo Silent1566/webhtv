@@ -680,9 +680,29 @@ public class SiteDialog extends BaseAlertDialog implements SiteAdapter.OnClickLi
     }
 
     private boolean onDialogKey(int keyCode, KeyEvent event) {
-        if (!groupReordering || keyCode != KeyEvent.KEYCODE_BACK || event.getAction() != KeyEvent.ACTION_UP) return false;
-        cancelGroupReorder();
-        return true;
+        if (keyCode != KeyEvent.KEYCODE_BACK || event.getAction() != KeyEvent.ACTION_UP) return false;
+        if (groupReordering) {
+            cancelGroupReorder();
+            return true;
+        }
+        // 焦点不在分组行时，返回键先把焦点送回「全部」并切回全部分组；焦点已在分组行时再按返回才关闭弹层。
+        if (binding != null && binding.groupScroll.getVisibility() == View.VISIBLE && binding.groupList.getChildCount() > 0) {
+            if (!isFocusInGroupRow()) {
+                View all = findGroupView("");
+                if (all == null) all = binding.groupList.getChildAt(0);
+                all.requestFocus();
+                centerGroup(all);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isFocusInGroupRow() {
+        View focused = null;
+        if (directDialog != null && directDialog.getWindow() != null) focused = directDialog.getWindow().getCurrentFocus();
+        if (focused == null && getDialogActivity() != null) focused = getDialogActivity().getCurrentFocus();
+        return focused != null && focused.getParent() == binding.groupList;
     }
 
     private void resetGroupReorderState() {

@@ -59,8 +59,8 @@
         （雪/白墙）且焦点落在画面框或播控条上时出现，而深色表选近白正是用户明确要求的
         「默认选中边框是白色」；浅色表仍由夹取保证 ≥3:1。
     -->
-    <color name="webhtv_color_player_focus_ring">#F5F7FF</color>
-    <color name="webhtv_color_player_current_ring">#00A95A</color>
+    <color name="webhtv_color_player_focus_ring">#FFFFFFFF</color>
+    <color name="webhtv_color_player_current_ring">#FFFFFFFF</color>
     <color name="webhtv_color_shadow">#000000</color>
     <!--
         深色表焦点环 = 近白（与上游的“白色焦点环”观感一致）。
@@ -71,7 +71,7 @@
         壁纸上的白色文字会被改写成焦点色（ThemeBaseWiringTest 钉住了这条不变量）。
         #F5F7FF 与纯白视觉上无法区分，对深色 surface 仍有 17.3:1。
     -->
-    <color name="webhtv_color_focus">#F5F7FF</color>
+    <color name="webhtv_color_focus">#FFFFFFFF</color>
     <color name="webhtv_color_player_control">#FFFFFF</color>
     <color name="webhtv_color_player_control_muted">#CCFFFFFF</color>
     <color name="webhtv_color_player_control_active">#FFD35C</color>

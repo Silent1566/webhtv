@@ -234,7 +234,7 @@ public class ThemeBinderItemOverlayTest {
         Context context = themedContext();
         ThemeTokens baseline = ThemeTokens.light();
         ThemeProfile profile = ThemeProfile.defaultProfile();
-        profile.light.focus = "#33AA55";
+        profile.light.primary = "#33AA55";
         ThemeTokens active = resolveWithProfile(context, profile);
         assertNotEquals("测试前提：档案必须真的改动了一个槽位", baseline, active);
         assertEquals("测试前提：本档案没有改选中文字色槽，token 必须与基线相同",

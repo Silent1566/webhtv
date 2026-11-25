@@ -31,16 +31,20 @@ public final class ThemeProfileStore {
         if (lastGood != null) return lastGood;
         String legacyJson = Prefers.getString(LEGACY_KEY_PROFILE);
         int legacyColor = Setting.getThemeColor();
-        // 蜂蜜影视产品默认：用户从未做过任何主题选择（无存储档、无 legacy 镜像）时，
-        // 首次安装的默认配色直接采用蜂蜜金预设，而不是上游的编译期基线。
+        // 产品默认（2026-11-25 定稿）：用户从未做过任何主题选择时，默认**主题配色关闭**，
+        // 全局观感对齐上游 FongMi/TV——原生编译期基线色板 + 纯白焦点环。
+        // 蜂蜜金等预设仍保留在外观编辑器里供用户主动选择。
         if (legacyColor == -1 && (legacyJson == null || legacyJson.isBlank())) return honeyDefault();
         return migrateLegacy(legacyColor, legacyJson);
     }
 
-    /** The shipped honey-gold palette used as the product default theme. */
+    /**
+     * The shipped default theme: an empty profile that leaves the compiled baseline
+     * (FongMi/TV stock palette with pure-white focus rings) untouched — i.e. theme OFF.
+     */
     public static ThemeProfile honeyDefault() {
         try {
-            return ThemePresets.Preset.HONEY.profile();
+            return ThemeProfile.defaultProfile();
         } catch (RuntimeException ignored) {
             return ThemeProfile.defaultProfile();
         }

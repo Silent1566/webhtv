@@ -447,12 +447,9 @@ public final class ThemeController {
      * 而主题 FOCUS 槽的浅色取值是 5.03–5.99:1（Resolver 另有 ≥3:1 的对比度门）。
      */
     public static int focusRingColor(Context context) {
-        int compiled = compiledFocusRingColor(context);
-        // Comparing the resolved FOCUS role against the frozen baseline avoids a second
-        // light/dark resolution here (this runs on every card focus change) and states the
-        // rule exactly: follow the profile only when it actually moved the focus colour.
-        int active = current.colorFocus();
-        return active == baseline.colorFocus() ? compiled : active;
+        // 用户最终定稿：全局焦点色环不再跟随主题 FOCUS 槽，恒等于编译期白色。
+        // 只封住环色改写通道，白色焦点文字/图标与既有 selector 描边保持不变。
+        return compiledFocusRingColor(context);
     }
 
     /** The compiled {@code ?attr/tvFocusRing} value, shared with the XML selector path. */

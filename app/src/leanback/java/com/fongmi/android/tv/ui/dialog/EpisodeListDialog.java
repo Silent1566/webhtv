@@ -62,6 +62,9 @@ public class EpisodeListDialog extends BaseAlertDialog implements FlagAdapter.On
     private List<EpisodeSeasonSegments.Segment> seasonSegments = List.of();
     private int selectedSeason = Integer.MIN_VALUE;
     private int selectedSegment;
+    private int loadedEpisodeEnd;
+    private boolean segmentAppendGuard;
+    private boolean forceFirstSegment;
 
     public EpisodeListDialog() {
         segmentStarts = new ArrayList<>();
@@ -96,6 +99,12 @@ public class EpisodeListDialog extends BaseAlertDialog implements FlagAdapter.On
 
     public EpisodeListDialog dismissListener(DialogInterface.OnDismissListener dismissListener) {
         this.dismissListener = dismissListener;
+        return this;
+    }
+
+    /** 上次从全屏选集弹层按返回退出后，下次打开固定从 1-20 开始。 */
+    public EpisodeListDialog startAtFirstSegment(boolean forceFirstSegment) {
+        this.forceFirstSegment = forceFirstSegment;
         return this;
     }
 
@@ -269,7 +278,8 @@ public class EpisodeListDialog extends BaseAlertDialog implements FlagAdapter.On
         episodeAdapter.setColumn(column);
         setSegments(episodes.size());
         setSegmentEpisodes(selectedSegment);
-        scrollToSelectedEpisode();
+        if (forceFirstSegment) scrollToEpisode(0, false);
+        else scrollToSelectedEpisode();
     }
 
     private List<Episode> visibleEpisodes(List<Episode> sourceEpisodes) {
@@ -315,7 +325,7 @@ public class EpisodeListDialog extends BaseAlertDialog implements FlagAdapter.On
                 items.add((offset + i + 1) + "-" + (offset + end));
             }
         }
-        selectedSegment = resolveSelectedSegment(selectedEpisode);
+        selectedSegment = forceFirstSegment ? 0 : resolveSelectedSegment(selectedEpisode);
         arrayAdapter.setSegmentSize(segment);
         arrayAdapter.addAll(items);
         binding.array.setVisibility(items.isEmpty() ? View.GONE : View.VISIBLE);
@@ -345,6 +355,7 @@ public class EpisodeListDialog extends BaseAlertDialog implements FlagAdapter.On
     }
 
     private void selectSegment(int position, boolean keepSegmentFocus) {
+        if (segmentAppendGuard) return;
         if (position < 0 || position >= segmentStarts.size() || position == selectedSegment) return;
         selectedSegment = position;
         setSegmentEpisodes(position);
@@ -354,6 +365,7 @@ public class EpisodeListDialog extends BaseAlertDialog implements FlagAdapter.On
     private void setSegmentEpisodes(int position) {
         if (segmentStarts.isEmpty()) {
             episodeAdapter.addAll(allEpisodes);
+            loadedEpisodeEnd = allEpisodes.size();
             updateEpisodeContentHeight();
             return;
         }
@@ -361,6 +373,7 @@ public class EpisodeListDialog extends BaseAlertDialog implements FlagAdapter.On
         int start = segmentStarts.get(position);
         int end = segmentEnds.get(position);
         episodeAdapter.addAll(EpisodeRangePolicy.slice(allEpisodes, new EpisodeRangePolicy.Range("", start, end, position == selectedSegment)));
+        loadedEpisodeEnd = end;
         updateEpisodeContentHeight();
     }
 
@@ -449,6 +462,16 @@ public class EpisodeListDialog extends BaseAlertDialog implements FlagAdapter.On
     private boolean onEpisodeKey(KeyEvent event) {
         if (!KeyUtil.isActionDown(event)) return false;
         if (KeyUtil.isDownKey(event)) return focusLowerFromEpisode();
+        if (KeyUtil.isLeftKey(event) || KeyUtil.isRightKey(event)) {
+            int position = getFocusedPosition(binding.episode);
+            if (position == RecyclerView.NO_POSITION) return false;
+            int column = Math.max(1, episodeAdapter.getColumn());
+            int target = TmdbEpisodeGridPolicy.horizontalFocusTarget(position, column, episodeAdapter.getItemCount(), KeyUtil.isRightKey(event));
+            if (target != TmdbEpisodeGridPolicy.NO_FOCUS_TARGET) return focusPosition(binding.episode, target);
+            // 行首向左 / 行尾向右才替换翻页；上下键只负责追加。
+            int absolute = absoluteEpisodePosition(position);
+            return turnEpisodePage(KeyUtil.isRightKey(event) ? 1 : -1, absolute);
+        }
         if (!KeyUtil.isUpKey(event)) return false;
         int position = getFocusedPosition(binding.episode);
         int column = Math.max(1, episodeAdapter.getColumn());
@@ -461,12 +484,66 @@ public class EpisodeListDialog extends BaseAlertDialog implements FlagAdapter.On
         int position = getFocusedPosition(binding.episode);
         int column = Math.max(1, episodeAdapter.getColumn());
         int count = episodeAdapter.getItemCount();
-        // 正下方有卡片时交给 Leanback 原生逐行移动，只兜底末行不满导致同列为空、下键卡住的情况
+        // 正下方有卡片时交给 Leanback 原生逐行移动；撞底才追加下一段。
         if (position == RecyclerView.NO_POSITION || position + column < count) return false;
         int target = TmdbEpisodeGridPolicy.verticalFocusTarget(position, column, count, true);
-        if (target == TmdbEpisodeGridPolicy.NO_FOCUS_TARGET) return false;
-        focusPosition(binding.episode, target);
-        return true;
+        if (target != TmdbEpisodeGridPolicy.NO_FOCUS_TARGET) return focusPosition(binding.episode, target);
+        return appendNextEpisodeSegment();
+    }
+
+    /** 已显示位置在整季集数里的真实下标，追加多段后左右翻页仍按它算目标段。 */
+    private int absoluteEpisodePosition(int adapterPosition) {
+        List<Episode> shown = episodeAdapter.getItems();
+        if (shown == null || adapterPosition < 0 || adapterPosition >= shown.size()) return getSelectedEpisodePosition(allEpisodes);
+        int index = allEpisodes.indexOf(shown.get(adapterPosition));
+        return index >= 0 ? index : getSelectedEpisodePosition(allEpisodes);
+    }
+
+    /** 下键撞底：追加下一段，保持已显示的旧段不动。 */
+    private boolean appendNextEpisodeSegment() {
+        if (segmentAppendGuard || segmentStarts.isEmpty() || allEpisodes.isEmpty()) return false;
+        if (loadedEpisodeEnd >= allEpisodes.size()) return false;
+        int segment = -1;
+        for (int i = 0; i < segmentStarts.size(); i++) if (segmentStarts.get(i) == loadedEpisodeEnd) { segment = i; break; }
+        if (segment < 0) return false;
+        int start = segmentStarts.get(segment);
+        int end = segmentEnds.get(segment);
+        if (start >= end) return false;
+        int focusIndex = episodeAdapter.getItemCount();
+        segmentAppendGuard = true;
+        try {
+            episodeAdapter.append(EpisodeRangePolicy.slice(allEpisodes, new EpisodeRangePolicy.Range("", start, end, false)));
+            loadedEpisodeEnd = end;
+            selectedSegment = segment;
+            arrayAdapter.setSelectedPosition(segment);
+            binding.array.setSelectedPosition(segment);
+            updateEpisodeContentHeight();
+            return focusPosition(binding.episode, focusIndex);
+        } finally {
+            binding.episode.post(() -> segmentAppendGuard = false);
+        }
+    }
+
+    /** 左右键撞行边界：替换成上/下一段，焦点接新段末集/首集。 */
+    private boolean turnEpisodePage(int direction, int absolutePosition) {
+        if (segmentAppendGuard || segmentStarts.isEmpty() || allEpisodes.isEmpty()) return false;
+        int current = 0;
+        for (int i = 0; i < segmentStarts.size(); i++) {
+            if (absolutePosition >= segmentStarts.get(i) && absolutePosition < segmentEnds.get(i)) { current = i; break; }
+        }
+        int target = current + direction;
+        if (target < 0 || target >= segmentStarts.size()) return false;
+        segmentAppendGuard = true;
+        try {
+            selectedSegment = target;
+            setSegmentEpisodes(target);
+            arrayAdapter.setSelectedPosition(target);
+            binding.array.setSelectedPosition(target);
+            int focusIndex = direction > 0 ? 0 : Math.max(0, episodeAdapter.getItemCount() - 1);
+            return focusPosition(binding.episode, focusIndex);
+        } finally {
+            binding.episode.post(() -> segmentAppendGuard = false);
+        }
     }
 
     private void focusUpperFromEpisode() {
@@ -519,10 +596,11 @@ public class EpisodeListDialog extends BaseAlertDialog implements FlagAdapter.On
         return child == null ? RecyclerView.NO_POSITION : recycler.getChildAdapterPosition(child);
     }
 
-    private void focusPosition(BaseGridView grid, int position) {
-        if (grid.getAdapter() == null || grid.getAdapter().getItemCount() == 0) return;
+    private boolean focusPosition(BaseGridView grid, int position) {
+        if (grid.getAdapter() == null || grid.getAdapter().getItemCount() == 0) return false;
         int target = Math.max(0, Math.min(position, grid.getAdapter().getItemCount() - 1));
         grid.setSelectedPosition(target, holder -> holder.itemView.requestFocus());
+        return true;
     }
 
     private boolean isVisible(View view) {

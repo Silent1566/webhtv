@@ -599,6 +599,13 @@ private boolean runtimeSourceOnly;
     // 同时充当待定对焦回调的失效令牌（换目标即作废旧回调，避免过期坐标把列表滚回原处）。
     private int mEpisodeHoldTarget = RecyclerView.NO_POSITION;
     private static final int EPISODE_HOLD_FOCUS_MAX_ATTEMPTS = 6;
+    // 按需分页：选集列表初始只装第一段，遥控上下/左右撞到已加载边界时自动追加下一段。
+    // mLoadedEpisodeEnd 是已追加到的集数末位（exclusive），segmentAppendGuard 防止一次按键
+    // 因布局回调重复触发多次追加。
+    private int mLoadedEpisodeEnd = 0;
+    private boolean mSegmentAppendGuard;
+    // 全屏选集弹层每次关闭后，下次打开默认回到 1-20，不保留上次翻到的后段。
+    private boolean mForceEpisodeDialogFirstSegment;
     // 焦点校正的尝试次数上限：只补偿「进场时焦点丢失」这一种情况，冲击几次就放手。
     private static final int EPISODE_GRID_FOCUS_MAX_ATTEMPTS = 3;
     private int mEpisodeGridFocusAttempts;
@@ -1972,7 +1979,13 @@ private boolean runtimeSourceOnly;
         for (int i = 0; i < group.getChildCount(); i++) {
             View child = group.getChildAt(i);
             child.setOnFocusChangeListener((view, hasFocus) -> {
-                if (hasFocus) scroll.post(() -> scroll.smoothScrollTo(Math.max(0, view.getLeft() - ResUtil.dp2px(24)), 0));
+                if (!hasFocus) return;
+                // 只有目标按钮真的超出可视区才滚动；此前每次聚焦都 post 一次 smoothScrollTo，
+                // 连续按左右键会堆积多条滚动动画互相打断，表现为控制条焦点切换卡顿。
+                int left = view.getLeft() - ResUtil.dp2px(24);
+                int right = view.getRight() + ResUtil.dp2px(24);
+                if (left >= scroll.getScrollX() && right <= scroll.getScrollX() + scroll.getWidth()) return;
+                scroll.post(() -> scroll.smoothScrollTo(Math.max(0, left), 0));
             });
         }
     }
@@ -2038,6 +2051,15 @@ private boolean runtimeSourceOnly;
         mBinding.quality.setHorizontalSpacing(ResUtil.dp2px(8));
         mBinding.quality.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
         mBinding.quality.setAdapter(mQualityAdapter = new QualityAdapter(this));
+        // 清晰度向下必须落到分段行的「倒序」chip（array 位置 0），不是当前分段 chip。
+        mBinding.quality.setOnKeyListener((view, keyCode, event) -> {
+            if (KeyUtil.isActionDown(event) && KeyUtil.isDownKey(event)
+                    && isVisible(mBinding.array) && mArrayAdapter.getItemCount() > 0) {
+                requestArrayFocus(0);
+                return true;
+            }
+            return false;
+        });
         mBinding.array.setHorizontalSpacing(ResUtil.dp2px(8));
         mBinding.array.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
         mBinding.array.setAdapter(mArrayAdapter = new ArrayAdapter(this));
@@ -4136,11 +4158,15 @@ private boolean runtimeSourceOnly;
         mEpisodeGridAdapter.setUseTmdbCard(useTmdbCards);
         applyActionButtonVisibility();
 
-        // 优化：只加载当前集所在分段的数据，避免一次性渲染所有集数导致卡顿
+        // 替换式分页：初始只装「当前集所在的那一段」，并显示对应的分段高亮。
+        // 段位由 selectedPosition 决定而非固定第一段：倒序时当前集第 1 集排在列表末位，
+        // 必须显示包含它的末段（如 12-1），否则内容停在 32-13、高亮却在 12-1，上下顺序全乱。
         int size = items.size();
         int segmentSize = getEpisodeSegmentSize(size);
         int selectedPosition = getSelectedEpisodePosition(items);
         int segmentStart = EpisodeRangePolicy.segmentStart(size, selectedPosition, segmentSize);
+        int end = Math.min(segmentStart + segmentSize, size);
+        mLoadedEpisodeEnd = end;
         List<Episode> initialItems = items.subList(segmentStart, Math.min(segmentStart + segmentSize, size));
         mEpisodeAdapter.addAll(initialItems);
         mEpisodeGridAdapter.addAll(initialItems);
@@ -4185,11 +4211,13 @@ private boolean runtimeSourceOnly;
         mEpisodeGridAdapter.setVerticalGridMode(true);
         mEpisodeGridAdapter.setColumn(column);
 
-        // 优化：只加载当前集所在分段的数据，避免一次性渲染所有集数导致卡顿
+        // 替换式分页：初始只装「当前集所在的那一段」（倒序时当前集可能排在列表末位）。
         int size = items.size();
         int segmentSize = getEpisodeSegmentSize(size);
         int selectedPosition = getSelectedEpisodePosition(items);
         int segmentStart = EpisodeRangePolicy.segmentStart(size, selectedPosition, segmentSize);
+        int end = Math.min(segmentStart + segmentSize, size);
+        mLoadedEpisodeEnd = end;
         List<Episode> initialItems = items.subList(segmentStart, Math.min(segmentStart + segmentSize, size));
         mEpisodeAdapter.addAll(initialItems);
         mEpisodeGridAdapter.addAll(initialItems);
@@ -4614,19 +4642,24 @@ private boolean runtimeSourceOnly;
     }
 
     private int findFocusDown(int index) {
-        List<Integer> orders = getEpisodeFocusOrders();
+        List<Integer> orders = getEpisodeVerticalFocusOrders();
         for (int i = 0; i < orders.size(); i++) if (i > index) if (isEpisodeFocusTarget(findViewById(orders.get(i)))) return orders.get(i);
         return 0;
     }
 
     private int findFocusUp(int index) {
-        List<Integer> orders = getEpisodeFocusOrders();
+        List<Integer> orders = getEpisodeVerticalFocusOrders();
         for (int i = orders.size() - 1; i >= 0; i--) if (i < index) if (isEpisodeFocusTarget(findViewById(orders.get(i)))) return orders.get(i);
         return 0;
     }
 
     private int episodeFocusIndex(int id) {
         return getEpisodeFocusOrders().indexOf(id);
+    }
+
+    /** 纵向焦点只用这条链，确保 播放器→线路→清晰度→倒序→集数，不被表头工具项插队。 */
+    private int episodeVerticalFocusIndex(int id) {
+        return getEpisodeVerticalFocusOrders().indexOf(id);
     }
 
     private boolean isEpisodeFocusTarget(View view) {
@@ -4674,12 +4707,39 @@ private boolean runtimeSourceOnly;
                 R.id.quick);
     }
 
+    /**
+     * 真正的遥控器上下链路。getEpisodeFocusOrders() 仍保留完整顺序供表头横向焦点使用，
+     * 但纵向不经过 episodeTitle/episodeReverse/episodeViewMode/episodeFileName：
+     * 用户定稿的顺序是 播放器 → B站/线路 → 清晰度 → 倒序(array) → 集数，
+     * 向上、向下都严格按这条链走，表头工具只能从倒序 chip 横移进入。
+     */
+    private List<Integer> getEpisodeVerticalFocusOrders() {
+        return Arrays.asList(
+                R.id.flag,
+                R.id.quality,
+                R.id.array,
+                R.id.episode,
+                R.id.episodeGrid,
+                R.id.tmdbOmdbRatings,
+                R.id.tmdbCast,
+                R.id.tmdbPhotos,
+                R.id.tmdbPosters,
+                R.id.tmdbRelatedVideos,
+                R.id.tmdbCrew,
+                R.id.tmdbRecommendations,
+                R.id.tmdbPersonalTmdbRecommendations,
+                R.id.tmdbPersonalDoubanRecommendations,
+                R.id.tmdbPersonalAiRecommendations,
+                R.id.part,
+                R.id.quick);
+    }
+
     private void updateFocus() {
-        int array = episodeFocusIndex(R.id.array);
-        int episode = episodeFocusIndex(R.id.episode);
-        int episodeGrid = episodeFocusIndex(R.id.episodeGrid);
-        int part = episodeFocusIndex(R.id.part);
-        int quick = episodeFocusIndex(R.id.quick);
+        int array = episodeVerticalFocusIndex(R.id.array);
+        int episode = episodeVerticalFocusIndex(R.id.episode);
+        int episodeGrid = episodeVerticalFocusIndex(R.id.episodeGrid);
+        int part = episodeVerticalFocusIndex(R.id.part);
+        int quick = episodeVerticalFocusIndex(R.id.quick);
         mArrayAdapter.setNextFocus(findFocusUp(array), findFocusDown(array));
         mEpisodeAdapter.setNextFocusUp(findFocusUp(episode));
         mFlagAdapter.setNextFocusDown(findFocusDown(0));
@@ -4702,7 +4762,7 @@ private boolean runtimeSourceOnly;
     private void updateRatingChipFocus() {
         ViewGroup container = mBinding.getRoot().findViewById(R.id.tmdbOmdbRatings);
         if (container == null || !isVisible(container)) return;
-        int ratings = episodeFocusIndex(R.id.tmdbOmdbRatings);
+        int ratings = episodeVerticalFocusIndex(R.id.tmdbOmdbRatings);
         int up = findFocusUp(ratings);
         int down = findFocusDown(ratings);
         for (int i = 0; i < container.getChildCount(); i++) {
@@ -4714,13 +4774,10 @@ private boolean runtimeSourceOnly;
     }
 
     private void updateEpisodeHeaderFocus() {
-        int title = episodeFocusIndex(R.id.episodeTitle);
-        int reverse = episodeFocusIndex(R.id.episodeReverse);
-        int fileName = episodeFocusIndex(R.id.episodeFileName);
-        int up = findFocusUp(isEpisodeFocusTarget(mBinding.episodeTitle) ? title : reverse);
-        int down = findFocusDown(fileName);
+        // 表头工具不进入纵向链：上接倒序 array，下接当前可见的集数列表。
+        int up = findFocusUp(episodeVerticalFocusIndex(R.id.array));
         int upId = up == 0 ? View.NO_ID : up;
-        int downId = down == 0 ? View.NO_ID : down;
+        int downId = firstEpisodeFocusId();
         boolean titleFocusable = isEpisodeFocusTarget(mBinding.episodeTitle);
         int firstTool = firstEpisodeHeaderToolId();
         mBinding.episodeTitle.setNextFocusUpId(upId);
@@ -4744,6 +4801,10 @@ private boolean runtimeSourceOnly;
                 ? R.id.episodeViewMode
                 : isEpisodeFocusTarget(mBinding.episodeReverse)
                 ? R.id.episodeReverse : titleFocusable ? R.id.episodeTitle : View.NO_ID);
+    }
+
+    private int firstEpisodeFocusId() {
+        return episodeGridMode ? R.id.episodeGrid : R.id.episode;
     }
 
     private int firstEpisodeHeaderToolId() {
@@ -4886,13 +4947,32 @@ private boolean runtimeSourceOnly;
         }
         if (!KeyUtil.isActionDown(event) || !KeyUtil.isDownKey(event)) return false;
         int position = mBinding.array.getSelectedPosition();
-        if (position <= 1) return false;
+        // 倒序/正序 chip 也属于「倒序焦点」，向下直接进入集数；
+        // 只有具体分段 chip 才先装载该段再落到集数表头。
+        if (position <= 1) return focusEpisodeFromArrayPosition(0);
         // 只装载分段，不直接抢焦点：声明式的 nextFocusDown 目标是集数表头（“选集 · 第 N 季”），
         // 之前这里直接 scrollToEpisode(..., true) 把焦点推进选集网格，遥控在分段行按向下
         // 会跳过整行集数表头，用户报告“往下到不了选季度的按钮”。
         selectEpisodeSegment(position, false);
         if (focusEpisodeHeaderTool(View.FOCUS_DOWN)) return true;
         scrollToEpisode(getSelectedEpisodePosition(mEpisodeAdapter.getItems()), true);
+        return true;
+    }
+
+    /** 倒序 chip 向下直接进入集数：优先当前集在已显示列表中的位置。 */
+    private boolean focusEpisodeFromArrayPosition(int segmentPosition) {
+        List<Episode> shown = mEpisodeAdapter == null ? List.of() : mEpisodeAdapter.getItems();
+        int position = getSelectedEpisodePosition(shown);
+        if (segmentPosition > 1 && mArrayAdapter != null) {
+            List<Episode> all = getFlag() == null ? List.of() : getFlag().getEpisodes();
+            int start = mArrayAdapter.getStart(segmentPosition);
+            int end = Math.min(start + getEpisodeSegmentSize(all.size()), all.size());
+            if (start >= 0 && start < end) position = Math.max(0, start);
+        }
+        if (shown.isEmpty()) return false;
+        position = Math.max(0, Math.min(position, shown.size() - 1));
+        if (episodeGridMode) return focusEpisodeGridPosition(position);
+        scrollToEpisode(position, true);
         return true;
     }
 
@@ -4922,12 +5002,14 @@ private boolean runtimeSourceOnly;
 
 
     private boolean onEpisodeKey(KeyEvent event) {
-        // 详情页选集区按返回：先把「当前正在播放的剧集」滚回列表顶部并聚焦，再按一次才退出页面。
-        // 只限非全屏且焦点确实落在选集卡片上，避免吞掉全屏/预览框既有的返回语义。
+        // 详情页选集区按返回：先把焦点送回线路切换行（如「UC无限#1」，实际是当前线路芯片），
+        // 再按一次才退出页面。只限非全屏且焦点确实落在选集卡片上，避免吞掉全屏/预览框既有的返回语义。
         if (KeyUtil.isActionUp(event) && KeyUtil.isBackKey(event)) {
             if (isFullscreen()) return false;
             RecyclerView backView = episodeGridMode ? mBinding.episodeGrid : mBinding.episode;
             if (!isFocusInside(backView)) return false;
+            if (focusFlagOnBack()) return true;
+            // 线路行不可见时回退到旧行为：把当前正在播放的剧集滚回列表顶部并聚焦。
             int anchor = getSelectedEpisodePosition(mEpisodeAdapter == null ? List.of() : mEpisodeAdapter.getItems());
             int current = backView instanceof androidx.leanback.widget.BaseGridView grid ? grid.getSelectedPosition() : RecyclerView.NO_POSITION;
             if (current == anchor) return false;
@@ -4954,22 +5036,32 @@ private boolean runtimeSourceOnly;
             if (KeyUtil.isDownKey(event)) {
                 int target = TmdbEpisodeGridPolicy.verticalFocusTarget(position, spanCount, mEpisodeGridAdapter.getItemCount(), true);
                 if (target != TmdbEpisodeGridPolicy.NO_FOCUS_TARGET) return focusEpisodeGridPosition(target);
-                // 长按撞到最后一排时停在原地，别让连续按键把焦点甩出网格。
+                // 下键撞底只追加下一段（1-20 → 追加 21-40），旧段仍留在列表里。
+                // 用户定稿：左右键才是「替换式翻页」，上下键负责连续浏览时按需追加。
+                if (appendNextEpisodeSegment()) return true;
+                // 长按已经没有更多分段时停在原地，别让连续按键把焦点甩出网格。
                 if (event.getRepeatCount() > 0) return true;
-                // 单次按下到网格最后一行：必须落到“评分与数据”，否则焦点链在选集底部断掉，
-                // 用户报告“评分与数据下的卡片无法选中容易遥控跳过”。
+                // 全部集数都在本段且按到最后一行：落到“评分与数据”，保持焦点链不中断。
                 return focusRatingRow();
             }
             if (KeyUtil.isUpKey(event)) {
                 int target = TmdbEpisodeGridPolicy.verticalFocusTarget(position, spanCount, mEpisodeGridAdapter.getItemCount(), false);
                 if (target != TmdbEpisodeGridPolicy.NO_FOCUS_TARGET) return focusEpisodeGridPosition(target);
+                // 上键不再替换分段；撞到首行时交给下方公共逻辑回到「倒序」chip。
                 if (event.getRepeatCount() > 0) return true;
             } else if (KeyUtil.isLeftKey(event) || KeyUtil.isRightKey(event)) {
                 // 集数卡片根视图不可聚焦、adapter 也没写水平 nextFocus，交回系统 FocusFinder 时
                 // 向左找不到同排邻居（按键无效）、向右直接跳出选集网格落到上方「简介」按钮
                 // （用户报告“再左遥控无效右遥控就跑到了简介按钮”）。这里在本排内显式移动。
                 int target = TmdbEpisodeGridPolicy.horizontalFocusTarget(position, spanCount, mEpisodeGridAdapter.getItemCount(), KeyUtil.isRightKey(event));
-                if (target == TmdbEpisodeGridPolicy.NO_FOCUS_TARGET) return true;
+                if (target == TmdbEpisodeGridPolicy.NO_FOCUS_TARGET) {
+                    // 行首向左 / 行尾向右才是「替换式翻页」：1-20 的 21 左键回 1-20，
+                    // 21-40 的 28 右键翻到下一页。基于全集下标计算，追加多段后仍翻对页。
+                    int absolute = absoluteEpisodePosition(position);
+                    if (KeyUtil.isRightKey(event)) turnEpisodePage(1, absolute);
+                    else if (KeyUtil.isLeftKey(event)) turnEpisodePage(-1, absolute);
+                    if (target == TmdbEpisodeGridPolicy.NO_FOCUS_TARGET) return true;
+                }
                 return focusEpisodeGridPosition(target);
             } else {
                 return false;
@@ -4979,11 +5071,28 @@ private boolean runtimeSourceOnly;
         } else if (!KeyUtil.isUpKey(event)) {
             return false;
         }
-        int target = findFocusUp(episodeFocusIndex(episodeGridMode ? R.id.episodeGrid : R.id.episode));
+        int target = findFocusUp(episodeVerticalFocusIndex(episodeGridMode ? R.id.episodeGrid : R.id.episode));
         if (target == 0) return false;
+        // 向上进入分段行时强制落到「倒序」chip（position 0），不是当前分段 chip。
+        if (target == R.id.array) {
+            requestArrayFocus(0);
+            return true;
+        }
         View view = findViewById(target);
         if (!isEpisodeFocusTarget(view)) return false;
         view.requestFocus();
+        return true;
+    }
+
+    /**
+     * 从详情页下方面板按返回时，把焦点恢复到线路切换行的当前线路芯片。
+     * 线路行是用户进入选集前的控制入口，返回到这里比留在剧集网格更符合 D-pad 的逐级回退直觉。
+     */
+    private boolean focusFlagOnBack() {
+        if (mFlagAdapter == null || mFlagAdapter.getItemCount() == 0 || !isVisible(mBinding.flag)) return false;
+        int position = Math.max(0, mFlagAdapter.getPosition());
+        mBinding.flag.setSelectedPosition(position);
+        mBinding.flag.requestFocus();
         return true;
     }
 
@@ -5007,9 +5116,12 @@ private boolean runtimeSourceOnly;
         mEpisodeHoldTarget = target;
         RecyclerView.ViewHolder holder = mBinding.episodeGrid.findViewHolderForAdapterPosition(target);
         if (holder != null) {
-            mBinding.episodeGrid.stopScroll();
+            // 目标卡片已经可见：直接聚焦，不要 stopScroll。此前无条件 stopScroll 会打断
+            // 正在进行的平滑滚动并强制一次额外布局，是上下左右连续切集时卡顿的主因。
             if (holder.itemView.requestFocus()) return true;
         } else if (attempt == 0) {
+            // 只有目标尚未 layout 时才滚动，且先停掉遗留滚动避免与定位互相拉扯。
+            mBinding.episodeGrid.stopScroll();
             mBinding.episodeGrid.scrollToPosition(target);
         }
         if (attempt >= EPISODE_HOLD_FOCUS_MAX_ATTEMPTS) return true;
@@ -5114,7 +5226,9 @@ private boolean runtimeSourceOnly;
         if (requestEpisodeFocus) scrollToEpisode(getSelectedEpisodePosition(mEpisodeAdapter.getItems()), true);
     }
 
-    // 该分段位置对应的集数是否已经在选集适配器里展示
+    // 该分段位置对应的集数是否已经在选集适配器里展示。
+    // 按需分页追加后，适配器里可能同时有多段；此时按「该段首尾实例都已展示」判断，
+    // 兼容单段替换与多段追加两种模式，避免布局回焦的选中回调触发 addAll 替换掉已追加内容。
     private boolean isSegmentContentDisplayed(int position) {
         if (mArrayAdapter == null || getFlag() == null) return false;
         List<Episode> episodes = getFlag().getEpisodes();
@@ -5122,7 +5236,15 @@ private boolean runtimeSourceOnly;
         int start = mArrayAdapter.getStart(position);
         if (start < 0 || start >= episodes.size()) return false;
         int end = Math.min(start + getEpisodeSegmentSize(episodes.size()), episodes.size());
-        return isSegmentDisplayed(episodes.subList(start, end));
+        if (isSegmentDisplayed(episodes.subList(start, end))) return true;
+        // 追加模式：该段范围已全部落入已加载窗口，且首尾实例就是原 Flag 里的对象。
+        if (start < mLoadedEpisodeEnd && end <= mLoadedEpisodeEnd) {
+            List<Episode> shown = mEpisodeAdapter.getItems();
+            return shown != null && shown.size() >= end
+                    && shown.get(start) == episodes.get(start)
+                    && shown.get(end - 1) == episodes.get(end - 1);
+        }
+        return false;
     }
 
     private void selectEpisodeSegmentPosition(int position) {
@@ -5155,7 +5277,88 @@ private boolean runtimeSourceOnly;
         if (isSegmentDisplayed(items)) return;
         mEpisodeAdapter.addAll(items);
         mEpisodeGridAdapter.addAll(items);
+        // 分段按钮是「替换」语义：把已加载末位重置到本段末尾，后续上下/右键从此处继续追加。
+        mLoadedEpisodeEnd = end;
         scrollToEpisode(positionInSegment);
+    }
+
+    /** 已显示位置在全集列表中的真实下标；追加多段后左右翻页必须按它算目标段。 */
+    private int absoluteEpisodePosition(int shownPosition) {
+        List<Episode> all = getFlag() == null ? List.of() : getFlag().getEpisodes();
+        List<Episode> shown = mEpisodeAdapter == null ? List.of() : mEpisodeAdapter.getItems();
+        if (all.isEmpty() || shown == null || shownPosition < 0 || shownPosition >= shown.size()) return getSelectedEpisodePosition(all);
+        int index = all.indexOf(shown.get(shownPosition));
+        return index >= 0 ? index : getSelectedEpisodePosition(all);
+    }
+
+    /**
+     * 下键撞底：追加下一段到当前列表末尾，而不是替换。用户要求 1-20 向下超过 20
+     * 接着把 21-40 续在后面；只有左右键才做替换式翻页。
+     */
+    private boolean appendNextEpisodeSegment() {
+        if (mSegmentAppendGuard || getFlag() == null || mEpisodeGridAdapter == null) return false;
+        List<Episode> episodes = getFlag().getEpisodes();
+        List<Episode> shown = mEpisodeAdapter == null ? List.of() : mEpisodeAdapter.getItems();
+        if (episodes.isEmpty() || shown.isEmpty()) return false;
+        int size = episodes.size();
+        int segmentSize = getEpisodeSegmentSize(size);
+        int start = mLoadedEpisodeEnd;
+        // 兼容列表已被外部替换过的情况：以当前适配器末项为准。
+        Episode lastShown = shown.get(shown.size() - 1);
+        int shownLast = episodes.indexOf(lastShown);
+        if (shownLast >= 0 && shownLast + 1 != start) start = shownLast + 1;
+        if (start < 0 || start >= size) return false;
+        int end = Math.min(start + segmentSize, size);
+        if (start >= end) return false;
+        List<Episode> next = episodes.subList(start, end);
+        mSegmentAppendGuard = true;
+        try {
+            int focusIndex = shown.size();
+            mEpisodeAdapter.append(next);
+            mEpisodeGridAdapter.append(next);
+            mLoadedEpisodeEnd = end;
+            int segmentIndex = EpisodeRangePolicy.segmentIndex(size, start, segmentSize);
+            selectEpisodeSegmentPosition(segmentIndex + 2);
+            if (episodeGridMode) focusEpisodeGridPosition(focusIndex);
+            else scrollToEpisode(focusIndex);
+            return true;
+        } finally {
+            android.view.View host = episodeGridMode ? mBinding.episodeGrid : mBinding.episode;
+            host.post(() -> mSegmentAppendGuard = false);
+        }
+    }
+
+    /**
+     * 左右键边界：替换式翻页，一次只显示一段。
+     *
+     * @param direction 1 = 下一段，-1 = 上一段
+     * @param referencePosition 当前焦点集在全集列表中的下标（不是适配器内下标）
+     * @return 是否真的翻页了
+     */
+    private boolean turnEpisodePage(int direction, int referencePosition) {
+        if (mSegmentAppendGuard || getFlag() == null || mArrayAdapter == null || mEpisodeGridAdapter == null) return false;
+        List<Episode> episodes = getFlag().getEpisodes();
+        if (episodes.isEmpty()) return false;
+        int segmentSize = getEpisodeSegmentSize(episodes.size());
+        int segmentCount = (episodes.size() + segmentSize - 1) / segmentSize;
+        int absolute = referencePosition;
+        if (absolute < 0 || absolute >= episodes.size()) absolute = getSelectedEpisodePosition(episodes);
+        int target = absolute / segmentSize + direction;
+        if (target < 0 || target >= segmentCount) return false;
+        mSegmentAppendGuard = true;
+        try {
+            int arrayPosition = target + 2;
+            selectEpisodeSegmentPosition(arrayPosition);
+            showEpisodeSegment(arrayPosition);
+            int focusIndex = direction > 0 ? 0 : Math.max(0, mEpisodeGridAdapter.getItemCount() - 1);
+            if (episodeGridMode) focusEpisodeGridPosition(focusIndex);
+            else scrollToEpisode(focusIndex);
+            return true;
+        } finally {
+            // 下一帧才放开守卫，吞掉布局期间同一按键派发的重复回调。
+            android.view.View host = episodeGridMode ? mBinding.episodeGrid : mBinding.episode;
+            host.post(() -> mSegmentAppendGuard = false);
+        }
     }
 
     /**
@@ -5322,8 +5525,12 @@ private boolean runtimeSourceOnly;
         hideControl();
         Flag flag = getFlag();
         boolean tmdbCard = flag != null && EpisodeDisplayPolicy.shouldUseTmdbEpisodeCards(isTmdbSourceEnabled(), flag.getEpisodes());
+        boolean forceFirst = mForceEpisodeDialogFirstSegment;
+        mForceEpisodeDialogFirstSegment = false;
         EpisodeListDialog.create().flags(mFlagAdapter.getItems()).tmdbCard(tmdbCard)
                 .fallbackStill(getEpisodeFallbackStillUrl())
+                .startAtFirstSegment(forceFirst)
+                .dismissListener(dialog -> mForceEpisodeDialogFirstSegment = true)
                 .seasons(getEpisodeDialogSeasons(), getEpisodeDialogSeasonCounts()).show(this);
     }
 
@@ -8630,9 +8837,8 @@ private boolean runtimeSourceOnly;
     }
 
     /**
-     * 评分卡片背景。常态保留原有深色玻璃底（0x6610141A）+ 1dp 半透明描边，
-     * 让白/黄文字在明亮剧照上依旧可读；只在获得焦点时换成统一的
-     * 3dp @color/tv_item_focus_ring 圆环，与选集/线路/推荐卡保持同一种“停下”视觉。
+     * 评分卡片背景。常态保留原有深色玻璃底（0x6610141A），去掉常驻描边轮廓；
+     * 只在获得焦点时画统一的焦点白环，与选集/线路/推荐卡保持同一种“停下”视觉。
      */
     private void styleRatingChipBackground(View view, boolean focused) {
         if (view == null) return;
@@ -8641,8 +8847,6 @@ private boolean runtimeSourceOnly;
         background.setCornerRadius(ResUtil.dp2px(8));
         if (focused) {
             background.setStroke(ResUtil.dp2px(TV_ITEM_FOCUS_WIDTH_DP), getColor(R.color.tv_item_focus_ring));
-        } else {
-            background.setStroke(ResUtil.dp2px(1), 0x33FFFFFF);
         }
         view.setBackground(background);
         View label = mBinding.getRoot().findViewById(R.id.tmdbOmdbRatingsLabel);
