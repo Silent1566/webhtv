@@ -2,8 +2,10 @@ package com.fongmi.android.tv.ui.custom;
 
 import android.app.Activity;
 import android.view.GestureDetector;
+import android.view.InputDevice;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
+import android.view.ViewConfiguration;
 
 import androidx.annotation.NonNull;
 
@@ -17,6 +19,7 @@ public class CustomKeyDownVod extends GestureDetector.SimpleOnGestureListener {
     private final GestureDetector detector;
     private final Listener listener;
     private final SeekSession seek;
+    private final HeldKey speedKey = new HeldKey();
     private boolean changeSpeed;
     private boolean full;
 
@@ -40,13 +43,17 @@ public class CustomKeyDownVod extends GestureDetector.SimpleOnGestureListener {
     }
 
     public void releaseSpeed() {
+        speedKey.clear();
         if (!changeSpeed) return;
         changeSpeed = false;
         listener.onSpeedEnd();
     }
 
     public void setFull(boolean full) {
-        if (!full) cancelSeek();
+        if (!full) {
+            cancelSeek();
+            releaseSpeed();
+        }
         this.full = full;
     }
 
@@ -60,7 +67,12 @@ public class CustomKeyDownVod extends GestureDetector.SimpleOnGestureListener {
     }
 
     private void check(KeyEvent event) {
+        if (KeyUtil.isActionDown(event) && !KeyUtil.isUpKey(event) && speedKey.isHeld()) releaseSpeed();
         if (seek.onKey(event)) return;
+        if (KeyUtil.isUpKey(event) && (isHdmi(event) || speedKey.isHeld())) {
+            checkHdmiSpeed(event);
+            return;
+        }
         if (KeyUtil.isActionUp(event) && KeyUtil.isUpKey(event)) {
             if (changeSpeed) listener.onSpeedEnd();
             else listener.onKeyUp();
@@ -72,6 +84,73 @@ public class CustomKeyDownVod extends GestureDetector.SimpleOnGestureListener {
         } else if (!changeSpeed && event.isLongPress() && KeyUtil.isUpKey(event)) {
             listener.onSpeedUp();
             changeSpeed = true;
+        }
+    }
+
+    private void checkHdmiSpeed(KeyEvent event) {
+        if (!isHdmi(event)) return;
+        if (KeyUtil.isActionDown(event) && event.getRepeatCount() == 0) {
+            if (!speedKey.start(event)) return;
+            if (changeSpeed) {
+                changeSpeed = false;
+                listener.onSpeedEnd();
+            }
+        }
+        if (!speedKey.accept(event)) return;
+        if (event.isCanceled()) {
+            releaseSpeed();
+        } else if (KeyUtil.isActionUp(event)) {
+            boolean wasChangingSpeed = changeSpeed;
+            releaseSpeed();
+            if (!wasChangingSpeed) listener.onKeyUp();
+        } else if (KeyUtil.isActionDown(event) && !changeSpeed && (event.isLongPress()
+                || event.getRepeatCount() > 0 && event.getEventTime() - speedKey.eventTime >= ViewConfiguration.getLongPressTimeout())) {
+            changeSpeed = true;
+            listener.onSpeedUp();
+        }
+    }
+
+    private static boolean isHdmi(KeyEvent event) {
+        return event.isFromSource(InputDevice.SOURCE_HDMI);
+    }
+
+    private static final class HeldKey {
+        private int keyCode = KeyEvent.KEYCODE_UNKNOWN;
+        private int deviceId;
+        private int source;
+        private long downTime;
+        private long eventTime;
+        private long lastEventTime;
+        private long lastHdmiTime = Long.MIN_VALUE;
+
+        boolean isHeld() {
+            return keyCode != KeyEvent.KEYCODE_UNKNOWN;
+        }
+
+        void clear() {
+            keyCode = KeyEvent.KEYCODE_UNKNOWN;
+        }
+
+        boolean start(KeyEvent event) {
+            if (isHdmi(event) && event.getEventTime() < lastHdmiTime) return false;
+            keyCode = event.getKeyCode();
+            deviceId = event.getDeviceId();
+            source = event.getSource();
+            downTime = event.getDownTime();
+            eventTime = lastEventTime = event.getEventTime();
+            return true;
+        }
+
+        boolean accept(KeyEvent event) {
+            if (keyCode != event.getKeyCode() || deviceId != event.getDeviceId() || source != event.getSource()) return false;
+            // HdmiCecLocalDevice injects a fresh downTime for every event.
+            if (isHdmi(event)) {
+                if (event.getDownTime() < downTime || event.getEventTime() < lastEventTime) return false;
+                lastHdmiTime = lastEventTime = event.getEventTime();
+            } else if (downTime != event.getDownTime()) {
+                return false;
+            }
+            return true;
         }
     }
 
@@ -98,9 +177,7 @@ public class CustomKeyDownVod extends GestureDetector.SimpleOnGestureListener {
     static final class SeekSession {
         private final SeekListener listener;
         private final Runnable commit = this::commitSeek;
-        private int keyCode = KeyEvent.KEYCODE_UNKNOWN;
-        private int deviceId;
-        private long downTime;
+        private final HeldKey heldKey = new HeldKey();
         private long offset;
         private String session;
         private boolean pending;
@@ -110,7 +187,7 @@ public class CustomKeyDownVod extends GestureDetector.SimpleOnGestureListener {
         }
 
         void cancelSeek() {
-            keyCode = KeyEvent.KEYCODE_UNKNOWN;
+            heldKey.clear();
             cancelPending();
         }
 
@@ -136,12 +213,10 @@ public class CustomKeyDownVod extends GestureDetector.SimpleOnGestureListener {
         private void onDown(KeyEvent event) {
             String current = listener.getSeekSession();
             if (event.getRepeatCount() == 0) {
-                if (pending && !session.equals(current)) cancelSeek();
-                keyCode = event.getKeyCode();
-                deviceId = event.getDeviceId();
-                downTime = event.getDownTime();
+                if (!heldKey.start(event)) return;
+                if (pending && !session.equals(current)) cancelPending();
             }
-            if (!owns(event)) return;
+            if (!heldKey.accept(event)) return;
             if (event.isCanceled()) {
                 cancelSeek();
             } else if (!listener.canSeek() || current == null || PlaybackTrace.NONE.equals(current)) {
@@ -158,12 +233,12 @@ public class CustomKeyDownVod extends GestureDetector.SimpleOnGestureListener {
         }
 
         private void onUp(KeyEvent event) {
-            if (!owns(event)) {
-                // 无配对 DOWN 的按键仍交给监听者判定（VOD/Cast 为 no-op）
-                if (!pending) listener.onSeekUnavailable(event);
+            if (!heldKey.accept(event)) {
+                // Preserve ordinary Live's unpaired release, not stale HDMI input.
+                if (!pending && !isHdmi(event)) listener.onSeekUnavailable(event);
                 return;
             }
-            keyCode = KeyEvent.KEYCODE_UNKNOWN;
+            heldKey.clear();
             if (event.isCanceled()) {
                 cancelSeek();
             } else if (!listener.canSeek()) {
@@ -174,10 +249,6 @@ public class CustomKeyDownVod extends GestureDetector.SimpleOnGestureListener {
             } else {
                 cancelSeek();
             }
-        }
-
-        private boolean owns(KeyEvent event) {
-            return keyCode == event.getKeyCode() && deviceId == event.getDeviceId() && downTime == event.getDownTime();
         }
 
         private void commitSeek() {
