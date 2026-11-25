@@ -170,3 +170,104 @@ bash ./gradlew :app:testLeanbackArm64_v8aDebugUnitTest --tests 'com.fongmi.andro
 新增测试：`CustomKeyDownSeekOwnershipTest.unpairedLiveReleaseStillSwitchesLineWithoutSeek` —— 只发左右 UP、无配对 DOWN 时 `LiveHost` 的 `lefts`/`rights` 各 1 且 `seeks` 为空，再断言 `VodHost` 同输入下 `seeks` 仍为空（VOD 默认 no-op）。
 
 验证状态（2026-11-09，Asia/Shanghai，父代理执行）：`gradlew.bat --console=plain :app:compileMobileArm64_v8aDebugJavaWithJavac :app:testLeanbackArm64_v8aDebugUnitTest --tests <6 类>` → `BUILD SUCCESSFUL in 7m29s`，mobile 与 leanback 主源集及 `compileLeanbackArm64_v8aDebugUnitTestJavaWithJavac` 全部通过；6 类共 80 tests / 0 failures / 0 errors / 0 skipped（`DanmakuApiOwnershipTest` 3、`StrmHttpTest` 19、`TvSeekOwnershipIntegrationTest` 5、`VideoDanmakuOwnershipTest` 22、`CustomKeyDownSeekOwnershipTest` 17、`ProxyResponseCompatibilityTest` 14）。仍未验：设备/真机（实机 seek、直播即时切线路、时移、慢响应弹幕覆盖、mobile 真实消费者）、全量 Gradle 矩阵/`connectedAndroidTest`/APK 打包安装、QuickJS/Python 真桥的 `destroy` 清理与 gzip 端到端播放。
+
+## Issue #582 — HDMI-CEC 输入兼容修复（2026-11-25）
+
+### 授权、基线与边界
+- 用户先要求查看 issue，收到只读诊断后明确回复“开始优化吧”；授权修复该 issue 的快进/快退及临时倍速输入兼容，不授权新增设置、改变倍速/步长、安装设备、推送或调整播放器/原生依赖。
+- guard：ISSUE-582-CEC，quick-fix；分支 dev1，基线 21c925bb2c131ed50fc58594eb66bec491f00cd3。已有 OriginMediaRelay.java、Proxy.java、两个 ProxyChunkedResponsePolicy 文件及 .scratch-goal/ 均为保护路径。
+- 写入范围：CustomKeyDownVod.java、testLeanback 的 CustomKeyDownCecInputTest.java / 必要的 CustomKeyDownSeekOwnershipTest.java、本文件；测试证据限 ignored .codex/task-state/reports/ISSUE-582-CEC/。
+
+### 已确认依据与设计选择
+- Issue：https://github.com/Silent1566/webhtv/issues/582；2026-11-25 经 GitHub API 读取，0 评论。报告 202611081126 可 seek、202611211059 不可 seek，以及长期上键长按误调片头。未取得报告者设备事件轨迹，不宣称已实机复现。
+- 官方源码（A级，访问 2026-11-25）：https://raw.githubusercontent.com/aosp-mirror/platform_frameworks_base/android-14.0.0_r1/services/core/java/com/android/server/hdmi/HdmiCecLocalDevice.java ，固定 tag android-14.0.0_r1（annotated tag object bd9ef6de90a1b726729d939f48dd8e7dbbe27218）。handleUserControlPressed / handleUserControlReleased / injectKeyEvent 为每条事件使用当前 uptime 作为 downTime 和 eventTime，repeat 递增、device=-1、SOURCE_HDMI、FLAG_FROM_SYSTEM，无 FLAG_LONG_PRESS。因此问题模式来自真实平台实现，而非只凭不规范事件猜测。
+- 本地 CustomKeyDownVod.java:126-180 严格匹配 key/device/downTime；:62-74 临时加速仅使用 isLongPress；VideoActivity.java:9253-9263 控制栏优先，:9451-9468 普通上键可聚焦片头，:9168-9179 上键增加片头。
+- 回归来源：dc5f1e60c4f96f88f5183cbf11b50bf97f2c6b65 在旧发布 852d8428d3ea207c86bc1ce18c999ffce8df67ee 与故障发布 bd54443af1156b1a22cc226e17aa7bb44dcab64e 之间加入 seek 所有权；当前仍有相同约束。
+- 方案比较：不改会保留官方 CEC 模式失败；全局删 downTime 校验会退化非 HDMI 输入隔离，拒绝；选择 SOURCE_HDMI 限定的适配，保留同键/设备/初始 DOWN/会话/cancel 和单次延迟提交，普通输入约束不变。
+- HDMI 上键通过同次按住的重复事件与系统 long-press timeout 判断，释放恢复原倍速；独立短按不合并。保持原生 FLAG_LONG_PRESS 路径和用户临时倍速设置；不增加菜单/开关/协议。
+- 研究范围说明：这是既有 App 输入路径的局部兼容修复，无依赖、ABI、解码器、网络或跨模块契约变更，不启动上游合并评估。问题报告、固定平台源码和既有真实输入测试可决定方案；无需论文、benchmark 或无关项目调研，不将此记录称为全领域最佳实践审查。
+
+### 实施与验收
+- [x] 真实 CustomKeyDownVod + App Handler/Looper 的 HDMI downTime 变化和无 LONG_PRESS 重复输入先 RED，再最小实现 GREEN。
+- [x] HDMI 普通左右短按/长按累计/250ms 合并成功；取消、孤立 repeat/UP、错误设备/键/来源、播放会话变更不错误提交。
+- [x] HDMI 上键短按仍只普通导航；到系统长按阈值后仅一次加速，释放恢复，不再额外普通上键；取消/其他键/已有 releaseSpeed 路径清状态；普通遥控器原行为不变。
+- [x] 既有 CustomKeyDownSeekOwnershipTest 与 TvSeekOwnershipIntegrationTest 通过，Leanback Java 编译由测试任务覆盖；不运行 native 或全 ABI 矩阵。
+- [ ] Lead 独立审阅最终差异并运行风险相关回归；记录实际输出后 guard finish 原子提交并创建 annotated recovery tag，不推送。
+- 实机边界：现仅连接 LIO-AN00 手机，不操作其 UI、不安装 APK。Robolectric 可验证官方事件模式，但无法代替报告者电视/盒子 HDMI-CEC 链路验收；交付明确该事实。
+
+### Recovery anchor（实施前）
+目标：修复 #582 的官方 HDMI 输入模式并保留 seek 会话保护；设计/边界已定，TDD 实施待开始。任务计数：implementation run 1/3。当前任务无生产改动。风险：没有问题电视实机轨迹；采用 SOURCE_HDMI 限定适配避免扩大普通输入行为。回滚：完成后 git revert 本任务单一提交，不 reset 或触碰已有 dirty 文件。唯一下一步：在上述源/测试边界执行 TDD 并交回差异和完整证据。
+
+### 实施记录与定向验证（implementation run 1/3）
+- 实际代码只改 CustomKeyDownVod.java，新增 CustomKeyDownCecInputTest.java；既有 ownership 测试未改。私有 HeldKey 复用键/设备/来源及有序事件校验，SOURCE_HDMI 允许每事件变化 downTime；普通输入仍严格 downTime，初始 repeat=0 和播放 session 检查不变。HDMI 上键 repeat 累计 eventTime 到平台阈值后一次加速，释放/取消/其他键/releaseSpeed/退出全屏清状态；seek-only cancellation 不清 speed hold。
+- RED 命令：bash ./gradlew :app:testLeanbackArm64_v8aDebugUnitTest --tests com.fongmi.android.tv.ui.custom.CustomKeyDownCecInputTest --tests com.fongmi.android.tv.ui.custom.CustomKeyDownSeekOwnershipTest --console=plain --offline。源文件未改前 32 tests / 13 assertion failures，全部来自新增 CEC 测试（15/13），原 ownership 17/0；red.log、red-TEST-*.xml。
+- 子代理自查修复了普通 Live 无配对 UP 回退被误抑制，以及 HDMI 持有期间非 HDMI DOWN 混入倍速识别；后者单独 red-source-mix.log 为 1 test / 1 failure。最终同命令 BUILD SUCCESSFUL in 36s；15 CEC + 17 ownership = 32 tests / 0 failures / 0 errors / 0 skipped。证据 green-accepted.log、green-accepted-TEST-*.xml。Lead 已读取真实断言及 XML 核对，不只采信报告。
+- Lead 独立审阅最终生产差异和全部新增行为断言；确认未改 Listener 接口、步长、250ms 提交和 session/cancel 保护，没有视觉变更。
+- Lead 消费者集成首轮因 SDK27 android-all-instrumented-8.1.0-robolectric-4611349-i7 未缓存，MavenArtifactFetcher 在网络读取阻塞（线程栈 lead-integration-threads.txt），尚未执行用例即停止，不算测试通过或失败。直连 Maven Central 下载 120s 仅 14965414/96651178 bytes，归类环境传输问题；切换镜像下载同一 artifact，并以 Maven Central 原始 SHA512 f6b923d67e9165f35592f1baa007f9c25906c2b81b1474ec4e20e2886f5e8bfe2893abaf08b35b8c9d480599620998c65177ef5d0e3b1b5bae89b55dad18e79b 校验后只填用户缓存，不改 SDK/test 注解或构建配置。
+- 所有证据位于 ignored .codex/task-state/reports/ISSUE-582-CEC/；源码差异 final.patch，定向摘要 verification-summary.txt。
+
+### Recovery anchor（Lead 验收中）
+基线和保护路径不变；已实现并完成真实输入 RED/GREEN，Lead 最终差异检查完成，消费者集成因缺失 SDK27 已转为校验后缓存路线。生产和测试改动尚未提交，未操作任何设备。唯一下一步：收集 lead-integration-cached.log 的原定集成结果，成功后补最终计数并 guard finish 提交/标签；若失败只处理直接原因，不跳过门槛。
+
+### Lead 最终验收（2026-11-25，提交前）
+- 官方 SHA512 校验后的 SDK27 运行库缓存完成；原命令只重跑先前环境阻塞、未执行用例的 TvSeekOwnershipIntegrationTest。BUILD SUCCESSFUL in 49s，14 tests / 0 failures / 0 errors / 0 skipped；lead-integration-cached.log、lead-TEST-*.xml。未改用 SDK28、未跳过测试，未改任何测试期望。
+- 最终合计 46 tests（15 HDMI + 17 原输入所有权 + 14 消费者集成），均 0 failures/errors/skipped。Leanback 主源码/测试源码 Java 编译通过，Gradle 既有 deprecation 警告未扩展处理。Lead 审查通过，无未解决的阻塞代码发现。
+- 已路由风险：普通 Live 回退、跨来源误识别在子代理 run1 自查中修复并重验；缺 SDK27 的环境阻塞经校验缓存后解决。无电视/盒子硬件验收与非 SOURCE_HDMI 厂商私有事件模式验证，明确保留为交付边界，不宣称实机修复通过。没有播放器内核、Native、依赖版本或视觉布局变更。
+- 子代理实现总 runs=1/3，Lead 独立验收通过；未重跑已成功且源码未变的 32 输入测试。guard finish 负责最终 scope/protected/whitespace、原子提交和本地 annotated recovery tag，未经授权不推送。
+
+### Recovery anchor（验收完成、待本地闭环）
+目标和自动化验收已完成，3 个任务文件为 CustomKeyDownVod.java、CustomKeyDownCecInputTest.java、本文件。未提交工作已验证；基线 21c925bb2c131ed50fc58594eb66bec491f00cd3，受保护 dirty 路径未归入任务。设备验证未执行。唯一下一步：guard finish 提交并立即标注本地 recovery/ISSUE-582-CEC 标签，随后报告实际提交与标签，不再额外构建或研究。
+
+## Issue #582 — 指定模拟器补充验证（2026-11-25）
+
+- 用户明确指定 192.168.50.3:5555“模拟器验证能验证的场景”，授权该设备调试包更新及测试操作；不授权清数据、卸载、root、刷机、真实 HDMI 链路完成声明或生产行为扩展。
+- 本轮 guard ISSUE-582-CEC-DEVICE，quick-fix；分支 dev1，代码基线 a904628207f4e1fe2a28bbe25b030202df5fe0fd，恢复 tag recovery/ISSUE-582-CEC/20261125203432-a904628207f4。现有 OriginMediaRelay、Proxy、两个 ProxyChunkedResponsePolicy 文件及 .scratch-goal/ 仍保护。
+- 设备探测：ADB device；model LIO-AN00，API28，x86_64，1920x1080，ABI列表含 arm64-v8a，native bridge libnb.so。设备已安装 debuggable com.silent.android.webhtv 和 androidx test instrumentation，原 APK 更新时间 2026-11-24 23:15:29，早于修复。不把型号字符串误当物理手机判据。
+- 允许只新增 app/src/androidTest/java/com/fongmi/android/tv/ui/custom/CustomKeyDownCecDeviceTest.java 并更新本文件；报告、APK备份、日志和截图仅 ignored .codex/task-state/reports/ISSUE-582-CEC-DEVICE/。不改生产代码、manifest、Gradle、依赖或原生库；需要扩界先 hand_back。
+- 验证路线：备份已装 APK身份/签名/必要数据状态；只做 adb install -r 更新、不 clear/uninstall。仅构建 LeanbackArm64_v8a Debug 与 androidTest 包；当前本地已有未提交改动会进入普通构建，交付明确“测试 APK 来自当前工作树”，不冒充独立 release artifact。
+- instrumentation 必须加载目标 APK 的真实 CustomKeyDownVod 和实际 Android KeyEvent/Handler，不复制状态机；构造 SOURCE_HDMI、变化的 per-event downTime、无 LONG_PRESS 标志的 repeat。直接输入组件验证与真实播放页面端到端需分列，不能把记录 Listener 回调声称为播放器 seek/倍速实播。
+- 目标场景：左右短按10s/长按累计/250ms后单次提交；普通遥控输入不回归；上键短按/连续独立短按、无标志长按一次加速及释放恢复、取消/其他键/离全屏/旧session事件清理；视既有页面/本地媒体入口可达性补实际播放页面 smoke，保存同一场景截图或精确数值/日志。
+- 测试保留用户数据和设置；任何临时播放/输入/媒体状态在结束恢复到合理首页。备份 APK可用 adb install -r 恢复，仅需要时执行、不无条件降级。
+- 边界：模拟器不支持验证物理CEC总线、电视固件转发、遥控器时序、电视待机/风扇、真实设备解码/性能。报告每项 PASS/FAIL/BLOCKED 与实证，不承诺所有场景必能跑通。
+
+### Recovery anchor（设备验证开始）
+完成目标：在指定模拟器验证可覆盖的 #582 场景并留可复现 instrumentation 及证据；代码修复已提交。设备实施 runs=1/3，当前测试未写、未安装。唯一下一步：设备执行子代理在上述测试边界完成 APK备份/构建/定向测试及恢复，交回命令、测试计数、截图和未覆盖项。
+
+### 设备验证阻塞与续行（run 1/3，干净 hand_back）
+- 第一次同时构建目标包/测试包，目标 Leanback Debug APK package 完成；androidTest Java 编译因既有 OriginIsolationPlaybackTest.java:464 引用不存在的 R.id.errorText 失败，BUILD FAILED in 2m53s，未安装设备、未执行测试。Lead 核对日志和该精确行，未更改无关测试。
+- 这是边界外旧测试编译问题；不扩大任务去修它。Lead 续用原子代理，批准 ignored 任务目录内 Gradle init script 只选择 CustomKeyDownCecDeviceTest.java 编译成专用测试 APK，再仅运行此类。不得把该隔离构建表述为整个 androidTest 源集可编译；保留原失败证据。目标包复用此次已完成产物，无需重复完整构建。
+- Lead 已审阅测试 lifecycle、真实 KeyEvent/Handler、记录 Listener 和真实 CastActivity/local MP4 两条证据路径，核对 CastAction 实际 class/extra；测试明确区分直接输入回调与页面播放器 seek/speed，不改生产接口。
+- 原目标/测试 APK、证书/哈希及偏好和数据库只读快照已经保存；构建日志、备份和本地 MP4 均在本轮 ignored 证据目录。hand_back 无越界修改，不计失败；同一个 implementation run 1/3 续行。
+- 第二次隔离测试 APK 构建成功（1m43s），但部署前证书检查发现既有 com.silent.android.webhtv.test signer SHA256=95e4b2e7043f82a052bebfe1bd44a4a6df3eb383f2d01688144d60e27cff7e4d，新测试 APK signer=32d245c5deda22a35c7a0b7cbecfc5d0c9eee62d5b56b53a7473467c4cd8df2e。不覆盖、不卸载旧测试包；未启动 instrumentation，干净 hand_back。
+- 主应用旧/新签名相同（32d245c5deda22a35c7a0b7cbecfc5d0c9eee62d5b56b53a7473467c4cd8df2e），install -r 已成功，原数据保留，当前设备保留新 Leanback 测试包版本。原 mobile APK 备份可恢复，不做无授权清数据/降级。
+- Lead 决定使用任务专用 instrumentation applicationId com.silent.android.webhtv.cec582test，在 ignored init script 设置 testApplicationId，仍 target 原 com.silent.android.webhtv、仅选本次测试类。不进行 APK 二进制篡改，不搜索用户私钥，不改 tracked Gradle/Manifest；核对最终 package/target/signer 后安装新 test identity，保留原测试包完全不动。此为本次验证授权内的最小部署适配，继续原子代理 run1/3。
+
+### 初次设备执行结果与 Lead 验收发现
+- 独立测试包部署后，仅执行 CustomKeyDownCecDeviceTest，instrument-1.log 为 OK (10 tests)，24.317s，10个 STATUS_CODE=0，无失败/忽略；shell exit0。Lead 直接读取原始输出核对，非仅采信子代理摘要。
+- 9项直接输入测试加载目标 APK 生产 CustomKeyDownVod、Android KeyEvent/主Looper，以记录 Listener 断言输入回调；不等价于播放器实播。第10项使用未改生产 CastActivity、实际 dispatchKeyEvent、真实本地 MP4/播放器：before=30352ms，preview=31253ms，release后 after=51750ms，speed=1.0/3.0/1.0，short UP currentFocus=MaterialTextView。
+- Lead 逐张审阅六张1920x1080截图：烧录时间码 30.400→31.067→51.733 可证明 seek 前后帧变化；倍速/控制截图只有视频没有可见控件，不能声称截图直接证明3x overlay或控制栏焦点。已退回原子代理加强 real-page 控制 root isShown/globalVisibleRect/焦点是其后代和截图时序证据；若确为生产视觉缺陷则 hand_back，不在测试任务中修生产代码。
+- 数据检查初报：3个SQLite逻辑行摘要相同；tv/tv-wal 字节相同，tv-shm仅运行时锁/索引变化。11个偏好文件除默认偏好 perf_exo_decoder_runtime_v1 自动遥测键外字节一致；不宣称所有文件字节完全相同。Lead 已路由为测试前后只恢复该一个键，精确保留原存在性/类型/值，不覆盖整文件、DB或用户其他键；必要原值文件只放任务cache，不在日志泄露内容。
+- 同一测试文件补 @After 输入释放和 @BeforeClass/@AfterClass 遥测精确恢复，相关改动后仅定向重验受影响场景；初次10/10结果仍保留其对应源版本，不以旧结果替代新改动验证。
+
+### 设备最终验证与 Lead 结论（2026-11-25）
+
+**结果：PASS（可模拟范围）；物理 HDMI-CEC 总线未验。** 本轮不再修改生产代码，仅新增设备测试和本记录。初次完整设备类10/10 PASS（24.317s）；加强真实页面可见性/焦点断言、每测试释放及单键恢复后，仅重跑受影响的真实页面方法1/1 PASS（13.031s）。没有忽略/跳过；不将两次结果说成11个独立场景或最终全类重跑。
+
+| 范围 | 实际覆盖 | 结果/依据 |
+|---|---|---|
+| 真实Android输入组件、记录Listener（9项） | HDMI左右短按+/-10s、约250ms一次提交；长按累计/快速连按；错误键/设备/来源/旧事件/孤立repeat拒绝；取消/session替换/离全屏/canSeek失效；上键短按/独立短按、无LONG_PRESS重复长按一次加速/释放；普通DPAD严格downTime与FLAG_LONG_PRESS | instrument-1.log 前九项PASS；加载目标APK生产输入和真实Looper，但不冒充播放器实播 |
+| 真实播放页面（1项最终加强版） | 原生产CastActivity、本地150s MP4、原播放器和dispatchKeyEvent；HDMI右键累计+20s；上键长按/释放；短UP打开控制栏及焦点 | before=30000ms，preview=30588ms，after=50982ms；speed=1.0→3.0→1.0；focus属于控制栏 |
+| UI可见性 | speed/control/focused-child shown/attached/alpha1/windowFocus/global非空；Lead看最终截图 | speed Rect(936,48-984,96)，control Rect(0,854-1920,1080)，focus Rect(48,902-152,972)；最终控制栏可见刷新焦点和1x |
+| 物理设备链路 | 电视固件、CEC总线、遥控器重复时序、待机/风扇、非SOURCE_HDMI私有模式 | NOT VERIFIED，模拟器不能覆盖 |
+
+- 定向运行：adb -s 192.168.50.3:5555 shell am instrument -w -r -e class com.fongmi.android.tv.ui.custom.CustomKeyDownCecDeviceTest com.silent.android.webhtv.cec582test/androidx.test.runner.AndroidJUnitRunner。最终仅运行同类#zRealPageLocalPlayerSeekBoostAndControlFocus，并通过cecRuntimeBaseline参数读取任务cache内首次原值以恢复一个遥测键；该文件已删除，日常重跑省略参数由测试自行快照。构建/安装/fixture完整步骤见ignored reproduce.sh。
+- 产物：本次工作树LeanbackArm64_v8aDebug基于a904628207f4e1fe2a28bbe25b030202df5fe0fd，含既有受保护本地改动，不是纯净release。target APK SHA256 ec42d34c462363e01eea0a84715c043df51d342e5e09128c9bac7244be55baca；最终专用test APK SHA256 33d2d727309d1f85b73f1af5d29cfc77aed57c2e891521ff9478f4592fa52314。原主包同签名install -r；原test路径/签名/更新时间未变，独立cec582test包用于验证。
+- 证据根：.codex/task-state/reports/ISSUE-582-CEC-DEVICE/。完整REPORT.md和CustomKeyDownCecDeviceTest.patch；初次logs/instrument-1.log；最终logs/instrument-real-page-final.log、logs/final-focused-live-logcat.txt；最终六截图screenshots/final/，结束screenshots/final-home.png；原APK和私有快照只留本地backups，不进Git。Lead读取原始instrument输出、真实数值、测试代码并审阅最终截图；最终聚焦日志FATAL EXCEPTION/AndroidRuntime/ANR计数为0。
+- 首轮截图只有视频帧：未等UI帧，补100/150ms有界主Looper帧时间并增加shown/bounds/焦点后代断言，定向复验通过。没有弱化期望或改生产；速度恢复由真实播放器getter及GONE断言证明，不从瞬时截图推断。真实页面是CastActivity，不扩称VideoActivity/直播/所有引擎硬件验收。
+- 数据精确保留：未clear/uninstall原包、未删库、未覆盖整份偏好。首次播放更新perf_exo_decoder_runtime_v1，已恢复原存在性和值（DATA_RESTORE equality=true）。首页启动后仅site_health与cache_mgmt_inventory_duration_ms诊断键更新；Config42行未增减，仅2条既有行time自动刷新，其余用户列和历史/订阅/收藏/追剧表逻辑内容未变。Lead从前后SQLite快照独立重算确认time-only两行与各表行数相同。shm/wal可有运行字节差异，不宣称全库/偏好字节相同。
+- 诊断/时间差异已对照SiteHealthStore.java:27,42（home协议健康记录）、CacheCenter.java:52-60（scan耗时）、Config.java:473-477和BaseConfig.java:123-131（load成功update时间）归类为正常首页活动元数据，明确保留，不覆盖活动用户库。不是未路由缺陷。
+- Lead独立ADB确认结束时主包HomeActivity前台，version560/5.6.0、lastUpdate2026-11-25 20:56:45，两个instrumentation identity保留，未push。原APK备份支持需要时install -r回退。
+- 发现及处置闭环：旧测试编译错误→隔离构建本类不改无关测试；test签名冲突→独立包名不卸载；截图证据不足→强断言+定向复测；解码遥测漂移→精确恢复；首页诊断/时间漂移→源码确认并保留。无未解决的本任务代码阻塞发现；物理/OEM链路和未实测页面/引擎仍明确未验。
+
+### Recovery anchor（设备验收完成、待本地闭环）
+生产无改动；新增CustomKeyDownCecDeviceTest.java及本文件已由Lead审阅。设备10/10及加强页面1/1有原始证据，真实seek/1→3→1通过；用户数据与原测试包保护完成，正常诊断时间元数据按核实约定保留。一个brief run1/3，多次干净hand_back续行。唯一下一步：guard finish提交测试/记录并立即创建recovery/ISSUE-582-CEC-DEVICE标签，不重复构建测试、不推送。

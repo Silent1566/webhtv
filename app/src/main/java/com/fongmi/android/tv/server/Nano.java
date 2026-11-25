@@ -17,6 +17,7 @@ import com.fongmi.android.tv.server.process.PlaybackProgressApi;
 import com.fongmi.android.tv.server.process.PlaybackRecordApi;
 import com.fongmi.android.tv.server.process.Proxy;
 import com.fongmi.android.tv.server.process.CatMessage;
+import com.fongmi.android.tv.server.process.ConfigImport;
 import com.fongmi.android.tv.server.process.RemoteTrustSetup;
 import com.fongmi.android.tv.server.process.SpiderApi;
 import com.fongmi.android.tv.server.process.VodApi;
@@ -85,8 +86,16 @@ public class Nano extends NanoHTTPD {
     public Response serve(IHTTPSession session) {
         String url = session.getUri().trim();
         Map<String, String> files = new HashMap<>();
+        boolean pcImport = ConfigImport.PATH.equals(url);
+        if (pcImport) {
+            // 限制必须先于通用 parseBody：未知长度、分块或超大请求体不得被读取。
+            ConfigImport.Rejection rejection = ConfigImport.bodyGuard(session.getMethod().name(), session.getHeaders());
+            if (rejection != null) return reject(rejection);
+        }
         if (session.getMethod() == Method.POST && shouldParseBody(url)) parse(session, files);
-        if (shouldLogRequest(url)) SpiderDebug.log("server", "%s %s params=%s", session.getMethod(), url, session.getParms());
+        if (pcImport) SpiderDebug.log("server", "%s %s bodyLength=%s pcMark=%s", session.getMethod(), url,
+                session.getHeaders().get("content-length"), session.getHeaders().containsKey(ConfigImport.PC_HEADER));
+        else if (shouldLogRequest(url)) SpiderDebug.log("server", "%s %s params=%s", session.getMethod(), url, session.getParms());
         if (url.startsWith("/tvbus")) return ok(LiveConfig.getResp());
         if (url.startsWith("/device")) return ok(Device.get().toString());
         // 实验室模板从外部目录下载脚本；未放置离线包时退回内置版本，不覆盖用户脚本。
@@ -96,6 +105,11 @@ public class Nano extends NanoHTTPD {
         }
         for (Process process : process) if (process.isRequest(session, url)) return process.doResponse(session, url, files);
         return getAssets(url.substring(1));
+    }
+
+    private Response reject(ConfigImport.Rejection rejection) {
+        Response.Status status = Response.Status.lookup(rejection.getStatus());
+        return newFixedLengthResponse(status == null ? Response.Status.BAD_REQUEST : status, MIME_PLAINTEXT, rejection.getMessage());
     }
 
     private boolean shouldParseBody(String url) {
