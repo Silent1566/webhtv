@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  日历日格底材：默认 / 选中 / 焦点三态。填充与描边全部取追更页既有语义 token，
+  随明暗主题切换；焦点用 primary_container 打底 + accent 描边，选中只描边，
+  因此“选中”和“焦点”同时存在时仍能分辨，且都不依赖写死色值。
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/webhtv_color_primary_container" />
+            <corners android:radius="@dimen/webhtv_card_radius_default" />
+            <stroke
+                android:width="@dimen/webhtv_focus_ring_width"
+                android:color="@color/following_accent" />
+        </shape>
+    </item>
+
+    <item android:state_selected="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/webhtv_color_surface_container_high" />
+            <corners android:radius="@dimen/webhtv_card_radius_default" />
+            <stroke
+                android:width="@dimen/webhtv_focus_ring_width"
+                android:color="@color/following_accent" />
+        </shape>
+    </item>
+
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/following_card_bg" />
+            <corners android:radius="@dimen/webhtv_card_radius_default" />
+            <stroke
+                android:width="1dp"
+                android:color="@color/following_card_stroke" />
+        </shape>
+    </item>
+</selector>

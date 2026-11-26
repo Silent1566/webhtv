@@ -26,6 +26,9 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.time.Clock;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Collections;
@@ -57,6 +60,35 @@ public class TmdbService {
     private static final long CN_ON_AIR_SEASON_CACHE_TTL = DAY;
     private static final long AUTH_FAILURE_COOLDOWN = TimeUnit.MINUTES.toMillis(5);
     private static final Map<String, Long> AUTH_FAILURE_BLOCKS = new ConcurrentHashMap<>();
+
+    private final File calendarCacheRoot;
+    private final Clock calendarClock;
+
+    public TmdbService() { this(null, Clock.systemUTC()); }
+
+    TmdbService(File cacheRoot, Clock clock) {
+        calendarCacheRoot = cacheRoot; calendarClock = clock;
+    }
+
+    public enum CalendarOrigin { NETWORK, FRESH_CACHE, STALE_CACHE }
+
+    public static final class CalendarSeasonResult {
+        public final JsonObject body;
+        public final CalendarOrigin origin;
+        public final long cachedAtMillis, retryAtMillis;
+        public final String sanitizedError;
+        public CalendarSeasonResult(JsonObject body, CalendarOrigin origin, long cachedAtMillis, String sanitizedError, long retryAtMillis) {
+            this.body = body; this.origin = origin; this.cachedAtMillis = cachedAtMillis;
+            this.sanitizedError = sanitizedError == null ? "" : sanitizedError; this.retryAtMillis = retryAtMillis;
+        }
+    }
+
+    public static final class RateLimitException extends IOException {
+        public final long retryAtMillis;
+        public RateLimitException(long retryAtMillis) {
+            super("TMDB season request failed: HTTP 429"); this.retryAtMillis = retryAtMillis;
+        }
+    }
 
     public static final class AuthException extends IllegalStateException {
 
@@ -216,6 +248,80 @@ public class TmdbService {
                 .addQueryParameter("include_image_language", requestLanguage(config) + ",null")
                 .build();
         return requestJson(url.toString(), config, "season", seasonCacheKey(item, seasonNumber, config), seasonCacheTtl(detail), "TMDB 分季返回为空", "TMDB 分季失败: HTTP ", refresh);
+    }
+
+    public CalendarSeasonResult seasonForCalendar(@NonNull TmdbItem item, int seasonNumber, @NonNull TmdbConfig config, boolean refresh) throws Exception {
+        ensureReady(config);
+        if (item.getTmdbId() <= 0 || !"tv".equalsIgnoreCase(item.getMediaType()) || seasonNumber < 0)
+            throw new IllegalArgumentException("Invalid calendar season identity");
+        HttpUrl url = apiBuilder(config.getApiBase() + "/tv/" + item.getTmdbId() + "/season/" + seasonNumber, config)
+                .addQueryParameter("language", requestLanguage(config))
+                .addQueryParameter("append_to_response", "images,credits,aggregate_credits,translations")
+                .addQueryParameter("include_image_language", requestLanguage(config) + ",null").build();
+        File file = cacheFile("season", seasonCacheKey(item, seasonNumber, config));
+        List<File> files = cacheFiles("season", seasonCacheKey(item, seasonNumber, config), Collections.emptyList(), url.toString());
+        CalendarSeasonResult cached = refresh ? null : calendarCache(files, SEASON_CACHE_TTL, CalendarOrigin.FRESH_CACHE, "", 0);
+        if (cached != null) return cached;
+        try (Response response = execute(url.toString(), config, true)) {
+            if (response.code() == 429) throw new RateLimitException(calendarRetryAt(response.header("Retry-After")));
+            if (!response.isSuccessful()) throw httpFailure(config, response.code(), "TMDB season request failed: HTTP " + response.code());
+            if (response.body() == null) throw new IOException("TMDB season response empty");
+            String body = response.body().string();
+            JsonElement parsed = JsonParser.parseString(body);
+            if (!parsed.isJsonObject()) throw new IOException("TMDB season response invalid");
+            JsonObject object = parsed.getAsJsonObject();
+            if (!object.has("episodes") || !object.get("episodes").isJsonArray()) throw new IOException("TMDB season episodes missing");
+            if (Thread.currentThread().isInterrupted()) throw new CancellationException("TMDB calendar cancelled");
+            writeCache(file, body);
+            long fetchedAt = calendarClock.millis();
+            if (file != null && file.exists()) file.setLastModified(fetchedAt);
+            return new CalendarSeasonResult(object, CalendarOrigin.NETWORK, fetchedAt, "", 0);
+        } catch (CancellationException e) {
+            throw e;
+        } catch (Exception error) {
+            if (Thread.currentThread().isInterrupted()) throw new CancellationException("TMDB calendar cancelled");
+            long retry = error instanceof RateLimitException ? ((RateLimitException) error).retryAtMillis : 0;
+            String sanitized = calendarError(error.getMessage(), config);
+            cached = calendarCache(files, DAY * 30, CalendarOrigin.STALE_CACHE, sanitized, retry);
+            if (cached != null) return cached;
+            if (error instanceof RateLimitException) throw error;
+            throw new IOException(sanitized);
+        }
+    }
+
+    private CalendarSeasonResult calendarCache(List<File> files, long ttl, CalendarOrigin origin, String error, long retry) {
+        for (File file : files) {
+            if (file == null || !file.exists()) continue;
+            long fetchedAt = file.lastModified();
+            long age = calendarClock.millis() - fetchedAt;
+            if (fetchedAt <= 0 || age < 0 || age > ttl) continue;
+            JsonObject object = readCache(file, Long.MAX_VALUE);
+            if (object == null || !object.has("episodes") || !object.get("episodes").isJsonArray()) continue;
+            return new CalendarSeasonResult(object, origin, fetchedAt, error, retry);
+        }
+        return null;
+    }
+
+    private long calendarRetryAt(String header) {
+        long now = calendarClock.millis();
+        if (header != null) {
+            try {
+                long seconds = Long.parseLong(header.trim());
+                if (seconds >= 0) return Math.addExact(now, Math.multiplyExact(Math.max(1, seconds), 1000));
+            } catch (RuntimeException ignored) { }
+            try {
+                long date = ZonedDateTime.parse(header, DateTimeFormatter.RFC_1123_DATE_TIME).toInstant().toEpochMilli();
+                if (date > now) return date;
+            } catch (RuntimeException ignored) { }
+        }
+        return now + TimeUnit.SECONDS.toMillis(60);
+    }
+
+    private String calendarError(String error, TmdbConfig config) {
+        String safe = redactMessage(error);
+        for (String secret : new String[]{config.getApiKey(), config.getAccessToken()})
+            if (secret != null && !secret.isEmpty()) safe = safe.replace(secret, "<redacted>");
+        return safe;
     }
 
     public JsonObject episode(@NonNull TmdbItem item, int seasonNumber, int episodeNumber, @NonNull TmdbConfig config, JsonObject detail) throws Exception {
@@ -748,6 +854,10 @@ public class TmdbService {
     }
 
     private Response execute(String url, TmdbConfig config) throws Exception {
+        return execute(url, config, false);
+    }
+
+    private Response execute(String url, TmdbConfig config, boolean stopOnRateLimit) throws Exception {
         throwIfAuthBlocked(config);
         String currentBase = config.getApiBase();
         List<String> candidates = config.getApiCandidates();
@@ -762,7 +872,7 @@ public class TmdbService {
                 Request.Builder builder = new Request.Builder().url(requestUrl);
                 if (!TextUtils.isEmpty(config.getAccessToken())) builder.header("Authorization", "Bearer " + config.getAccessToken());
                 Response response = com.github.catvod.net.OkHttp.client().newCall(builder.build()).execute();
-                if (response.isSuccessful() || !config.isApiAuto() || response.code() == 401 || response.code() == 403 || candidate.equals(candidates.get(candidates.size() - 1))) {
+                if (response.isSuccessful() || stopOnRateLimit && response.code() == 429 || !config.isApiAuto() || response.code() == 401 || response.code() == 403 || candidate.equals(candidates.get(candidates.size() - 1))) {
                     if (response.isSuccessful() && config.isApiAuto()) {
                         TmdbProxy.RouteSelector.success(TmdbProxy.RouteSelector.Kind.API, candidate,
                                 TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started));
@@ -906,7 +1016,7 @@ public class TmdbService {
 
     private File cacheFile(String type, String key) {
         try {
-            File root = Path.cache();
+            File root = calendarCacheRoot == null ? Path.cache() : calendarCacheRoot;
             if (root == null) return null;
             File dir = new File(root, "tmdb");
             if (!dir.exists()) dir.mkdirs();
