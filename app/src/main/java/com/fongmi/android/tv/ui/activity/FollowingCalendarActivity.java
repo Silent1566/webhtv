@@ -262,12 +262,13 @@ public class FollowingCalendarActivity extends AppCompatActivity
                 grid.cells.get(6).getMonthValue(), grid.cells.get(6).getDayOfMonth())
                 : getString(R.string.following_calendar_month_label, YearMonth.from(anchor).getYear(), YearMonth.from(anchor).getMonthValue()));
         binding.modeGroup.check(mode == Mode.WEEK ? R.id.weekMode : R.id.monthMode);
-        boolean clippedMonth = mode == Mode.MONTH && grid.rows > 2 && getResources().getConfiguration().screenHeightDp < 500;
-        binding.statusLabel.setText(clippedMonth ? getString(R.string.following_calendar_month_scroll) : statusText(snapshot));
-        binding.statusLabel.setVisibility(clippedMonth || snapshot == null || snapshot.loading || snapshot.failedSeasons > 0
+        // 整页只有一个滚动面：日期面板跟着滚走，所以月历可以完整展开 4–6 行，
+        // 不再需要把月切成固定行数、再让日期面板自己滚一层。
+        int maxRows = mode == Mode.WEEK ? 1 : grid.rows;
+        binding.statusLabel.setText(statusText(snapshot));
+        binding.statusLabel.setVisibility(snapshot == null || snapshot.loading || snapshot.failedSeasons > 0
                 || snapshot.retryAtMillis > System.currentTimeMillis() ? View.VISIBLE : View.GONE);
         int rowHeight = Math.round(48 * getResources().getDisplayMetrics().density);
-        int maxRows = getResources().getConfiguration().screenHeightDp < 500 ? 2 : 6;
         ViewGroup.LayoutParams gridParams = binding.grid.getLayoutParams();
         gridParams.height = rowHeight * Math.min(grid.rows, maxRows);
         binding.grid.setLayoutParams(gridParams);
@@ -295,11 +296,6 @@ public class FollowingCalendarActivity extends AppCompatActivity
         boolean hasFollowings = snapshot != null && snapshot.totalSeasons > 0;
         boolean emptyRange = nothing && hasFollowings;
         binding.entries.setVisibility(emptyRange ? View.GONE : View.VISIBLE);
-        android.widget.LinearLayout.LayoutParams noticeParams = (android.widget.LinearLayout.LayoutParams) binding.dayNotice.getLayoutParams();
-        noticeParams.height = emptyRange ? 0 : ViewGroup.LayoutParams.WRAP_CONTENT;
-        noticeParams.weight = emptyRange ? 1 : 0;
-        binding.dayNotice.setGravity(emptyRange ? android.view.Gravity.CENTER : android.view.Gravity.START | android.view.Gravity.CENTER_VERTICAL);
-        binding.dayNotice.setLayoutParams(noticeParams);
         // 空日提示只在加载结束后给出：加载中既不能断言“当天没排期”，也不能把空日当成整月空。
         boolean emptyDay = settled && !nothing && !FollowingCalendarViewModel.hasDaySection(sections, selectedDate);
         binding.empty.setVisibility(nothing && !hasFollowings ? View.VISIBLE : View.GONE);
@@ -322,12 +318,16 @@ public class FollowingCalendarActivity extends AppCompatActivity
         return getString(R.string.following_calendar_status_idle, snapshot.totalSeasons, loaded, snapshot.failedSeasons);
     }
 
+    /** 选中某天后把该日分段滚到视口顶部附近：整页共用一个滚动面，所以滚动的是页面而不是列表。 */
     private void scrollToSelection(int position) {
         ActivityFollowingCalendarBinding target = binding;
         long issued = scrollEpoch;
         target.entries.post(() -> {
             if (!visible || binding != target || issued != scrollEpoch || isFinishing() || isDestroyed()) return;
-            ((GridLayoutManager) target.entries.getLayoutManager()).scrollToPositionWithOffset(position, 0);
+            RecyclerView.ViewHolder holder = target.entries.findViewHolderForAdapterPosition(position);
+            if (holder == null) return;
+            int offset = Math.max(0, target.entries.getTop() + holder.itemView.getTop() - Math.round(8 * getResources().getDisplayMetrics().density));
+            target.scroll.smoothScrollTo(0, offset);
         });
     }
 

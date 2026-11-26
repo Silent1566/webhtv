@@ -95,10 +95,9 @@ public class FollowingCalendarActivityDeviceTest {
                 assertEquals(View.GONE, activity.findViewById(R.id.empty).getVisibility());
                 assertEquals(View.VISIBLE, activity.findViewById(R.id.dayNotice).getVisibility());
                 GridLayoutManager agenda = (GridLayoutManager) entries.getLayoutManager();
-                assertEquals("Agenda starts at its own first section", 0, agenda.findFirstVisibleItemPosition());
-                assertTrue("Agenda has a bounded on-screen viewport", entries.getHeight() > 0
-                        && entries.getHeight() < activity.findViewById(android.R.id.content).getHeight());
-                assertTrue("Page title remains above agenda", activity.findViewById(R.id.pageTitle).isShown());
+                // 日期面板与逐集列表在同一个滚动面里：面板随页滚走，列表才有完整高度。
+                assertTrue("Agenda is laid out inside the page scroll surface", entries.getHeight() > 0);
+                assertTrue("Page title remains above the scrolling surface", activity.findViewById(R.id.pageTitle).isShown());
                 assertEquals(0, entries.getAdapter().getItemViewType(0));
                 assertEquals(2, entries.getAdapter().getItemViewType(1));
                 assertEquals("Local records span the whole agenda", agenda.getSpanCount(), agenda.getSpanSizeLookup().getSpanSize(1));
@@ -160,8 +159,6 @@ public class FollowingCalendarActivityDeviceTest {
                 assertEquals(View.VISIBLE, activity.findViewById(R.id.dayNotice).getVisibility());
                 assertEquals("Selection preserves every local record and header", countBefore[0], entries.getAdapter().getItemCount());
                 assertEquals(0, entries.getAdapter().getItemViewType(0));
-                assertEquals("Empty-day selection does not move the agenda", agendaPosition[0],
-                        ((GridLayoutManager) entries.getLayoutManager()).findFirstVisibleItemPosition());
                 assertTrue("Page header stays visible", activity.findViewById(R.id.pageTitle).isShown());
                 TextView range = activity.findViewById(R.id.rangeLabel);
                 assertFalse(range.getText().toString().isEmpty());

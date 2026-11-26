@@ -216,7 +216,12 @@ public class FollowingCalendarEntryAdapter extends RecyclerView.Adapter<Followin
             default -> "";
         };
         if (label.isEmpty() || cachedAtMillis <= 0) return label;
+        // 缓存日期本身已经说明是缓存，再拼一次「缓存」会读成「缓存 · 缓存 11月26日」。
         LocalDate cachedAt = Instant.ofEpochMilli(cachedAtMillis).atZone(ZoneId.systemDefault()).toLocalDate();
+        if (source == Source.FRESH_CACHE || source == Source.STALE_CACHE) {
+            String dated = context.getString(R.string.following_calendar_cached_at, dayLabel(context, cachedAt, today));
+            return source == Source.STALE_CACHE ? label + " " + dated : dated;
+        }
         return label + " · " + context.getString(R.string.following_calendar_cached_at, dayLabel(context, cachedAt, today));
     }
 

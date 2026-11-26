@@ -335,3 +335,19 @@ void close();  // 释放执行器/页面引用
 - 数据保持：安装前后following表逐字段一致（watched_episode=3、read_watermark=0、notify不变），未清数据。
 - 未验收：leanback实机遥控焦点与TV暗色；竖屏实机截图（仅XML/单元验证）；旋转/跨午夜；androidTest仅编译未在设备执行。以上均未宣称通过。
 - 证据：F:/temp/webhtv-calendar-redesign/{before-5556.png,after-week3-5556.png,after-month3-5556.png,month-day6-selected.png,after-dark-5556.png,build-final*.log,test-*.log,mock-landscape.png,mock-portrait.png}。
+
+## 竖屏可用性修复（2026-11-26 17:44 +08，follow-4-portrait-usability）
+- 用户三项：5556高宽/顶部刘海；月历固定占高导致滚动agenda太小；提示/来源文案挤两行且无须显示TMDB域名。
+- 已查设备硬事实：physical1080x1920/density480、override420，高刘海cutout.emulation.tall enabled，DisplayCutout top144px。Lead关闭tall叠加层，wm density reset原生480，分辨率保持1080x1920，原数据不清。before.png与before-normalized.png保留在F:/temp/webhtv-calendar-portrait-fix。
+- 代码根因：竖屏render maxRows=6、日历固定在weighted agenda之上；页脚长hint+含themoviedb.org按钮横排。采用项目现有Material Coordinator/AppBar联动收起、月grid上限3行但完整月数据可滚、常驻短来源链接（无可见域名）与去工程提示。无产品/数据协议新决策。
+- 基线52176f9118bc1ebbda217eb55d6968a3b1f3277d、dev2干净，guard已启动，scope仅日历展示12文件+本文。允许paths由guard列出，不改Repo/Policy/VM/TMDB/通知/已读/播放。
+- 拓扑：一个紧耦合UI作者calendar-portrait-usability run1/3，Lead处理设备/文档/最终验收build。目标20–30分钟（实现约12–16min；build/install/360x640dp month验收约8–14min），约18:10前收口。
+- 目标反馈：真实Activity360x640dp month初始agenda≥220dp、滑agenda后日期区collapse可恢复、footer无域名且hint不占固定行、caption按层次不乱折行；expectedRED后GREEN与裸22保持。
+- 下一动作：作者final报告后Lead读最终diff与证据，单次build含mobile+TV/test编译，再5556竖屏月视图截图和滑动对比。
+
+- Lead设备复核：overlay移除后DisplayDeviceInfo无cutout，原生1080x1920/480，before-normalized.png顶端黑色刘海与白条已消失；月6行挤压agenda问题仍可复现。数据快照before-db与先前一致（1条、watched3），未清任何数据。显式同app UID --user0可直达非导出Calendar，后续验收不用反复冷启动首页。
+
+- 作者run1/3 ready：7生产文件（Activity行策略+3同构布局+3语言文案），Material AppBarLayout(48dp顶栏+面板scroll|enterAlways)+agenda content behavior，月竖屏3行/短屏2行、完整月内部可滚；真实Activity360x640dp 8/8Green（agenda 248dp vs 修前139），RED 3失败留存，裸mobile 22通过。作者明确未在真机证明collapse（Robolectric scrollRange恒0），Lead进行真机触控验收。
+- Lead实机复验（5556 1080x1920/480=360x640dp，浅色）：顶栏一行不再折行（“刷新”）；页脚只剩“数据来源 TMDB”，hint已隐藏；月历完整4–6行但整页滚动——上滑后日期面板滚走、列表占满视口并可见4–5张卡（此前日历固定、仅露1张半）；行内文案去重为“已看到 E1 · 缓存 11月26日”。
+- 过程中发现并修正两点仅真机可见的问题：1. Material AppBarLayout 收起链未生效（RecyclerView 被普通LinearLayout包住，CoordinatorLayout拿不到nested scroll），改为“固定顶栏+单一滚动面”后行为确定、无动画依赖；2. 中文“刷新排期”在360dp折成两行，缩短为“刷新”并把今天/刷新改wrap_content+maxLines1。
+- 验证：裸mobile 15+7通过、androidTest编译通过；设备数据安装前后逐字段一致（watched=3）。未验收：leanback遥控焦点、横屏land布局实机、暗色竖屏截图。
