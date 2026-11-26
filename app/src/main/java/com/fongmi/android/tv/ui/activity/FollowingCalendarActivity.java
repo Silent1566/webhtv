@@ -23,6 +23,7 @@ import com.fongmi.android.tv.following.Following;
 import com.fongmi.android.tv.following.FollowingCalendarPolicy.CalendarProjection;
 import com.fongmi.android.tv.following.FollowingCalendarPolicy.Entry;
 import com.fongmi.android.tv.following.FollowingCalendarRepository.CalendarSnapshot;
+import com.fongmi.android.tv.following.FollowingSource;
 import com.fongmi.android.tv.following.FollowingStore;
 import com.fongmi.android.tv.model.FollowingCalendarViewModel;
 import com.fongmi.android.tv.model.FollowingCalendarViewModel.Grid;
@@ -30,8 +31,12 @@ import com.fongmi.android.tv.model.FollowingCalendarViewModel.Mode;
 import com.fongmi.android.tv.model.FollowingCalendarViewModel.Section;
 import com.fongmi.android.tv.theme.ThemeController;
 import com.fongmi.android.tv.ui.adapter.FollowingCalendarDayAdapter;
+import com.fongmi.android.tv.bean.History;
+import com.fongmi.android.tv.bean.TmdbItem;
+import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.adapter.FollowingCalendarEntryAdapter;
 import com.fongmi.android.tv.ui.custom.CustomWallView;
+import com.fongmi.android.tv.ui.activity.VideoActivity;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.Task;
 import com.fongmi.android.tv.utils.Util;
@@ -342,11 +347,51 @@ public class FollowingCalendarActivity extends AppCompatActivity
     }
 
     @Override
+    /**
+     * 点某条排期：和追更页的「继续看」走同一条链路——有历史就续播，没有就打开详情页选线路。
+     * 日历本身仍是只读的：它不标已读、不改通知，只负责把用户带到那一集。
+     */
     public void onEntryIdentity(String identityKey) {
-        Intent data = new Intent();
-        data.putExtra(FollowingActivity.EXTRA_IDENTITY_KEY, identityKey);
-        setResult(RESULT_OK, data);
-        finish();
+        if (identityKey == null || identityKey.isEmpty()) return;
+        Task.execute(() -> {
+            Following item = FollowingStore.find(identityKey);
+            if (item == null) return;
+            FollowingStore.reconcile(item);
+            FollowingSource source = FollowingStore.preferredSource(identityKey);
+            History history = FollowingStore.historyFor(item, source);
+            App.post(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                if (history != null) {
+                    VideoActivity.startFromFollowingHistory(this, history);
+                    finish();
+                    return;
+                }
+                FollowingSource target = source != null ? source : fallbackSource(item);
+                if (target == null || target.siteKey == null || target.siteKey.isEmpty()
+                        || target.vodId == null || target.vodId.isEmpty()) {
+                    Notify.show(R.string.following_check_failed);
+                    return;
+                }
+                TmdbItem tmdb = item.tmdbId > 0 ? new TmdbItem(item.tmdbId, item.mediaType, item.vodName,
+                        "", "", item.vodPic, "", "", 0.0) : null;
+                TmdbDetailActivity.start(this, target.siteKey, target.vodId, item.vodName, item.vodPic, "",
+                        tmdb, Setting.getDetailOpenMode());
+                finish();
+            });
+        });
+    }
+
+    /** 没有优先源时退回追更记录本身的站点/条目，和追更页 preferred() 的兜底一致。 */
+    private static FollowingSource fallbackSource(Following item) {
+        FollowingSource target = new FollowingSource();
+        target.followingKey = item.identityKey;
+        target.cid = item.cid;
+        target.siteKey = item.siteKey;
+        target.vodId = item.vodId;
+        target.vodName = item.vodName;
+        target.vodPic = item.vodPic;
+        target.preferred = true;
+        return target;
     }
 
     private void openAttribution() {

@@ -351,3 +351,9 @@ void close();  // 释放执行器/页面引用
 - Lead实机复验（5556 1080x1920/480=360x640dp，浅色）：顶栏一行不再折行（“刷新”）；页脚只剩“数据来源 TMDB”，hint已隐藏；月历完整4–6行但整页滚动——上滑后日期面板滚走、列表占满视口并可见4–5张卡（此前日历固定、仅露1张半）；行内文案去重为“已看到 E1 · 缓存 11月26日”。
 - 过程中发现并修正两点仅真机可见的问题：1. Material AppBarLayout 收起链未生效（RecyclerView 被普通LinearLayout包住，CoordinatorLayout拿不到nested scroll），改为“固定顶栏+单一滚动面”后行为确定、无动画依赖；2. 中文“刷新排期”在360dp折成两行，缩短为“刷新”并把今天/刷新改wrap_content+maxLines1。
 - 验证：裸mobile 15+7通过、androidTest编译通过；设备数据安装前后逐字段一致（watched=3）。未验收：leanback遥控焦点、横屏land布局实机、暗色竖屏截图。
+
+## 点集进入播放/详情 + TV 按钮两字（2026-11-26 19:4x，follow-4-open-episode）
+- 用户反馈：日历里点集数没有进详情/播放，而是退回追更页；应与追更模式一致。改为与 FollowingActivity.onContinue 同链路：有历史续播，无历史打开 TmdbDetailActivity；日历本身仍不写已读/通知/进度。
+- 因此移除 FollowingActivity 中已死的 ActivityResult 回传（calendarLauncher/focusFromCalendar），日历入口改为普通 startActivity；设备测试的点击契约相应改为“点击后离开日历页”。
+- 电视首页「追更」按钮原来拼「· 未读数」，在按钮宽度内被截成「追更…」；改为只显示两字名称，未读数仍在追更页顶部统计里。
+- 实机（leanback arm64，5556）：首页按钮显示「追更」无省略号；日历月视图点「今天是太阳雨」卡片 → 打开 TmdbDetailActivity（截图为“正在加载 TMDB 详情…”）。手机包与电视包均构建通过。

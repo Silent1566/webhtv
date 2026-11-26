@@ -167,12 +167,14 @@ public class FollowingCalendarActivityDeviceTest {
     }
 
     @Test
-    public void recordRowReturnsIdentityAndClosesCalendar() {
-        try (ActivityScenario<FollowingCalendarActivity> scenario = ActivityScenario.launchActivityForResult(intent())) {
+    public void recordRowOpensPlaybackOrDetailAndLeavesCalendar() {
+        // 和追更页「继续看」同一链路：有历史就续播，没有就打开详情。这里只验证点击后日历自行退出，
+        // 不假设设备上一定能起播（样例没有真实站源与历史）。
+        try (ActivityScenario<FollowingCalendarActivity> scenario = ActivityScenario.launch(intent())) {
             assertTrue(await(scenario, activity -> ((RecyclerView) activity.findViewById(R.id.entries)).getAdapter() != null
                     && ((RecyclerView) activity.findViewById(R.id.entries)).getAdapter().getItemCount() >= 2));
             scenario.onActivity(activity -> ((RecyclerView) activity.findViewById(R.id.entries)).scrollToPosition(1));
-            assertTrue("Local record stays reachable in the bounded agenda", await(scenario, activity ->
+            assertTrue("Local record stays reachable in the scrolling surface", await(scenario, activity ->
                     ((RecyclerView) activity.findViewById(R.id.entries)).findViewHolderForAdapterPosition(1) != null));
             scenario.onActivity(activity -> {
                 RecyclerView entries = activity.findViewById(R.id.entries);
@@ -180,11 +182,7 @@ public class FollowingCalendarActivityDeviceTest {
                 assertNotNull("第一条本地记录必须已布局", holder);
                 holder.itemView.findViewById(R.id.entryRow).performClick();
             });
-            android.app.Instrumentation.ActivityResult result = scenario.getResult();
-            assertEquals(Activity.RESULT_OK, result.getResultCode());
-            assertNotNull(result.getResultData());
-            assertEquals("Calendar returns the selected existing identity only", identityKeys.get(0),
-                    result.getResultData().getStringExtra(FollowingActivity.EXTRA_IDENTITY_KEY));
+            assertTrue("点击排期应离开日历页", await(scenario, FollowingCalendarActivity::isFinishing));
         }
     }
 
