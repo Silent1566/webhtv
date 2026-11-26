@@ -86,11 +86,6 @@ public class FollowingActivity extends AppCompatActivity implements FollowingAda
                 pendingNotifyIdentity = null;
                 load();
             });
-    private final ActivityResultLauncher<Intent> calendarLauncher = registerForActivityResult(
-            new ActivityResultContracts.StartActivityForResult(), result -> {
-                if (result.getResultCode() != Activity.RESULT_OK || result.getData() == null) return;
-                focusFromCalendar(result.getData().getStringExtra(EXTRA_IDENTITY_KEY));
-            });
 
     public static Intent intent(Context context, String identityKey) {
         Intent intent = new Intent(context, FollowingActivity.class);
@@ -153,7 +148,8 @@ public class FollowingActivity extends AppCompatActivity implements FollowingAda
             load();
         });
         binding.alistImport.setOnClickListener(view -> showServerImportDialog());
-        binding.calendar.setOnClickListener(view -> calendarLauncher.launch(FollowingCalendarActivity.intent(this)));
+        // 日历里点某集会直接续播或打开详情，不再把身份回传到本页，所以这里只要普通启动。
+        binding.calendar.setOnClickListener(view -> startActivity(FollowingCalendarActivity.intent(this)));
         load();
     }
 
@@ -200,28 +196,6 @@ public class FollowingActivity extends AppCompatActivity implements FollowingAda
                 focusIdentity = null;
             });
         }
-    }
-
-    /**
-     * 日历页只交回身份：仍走本页原有筛选与滚动定位，不新建本页实例、不自动播放、不标已读。
-     * 当前筛选隐藏该条目时只说明原因，不擅自清除筛选。
-     */
-    private void focusFromCalendar(String identityKey) {
-        if (TextUtils.isEmpty(identityKey)) return;
-        Task.execute(() -> {
-            Following item = FollowingStore.find(identityKey);
-            boolean visible = item != null && matchesFilter(item);
-            String title = item == null ? identityKey : item.vodName;
-            App.post(() -> {
-                if (binding == null || isFinishing() || isDestroyed()) return;
-                if (!visible) {
-                    Notify.show(getString(R.string.following_calendar_notice_filtered, title, getString(filterLabel())));
-                    return;
-                }
-                focusIdentity = identityKey;
-                load();
-            });
-        });
     }
 
     private void markAllRead() {
