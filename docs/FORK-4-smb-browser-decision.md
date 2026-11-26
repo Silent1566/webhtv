@@ -71,3 +71,36 @@
 
 1. 是否按 C 的 **P1 范围**（浏览 + 播放 + 凭据，不含收藏/删除/复制/MPV 代理）实施？
 2. 入口默认**关闭**（需用户手动开启）是否可接受？——我推荐默认关闭，避免给所有用户多一个入口。
+
+## 实施记录与实机验证（2026-11-27）
+
+### 本轮两处代码改动（都已单测/构建验证）
+
+1. **主机端口支持**（`SmbUriResolver.endpoint`）：`SmbUriResolver` 本来就在 URI 形态里接受 `host[:port]`，但浏览页把端口写死成 445（`SmbClient.connect(host, 445, …)`、`storageUri(host, 445, …)`）。本轮把"填 `主机:端口`"这条路打通：新增纯函数 `endpoint(String)`，默认 445，非法输入（空主机、空端口、`nas:0`、`nas:70000`、`nas:abc`、`a:1:2`）一律返回 null 并由界面提示 `smb_bad_host`，不猜端口。单测 3 例（默认端口、显式端口、八种非法输入），`SmbUriResolverTest` 共 10/10 通过。
+2. **播放不能因为"没勾记住账号"退回 guest**：`play()` 原来只从 `SmbCredentialStore` 取凭据，于是"浏览用表单里的账号、播放却当访客"——浏览能列目录、点播放必然鉴权失败。改为优先用本次连接的表单凭据，库里存的作为兜底（`private SmbCredential credential`）。
+
+### 用本机临时 SMB 服务做的端到端验证
+
+测试服务是 impacket 的 `smbserver.py`（SMB2、带账号、非 445 端口 1445），共享里放 `top.mkv` 与子目录 `sub/sample.mkv`；模拟器（emulator-5556）连宿主机局域网地址 `192.168.50.3:1445`，用户名 `test`。测完已停服务并删除临时目录。
+
+| 步骤 | 结果 | 证据 |
+|---|---|---|
+| 填 `192.168.50.3:1445` + 共享 + 账号 + 密码 → 连接 | 通过 | 列表显示 `webhtvtest/`、`目录 · sub`、`top.mkv · 2.4 MB` |
+| 进子目录 | 通过 | 面包屑 `webhtvtest/sub`，列出 `sample.mkv · 2.4 MB` |
+| 点击视频起播 | **播放失败** | 见下 |
+| 未勾"记住账号"时也能鉴权打开文件 | 通过 | 失败点在第一次 READ（`SmbDataSource.read`），不是登录/打开——若退回 guest 会在 session setup 就失败 |
+
+**播放失败的真实原因**：`com.hierynomus.smbj.common.SMBRuntimeException: … TransportException: Unable to deserialize SMB2 Packet Data`，即 **smbj 与 impacket 测试服务在 SMB2 报文上不兼容**，第一次 READ 就炸。这不是鉴权失败（文件已打开），也不是我们的数据源接错（栈里明确走到 `androidx.media3.datasource.SmbDataSource.read`）。impacket 的 smbserver 是简化实现，真机 NAS（Samba/Windows）不会走这条路径。
+
+### 仍未验（需要一台真实 NAS 或 Samba）
+
+- **SMB 起播与拖进度**：本轮只验到"列目录 + 鉴权打开文件"，读数据这一步被测试服务的协议实现卡住。最小补验：同一台设备连真实 NAS → 进子目录 → 点视频 → 能起播并拖动进度。
+- 收藏/最近使用、删除/复制（P2 范围外，未做）。
+
+### 复现方式（下次换真实服务时照抄）
+
+```
+python -m venv <venv> && <venv>/Scripts/python -m pip install impacket
+<venv>/Scripts/smbserver.py webhtvtest <shareDir> -smb2support -username test -password <pw> -port 1445
+```
+把 `<shareDir>` 指向含测试视频的目录，App 里主机填 `<宿主机 IP>:1445`、共享名 `webhtvtest`。445 端口在本机被 Windows 自带 SMB 占用，绑定会报 `WinError 10013`，所以必须用非标准端口——这正是本轮补端口支持的由来。

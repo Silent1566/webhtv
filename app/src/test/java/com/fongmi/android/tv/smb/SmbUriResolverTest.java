@@ -66,6 +66,34 @@ public class SmbUriResolverTest {
     }
 
     @Test
+    public void endpointDefaultsToTheStandardPort() {
+        SmbUriResolver.Endpoint plain = SmbUriResolver.endpoint(" nas.local ");
+        assertEquals("nas.local", plain.host);
+        assertEquals(445, plain.port);
+        assertEquals(445, SmbUriResolver.endpoint("nas.local:445").port);
+    }
+
+    @Test
+    public void endpointAcceptsAnExplicitPort() {
+        SmbUriResolver.Endpoint explicit = SmbUriResolver.endpoint("10.0.2.2:1445");
+        assertEquals("10.0.2.2", explicit.host);
+        assertEquals(1445, explicit.port);
+        assertEquals(65535, SmbUriResolver.endpoint("nas.local:65535").port);
+    }
+
+    @Test
+    public void endpointRejectsMalformedInput() {
+        assertNull(SmbUriResolver.endpoint(null));
+        assertNull(SmbUriResolver.endpoint("   "));
+        assertNull(SmbUriResolver.endpoint(":1445"));
+        assertNull(SmbUriResolver.endpoint("nas.local:"));
+        assertNull(SmbUriResolver.endpoint("nas.local:0"));
+        assertNull(SmbUriResolver.endpoint("nas.local:70000"));
+        assertNull(SmbUriResolver.endpoint("nas.local:abc"));
+        assertNull(SmbUriResolver.endpoint("nas.local:1:2"));
+    }
+
+    @Test
     public void authPartsRoundTripThroughPlaybackUri() {
         String playback = SmbUriResolver.playbackUri("smb://nas.local/media/x.mkv", "us er", "p w", "WORKGROUP");
         assertEquals("us er", SmbUriResolver.username(playback));

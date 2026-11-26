@@ -54,7 +54,10 @@ public class SmbBrowserActivity extends AppCompatActivity {
     @Nullable
     private SmbClient client;
     private String host = "";
+    private int port = 445;
     private String share = "";
+    /** 本次连接实际使用的凭据：未勾选“记住账号”时播放也必须用它，否则会退回 guest。 */
+    private SmbCredential credential;
     private String dir = "";
     private boolean busy;
 
@@ -94,13 +97,19 @@ public class SmbBrowserActivity extends AppCompatActivity {
             status(getString(R.string.smb_need_host_share));
             return;
         }
-        host = nextHost;
+        SmbUriResolver.Endpoint endpoint = SmbUriResolver.endpoint(nextHost);
+        if (endpoint == null) {
+            status(getString(R.string.smb_bad_host));
+            return;
+        }
+        host = endpoint.host;
+        port = endpoint.port;
         share = SmbPath.share(nextSharePath);
         dir = "";
-        Prefers.put("smb_last_host", host);
+        Prefers.put("smb_last_host", nextHost);
         Prefers.put("smb_last_share", share);
         Prefers.put("smb_last_user", user);
-        SmbCredential credential = user.isEmpty() ? null : SmbCredential.of(user, password, "");
+        credential = user.isEmpty() ? null : SmbCredential.of(user, password, "");
         boolean remember = binding.remember.isChecked() && credential != null;
         setBusy(true);
         status(getString(R.string.smb_connecting));
@@ -109,7 +118,7 @@ public class SmbBrowserActivity extends AppCompatActivity {
             String error = null;
             try {
                 closeClient();
-                client = SmbClient.connect(host, 445, credential, TIMEOUT_MS);
+                client = SmbClient.connect(host, port, credential, TIMEOUT_MS);
                 result = client.listDir(share, dir, TIMEOUT_MS);
             } catch (IOException e) {
                 error = message(e);
@@ -177,14 +186,14 @@ public class SmbBrowserActivity extends AppCompatActivity {
     }
 
     private void play(SmbClient.Entry entry) {
-        String storage = SmbUriResolver.storageUri(host, 445, share, entry.path);
+        String storage = SmbUriResolver.storageUri(host, port, share, entry.path);
         if (storage == null) {
             toast(getString(R.string.smb_play_failed, entry.name));
             return;
         }
-        SmbCredential credential = SmbCredentialStore.get(SmbUriResolver.hostKey(host, share));
-        String playback = SmbUriResolver.playbackUri(storage, credential == null ? "" : credential.username,
-                credential == null ? "" : credential.password, "");
+        SmbCredential auth = credential != null ? credential : SmbCredentialStore.get(SmbUriResolver.hostKey(host, share));
+        String playback = SmbUriResolver.playbackUri(storage, auth == null ? "" : auth.username,
+                auth == null ? "" : auth.password, "");
         if (playback == null) {
             toast(getString(R.string.smb_play_failed, entry.name));
             return;

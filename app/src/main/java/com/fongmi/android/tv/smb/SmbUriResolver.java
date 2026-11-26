@@ -22,6 +22,42 @@ public final class SmbUriResolver {
     private SmbUriResolver() {
     }
 
+    /** 用户输入的主机端点：{@code host[:port]}，端口缺省 445。 */
+    public static final class Endpoint {
+
+        public final String host;
+        public final int port;
+
+        private Endpoint(String host, int port) {
+            this.host = host;
+            this.port = port;
+        }
+    }
+
+    /**
+     * 解析浏览页输入的主机端点；非法输入返回 null（由界面提示，不猜一个端口出来）。
+     *
+     * <p>只支持 {@code 主机} 与 {@code 主机:端口} 两种形态；{@code [::1]} 这类 IPv6 字面量不在支持范围。
+     */
+    public static Endpoint endpoint(String raw) {
+        String value = trim(raw);
+        if (value.isEmpty()) return null;
+        int colon = value.indexOf(':');
+        if (colon < 0) return new Endpoint(value, DEFAULT_PORT);
+        String host = trim(value.substring(0, colon));
+        String portText = trim(value.substring(colon + 1));
+        if (host.isEmpty() || portText.isEmpty() || portText.indexOf(':') >= 0) return null;
+        for (int i = 0; i < portText.length(); i++) if (!Character.isDigit(portText.charAt(i))) return null;
+        int port;
+        try {
+            port = Integer.parseInt(portText);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+        if (port <= 0 || port > 65535) return null;
+        return new Endpoint(host, port);
+    }
+
     /** 生成可落库的无凭据 URI；host 与共享名缺失时返回 null。 */
     public static String storageUri(String host, int port, String share, String path) {
         String hostPart = trim(host);

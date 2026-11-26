@@ -13,6 +13,7 @@
     <string name="smb_up">上一级</string>
     <string name="smb_root">共享根目录</string>
     <string name="smb_connecting">正在连接…</string>
+    <string name="smb_bad_host">主机格式不对：填“主机”或“主机:端口”（端口 1-65535）</string>
     <string name="smb_need_host_share">请填写主机与共享名</string>
     <string name="smb_empty_dir">这个目录是空的</string>
     <string name="smb_credential_saved">账号已加密保存</string>
