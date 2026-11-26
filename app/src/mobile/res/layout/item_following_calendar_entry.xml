@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  日历列表行：同一布局承载「日期分段标题」「集行」「本地记录行」三类内容，
-  未使用的部分由绑定层隐藏，因此两个 flavor 只需一个 item 布局与一套 id。
+  日历列表行：同一布局承载「日期分段标题」「集行」「本地记录行」，未用部分由绑定层隐藏。
+  集行不再整块铺灰卡：海报 + 标题 + 集信息 + 状态四层靠间距分组，焦点/按下才上底色。
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
@@ -12,8 +12,8 @@
         android:id="@+id/entryHeader"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:layout_marginBottom="6dp"
+        android:layout_marginTop="18dp"
+        android:layout_marginBottom="2dp"
         android:ellipsize="end"
         android:maxLines="2"
         android:textColor="@color/following_text_primary"
@@ -25,19 +25,24 @@
         android:id="@+id/entryRow"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@drawable/following_calendar_day_bg"
+        android:layout_marginTop="2dp"
+        android:background="@drawable/following_calendar_entry_bg"
         android:clickable="true"
         android:focusable="true"
         android:gravity="center_vertical"
-        android:minHeight="56dp"
+        android:minHeight="52dp"
         android:orientation="horizontal"
-        android:padding="8dp"
+        android:paddingStart="6dp"
+        android:paddingTop="7dp"
+        android:paddingEnd="6dp"
+        android:paddingBottom="7dp"
         android:visibility="gone">
 
         <ImageView
             android:id="@+id/entryPoster"
-            android:layout_width="36dp"
-            android:layout_height="50dp"
+            android:layout_width="34dp"
+            android:layout_height="46dp"
+            android:background="@color/following_card_stroke"
             android:contentDescription="@null"
             android:importantForAccessibility="no"
             android:scaleType="centerCrop" />
@@ -45,7 +50,7 @@
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="10dp"
+            android:layout_marginStart="11dp"
             android:layout_weight="1"
             android:orientation="vertical">
 
@@ -63,9 +68,9 @@
                 android:id="@+id/entryMeta"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
+                android:layout_marginTop="1dp"
                 android:ellipsize="end"
-                android:maxLines="2"
+                android:maxLines="1"
                 android:textColor="@color/following_text_secondary"
                 android:textSize="12sp" />
 
@@ -73,9 +78,11 @@
                 android:id="@+id/entryStatus"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="3dp"
+                android:layout_marginTop="2dp"
+                android:ellipsize="end"
+                android:maxLines="1"
                 android:textColor="@color/following_text_secondary"
-                android:textSize="12sp" />
+                android:textSize="11sp" />
         </LinearLayout>
     </LinearLayout>
 </LinearLayout>

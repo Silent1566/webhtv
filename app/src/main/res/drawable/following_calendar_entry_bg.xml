@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 集行底材：默认透明（靠留白分隔），焦点/按下时给一层浅主色，不做整行灰卡。 -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/webhtv_color_primary_container" />
+            <corners android:radius="@dimen/webhtv_card_radius_default" />
+            <stroke android:width="@dimen/webhtv_focus_ring_width" android:color="@color/following_accent" />
+        </shape>
+    </item>
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/webhtv_color_surface_container" />
+            <corners android:radius="@dimen/webhtv_card_radius_default" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@android:color/transparent" />
+        </shape>
+    </item>
+</selector>

@@ -1,22 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 日历日格：日期 + 当天排期集数，最小 48dp 触控/焦点目标。 -->
+<!--
+  日历日格：只有日期数字与当天排期数两个元素。默认无底无边，靠留白成组；
+  今天用实心主色底（today_bg），选中用浅底 + 主色描边，焦点由 day_bg 的 focused 态给出。
+  最小 44dp 触控目标由 minHeight/minWidth 保证，可见标记比点击区域小。
+-->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/dayCell"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_margin="2dp"
+    android:layout_margin="1dp"
     android:background="@drawable/following_calendar_day_bg"
     android:clickable="true"
     android:focusable="true"
-    android:minHeight="48dp"
-    android:paddingStart="4dp"
-    android:paddingTop="6dp"
-    android:paddingEnd="4dp"
-    android:paddingBottom="6dp">
+    android:minHeight="44dp"
+    android:paddingTop="5dp"
+    android:paddingBottom="5dp">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_gravity="center"
         android:gravity="center"
         android:orientation="vertical">
 
@@ -26,14 +29,16 @@
             android:layout_height="wrap_content"
             android:includeFontPadding="false"
             android:textColor="@color/following_text_primary"
-            android:textSize="14sp" />
+            android:textSize="15sp" />
 
         <TextView
             android:id="@+id/dayCount"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginTop="1dp"
             android:includeFontPadding="false"
             android:textColor="@color/following_text_secondary"
-            android:textSize="10sp" />
+            android:textSize="10sp"
+            android:textStyle="bold" />
     </LinearLayout>
 </FrameLayout>

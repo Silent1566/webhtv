@@ -67,7 +67,7 @@ public class FollowingCalendarActivity extends AppCompatActivity
     private FollowingCalendarEntryAdapter entryAdapter;
     private boolean visible;
     private int loadEpoch;
-    private Mode mode = Mode.MONTH;
+    private Mode mode = Mode.WEEK;
     private LocalDate selectedDate;
     private LocalDate anchor;
     private boolean scrollPending;
@@ -106,7 +106,8 @@ public class FollowingCalendarActivity extends AppCompatActivity
 
     private void restoreState(Bundle state) {
         LocalDate today = viewModel.today();
-        mode = state != null && Mode.WEEK.name().equals(state.getString(STATE_MODE)) ? Mode.WEEK : Mode.MONTH;
+        // 日历的主任务是「这周看什么」，默认周视图；用户切到月视图后按状态恢复。
+        mode = state != null && Mode.MONTH.name().equals(state.getString(STATE_MODE)) ? Mode.MONTH : Mode.WEEK;
         selectedDate = parse(state == null ? null : state.getString(STATE_SELECTED), today);
         anchor = parse(state == null ? null : state.getString(STATE_ANCHOR), selectedDate);
         scrollPending = false;
@@ -250,7 +251,7 @@ public class FollowingCalendarActivity extends AppCompatActivity
         Grid grid = currentGrid();
 
         binding.rangeLabel.setText(mode == Mode.WEEK
-                ? getString(R.string.following_calendar_week_label, grid.cells.get(0).getMonthValue(), grid.cells.get(0).getDayOfMonth(),
+                ? getString(R.string.following_calendar_week_range, grid.cells.get(0).getMonthValue(), grid.cells.get(0).getDayOfMonth(),
                 grid.cells.get(6).getMonthValue(), grid.cells.get(6).getDayOfMonth())
                 : getString(R.string.following_calendar_month_label, YearMonth.from(anchor).getYear(), YearMonth.from(anchor).getMonthValue()));
         binding.modeGroup.check(mode == Mode.WEEK ? R.id.weekMode : R.id.monthMode);
@@ -274,10 +275,17 @@ public class FollowingCalendarActivity extends AppCompatActivity
 
         boolean settled = snapshot != null && !snapshot.loading;
         boolean nothing = sections.isEmpty() && settled;
+        // 「没有任何追更」和「这一周/这月没有排期」是两件事：前者要求用户先去加追更，
+        // 后者只需要他换个范围看，用同一句话会把已有追更的用户误导成配置丢了。
+        boolean hasFollowings = snapshot != null && snapshot.totalSeasons > 0;
+        boolean emptyRange = nothing && hasFollowings;
         // 空日提示只在加载结束后给出：加载中既不能断言“当天没排期”，也不能把空日当成整月空。
         boolean emptyDay = settled && !nothing && !FollowingCalendarViewModel.hasDaySection(sections, selectedDate);
-        binding.empty.setVisibility(nothing ? View.VISIBLE : View.GONE);
-        binding.dayNotice.setVisibility(emptyDay ? View.VISIBLE : View.GONE);
+        binding.empty.setVisibility(nothing && !hasFollowings ? View.VISIBLE : View.GONE);
+        binding.dayNotice.setVisibility(emptyDay || emptyRange ? View.VISIBLE : View.GONE);
+        binding.dayNotice.setText(emptyRange
+                ? getString(mode == Mode.WEEK ? R.string.following_calendar_empty_week : R.string.following_calendar_empty_month)
+                : getString(R.string.following_calendar_empty_day));
         int position = entryAdapter.indexOfDay(selectedDate);
         if (FollowingCalendarViewModel.shouldScrollToSection(scrollPending, position)) scrollToSelection(position);
         scrollPending = false;

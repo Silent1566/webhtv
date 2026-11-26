@@ -3,6 +3,7 @@ package com.fongmi.android.tv.ui.adapter;
 import android.content.Context;
 import android.graphics.Typeface;
 import android.view.LayoutInflater;
+import android.view.View;
 import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
@@ -75,12 +76,19 @@ public class FollowingCalendarDayAdapter extends RecyclerView.Adapter<FollowingC
         Cell cell = cells.get(position);
         Context context = holder.itemView.getContext();
         holder.binding.dayCell.setSelected(cell.selected);
+        // 今天用实心主色块承担锚点，选中用浅底描边；两者都不是「有排期」的暗示，排期只由下方的
+        // 集数数字表达，避免把视觉重量和平凡的空日期混为一谈。
+        holder.binding.dayCell.setBackgroundResource(cell.today
+                ? R.drawable.following_calendar_today_bg : R.drawable.following_calendar_day_bg);
         holder.binding.dayNumber.setText(String.valueOf(cell.day.getDayOfMonth()));
-        holder.binding.dayNumber.setTextColor(context.getColor(cell.today ? R.color.following_accent
+        holder.binding.dayNumber.setTextColor(context.getColor(cell.selected ? R.color.webhtv_color_on_primary_container
+                : cell.today ? R.color.webhtv_color_on_primary
                 : cell.outOfMonth ? R.color.following_text_secondary : R.color.following_text_primary));
-        holder.binding.dayNumber.setTypeface(null, cell.today ? Typeface.BOLD : Typeface.NORMAL);
+        holder.binding.dayNumber.setTypeface(null, cell.today || cell.selected ? Typeface.BOLD : Typeface.NORMAL);
+        holder.binding.dayCount.setVisibility(cell.count > 0 ? View.VISIBLE : View.INVISIBLE);
         holder.binding.dayCount.setText(cell.count > 0 ? String.valueOf(cell.count) : "");
-        holder.binding.dayCount.setTextColor(context.getColor(cell.today ? R.color.following_accent : R.color.following_text_secondary));
+        holder.binding.dayCount.setTextColor(context.getColor(cell.today && !cell.selected
+                ? R.color.webhtv_color_on_primary : R.color.following_accent));
         holder.binding.dayCell.setContentDescription(context.getString(R.string.following_calendar_day_desc,
                 FollowingCalendarEntryAdapter.dayLabel(context, cell.day, today == null ? cell.day : today), cell.count));
         holder.binding.dayCell.setOnClickListener(view -> {

@@ -98,23 +98,27 @@ public class FollowingCalendarActivityDeviceTest {
     }
 
     @Test
-    public void weekModeShowsSevenCellsAndMonthModeRestoresWholeWeeks() {
+    public void weekIsDefaultAndMonthModeRestoresWholeWeeks() {
         try (ActivityScenario<FollowingCalendarActivity> scenario = ActivityScenario.launch(intent())) {
-            assertTrue(await(scenario, activity -> activity.findViewById(R.id.grid) != null
-                    && ((RecyclerView) activity.findViewById(R.id.grid)).getAdapter() != null));
-            scenario.onActivity(activity -> activity.findViewById(R.id.weekMode).performClick());
-            assertTrue(await(scenario, activity -> ((RecyclerView) activity.findViewById(R.id.grid)).getAdapter().getItemCount() == 7));
+            assertTrue("日历默认停在周视图", await(scenario, activity -> activity.findViewById(R.id.grid) != null
+                    && ((RecyclerView) activity.findViewById(R.id.grid)).getAdapter() != null
+                    && ((RecyclerView) activity.findViewById(R.id.grid)).getAdapter().getItemCount() == 7));
             scenario.onActivity(activity -> activity.findViewById(R.id.monthMode).performClick());
             assertTrue(await(scenario, activity -> {
                 int count = ((RecyclerView) activity.findViewById(R.id.grid)).getAdapter().getItemCount();
                 return count >= 28 && count % 7 == 0;
             }));
+            scenario.onActivity(activity -> activity.findViewById(R.id.weekMode).performClick());
+            assertTrue(await(scenario, activity -> ((RecyclerView) activity.findViewById(R.id.grid)).getAdapter().getItemCount() == 7));
         }
     }
 
     @Test
     public void selectingADayMovesSelectionWithoutHidingOtherSections() {
         try (ActivityScenario<FollowingCalendarActivity> scenario = ActivityScenario.launch(intent())) {
+            assertTrue(await(scenario, activity -> ((RecyclerView) activity.findViewById(R.id.grid)).getAdapter() != null));
+            // 默认是周视图，逐日选格在月视图里验证（同屏 4–6 行、位置 9 必然存在）。
+            scenario.onActivity(activity -> activity.findViewById(R.id.monthMode).performClick());
             assertTrue(await(scenario, activity -> ((RecyclerView) activity.findViewById(R.id.grid)).getAdapter() != null
                     && ((RecyclerView) activity.findViewById(R.id.grid)).getAdapter().getItemCount() >= 28));
             int[] target = new int[1];

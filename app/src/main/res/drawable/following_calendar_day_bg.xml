@@ -1,38 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  日历日格底材：默认 / 选中 / 焦点三态。填充与描边全部取追更页既有语义 token，
-  随明暗主题切换；焦点用 primary_container 打底 + accent 描边，选中只描边，
-  因此“选中”和“焦点”同时存在时仍能分辨，且都不依赖写死色值。
+  日历日格底材：默认不留边不留底，让整片日历靠留白分组而不是 35 个灰块。
+  焦点态（电视/键盘）用 primary_container 打底 + 焦点环；选中态用同色打底 + 主色描边，
+  与「今天」的实心主色底区分开——三者叠在一起时仍能分辨谁是谁。
 -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-
     <item android:state_focused="true">
         <shape android:shape="rectangle">
             <solid android:color="@color/webhtv_color_primary_container" />
             <corners android:radius="@dimen/webhtv_card_radius_default" />
-            <stroke
-                android:width="@dimen/webhtv_focus_ring_width"
-                android:color="@color/following_accent" />
+            <stroke android:width="@dimen/webhtv_focus_ring_width" android:color="@color/following_accent" />
         </shape>
     </item>
-
     <item android:state_selected="true">
         <shape android:shape="rectangle">
-            <solid android:color="@color/webhtv_color_surface_container_high" />
+            <solid android:color="@color/webhtv_color_primary_container" />
             <corners android:radius="@dimen/webhtv_card_radius_default" />
-            <stroke
-                android:width="@dimen/webhtv_focus_ring_width"
-                android:color="@color/following_accent" />
+            <stroke android:width="@dimen/webhtv_focus_ring_width" android:color="@color/following_accent" />
         </shape>
     </item>
-
     <item>
         <shape android:shape="rectangle">
-            <solid android:color="@color/following_card_bg" />
+            <solid android:color="@android:color/transparent" />
             <corners android:radius="@dimen/webhtv_card_radius_default" />
-            <stroke
-                android:width="1dp"
-                android:color="@color/following_card_stroke" />
         </shape>
     </item>
 </selector>
