@@ -38,8 +38,22 @@
 - 构建：`:app:assembleMobileArm64_v8aDebug` BUILD SUCCESSFUL 2m36s，产出 `app/build/outputs/apk/mobileArm64_v8a/debug/app-mobile-arm64_v8a-debug.apk`。
 - 设备冒烟（emulator-5556，1920x1080）：新包安装成功（versionName 5.6.0），冷启动进入首页无崩溃，点开影片进入 `TmdbDetailActivity` 无崩溃。截图 `F:/temp/vp_before.png`（旧包首页）、`vp_after_home2.png`（新包首页）、`vp_detail.png`（新包详情页）。
 
-## 未验范围（必须显式保留）
+## 设备实测（2026-11-26 22:00–22:08，emulator-5556 竖屏 1080x1920）
 
-- **竖屏上下滑切集本身未在设备上验证**：本机两个可用模拟器都是 1920x1080 横屏面板（`wm size` 均为横向，`user_rotation=1` 不生效），无法构造 `isFullscreen() && player().isPortrait()` 的竖屏全屏短剧会话；这一状态同时受 TMDB 网络加载影响。
-- 因此本次验收边界是：判定逻辑有单测、整包能编译安装运行、既有页面不回归；**手势在真机竖屏的表现（跟手性、回弹、与亮度/音量/进度手势的冲突）仍待竖屏设备补验**。
-- 若要收敛剩余风险，最小补验路径：竖屏手机 → 竖屏短剧全屏播到第 2 集以上 → 上滑/下滑各 3 次，确认切集、回弹、左右侧亮度音量仍生效、横滑进度不变形。
+场景：竖屏短剧《别触逆鳞》，`VideoActivity` 前台，`player().isPortrait()=true`，全屏。
+
+| 用例 | 期望 | 实测 | 证据 |
+|---|---|---|---|
+| 正中上滑 | 切下一集 | 通过：第1集→第2集 | 截图 `F:/temp/vp_now.png`(第1集) / `vp_up.png`(第2集)；日志 `down rawX=540.0 width=1080 armed=true` + `settle dragY=-745.6 velocity=-992.6 threshold=240.0 commit=true` |
+| 正中下滑 | 切上一集 | 通过：第2集→第1集 | 截图 `vp_down.png`(第1集) |
+| 侧边四分之一滑（x=80） | 不换集 | 通过 | 日志 `down rawX=80.0 width=1080 armed=false`，无 settle |
+| 40px 快速小幅拖动 | 回弹不换集 | 通过 | 日志 `down rawX=540.0 armed=true` + `settle dragY=-29.3 velocity=0.0 commit=false` |
+| 稳定性 | 无崩溃 | 通过 | `logcat -b crash` 全程无 `FATAL EXCEPTION` |
+
+**过程中的一次自我纠错（值得留档）**：早前"侧边滑也换集"看起来像门控失效，实际是两层原因叠加——(1) 控制层显示时事件被其吞掉，我的 handler 根本没收到；(2) 那些集数变化是短剧**自动续播**（每个片段 1:26–2:05，而测试跨度约 8 分钟）。加日志后同一手势得到 `armed=false`，证明门控正确。为避免再误判，`VerticalPageSwitcher` 保留 DEBUG 级 `TV-vpage` 日志（与本仓既有 `TV-playback-progress` 同类），记录 rawX/width/armed 与 dragY/velocity/threshold/commit。
+
+## 未验范围（仍然保留）
+
+- **MPV 内核路径未验**：实测播放走默认内核；若用户切到 MPV，竖屏短剧的同一手势未单独验证（代码路径相同，但内核切换会重建播放页）。
+- **横滑进度、双击、亮度/音量手势未被本轮的自动化输入覆盖**：只验证了"侧边竖向滑动不触发换集"，未逐项回归其余手势。补验路径同前：竖屏手机 → 短剧播到第 2 集以上 → 上/下滑各 3 次 + 左右侧亮度音量 + 横滑进度 + 双击暂停。
+- 对端页（`episodePeer`）的"↓ 集名"提示只在拖动过程中可见，本轮的截图采样恰好都落在动画完成之后，未取得对端页可见帧的截图。
