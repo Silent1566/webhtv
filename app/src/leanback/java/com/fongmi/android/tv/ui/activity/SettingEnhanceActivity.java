@@ -109,6 +109,19 @@ public class SettingEnhanceActivity extends BaseActivity {
         mBinding.loginState.setOnClickListener(view -> LoginStateLearnDialog.show(this, this::setText));
         mBinding.oneKeySync.setOnClickListener(v -> OneKeySyncDialog.create().show(this));
         mBinding.pluginManager.setOnClickListener(view -> PluginManagerActivity.start(this));
+        // SMB 浏览是实验能力：默认关闭，长按本行切换开关，开启后点击进入浏览页。
+        mBinding.smbBrowser.setOnClickListener(view -> {
+            if (!Setting.isSmbBrowserEnabled()) {
+                Notify.show(R.string.smb_browser_need_enable);
+                return;
+            }
+            SmbBrowserActivity.start(this);
+        });
+        mBinding.smbBrowser.setOnLongClickListener(view -> {
+            Setting.putSmbBrowserEnabled(!Setting.isSmbBrowserEnabled());
+            setText();
+            return true;
+        });
     }
 
     private void reorderItems() {
@@ -162,6 +175,7 @@ public class SettingEnhanceActivity extends BaseActivity {
         safeSet("remoteTrust", mBinding.remoteTrustText, () -> RemoteStore.summary(this));
         safeSet("gitCloud", mBinding.gitCloudText, () -> getString(R.string.git_cloud_account_count, GitCloudAccountStore.list().size()));
         safeSet("pluginManager", mBinding.pluginManagerText, () -> getString(R.string.plugin_manager_entry_count, PluginSourceConfig.get().entries().size()));
+        safeSet("smbBrowser", mBinding.smbBrowserText, () -> getString(Setting.isSmbBrowserEnabled() ? R.string.setting_enable : R.string.setting_disable));
         setShellProxyText();
         setCustomCspText();
         safeSet("loginState", mBinding.loginStateText, () -> {
