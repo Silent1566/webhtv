@@ -264,7 +264,10 @@ public class IntroSkipService {
         long start = SystemClock.elapsedRealtime();
         String url = request.url().toString();
         SpiderDebug.log("intro-skip", "%s request url=%s", provider, url);
-        try (Response response = OkHttp.client(TIMEOUT_MS).newCall(request).execute()) {
+        try (Response response = (PROVIDER_TODB.equals(provider) ? TodbHttpClient.get(TIMEOUT_MS) : OkHttp.client(TIMEOUT_MS)).newCall(request).execute()) {
+            if (PROVIDER_TODB.equals(provider)) {
+                SpiderDebug.log("intro-skip", "%s transport tls=%s protocol=%s", provider, response.handshake() == null ? "none" : response.handshake().tlsVersion(), response.protocol());
+            }
             if (response.body() == null || !response.isSuccessful()) {
                 SpiderDebug.log("intro-skip", "%s http=%d empty=%s url=%s", provider, response.code(), response.body() == null, url);
                 // 404 是明确的「这一集没有数据」，可以缓存；其余状态码都可能是暂时的
@@ -291,6 +294,11 @@ public class IntroSkipService {
             case PROVIDER_TODB: return parseTodbRaw(body);
             default: return Collections.emptyList();
         }
+    }
+
+    /** 仅供测试/诊断：清空原始段缓存，保证一次查询真的走到网络。 */
+    static void clearCacheForTest() {
+        CACHE.clear();
     }
 
     public static IntroSkipPlan parseIntroDb(String body, long durationMs) {

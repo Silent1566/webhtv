@@ -187,6 +187,7 @@ dependencies {
     implementation libs.bundles.glide
     implementation libs.bundles.jupnp
     implementation libs.commons.compress
+    implementation libs.conscrypt.android
     implementation libs.customactivityoncrash
     implementation libs.eventbus
     implementation libs.flexbox
