@@ -1,6 +1,7 @@
 package com.fongmi.android.tv.ui.custom;
 
 import android.annotation.SuppressLint;
+import android.util.Log;
 import android.view.MotionEvent;
 import android.view.VelocityTracker;
 import android.view.View;
@@ -32,6 +33,7 @@ public class VerticalPageSwitcher {
         void onCancelBaseGesture();
     }
 
+    private static final String TAG = "TV-vpage";
     private static final long OUT_DURATION = 190;
     private static final long IN_DURATION = 240;
     private static final int SLOP_DP = 6;
@@ -73,6 +75,8 @@ public class VerticalPageSwitcher {
                 downX = event.getRawX();
                 downY = event.getRawY();
                 armed = height > 0 && VerticalPageSwitchGestures.arms(downX, page.getWidth());
+                Log.d(TAG, "down rawX=" + downX + " rawY=" + downY + " width=" + page.getWidth()
+                        + " height=" + height + " armed=" + armed + " enabled=" + listener.isEnabled());
                 return false;
             case MotionEvent.ACTION_MOVE:
                 if (!armed) return false;
@@ -129,9 +133,13 @@ public class VerticalPageSwitcher {
 
     private void settle(boolean canceled, float velocity) {
         int direction = dragY < 0 ? 1 : -1;
+        float threshold = ResUtil.dp2px(THRESHOLD_DP);
         boolean commit = !canceled
                 && listener.canSwitch(direction)
-                && VerticalPageSwitchGestures.commits(dragY, velocity, height, ResUtil.dp2px(THRESHOLD_DP));
+                && VerticalPageSwitchGestures.commits(dragY, velocity, height, threshold);
+        Log.d(TAG, "settle dragY=" + dragY + " velocity=" + velocity + " height=" + height
+                + " threshold=" + threshold + " ratio=" + (height * 0.18f)
+                + " direction=" + direction + " canSwitch=" + listener.canSwitch(direction) + " commit=" + commit);
         if (!commit) {
             page.animate().translationY(0f).setDuration(OUT_DURATION)
                     .setInterpolator(new DecelerateInterpolator())
