@@ -291,12 +291,18 @@
     <string name="intro_skip_confirm_recap">Skip recap</string>
     <string name="intro_skip_confirm_outro">Skip outro</string>
     <string name="intro_skip_confirm_preview">Skip next-episode preview</string>
+    <string name="intro_skip_confirm_post_credits">Skip post-credits scene</string>
+    <string name="intro_skip_confirm_advertisement">Skip in-video ad</string>
+    <string name="intro_skip_confirm_intermission">Skip intermission</string>
     <!-- Detected (not user-set) intro/outro time shown on the control bar; %1$s is the timestamp -->
     <string name="intro_skip_detected_value">~%1$s</string>
     <string name="intro_skip_kind_recap">Recap</string>
     <string name="intro_skip_kind_intro">Intro</string>
     <string name="intro_skip_kind_outro">Outro</string>
     <string name="intro_skip_kind_preview">Preview</string>
+    <string name="intro_skip_kind_post_credits">Post-credits</string>
+    <string name="intro_skip_kind_advertisement">In-video ad</string>
+    <string name="intro_skip_kind_intermission">Intermission</string>
     <string name="setting_intro_skip_kinds">Segments to skip</string>
     <string name="intro_skip_kinds_none">None</string>
     <string name="intro_skip_kinds_all">All</string>

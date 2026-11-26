@@ -108,6 +108,29 @@ public class IntroSkipPlaybackStateTest {
         assertFalse("另一家 provider 的片尾不能被连带标记为已处理", playback.isSegmentHandled(introDb));
     }
 
+    /**
+     * 片中段（片内广告）永远是有界 seek：它就算贴着文件结尾，跳过也不等于「本集看完」。
+     */
+    @Test
+    public void midRollAdvertisementNeverCountsAsEndingTheEpisode() {
+        Segment ad = IntroSkipService.parseTodb(
+                "{\"items\":[{\"version_id\":1,\"version_runtime\":1500,\"marker\":["
+                        + "{\"marker_id\":2,\"marker_type\":\"advertisement\",\"time_start\":1300,\"time_end\":1499}]}]}",
+                1_500_000)
+                .getMiddles().get(0);
+
+        assertFalse(IntroSkipPlayback.endsWithFile(ad, 1_500_000));
+    }
+
+    @Test
+    public void postCreditsReachingFileEndCountsAsEndingTheEpisode() {
+        Segment post = IntroSkipService.parseIntroDb(
+                "{\"post_credits\":{\"start_ms\":1380000,\"end_ms\":1499000}}", 1_500_000)
+                .getEndings().get(0);
+
+        assertTrue(IntroSkipPlayback.endsWithFile(post, 1_500_000));
+    }
+
     private static Segment segment() {
         return IntroSkipService.parseTheIntroDb(
                 "{\"intro\":[{\"start_ms\":0,\"end_ms\":45000}]}", 2_700_000)

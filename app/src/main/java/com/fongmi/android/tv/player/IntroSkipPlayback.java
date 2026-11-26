@@ -281,8 +281,9 @@ public class IntroSkipPlayback {
     }
 
     /**
-     * 按时间顺序逐段判定。四类片段（回顾、片头、片尾、预告）走同一条通路，差别只在
-     * 「用户是否开了这一类」和「有没有可 seek 的落点」，不再按片头/片尾分两套逻辑。
+     * 按时间顺序逐段判定。七类片段（回顾、片头、片尾、预告、彩蛋、广告、休息）走同一条
+     * 通路，差别只在「用户是否开了这一类」和「有没有可 seek 的落点」，不再按片头/片尾分两套逻辑。
+     * 只有尾部段（片尾/预告/彩蛋）可能「一直放到文件结束」；广告与休息永远是有界 seek。
      */
     public boolean apply(PlayerManager player, EndingAction onEnding) {
         if (player == null || player.isReleased() || plan == null || plan.isEmpty()) return false;
@@ -423,6 +424,9 @@ public class IntroSkipPlayback {
             case INTRO: return Setting.isIntroSkipKindEnabled(Setting.INTRO_SKIP_KIND_INTRO);
             case OUTRO: return Setting.isIntroSkipKindEnabled(Setting.INTRO_SKIP_KIND_OUTRO);
             case PREVIEW: return Setting.isIntroSkipKindEnabled(Setting.INTRO_SKIP_KIND_PREVIEW);
+            case POST_CREDITS: return Setting.isIntroSkipKindEnabled(Setting.INTRO_SKIP_KIND_POST_CREDITS);
+            case ADVERTISEMENT: return Setting.isIntroSkipKindEnabled(Setting.INTRO_SKIP_KIND_ADVERTISEMENT);
+            case INTERMISSION: return Setting.isIntroSkipKindEnabled(Setting.INTRO_SKIP_KIND_INTERMISSION);
             default: return false;
         }
     }

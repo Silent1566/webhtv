@@ -11,6 +11,7 @@ import java.util.List;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 public class IntroSkipServiceTest {
@@ -377,5 +378,100 @@ public class IntroSkipServiceTest {
         IntroSkipPlan plan = IntroSkipService.parseTheIntroDb(body, 1_500_000);
 
         assertTrue(plan.getEndings().isEmpty());
+    }
+
+    @Test
+    public void parseTodb_readsSecondsAndDropsChapterMarkers() {
+        // TODB 一次给多个播放版本：time_start/time_end/version_runtime 全是秒。
+        // chapter 是剧情章节标记而不是可跳过段，认进来会让播放器把正片当片尾跳掉。
+        String body = "{\"page\":1,\"page_size\":3,\"has_more\":false,\"items\":["
+                + "{\"version_id\":1192,\"version_name\":\"iqiyi\",\"version_runtime\":1300,"
+                + "\"marker\":["
+                + "{\"marker_id\":1588,\"marker_type\":\"intro\",\"time_start\":0,\"time_end\":27},"
+                + "{\"marker_id\":1589,\"marker_type\":\"advertisement\",\"time_start\":600,\"time_end\":690},"
+                + "{\"marker_id\":1590,\"marker_type\":\"chapter\",\"time_start\":300,\"time_end\":420}"
+                + "]}]}";
+
+        IntroSkipPlan plan = IntroSkipService.parseTodb(body, 1_300_000);
+
+        assertEquals(1, plan.getOpenings().size());
+        assertEquals(Segment.Kind.INTRO, plan.getOpenings().get(0).getKind());
+        assertEquals(0, plan.getOpenings().get(0).getStartMs());
+        assertEquals(27_000, plan.getOpenings().get(0).getEndMs());
+        assertEquals(1, plan.getMiddles().size());
+        assertEquals(Segment.Kind.ADVERTISEMENT, plan.getMiddles().get(0).getKind());
+        assertEquals(600_000, plan.getMiddles().get(0).getStartMs());
+        assertEquals(690_000, plan.getMiddles().get(0).getEndMs());
+        assertTrue("chapter 不得变成可跳过段", plan.getEndings().isEmpty());
+    }
+
+    @Test
+    public void parseIntroDb_mapsPostCreditsToItsOwnEndingKind() {
+        String body = "{\"duration_ms\":1500000,"
+                + "\"outro\":{\"start_ms\":1380000,\"end_ms\":1439000},"
+                + "\"post_credits\":{\"start_ms\":1440000,\"end_ms\":1495000}}";
+
+        IntroSkipPlan plan = IntroSkipService.parseIntroDb(body, 1_500_000);
+
+        assertEquals(2, plan.getEndings().size());
+        assertEquals(Segment.Kind.OUTRO, plan.getEndings().get(0).getKind());
+        assertEquals(Segment.Kind.POST_CREDITS, plan.getEndings().get(1).getKind());
+    }
+
+    @Test
+    public void resolve_keepsMidRollAdvertisementSeparateFromOpeningAtSameStart() {
+        // 一条 0–30s 的广告与一条 0–90s 的片头物理位置不同，合并掉会让用户开的开关形同虚设。
+        List<IntroSkipService.RawSegment> raw = new ArrayList<>();
+        raw.addAll(IntroSkipService.parseIntroDbRaw("{\"intro\":{\"start_ms\":0,\"end_ms\":90000,\"confidence\":1,\"submission_count\":2}}"));
+        raw.addAll(IntroSkipService.parseTodbRaw("{\"items\":[{\"version_id\":1,\"version_runtime\":1500,\"marker\":["
+                + "{\"marker_id\":2,\"marker_type\":\"advertisement\",\"time_start\":0,\"time_end\":30}]}]}"));
+
+        IntroSkipPlan plan = IntroSkipPlan.from(raw, 1_500_000);
+
+        assertEquals(1, plan.getOpenings().size());
+        assertEquals(Segment.Kind.INTRO, plan.getOpenings().get(0).getKind());
+        assertEquals(1, plan.getMiddles().size());
+        assertEquals(Segment.Kind.ADVERTISEMENT, plan.getMiddles().get(0).getKind());
+    }
+
+    @Test
+    public void resolve_shiftsPostCreditsByVersionRuntime() {
+        // 参考版本 25:00、本地 24:00：彩蛋按「距结尾的距离」折算，而不是被整段丢弃
+        String body = "{\"items\":[{\"version_id\":7,\"version_runtime\":1500,\"marker\":["
+                + "{\"marker_id\":11,\"marker_type\":\"post_credits\",\"time_start\":1440,\"time_end\":1480}]}]}";
+
+        IntroSkipPlan plan = IntroSkipService.parseTodb(body, 1_440_000);
+
+        assertEquals(1, plan.getEndings().size());
+        assertEquals(Segment.Kind.POST_CREDITS, plan.getEndings().get(0).getKind());
+        assertEquals(1_380_000, plan.getEndings().get(0).getStartMs());
+        assertEquals(1_420_000, plan.getEndings().get(0).getEndMs());
+        assertFalse(plan.getEndings().get(0).isOpenEnded());
+    }
+
+    @Test
+    public void getAllMixesOpeningsMiddlesAndEndingsInTimeOrder() {
+        List<IntroSkipService.RawSegment> raw = new ArrayList<>();
+        raw.addAll(IntroSkipService.parseIntroDbRaw("{\"intro\":{\"start_ms\":0,\"end_ms\":60000}}"));
+        raw.addAll(IntroSkipService.parseTodbRaw("{\"items\":[{\"version_id\":1,\"version_runtime\":1500,\"marker\":["
+                + "{\"marker_id\":2,\"marker_type\":\"intermission\",\"time_start\":600,\"time_end\":660}]}]}"));
+        raw.addAll(IntroSkipService.parseTheIntroDbRaw("{\"credits\":[{\"start_ms\":1380000,\"end_ms\":1439000}]}"));
+
+        IntroSkipPlan plan = IntroSkipPlan.from(raw, 1_500_000);
+        List<Segment> all = plan.getAll();
+
+        assertEquals(3, all.size());
+        assertEquals(Segment.Kind.INTRO, all.get(0).getKind());
+        assertEquals(Segment.Kind.INTERMISSION, all.get(1).getKind());
+        assertEquals(Segment.Kind.OUTRO, all.get(2).getKind());
+    }
+
+    @Test
+    public void kindFromWireOnlyAcceptsSkippableMarkerTypes() {
+        assertEquals(Segment.Kind.POST_CREDITS, IntroSkipService.kindFromWire(" post_credits "));
+        assertEquals(Segment.Kind.ADVERTISEMENT, IntroSkipService.kindFromWire("AD"));
+        assertEquals(Segment.Kind.INTERMISSION, IntroSkipService.kindFromWire("interval"));
+        assertNull("chapter 是剧情章节书签，不是可跳过段", IntroSkipService.kindFromWire("chapter"));
+        assertNull(IntroSkipService.kindFromWire(""));
     }
 }
