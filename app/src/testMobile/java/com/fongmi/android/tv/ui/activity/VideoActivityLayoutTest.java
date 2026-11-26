@@ -1701,7 +1701,7 @@ public class VideoActivityLayoutTest {
         int predicate = source.indexOf("private boolean shouldUseUpstreamNativeEpisodeModule()");
         int bind = source.indexOf("private void setUpstreamNativeEpisodeItems(List<Episode> items)");
         int viewport = source.indexOf("private void updateEpisodeViewportHeight()");
-        int nextViewportMethod = source.indexOf("private boolean isTmdbEpisodeCardMode()", viewport);
+        int nextViewportMethod = source.indexOf("private void updateEpisodeTouchHandling()", viewport);
         int setEpisode = source.indexOf("private void setEpisodeAdapter(List<Episode> items)");
         String viewportBody = nextViewportMethod > viewport ? source.substring(viewport, nextViewportMethod) : "";
 
@@ -3245,6 +3245,26 @@ public class VideoActivityLayoutTest {
                 !methodBody.contains("available ="));
         assertTrue("episode viewport must not depend on root height after the method starts",
                 !methodBody.contains("mBinding.getRoot().getHeight()"));
+    }
+
+    @Test
+    public void mobileDirectEpisodeViewportSharesNestedScrollWithoutRemovingHeightCap() throws Exception {
+        Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        String outerScrollBody = methodBody(source, "private boolean usesOuterEpisodePageScroll()", "private boolean isTmdbEpisodeCardMode()");
+        String viewportBody = methodBody(source, "private void updateEpisodeViewportHeight()", "private void updateEpisodeTouchHandling()");
+        String touchBody = methodBody(source, "private void updateEpisodeTouchHandling()", "private boolean usesOuterEpisodePageScroll()");
+
+        assertTrue("影视原生 must share unconsumed episode drags with the page so tablet landscape can reveal the last row",
+                touchBody.contains("mBinding.episode.setNestedScrollingEnabled(shouldUseUpstreamNativeEpisodeModule());"));
+        assertTrue("native episodes must keep the bounded viewport so long series retain RecyclerView virtualization",
+                viewportBody.contains("int height = usesOuterEpisodePageScroll() ? 0 : limit;")
+                        && !outerScrollBody.contains("isRuntimeDirectMode()")
+                        && !outerScrollBody.contains("shouldUseUpstreamNativeEpisodeModule()"));
+        assertTrue("enhanced outer-scroll pages must keep releasing vertical interception to the page",
+                touchBody.contains("if (!usesOuterEpisodePageScroll()) return false;")
+                        && touchBody.contains("action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_MOVE")
+                        && touchBody.contains("view.getParent().requestDisallowInterceptTouchEvent(false);"));
     }
 
     @Test
