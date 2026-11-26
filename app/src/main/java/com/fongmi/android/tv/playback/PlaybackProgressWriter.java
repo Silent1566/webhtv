@@ -208,7 +208,7 @@ public final class PlaybackProgressWriter {
         boolean sameEpisode = isSameEpisode(local, input);
         history.setKey(key);
         history.setCid(cid);
-        history.setVodName(input.vodName);
+        history.setVodName(History.preferStableVodName(history.getVodName(), input.vodName));
         history.setVodPic(input.vodPic);
         history.setVodFlag(input.flag);
         applySourceBindingKey(history, input);
