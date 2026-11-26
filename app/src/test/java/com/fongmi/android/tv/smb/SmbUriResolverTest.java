@@ -58,6 +58,14 @@ public class SmbUriResolverTest {
     }
 
     @Test
+    public void hostKeyOverloadMatchesTheUriForm() {
+        assertEquals(SmbUriResolver.hostKey("smb://nas.local/media/x.mkv"),
+                SmbUriResolver.hostKey("NAS.Local", "media"));
+        assertNull(SmbUriResolver.hostKey("nas.local", ""));
+        assertNull(SmbUriResolver.hostKey("", "media"));
+    }
+
+    @Test
     public void authPartsRoundTripThroughPlaybackUri() {
         String playback = SmbUriResolver.playbackUri("smb://nas.local/media/x.mkv", "us er", "p w", "WORKGROUP");
         assertEquals("us er", SmbUriResolver.username(playback));

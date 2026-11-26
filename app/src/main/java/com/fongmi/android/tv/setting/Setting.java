@@ -729,6 +729,15 @@ public class Setting {
         ProxySetting.apply();
     }
 
+    /** SMB 局域网浏览入口是否可见（实验能力，默认关闭）。 */
+    public static boolean isSmbBrowserEnabled() {
+        return Prefers.getBoolean("smb_browser_enabled");
+    }
+
+    public static void putSmbBrowserEnabled(boolean enabled) {
+        Prefers.put("smb_browser_enabled", enabled);
+    }
+
     public static String getShellProxyRules() {
         return Prefers.getString("shell_proxy_rules");
     }

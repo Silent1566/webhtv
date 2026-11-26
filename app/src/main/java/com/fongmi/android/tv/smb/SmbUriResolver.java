@@ -61,6 +61,14 @@ public final class SmbUriResolver {
     }
 
     /** 凭据索引键：host（小写）+ 共享名；无法构成时返回 null。 */
+    /** 由主机与共享名直接构造凭据索引键，避免调用方自己拼 URI 再解析。 */
+    public static String hostKey(String host, String share) {
+        String hostPart = trim(host).toLowerCase(Locale.ROOT);
+        String sharePart = trim(share);
+        if (hostPart.isEmpty() || sharePart.isEmpty()) return null;
+        return hostPart + "/" + sharePart;
+    }
+
     public static String hostKey(String raw) {
         String stripped = stripCredentials(raw);
         if (stripped == null) return null;
