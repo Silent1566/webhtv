@@ -47,13 +47,31 @@
 | 正中上滑 | 切下一集 | 通过：第1集→第2集 | 截图 `F:/temp/vp_now.png`(第1集) / `vp_up.png`(第2集)；日志 `down rawX=540.0 width=1080 armed=true` + `settle dragY=-745.6 velocity=-992.6 threshold=240.0 commit=true` |
 | 正中下滑 | 切上一集 | 通过：第2集→第1集 | 截图 `vp_down.png`(第1集) |
 | 侧边四分之一滑（x=80） | 不换集 | 通过 | 日志 `down rawX=80.0 width=1080 armed=false`，无 settle |
-| 40px 快速小幅拖动 | 回弹不换集 | 通过 | 日志 `down rawX=540.0 armed=true` + `settle dragY=-29.3 velocity=0.0 commit=false` |
+| 40px 慢速小幅拖动 | 回弹不换集 | 通过 | 日志 `down rawX=540.0 armed=true` + `settle dragY=-29.3 velocity=0.0 commit=false` |
 | 稳定性 | 无崩溃 | 通过 | `logcat -b crash` 全程无 `FATAL EXCEPTION` |
 
 **过程中的一次自我纠错（值得留档）**：早前"侧边滑也换集"看起来像门控失效，实际是两层原因叠加——(1) 控制层显示时事件被其吞掉，我的 handler 根本没收到；(2) 那些集数变化是短剧**自动续播**（每个片段 1:26–2:05，而测试跨度约 8 分钟）。加日志后同一手势得到 `armed=false`，证明门控正确。为避免再误判，`VerticalPageSwitcher` 保留 DEBUG 级 `TV-vpage` 日志（与本仓既有 `TV-playback-progress` 同类），记录 rawX/width/armed 与 dragY/velocity/threshold/commit。
 
+**一处口径修正（2026-11-27 复核）**：上表那条"40px 小幅拖动回弹"用的是慢速拖动（`velocity=0.0`），**快速小幅甩动仍会切集**——这是设计意图，不是漏判：`VerticalPageSwitchGestures.commits` 的判据是"位移超过 `min(18% 页高, 240dp)` **或** 速度超过 `FLICK_VELOCITY=350 px/s`"。本轮实测 40px 快速甩动得到 `settle dragY=-37.6 velocity=-457.3 threshold=240.0 commit=true`，即速度分支生效，与短视频类应用的"轻甩换条"手感一致。若要禁止这种情况，需要改的是速度阈值，不是位移阈值。
+
+## 设备实测（2026-11-27 00:12–00:21，MPV 内核，emulator-5556 竖屏 1080x1920）
+
+设置 → 播放设置 → 播放器内核 切到 MPV 后重放《别触逆鳞》，内核已确认为 MPV：`MPV_SIZE: video layout new=1080x1920 old=1080x1920 fullscreen=true land=false scale=0 player=MPV`。
+
+| 用例 | 期望 | 实测 | 证据 |
+|---|---|---|---|
+| 正中上滑 | 切下一集 | 通过：第20集→第21集 | 截图前后对比；`TV-vpage: down rawX=540.0 armed=true` + `settle dragY=-990.0 velocity=32.0 threshold=240.0 commit=true` |
+| 正中下滑 | 切上一集 | 通过 | 截图：`准备播放：第13集`（自第14集回退） |
+| 左侧四分之一（x=80） | 不换集 | 通过 | `TV-vpage: down rawX=80.0 armed=false`，无 settle |
+| 右侧四分之一（x=1000） | 不换集 | 通过 | `TV-vpage: down rawX=1000.0 armed=false`，无 settle |
+| 横滑（900→300） | 进度改变、不换集 | 通过 | 进度 01:29 → 01:09，集数未变 |
+| 双击中央 | 暂停/继续 | 通过 | 中央按钮由"暂停"变"播放"，进度在采样间隔内保持 01:15 |
+| 稳定性 | 无崩溃 | 通过 | `logcat -b crash` 全程无 `FATAL` |
+
+**再次踩到"自动续播"这个坑**：本轮采样窗口里出现过两次"无故换集"，事后都查明是 1:00–2:10 的片段自然播完续播（其中一次从 00:52/01:00 直接跳到"准备播放：第20集"）。判定手势是否生效只能看 `TV-vpage` 的 `down`/`settle` 行，不能只看画面集数——这也正是上一轮加日志的原因。
+
 ## 未验范围（仍然保留）
 
-- **MPV 内核路径未验**：实测播放走默认内核；若用户切到 MPV，竖屏短剧的同一手势未单独验证（代码路径相同，但内核切换会重建播放页）。
-- **横滑进度、双击、亮度/音量手势未被本轮的自动化输入覆盖**：只验证了"侧边竖向滑动不触发换集"，未逐项回归其余手势。补验路径同前：竖屏手机 → 短剧播到第 2 集以上 → 上/下滑各 3 次 + 左右侧亮度音量 + 横滑进度 + 双击暂停。
-- 对端页（`episodePeer`）的"↓ 集名"提示只在拖动过程中可见，本轮的截图采样恰好都落在动画完成之后，未取得对端页可见帧的截图。
+- **亮度/音量的实际生效值**：只验到"右侧竖向滑动不触发换集"和手势被正确过滤，没有测量亮度/音量数值是否真的改变。
+- **对端页（`episodePeer`）的"↓ 集名"提示**只在拖动过程中可见，两轮截图采样都落在动画完成之后，始终没有取得对端页可见帧。
+- **MPV 下的跟手动画观感**（拖动时页面跟手程度、回弹曲线）没有量化评估，只确认了判定与切集结果正确。
