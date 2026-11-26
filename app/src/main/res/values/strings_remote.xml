@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="remote_panel_title">遥控其他设备</string>
+    <string name="remote_panel_title_target">遥控 %1$s</string>
+    <string name="remote_panel_play_pause">播放 / 暂停</string>
+    <string name="remote_panel_prev">上一集</string>
+    <string name="remote_panel_next">下一集</string>
+    <string name="remote_panel_seek_back">快退 10 秒</string>
+    <string name="remote_panel_seek_forward">快进 10 秒</string>
+    <string name="remote_panel_back">返回</string>
+    <string name="remote_panel_up">上</string>
+    <string name="remote_panel_down">下</string>
+    <string name="remote_panel_left">左</string>
+    <string name="remote_panel_right">右</string>
+    <string name="remote_panel_enter">确定</string>
+    <string name="remote_panel_volume_up">音量 +</string>
+    <string name="remote_panel_volume_down">音量 -</string>
+    <string name="remote_panel_no_profile">还没有绑定中转服务，遥控需要先在“远程托管”里绑定</string>
+    <string name="remote_panel_no_device">没有找到可遥控的另一台设备</string>
+    <string name="remote_panel_sent">已发送：%1$s</string>
+    <string name="remote_panel_failed">发送失败：%1$s</string>
+    <string name="remote_panel_rejected">中转服务未受理这条命令</string>
+</resources>

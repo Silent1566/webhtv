@@ -1,4 +1,4 @@
-# FORK-5 局域网遥控（决策文档，未实施）
+# FORK-5 局域网遥控（决策 + 实施记录）
 
 ## 要实现的用户能力
 
@@ -72,3 +72,38 @@
 
 1. 是否按 C 只做"命令表 + 遥控面板"（不含语音、不含直连 `/key` 端点）？
 2. 导航命令范围先只做 `up/down/left/right/enter/back` 六个是否够用？
+
+## 实施记录（2026-11-27）
+
+### 已落地
+
+1. **命令通道**（`9d273a4500`）：`RemoteCommandExecutor` 新增 `player.command` 分支，鉴权沿用 `validateGroup`；`RemotePlayerCommand` 负责解析与校验（13 个动作、未知动作直接拒绝、seek 夹在 `1000..600000`、导航类 value 归零）；`RemotePlayerOps` 单一通道执行（媒体/音量走 `KeyEvent`、返回走 `Activity.onBackPressed`、方向/确定走 DPAD）。单测 4/4。
+2. **手机端面板**（本次提交）：`RemotePlayerPanel` 只做两件事——挑目标、发命令。
+   - 目标解析抽成纯逻辑 `RemotePlayerTargets`：排除自己、排除空 `deviceId`、同一设备只保留首次出现的分组、在线设备排前。5 个单测覆盖。
+   - 目标唯一时直接开动作列表；目标多于一个时先选设备（实测里 `卧室 TV` 在线排第一，`客厅 TV` 第二）。
+   - **结果提示放在命令真正发出之后**：拿到 `commandId` 才提示"已发送"，否则提示"中转服务未受理"，异常则回显 `IOException` 原文。上一版在点击时就提示"已发送"再异步发送，会掩盖发送失败，已改掉。
+   - seek 步长不在面板里重写常量，交给执行端 `RemotePlayerCommand` 的默认值（10000ms）。
+
+### 设备实测（emulator-5556，1080×1920）
+
+用一份**临时种子 profile**（`serverUrl=http://127.0.0.1:9`，两台假设备）走通面板分支；测完已把 `shared_prefs` 恢复原样（`remote_trust_store` 计数回到 0）。
+
+| 步骤 | 结果 | 证据（uiautomator 抓到的实际控件文本） |
+|---|---|---|
+| 设置 → 增强功能 → 长按"远程托管" | 面板打开 | `遥控其他设备 | 卧室 TV | 客厅 TV | 取消` |
+| 设备选择 | 在线设备排第一 | 同上，`卧室 TV`（online）在 `客厅 TV`（offline）之前 |
+| 选设备后 | 标题带目标名 + 13 项动作 | `遥控 卧室 TV | 播放 / 暂停 | 上一集 | 下一集 | 快退 10 秒 …` |
+| 点"下一集" | 真发 HTTP，失败原文回显 | Toast：`发送失败： Failed to connect to /127.0.0.1:9` |
+| 崩溃 | 无 | `logcat -b crash` 无 FATAL |
+
+截图只用于本轮人工核对，未入库也未留痕；复现按上面的种子 profile 参数（`serverUrl` 指向一个拒绝连接的端口）重跑即可。
+
+### 仍未验
+
+- **真实中转服务 + 真实 TV 的端到端时延**（验收标准第一条"1 秒内响应"）：需要绑定真实中转并有两台在线设备，本轮没有该环境。
+- **TV 端焦点行为**（首页/详情页/设置页的方向键、播放页不误触、无双触发）：执行层已实现、解析有单测，真机未验。
+- 长按入口没有可见提示：设置页看不到"这里能长按"。后续可加一条可见行或在点击"远程托管"时提示。
+
+### 回滚
+
+删除 `player.command` 分支、`RemotePlayerOps`、`RemotePlayerCommand`、`RemotePlayerPanel`、`RemotePlayerTargets` 与本次接线即可；服务端无需改动（未知命令本来就会被 `Unsupported command` 拒绝）。
