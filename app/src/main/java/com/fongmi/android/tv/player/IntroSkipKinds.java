@@ -14,7 +14,7 @@ import com.fongmi.android.tv.utils.ResUtil;
 import com.github.catvod.crawler.SpiderDebug;
 
 /**
- * 片段类型（回顾/片头/片尾/预告）的名称、提示与多选框，三个播放页共用一份。
+ * 片段类型（回顾/片头/片尾/预告/彩蛋/广告/休息）的名称、提示与多选框，三个播放页共用一份。
  */
 public final class IntroSkipKinds {
 
@@ -24,6 +24,9 @@ public final class IntroSkipKinds {
             Setting.INTRO_SKIP_KIND_INTRO,
             Setting.INTRO_SKIP_KIND_OUTRO,
             Setting.INTRO_SKIP_KIND_PREVIEW,
+            Setting.INTRO_SKIP_KIND_POST_CREDITS,
+            Setting.INTRO_SKIP_KIND_ADVERTISEMENT,
+            Setting.INTRO_SKIP_KIND_INTERMISSION,
     };
 
     private static final int[] LABELS = {
@@ -31,6 +34,9 @@ public final class IntroSkipKinds {
             R.string.intro_skip_kind_intro,
             R.string.intro_skip_kind_outro,
             R.string.intro_skip_kind_preview,
+            R.string.intro_skip_kind_post_credits,
+            R.string.intro_skip_kind_advertisement,
+            R.string.intro_skip_kind_intermission,
     };
 
     private IntroSkipKinds() {
@@ -43,6 +49,9 @@ public final class IntroSkipKinds {
             case INTRO: return ResUtil.getString(R.string.intro_skip_kind_intro);
             case OUTRO: return ResUtil.getString(R.string.intro_skip_kind_outro);
             case PREVIEW: return ResUtil.getString(R.string.intro_skip_kind_preview);
+            case POST_CREDITS: return ResUtil.getString(R.string.intro_skip_kind_post_credits);
+            case ADVERTISEMENT: return ResUtil.getString(R.string.intro_skip_kind_advertisement);
+            case INTERMISSION: return ResUtil.getString(R.string.intro_skip_kind_intermission);
             default: return "";
         }
     }
@@ -54,6 +63,9 @@ public final class IntroSkipKinds {
             case RECAP: return R.string.intro_skip_confirm_recap;
             case OUTRO: return R.string.intro_skip_confirm_outro;
             case PREVIEW: return R.string.intro_skip_confirm_preview;
+            case POST_CREDITS: return R.string.intro_skip_confirm_post_credits;
+            case ADVERTISEMENT: return R.string.intro_skip_confirm_advertisement;
+            case INTERMISSION: return R.string.intro_skip_confirm_intermission;
             default: return R.string.intro_skip_confirm_intro;
         }
     }

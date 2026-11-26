@@ -287,12 +287,18 @@
     <string name="intro_skip_confirm_recap">跳过前情提要</string>
     <string name="intro_skip_confirm_outro">跳过片尾</string>
     <string name="intro_skip_confirm_preview">跳过下集预告</string>
+    <string name="intro_skip_confirm_post_credits">跳过片尾彩蛋</string>
+    <string name="intro_skip_confirm_advertisement">跳过片内广告</string>
+    <string name="intro_skip_confirm_intermission">跳过中场休息</string>
     <!-- 控制栏上显示的自动探测值（非用户手设），%1$s 为时间 -->
     <string name="intro_skip_detected_value">~%1$s</string>
     <string name="intro_skip_kind_recap">前情回顾</string>
     <string name="intro_skip_kind_intro">片头</string>
     <string name="intro_skip_kind_outro">片尾</string>
     <string name="intro_skip_kind_preview">下集预告</string>
+    <string name="intro_skip_kind_post_credits">片尾彩蛋</string>
+    <string name="intro_skip_kind_advertisement">片内广告</string>
+    <string name="intro_skip_kind_intermission">中场休息</string>
     <string name="setting_intro_skip_kinds">跳过的片段类型</string>
     <string name="intro_skip_kinds_none">未选择</string>
     <string name="intro_skip_kinds_all">全部</string>

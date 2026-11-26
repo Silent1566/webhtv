@@ -27,6 +27,7 @@ androidGifDrawable = "1.2.31"
 androidautosize = "1.2.1"
 brotli = "0.1.2"
 commonsCompress = "1.27.1"
+conscrypt = "2.10.0"
 customactivityoncrash = "2.4.0"
 flexbox = "3.0.0"
 glide = "5.0.7"
@@ -91,6 +92,7 @@ android-gif-drawable = { group = "pl.droidsonroids.gif", name = "android-gif-dra
 androidautosize = { group = "com.github.JessYanCoding", name = "AndroidAutoSize", version.ref = "androidautosize" }
 brotli = { group = "org.brotli", name = "dec", version.ref = "brotli" }
 commons-compress = { group = "org.apache.commons", name = "commons-compress", version.ref = "commonsCompress" }
+conscrypt-android = { group = "org.conscrypt", name = "conscrypt-android", version.ref = "conscrypt" }
 customactivityoncrash = { group = "cat.ereza", name = "customactivityoncrash", version.ref = "customactivityoncrash" }
 eventbus = { group = "org.greenrobot", name = "eventbus", version.ref = "greenrobot" }
 eventbus-annotation-processor = { group = "org.greenrobot", name = "eventbus-annotation-processor", version.ref = "greenrobot" }

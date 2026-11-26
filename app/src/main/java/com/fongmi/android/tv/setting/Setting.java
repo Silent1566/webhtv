@@ -89,7 +89,10 @@ public class Setting {
     public static final int INTRO_SKIP_KIND_INTRO = 1 << 1;
     public static final int INTRO_SKIP_KIND_OUTRO = 1 << 2;
     public static final int INTRO_SKIP_KIND_PREVIEW = 1 << 3;
-    public static final int INTRO_SKIP_KIND_ALL = INTRO_SKIP_KIND_RECAP | INTRO_SKIP_KIND_INTRO | INTRO_SKIP_KIND_OUTRO | INTRO_SKIP_KIND_PREVIEW;
+    public static final int INTRO_SKIP_KIND_POST_CREDITS = 1 << 4;
+    public static final int INTRO_SKIP_KIND_ADVERTISEMENT = 1 << 5;
+    public static final int INTRO_SKIP_KIND_INTERMISSION = 1 << 6;
+    public static final int INTRO_SKIP_KIND_ALL = INTRO_SKIP_KIND_RECAP | INTRO_SKIP_KIND_INTRO | INTRO_SKIP_KIND_OUTRO | INTRO_SKIP_KIND_PREVIEW | INTRO_SKIP_KIND_POST_CREDITS | INTRO_SKIP_KIND_ADVERTISEMENT | INTRO_SKIP_KIND_INTERMISSION;
     public static final int INTRO_SKIP_KIND_DEFAULT = INTRO_SKIP_KIND_RECAP | INTRO_SKIP_KIND_INTRO | INTRO_SKIP_KIND_OUTRO;
     public static final int DETAIL_INTERACTION_ORIGINAL = 1;
     public static final int DETAIL_THEME_CURRENT = DETAIL_STYLE_NATIVE;
@@ -1590,8 +1593,9 @@ public class Setting {
     }
 
     /**
-     * 允许跳过的片段类型位掩码。默认回顾 + 片头 + 片尾，预告不默认开——预告在片尾之后，
-     * 跳掉它等于直接进下一集，属于更激进的行为，让用户自己选。
+     * 允许跳过的片段类型位掩码。默认回顾 + 片头 + 片尾；预告、彩蛋、广告、休息都不默认开——
+     * 前两者排在最末尾（跳掉等于直接进下一集），后两者依赖社区标注的准确度，
+     * 都属于更激进的行为，让用户自己选。
      */
     public static int getIntroSkipKinds() {
         return Prefers.getInt("intro_skip_kinds", INTRO_SKIP_KIND_DEFAULT);
