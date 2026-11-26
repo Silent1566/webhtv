@@ -56,6 +56,13 @@
             android:exported="false"
             android:launchMode="singleTop" />
 
+        <!-- 只读追剧日历：由追更页以 Activity Result 打开，身份交回原页定位。 -->
+        <activity
+            android:name=".ui.activity.FollowingCalendarActivity"
+            android:exported="false"
+            android:label="@string/following_calendar_entry"
+            android:theme="@style/Theme.App" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.provider"

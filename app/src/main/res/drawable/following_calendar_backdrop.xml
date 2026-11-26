@@ -1,0 +1,1 @@
+<shape xmlns:android="http://schemas.android.com/apk/res/android"><gradient android:angle="270" android:startColor="@color/calendar_back_start" android:endColor="@color/calendar_back_end" /></shape>
