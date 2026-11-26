@@ -261,3 +261,77 @@ void close();  // 释放执行器/页面引用
 - 空态拆分：无任何追更 vs 本周/本月没有排期，文案与指引分开，不再把「本周无排期」说成「还没有追更」。
 - 两端布局同构同 id，电视端放大字号/焦点目标；测试同步为「默认周视图」契约。
 - 视觉证据（mobile/5556）：final2-week-5556.png（周默认+空态文案）、final2-rows-5556.png（月视图行层次）。电视端仅构建通过，未实机验收。
+
+## GitHub日历视觉再研究（2026-11-26，仅研究，未实施）
+
+### 目标、基线与范围
+- 用户明确重点是界面好看，授权GitHub检索追剧/追番日历参考；不再把颜色/圆角/抽象布局选项交给用户猜。当前业务基线0d6ac40dd89f1d6e0cf27ad43459132cf28ef53f；本轮不改业务代码、设备或配置，只追加本文。
+- 已定：默认周、保留月、逐集/未知日期/只读观看状态等既有数据契约继续。假设：继承WebHTV蓝色色系及明暗主题，不重新品牌化。
+- 排除：凭README功能宣称已看过UI、把发现/详情/Shows列表当日历、照抄iOS玻璃/遮挡浮层、再次只改数字颜色与圆角。完成条件是有真实图/固定来源/实际源码及明确的适配判断，不是功能实施或视觉验收。
+- 证据分两路：Android/calendar-android-inspiration run1/3；Web/calendar-web-inspiration run1/3。Lead实际read_image与固定源码独立复核，报告不是自动接受。研究约15分钟，原8–12分钟估计超出因多张官网/README图实际不是日历及读取fallback；不再扩展项目。
+
+### 有效案例与证据边界
+
+访问日2026-11-26（UTC+8）。截图来源时间/版本不等同代码HEAD；以下只声明实际看到的画面。
+
+| 项目 | 固定版本与许可 | 实际证据 | 可用结论/限制 |
+|---|---|---|---|
+| MoviePilot App（主视觉参考） https://github.com/jxxghp/MoviePilot-App | 67ca9aca583608bb4034fe17f3ee1426032959a3；GPL v3 | [官方日历原图](https://raw.githubusercontent.com/jxxghp/MoviePilot-App/67ca9aca583608bb4034fe17f3ee1426032959a3/screenshots/ios/native-v2-live-calendar.jpg)，screenshots/README.md:61–63明确日历 | 真正周日期条+当天节目列表；窄选中胶囊、小排期点、标题/季、集列表、进度三层；图上多张海报空位、底部导航与机器人遮挡也是事实，不照搬 |
+| MoviePilot Frontend（单独代码参考） https://github.com/jxxghp/MoviePilot-Frontend | main 6fdbc8104cabf09441572d6ecd444a59b74b2195；MIT。默认v3为98a71572f98858289459eabd37d543e73f9737d8，本轮未读取v3日历 | [FullCalendarView.vue](https://github.com/jxxghp/MoviePilot-Frontend/blob/6fdbc8104cabf09441572d6ecd444a59b74b2195/src/views/subscribe/FullCalendarView.vue):23–44、138–198、206 | 月格内海报+剧名/集数，今日轻底；没有该版本月格实图，不能拿App图当Frontend图。Android/TV不可依赖hover tooltip |
+| Showly（Android列表/组件参考） https://github.com/trakt/showly | master e08cb90ba0205ed9401a11265b912b0302f253b5；GPL-3.0 | [官方Shows Calendar小组件图](https://raw.githubusercontent.com/trakt/showly/e08cb90ba0205ed9401a11265b912b0302f253b5/fastlane/metadata/android/en-US/images/phoneScreenshots/08.jpg)；ui-progress/src/main/res/layout/view_calendar_item.xml:19–38、61–106与view_calendar_header.xml:15–23 | 小组件是真按Today/Next Week分组的海报行，不是应用全屏网格；应用calendar源码是日期分组列表。README详情图/02入口页不能证明calendar正文视觉 |
+| SeriesGuide（Android层次参考） https://github.com/UweTrottmann/SeriesGuide | dev 1bdc18b10132689fe4751193c7ee26f316a73649；app GPL-3.0-or-later，API Apache-2.0 | screenshots/phone.png是Shows列表；app/src/main/java/com/battlelancer/seriesguide/shows/calendar/CalendarFragment2.kt:69–78、129–130 | 代码证实按宽度调整列表列数并区分空态；只有Shows图，没有取得calendar实图，不称其为漂亮网格样板 |
+| Seanime（仅代码启发） https://github.com/5rahim/seanime | d4d58b22fa690093da572083d163f60cc8725104；GPL v3 | seanime-web/src/app/(main)/schedule/_components/schedule-calendar.tsx:30、304–313、410–454、524–580、760–769 | 最多4事件/格、海报背景、今天小白圆、移动分组列表；官网Discover配图实际是发现页，非日历。未取得真实日历图，不能称亲眼验过其视觉 |
+
+许可说明：以上允许借鉴设计思路；若复用代码需履行对应许可，不能因为开源就默认素材可再分发。本任务不搬运代码/海报/品牌资源。前述子报告“GPL不可复制”的绝对说法不采用，GPL允许遵守许可的复用，具体整合另行核对。
+
+### Lead视觉判断与推荐（不是已实现的新界面）
+1. 主方向借MoviePilot App的“紧凑7日导航+马上可见的节目”，而不是大面积七列数字。一格把星期/日期/排期点作为整体，选中只占小胶囊；不铺整日蓝色矩形。
+2. 日期是导航、剧集是正文。横屏限制日历区的伸展，把海报/剧名/当日集号同时放在首屏；竖屏保持低高度周条接节目卡片。月模式保留，但作为紧凑日期选择，不再撑满横屏。具体响应式布局是WebHTV适配建议，不冒称参考图里已有横屏方案。
+3. 海报尺寸稳定、有真实素材就用；缺图给克制占位。节目排版按“剧名+季 → 当日集号/集名 → 次要观看/排期来源”三层，不让缓存时间和诊断数字抢标题权重；错误及日期待定仍可见。
+4. 今天、选中、焦点各自有语义：今天用小圆/文字标识，选中用小范围浅底或描边，TV焦点另有外环。当前DayAdapter今天+选中字色压蓝底的问题必须在后续实现中用状态对验证修复，不能因本轮未改代码就声称已修。
+5. 不直接照抄MoviePilot大圆角/玻璃材质/底部遮挡。Showly/SeriesGuide只取日期分组和海报行密度；Seanime没有实图，不据代码给整体美观背书。既有默认周与全部数据语义不变。
+
+### 验证、限制与交接
+- Lead实际查看MoviePilot日历原图、Showly日历小组件、SeriesGuide Shows图、Showly详情与Lists排除图；核对MoviePilot截图索引/Frontend源码/两份LICENSE及Showly、SeriesGuide固定源码。外部页面通过read_page原文/云读取桥，关键段已取；不使用搜索摘要作实现证据。
+- 原始图片与完整报告保留F:/temp/webhtv-calendar-inspiration/：web-moviepilot-ios-calendar.jpg、android-showly-widget-calendar-08.jpg、android-seriesguide-phone.png、web.md、android.md、lead-review.md。MoviePilot原图SHA256=36c61e5b5a7c5f7c7411623718ff116c9fe9f194931e5ec98b42712c77c2e440。
+- 此轮没有构建、测试、安装或源码改动。未取得SeriesGuide/Showly应用内calendar、Seanime/Frontend月格实图是证据限制，不把它们表述为项目没有截图/没有日历能力。
+- 下一动作：按MoviePilot紧凑周条为主参考形成WebHTV真实内容的单屏视觉稿，再做有界实现与同场景Before/After；不再直接改Android XML碰运气，也不让用户反复选择抽象风格。
+
+## 日历界面重构执行（2026-11-26 16:12 +08，follow-4-surface-redesign）
+- 用户授权开始，玻璃效果允许，核心目标是真正好看；主参考MoviePilot周条/海报排期，不照抄素材。采用既有蓝色色系、兼容浅/深主题，先单屏比例稿，Lead看图后实施。
+- Lane standard，guard follow-4-surface-redesign；唯一初始dirty为本文GitHub研究，任务自有明确adopt。Base HEAD0d6ac40dd89f1d6e0cf27ad43459132cf28ef53f；工作目录/分支dev2不变。
+- 允许仅日历Activity/两个Adapter/双端和land布局/日历专用drawable+colors+字符串+相关测试，核心数据/VM/DB/通知/已读/播放不变。完整路径在guard，child最多24生产文件。
+- 先视觉稿A（最多8min）再代码B（约15–20min），Lead构建/5556明暗BeforeAfter与收尾（约15–20min），目标总35–50min、17:00前收敛；这是预算目标，不削减验证。
+- 质感决定：半透明霜玻璃面、细高光边和柔和背景；API28不用持续实时blur，不新增原生/第三方依赖。不是用彩色大卡框替代信息层次。
+- 拓扑：一个紧耦合UI执行者calendar-surface-redesign run1/3，公开数据seam冻结；Lead专属文档/图审/review/build/install。设备5556 Before在F:/temp/webhtv-calendar-redesign/before-5556.png（1920x1080/density420）。
+- 风险必须覆盖：today+selected前景状态对、横屏731dp实际可用宽、日历与内容同屏、独立滚动后的日期定位、混合来源可见、空日/未来/未知不伪造、TV焦点与大字体、旋转late callback。
+- 下一动作：收到mock-landscape.png审比例，回传Lead决定后进入同brief代码实现；不再问用户颜色/布局。
+
+- Stage A（约16:20）Lead已看mock-landscape.png与mock-portrait.png：48dp整合头、116dp霜玻璃日期面、44dp窄选中视觉/48dp点击、独立agenda、真实11/6 E1-E3集名。不是native截图、海报为中性占位。接受该视觉方向，进入同brief B。
+- Lead图审修正：横屏agenda在每列>=300dp时自适应双列，日期分段header/empty/local满span，竖屏单列；避免长卡右半留白。追加第8日真实2集event点，production依count而非mock。对应mock仅覆盖一次，不额外审批。
+- 时间/任务：surface-redesign run1/3（stageA已接受，stageB实施中），Lead只文档/图审与后续测试安装；不会把mock当native视觉通过。下一动作：收到B final读diff与实际测试后build/install，最多一批native视觉修正。
+
+- 验证路由决定：mobile未声明Robolectric，leanback已用4.16。Lead允许仓库外preview.gradle init-script为mobile定向测试临时注入同版本缓存，以--offline执行真实Activity/adapter测试；不改build/lock/生产依赖、不下载新依赖，失败报告明确缺项而非扩展。对应temp cap不变，run仍1/3。
+
+- 设备验收准备：同app UID(run-as)可启动未导出日历，避免重复首页warmup；旋转原值accelerometer=1/user_rotation=0，夜间系统no。验收前后恢复系统主题/旋转；仅提取theme_mode字段，不输出整份凭据/配置。
+
+- expected RED已观察：26tests/3fails（wide仍linear/today+selected前景/mixed source遗漏），23通过。Robolectric缓存4.16 offline可用，测试禁用Conscrypt仅处理Windows宿主JNI；无生产依赖改变。Lead要求tracked mobile tests不得依赖temp init，真实Robolectric用例移临时独立测试源或Instrumentation等价，裸mobile仍可运行；临时总cap仅为此额外.java扩为9。
+
+- Lead进行中diff复核：wide agenda改GridLayoutManager(2，当每列>=300dp)、分段header满span；agenda独立bounded滚动，日期定位用scrollToPositionWithOffset；保留VM/Activity可见代次保护。
+- 窄审查回传作者：来源格式化复用render today不用LocalDate.now；日格48dp与内容实际51dp需measure防裁event点；海报直接ImgUtil.getUrl异常必须降级占位不崩页；本任务XML按标准缩进恢复可维护性。相同brief run1，不新开功能/文件。
+- 实机明暗策略：当前theme_mode=-1跟随系统，可用cmd uimode切换并恢复no，设备原rotation 1/0；不改App持久化偏好。下一动作：作者最终验证交接，Lead一次build包含双端与androidTest编译，继而原生截图。
+
+- Surface run1/3返回，裸mobile22(Activity15+Policy7)与临时真实Android5项通过，核心/VM/build未变。Lead发现报告local满span与代码不一致、设备测试旧全holder/scroll假设未更新，已回原作者run2/3窄补：local独立type满span+androidTest语义修正，不再设计/跑并发构建。下一动作收到窄补立即build双端+androidTest，实机明暗/定位。
+
+- Surface run2/3窄补按指示完成3文件：spanLookup type!=1满、local独立type2、androidTest改为bounded agenda/真实月份滚后选/ActivityResult内容校验。Lead审查该diff与type映射，裸15无接口变化；进入唯一一次build（mobile+leanback+androidTest），日志build-both.log。
+
+## 界面重构实施结果（surface-redesign run1–3 + Lead原生收口，2026-11-26 17:3x）
+- 交付形态：一体头部（标题+周/月+今天+刷新，48dp）→ 霜玻璃日期条（今天实心小圆、selected窄胶囊、focus外环、事件小圆点）→ 独立bounded agenda；横屏内容宽≥608dp时两列（每列≥300dp），竖屏单列；分段header/日期待定/本地记录满span，逐集一集一条保留各自海报、S/E集名、来源/缓存时间/错误。
+- 默认周保持不变，月可切；横屏月条最多2行并可内部滚动，Lead补“月视图：上下滑动日历可查看整月”提示，避免被误读成只有两周；竖屏月最多6行。
+- 数据契约未动：Policy/Repository/TmdbService/VM/Room/通知/已读/播放/构建脚本全部零改动；日历仅展示与导航。
+- 测试：tracked裸mobile 22通过（Activity15+Policy7，无Robolectric依赖）；临时真实Android套件5通过（周默认/月恢复、两列66集bounded、远端日定位后标题仍在、空日不滚、48dp实测不裁点、today+selected前景、混源+坏URL不崩、竖屏单列）；expected RED 26/3failed留存。
+- Lead原生收口两处只有真机可见的缺陷：三份activity根同时用fitsSystemWindows与padding导致系统清零padding（左侧文字被切），移除fits后14/10/14生效；空排期提示改占满agenda剩余空间并居中，不再留半屏死白。
+- 实机验收（5556，1920x1080/density420/API28）：浅色周默认+空态居中、月视图两列真实海报与11月6日三集、选6日后窄胶囊高亮且agenda定位、暗色深蓝主题同样可读；暗色/系统主题已恢复no，旋转原值1/0保留。
+- 数据保持：安装前后following表逐字段一致（watched_episode=3、read_watermark=0、notify不变），未清数据。
+- 未验收：leanback实机遥控焦点与TV暗色；竖屏实机截图（仅XML/单元验证）；旋转/跨午夜；androidTest仅编译未在设备执行。以上均未宣称通过。
+- 证据：F:/temp/webhtv-calendar-redesign/{before-5556.png,after-week3-5556.png,after-month3-5556.png,month-day6-selected.png,after-dark-5556.png,build-final*.log,test-*.log,mock-landscape.png,mock-portrait.png}。

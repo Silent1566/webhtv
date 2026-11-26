@@ -28,9 +28,8 @@ import java.util.List;
 /**
  * 日历分段列表：日期标题 + 集行，其后固定保留日期待定区与本地记录区。
  *
- * <p>去重的是「重复」，不是信息：同一天里同一部剧的剧名只在第一行出现，排期来源与缓存时间
- * 提到日期标题上，于是每一行只剩真正逐集变化的东西——集号、集名、看过没有。集行仍只把身份
- * 交回原追剧列表定位，不提供已读/通知/播放等写入动作。
+ * <p>每集保留独立身份、海报、剧名、集名和逐条来源；日期标题仅负责分段。
+ * 集行只把身份交回原追剧列表定位，不提供已读/通知/播放等写入动作。
  */
 public class FollowingCalendarEntryAdapter extends RecyclerView.Adapter<FollowingCalendarEntryAdapter.Holder> {
 
@@ -40,10 +39,10 @@ public class FollowingCalendarEntryAdapter extends RecyclerView.Adapter<Followin
 
     private static final class Row {
         final String header, series, episode, status, identityKey, poster;
-        final boolean row, showSeries;
+        final boolean row, local;
 
         private Row(String header, String series, String episode, String status, String identityKey,
-                    String poster, boolean row, boolean showSeries) {
+                    String poster, boolean row, boolean local) {
             this.header = header;
             this.series = series;
             this.episode = episode;
@@ -51,7 +50,7 @@ public class FollowingCalendarEntryAdapter extends RecyclerView.Adapter<Followin
             this.identityKey = identityKey;
             this.poster = poster;
             this.row = row;
-            this.showSeries = showSeries;
+            this.local = local;
         }
 
         static Row header(String text) {
@@ -74,8 +73,7 @@ public class FollowingCalendarEntryAdapter extends RecyclerView.Adapter<Followin
         for (Section section : sections == null ? List.<Section>of() : sections) {
             switch (section.kind) {
                 case DAY -> {
-                    rows.add(Row.header(sectionDayTitle(context, section.day, section.entries.size(), today)
-                            + sectionSourceSuffix(context, section.entries, today)));
+                    rows.add(Row.header(sectionDayTitle(context, section.day, section.entries.size(), today)));
                     dayHeaders.add(section.day);
                     addEntries(context, section, today);
                 }
@@ -85,7 +83,7 @@ public class FollowingCalendarEntryAdapter extends RecyclerView.Adapter<Followin
                 }
                 case LOCAL -> {
                     rows.add(Row.header(context.getString(R.string.following_calendar_section_local, section.records.size())));
-                    for (LocalRecord record : section.records) rows.add(recordRow(context, record));
+                    for (LocalRecord record : section.records) rows.add(recordRow(context, record, today));
                 }
             }
         }
@@ -93,12 +91,7 @@ public class FollowingCalendarEntryAdapter extends RecyclerView.Adapter<Followin
     }
 
     private void addEntries(Context context, Section section, LocalDate today) {
-        String previous = null;
-        for (Entry entry : section.entries) {
-            boolean showSeries = !TextUtils.equals(previous, entry.identityKey);
-            rows.add(entryRow(context, entry, showSeries));
-            previous = entry.identityKey;
-        }
+        for (Entry entry : section.entries) rows.add(entryRow(context, entry, today));
     }
 
     /** 分段标题在适配器里的位置；用于选日后滚动到该日分段。 */
@@ -111,6 +104,12 @@ public class FollowingCalendarEntryAdapter extends RecyclerView.Adapter<Followin
             header++;
         }
         return -1;
+    }
+
+    @Override
+    public int getItemViewType(int position) {
+        Row row = rows.get(position);
+        return !row.row ? 0 : row.local ? 2 : 1;
     }
 
     @Override
@@ -139,25 +138,35 @@ public class FollowingCalendarEntryAdapter extends RecyclerView.Adapter<Followin
             holder.binding.entryHeader.setText(row.header);
             return;
         }
-        holder.binding.entryTitle.setVisibility(row.showSeries ? View.VISIBLE : View.GONE);
+        holder.binding.entryTitle.setVisibility(View.VISIBLE);
         holder.binding.entryTitle.setText(row.series);
         holder.binding.entryMeta.setText(row.episode);
-        // 剧名隐去时这一行就是主信息，放大加粗顶上；有剧名时它退成副信息。
-        holder.binding.entryMeta.setTextSize(row.showSeries ? 12f : 15f);
-        holder.binding.entryMeta.setTypeface(null, row.showSeries ? android.graphics.Typeface.NORMAL : android.graphics.Typeface.BOLD);
         holder.binding.entryStatus.setText(row.status);
         holder.binding.entryStatus.setVisibility(TextUtils.isEmpty(row.status) ? View.GONE : View.VISIBLE);
-        ImgUtil.load(row.series, row.poster, holder.binding.entryPoster);
+        bindPoster(holder.binding.entryPoster, row.poster);
         holder.binding.entryRow.setOnClickListener(view -> {
             if (listener != null && !TextUtils.isEmpty(row.identityKey)) listener.onEntryIdentity(row.identityKey);
         });
     }
 
-    private Row entryRow(Context context, Entry entry, boolean showSeries) {
+    /** 图片串来自旧数据，畸形 URL 只能退到占位，不能让整页崩溃。 */
+    private static void bindPoster(android.widget.ImageView view, String poster) {
+        try {
+            com.bumptech.glide.Glide.with(view).clear(view);
+            view.setImageResource(R.drawable.following_calendar_poster_placeholder);
+            if (TextUtils.isEmpty(poster)) return;
+            com.bumptech.glide.Glide.with(view).load(ImgUtil.getUrl(poster)).centerCrop()
+                    .placeholder(R.drawable.following_calendar_poster_placeholder)
+                    .error(R.drawable.following_calendar_poster_placeholder).into(view);
+        } catch (RuntimeException error) {
+            view.setImageResource(R.drawable.following_calendar_poster_placeholder);
+        }
+    }
+
+    private Row entryRow(Context context, Entry entry, LocalDate today) {
         StringBuilder episode = new StringBuilder(context.getString(R.string.following_calendar_episode, entry.seasonNumber, entry.episodeNumber));
         if (!TextUtils.isEmpty(entry.name)) episode.append(" · ").append(entry.name);
-        // 已到排期日是每行的默认事实，重复七遍只会把真正有信息量的「看过没有」埋掉；
-        // 排期来源已提到日期标题，只有今天/待播/日期待定与错误才占状态位。
+        // 每行保留自己的来源、日期关系和错误；不把混合来源上提到日期标题。
         StringBuilder status = new StringBuilder();
         if (entry.temporalState != TemporalState.PAST) status.append(context.getString(temporalLabelResource(entry.temporalState)));
         int watchLabel = watchLabelResource(entry.temporalState, entry.watched);
@@ -165,37 +174,24 @@ public class FollowingCalendarEntryAdapter extends RecyclerView.Adapter<Followin
             if (status.length() > 0) status.append(" · ");
             status.append(context.getString(watchLabel, entry.episodeNumber));
         }
+        String source = sourceLabel(context, entry.source, entry.cachedAtMillis, today);
+        if (!source.isEmpty()) {
+            if (status.length() > 0) status.append(" · ");
+            status.append(source);
+        }
         if (!TextUtils.isEmpty(entry.sanitizedError)) {
             if (status.length() > 0) status.append(" · ");
             status.append(entry.sanitizedError);
         }
-        return new Row(null, entry.title, episode.toString(), status.toString(), entry.identityKey,
-                entry.poster, true, showSeries);
+        return new Row(null, entry.title, episode.toString(), status.toString(), entry.identityKey, entry.poster, true, false);
     }
 
-    private Row recordRow(Context context, LocalRecord record) {
+    private Row recordRow(Context context, LocalRecord record, LocalDate today) {
         String episode = context.getString(R.string.following_calendar_local_summary, record.seasonNumber, record.watchedEpisode,
                 record.releasedEpisodes, record.totalEpisodes);
         String status = reasonLabel(context, record.reason);
         if (!TextUtils.isEmpty(record.sanitizedError)) status += " · " + record.sanitizedError;
         return new Row(null, record.title, episode, status, record.identityKey, record.poster, true, true);
-    }
-
-    /** 同一段里所有条目同源时，把来源与缓存时间合并到日期标题（避免每行重复同一句）。 */
-    private static String sectionSourceSuffix(Context context, List<Entry> entries, LocalDate today) {
-        Source source = null;
-        long cachedAt = -1;
-        for (Entry entry : entries) {
-            if (source == null) {
-                source = entry.source;
-                cachedAt = entry.cachedAtMillis;
-                continue;
-            }
-            if (source != entry.source || cachedAt != entry.cachedAtMillis) return "";
-        }
-        if (source == null) return "";
-        String label = sourceLabel(context, source, cachedAt, today);
-        return label.isEmpty() ? "" : " · " + label;
     }
 
     public static int watchLabelResource(TemporalState state, boolean watched) {

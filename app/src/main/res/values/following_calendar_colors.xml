@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="calendar_text">#1B2B46</color>
+    <color name="calendar_secondary">#526B89</color>
+    <color name="calendar_accent">#245FAD</color>
+    <color name="calendar_selected">#DCEAFF</color>
+    <color name="calendar_selected_text">#174E92</color>
+    <color name="calendar_glass">#CCFFFFFF</color>
+    <color name="calendar_edge">#FFFFFFFF</color>
+    <color name="calendar_card">#EFFFFFFF</color>
+    <color name="calendar_card_edge">#DDE6F2</color>
+    <color name="calendar_back_start">#E5EEFB</color>
+    <color name="calendar_back_end">#F4F7FD</color>
+    <color name="calendar_placeholder">#DCE5F1</color>
+</resources>

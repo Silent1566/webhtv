@@ -1,40 +1,41 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 日历日格（电视）：与手机同 id，放大字号与最小焦点目标；今天/选中/焦点三态由底材与绑定层给出。 -->
+<!-- Calendar day cell: weekday+date+event dot are one 48dp target. Today is a solid circle,
+     selection is a narrow capsule behind the number, and focus is an outer ring. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/dayCell"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:layout_margin="2dp"
-    android:background="@drawable/following_calendar_day_bg"
+    android:minWidth="48dp"
+    android:minHeight="48dp"
+    android:paddingTop="2dp"
+    android:paddingBottom="2dp"
     android:clickable="true"
     android:focusable="true"
-    android:minHeight="56dp"
-    android:paddingTop="7dp"
-    android:paddingBottom="7dp">
+    android:background="@drawable/following_calendar_day_bg">
 
     <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:id="@+id/dayMark"
+        android:layout_width="40dp"
+        android:layout_height="44dp"
         android:layout_gravity="center"
         android:gravity="center"
         android:orientation="vertical">
 
         <TextView
             android:id="@+id/dayNumber"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:gravity="center"
             android:includeFontPadding="false"
-            android:textColor="@color/following_text_primary"
-            android:textSize="19sp" />
+            android:textColor="@color/calendar_text"
+            android:textSize="17sp" />
 
         <TextView
             android:id="@+id/dayCount"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:includeFontPadding="false"
-            android:textColor="@color/following_text_secondary"
-            android:textSize="12sp"
-            android:textStyle="bold" />
+            android:layout_width="4dp"
+            android:layout_height="4dp"
+            android:layout_marginTop="3dp"
+            android:background="@drawable/following_calendar_event_dot"
+            android:importantForAccessibility="no" />
     </LinearLayout>
 </FrameLayout>

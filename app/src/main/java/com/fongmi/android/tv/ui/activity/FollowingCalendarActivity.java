@@ -14,7 +14,6 @@ import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.GridLayoutManager;
-import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.fongmi.android.tv.App;
@@ -125,8 +124,16 @@ public class FollowingCalendarActivity extends AppCompatActivity
     private void initView() {
         binding.grid.setLayoutManager(new GridLayoutManager(this, 7));
         binding.grid.setAdapter(dayAdapter = new FollowingCalendarDayAdapter(this));
-        binding.entries.setLayoutManager(new LinearLayoutManager(this));
-        binding.entries.setAdapter(entryAdapter = new FollowingCalendarEntryAdapter(this));
+        entryAdapter = new FollowingCalendarEntryAdapter(this);
+        int width = getResources().getConfiguration().screenWidthDp - 28;
+        GridLayoutManager agenda = new GridLayoutManager(this, width >= 608 ? 2 : 1);
+        agenda.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {
+            @Override public int getSpanSize(int position) {
+                return entryAdapter.getItemViewType(position) != 1 ? agenda.getSpanCount() : 1;
+            }
+        });
+        binding.entries.setLayoutManager(agenda);
+        binding.entries.setAdapter(entryAdapter);
         initWeekdays();
         binding.prev.setOnClickListener(view -> shift(-1));
         binding.next.setOnClickListener(view -> shift(1));
@@ -255,7 +262,15 @@ public class FollowingCalendarActivity extends AppCompatActivity
                 grid.cells.get(6).getMonthValue(), grid.cells.get(6).getDayOfMonth())
                 : getString(R.string.following_calendar_month_label, YearMonth.from(anchor).getYear(), YearMonth.from(anchor).getMonthValue()));
         binding.modeGroup.check(mode == Mode.WEEK ? R.id.weekMode : R.id.monthMode);
-        binding.statusLabel.setText(statusText(snapshot));
+        boolean clippedMonth = mode == Mode.MONTH && grid.rows > 2 && getResources().getConfiguration().screenHeightDp < 500;
+        binding.statusLabel.setText(clippedMonth ? getString(R.string.following_calendar_month_scroll) : statusText(snapshot));
+        binding.statusLabel.setVisibility(clippedMonth || snapshot == null || snapshot.loading || snapshot.failedSeasons > 0
+                || snapshot.retryAtMillis > System.currentTimeMillis() ? View.VISIBLE : View.GONE);
+        int rowHeight = Math.round(48 * getResources().getDisplayMetrics().density);
+        int maxRows = getResources().getConfiguration().screenHeightDp < 500 ? 2 : 6;
+        ViewGroup.LayoutParams gridParams = binding.grid.getLayoutParams();
+        gridParams.height = rowHeight * Math.min(grid.rows, maxRows);
+        binding.grid.setLayoutParams(gridParams);
         binding.loading.setVisibility(snapshot != null && snapshot.loading ? View.VISIBLE : View.GONE);
         binding.refresh.setEnabled(snapshot == null || !snapshot.loading);
 
@@ -279,6 +294,12 @@ public class FollowingCalendarActivity extends AppCompatActivity
         // 后者只需要他换个范围看，用同一句话会把已有追更的用户误导成配置丢了。
         boolean hasFollowings = snapshot != null && snapshot.totalSeasons > 0;
         boolean emptyRange = nothing && hasFollowings;
+        binding.entries.setVisibility(emptyRange ? View.GONE : View.VISIBLE);
+        android.widget.LinearLayout.LayoutParams noticeParams = (android.widget.LinearLayout.LayoutParams) binding.dayNotice.getLayoutParams();
+        noticeParams.height = emptyRange ? 0 : ViewGroup.LayoutParams.WRAP_CONTENT;
+        noticeParams.weight = emptyRange ? 1 : 0;
+        binding.dayNotice.setGravity(emptyRange ? android.view.Gravity.CENTER : android.view.Gravity.START | android.view.Gravity.CENTER_VERTICAL);
+        binding.dayNotice.setLayoutParams(noticeParams);
         // 空日提示只在加载结束后给出：加载中既不能断言“当天没排期”，也不能把空日当成整月空。
         boolean emptyDay = settled && !nothing && !FollowingCalendarViewModel.hasDaySection(sections, selectedDate);
         binding.empty.setVisibility(nothing && !hasFollowings ? View.VISIBLE : View.GONE);
@@ -304,18 +325,10 @@ public class FollowingCalendarActivity extends AppCompatActivity
     private void scrollToSelection(int position) {
         ActivityFollowingCalendarBinding target = binding;
         long issued = scrollEpoch;
-        target.scroll.post(() -> scrollToSection(target, issued, position, 0));
-    }
-
-    private void scrollToSection(ActivityFollowingCalendarBinding target, long issued, int position, int attempt) {
-        if (!visible || binding != target || issued != scrollEpoch || isFinishing() || isDestroyed()) return;
-        RecyclerView.ViewHolder holder = target.entries.findViewHolderForAdapterPosition(position);
-        if (holder == null) {
-            if (attempt < 2) target.entries.postOnAnimation(() -> scrollToSection(target, issued, position, attempt + 1));
-            return;
-        }
-        int offset = Math.max(0, target.entries.getTop() + holder.itemView.getTop());
-        target.scroll.smoothScrollTo(0, offset);
+        target.entries.post(() -> {
+            if (!visible || binding != target || issued != scrollEpoch || isFinishing() || isDestroyed()) return;
+            ((GridLayoutManager) target.entries.getLayoutManager()).scrollToPositionWithOffset(position, 0);
+        });
     }
 
     @Override

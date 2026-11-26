@@ -76,19 +76,18 @@ public class FollowingCalendarDayAdapter extends RecyclerView.Adapter<FollowingC
         Cell cell = cells.get(position);
         Context context = holder.itemView.getContext();
         holder.binding.dayCell.setSelected(cell.selected);
-        // 今天用实心主色块承担锚点，选中用浅底描边；两者都不是「有排期」的暗示，排期只由下方的
-        // 集数数字表达，避免把视觉重量和平凡的空日期混为一谈。
-        holder.binding.dayCell.setBackgroundResource(cell.today
-                ? R.drawable.following_calendar_today_bg : R.drawable.following_calendar_day_bg);
+        android.graphics.drawable.GradientDrawable selected = new android.graphics.drawable.GradientDrawable();
+        selected.setColor(context.getColor(cell.selected ? R.color.calendar_selected : android.R.color.transparent));
+        selected.setCornerRadius(14 * context.getResources().getDisplayMetrics().density);
+        holder.binding.dayMark.setBackground(selected);
+        holder.binding.dayNumber.setBackgroundResource(cell.today ? R.drawable.following_calendar_today_bg : 0);
         holder.binding.dayNumber.setText(String.valueOf(cell.day.getDayOfMonth()));
-        holder.binding.dayNumber.setTextColor(context.getColor(cell.selected ? R.color.webhtv_color_on_primary_container
-                : cell.today ? R.color.webhtv_color_on_primary
-                : cell.outOfMonth ? R.color.following_text_secondary : R.color.following_text_primary));
+        holder.binding.dayNumber.setTextColor(context.getColor(cell.today ? R.color.webhtv_color_on_primary
+                : cell.selected ? R.color.calendar_selected_text
+                : cell.outOfMonth ? R.color.calendar_secondary : R.color.calendar_text));
         holder.binding.dayNumber.setTypeface(null, cell.today || cell.selected ? Typeface.BOLD : Typeface.NORMAL);
         holder.binding.dayCount.setVisibility(cell.count > 0 ? View.VISIBLE : View.INVISIBLE);
-        holder.binding.dayCount.setText(cell.count > 0 ? String.valueOf(cell.count) : "");
-        holder.binding.dayCount.setTextColor(context.getColor(cell.today && !cell.selected
-                ? R.color.webhtv_color_on_primary : R.color.following_accent));
+        holder.binding.dayCount.setText("");
         holder.binding.dayCell.setContentDescription(context.getString(R.string.following_calendar_day_desc,
                 FollowingCalendarEntryAdapter.dayLabel(context, cell.day, today == null ? cell.day : today), cell.count));
         holder.binding.dayCell.setOnClickListener(view -> {

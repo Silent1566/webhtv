@@ -3034,6 +3034,7 @@
     <string name="following_calendar_week_range">%1$d月%2$d日 – %3$d月%4$d日</string>
     <string name="following_calendar_empty_month">本月沒有官方排期。可用左右箭頭切換範圍。</string>
     <string name="following_calendar_empty_week">本週沒有官方排期。可切到「月」或點選其它日期。</string>
+    <string name="following_calendar_month_scroll">月檢視：上下滑動日曆可查看整月。</string>
     <string name="following_calendar_day_label">%1$d月%2$d日</string>
     <string name="following_calendar_day_label_year">%1$d年%2$d月%3$d日</string>
     <string name="following_calendar_day_label_near">%1$d/%2$d</string>

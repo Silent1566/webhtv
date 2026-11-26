@@ -1,5 +1,6 @@
 package com.fongmi.android.tv.following;
 
+import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.view.View;
@@ -13,6 +14,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4;
 
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.ui.activity.FollowingCalendarActivity;
+import com.fongmi.android.tv.ui.activity.FollowingActivity;
 
 import org.junit.After;
 import org.junit.Before;
@@ -92,7 +94,14 @@ public class FollowingCalendarActivityDeviceTest {
                 assertTrue("本地记录区必须可见", entries.getAdapter().getItemCount() > 0);
                 assertEquals(View.GONE, activity.findViewById(R.id.empty).getVisibility());
                 assertEquals(View.VISIBLE, activity.findViewById(R.id.dayNotice).getVisibility());
-                assertEquals("Initial calendar keeps its controls at the top", 0, activity.findViewById(R.id.scroll).getScrollY());
+                GridLayoutManager agenda = (GridLayoutManager) entries.getLayoutManager();
+                assertEquals("Agenda starts at its own first section", 0, agenda.findFirstVisibleItemPosition());
+                assertTrue("Agenda has a bounded on-screen viewport", entries.getHeight() > 0
+                        && entries.getHeight() < activity.findViewById(android.R.id.content).getHeight());
+                assertTrue("Page title remains above agenda", activity.findViewById(R.id.pageTitle).isShown());
+                assertEquals(0, entries.getAdapter().getItemViewType(0));
+                assertEquals(2, entries.getAdapter().getItemViewType(1));
+                assertEquals("Local records span the whole agenda", agenda.getSpanCount(), agenda.getSpanSizeLookup().getSpanSize(1));
             });
         }
     }
@@ -117,7 +126,7 @@ public class FollowingCalendarActivityDeviceTest {
     public void selectingADayMovesSelectionWithoutHidingOtherSections() {
         try (ActivityScenario<FollowingCalendarActivity> scenario = ActivityScenario.launch(intent())) {
             assertTrue(await(scenario, activity -> ((RecyclerView) activity.findViewById(R.id.grid)).getAdapter() != null));
-            // 默认是周视图，逐日选格在月视图里验证（同屏 4–6 行、位置 9 必然存在）。
+            // 月份保留 4–6 行数据，但横屏只显示部分行；先滚动到目标再等待布局。
             scenario.onActivity(activity -> activity.findViewById(R.id.monthMode).performClick());
             assertTrue(await(scenario, activity -> ((RecyclerView) activity.findViewById(R.id.grid)).getAdapter() != null
                     && ((RecyclerView) activity.findViewById(R.id.grid)).getAdapter().getItemCount() >= 28));
@@ -125,8 +134,19 @@ public class FollowingCalendarActivityDeviceTest {
             scenario.onActivity(activity -> {
                 RecyclerView grid = activity.findViewById(R.id.grid);
                 target[0] = 9;
+                grid.scrollToPosition(target[0]);
+            });
+            assertTrue("Scrolled target day must be reachable", await(scenario, activity ->
+                    ((RecyclerView) activity.findViewById(R.id.grid)).findViewHolderForAdapterPosition(target[0]) != null));
+            int[] countBefore = new int[1];
+            int[] agendaPosition = new int[1];
+            scenario.onActivity(activity -> {
+                RecyclerView entries = activity.findViewById(R.id.entries);
+                countBefore[0] = entries.getAdapter().getItemCount();
+                agendaPosition[0] = ((GridLayoutManager) entries.getLayoutManager()).findFirstVisibleItemPosition();
+                RecyclerView grid = activity.findViewById(R.id.grid);
                 RecyclerView.ViewHolder holder = grid.findViewHolderForAdapterPosition(target[0]);
-                assertNotNull("目标日格必须已布局", holder);
+                assertNotNull("目标日格滚动后必须已布局", holder);
                 holder.itemView.performClick();
             });
             assertTrue(await(scenario, activity -> {
@@ -138,7 +158,11 @@ public class FollowingCalendarActivityDeviceTest {
                 RecyclerView entries = activity.findViewById(R.id.entries);
                 assertTrue("选日后本地记录区仍然可用", entries.getAdapter().getItemCount() > 0);
                 assertEquals(View.VISIBLE, activity.findViewById(R.id.dayNotice).getVisibility());
-                assertEquals("Empty-day selection must not jump to local records", 0, activity.findViewById(R.id.scroll).getScrollY());
+                assertEquals("Selection preserves every local record and header", countBefore[0], entries.getAdapter().getItemCount());
+                assertEquals(0, entries.getAdapter().getItemViewType(0));
+                assertEquals("Empty-day selection does not move the agenda", agendaPosition[0],
+                        ((GridLayoutManager) entries.getLayoutManager()).findFirstVisibleItemPosition());
+                assertTrue("Page header stays visible", activity.findViewById(R.id.pageTitle).isShown());
                 TextView range = activity.findViewById(R.id.rangeLabel);
                 assertFalse(range.getText().toString().isEmpty());
             });
@@ -147,21 +171,28 @@ public class FollowingCalendarActivityDeviceTest {
 
     @Test
     public void recordRowReturnsIdentityAndClosesCalendar() {
-        try (ActivityScenario<FollowingCalendarActivity> scenario = ActivityScenario.launch(intent())) {
+        try (ActivityScenario<FollowingCalendarActivity> scenario = ActivityScenario.launchActivityForResult(intent())) {
             assertTrue(await(scenario, activity -> ((RecyclerView) activity.findViewById(R.id.entries)).getAdapter() != null
                     && ((RecyclerView) activity.findViewById(R.id.entries)).getAdapter().getItemCount() >= 2));
+            scenario.onActivity(activity -> ((RecyclerView) activity.findViewById(R.id.entries)).scrollToPosition(1));
+            assertTrue("Local record stays reachable in the bounded agenda", await(scenario, activity ->
+                    ((RecyclerView) activity.findViewById(R.id.entries)).findViewHolderForAdapterPosition(1) != null));
             scenario.onActivity(activity -> {
                 RecyclerView entries = activity.findViewById(R.id.entries);
                 RecyclerView.ViewHolder holder = entries.findViewHolderForAdapterPosition(1);
                 assertNotNull("第一条本地记录必须已布局", holder);
                 holder.itemView.findViewById(R.id.entryRow).performClick();
             });
-            assertTrue(await(scenario, FollowingCalendarActivity::isFinishing));
+            android.app.Instrumentation.ActivityResult result = scenario.getResult();
+            assertEquals(Activity.RESULT_OK, result.getResultCode());
+            assertNotNull(result.getResultData());
+            assertEquals("Calendar returns the selected existing identity only", identityKeys.get(0),
+                    result.getResultData().getStringExtra(FollowingActivity.EXTRA_IDENTITY_KEY));
         }
     }
 
     private Intent intent() {
-        return new Intent(context, FollowingCalendarActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        return new Intent(context, FollowingCalendarActivity.class);
     }
 
     private boolean await(ActivityScenario<FollowingCalendarActivity> scenario, Check check) {
