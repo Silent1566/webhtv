@@ -8,6 +8,7 @@ import android.content.res.Resources;
 import android.os.Bundle;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.view.Window;
 
 import androidx.activity.OnBackPressedCallback;
@@ -219,6 +220,9 @@ public abstract class BaseActivity extends AppCompatActivity {
     }
 
     protected void onBackInvoked() {
+        // 设置子页：返回键先把焦点送回当前子页自己的顶部项（同时回顶），再按才继续
+        // 走基类回顶/退出。设置主页保持「点播」焦点语义，由 SettingActivity 自行处理。
+        if (focusSettingTopOnBack()) return;
         // 设置页由多个 Setting*Activity 承载，布局根为 NestedScrollView。按返回键时若内容
         // 已滚动，先平滑回到顶部并消费本次返回；再次按返回才真正退出。首页/播放页各自
         // 覆写了 onBackInvoked()，不受此逻辑影响。
@@ -235,6 +239,33 @@ public abstract class BaseActivity extends AppCompatActivity {
      */
     protected boolean isSettingScreen() {
         return getClass().getSimpleName().startsWith("Setting");
+    }
+
+    /**
+     * 设置子页自己的顶部焦点项 id。0 表示不接管返回焦点（设置主页和非设置页）。
+     */
+    protected int settingTopFocusId() {
+        return 0;
+    }
+
+    private boolean focusSettingTopOnBack() {
+        int id = settingTopFocusId();
+        if (id == 0) return false;
+        View top = findViewById(id);
+        if (top == null || top.getVisibility() != View.VISIBLE) return false;
+        View focus = getCurrentFocus();
+        if (isSameOrChild(focus, top)) return false;
+        scrollRootToTop();
+        return top.requestFocus();
+    }
+
+    private static boolean isSameOrChild(View view, View ancestor) {
+        while (view != null) {
+            if (view == ancestor) return true;
+            ViewParent parent = view.getParent();
+            view = parent instanceof View ? (View) parent : null;
+        }
+        return false;
     }
 
     /**

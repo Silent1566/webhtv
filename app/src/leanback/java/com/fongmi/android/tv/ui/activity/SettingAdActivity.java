@@ -40,6 +40,11 @@ public class SettingAdActivity extends BaseActivity {
     }
 
     @Override
+    protected int settingTopFocusId() {
+        return R.id.adblock;
+    }
+
+    @Override
     protected void initView(Bundle savedInstanceState) {
         mBinding.adblock.requestFocus();
         introSkipMode = getResources().getStringArray(R.array.select_auto_skip_intro_outro);

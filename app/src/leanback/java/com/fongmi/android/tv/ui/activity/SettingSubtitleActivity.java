@@ -36,6 +36,11 @@ public class SettingSubtitleActivity extends BaseActivity {
     }
 
     @Override
+    protected int settingTopFocusId() {
+        return R.id.subtitleAutoMatch;
+    }
+
+    @Override
     protected void initView(Bundle savedInstanceState) {
         mBinding.subtitleAutoMatch.requestFocus();
         subtitleLanguageLabels = ResUtil.getStringArray(R.array.select_subtitle_language);

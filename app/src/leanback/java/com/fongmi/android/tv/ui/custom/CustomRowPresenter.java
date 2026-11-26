@@ -104,16 +104,45 @@ public class CustomRowPresenter extends ListRowPresenter {
         grid.setSelectedPosition(target, attached -> {
             if (attached != null) attached.itemView.requestFocus();
         });
+        // 目标项在屏幕外时，setSelectedPosition 的 attach 回调在部分设备上不会触发，
+        // 按键被消费却没有焦点，表现为「从第一个按钮按左整机无响应」。补一条主动滚动 +
+        // 逐帧找目标的路径，确保焦点一定落到另一端；重试有上限，不会长期占用主线程。
+        focusEdgeTarget(grid, target, 0);
         return true;
+    }
+
+    private void focusEdgeTarget(HorizontalGridView grid, int target, int attempt) {
+        if (attempt > 4 || grid.getAdapter() == null || target >= grid.getAdapter().getItemCount()) return;
+        RecyclerView.ViewHolder holder = grid.findViewHolderForAdapterPosition(target);
+        if (holder != null) {
+            holder.itemView.requestFocus();
+            return;
+        }
+        grid.scrollToPosition(target);
+        grid.post(() -> focusEdgeTarget(grid, target, attempt + 1));
     }
 
     private boolean isHorizontalEdge(HorizontalGridView grid, KeyEvent event) {
         int keyCode = event.getKeyCode();
         if (keyCode != KeyEvent.KEYCODE_DPAD_LEFT && keyCode != KeyEvent.KEYCODE_DPAD_RIGHT) return false;
         RecyclerView.Adapter<?> adapter = grid.getAdapter();
-        int position = grid.getSelectedPosition();
-        if (adapter == null || position == RecyclerView.NO_POSITION || adapter.getItemCount() == 0) return false;
+        if (adapter == null || adapter.getItemCount() == 0) return false;
+        // 焦点实际所在的子项优先：BaseGridView 的 selectedPosition 在重建/回焦后可能与焦点不一致，
+        // 只看它会让「历史」已经聚焦却不被判定为行首，左键被双双放行后表现为无响应。
+        int position = focusedPosition(grid);
+        if (position == RecyclerView.NO_POSITION) position = grid.getSelectedPosition();
+        if (position == RecyclerView.NO_POSITION) return false;
         return isTowardEnd(grid, event) ? position == adapter.getItemCount() - 1 : position == 0;
+    }
+
+    private int focusedPosition(RecyclerView grid) {
+        View focus = grid.getFocusedChild();
+        while (focus != null) {
+            if (focus.getParent() == grid) return grid.getChildAdapterPosition(focus);
+            android.view.ViewParent parent = focus.getParent();
+            focus = parent instanceof View ? (View) parent : null;
+        }
+        return RecyclerView.NO_POSITION;
     }
 
     private boolean isTowardEnd(HorizontalGridView grid, KeyEvent event) {

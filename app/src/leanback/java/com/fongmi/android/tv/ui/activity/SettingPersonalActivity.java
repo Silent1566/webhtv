@@ -57,6 +57,11 @@ public class SettingPersonalActivity extends BaseActivity {
     }
 
     @Override
+    protected int settingTopFocusId() {
+        return R.id.homeVodAutoLoad;
+    }
+
+    @Override
     protected void initView(Bundle savedInstanceState) {
         mBinding.homeVodAutoLoad.requestFocus();
         setText();

@@ -4,6 +4,7 @@ import android.app.Dialog;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.Gravity;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
@@ -60,7 +61,15 @@ public final class AppearanceDialog extends DialogFragment {
         uiScales = safeArray(R.array.select_ui_scale);
         languages = safeArray(R.array.select_language);
         imageSizes = safeArray(R.array.select_size);
-        return LightDialog.create(requireContext(), getString(R.string.setting_appearance), createContent(), getString(R.string.dialog_close), null, null, null);
+        Dialog dialog = LightDialog.create(requireContext(), getString(R.string.setting_appearance), createContent(), getString(R.string.dialog_close), null, null, null);
+        // 外观与语言：返回键先把焦点送回本弹窗第一行，再按才关闭弹窗。
+        dialog.setOnKeyListener((ignored, keyCode, event) -> {
+            if (rows.isEmpty() || keyCode != KeyEvent.KEYCODE_BACK || event.getAction() != KeyEvent.ACTION_DOWN) return false;
+            View first = rows.get(0).root();
+            if (first.hasFocus() || first.findFocus() != null) return false;
+            return first.requestFocus();
+        });
+        return dialog;
     }
 
     private View createContent() {

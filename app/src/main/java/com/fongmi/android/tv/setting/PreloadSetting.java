@@ -6,7 +6,7 @@ public class PreloadSetting {
 
     public static final int MIN_THREADS = 1;
     public static final int MAX_THREADS = 128;
-    public static final int DEFAULT_THREADS = 1;
+    public static final int DEFAULT_THREADS = 10;
     public static final int MIN_SIZE_MB = 128;
     public static final int MAX_SIZE_MB = 32768;
     public static final int MIN_TIME_SECONDS = 20;
@@ -16,7 +16,7 @@ public class PreloadSetting {
     public static final int WHOLE_MEDIA_AHEAD_SECONDS = 0;
     public static final int DEFAULT_AHEAD_SECONDS = 300;
     public static final int MIN_CACHE_MINUTES = 5;
-    public static final int DEFAULT_CACHE_MINUTES = 30;
+    public static final int DEFAULT_CACHE_MINUTES = 5;
     /** Seamless multi-episode pre-buffer depth. 0 = only short-drama sites; 1..10 = also normal series. */
     public static final int MIN_SEAMLESS_DEPTH = 0;
     public static final int MAX_SEAMLESS_DEPTH = 10;

@@ -31,6 +31,8 @@ public class PlaybackPerformanceSetting {
     private static final String KEY_BUFFER_WATERMARKS_MIGRATED = "playback_performance_buffer_watermarks_v2";
     private static final String KEY_EXO_SIZE_PRIORITY_MIGRATED = "playback_performance_exo_size_priority_v1";
     private static final String KEY_PRELOAD_DEFAULTS_MIGRATED = "playback_performance_preload_defaults_v1";
+    private static final String KEY_PRELOAD_TEN_THREADS_MIGRATED = "playback_performance_preload_10_threads_v1";
+    private static final String KEY_CACHE_FIVE_MINUTES_MIGRATED = "playback_performance_cache_5_minutes_v1";
     private static final String KEY_EXO_LOAD_CONTROL_MIGRATED = "playback_performance_exo_load_control_v2";
     private static final String KEY_EXO_BACK_BUFFER_MIGRATED = "playback_performance_exo_back_buffer_v1";
     private static final String KEY_EXO_REBUFFER_MIGRATED = "playback_performance_exo_rebuffer_v3";
@@ -79,6 +81,8 @@ public class PlaybackPerformanceSetting {
         migrateBufferWatermarks();
         migrateExoSizePriority();
         migratePreloadDefaults();
+        migratePreloadTenThreads();
+        migrateCacheFiveMinutes();
         migrateExoLoadControl();
         migrateExoBackBuffer();
         migrateExoRebuffer();
@@ -694,6 +698,26 @@ public class PlaybackPerformanceSetting {
             if (shouldMigratePreloadDefaults(profile)) KernelPerformanceSetting.applyPreloadPreset(kernel, profile);
         }
         Prefers.put(KEY_PRELOAD_DEFAULTS_MIGRATED, true);
+    }
+
+    /** One-time upgrade: non-custom profiles move from the old 1-thread default to 10. */
+    private static void migratePreloadTenThreads() {
+        if (Prefers.getBoolean(KEY_PRELOAD_TEN_THREADS_MIGRATED)) return;
+        for (int kernel : new int[]{PlayerSetting.EXO, PlayerSetting.MPV, PlayerSetting.IJK}) {
+            int profile = clampProfile(Prefers.getInt(profileKey(kernel), PROFILE_RECOMMENDED));
+            if (profile == PROFILE_CUSTOM) continue;
+            if (KernelPerformanceSetting.getPreloadThreads(kernel) == 1) {
+                KernelPerformanceSetting.putPreloadThreads(kernel, 10);
+            }
+        }
+        Prefers.put(KEY_PRELOAD_TEN_THREADS_MIGRATED, true);
+    }
+
+    /** One-time upgrade: the old 30-minute cache default becomes 5 minutes. */
+    private static void migrateCacheFiveMinutes() {
+        if (Prefers.getBoolean(KEY_CACHE_FIVE_MINUTES_MIGRATED)) return;
+        if (PreloadSetting.getCacheMinutes() == 30) PreloadSetting.putCacheMinutes(5);
+        Prefers.put(KEY_CACHE_FIVE_MINUTES_MIGRATED, true);
     }
 
     static boolean shouldMigratePreloadDefaults(int profile) {

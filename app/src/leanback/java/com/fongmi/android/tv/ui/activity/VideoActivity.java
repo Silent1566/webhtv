@@ -392,6 +392,10 @@ private boolean runtimeSourceOnly;
 
     private ActivityVideoBinding mBinding;
     private ViewGroup.LayoutParams mFrameParams;
+    // 播放器焦点环必须复用 XML inflate 时带 Activity 主题解析出的 drawable；
+    // ResUtil.getDrawable() 用 application context 加载，?attr/tvPlayerRing 会解析成
+    // 错误颜色/透明，导致焦点环消失。
+    private Drawable mVideoFocusRingDrawable;
     private Observer<Result> mObserveDetail;
     private Observer<Result> mObservePlayer;
     private Observer<Result> mObserveSearch;
@@ -1741,6 +1745,13 @@ private boolean runtimeSourceOnly;
         SpiderDebug.log("video-flow", "initView after playback cost=%dms", System.currentTimeMillis() - start);
         applyPlaybackOverlay();
         mFrameParams = mBinding.video.getLayoutParams();
+        mVideoFocusRingDrawable = mBinding.video.getForeground();
+        // 退出全屏回到列表后，遥控上下进播放器偶发没有焦点环：焦点环由 video 的 foreground
+        // selector 绘制，布局重排后 drawable 状态可能不刷新。获得焦点时（非全屏、非纯音频
+        // 舞台）确定性恢复一次前景。
+        mBinding.video.setOnFocusChangeListener((v, hasFocus) -> {
+            if (hasFocus) ensureVideoFocusRing();
+        });
         mPlayerUi = new VodPlayerUiController(new VodPlayerUiHost() {
             @Override
             public PlayerManager player() {
@@ -2036,6 +2047,11 @@ private boolean runtimeSourceOnly;
         mBinding.flag.setHorizontalSpacing(ResUtil.dp2px(8));
         mBinding.flag.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
         mBinding.flag.setAdapter(mFlagAdapter = new FlagAdapter(this));
+        // 线路行是详情页第一个横向行：清晰度隐藏时必须显式接管向下键，
+        // 否则 BaseGridView 会按分段行保存的选中位置直接落到「1-20」，
+        // 跳过用户要求的「线路 → 倒序」焦点顺序。
+        mBinding.flag.setOnKeyListener((view, keyCode, event) -> onFlagKeyForDetail(event));
+        mFlagAdapter.setOnKeyListener((view, keyCode, event) -> onFlagKeyForDetail(event));
         mBinding.episode.setHorizontalSpacing(ResUtil.dp2px(8));
         mBinding.episode.setVerticalSpacing(ResUtil.dp2px(8));
         mBinding.episode.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -2052,14 +2068,10 @@ private boolean runtimeSourceOnly;
         mBinding.quality.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
         mBinding.quality.setAdapter(mQualityAdapter = new QualityAdapter(this));
         // 清晰度向下必须落到分段行的「倒序」chip（array 位置 0），不是当前分段 chip。
-        mBinding.quality.setOnKeyListener((view, keyCode, event) -> {
-            if (KeyUtil.isActionDown(event) && KeyUtil.isDownKey(event)
-                    && isVisible(mBinding.array) && mArrayAdapter.getItemCount() > 0) {
-                requestArrayFocus(0);
-                return true;
-            }
-            return false;
-        });
+        // 芯片的可聚焦视图是 text（adapter_quality.xml），必须在项级挂监听：grid 级监听
+        // 在真机上焦点在子项时不触发；同时 XML 里 nextFocusDown=@id/episode 会越过倒序行。
+        mBinding.quality.setOnKeyListener((view, keyCode, event) -> onQualityKey(event));
+        mQualityAdapter.setOnKeyListener((view, keyCode, event) -> onQualityKey(event));
         mBinding.array.setHorizontalSpacing(ResUtil.dp2px(8));
         mBinding.array.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
         mBinding.array.setAdapter(mArrayAdapter = new ArrayAdapter(this));
@@ -4882,6 +4894,9 @@ private boolean runtimeSourceOnly;
         int target = Math.max(0, Math.min(count - 1, current + delta));
         if (target == current) return false;
         requestArrayFocus(target);
+        // 焦点回调与布局回调可能互相抵消，单靠 onSegmentFocus 偶尔不会装载目标段。
+        // 这里同步补一次「内容已经显示就 no-op」的分段装载，保证左右键必然翻页。
+        if (target >= 2 && getFlag() != null) showEpisodeSegment(target);
         return true;
     }
 
@@ -4939,6 +4954,26 @@ private boolean runtimeSourceOnly;
         ViewTreeObserver observer = mBinding.array.getViewTreeObserver();
         if (observer.isAlive()) observer.removeOnGlobalLayoutListener(mArrayFocusListener);
         mArrayFocusListener = null;
+    }
+
+    /** 清晰度行下键：分段行可见时落到「倒序」chip（位置 0）。 */
+    private boolean onQualityKey(KeyEvent event) {
+        if (!KeyUtil.isActionDown(event) || !KeyUtil.isDownKey(event)) return false;
+        if (mBinding.array.getVisibility() != View.VISIBLE || mArrayAdapter == null || mArrayAdapter.getItemCount() == 0) return false;
+        requestArrayFocus(0);
+        return true;
+    }
+
+    /**
+     * 线路行向下：清晰度可见时保持原生链路；清晰度隐藏时直接落到分段行「倒序」chip（位置 0）。
+     * 不接管会让 HorizontalGridView 按分段行的选中位置换焦，表现为从线路直接跳到「1-20」。
+     */
+    private boolean onFlagKeyForDetail(KeyEvent event) {
+        if (!KeyUtil.isActionDown(event) || !KeyUtil.isDownKey(event)) return false;
+        if (mBinding.quality.getVisibility() == View.VISIBLE) return false;
+        if (mBinding.array.getVisibility() != View.VISIBLE || mArrayAdapter == null || mArrayAdapter.getItemCount() == 0) return false;
+        requestArrayFocus(0);
+        return true;
     }
 
     private boolean onArrayKey(KeyEvent event) {
@@ -5395,15 +5430,29 @@ private boolean runtimeSourceOnly;
             mBinding.video.setForeground(null);
             mBinding.video.setLayoutParams(new RelativeLayout.LayoutParams(RelativeLayout.LayoutParams.MATCH_PARENT, RelativeLayout.LayoutParams.MATCH_PARENT));
         } else {
-            mBinding.video.setForeground(ResUtil.getDrawable(R.drawable.selector_video));
+            mBinding.video.setForeground(mVideoFocusRingDrawable);
             mBinding.video.setLayoutParams(mFrameParams);
         }
         restoreEmbeddedVideoLayoutAfterFullscreen();
         getFocus1().requestFocus();
         mKeyDown.setFull(false);
         setFullscreen(false);
+        // 嵌入布局是异步恢复的（见 restoreEmbeddedVideoLayoutAfterFullscreen 的 post），
+        // 重排后偶发前景 selector 状态不刷新，焦点在播放器上却看不到焦点环。布局落定后
+        // 再确定性补一次焦点环。
+        mBinding.video.post(this::ensureVideoFocusRing);
         mFocus2 = null;
         hideInfo();
+    }
+
+    /** 播放器画面框的焦点环由 foreground selector 绘制；状态偶发不刷新时在这里强制恢复。 */
+    private void ensureVideoFocusRing() {
+        if (isFinishing() || isDestroyed() || isFullscreen() || mAudioStageVisible) return;
+        if (mVideoFocusRingDrawable == null) mVideoFocusRingDrawable = mBinding.video.getForeground();
+        if (mVideoFocusRingDrawable == null) return;
+        mBinding.video.setForeground(mVideoFocusRingDrawable);
+        mBinding.video.refreshDrawableState();
+        mBinding.video.invalidate();
     }
 
     private void restoreEmbeddedVideoLayoutAfterFullscreen() {
@@ -9955,8 +10004,46 @@ private boolean runtimeSourceOnly;
         } else if (isFullscreen()) {
             exitFullscreen();
         } else {
-            finishVideoPlayback();
+            handleDetailBackFocus();
         }
+    }
+
+    /**
+     * 详情页（非全屏）返回键改造成焦点回退链：焦点在播放器以下（线路/清晰度/分段/集数等）
+     * 时，第一次返回聚焦线路行「金牌」chip；再按一次返回聚焦播放器；焦点已在播放器时，
+     * 按一次返回即退出详情页。
+     */
+    private void handleDetailBackFocus() {
+        if (isFocusInside(mBinding.flag) && isEpisodeFocusTarget(mBinding.flag)) {
+            focusDetailPlayer();
+            return;
+        }
+        if (!isFocusInside(mBinding.video)) {
+            if (isEpisodeFocusTarget(mBinding.flag)) applyFlagFocus(0);
+            else focusDetailPlayer();
+            return;
+        }
+        finishVideoPlayback();
+    }
+
+    private void focusDetailPlayer() {
+        ensureVideoFocusRing();
+        mBinding.video.requestFocus();
+        // 焦点环 selector 依赖 view 的 focused state；requestFocus 后再刷一次确保白色环立即呈现。
+        mBinding.video.post(this::ensureVideoFocusRing);
+    }
+
+    /** 把焦点送回线路行指定 chip（0 = 金牌/第一个线路）；目标未布局时延迟一帧再试。 */
+    private void applyFlagFocus(int position) {
+        mBinding.flag.setSelectedPosition(position);
+        RecyclerView.ViewHolder holder = mBinding.flag.findViewHolderForAdapterPosition(position);
+        if (holder != null && holder.itemView.requestFocus()) return;
+        mBinding.flag.postDelayed(() -> {
+            if (isFinishing() || isDestroyed()) return;
+            if (!isFocusInside(mBinding.flag)) return;
+            RecyclerView.ViewHolder next = mBinding.flag.findViewHolderForAdapterPosition(position);
+            if (next != null) next.itemView.requestFocus();
+        }, 33);
     }
 
     private void finishVideoPlayback() {
@@ -11820,7 +11907,7 @@ private void applyAudioStageLayout(boolean visible) {
             mBinding.video.setForeground(null);
             mBinding.video.setLayoutParams(new RelativeLayout.LayoutParams(RelativeLayout.LayoutParams.MATCH_PARENT, RelativeLayout.LayoutParams.MATCH_PARENT));
         } else {
-            mBinding.video.setForeground(ResUtil.getDrawable(R.drawable.selector_video));
+            mBinding.video.setForeground(mVideoFocusRingDrawable);
             mBinding.video.setLayoutParams(mFrameParams);
         }
     }

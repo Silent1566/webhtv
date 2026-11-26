@@ -59,6 +59,7 @@ public final class ChoiceDialog extends DialogFragment {
     private boolean multi;
     private boolean showCancel = true;
     private boolean dismissOnChoice = true;
+    private boolean backToTopOnBack;
     private OnChoice choice;
     private OnApply apply;
     private OnItemEnabled itemEnabled;
@@ -159,6 +160,17 @@ public final class ChoiceDialog extends DialogFragment {
         showSingle(manager, title, items, selected, true, choice);
     }
 
+    /** Settings list dialogs (e.g. DoH): back first returns focus to the first item. */
+    public static void showSingleWithBackTop(FragmentActivity activity, int titleRes, CharSequence[] items, int selected, OnChoice choice) {
+        ChoiceDialog dialog = new ChoiceDialog();
+        dialog.title = activity.getString(titleRes);
+        dialog.items = items == null ? new CharSequence[0] : Arrays.copyOf(items, items.length);
+        dialog.selected = selected;
+        dialog.choice = choice;
+        dialog.backToTopOnBack = true;
+        dialog.show(activity.getSupportFragmentManager(), ChoiceDialog.class.getSimpleName());
+    }
+
     private static void showSingle(FragmentManager manager, CharSequence title, CharSequence[] items, int selected, boolean showCancel, OnChoice choice) {
         ChoiceDialog dialog = new ChoiceDialog();
         dialog.title = title;
@@ -255,6 +267,10 @@ public final class ChoiceDialog extends DialogFragment {
         dialog.setContentView(createView(LayoutInflater.from(requireContext())));
         ThemeController.bindDialog(dialog);
         dialog.setCanceledOnTouchOutside(true);
+        dialog.setOnKeyListener((ignored, keyCode, event) -> backToTopOnBack
+                && event.getAction() == KeyEvent.ACTION_DOWN
+                && keyCode == KeyEvent.KEYCODE_BACK
+                && focusFirstChoiceItemOnBack());
         return dialog;
     }
 
@@ -278,6 +294,20 @@ public final class ChoiceDialog extends DialogFragment {
             adaptListHeight(window);
             if (Util.isLeanback()) window.getDecorView().post(this::focusSelectedItem);
         });
+    }
+
+    private boolean focusFirstChoiceItemOnBack() {
+        View root = viewRoot();
+        View listView = root == null ? null : root.findViewWithTag("choice_list");
+        if (!(listView instanceof ViewGroup list)) return false;
+        View focused = root.findFocus();
+        for (int index = 0; index < list.getChildCount(); index++) {
+            View child = list.getChildAt(index);
+            if (!child.isEnabled() || !child.isFocusable()) continue;
+            if (focused == child) return false;
+            return requestItemFocus(list, child);
+        }
+        return false;
     }
 
     private void focusSelectedItem() {

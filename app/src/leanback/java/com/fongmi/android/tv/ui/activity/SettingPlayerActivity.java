@@ -5,6 +5,7 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.text.InputType;
+import android.view.KeyEvent;
 import android.view.View;
 import android.widget.EditText;
 import android.widget.FrameLayout;
@@ -80,11 +81,16 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
     }
 
     @Override
+    protected int settingTopFocusId() {
+        return R.id.decode;
+    }
+
+    @Override
     protected void initView(Bundle savedInstanceState) {
         setVisible();
         format = new DecimalFormat("0.#");
         PlaybackPerformanceSetting.ensureInitialized();
-        mBinding.exo4kCompat.requestFocus();
+        mBinding.decode.requestFocus();
         mBinding.uaText.setText(Setting.getUa());
         mBinding.aacText.setText(getSwitch(PlayerSetting.isPreferAAC()));
         mBinding.tunnelText.setText(getSwitch(PlayerSetting.isTunnel()));
@@ -151,6 +157,29 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
         mBinding.preloadAhead.setOnClickListener(this::setPreloadAhead);
         mBinding.preloadSeamless.setOnClickListener(this::setPreloadSeamless);
         mBinding.preloadSeamlessBar.setOnSeekBarChangeListener(this);
+        // 「集数缓存总开关」下的档位进度条：遥控从展开行下键直接落到进度条而不是右侧文字，
+        // 左右键按档位增减并即时落盘，避免 TV 上 seekbar 默认按键行为被父布局吞掉。
+        // 展开行的下移目标由 setPreloadText() 按展开/收起状态动态设置：收起时进度条 GONE，
+        // 静态 nextFocusDownId 指向不可聚焦目标会导致焦点搜索失败、焦点凭空消失（真机报告）。
+        mBinding.preloadSeamlessSwitch.setNextFocusDownId(R.id.preloadExpand);
+        mBinding.preloadSeamlessText.setFocusable(false);
+        mBinding.preloadSeamlessText.setFocusableInTouchMode(false);
+        mBinding.preloadSeamlessBar.setNextFocusUpId(R.id.preloadExpand);
+        mBinding.preloadSeamlessBar.setNextFocusDownId(R.id.preloadThreadText);
+        mBinding.preloadSeamlessBar.setOnKeyListener((view, keyCode, event) -> {
+            if (keyCode != KeyEvent.KEYCODE_DPAD_LEFT && keyCode != KeyEvent.KEYCODE_DPAD_RIGHT) return false;
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                SeekBar bar = (SeekBar) view;
+                int step = keyCode == KeyEvent.KEYCODE_DPAD_RIGHT ? 1 : -1;
+                int progress = Math.max(0, Math.min(bar.getMax(), bar.getProgress() + step));
+                if (progress != bar.getProgress()) {
+                    bar.setProgress(progress);
+                    onProgressChanged(bar, progress, true);
+                    onStopTrackingTouch(bar);
+                }
+            }
+            return true;
+        });
         mBinding.preloadDuration.setOnClickListener(this::setPreloadDuration);
         mBinding.preloadDurationBar.setOnSeekBarChangeListener(this);
         mBinding.preloadSeamlessSwitch.setOnClickListener(this::setSeamlessSwitch);
@@ -508,6 +537,9 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
         mBinding.preloadExpand.setVisibility(seamless ? View.VISIBLE : View.GONE);
         mBinding.preloadExpandText.setText(getString(expanded ? R.string.player_seamless_collapse : R.string.player_seamless_expand));
         int seamlessVisibility = expanded ? View.VISIBLE : View.GONE;
+        // 展开行下移目标动态化：展开时落到档位进度条；收起时进度条整块 GONE，
+        // 置 NO_ID 让框架波束搜索找下一个可见行，避免静态 ID 指向 GONE 视图导致丢焦点。
+        mBinding.preloadExpand.setNextFocusDownId(expanded ? R.id.preloadSeamlessBar : View.NO_ID);
         mBinding.preloadSeamless.setVisibility(seamlessVisibility);
         mBinding.preloadDuration.setVisibility(seamlessVisibility);
         mBinding.preloadThread.setVisibility(seamlessVisibility);

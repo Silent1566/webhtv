@@ -1,6 +1,7 @@
 package com.fongmi.android.tv.ui.adapter;
 
 import android.view.LayoutInflater;
+import android.view.View;
 import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
@@ -14,10 +15,16 @@ public class QualityAdapter extends RecyclerView.Adapter<QualityAdapter.ViewHold
     private final OnClickListener listener;
     private Result result;
     private int position;
+    private View.OnKeyListener keyListener;
 
     public QualityAdapter(OnClickListener listener) {
         this.listener = listener;
         this.result = Result.empty();
+    }
+
+    /** 项级按键监听：绑在可聚焦的 text 上。grid 级 setOnKeyListener 在真机上焦点在子项时不可靠。 */
+    public void setOnKeyListener(View.OnKeyListener keyListener) {
+        this.keyListener = keyListener;
     }
 
     public interface OnClickListener {
@@ -57,6 +64,7 @@ public class QualityAdapter extends RecyclerView.Adapter<QualityAdapter.ViewHold
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         holder.binding.text.setText(result.getUrl().n(position));
         holder.binding.text.setOnClickListener(v -> onItemClick(position));
+        holder.binding.text.setOnKeyListener(keyListener);
         holder.binding.text.setSelected(result.getUrl().getPosition() == position);
     }
 

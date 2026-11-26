@@ -70,6 +70,11 @@ public class SettingEnhanceActivity extends BaseActivity {
     }
 
     @Override
+    protected int settingTopFocusId() {
+        return R.id.customCsp;
+    }
+
+    @Override
     protected void initView(Bundle savedInstanceState) {
         reorderItems();
         mBinding.customCsp.requestFocus();

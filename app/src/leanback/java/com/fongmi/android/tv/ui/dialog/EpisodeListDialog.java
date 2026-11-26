@@ -586,6 +586,11 @@ public class EpisodeListDialog extends BaseAlertDialog implements FlagAdapter.On
         focusPosition(binding.array, position);
     }
 
+    private void focusFlagRow() {
+        int position = Math.max(0, binding.flag.getSelectedPosition());
+        focusPosition(binding.flag, position);
+    }
+
     private void focusSeason() {
         int position = Math.max(0, binding.season.getSelectedPosition());
         focusPosition(binding.season, position);
@@ -599,12 +604,33 @@ public class EpisodeListDialog extends BaseAlertDialog implements FlagAdapter.On
     private boolean focusPosition(BaseGridView grid, int position) {
         if (grid.getAdapter() == null || grid.getAdapter().getItemCount() == 0) return false;
         int target = Math.max(0, Math.min(position, grid.getAdapter().getItemCount() - 1));
-        grid.setSelectedPosition(target, holder -> holder.itemView.requestFocus());
+        RecyclerView.ViewHolder holder = grid.findViewHolderForAdapterPosition(target);
+        if (holder != null) return holder.itemView.requestFocus();
+        // 目标在屏幕外：setSelectedPosition 的 attach 回调在部分设备上不触发，按键会被吞掉。
+        // 补一条主动滚动 + 延迟重试的路径，确保焦点一定落到目标行；重试有上限。
+        grid.setSelectedPosition(target, attached -> attached.itemView.requestFocus());
+        grid.scrollToPosition(target);
+        grid.postDelayed(() -> {
+            if (isFocusInside(grid)) return;
+            RecyclerView.ViewHolder next = grid.findViewHolderForAdapterPosition(target);
+            if (next != null) next.itemView.requestFocus();
+        }, 64);
         return true;
     }
 
     private boolean isVisible(View view) {
         return view.getVisibility() == View.VISIBLE;
+    }
+
+    private boolean isFocusInside(View view) {
+        View focus = getDialog() == null ? null : getDialog().getCurrentFocus();
+        if (focus == null) focus = requireActivity().getCurrentFocus();
+        while (focus != null) {
+            if (focus == view) return true;
+            android.view.ViewParent parent = focus.getParent();
+            focus = parent instanceof View ? (View) parent : null;
+        }
+        return false;
     }
 
     private int getEpisodeSegmentSize(int size) {
@@ -697,6 +723,29 @@ public class EpisodeListDialog extends BaseAlertDialog implements FlagAdapter.On
     @Override
     public Dialog onCreateDialog(@Nullable android.os.Bundle savedInstanceState) {
         Dialog dialog = super.onCreateDialog(savedInstanceState);
+        // 全屏选集面板：第一次返回先把焦点送回「1-20」分页 chip，第二次才关闭弹层。
+        // 个别线路集数不足一个分段时分段行整块 GONE：此时返回键回退到面板顶端行
+        // （季 → 线路），同样先聚焦再按一次才关闭，避免遥控直接退出集数列表。
+        dialog.setOnKeyListener((d, keyCode, event) -> {
+            if (keyCode != KeyEvent.KEYCODE_BACK || event.getAction() != KeyEvent.ACTION_DOWN) return false;
+            if (binding == null) return false;
+            boolean arrayUsable = isVisible(binding.array) && arrayAdapter != null && arrayAdapter.getItemCount() > 0;
+            if (arrayUsable) {
+                if (isFocusInside(binding.array)) return false;
+                focusArray();
+                return true;
+            }
+            if (!isFocusInside(binding.episode)) return false;
+            if (isVisible(binding.season) && seasonAdapter != null && seasonAdapter.getItemCount() > 0) {
+                focusSeason();
+                return true;
+            }
+            if (isVisible(binding.flag) && flagAdapter != null && flagAdapter.getItemCount() > 0) {
+                focusFlagRow();
+                return true;
+            }
+            return false;
+        });
         Window window = dialog.getWindow();
         if (window != null) {
             window.setWindowAnimations(0);

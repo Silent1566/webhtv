@@ -8,6 +8,7 @@ import android.os.SystemClock;
 import android.text.TextUtils;
 import android.view.KeyEvent;
 import android.view.View;
+import android.view.ViewParent;
 import android.view.ViewTreeObserver;
 import android.webkit.WebView;
 import android.widget.FrameLayout;
@@ -189,7 +190,37 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
         super.onCreate(savedInstanceState);
     }
 
-    @Override
+    // 功能行首尾环形环绕的 Activity 级接管：焦点在第一个按钮按左 → 跳到行尾最后一个按钮，
+    // 在最后一个按钮按右 → 跳回第一个按钮。行级/项级环绕在部分真机上（目标在屏幕外、
+    // 布局回调不触发）会吞掉按键，这里在事件进视图树前确定性处理，挂到 dispatchKeyEvent 内。
+
+    private boolean wrapFuncRowEdge(KeyEvent event) {
+        View focus = getCurrentFocus();
+        if (focus == null || focus.getTag(R.id.tag_home_func_button) == null) return false;
+        ViewParent parent = focus.getParent();
+        while (parent != null && !(parent instanceof RecyclerView)) parent = parent.getParent();
+        if (!(parent instanceof RecyclerView grid) || grid.getAdapter() == null) return false;
+        int position = grid.getChildAdapterPosition(focus);
+        int count = grid.getAdapter().getItemCount();
+        if (position == RecyclerView.NO_POSITION || count <= 1) return false;
+        boolean left = KeyUtil.isLeftKey(event);
+        int target;
+        if (left && position == 0) target = count - 1;
+        else if (!left && position == count - 1) target = 0;
+        else return false;
+        focusFuncTarget(grid, target, 0);
+        return true;
+    }
+
+    /** 目标在屏幕外时 scrollToPosition 后布局要等下一帧，用 postDelayed 逐帧确认焦点落地；有上限，不长期占用主线程。 */
+    private void focusFuncTarget(RecyclerView grid, int target, int attempt) {
+        if (attempt > 8 || grid.getAdapter() == null || target >= grid.getAdapter().getItemCount()) return;
+        RecyclerView.ViewHolder holder = grid.findViewHolderForAdapterPosition(target);
+        if (holder != null && holder.itemView.requestFocus()) return;
+        grid.scrollToPosition(target);
+        grid.postDelayed(() -> focusFuncTarget(grid, target, attempt + 1), 33);
+    }
+
     protected void initView(Bundle savedInstanceState) {
         SpiderDebug.log("startup", "home initView start cost=%sms", System.currentTimeMillis() - App.time());
         mResult = Result.empty();
@@ -1488,6 +1519,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
             else onHomeMenuKey();
             return true;
         }
+        if (KeyUtil.isActionDown(event) && (KeyUtil.isLeftKey(event) || KeyUtil.isRightKey(event)) && wrapFuncRowEdge(event)) return true;
         if (mWeb != null && mWeb.isVisible() && mBinding.webOverlay.getVisibility() == View.VISIBLE) {
             if (KeyUtil.isBackKey(event)) {
                 if (KeyUtil.isActionUp(event)) onBackInvoked();

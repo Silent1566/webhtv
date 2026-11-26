@@ -39,6 +39,11 @@ public class SettingTmdbActivity extends BaseActivity {
     }
 
     @Override
+    protected int settingTopFocusId() {
+        return R.id.tmdbSource;
+    }
+
+    @Override
     protected void initView(Bundle savedInstanceState) {
         mBinding.tmdbSource.requestFocus();
         setText();
