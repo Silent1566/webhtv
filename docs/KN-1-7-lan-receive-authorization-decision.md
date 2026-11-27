@@ -1,6 +1,6 @@
 # KN-1 #7 · 局域网接收授权
 
-> 状态：**第 1 步仅实现离线授权内核**。HTTP、持久化、UI 与客户端尚未接入。§12 更正了早期方案中把 UUID 当作身份证明的部分。
+> 状态：**已实现离线授权内核与受保护的通道原语**。HTTP、持久化、UI 与客户端尚未接入。§12 更正了早期方案中把 UUID 当作身份证明的部分，§13 记录通道证据。
 > 来源：`docs/KN-1-pc-parity-upgrade-backlog-20261126.md` 第 7 项（局域网同步/推送接收授权）。
 > 调研日期：2026-11-27（本地时间 +08:00）。
 
@@ -137,4 +137,11 @@
 
 ### Recovery anchor
 
-回滚基线 `dev2@1dfde3df4b`；开工无既有脏文件。范围为 `LanPeerAuthorization`、定向 JVM 测试、本文和 KN-1 索引。第 1 步验收：JDK 21/JUnit 4.13.2 下，内核 12 例及现有代理凭据 3 例共 15 例通过；固定设备 ID 的回归用例先证实失败再修复。HTTP 未接入、未做网络验证。下一步：在接入前验证受保护的配对与控制通道。
+回滚基线 `dev2@1dfde3df4b`；第 2 步开工无既有脏文件。范围为 `LanPeerAuthorization`、`LanSecureChannel`、两份定向 JVM 测试、本文与 KN-1 索引。第 2 步验收：JDK 21/JUnit 4.13.2 下通道 1 例通过（正例交换应用数据、冒名对端在进入处理器前即被拒），内核 12 例与代理凭据 3 例仍通过；红灯先后由缺失类与模式配置错误证实。HTTP 仍走明文、未接入内核。下一步：把配对与控制入口挂到受保护监听上，并补持久化与 UI。
+
+## 13. 受保护通道证据（2026-11-27）
+
+- 互为身份的是**两份本地自签证书的 SHA-256 指纹**，不是 UUID、也不是平台信任库。客户端只接受固定指纹的服务端证书，服务端要求对端出示证书并校验指纹；两侧都用 `SSLContext` 注入固定指纹的 `X509TrustManager`，未使用 `OkHttp.hostnameVerifier(true)` 之类的全局放行。
+- 出口只绑定 `127.0.0.1` 的临时端口，用一次握手交换一行应用数据后即关闭；**没有**接入 `Nano`/端口 9978，也没有改变现有 HTTP 行为。
+- 复核依据：[RFC 9525 §6](https://www.rfc-editor.org/rfc/rfc9525.txt)（用 `subjectAltName` 核对对端身份）；[OkHttp 5.4.0 CertificatePinner KDoc](https://raw.githubusercontent.com/square/okhttp/parent-5.4.0/okhttp/src/commonJvmAndroid/kotlin/okhttp3/CertificatePinner.kt)（自签证书必须先被 `TrustManager` 接受才能固定）；本机 `nanohttpd-2.3.1` 的 `makeSecure`/`SecureServerSocketFactory` 签名（说明最小可用做法是独立 TLS 监听，而不是在原监听上叠加）。
+- **未验**：Android 运行时上的同一握手（本轮只在 JDK 21 上跑通；下一步需要在两台模拟器上复验）；配对流程、凭据存储、UI 与第一方客户端接线均未开始。
