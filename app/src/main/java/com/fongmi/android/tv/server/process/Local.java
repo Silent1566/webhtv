@@ -17,6 +17,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.InetAddress;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -37,22 +38,68 @@ public class Local implements Process {
 
     @Override
     public Response doResponse(IHTTPSession session, String url, Map<String, String> files) {
-        if (url.startsWith("/file")) return getFile(session.getHeaders(), session.getParms(), url);
+        if (url.startsWith("/file")) return getFile(session, url);
         if (url.startsWith("/upload")) return upload(session.getParms(), files);
         if (url.startsWith("/newFolder")) return newFolder(session.getParms());
         if (url.startsWith("/delFolder") || url.startsWith("/delFile")) return delete(session.getParms());
         return null;
     }
 
-    private Response getFile(Map<String, String> headers, Map<String, String> params, String path) {
+    private Response getFile(IHTTPSession session, String url) {
+        Map<String, String> headers = session.getHeaders();
         try {
-            File file = Path.local(path.substring(5));
+            File file = resolveReadable(session, url.substring(5));
             if (file.isDirectory()) return getFolder(file);
-            if (file.isFile()) return getFile(headers, params, file, getMimeTypeForFile(path));
+            if (file.isFile()) return getFile(headers, session.getParms(), file, getMimeTypeForFile(url));
             return Nano.error(Status.NOT_FOUND, "File not found");
+        } catch (SecurityException e) {
+            return Nano.error(Status.FORBIDDEN, e.getMessage());
         } catch (Exception e) {
             return Nano.error(e.getMessage());
         }
+    }
+
+    /**
+     * 只有真实回环连接可读共享根之外的内部缓存文件；其他对端必须落在共享根内。
+     * 对端地址取自连接本身，不采信任何转发请求头。
+     */
+    private static File resolveReadable(IHTTPSession session, String requested) throws IOException {
+        File rootDir = Path.root().getCanonicalFile();
+        if (requested.indexOf(58) < 0) {
+            String name = requested;
+            if (name.startsWith("/")) name = name.substring(1);
+            File shared = contained(rootDir, new File(rootDir, name));
+            if (shared != null) return shared;
+        }
+        File external = Path.local(requested).getCanonicalFile();
+        if (isLoopback(session)) return external;
+        throw new SecurityException("Path outside shared storage");
+    }
+
+    /** 存在时用真实路径比对，能识别符号链接越界；不存在时退回 canonical 字面判定。 */
+    private static File contained(File root, File candidate) throws IOException {
+        File resolved = candidate.exists() ? candidate.toPath().toRealPath().toFile() : candidate.getCanonicalFile();
+        String rootPath = root.toPath().toRealPath().toString();
+        String target = resolved.getPath();
+        return target.equals(rootPath) || target.startsWith(rootPath + File.separator) ? resolved : null;
+    }
+
+    private static boolean isLoopback(IHTTPSession session) {
+        String address = session.getRemoteIpAddress();
+        if (address == null) return false;
+        // 只接受 IP 字面量，避免 localhost 之类的主机名经 DNS 解析获得回环权限。
+        if (!address.matches("[0-9A-Fa-f:.\\[\\]]+")) return false;
+        try {
+            return InetAddress.getByName(address).isLoopbackAddress();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private static boolean isWithinRoot(File file) throws IOException {
+        String root = Path.root().getCanonicalPath();
+        String target = file.getCanonicalPath();
+        return target.equals(root) || target.startsWith(root + File.separator);
     }
 
     private Response getFile(Map<String, String> headers, Map<String, String> params, File file, String mime) throws IOException {
