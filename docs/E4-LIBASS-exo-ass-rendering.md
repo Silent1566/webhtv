@@ -797,3 +797,23 @@ USB 再次短暂重连后，改为手机本地 shell 连续测量，保留原已
 | `app/build/outputs/apk/mobileArm64_v8a/release/mobile-arm64_v8a.apk` | 150060204 | `495157f6c45a515278bf5f74ad4dc9f09edd30522025887981e85e8162c05b50` |
 | `app/build/outputs/apk/mobileArm64_v8a/debug/app-mobile-arm64_v8a-debug.apk` | 181893921 | `ce9d02c97edcbd595f40db5ae9fa8f28fa9b4dce750ef0b1cddd0471e35183a0` |
 | `app/build/outputs/apk/androidTest/mobileArm64_v8a/debug/app-mobile-arm64_v8a-debug-androidTest.apk` | 1370334 | `05073818d8e0edbeb02dc86388d88c5e70ef2a69ec000481303681eecba0ae28` |
+
+
+## Exo 外挂字幕列表容错（2026-11-27）
+
+- 授权与范围：用户确认窄适配；基线及回滚锚点 Silent1566/webhtv dev2@5d5f7008ba16920c8c42531bc63129f2772e603a，初始工作树干净。变更限 Exo 外挂配置入口、相关测试及 E4-LIBASS 文档；不改变 MPV/IJK、SubtitleFlags、下载、MIME 推断、Media3/原生库或发布配置。
+- 决策问题：无效外挂条目是否可在 Exo 配置边界丢弃，同时保住有效字幕顺序、URI、MIME、语言、默认/强制标记和本地 ASS 标识格式？只要真实 MediaItem 能保留这些字段，无需重写工厂和选轨策略。
+
+| 证据（2026-11-27） | 等级 | 决策影响与限制 |
+| --- | --- | --- |
+| [FongMi/TV 753b66fc0e390b27e7a49c7553d4dda5e3831054](https://github.com/FongMi/TV/commit/753b66fc0e390b27e7a49c7553d4dda5e3831054)，父 a767cb510e73f4263a4f8248c3e82e6bb6b652f6；四文件 diff | A | 工厂在创建配置和计算 flags 前过滤 null/空 URL；上游同时修改 PlayerManager 和 MPV，属于本轮不移植部分。精确提交未关联 PR；[后续 MediaItemFactory 历史](https://github.com/FongMi/TV/commits/fongmi/app/src/main/java/com/fongmi/android/tv/player/media/MediaItemFactory.java) 的 125468f0ec3f448c93626b4a7ef27a03cad21790 是配置身份重整，不作为本阶段输入。 |
+| [AndroidX Media3 MediaItem.SubtitleConfiguration.Builder](https://developer.android.com/reference/androidx/media3/common/MediaItem.SubtitleConfiguration.Builder) 对应 [androidx/media release 源码](https://github.com/androidx/media/blob/release/libraries/common/src/main/java/androidx/media3/common/MediaItem.java)，源码 blob 6be88f395a3c421271e881570a7912341f1d2348 | A | URI、MIME、flags、id 分别由调用方提供；不依赖 builder 过滤业务列表。不改本地使用的 API 或版本。 |
+| WebHTV 基线 ExoUtil.java:349–364、1094–1105，Sub.java:44–61、AssInput.java:12–32 | A | 条目直接解引用并配置；Sub 将缺失地址归一为空字符串；本地 ASS 需要 webhtv-ass-external:数字，不能复制上游后续身份策略。 |
+
+- 其他证据类别：没有新规范、算法、设备兼容、性能或 native 供应链主张，论文、第三方性能报告、播放器二进制/ABI 研究与此 Java 输入护栏的决策无关。以精确上游差异、Media3 平台 API 和本仓回归替代轶闻；不声称有现场崩溃数量或性能收益。
+- 方案：不变更会保留配置失败风险；照搬上游会扩至 MPV/公共投递入口及不同 flag 计算；选择 Exo Java 入口跳过 null/空 URL，按过滤后原顺序交给既有 builder，保留 URL 转换、有效轨道 flags 与 ASS ID 结构，不推断新 MIME。不新增网络请求或依赖，空间复杂度、ABI/包体边界不变；只对无效数据产生行为差异。
+- 验收及回滚：先证明混合有效 ASS / null / 空地址 / 有效 SRT 失败，另验全空地址降为无外挂字幕；修复后两项均通过，Mobile/Leanback 定向编译及 ASS 标识回归，复用现有双字幕播放用例做设备冒烟（不覆盖已有安装）。版本库只变化本阶段路径，可原子 revert，恢复上述基线行为。
+- 已验证（代码未改 → 仅过滤无效项）：精确回归由 2 个预期失败转为 2/2 通过。红灯混合列表在 ExoUtil.buildSubConfig 对 null 解引用，仅空地址列表保留了无效配置；第 1 次初始化失败源于 Windows 无 Conscrypt JNI，夹具按现有约定关闭 Conscrypt，并禁用不相关的去广设置后才记录有效红灯。
+- 绿灯：Leanback ARM64 Debug 的外挂配置 2/2 与 AssInput 6/6、Mobile ARM64 Debug 的 AssInput 6/6，共 14/14 无失败、错误或跳过；两端 Java 生产／测试编译均成功，标准 Gradle 命令不使用 init 脚本。日志 F:/temp/webhtv-e4-external-subtitle-red-contract-91000.log、F:/temp/webhtv-e4-external-subtitle-green-87440.log。
+- Android 设备冒烟：emulator-5558 / API 28，隔离 Mobile ARM64 APK 与测试 APK 构建、安装成功。真实 Exo 的 DualSubtitlePlaybackTest#testExternalAssAndSecondaryTextLifecycle 混入 null 和空地址，实际提取并切换有效字幕轨、运行 ASS/SRT 双轨生命周期，1/1 通过（9.69s）。临时包 com.silent.android.webhtv.e4verify 与 .test 均已卸载，未覆盖已安装应用；临时构建配置不入库。日志 F:/temp/webhtv-e4-subtitle-isolated-6386ae7f/dual-subtitle-device.log。
+- 收口：没有改变二进制、依赖、播放选轨策略或包体配置；本轮不是其他 ABI、真实站源表现或性能专项测量。按 Task-Guard: E4-LIBASS-EXTERNAL-SUBTITLE-GUARD 定位原子提交及恢复标签，必要时 revert 此提交；未授权推送或发布。
