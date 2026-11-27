@@ -21,6 +21,7 @@ import com.fongmi.android.tv.bean.Device;
 import com.fongmi.android.tv.bean.SyncOptions;
 import com.fongmi.android.tv.databinding.DialogOneKeySyncBinding;
 import com.fongmi.android.tv.remote.RemoteStore;
+import com.fongmi.android.tv.server.LanClient;
 import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.theme.ThemeController;
@@ -46,7 +47,6 @@ import com.google.android.material.checkbox.MaterialCheckBox;
 import java.io.File;
 import java.io.IOException;
 import java.util.Locale;
-import java.util.concurrent.TimeUnit;
 
 import okhttp3.Call;
 import okhttp3.Callback;
@@ -239,6 +239,7 @@ public class OneKeySyncDialog extends BaseBottomSheetDialog implements SyncDevic
     }
 
     private void updateVisible() {
+        if (binding == null) return;
         if (selected != null) {
             binding.recycler.setVisibility(View.GONE);
             binding.status.setVisibility(View.GONE);
@@ -345,7 +346,7 @@ public class OneKeySyncDialog extends BaseBottomSheetDialog implements SyncDevic
     }
 
     private void focusFirstDevice() {
-        if (!focusFirstOnNextDevice || selected != null || adapter.getItemCount() == 0) return;
+        if (binding == null || !focusFirstOnNextDevice || selected != null || adapter.getItemCount() == 0) return;
         focusFirstOnNextDevice = false;
         binding.recycler.scrollToPosition(0);
     }
@@ -360,44 +361,47 @@ public class OneKeySyncDialog extends BaseBottomSheetDialog implements SyncDevic
             Notify.show(R.string.sync_select_device_first);
             return;
         }
+        Device target = LanRemotePairDialog.snapshot(selected);
         SyncOptions options = options();
-        // 方向必须在入口快照：toRemote 由主线程的方向选择器改写，而下面的工作线程要读它
-        // 决定请求体。若不快照，同步中切换方向会让 URL 的 mode 与请求体（backup/device）
-        // 指向相反方向。
-        final boolean toRemote = this.toRemote;
-        // 代际同样在入口快照：陈旧回调靠它在执行前丢弃，不会复位新一次同步的界面。
-        final long generation = ++syncGeneration;
-        String mode = toRemote ? "1" : "2";
-        String url = String.format(Locale.getDefault(), "%s/action?do=sync&mode=%s&type=backup", selected.getIp(), mode);
+        boolean direction = toRemote;
+        long generation = ++syncGeneration;
         binding.start.setEnabled(false);
+        binding.changeDevice.setEnabled(false);
+        binding.directionPush.setEnabled(false);
+        binding.directionPull.setEnabled(false);
+        LanRemotePairDialog.withPairing(requireActivity(), target, () -> current(generation),
+                () -> startSync(target, options, direction, generation),
+                () -> { if (current(generation)) setSyncing(false); });
+    }
+
+    private void startSync(Device target, SyncOptions options, boolean toRemote, long generation) {
+        String url = String.format(Locale.ROOT, "%s/action?do=sync&mode=%s&type=backup", target.getIp(), toRemote ? "1" : "2");
         setSyncing(true);
         updateProgress(0, toRemote ? R.string.sync_prepare_files : R.string.sync_wait_remote);
         prepareStart = System.currentTimeMillis();
         prepareUpdate = 0;
         Task.execute(() -> {
+            SyncFiles.Archive archive = null;
+            MpvConfigSync.Archive mpvArchive = null;
+            LoginStateSync.Archive loginArchive = null;
             try {
-                SyncFiles.Archive archive = toRemote && SyncFiles.hasPaths(options) ? SyncFiles.createArchive(SyncFiles.getPaths(options), () -> syncing && generation == syncGeneration, (count, size) -> onPrepareProgress(generation, count, size)) : null;
-                MpvConfigSync.Archive mpvArchive = toRemote && options.isMpvConfig() ? MpvConfigSync.createArchive() : null;
-                LoginStateSync.Archive loginArchive = toRemote && options.isLoginState() ? LoginStateSync.createArchive() : null;
+                if (!transferring(generation)) return;
+                if (toRemote && SyncFiles.hasPaths(options)) archive = SyncFiles.createArchive(SyncFiles.getPaths(options),
+                        () -> transferring(generation), (count, size) -> onPrepareProgress(generation, count, size));
+                if (!transferring(generation)) return;
+                if (toRemote && options.isMpvConfig()) mpvArchive = MpvConfigSync.createArchive();
+                if (!transferring(generation)) return;
+                if (toRemote && options.isLoginState()) loginArchive = LoginStateSync.createArchive();
+                if (!transferring(generation)) return;
                 RequestBody body = buildBody(options, toRemote, archive, mpvArchive, loginArchive, generation);
-                // 代际必须一起判：取消后立刻重开时 syncing 已是新一次同步的 true，
-                // 只判 syncing 会让这条陈旧的准备线程继续把上一轮的 body 真发出去，
-                // 并在 request() 里覆盖 syncCall（此后点「取消」取消的是错的 Call）。
-                if (!syncing || generation != syncGeneration) {
-                    if (archive != null) archive.delete();
-                    if (mpvArchive != null) mpvArchive.delete();
-                    if (loginArchive != null) loginArchive.delete();
-                    return;
-                }
-                App.post(() -> binding.start.setEnabled(true));
-                request(url, body, archive, mpvArchive, loginArchive, 0, generation);
+                request(new Transfer(target, url, body, archive, mpvArchive, loginArchive, generation, !toRemote), 0);
+                archive = null;
+                mpvArchive = null;
+                loginArchive = null;
             } catch (Exception e) {
-                if (!syncing || generation != syncGeneration) return;
-                App.post(() -> {
-                    if (generation != syncGeneration) return;
-                    setSyncing(false);
-                    Notify.show(getString(R.string.sync_failed_with_reason, e.getMessage()));
-                });
+                App.post(() -> finish(generation, target, R.string.sync_failed));
+            } finally {
+                deleteArchives(archive, mpvArchive, loginArchive);
             }
         });
     }
@@ -428,79 +432,87 @@ public class OneKeySyncDialog extends BaseBottomSheetDialog implements SyncDevic
         if (options.isRemoteRelay() && includeLocal) body.add("remoteRelay", RemoteStore.exportRelayConfig());
     }
 
-    private void request(String url, RequestBody body, SyncFiles.Archive archive, MpvConfigSync.Archive mpvArchive, LoginStateSync.Archive loginArchive, int retry, long generation) {
-        syncCall = OkHttp.newCall(client, url, body);
-        syncCall.enqueue(callback(url, body, archive, mpvArchive, loginArchive, retry, generation));
-    }
-
-    private void retry(String url, RequestBody body, SyncFiles.Archive archive, MpvConfigSync.Archive mpvArchive, LoginStateSync.Archive loginArchive, int retry, long generation, String msg) {
-        if (generation != syncGeneration || !syncing) {
-            if (archive != null) archive.delete();
-            if (mpvArchive != null) mpvArchive.delete();
-            if (loginArchive != null) loginArchive.delete();
+    private void request(Transfer transfer, int retry) {
+        if (!transferring(transfer.generation)) {
+            transfer.deleteArchives();
             return;
         }
-        if (retry >= MAX_RETRY) {
-            if (archive != null) archive.delete();
-            if (mpvArchive != null) mpvArchive.delete();
-            if (loginArchive != null) loginArchive.delete();
-            App.post(() -> {
-                if (generation != syncGeneration) return;
-                setSyncing(false);
-                Notify.show(getString(R.string.sync_failed_with_reason, msg));
-            });
-        } else {
-            Task.schedule(() -> {
-                // 延迟重试也要复核代际：这段时间里用户可能已取消并重新开始同步，
-                // 此时重发上一轮的请求会与新同步并发，并劫持 syncCall。
-                if (generation != syncGeneration || !syncing) {
-                    if (archive != null) archive.delete();
-                    if (mpvArchive != null) mpvArchive.delete();
-                    if (loginArchive != null) loginArchive.delete();
-                    return;
-                }
-                request(url, body, archive, mpvArchive, loginArchive, retry + 1, generation);
-            }, RETRY_DELAY, TimeUnit.MILLISECONDS);
+        Call call;
+        try {
+            call = LanClient.newCall(client, transfer.url, transfer.target.getUuid(), transfer.body);
+        } catch (IOException e) {
+            complete(transfer, R.string.lan_pairing_required);
+            return;
         }
+        App.post(() -> {
+            if (!transferring(transfer.generation)) {
+                call.cancel();
+                transfer.deleteArchives();
+                return;
+            }
+            syncCall = call;
+            call.enqueue(new Callback() {
+                @Override
+                public void onFailure(@NonNull Call call, @NonNull IOException error) {
+                    int message = LanRemotePairDialog.connectionError(error);
+                    if (call.isCanceled() || LanRemotePairDialog.repairable(message)) complete(transfer, message);
+                    else retry(transfer, retry, R.string.sync_failed);
+                }
+
+                @Override
+                public void onResponse(@NonNull Call call, @NonNull Response response) {
+                    try (Response res = response) {
+                        if (res.isSuccessful()) complete(transfer, 0);
+                        else if (LanRemotePairDialog.denied(res.code())) complete(transfer,
+                                transfer.reverse && LanRemotePairDialog.reciprocalPairingRequired(res)
+                                        ? R.string.lan_pairing_reverse_sync : R.string.lan_pairing_denied);
+                        else if (transfer.reverse) complete(transfer, R.string.lan_pairing_reverse_sync);
+                        else retry(transfer, retry, R.string.sync_failed);
+                    }
+                }
+            });
+        });
     }
 
-    private Callback callback(String url, RequestBody body, SyncFiles.Archive archive, MpvConfigSync.Archive mpvArchive, LoginStateSync.Archive loginArchive, int retry, long generation) {
-        return new Callback() {
-            @Override
-            public void onFailure(@NonNull Call call, @NonNull IOException e) {
-                if (call.isCanceled() || !syncing) {
-                    if (archive != null) archive.delete();
-                    if (mpvArchive != null) mpvArchive.delete();
-                    if (loginArchive != null) loginArchive.delete();
-                    App.post(() -> {
-                        if (generation != syncGeneration) return;
-                        setSyncing(false);
-                        Notify.show(R.string.sync_canceled);
-                    });
-                    return;
-                }
-                retry(url, body, archive, mpvArchive, loginArchive, retry, generation, e.getMessage());
-            }
+    private void retry(Transfer transfer, int retry, int message) {
+        if (retry >= MAX_RETRY || !transferring(transfer.generation)) complete(transfer, message);
+        else App.post(() -> Task.execute(() -> request(transfer, retry + 1)), RETRY_DELAY);
+    }
 
-            @Override
-            public void onResponse(@NonNull Call call, @NonNull Response response) {
-                try (Response res = response) {
-                    if (res.isSuccessful()) {
-                        // 临时归档必须无条件清理：陈旧回调也要删，否则会留下本次同步的文件。
-                        if (archive != null) archive.delete();
-                        if (mpvArchive != null) mpvArchive.delete();
-                        if (loginArchive != null) loginArchive.delete();
-                        App.post(() -> {
-                            if (generation != syncGeneration) return;
-                            setSyncing(false);
-                            Notify.show(R.string.sync_success);
-                            dismiss();
-                        });
-                    }
-                    else retry(url, body, archive, mpvArchive, loginArchive, retry, generation, res.message());
-                }
-            }
-        };
+    private void complete(Transfer transfer, int message) {
+        transfer.deleteArchives();
+        App.post(() -> finish(transfer.generation, transfer.target, message));
+    }
+
+    private void finish(long generation, Device target, int message) {
+        if (!current(generation) || !syncing) return;
+        setSyncing(false);
+        if (message == 0) {
+            Notify.show(R.string.sync_success);
+            dismiss();
+        } else if (LanRemotePairDialog.repairable(message)) LanRemotePairDialog.offerRepair(getActivity(), target, message);
+        else Notify.show(message);
+    }
+
+    private boolean current(long generation) {
+        return binding != null && generation == syncGeneration;
+    }
+
+    private boolean transferring(long generation) {
+        return syncing && generation == syncGeneration;
+    }
+
+    private static void deleteArchives(SyncFiles.Archive archive, MpvConfigSync.Archive mpvArchive, LoginStateSync.Archive loginArchive) {
+        if (archive != null) archive.delete();
+        if (mpvArchive != null) mpvArchive.delete();
+        if (loginArchive != null) loginArchive.delete();
+    }
+
+    private record Transfer(Device target, String url, RequestBody body, SyncFiles.Archive archive,
+                            MpvConfigSync.Archive mpvArchive, LoginStateSync.Archive loginArchive, long generation, boolean reverse) {
+        void deleteArchives() {
+            OneKeySyncDialog.deleteArchives(archive, mpvArchive, loginArchive);
+        }
     }
 
     private void setSyncing(boolean syncing) {
@@ -512,6 +524,7 @@ public class OneKeySyncDialog extends BaseBottomSheetDialog implements SyncDevic
         // 同步中锁住方向：请求的方向已在 startSync 入口快照，此时翻方向不会改变
         // 正在跑的这次同步，只会让界面显示的方向与实际请求相反。
         // 注意 ViewGroup.setEnabled 不会传播到子 View，必须逐个按钮设。
+        binding.changeDevice.setEnabled(!syncing);
         binding.directionPush.setEnabled(!syncing);
         binding.directionPull.setEnabled(!syncing);
         if (!syncing) {
@@ -522,12 +535,10 @@ public class OneKeySyncDialog extends BaseBottomSheetDialog implements SyncDevic
     }
 
     private void cancelSync() {
-        syncing = false;
+        ++syncGeneration;
         if (syncCall != null) syncCall.cancel();
-        else {
-            setSyncing(false);
-            Notify.show(R.string.sync_canceled);
-        }
+        setSyncing(false);
+        Notify.show(R.string.sync_canceled);
     }
 
     private void updatePrepare(long generation, SyncFiles.Archive archive, LoginStateSync.Archive loginArchive) {
@@ -595,5 +606,6 @@ public class OneKeySyncDialog extends BaseBottomSheetDialog implements SyncDevic
         super.onDestroyView();
         discovery.stop();
         scanTask.stop();
+        binding = null;
     }
 }

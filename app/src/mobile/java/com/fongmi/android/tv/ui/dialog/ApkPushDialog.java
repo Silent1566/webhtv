@@ -1,5 +1,6 @@
 package com.fongmi.android.tv.ui.dialog;
 
+import android.content.Context;
 import android.database.Cursor;
 import android.net.Uri;
 import android.provider.OpenableColumns;
@@ -9,7 +10,6 @@ import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
 import androidx.viewbinding.ViewBinding;
 
@@ -18,6 +18,7 @@ import com.fongmi.android.tv.Constant;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.bean.Device;
 import com.fongmi.android.tv.databinding.DialogDeviceBinding;
+import com.fongmi.android.tv.server.LanClient;
 import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.ui.adapter.SyncDeviceAdapter;
 import com.fongmi.android.tv.ui.custom.SpaceItemDecoration;
@@ -36,9 +37,10 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.io.IOException;
 import java.security.MessageDigest;
 import java.util.Locale;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.Future;
 
 import okhttp3.Call;
 import okhttp3.Callback;
@@ -66,8 +68,7 @@ public class ApkPushDialog extends BaseBottomSheetDialog implements SyncDeviceAd
     private ScanTask scanTask = new ScanTask(this);
     private Call uploadCall;
     private File apk;
-    private String fileName;
-    private String sha256;
+    private Future<?> preparation;
     private volatile boolean pushing;
     private long lastProgressUpdate;
     private Listener listener;
@@ -114,7 +115,13 @@ public class ApkPushDialog extends BaseBottomSheetDialog implements SyncDeviceAd
         } else {
             binding.title.setText(R.string.apk_push_preparing);
             binding.refresh.setVisibility(View.GONE);
-            prepare();
+            DialogDeviceBinding current = binding;
+            Device device = LanRemotePairDialog.snapshot(target);
+            App.post(() -> {
+                if (binding != current || !isAdded()) return;
+                LanRemotePairDialog.withPairing(requireActivity(), device, () -> binding == current,
+                        () -> prepare(device, current), () -> { if (binding == current) dismissAllowingStateLoss(); });
+            });
         }
     }
 
@@ -123,34 +130,50 @@ public class ApkPushDialog extends BaseBottomSheetDialog implements SyncDeviceAd
         binding.refresh.setOnClickListener(view -> refresh());
     }
 
-    private void prepare() {
-        Task.execute(() -> {
+    private void prepare(Device device, DialogDeviceBinding current) {
+        Context context = requireContext().getApplicationContext();
+        preparation = Task.submit(() -> {
+            File temp = null;
             try {
-                fileName = getDisplayName();
-                if (fileName == null || !fileName.toLowerCase(Locale.ROOT).endsWith(".apk")) throw new IllegalArgumentException(getString(R.string.apk_push_invalid));
-                fileName = sanitize(fileName);
-                apk = Path.cache("apk-push-" + System.currentTimeMillis() + ".apk");
-                copyUri(apk);
-                if (requireContext().getPackageManager().getPackageArchiveInfo(apk.getAbsolutePath(), 0) == null) throw new IllegalArgumentException(getString(R.string.apk_push_invalid));
-                sha256 = sha256(apk);
+                String name = getDisplayName(context);
+                if (name == null || !name.toLowerCase(Locale.ROOT).endsWith(".apk")) {
+                    App.post(() -> fail(current, device, R.string.apk_push_invalid));
+                    return;
+                }
+                name = sanitize(name);
+                temp = Path.cache("apk-push-" + System.currentTimeMillis() + ".apk");
+                copyUri(context, temp);
+                if (context.getPackageManager().getPackageArchiveInfo(temp.getAbsolutePath(), 0) == null) {
+                    App.post(() -> fail(current, device, R.string.apk_push_invalid));
+                    return;
+                }
+                String digest = sha256(temp);
+                if (Thread.currentThread().isInterrupted()) return;
+                File file = temp;
+                String fileName = name;
                 App.post(() -> {
-                    if (binding == null) return;
-                    binding.title.setText(getString(R.string.apk_push_ready, fileName, FileUtil.byteCountToDisplaySize(apk.length())));
+                    if (binding != current) {
+                        Path.clear(file);
+                        return;
+                    }
+                    apk = file;
+                    binding.title.setText(getString(R.string.apk_push_ready, fileName, FileUtil.byteCountToDisplaySize(file.length())));
                     pushing = true;
-                    upload(target, 0);
+                    upload(current, device, file, fileName, digest, 0);
                 });
+                temp = null;
+            } catch (ApkPreparationException e) {
+                App.post(() -> fail(current, device, e.message));
             } catch (Exception e) {
-                if (apk != null) Path.clear(apk);
-                App.post(() -> {
-                    Notify.show(e.getMessage());
-                    dismissAllowingStateLoss();
-                });
+                if (!Thread.currentThread().isInterrupted()) App.post(() -> fail(current, device, R.string.apk_push_read_failed));
+            } finally {
+                if (temp != null) Path.clear(temp);
             }
         });
     }
 
-    private String getDisplayName() {
-        try (Cursor cursor = requireContext().getContentResolver().query(uri, new String[]{OpenableColumns.DISPLAY_NAME}, null, null, null)) {
+    private String getDisplayName(Context context) {
+        try (Cursor cursor = context.getContentResolver().query(uri, new String[]{OpenableColumns.DISPLAY_NAME}, null, null, null)) {
             if (cursor != null && cursor.moveToFirst()) return cursor.getString(0);
         } catch (Exception ignored) {
         }
@@ -162,22 +185,23 @@ public class ApkPushDialog extends BaseBottomSheetDialog implements SyncDeviceAd
         return result.isEmpty() ? "app.apk" : result;
     }
 
-    private void copyUri(File target) throws Exception {
+    private void copyUri(Context context, File target) throws Exception {
         long available = FileUtil.getAvailableStorageSpace(Path.cache());
-        try (InputStream raw = requireContext().getContentResolver().openInputStream(uri)) {
-            if (raw == null) throw new IllegalStateException(getString(R.string.apk_push_read_failed));
+        try (InputStream raw = context.getContentResolver().openInputStream(uri)) {
+            if (raw == null) throw new ApkPreparationException(R.string.apk_push_read_failed);
             try (BufferedInputStream input = new BufferedInputStream(raw); BufferedOutputStream output = new BufferedOutputStream(new FileOutputStream(Path.create(target)))) {
                 byte[] buffer = new byte[64 * 1024];
                 long written = 0;
                 int count;
                 while ((count = input.read(buffer)) != -1) {
+                    if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
                     written += count;
-                    if (available > 0 && written + 16L * 1024 * 1024 > available) throw new IllegalStateException(getString(R.string.apk_push_no_space));
+                    if (available > 0 && written + 16L * 1024 * 1024 > available) throw new ApkPreparationException(R.string.apk_push_no_space);
                     output.write(buffer, 0, count);
                 }
             }
         }
-        if (target.length() <= 0) throw new IllegalStateException(getString(R.string.apk_push_read_failed));
+        if (target.length() <= 0) throw new ApkPreparationException(R.string.apk_push_read_failed);
     }
 
     private void refresh() {
@@ -186,6 +210,7 @@ public class ApkPushDialog extends BaseBottomSheetDialog implements SyncDeviceAd
         scanTask.stop();
         scanTask = new ScanTask(this);
         adapter.clear(() -> {
+            if (binding == null) return;
             binding.recycler.setVisibility(View.GONE);
             discovery.start();
             scanTask.start();
@@ -199,13 +224,16 @@ public class ApkPushDialog extends BaseBottomSheetDialog implements SyncDeviceAd
 
     @Override
     public void onFind(Device device) {
-        if (device == null || !device.isApp() || Device.get().equals(device)) return;
-        adapter.sort(device, () -> binding.recycler.setVisibility(View.VISIBLE));
+        if (binding == null || device == null || !device.isApp() || Device.get().equals(device)) return;
+        adapter.sort(device, () -> { if (binding != null) binding.recycler.setVisibility(View.VISIBLE); });
     }
 
     @Override
     public void onLost(Device device) {
-        adapter.remove(device, () -> binding.recycler.setVisibility(adapter.getItemCount() == 0 ? View.GONE : View.VISIBLE));
+        if (binding == null) return;
+        adapter.remove(device, () -> {
+            if (binding != null) binding.recycler.setVisibility(adapter.getItemCount() == 0 ? View.GONE : View.VISIBLE);
+        });
     }
 
     @Override
@@ -221,63 +249,92 @@ public class ApkPushDialog extends BaseBottomSheetDialog implements SyncDeviceAd
         if (callback != null) callback.onSelected(device);
     }
 
-    private void upload(Device device, int retry) {
-        RequestBody fileBody = new ProgressRequestBody(apk, APK, this::onProgress);
-        MultipartBody body = new MultipartBody.Builder().setType(MultipartBody.FORM)
-                .addFormDataPart("device", Device.get().toString())
-                .addFormDataPart("name", fileName)
-                .addFormDataPart("size", String.valueOf(apk.length()))
-                .addFormDataPart("sha256", sha256)
-                .addFormDataPart(PART_NAME, fileName, fileBody)
-                .build();
-        String url = device.getIp() + "/action?do=apk";
-        uploadCall = OkHttp.newCall(client, url, body);
-        uploadCall.enqueue(new Callback() {
-            @Override
-            public void onFailure(@NonNull Call call, @NonNull java.io.IOException e) {
-                if (call.isCanceled()) return;
-                if (retry < MAX_RETRY) {
-                    Task.schedule(() -> upload(device, retry + 1), 600, TimeUnit.MILLISECONDS);
+    private void upload(DialogDeviceBinding current, Device device, File file, String fileName, String sha256, int retry) {
+        Task.execute(() -> {
+            RequestBody fileBody = new ProgressRequestBody(file, APK, (written, total) -> onProgress(current, written, total));
+            MultipartBody body = new MultipartBody.Builder().setType(MultipartBody.FORM)
+                    .addFormDataPart("device", Device.get().toString())
+                    .addFormDataPart("name", fileName)
+                    .addFormDataPart("size", String.valueOf(file.length()))
+                    .addFormDataPart("sha256", sha256)
+                    .addFormDataPart(PART_NAME, fileName, fileBody)
+                    .build();
+            Call pending;
+            try {
+                pending = LanClient.newCall(client, device.getIp() + "/action?do=apk", device.getUuid(), body);
+            } catch (IOException e) {
+                App.post(() -> fail(current, device, R.string.lan_pairing_required));
+                return;
+            }
+            App.post(() -> {
+                if (binding != current || !pushing) {
+                    pending.cancel();
                     return;
                 }
-                App.post(() -> failed(e.getMessage()));
-            }
-
-            @Override
-            public void onResponse(@NonNull Call call, @NonNull Response response) {
-                try (Response res = response) {
-                    String ack;
-                    try {
-                        ack = res.body() == null ? "" : res.body().string().trim();
-                    } catch (java.io.IOException e) {
-                        ack = "";
+                uploadCall = pending;
+                pending.enqueue(new Callback() {
+                    @Override
+                    public void onFailure(@NonNull Call call, @NonNull IOException e) {
+                        if (!call.isCanceled()) finish(LanRemotePairDialog.connectionError(e));
                     }
-                    if (res.isSuccessful() && "APK received".equals(ack)) App.post(() -> {
-                        pushing = false;
-                        Notify.show(R.string.apk_push_success);
-                        dismissAllowingStateLoss();
-                    });
-                    else if (retry < MAX_RETRY) Task.schedule(() -> upload(device, retry + 1), 600, TimeUnit.MILLISECONDS);
-                    else App.post(() -> failed(res.isSuccessful() ? getString(R.string.apk_push_receiver_unsupported) : "HTTP " + res.code()));
-                }
-            }
+
+                    @Override
+                    public void onResponse(@NonNull Call call, @NonNull Response response) {
+                        int message;
+                        try (Response res = response) {
+                            if (LanRemotePairDialog.denied(res.code())) message = R.string.lan_pairing_denied;
+                            else if (!res.isSuccessful()) message = R.string.lan_pairing_send_failed;
+                            else message = res.body() != null && "APK received".equals(res.body().string().trim())
+                                    ? 0 : R.string.apk_push_receiver_unsupported;
+                        } catch (IOException e) {
+                            message = R.string.lan_pairing_send_failed;
+                        }
+                        if (!call.isCanceled()) finish(message);
+                    }
+
+                    private void finish(int message) {
+                        App.post(() -> {
+                            if (binding != current || !pushing) return;
+                            if (message == 0) {
+                                pushing = false;
+                                Notify.show(R.string.apk_push_success);
+                                dismissAllowingStateLoss();
+                            } else if (!LanRemotePairDialog.repairable(message) && retry < MAX_RETRY) {
+                                App.post(() -> {
+                                    if (binding == current && pushing) upload(current, device, file, fileName, sha256, retry + 1);
+                                }, 600);
+                            } else fail(current, device, message);
+                        });
+                    }
+                });
+            });
         });
     }
 
-    private void onProgress(long written, long total) {
+    private void onProgress(DialogDeviceBinding current, long written, long total) {
         long now = System.currentTimeMillis();
         if (now - lastProgressUpdate < 250 && written < total) return;
         lastProgressUpdate = now;
         int percent = total <= 0 ? 0 : (int) Math.min(100, written * 100 / total);
         App.post(() -> {
-            if (binding != null) binding.title.setText(getString(R.string.apk_push_progress, percent, FileUtil.byteCountToDisplaySize(written), FileUtil.byteCountToDisplaySize(total)));
+            if (binding == current && pushing) binding.title.setText(getString(R.string.apk_push_progress, percent, FileUtil.byteCountToDisplaySize(written), FileUtil.byteCountToDisplaySize(total)));
         });
     }
 
-    private void failed(String reason) {
+    private void fail(DialogDeviceBinding current, Device device, int message) {
+        if (binding != current) return;
         pushing = false;
-        Notify.show(getString(R.string.apk_push_failed, reason));
+        if (LanRemotePairDialog.repairable(message)) LanRemotePairDialog.offerRepair(getActivity(), device, message);
+        else Notify.show(getString(R.string.apk_push_failed, getString(message)));
         dismissAllowingStateLoss();
+    }
+
+    private static final class ApkPreparationException extends IOException {
+        final int message;
+
+        ApkPreparationException(int message) {
+            this.message = message;
+        }
     }
 
     private boolean isDiscoveryMode() {
@@ -294,7 +351,10 @@ public class ApkPushDialog extends BaseBottomSheetDialog implements SyncDeviceAd
         try (FileInputStream input = new FileInputStream(file)) {
             byte[] buffer = new byte[64 * 1024];
             int count;
-            while ((count = input.read(buffer)) != -1) digest.update(buffer, 0, count);
+            while ((count = input.read(buffer)) != -1) {
+                if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
+                digest.update(buffer, 0, count);
+            }
         }
         StringBuilder result = new StringBuilder();
         for (byte value : digest.digest()) result.append(String.format(Locale.ROOT, "%02x", value));
@@ -303,6 +363,8 @@ public class ApkPushDialog extends BaseBottomSheetDialog implements SyncDeviceAd
 
     @Override
     public void onDestroyView() {
+        pushing = false;
+        if (preparation != null) preparation.cancel(true);
         if (uploadCall != null) uploadCall.cancel();
         stopScan();
         if (apk != null) Path.clear(apk);

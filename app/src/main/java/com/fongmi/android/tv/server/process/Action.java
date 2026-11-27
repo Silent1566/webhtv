@@ -19,6 +19,12 @@ import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.event.ServerEvent;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.remote.RemoteStore;
+import com.fongmi.android.tv.server.LanActionGate;
+import com.fongmi.android.tv.server.LanClient;
+import com.fongmi.android.tv.server.LanActionGate.Verdict;
+import com.fongmi.android.tv.server.LanPairingController;
+import com.fongmi.android.tv.server.LanPeerStore;
+import com.fongmi.android.tv.server.LanPeers;
 import com.fongmi.android.tv.server.Nano;
 import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.server.impl.Process;
@@ -63,10 +69,26 @@ public class Action implements Process {
 
     @Override
     public Response doResponse(IHTTPSession session, String url, Map<String, String> files) {
-        Map<String, String> params = session.getParms();
-        String param = params.get("do");
-        SpiderDebug.log("action", "do=%s params=%s", param, params);
-        return TextUtils.isEmpty(param) ? Nano.ok() : doJob(param, params, files);
+        return Nano.error(Response.Status.FORBIDDEN, "Secure LAN transport required");
+    }
+
+    public Response dispatchAuthorized(IHTTPSession session, String action, Map<String, String> files) {
+        Verdict verdict = authorize(session, action);
+        if (!verdict.allowed()) return Nano.error(Response.Status.FORBIDDEN, "LAN action denied");
+        return doJob(action, session.getParms(), files);
+    }
+
+    /** Deny-by-default: the switch, the peer identity and the local write permission are checked here. */
+    public Verdict authorize(IHTTPSession session, String action) {
+        LanPairingController controller = LanPeers.get();
+        String device = LanActionGate.header(session.getHeaders(), LanActionGate.HEADER_DEVICE);
+        String credential = LanActionGate.header(session.getHeaders(), LanActionGate.HEADER_CREDENTIAL);
+        boolean localWrite = controller.isEnabled() && isLocalWriteEnabled();
+        return LanActionGate.decide(controller.authorize(action, device, credential, localWrite));
+    }
+
+    private static boolean isLocalWriteEnabled() {
+        return LanPeerStore.isLocalWriteEnabled();
     }
 
     private Response doJob(String param, Map<String, String> params, Map<String, String> files) {
@@ -191,9 +213,12 @@ public class Action implements Process {
             boolean success = true;
             if (params.get("device") != null && (mode.equals("0") || mode.equals("2"))) {
                 Device device = Device.objectFrom(params.get("device"));
-                if ("history".equals(type)) success = sendHistory(device, params);
-                else if ("keep".equals(type)) success = sendKeep(device);
-                else if ("backup".equals(type)) success = sendBackup(device, params);
+                if (device == null || !LanClient.paired(device.getUuid())) {
+                    return Nano.error(Response.Status.FORBIDDEN, "Reciprocal LAN pairing required");
+                }
+                if ("history".equals(type)) success = sendHistory(device, params, force);
+                else if ("keep".equals(type)) success = sendKeep(device, force);
+                else if ("backup".equals(type)) success = sendBackup(device, params, force);
             }
             if (mode.equals("0") || mode.equals("1")) {
                 if ("history".equals(type)) syncHistory(params, force);
@@ -202,8 +227,7 @@ public class Action implements Process {
             }
             return success ? Nano.ok() : Nano.error(ResUtil.getString(R.string.sync_failed));
         } catch (Exception e) {
-            SpiderDebug.log("sync", e);
-            return Nano.error(Notify.getError(R.string.sync_failed, e));
+            return Nano.error(ResUtil.getString(R.string.sync_failed));
         }
     }
 
@@ -226,9 +250,7 @@ public class Action implements Process {
             Path.copy(source, target);
             if (target.length() != source.length()) throw new IllegalStateException("APK copy incomplete");
             File installFile = target;
-            Device senderDevice = Device.objectFrom(params.get("device"));
-            String sender = senderDevice == null ? "" : senderDevice.getName();
-            SpiderDebug.log("apk-push", "received name=%s size=%d sender=%s", name, target.length(), sender);
+            SpiderDebug.log("apk-push", "APK received");
             App.post(() -> {
                 try {
                     FileUtil.openFile(installFile);
@@ -241,8 +263,7 @@ public class Action implements Process {
             return Nano.ok("APK received");
         } catch (Exception e) {
             if (target != null) Path.clear(target);
-            SpiderDebug.log("apk-push", e);
-            return Nano.error(fi.iki.elonen.NanoHTTPD.Response.Status.BAD_REQUEST, e.getMessage());
+            return Nano.error(Response.Status.BAD_REQUEST, "APK rejected");
         }
     }
 
@@ -254,9 +275,8 @@ public class Action implements Process {
             if (result == ApkUrlPush.StartResult.BUSY) return Nano.error(Response.Status.CONFLICT, ResUtil.getString(R.string.apk_push_url_busy));
             return Nano.ok("APK URL accepted");
         } catch (IllegalArgumentException e) {
-            return Nano.error(Response.Status.BAD_REQUEST, e.getMessage());
+            return Nano.error(Response.Status.BAD_REQUEST, "Invalid APK URL");
         } catch (Exception e) {
-            SpiderDebug.log("apk-push-url", e);
             return Nano.error(ResUtil.getString(R.string.apk_push_url_schedule_failed));
         }
     }
@@ -286,63 +306,59 @@ public class Action implements Process {
         return result.toString();
     }
 
-    private boolean post(Device device, String type, FormBody.Builder body) {
-        return post(device, type, body.build());
+    private boolean post(Device device, String type, FormBody.Builder body, boolean force) {
+        return post(device, type, body.build(), force);
     }
 
-    private boolean post(Device device, String type, RequestBody body) {
+    private boolean post(Device device, String type, RequestBody body, boolean force) {
         try {
-            try (okhttp3.Response response = OkHttp.newCall(OkHttp.client(Constant.TIMEOUT_SYNC_TRANSFER), device.getIp().concat("/action?do=sync&mode=0&type=" + type), body).execute()) {
+            try (okhttp3.Response response = LanClient.newCall(OkHttp.client(Constant.TIMEOUT_SYNC_TRANSFER), device.getIp().concat("/action?do=sync&mode=1&type=" + type + "&force=" + force), device.getUuid(), body).execute()) {
                 if (response.isSuccessful()) return true;
                 throw new IllegalStateException(response.message());
             }
         } catch (Exception e) {
-            App.post(() -> Notify.show(e.getMessage()));
             return false;
         }
     }
 
-    private boolean sendHistory(Device device, Map<String, String> params) {
+    private boolean sendHistory(Device device, Map<String, String> params, boolean force) {
         try {
             Config config = Config.find(Config.objectFrom(params.get("config")));
             if (config.getUrl() == null) config = Config.vod();
             FormBody.Builder body = new FormBody.Builder();
             body.add("config", config.toString());
             body.add("targets", App.gson().toJson(History.get(config.getId())));
-            return post(device, "history", body);
+            return post(device, "history", body, force);
         } catch (Exception e) {
-            App.post(() -> Notify.show(e.getMessage()));
             return false;
         }
     }
 
-    private boolean sendKeep(Device device) {
+    private boolean sendKeep(Device device, boolean force) {
         try {
             FormBody.Builder body = new FormBody.Builder();
             body.add("targets", App.gson().toJson(Keep.getVod()));
             body.add("configs", App.gson().toJson(Config.findUrls()));
-            return post(device, "keep", body);
+            return post(device, "keep", body, force);
         } catch (Exception e) {
-            App.post(() -> Notify.show(e.getMessage()));
             return false;
         }
     }
 
-    private boolean sendBackup(Device device, Map<String, String> params) {
+    private boolean sendBackup(Device device, Map<String, String> params, boolean force) {
         try {
             SyncOptions options = SyncOptions.objectFrom(params.get("options"));
             SyncFiles.Archive archive = SyncFiles.hasPaths(options) ? SyncFiles.createArchive(SyncFiles.getPaths(options)) : null;
             MpvConfigSync.Archive mpvArchive = options.isMpvConfig() ? MpvConfigSync.createArchive() : null;
             LoginStateSync.Archive loginArchive = options.isLoginState() ? LoginStateSync.createArchive() : null;
             try {
-                return post(device, "backup", getBackupBody(options, archive, mpvArchive, loginArchive));
+                return post(device, "backup", getBackupBody(options, archive, mpvArchive, loginArchive), force);
             } finally {
                 if (archive != null) archive.delete();
                 if (mpvArchive != null) mpvArchive.delete();
                 if (loginArchive != null) loginArchive.delete();
             }
         } catch (Exception e) {
-            App.post(() -> Notify.show(e.getMessage()));
             return false;
         }
     }

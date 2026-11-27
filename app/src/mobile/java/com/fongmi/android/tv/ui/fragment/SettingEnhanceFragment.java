@@ -43,6 +43,7 @@ import com.fongmi.android.tv.ui.dialog.CustomCspDialog;
 import com.fongmi.android.tv.ui.dialog.DebugLogDialog;
 import com.fongmi.android.tv.ui.dialog.GitCloudDialog;
 import com.fongmi.android.tv.ui.dialog.LoginStateLearnDialog;
+import com.fongmi.android.tv.ui.dialog.LanPairingDialog;
 import com.fongmi.android.tv.ui.dialog.ManagePageDialog;
 import com.fongmi.android.tv.ui.dialog.OneKeySyncDialog;
 import com.fongmi.android.tv.ui.dialog.RemoteTrustDialog;
@@ -148,6 +149,7 @@ public class SettingEnhanceFragment extends BaseFragment {
             setText();
             return true;
         });
+        mBinding.lanPairing.setOnClickListener(view -> LanPairingDialog.show(this, this::updateLanPairing));
     }
 
     private void reorderItems() {
@@ -204,6 +206,7 @@ public class SettingEnhanceFragment extends BaseFragment {
         safeSet("playbackWebhook", mBinding.playbackWebhookText, () -> ViewingRecordSyncStore.summary(requireContext()));
         safeSet("managePage", mBinding.managePageText, () -> getString(R.string.manage_page_web));
         safeSet("smbBrowser", mBinding.smbBrowserText, () -> getString(Setting.isSmbBrowserEnabled() ? R.string.setting_enable : R.string.setting_disable));
+        updateLanPairing();
         safeSet("remoteTrust", mBinding.remoteTrustText, () -> RemoteStore.summary(requireContext()));
         safeSet("gitCloud", mBinding.gitCloudText, () -> getString(R.string.git_cloud_account_count, GitCloudAccountStore.list().size()));
         safeSet("pluginManager", mBinding.pluginManagerText, () -> getString(R.string.plugin_manager_entry_count, PluginSourceConfig.get().entries().size()));
@@ -398,6 +401,10 @@ public class SettingEnhanceFragment extends BaseFragment {
     @Override
     public void onHiddenChanged(boolean hidden) {
         if (!hidden) setText();
+    }
+
+    private void updateLanPairing() {
+        if (mBinding != null) LanPairingDialog.updateSummary(mBinding.lanPairingText);
     }
 
     @Override
