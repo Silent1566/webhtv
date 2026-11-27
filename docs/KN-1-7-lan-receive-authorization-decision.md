@@ -144,4 +144,9 @@
 - 互为身份的是**两份本地自签证书的 SHA-256 指纹**，不是 UUID、也不是平台信任库。客户端只接受固定指纹的服务端证书，服务端要求对端出示证书并校验指纹；两侧都用 `SSLContext` 注入固定指纹的 `X509TrustManager`，未使用 `OkHttp.hostnameVerifier(true)` 之类的全局放行。
 - 出口只绑定 `127.0.0.1` 的临时端口，用一次握手交换一行应用数据后即关闭；**没有**接入 `Nano`/端口 9978，也没有改变现有 HTTP 行为。
 - 复核依据：[RFC 9525 §6](https://www.rfc-editor.org/rfc/rfc9525.txt)（用 `subjectAltName` 核对对端身份）；[OkHttp 5.4.0 CertificatePinner KDoc](https://raw.githubusercontent.com/square/okhttp/parent-5.4.0/okhttp/src/commonJvmAndroid/kotlin/okhttp3/CertificatePinner.kt)（自签证书必须先被 `TrustManager` 接受才能固定）；本机 `nanohttpd-2.3.1` 的 `makeSecure`/`SecureServerSocketFactory` 签名（说明最小可用做法是独立 TLS 监听，而不是在原监听上叠加）。
-- **未验**：Android 运行时上的同一握手（本轮只在 JDK 21 上跑通；下一步需要在两台模拟器上复验）；配对流程、凭据存储、UI 与第一方客户端接线均未开始。
+- **Android 运行时已复验（2026-11-27，两台模拟器 API 28）**：把同一份 `LanSecureChannel` 打成临时 dex，用 `app_process` 分别在 emulator-5554（服务端，证书 a）与 emulator-5556（客户端，证书 b）上运行，经 `adb forward/reverse` 桥接后握手成功——客户端拿到 `ack-from-5554`，即服务端已验证对端指纹并与应用数据交换。
+  - 负例 1（冒名对端）：客户端改用证书 attacker 连接同一服务端，服务端日志中 `SERVER_RECEIVED` 计数为 **0**——未通过对端校验的请求根本没有进入应用处理。
+  - 负例 2（客户端指纹不符）：客户端把期望指纹换成 b 而服务端仍是 a，握手在客户端即被拒，服务端同样 0 次进入处理。
+  - 过程中发现并修正的**测试夹具**问题（非产品缺陷）：JDK 21 默认生成的 PKCS12 用 PBES2，Android BC 报 `1.2.840.113549.1.5.12 SecretKeyFactory not available`；改用 `PBEWithSHA1AndDESede`/`PBEWithSHA1AndRC2_40` 后两端均可加载。`java.nio.file.Path.of` 在 API 28 上同样不可用（仅影响临时 runner）。
+  - 观察到的残留现象：服务端完成一次交换后 `app_process` 在退出阶段会打印 `RuntimeInit` 的 kill 栈；正例的结论来自客户端收到的 `ack-from-5554`（该 ack 由处理器内部写出），负例结论来自服务端处理器零进入。
+- **仍未开始**：配对流程、凭据持久化、受保护监听接入、设置页 UI 与第一方客户端接线。现有 `/action` 仍走明文且无鉴权。
