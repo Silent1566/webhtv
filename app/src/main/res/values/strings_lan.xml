@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="lan_pairing_entry">局域网控制授权</string>
+    <string name="lan_pairing_disabled">已关闭</string>
+    <string name="lan_pairing_enabled">已启用 · 已配对 %1$d 台</string>
+    <string name="lan_pairing_title">局域网控制授权</string>
+    <string name="lan_pairing_title_state">局域网控制授权 · %1$s</string>
+    <string name="lan_pairing_state_off">局域网控制已关闭：同网段的设备无法向本机推送内容、修改设置或同步配置。</string>
+    <string name="lan_pairing_state_on">局域网控制已开启，只有已配对的设备可以下达操作。</string>
+    <string name="lan_pairing_enabled_short">已配对设备：%1$d 台</string>
+    <string name="lan_pairing_code">配对码：%1$s（2 分钟内有效，一次有效）</string>
+    <string name="lan_pairing_toggle">开启 / 关闭局域网控制</string>
+    <string name="lan_pairing_new_code">生成配对码</string>
+    <string name="lan_pairing_revoke_all">撤销全部已配对设备</string>
+    <string name="lan_pairing_revoked">已撤销 %1$d 台设备</string>
+</resources>
