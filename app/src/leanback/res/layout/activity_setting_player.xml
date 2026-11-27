@@ -154,8 +154,8 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:ellipsize="end"
-                    android:focusable="true"
-                    android:focusableInTouchMode="true"
+                    android:focusable="false"
+                    android:focusableInTouchMode="false"
                     android:gravity="end"
                     android:singleLine="true"
                     android:textColor="?attr/webhtvColorOnWallpaper"
@@ -179,52 +179,7 @@
 
 
 
-<androidx.appcompat.widget.LinearLayoutCompat
-            android:id="@+id/preloadThread"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:background="@drawable/selector_item"
-            android:orientation="vertical">
 
-            <androidx.appcompat.widget.LinearLayoutCompat
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal">
-
-                <com.google.android.material.textview.MaterialTextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginEnd="16dp"
-                    android:text="@string/player_preload_threads"
-                    android:textColor="?attr/webhtvColorOnWallpaper"
-                    android:textSize="18sp" />
-
-                <com.google.android.material.textview.MaterialTextView
-                    android:id="@+id/preloadThreadText"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:ellipsize="end"
-                    android:focusable="true"
-                    android:focusableInTouchMode="true"
-                    android:gravity="end"
-                    android:singleLine="true"
-                    android:textColor="?attr/webhtvColorOnWallpaper"
-                    android:textSize="18sp"
-                    tools:text="1 条" />
-
-            </androidx.appcompat.widget.LinearLayoutCompat>
-
-            <SeekBar
-                android:id="@+id/preloadThreadBar"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:focusable="true"
-                android:focusableInTouchMode="true"
-                android:max="127" />
-
-        </androidx.appcompat.widget.LinearLayoutCompat>
 
 <androidx.appcompat.widget.LinearLayoutCompat
             android:id="@+id/preloadSize"
@@ -252,8 +207,8 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:ellipsize="end"
-                    android:focusable="true"
-                    android:focusableInTouchMode="true"
+                    android:focusable="false"
+                    android:focusableInTouchMode="false"
                     android:gravity="end"
                     android:singleLine="true"
                     android:textColor="?attr/webhtvColorOnWallpaper"
@@ -270,6 +225,53 @@
                 android:focusable="true"
                 android:focusableInTouchMode="true"
                 android:max="8" />
+
+        </androidx.appcompat.widget.LinearLayoutCompat>
+
+<androidx.appcompat.widget.LinearLayoutCompat
+            android:id="@+id/preloadThread"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/selector_item"
+            android:orientation="vertical">
+
+            <androidx.appcompat.widget.LinearLayoutCompat
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="16dp"
+                    android:text="@string/player_preload_threads"
+                    android:textColor="?attr/webhtvColorOnWallpaper"
+                    android:textSize="18sp" />
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:id="@+id/preloadThreadText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:focusable="false"
+                    android:focusableInTouchMode="false"
+                    android:gravity="end"
+                    android:singleLine="true"
+                    android:textColor="?attr/webhtvColorOnWallpaper"
+                    android:textSize="18sp"
+                    tools:text="1 条" />
+
+            </androidx.appcompat.widget.LinearLayoutCompat>
+
+            <SeekBar
+                android:id="@+id/preloadThreadBar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:max="127" />
 
         </androidx.appcompat.widget.LinearLayoutCompat>
 
@@ -299,8 +301,8 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:ellipsize="end"
-                    android:focusable="true"
-                    android:focusableInTouchMode="true"
+                    android:focusable="false"
+                    android:focusableInTouchMode="false"
                     android:gravity="end"
                     android:singleLine="true"
                     android:textColor="?attr/webhtvColorOnWallpaper"

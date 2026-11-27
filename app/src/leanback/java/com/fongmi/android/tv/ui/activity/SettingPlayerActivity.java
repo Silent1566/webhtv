@@ -7,6 +7,7 @@ import android.provider.Settings;
 import android.text.InputType;
 import android.view.KeyEvent;
 import android.view.View;
+import android.view.ViewParent;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.SeekBar;
@@ -157,31 +158,17 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
         mBinding.preloadAhead.setOnClickListener(this::setPreloadAhead);
         mBinding.preloadSeamless.setOnClickListener(this::setPreloadSeamless);
         mBinding.preloadSeamlessBar.setOnSeekBarChangeListener(this);
-        // 「集数缓存总开关」下的档位进度条：遥控从展开行下键直接落到进度条而不是右侧文字，
-        // 左右键按档位增减并即时落盘，避免 TV 上 seekbar 默认按键行为被父布局吞掉。
-        // 展开行的下移目标由 setPreloadText() 按展开/收起状态动态设置：收起时进度条 GONE，
-        // 静态 nextFocusDownId 指向不可聚焦目标会导致焦点搜索失败、焦点凭空消失（真机报告）。
-        mBinding.preloadSeamlessSwitch.setNextFocusDownId(R.id.preloadExpand);
-        mBinding.preloadSeamlessText.setFocusable(false);
-        mBinding.preloadSeamlessText.setFocusableInTouchMode(false);
-        mBinding.preloadSeamlessBar.setNextFocusUpId(R.id.preloadExpand);
-        mBinding.preloadSeamlessBar.setNextFocusDownId(R.id.preloadThreadText);
-        mBinding.preloadSeamlessBar.setOnKeyListener((view, keyCode, event) -> {
-            if (keyCode != KeyEvent.KEYCODE_DPAD_LEFT && keyCode != KeyEvent.KEYCODE_DPAD_RIGHT) return false;
-            if (event.getAction() == KeyEvent.ACTION_DOWN) {
-                SeekBar bar = (SeekBar) view;
-                int step = keyCode == KeyEvent.KEYCODE_DPAD_RIGHT ? 1 : -1;
-                int progress = Math.max(0, Math.min(bar.getMax(), bar.getProgress() + step));
-                if (progress != bar.getProgress()) {
-                    bar.setProgress(progress);
-                    onProgressChanged(bar, progress, true);
-                    onStopTrackingTouch(bar);
-                }
-            }
-            return true;
-        });
         mBinding.preloadDuration.setOnClickListener(this::setPreloadDuration);
         mBinding.preloadDurationBar.setOnSeekBarChangeListener(this);
+        // 四个档位滑动条统一接管遥控左右键：TV 上 SeekBar 默认按键行为会被父布局吞掉，
+        // 这里显式按档位增减并即时落盘。数值 TextView 不参与聚焦，焦点直接落在滑动条上。
+        bindDpadSeekBar(mBinding.preloadSeamlessBar, mBinding.preloadSeamlessText);
+        bindDpadSeekBar(mBinding.preloadThreadBar, mBinding.preloadThreadText);
+        bindDpadSeekBar(mBinding.preloadSizeBar, mBinding.preloadSizeText);
+        bindDpadSeekBar(mBinding.preloadDurationBar, mBinding.preloadDurationText);
+        // 下键目标全部由 setPreloadText() 按展开/总开关状态动态设置，不能在这里静态覆盖：
+        // 否则总开关关闭后仍指向 GONE 的展开行，真机上会丢焦点。无缝条上键恒定指向展开行。
+        mBinding.preloadSeamlessBar.setNextFocusUpId(R.id.preloadExpand);
         mBinding.preloadSeamlessSwitch.setOnClickListener(this::setSeamlessSwitch);
         mBinding.preloadExpand.setOnClickListener(this::setPreloadExpand);
         mBinding.decode.setOnClickListener(this::setDecode);
@@ -473,6 +460,33 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
                 .show();
     }
 
+    /**
+     * TV 端档位滑动条统一接管遥控左右键。SeekBar 默认按键行为在 NestedScrollView +
+     * LinearLayout 嵌套布局里会被父布局当作焦点移动吞掉，真机表现为左右键不能增减档位；
+     * 这里在 View 层显式消费 DPAD_LEFT/RIGHT，按一档步进并即时落盘。数值 TextView 不参与
+     * 聚焦，遥控焦点直接落在滑动条本身，避免焦点停在文字上导致左右键无响应。
+     */
+    private void bindDpadSeekBar(SeekBar bar, View valueText) {
+        valueText.setFocusable(false);
+        valueText.setFocusableInTouchMode(false);
+        bar.setFocusable(true);
+        bar.setFocusableInTouchMode(true);
+        bar.setOnKeyListener((view, keyCode, event) -> {
+            if (keyCode != KeyEvent.KEYCODE_DPAD_LEFT && keyCode != KeyEvent.KEYCODE_DPAD_RIGHT) return false;
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                int step = keyCode == KeyEvent.KEYCODE_DPAD_RIGHT ? 1 : -1;
+                int progress = Math.max(0, Math.min(bar.getMax(), bar.getProgress() + step));
+                if (progress != bar.getProgress()) {
+                    bar.setProgress(progress);
+                    onProgressChanged(bar, progress, true);
+                    onStopTrackingTouch(bar);
+                }
+            }
+            // 左右键一律消费：既不触发焦点横移，也不让 SeekBar 默认实现重复步进。
+            return true;
+        });
+    }
+
     @Override
     public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
         if (!fromUser || mBinding == null) return;
@@ -533,17 +547,27 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
         boolean seamless = PreloadSetting.isSeamlessEnabled();
         boolean expanded = seamless && PreloadSetting.isSeamlessExpanded();
         mBinding.preloadSeamlessSwitchText.setText(getSwitch(seamless));
-        // 总开关控制整组显隐；展开行默认收起，点开后才显示集数/线程/大小/时长。
+        // 总开关只控制「无缝集数 / 磁盘配额」这组随展开收起的子项；「预载并发 / 预加载时长」
+        // 已脱离总开关常驻显示，位置在总开关与播放器按钮之间（布局顺序亦如此）。
         mBinding.preloadExpand.setVisibility(seamless ? View.VISIBLE : View.GONE);
         mBinding.preloadExpandText.setText(getString(expanded ? R.string.player_seamless_collapse : R.string.player_seamless_expand));
         int seamlessVisibility = expanded ? View.VISIBLE : View.GONE;
-        // 展开行下移目标动态化：展开时落到档位进度条；收起时进度条整块 GONE，
-        // 置 NO_ID 让框架波束搜索找下一个可见行，避免静态 ID 指向 GONE 视图导致丢焦点。
-        mBinding.preloadExpand.setNextFocusDownId(expanded ? R.id.preloadSeamlessBar : View.NO_ID);
         mBinding.preloadSeamless.setVisibility(seamlessVisibility);
-        mBinding.preloadDuration.setVisibility(seamlessVisibility);
-        mBinding.preloadThread.setVisibility(seamlessVisibility);
         mBinding.preloadSize.setVisibility(seamlessVisibility);
+        mBinding.preloadThread.setVisibility(View.VISIBLE);
+        mBinding.preloadDuration.setVisibility(View.VISIBLE);
+        // 焦点链随展开状态动态维护，任何下/上键目标都不能指向 GONE 视图（真机曾因此丢焦点）：
+        //   展开：总开关 → 展开行 → 无缝集数 → 磁盘配额 → 预载并发 → 预加载时长 → 播放器按钮
+        //   收起：总开关 → 展开行 → 预载并发 → 预加载时长 → 播放器按钮
+        //   总开关关闭：总开关 → 预载并发 → 预加载时长 → 播放器按钮
+        mBinding.preloadSeamlessSwitch.setNextFocusDownId(seamless ? R.id.preloadExpand : R.id.preloadThreadBar);
+        mBinding.preloadExpand.setNextFocusDownId(expanded ? R.id.preloadSeamlessBar : R.id.preloadThreadBar);
+        mBinding.preloadSeamlessBar.setNextFocusDownId(R.id.preloadSizeBar);
+        mBinding.preloadSizeBar.setNextFocusUpId(R.id.preloadSeamlessBar);
+        mBinding.preloadSizeBar.setNextFocusDownId(R.id.preloadThreadBar);
+        mBinding.preloadThreadBar.setNextFocusDownId(R.id.preloadDurationBar);
+        mBinding.preloadThreadBar.setNextFocusUpId(expanded ? R.id.preloadSizeBar : seamless ? R.id.preloadExpand : R.id.preloadSeamlessSwitch);
+        mBinding.preloadDurationBar.setNextFocusUpId(R.id.preloadThreadBar);
         int seamlessDepth = PreloadSetting.getSeamlessQueueDepth();
         mBinding.preloadSeamlessText.setText(seamlessDepth == 0 ? getString(R.string.player_seamless_queue_off) : getString(R.string.player_seamless_queue_value, seamlessDepth));
         mBinding.preloadSeamlessBar.setProgress(seamlessDepth);
