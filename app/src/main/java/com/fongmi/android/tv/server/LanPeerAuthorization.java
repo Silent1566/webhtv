@@ -59,7 +59,7 @@ public final class LanPeerAuthorization {
             pairingCode = null;
             return null;
         }
-        if (!validDeviceId(uuid) || !matchesCode(code)) {
+        if (!isValidDeviceId(uuid) || !matchesCode(code)) {
             if (--attemptsLeft == 0) pairingCode = null;
             return null;
         }
@@ -79,6 +79,25 @@ public final class LanPeerAuthorization {
         return paired.remove(uuid) != null;
     }
 
+    /** Defensive copy of the digest registry, for persistence only. */
+    public synchronized Map<String, byte[]> partners() {
+        Map<String, byte[]> copy = new HashMap<>();
+        for (Map.Entry<String, byte[]> entry : paired.entrySet()) copy.put(entry.getKey(), entry.getValue().clone());
+        return copy;
+    }
+
+    /** Replaces the registry; an oversized or empty payload leaves the current state untouched. */
+    public synchronized void restore(Map<String, byte[]> partners) {
+        if (partners == null || partners.isEmpty() || partners.size() > LanPeerRegistry.MAX_PARTNERS) return;
+        Map<String, byte[]> next = new HashMap<>();
+        for (Map.Entry<String, byte[]> entry : partners.entrySet()) {
+            if (!LanPeerRegistry.valid(entry.getKey(), entry.getValue())) continue;
+            next.put(entry.getKey(), entry.getValue().clone());
+        }
+        paired.clear();
+        paired.putAll(next);
+    }
+
     public synchronized Decision authorize(String action, String uuid, String credential, boolean sensitiveEnabled) {
         if (action == null) return Decision.UNKNOWN_ACTION;
         boolean sensitive;
@@ -88,7 +107,7 @@ public final class LanPeerAuthorization {
             default -> { return Decision.UNKNOWN_ACTION; }
         }
         if (!enabled) return Decision.DISABLED;
-        if (!validDeviceId(uuid) || credential == null || credential.length() != CREDENTIAL_LENGTH) return Decision.UNAUTHORIZED;
+        if (!isValidDeviceId(uuid) || credential == null || credential.length() != CREDENTIAL_LENGTH) return Decision.UNAUTHORIZED;
         byte[] expected = paired.get(uuid);
         if (expected == null || !MessageDigest.isEqual(expected, digest(credential))) return Decision.UNAUTHORIZED;
         if (sensitive && !sensitiveEnabled) return Decision.SENSITIVE_DISABLED;
@@ -100,7 +119,7 @@ public final class LanPeerAuthorization {
                 pairingCode.getBytes(StandardCharsets.US_ASCII), code.getBytes(StandardCharsets.UTF_8));
     }
 
-    private static boolean validDeviceId(String uuid) {
+    static boolean isValidDeviceId(String uuid) {
         return uuid != null && uuid.length() <= 128 && !UNAVAILABLE_ANDROID_ID.equals(uuid) && DEVICE_ID.matcher(uuid).matches();
     }
 
