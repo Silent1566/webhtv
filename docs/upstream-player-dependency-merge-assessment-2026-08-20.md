@@ -29,6 +29,7 @@
 | ---: | --- | --- | --- | --- | --- |
 | 字幕 ZIP 子项 | `C-TV-FILE-SAFETY` | 通用/App | 仅加固字幕压缩包路径、限额、完整性和失败清理；不改公共解压 | 已授权实施，回归先行 | [C-TV-FILE-SAFETY-subtitle-archives.md](C-TV-FILE-SAFETY-subtitle-archives.md) |
 | 404 子项 | `C-TV-FILE-SAFETY` | 通用/App | 本地文件端点缺失时返回 404，其余异常仍 500 | 已授权实施，回归先行 | [C-TV-FILE-SAFETY-missing-local-source-404.md](C-TV-FILE-SAFETY-missing-local-source-404.md) |
+| 路径边界子项 | `C-TV-FILE-SAFETY` | 通用/App | 本地 upload/newFolder/del 端点限制在共享根内，拒绝空路径与根删除 | 已实施并验证 | [C-TV-FILE-SAFETY-local-endpoint-paths.md](C-TV-FILE-SAFETY-local-endpoint-paths.md) |
 | 既有应用任务续修 | `INTRO-SKIP-02` | 通用/App网络兼容 | TODB片段数据源在Android9使用隔离TLS1.3能力；非播放器上游合并阶段，保留已有任务ID | 研究与真实回归红灯已完成，兼容适配及5556验收进行中 | [INTRO-SKIP-02-sources-and-kinds.md](INTRO-SKIP-02-sources-and-kinds.md) |
 | 既有任务续修 | `E11` | Exo/App | 压缩音频输出、跳转释放状态、隧道一致性与起播恢复 | A 为 `123d871c027eb686702766bca995f616e8d2bd1e`，首次起播研究为 `e9fef2b90ee8aa634327c2c179eb3dc5d22cb1be`，直通开关修复为 `24fa078d2dc8a404fad23fc30972e5fc4a8a1b5b`。首次快速恢复现已实现：完整 AU 供数及启动门槛读回后，以 800 ms 窗口和原始播放头/路由复核判错，使用 Media3 内部恢复复用当前媒体与缓存；保留正常直出与关闭开关的 PCM 行为。C4 第七轮合并保留本地厂商直出初始化失败立即 PCM 回退，并接入按媒体/路由失败记忆、直通开关一致性和已缓冲起播恢复；合并冲突组合的最终验证记录见唯一任务文档。 | [E11-exo-compressed-audio-direct.md](E11-exo-compressed-audio-direct.md) |
 | 插入修复 | `P11` | MPV/App | AV3A 直播使用 `.m3u8?ts=…` 媒体端点时保持分片语义，修复代理误报 HTTP 400 | 已修复；19 项定向测试、Debug/快速 Release 构建和手机同源实播通过，持续超过 6 分钟、AV3A 音频输出无写入错误；Release 已安装，视频手动解码合同保持；源内迅雷插件 Debug JNI 问题独立记录 | [P11-mpv-live-av3a.md](P11-mpv-live-av3a.md) |
