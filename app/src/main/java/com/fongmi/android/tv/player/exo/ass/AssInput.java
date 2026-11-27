@@ -16,21 +16,24 @@ public final class AssInput {
     public static final int MAX_STYLES = 512;
 
     static boolean isExternalId(String id) {
-        if (id == null || id.length() > 256) return false;
+        return externalIdOffset(id) >= 0;
+    }
+
+    public static int externalIdOffset(String id) {
+        if (id == null || id.length() > 256) return -1;
         int offset = 0;
-        // MergingMediaPeriod prefixes Format IDs with the child index. This is
-        // only admission; the complete Stream/period/generation remains the identity.
+        // MergingMediaPeriod prefixes Format IDs with the child index.
         while (!id.startsWith(EXTERNAL_ID_PREFIX, offset)) {
             int start = offset;
             while (offset < id.length() && id.charAt(offset) >= '0' && id.charAt(offset) <= '9') offset++;
-            if (offset == start || offset == id.length() || id.charAt(offset++) != ':') return false;
+            if (offset == start || offset == id.length() || id.charAt(offset++) != ':') return -1;
         }
-        offset += EXTERNAL_ID_PREFIX.length();
-        if (offset == id.length()) return false;
-        for (; offset < id.length(); offset++) {
-            if (id.charAt(offset) < '0' || id.charAt(offset) > '9') return false;
+        int suffix = offset + EXTERNAL_ID_PREFIX.length();
+        if (suffix == id.length()) return -1;
+        for (int i = suffix; i < id.length(); i++) {
+            if (id.charAt(i) < '0' || id.charAt(i) > '9') return -1;
         }
-        return true;
+        return offset;
     }
 
     static byte[] copy(ByteBuffer input) {

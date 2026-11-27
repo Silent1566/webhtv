@@ -19,6 +19,7 @@ import androidx.media3.common.Format;
 import androidx.media3.common.MediaEdition;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.MediaMetadata;
+import androidx.media3.common.MimeTypes;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.common.TrackSelectionParameters;
@@ -43,6 +44,7 @@ import com.fongmi.android.tv.impl.ParseCallback;
 import com.fongmi.android.tv.node.NodeRuntime;
 import com.fongmi.android.tv.player.codec.CodecCapabilityInspector;
 import com.fongmi.android.tv.player.engine.ExoPlayerEngine;
+import com.fongmi.android.tv.player.exo.ass.AssInput;
 import com.fongmi.android.tv.player.exo.ass.ExoAssSession;
 import com.fongmi.android.tv.player.engine.IjkPlayerEngine;
 import com.fongmi.android.tv.player.engine.MpvPlayerEngine;
@@ -127,6 +129,7 @@ import com.fongmi.android.tv.utils.LocalProxyDebug;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.fongmi.android.tv.utils.Task;
+import com.fongmi.android.tv.utils.UrlUtil;
 import com.fongmi.android.tv.utils.Util;
 import com.github.catvod.crawler.SpiderDebug;
 import com.github.catvod.net.OkHttp;
@@ -630,7 +633,35 @@ public class PlayerManager implements ParseCallback {
     }
 
     public Sub getSelectedSubtitleSub() {
-        return spec == null ? null : findSelectedSubtitleSub(spec.getSubs(), getCurrentTracks());
+        if (spec == null) return null;
+        List<Sub> subs = spec.getSubs();
+        Tracks tracks = getCurrentTracks();
+        if (isExo() && !com.fongmi.android.tv.player.exo.MediaSourceFactory.isConcatenatingUrl(spec.getUrl())) {
+            Format selected = getSelectedFormat(tracks, C.TRACK_TYPE_TEXT);
+            if (selected != null) {
+                int offset = AssInput.externalIdOffset(selected.id);
+                if (offset >= 0) return findExternalAssSub(spec, getCurrentMediaItem(), selected.id.substring(offset));
+                if (MimeTypes.TEXT_SSA.equals(selected.sampleMimeType)) return null;
+            }
+        }
+        return findSelectedSubtitleSub(subs, tracks);
+    }
+
+    private static Sub findExternalAssSub(PlaySpec spec, MediaItem item, String id) {
+        List<Sub> subs = spec.getSubs();
+        if (subs == null || item == null || item.localConfiguration == null || TextUtils.isEmpty(spec.getUrl())
+                || !spec.getUri().equals(item.requestMetadata.mediaUri)) return null;
+        for (MediaItem.SubtitleConfiguration subtitle : item.localConfiguration.subtitleConfigurations) {
+            if (!id.equals(subtitle.id) || !MimeTypes.TEXT_SSA.equals(subtitle.mimeType)) continue;
+            Sub match = null;
+            for (Sub sub : subs) {
+                if (sub == null || sub.getUrl().isEmpty() || !subtitle.uri.equals(Uri.parse(UrlUtil.convert(sub.getUrl())))) continue;
+                if (match != null) return null;
+                match = sub;
+            }
+            return match;
+        }
+        return null;
     }
 
     public List<Sub> getSubtitleSubs() {
