@@ -14,7 +14,6 @@ import com.google.gson.JsonObject;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URLEncoder;
@@ -49,7 +48,7 @@ public class Local implements Process {
             File file = Path.local(path.substring(5));
             if (file.isDirectory()) return getFolder(file);
             if (file.isFile()) return getFile(headers, params, file, getMimeTypeForFile(path));
-            throw new FileNotFoundException();
+            return Nano.error(Status.NOT_FOUND, "File not found");
         } catch (Exception e) {
             return Nano.error(e.getMessage());
         }
