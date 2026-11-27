@@ -19,6 +19,10 @@ import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.event.ServerEvent;
 import com.fongmi.android.tv.impl.Callback;
 import com.fongmi.android.tv.remote.RemoteStore;
+import com.fongmi.android.tv.server.LanActionGate;
+import com.fongmi.android.tv.server.LanActionGate.Verdict;
+import com.fongmi.android.tv.server.LanPairingController;
+import com.fongmi.android.tv.server.LanPeers;
 import com.fongmi.android.tv.server.Nano;
 import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.server.impl.Process;
@@ -34,6 +38,7 @@ import com.fongmi.android.tv.utils.Task;
 import com.github.catvod.net.OkHttp;
 import com.github.catvod.crawler.SpiderDebug;
 import com.github.catvod.utils.Path;
+import com.github.catvod.utils.Prefers;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -65,8 +70,25 @@ public class Action implements Process {
     public Response doResponse(IHTTPSession session, String url, Map<String, String> files) {
         Map<String, String> params = session.getParms();
         String param = params.get("do");
-        SpiderDebug.log("action", "do=%s params=%s", param, params);
-        return TextUtils.isEmpty(param) ? Nano.ok() : doJob(param, params, files);
+        // Log the action and the parameter names only: values carry URLs, paths and pairing data.
+        SpiderDebug.log("action", "do=%s keys=%s", param, params.keySet());
+        if (!LanActionGate.hasAction(param)) return Nano.ok();
+        Verdict verdict = gate(session, param);
+        if (!verdict.allowed()) return Nano.error(Response.Status.lookup(verdict.status()), verdict.message());
+        return doJob(param, params, files);
+    }
+
+    /** Deny-by-default: the switch, the peer identity and the local write permission are checked here. */
+    private Verdict gate(IHTTPSession session, String action) {
+        LanPairingController controller = LanPeers.get();
+        String device = LanActionGate.header(session.getHeaders(), LanActionGate.HEADER_DEVICE);
+        String credential = LanActionGate.header(session.getHeaders(), LanActionGate.HEADER_CREDENTIAL);
+        boolean localWrite = controller.isEnabled() && isLocalWriteEnabled();
+        return LanActionGate.decide(controller.authorize(action, device, credential, localWrite));
+    }
+
+    private static boolean isLocalWriteEnabled() {
+        return Prefers.getBoolean("lan_local_write", false);
     }
 
     private Response doJob(String param, Map<String, String> params, Map<String, String> files) {
