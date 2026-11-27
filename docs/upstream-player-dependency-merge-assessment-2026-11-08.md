@@ -219,6 +219,7 @@
 - 预计需要的验证 / 未完成门槛：失败factory、失败init、destroy二次失败、重试成功、A/B同名模块互不污染、标准流日志保留；不先构建整个runtime。
 
 ### C-TV-LOADER-OWNERSHIP — 共享loader owner世代、取消和清理隔离（优先）
+- 唯一任务记录：[C-TV-LOADER-OWNERSHIP-loader-generations.md](C-TV-LOADER-OWNERSHIP-loader-generations.md)（本次仅 Jar 子项）
 - 所属审查分类：common（实际Exo/MPV/common按适配所有权分阶段）
 - 建议：实施
 - 涉及仓库及完整 commit ID：
