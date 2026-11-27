@@ -2,7 +2,17 @@ pluginManagement {
     repositories {
         gradlePluginPortal()
         mavenCentral()
-        google()
+        google {
+            allowInsecureContinueWhenDisabled.set(true)
+        }
+        maven {
+            url = "https://maven.aliyun.com/repository/google"
+            content {
+                includeGroupByRegex(/com\.android(\..*)?/)
+                includeGroupByRegex(/androidx(\..*)?/)
+                includeGroup("com.google.testing.platform")
+            }
+        }
         maven { url = "https://maven.aliyun.com/repository/gradle-plugin" }
         maven { url = "https://maven.aliyun.com/repository/public" }
     }
