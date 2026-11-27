@@ -22,6 +22,7 @@ import com.fongmi.android.tv.remote.RemoteStore;
 import com.fongmi.android.tv.server.LanActionGate;
 import com.fongmi.android.tv.server.LanActionGate.Verdict;
 import com.fongmi.android.tv.server.LanPairingController;
+import com.fongmi.android.tv.server.LanPeerStore;
 import com.fongmi.android.tv.server.LanPeers;
 import com.fongmi.android.tv.server.Nano;
 import com.fongmi.android.tv.server.Server;
@@ -38,7 +39,6 @@ import com.fongmi.android.tv.utils.Task;
 import com.github.catvod.net.OkHttp;
 import com.github.catvod.crawler.SpiderDebug;
 import com.github.catvod.utils.Path;
-import com.github.catvod.utils.Prefers;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -88,7 +88,7 @@ public class Action implements Process {
     }
 
     private static boolean isLocalWriteEnabled() {
-        return Prefers.getBoolean("lan_local_write", false);
+        return LanPeerStore.isLocalWriteEnabled();
     }
 
     private Response doJob(String param, Map<String, String> params, Map<String, String> files) {

@@ -160,4 +160,6 @@
   - **`/action` 已经真正受控（2026-11-27）**：`Action.doResponse` 在分发前先问 `LanPairingController`——请求头 `X-WebHTV-Device` / `X-WebHTV-Credential` 提供身份，判定结果映射为 HTTP（403 `LAN access disabled` / 403 `peer not authorized` / 403 `local API write disabled` / 400 `unknown action`）。日志同时脱敏：不再打印参数值，只打印动作名与参数名集合。
   - 设备实测（emulator-5556，经 `adb forward` 从主机请求）：`/action?do=push` → **403 LAN access disabled**（改造前是 200 且会真的开播）；`/action?do=zzz` → **400 unknown action**；`/action`（无 do）→ 200（探针语义未变）；`/device` → 200（发现层不受影响）。开关保持默认关闭。
   - 两个必须记住的口径：**未知动作先于开关判定**，所以开关关着也返回 400 而不是 403；**敏感动作（`setting/file/sync/apk*`）还要求 `lan_local_write` 偏好**，而该偏好目前没有 UI，等价于"配对后仍被拒"——下一屏必须把它接到界面上，否则一键同步/推 APK 会被自己挡住。
-  - 未做：`lan_local_write` 的 UI、第一方 7 个调用点带凭据（现在它们一律会被 403 拦下）、逐台撤销、TV 端入口、受保护监听（当前仍是明文 HTTP + 凭据头）。
+  - **敏感操作开关已接到界面（2026-11-27，仅编译验证）**：偏好键统一收进 `LanPeerStore`（`control_enabled` / `lan_local_write`），`Action` 不再自己拼键名；对话框第四项"允许改设置 / 同步 / 推 APK：已允许/已禁止"直接切换该偏好。手机端 debug APK `BUILD SUCCESSFUL`。
+  - **这一项没拿到设备证据**：两次尝试在模拟器上打开对话框时，App 进程都被系统结束（`app died` + `remove task`，无 FATAL、无崩溃栈），界面停留在旧快照上。同样的 `app died` 在本次改动之前的 14:25 也出现过一次，因此更像是模拟器/任务栈层面的不稳定，而不是本改动引入的崩溃——但既然没有拿到"第四项可见且能切换"的现场证据，就**不记为已验证**。下一轮补验方式：启动后先确认 `pidof` 非空再操作，逐步 dump 校验页面切换，避免在旧快照上盲点。
+  - 未做：第一方 7 个调用点带凭据（现在它们一律会被 403 拦下）、配对接口本身（客户端提交 uuid + 配对码换凭据的端点还不存在）、逐台撤销、TV 端入口、受保护监听（当前仍是明文 HTTP + 凭据头）。

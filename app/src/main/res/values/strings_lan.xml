@@ -13,4 +13,6 @@
     <string name="lan_pairing_new_code">生成配对码</string>
     <string name="lan_pairing_revoke_all">撤销全部已配对设备</string>
     <string name="lan_pairing_revoked">已撤销 %1$d 台设备</string>
+    <string name="lan_pairing_local_write_on">允许改设置 / 同步 / 推 APK：已允许</string>
+    <string name="lan_pairing_local_write_off">允许改设置 / 同步 / 推 APK：已禁止</string>
 </resources>

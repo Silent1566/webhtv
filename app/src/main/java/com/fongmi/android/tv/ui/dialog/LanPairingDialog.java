@@ -7,6 +7,7 @@ import androidx.fragment.app.Fragment;
 
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.server.LanPairingController;
+import com.fongmi.android.tv.server.LanPeerStore;
 import com.fongmi.android.tv.server.LanPeers;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
@@ -30,6 +31,9 @@ public final class LanPairingDialog {
                 context.getString(R.string.lan_pairing_toggle),
                 context.getString(R.string.lan_pairing_new_code),
                 context.getString(R.string.lan_pairing_revoke_all),
+                context.getString(LanPeerStore.isLocalWriteEnabled()
+                        ? R.string.lan_pairing_local_write_on
+                        : R.string.lan_pairing_local_write_off),
         };
         new MaterialAlertDialogBuilder(context)
                 .setTitle(context.getString(R.string.lan_pairing_title_state, stateShort(context, controller)))
@@ -41,6 +45,11 @@ public final class LanPairingDialog {
                         String code = controller.issuePairingCode();
                         Toast.makeText(context, code == null ? context.getString(R.string.lan_pairing_state_off)
                                 : context.getString(R.string.lan_pairing_code, code), Toast.LENGTH_LONG).show();
+                    } else if (which == 3) {
+                        LanPeerStore.setLocalWriteEnabled(!LanPeerStore.isLocalWriteEnabled());
+                        Toast.makeText(context, LanPeerStore.isLocalWriteEnabled()
+                                ? R.string.lan_pairing_local_write_on
+                                : R.string.lan_pairing_local_write_off, Toast.LENGTH_SHORT).show();
                     } else {
                         Map<String, byte[]> partners = controller.partners();
                         int revoked = 0;

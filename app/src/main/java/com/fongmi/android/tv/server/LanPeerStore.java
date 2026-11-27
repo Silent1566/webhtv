@@ -39,6 +39,7 @@ public final class LanPeerStore {
     private static final String PREF = "lan_peer_registry";
     private static final String KEY = "registry";
     private static final String KEY_ENABLED = "control_enabled";
+    private static final String KEY_LOCAL_WRITE = "lan_local_write";
     private static final String ALIAS = "webhtv_lan_peer";
     private static final String ANDROID_KEYSTORE = "AndroidKeyStore";
     private static final String LOCAL_PREFIX = "local-v1:";
@@ -77,6 +78,15 @@ public final class LanPeerStore {
 
     public static void setControlEnabled(boolean enabled) {
         prefs().edit().putBoolean(KEY_ENABLED, enabled).apply();
+    }
+
+    /** Sensitive actions (config changes, sync, APK pushes) additionally need this local permission. */
+    public static boolean isLocalWriteEnabled() {
+        return prefs().getBoolean(KEY_LOCAL_WRITE, false);
+    }
+
+    public static void setLocalWriteEnabled(boolean enabled) {
+        prefs().edit().putBoolean(KEY_LOCAL_WRITE, enabled).apply();
     }
 
     static LanPeerPersist persist() {
