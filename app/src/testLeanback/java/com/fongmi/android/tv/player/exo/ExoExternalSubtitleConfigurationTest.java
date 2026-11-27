@@ -1,6 +1,7 @@
 package com.fongmi.android.tv.player.exo;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
@@ -72,6 +73,56 @@ public class ExoExternalSubtitleConfigurationTest {
 
         assertEquals(Uri.parse(VIDEO), configuration.uri);
         assertTrue(configuration.subtitleConfigurations.isEmpty());
+    }
+
+    @Test
+    public void infersKnownSubtitleMimeFromPathWithoutChangingSelectionFields() {
+        String signedAss = "https://example.invalid/chinese.ASS?token=one.srt#ignored.vtt";
+        Sub ass = Sub.create("Chinese ASS", signedAss, "zh", null);
+        ass.setFlag(C.SELECTION_FLAG_DEFAULT | C.SELECTION_FLAG_FORCED);
+        Sub srt = Sub.create("English SRT", "https://example.invalid/english.sRt?signature=one", "en", "");
+        Sub ssa = Sub.create("Japanese SSA", "https://example.invalid/japanese.SSA", "ja", "");
+        Sub vtt = Sub.create("French VTT", "https://example.invalid/french.VtT#cue", "fr", null);
+
+        List<MediaItem.SubtitleConfiguration> subtitles = createMedia(ass, srt, ssa, vtt).subtitleConfigurations;
+
+        assertEquals(4, subtitles.size());
+        assertEquals(new MediaItem.SubtitleConfiguration.Builder(Uri.parse(signedAss))
+                .setLabel("Chinese ASS").setMimeType(MimeTypes.TEXT_SSA).setLanguage("zh")
+                .setSelectionFlags(C.SELECTION_FLAG_DEFAULT | C.SELECTION_FLAG_FORCED)
+                .setId("webhtv-ass-external:0").build(), subtitles.get(0));
+        assertEquals(MimeTypes.APPLICATION_SUBRIP, subtitles.get(1).mimeType);
+        assertEquals(MimeTypes.TEXT_SSA, subtitles.get(2).mimeType);
+        assertEquals("webhtv-ass-external:2", subtitles.get(2).id);
+        assertEquals(MimeTypes.TEXT_VTT, subtitles.get(3).mimeType);
+    }
+
+    @Test
+    public void explicitSubtitleMimeTakesPriorityOverConflictingPath() {
+        Sub explicitVtt = Sub.create("WebVTT", ASS, "en", MimeTypes.TEXT_VTT);
+        Sub explicitAss = Sub.create("ASS", SRT, "zh", MimeTypes.TEXT_SSA);
+
+        List<MediaItem.SubtitleConfiguration> subtitles = createMedia(explicitVtt, explicitAss).subtitleConfigurations;
+
+        assertEquals(MimeTypes.TEXT_VTT, subtitles.get(0).mimeType);
+        assertNull(subtitles.get(0).id);
+        assertEquals(MimeTypes.TEXT_SSA, subtitles.get(1).mimeType);
+        assertEquals("webhtv-ass-external:1", subtitles.get(1).id);
+    }
+
+    @Test
+    public void doesNotGuessMimeForUnknownOrMissingPathSuffix() {
+        Sub unknown = Sub.create("Unknown", "https://example.invalid/subtitle.txt?file=sample.ass", "en", null);
+        Sub noSuffix = Sub.create("No suffix", "https://example.invalid/download?file=sample.srt#sample.vtt", "en", "");
+        Sub directory = Sub.create("Directory", "https://example.invalid/subtitle.ass/", "en", null);
+
+        List<MediaItem.SubtitleConfiguration> subtitles = createMedia(unknown, noSuffix, directory).subtitleConfigurations;
+
+        assertEquals(3, subtitles.size());
+        for (MediaItem.SubtitleConfiguration subtitle : subtitles) {
+            assertEquals("", subtitle.mimeType);
+            assertNull(subtitle.id);
+        }
     }
 
     private static MediaItem.LocalConfiguration createMedia(Sub... subs) {
