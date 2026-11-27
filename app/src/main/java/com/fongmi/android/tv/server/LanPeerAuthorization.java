@@ -34,6 +34,10 @@ public final class LanPeerAuthorization {
         this.elapsedMillis = elapsedMillis;
     }
 
+    public synchronized boolean isEnabled() {
+        return enabled;
+    }
+
     public synchronized void setEnabled(boolean enabled) {
         this.enabled = enabled;
         if (!enabled) pairingCode = null;
