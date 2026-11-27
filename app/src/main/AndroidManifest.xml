@@ -52,6 +52,12 @@
             android:value="2.5" />
 
         <activity
+            android:name=".ui.activity.SmbBrowserActivity"
+            android:exported="false"
+            android:label="@string/smb_browser_title"
+            android:theme="@style/Theme.App" />
+
+        <activity
             android:name=".ui.activity.FollowingActivity"
             android:exported="false"
             android:launchMode="singleTop" />

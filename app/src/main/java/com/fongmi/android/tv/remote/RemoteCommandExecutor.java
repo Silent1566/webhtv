@@ -37,11 +37,20 @@ public final class RemoteCommandExecutor {
             if ("remoteSync.restore".equals(command.type)) return startSyncRestore(profile, command);
             if ("action.search".equals(command.type)) return search(command.payload);
             if ("action.push".equals(command.type)) return push(command.payload);
+            if ("player.command".equals(command.type)) return player(command);
             if ("log.recent".equals(command.type) || "device.log.recent".equals(command.type)) return recentLog(command.payload);
             return RemoteCommandResult.failure("Unsupported command: " + command.type);
         } catch (Throwable e) {
             return RemoteCommandResult.failure(e.getMessage());
         }
+    }
+
+    /** 遥控：解析并执行一条播放/导航命令；未识别的动作直接回失败，不做兜底猜测。 */
+    private static RemoteCommandResult player(RemoteCommand command) {
+        RemotePlayerCommand.Parsed parsed = RemotePlayerCommand.parse(command.payload);
+        if (parsed == null) return RemoteCommandResult.failure("Unsupported player action");
+        if (!RemotePlayerOps.run(parsed)) return RemoteCommandResult.failure("No active screen to receive the command");
+        return RemoteCommandResult.success(parsed.action.wire, null);
     }
 
     private static RemoteCommandResult addGroup(RemoteProfile profile, RemoteCommand command) {

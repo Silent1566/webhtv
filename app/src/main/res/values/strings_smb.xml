@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="smb_browser_title">SMB 局域网浏览</string>
+    <string name="smb_browser_entry">SMB 局域网浏览</string>
+    <string name="smb_browser_entry_summary">浏览 NAS 共享并直接播放（实验）</string>
+    <string name="smb_browser_need_enable">长按该行开启 SMB 浏览（实验）</string>
+    <string name="smb_host_hint">主机或 IP</string>
+    <string name="smb_share_hint">共享名</string>
+    <string name="smb_user_hint">用户名（留空为访客）</string>
+    <string name="smb_password_hint">密码</string>
+    <string name="smb_remember">记住账号</string>
+    <string name="smb_connect">连接</string>
+    <string name="smb_up">上一级</string>
+    <string name="smb_root">共享根目录</string>
+    <string name="smb_connecting">正在连接…</string>
+    <string name="smb_bad_host">主机格式不对：填“主机”或“主机:端口”（端口 1-65535）</string>
+    <string name="smb_need_host_share">请填写主机与共享名</string>
+    <string name="smb_empty_dir">这个目录是空的</string>
+    <string name="smb_credential_saved">账号已加密保存</string>
+    <string name="smb_credential_failed">账号保存失败：%1$s</string>
+    <string name="smb_play_failed">无法打开：%1$s</string>
+    <string name="smb_dir_prefix">目录</string>
+    <string name="smb_folder_row">目录 · %1$s</string>
+    <string name="smb_file_row">%1$s · %2$s</string>
+</resources>

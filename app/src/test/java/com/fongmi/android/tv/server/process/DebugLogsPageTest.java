@@ -28,6 +28,22 @@ public class DebugLogsPageTest {
     }
 
     @Test
+    public void spiderDebugLogsUseTheirSeverityPrefix() throws Exception {
+        Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "server", "process", "DebugLogs.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+
+        assertTrue("SpiderDebug lines must parse a severity prefix instead of classifying by keywords",
+                source.contains("if(r.tag==='SpiderDebug'){e.kind='api';const m=/^")
+                        && source.contains("const lv=m?m[1]:''"));
+        assertTrue("SpiderDebug detail must drop the severity prefix",
+                source.contains("e.detail=m?r.msg.slice(m[0].length):r.msg"));
+        assertTrue("SpiderDebug keeps the legacy 成功/通过 fallback when a line carries no prefix",
+                source.contains("(low.includes('成功')||low.includes('通过')?'ok':'raw')"));
+        assertTrue("SpiderDebug must mark WARN/ERROR states",
+                source.contains("lv==='ERROR'||lv==='FATAL'?'err':lv==='WARN'||lv==='WARNING'?'warn'"));
+    }
+
+    @Test
     public void logsPageKeepsAiTaggedFailuresInAiGroup() throws Exception {
         Path sourcePath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "server", "process", "DebugLogs.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);

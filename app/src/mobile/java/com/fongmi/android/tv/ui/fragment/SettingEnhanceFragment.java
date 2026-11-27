@@ -31,6 +31,8 @@ import com.fongmi.android.tv.setting.SiteNameStore;
 import com.fongmi.android.tv.ui.activity.FileActivity;
 import com.fongmi.android.tv.ui.activity.HomeActivity;
 import com.fongmi.android.tv.ui.activity.PluginManagerActivity;
+import com.fongmi.android.tv.ui.activity.SmbBrowserActivity;
+import com.fongmi.android.tv.ui.dialog.RemotePlayerPanel;
 import com.fongmi.android.tv.ui.base.BaseFragment;
 import com.fongmi.android.tv.ui.dialog.AudioSourceDialog;
 import com.fongmi.android.tv.ui.dialog.ComicSourceDialog;
@@ -116,6 +118,11 @@ public class SettingEnhanceFragment extends BaseFragment {
         mBinding.playbackWebhook.setOnClickListener(view -> ViewingRecordSyncDialog.show(this, this::setText));
         mBinding.managePage.setOnClickListener(view -> ManagePageDialog.show(this));
         mBinding.remoteTrust.setOnClickListener(view -> RemoteTrustDialog.show(this, this::setText));
+        // 遥控面板复用同一条中转通道：长按“远程托管”打开。
+        mBinding.remoteTrust.setOnLongClickListener(view -> {
+            RemotePlayerPanel.show(this);
+            return true;
+        });
         mBinding.gitCloud.setOnClickListener(view -> GitCloudDialog.show(this, this::setText));
         mBinding.shellProxy.setOnClickListener(view -> ShellProxyDialog.show(this, this::setText));
         mBinding.shellProxy.setOnLongClickListener(v -> false);
@@ -128,6 +135,19 @@ public class SettingEnhanceFragment extends BaseFragment {
         mBinding.loginState.setOnClickListener(view -> LoginStateLearnDialog.show(this, this::setText));
         mBinding.oneKeySync.setOnClickListener(v -> OneKeySyncDialog.create().show(requireActivity()));
         mBinding.pluginManager.setOnClickListener(view -> PluginManagerActivity.start(requireActivity()));
+        // SMB 浏览是实验能力：默认关闭，长按本行切换开关，开启后点击进入浏览页。
+        mBinding.smbBrowser.setOnClickListener(view -> {
+            if (!Setting.isSmbBrowserEnabled()) {
+                Notify.show(R.string.smb_browser_need_enable);
+                return;
+            }
+            SmbBrowserActivity.start(requireActivity());
+        });
+        mBinding.smbBrowser.setOnLongClickListener(view -> {
+            Setting.putSmbBrowserEnabled(!Setting.isSmbBrowserEnabled());
+            setText();
+            return true;
+        });
     }
 
     private void reorderItems() {
@@ -183,6 +203,7 @@ public class SettingEnhanceFragment extends BaseFragment {
         safeSet("playbackArtworkWall", mBinding.playbackArtworkWallText, () -> getSwitch(Setting.isPlaybackArtworkWall()));
         safeSet("playbackWebhook", mBinding.playbackWebhookText, () -> ViewingRecordSyncStore.summary(requireContext()));
         safeSet("managePage", mBinding.managePageText, () -> getString(R.string.manage_page_web));
+        safeSet("smbBrowser", mBinding.smbBrowserText, () -> getString(Setting.isSmbBrowserEnabled() ? R.string.setting_enable : R.string.setting_disable));
         safeSet("remoteTrust", mBinding.remoteTrustText, () -> RemoteStore.summary(requireContext()));
         safeSet("gitCloud", mBinding.gitCloudText, () -> getString(R.string.git_cloud_account_count, GitCloudAccountStore.list().size()));
         safeSet("pluginManager", mBinding.pluginManagerText, () -> getString(R.string.plugin_manager_entry_count, PluginSourceConfig.get().entries().size()));

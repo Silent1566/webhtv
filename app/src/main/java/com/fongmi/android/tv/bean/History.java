@@ -45,6 +45,7 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
 
 @Entity
 public class History implements Diffable<History> {
@@ -56,6 +57,8 @@ public class History implements Diffable<History> {
     private static final long NEAR_END_MIN_MS = TimeUnit.SECONDS.toMillis(5);
     private static final long NEAR_END_MAX_MS = TimeUnit.SECONDS.toMillis(30);
     private static final long ENDING_MIN_PLAYED_MS = TimeUnit.MINUTES.toMillis(1);
+    /** 只由集号/链接构成的占位标题：进度写回时不得覆盖已落库的真实片名。 */
+    private static final Pattern EPISODE_ONLY_NAME = Pattern.compile("^(?:第\\s*)?[0-9零〇一二三四五六七八九十百]+\\s*(?:[集话話回期章节節])$");
 
     @NonNull
     @PrimaryKey
@@ -695,6 +698,29 @@ public class History implements Diffable<History> {
         this.vodName = vodName;
     }
 
+    /**
+     * 片名是否可作为稳定标题：空值、URL、纯集号以及 null/undefined 这类进度载荷占位值都不算。
+     * 显示投影需要改名时直接走 {@link #setVodName(String)}，不要经过这里。
+     */
+    public static boolean isRealVodName(String name) {
+        if (name == null) return false;
+        String value = name.trim();
+        if (value.isEmpty()) return false;
+        String lower = value.toLowerCase(Locale.ROOT);
+        if (lower.equals("null") || lower.equals("undefined") || value.equals("-")) return false;
+        if (lower.startsWith("http://") || lower.startsWith("https://") || lower.startsWith("file://")) return false;
+        return !EPISODE_ONLY_NAME.matcher(value).matches();
+    }
+
+    /**
+     * 进度写回时的片名选择：占位值不得顶替真实片名，真实片名之间仍按新值纠正，
+     * 两者都不可用时保持原行为（沿用写回值）。
+     */
+    public static String preferStableVodName(String existing, String incoming) {
+        if (isRealVodName(incoming)) return incoming;
+        return isRealVodName(existing) ? existing : incoming;
+    }
+
     public String getVodFlag() {
         return vodFlag;
     }
@@ -1225,6 +1251,7 @@ public class History implements Diffable<History> {
             long deletedAt = Math.max(latestDeletion(tombstones, previous), latestDeletion(tombstones, key));
             if (!writeSurvivesDeletion(getCreateTime(), deletedAt)) return null;
             before[0] = find(getCid(), previous);
+            if (before[0] != null) setVodName(preferStableVodName(before[0].getVodName(), vodName));
             if (!TextUtils.isEmpty(previous)) {
                 AppDatabase.get().getTmdbSeasonProgressDao().replaceSourceHistoryKey(getCid(), previous, key);
                 AppDatabase.get().getHistoryDao().delete(getCid(), previous);
@@ -1255,6 +1282,7 @@ public class History implements Diffable<History> {
             if (before == null || before.getTmdbId() != getTmdbId()) return null;
             long deletedAt = latestDeletion(PlaybackDeleteTombstoneStore.snapshot(), getKey());
             if (!writeSurvivesDeletion(getCreateTime(), deletedAt)) return null;
+            setVodName(preferStableVodName(before.getVodName(), vodName));
             position = Math.max(0, originPosition);
             if (originDuration > 0) duration = originDuration;
             createTime = updateTime = System.currentTimeMillis();
@@ -1287,6 +1315,7 @@ public class History implements Diffable<History> {
             long deletedAt = latestDeletion(PlaybackDeleteTombstoneStore.snapshot(), getKey());
             if (!writeSurvivesDeletion(getCreateTime(), deletedAt)) return null;
             before[0] = find(getCid(), getKey());
+            if (before[0] != null) setVodName(preferStableVodName(before[0].getVodName(), vodName));
             if (mediaIdentityChanged(before[0], this)) {
                 AppDatabase.get().getTmdbSeasonProgressDao().deleteBySource(getCid(), getKey());
             }
