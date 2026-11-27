@@ -52,6 +52,9 @@ public class CustomWallView extends FrameLayout implements DefaultLifecycleObser
     private PlayerView video;
     private ExoPlayer player;
     private final Runnable refreshRunnable = this::refresh;
+    private final Runnable themeRunnable = () -> {
+        if (isReady()) theme();
+    };
     private boolean observerAdded;
     private boolean motionEnabled = true;
     private boolean videoRestorePending;
@@ -80,20 +83,23 @@ public class CustomWallView extends FrameLayout implements DefaultLifecycleObser
             ((ComponentActivity) getContext()).getLifecycle().addObserver(this);
             observerAdded = true;
         }
-        removeCallbacks(refreshRunnable);
-        if (loadedPlaceholder && isStaticBuiltInWall()) theme();
-        else post(refreshRunnable);
+        if (!loadedPlaceholder || hasMotionWall()) post(refreshRunnable);
+        else if (isStaticBuiltInWall()) theme();
+        else post(themeRunnable);
     }
 
     @Override
     protected void onDetachedFromWindow() {
         removeCallbacks(refreshRunnable);
+        removeCallbacks(themeRunnable);
         super.onDetachedFromWindow();
     }
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onConfigEvent(ConfigEvent event) {
-        if (event.type() == ConfigEvent.Type.WALL) refresh();
+        if (event.type() != ConfigEvent.Type.WALL) return;
+        removeCallbacks(themeRunnable);
+        refresh();
     }
 
     private void refresh() {
@@ -166,20 +172,17 @@ public class CustomWallView extends FrameLayout implements DefaultLifecycleObser
     private void loadImage() {
         if (!isReady()) return;
         Drawable cache = cache();
-        if (cache != null) binding.image.setImageDrawable(cache);
-        else loadPlaceholder();
+        binding.image.setImageDrawable(cache != null ? cache : new ColorDrawable(DEFAULT_WALL_COLOR));
     }
 
     private void loadPlaceholder() {
         if (binding == null || binding.image == null) return;
         int wall = Setting.getWall();
         int type = Setting.getWallType();
-        Drawable cache = cache();
         if (isBuiltInColor(wall, type)) binding.image.setImageDrawable(new ColorDrawable(Setting.getBuiltInWallColor(wall)));
         else if (isBuiltInDesign(wall, type)) loadDesign(wall);
         else if (isGreen(wall, type)) binding.image.setImageResource(R.drawable.wallpaper_1);
-        else if (cache != null) binding.image.setImageDrawable(cache);
-        else binding.image.setImageDrawable(new ColorDrawable(DEFAULT_WALL_COLOR));
+        else loadImage();
     }
 
     public static int getDesignResId(int wall) {
@@ -313,6 +316,10 @@ public class CustomWallView extends FrameLayout implements DefaultLifecycleObser
         int type = Setting.getWallType();
         if (type == TYPE_RES && Setting.isBuiltInWall(wall)) return Setting.getBuiltInWallColor(wall);
         if (isGreen(wall, type)) return GREEN_WALL_COLOR;
+        if (!hasMotionWall()) {
+            Drawable backdrop = binding.image.getDrawable();
+            return backdrop instanceof BitmapDrawable bitmap ? paletteColor(bitmap.getBitmap()) : DEFAULT_WALL_COLOR;
+        }
         File file = FileUtil.getWallCache();
         return file.exists() ? paletteColor(file) : DEFAULT_WALL_COLOR;
     }
@@ -320,9 +327,19 @@ public class CustomWallView extends FrameLayout implements DefaultLifecycleObser
     private int paletteColor(File file) {
         Bitmap bitmap = decodeBitmap(file);
         if (bitmap == null) return DEFAULT_WALL_COLOR;
-        Palette palette = Palette.from(bitmap).maximumColorCount(8).generate();
-        bitmap.recycle();
-        return swatchColor(palette);
+        try {
+            return paletteColor(bitmap);
+        } finally {
+            bitmap.recycle();
+        }
+    }
+
+    private int paletteColor(Bitmap bitmap) {
+        try {
+            return swatchColor(Palette.from(bitmap).maximumColorCount(8).generate());
+        } catch (OutOfMemoryError | RuntimeException e) {
+            return DEFAULT_WALL_COLOR;
+        }
     }
 
     private Bitmap decodeBitmap(File file) {
@@ -353,6 +370,11 @@ public class CustomWallView extends FrameLayout implements DefaultLifecycleObser
         int wall = Setting.getWall();
         int type = Setting.getWallType();
         return isBuiltInColor(wall, type) || isBuiltInDesign(wall, type) || isGreen(wall, type);
+    }
+
+    private boolean hasMotionWall() {
+        int type = Setting.getWallType();
+        return WallMotionPolicy.isVideoMotion(motionEnabled, type) || WallMotionPolicy.isGifMotion(motionEnabled, type);
     }
 
     /** 与 {@link #load()} 里走 loadVideo 的条件保持一致；内置色/设计壁纸的 type 恒为 TYPE_RES，故无需再排除。 */
@@ -420,6 +442,7 @@ public class CustomWallView extends FrameLayout implements DefaultLifecycleObser
     @Override
     public void onDestroy(@NonNull LifecycleOwner owner) {
         removeCallbacks(refreshRunnable);
+        removeCallbacks(themeRunnable);
         EventBus.getDefault().unregister(this);
         if (drawable != null) drawable.recycle();
         if (video != null) removeView(video);
