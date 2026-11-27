@@ -67,6 +67,7 @@ public final class LanPeerAuthorization {
             if (--attemptsLeft == 0) pairingCode = null;
             return null;
         }
+        if (!paired.containsKey(uuid) && paired.size() >= LanPeerRegistry.MAX_PARTNERS) return null;
         pairingCode = null;
         byte[] secret = new byte[CREDENTIAL_BYTES];
         RANDOM.nextBytes(secret);
@@ -90,9 +91,12 @@ public final class LanPeerAuthorization {
         return copy;
     }
 
-    /** Replaces the registry; an oversized or empty payload leaves the current state untouched. */
+    /** Replaces the registry; empty, missing or oversized input clears existing authorizations. */
     public synchronized void restore(Map<String, byte[]> partners) {
-        if (partners == null || partners.isEmpty() || partners.size() > LanPeerRegistry.MAX_PARTNERS) return;
+        if (partners == null || partners.isEmpty() || partners.size() > LanPeerRegistry.MAX_PARTNERS) {
+            paired.clear();
+            return;
+        }
         Map<String, byte[]> next = new HashMap<>();
         for (Map.Entry<String, byte[]> entry : partners.entrySet()) {
             if (!LanPeerRegistry.valid(entry.getKey(), entry.getValue())) continue;

@@ -177,4 +177,23 @@ public class LanPeerAuthorizationTest {
         assertNotNull(credential);
         return credential;
     }
+
+    @Test
+    public void admissionStopsAt64ButAllowsReplacingAnExistingPeer() {
+        LanPeerAuthorization kernel = new LanPeerAuthorization(() -> 0);
+        kernel.setEnabled(true);
+        String first = "";
+        for (int i = 0; i < 64; i++) {
+            String credential = kernel.pair("phone-" + i, kernel.issuePairingCode());
+            assertNotNull(credential);
+            if (i == 0) first = credential;
+        }
+        assertNull(kernel.pair("phone-overflow", kernel.issuePairingCode()));
+        assertEquals(64, kernel.partners().size());
+        String replacement = kernel.pair("phone-0", kernel.issuePairingCode());
+        assertNotNull(replacement);
+        assertEquals(LanPeerAuthorization.Decision.UNAUTHORIZED, kernel.authorize("push", "phone-0", first, false));
+        assertEquals(LanPeerAuthorization.Decision.ALLOW, kernel.authorize("push", "phone-0", replacement, false));
+    }
+
 }

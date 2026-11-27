@@ -1,57 +1,180 @@
 package com.fongmi.android.tv.server;
 
 import com.fongmi.android.tv.bean.Device;
-import com.github.catvod.net.OkHttp;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.net.Proxy;
+import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
+import java.util.Collections;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
 
-import okhttp3.FormBody;
+import javax.net.ssl.X509TrustManager;
+
+import okhttp3.Call;
+import okhttp3.ConnectionSpec;
+import okhttp3.Headers;
+import okhttp3.HttpUrl;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Protocol;
+import okhttp3.Request;
+import okhttp3.RequestBody;
 import okhttp3.Response;
+import okhttp3.ResponseBody;
+import okhttp3.TlsVersion;
 
-/**
- * First-party client side of the LAN gate: attaches identity headers and performs the one-time
- * pairing exchange. Callers use {@link #headers(String)} with the target device uuid.
- */
 public final class LanClient {
+    private static final Pattern UUID = Pattern.compile("[A-Za-z0-9_-]{1,128}");
+    private static final Pattern CREDENTIAL = Pattern.compile("[A-Za-z0-9_-]{43}");
+    private static final Pattern CODE = Pattern.compile("[0-9]{8}");
+    private static final MediaType TEXT = MediaType.get("text/plain");
 
     private LanClient() {
     }
 
-    /** Headers for a request to the target; empty when this device has no id yet. */
-    public static Map<String, String> headers(String targetUuid) {
-        return LanClientHeaders.of(Device.identityUuid(), LanSenderCredentialStore.credentialFor(targetUuid));
-    }
-
     public static boolean paired(String targetUuid) {
-        return !LanSenderCredentialStore.credentialFor(targetUuid).isEmpty();
-    }
-
-    /**
-     * Exchanges the code shown on the target for a credential and stores it.
-     *
-     * @return the stored credential, or null when the target refused (its body says why).
-     */
-    public static String pair(String targetBaseUrl, String targetUuid, String code) throws IOException {
-        String base = targetBaseUrl == null ? "" : targetBaseUrl.replaceAll("/+$", "");
-        String device = Device.identityUuid();
-        if (base.isEmpty() || device.isEmpty() || code == null || code.trim().isEmpty()) return null;
-        Map<String, String> headers = LanClientHeaders.of(device, "");
-        String url = base + "/lan/pair?code=" + java.net.URLEncoder.encode(code.trim(), "UTF-8");
-        try (Response response = OkHttp.newCall(url, headers, new FormBody.Builder().build()).execute()) {
-            String body = response.body() == null ? "" : response.body().string().trim();
-            if (!response.isSuccessful() || body.isEmpty()) return null;
-            try {
-                LanSenderCredentialStore.get().put(targetUuid, body);
-            } catch (Exception storageFailure) {
-                // A credential we cannot persist would work once and fail later; report failure now.
-                return null;
-            }
-            return body;
+        if (!validId(targetUuid)) return false;
+        LanSenderCredentials store = LanSenderCredentialStore.get();
+        synchronized (store) {
+            return CREDENTIAL.matcher(store.get(targetUuid)).matches()
+                    && !LanTlsIdentity.normalizePin(store.fingerprint(targetUuid)).isEmpty();
         }
     }
 
-    /** Test seam: forgets the cached store so the next call reloads from disk. */
+    public static String discoverFingerprint(String targetHttpBase) throws IOException {
+        HttpUrl target = controlUrl(targetHttpBase, null, LanTlsPolicy.INFO_PATH);
+        return LanTlsIdentity.probe(target.host(), target.port());
+    }
+
+    public static PairResult pair(String targetHttpBase, String targetUuid, String verifiedFingerprint, String code) {
+        String device = Device.identityUuid();
+        String pin = LanTlsIdentity.normalizePin(verifiedFingerprint);
+        if (pin.isEmpty()) return failure("Verify the receiver fingerprint first");
+        if (!validId(device) || !validId(targetUuid) || code == null || !CODE.matcher(code).matches()) {
+            return failure("Invalid pairing details");
+        }
+        try {
+            HttpUrl info = controlUrl(targetHttpBase, null, LanTlsPolicy.INFO_PATH);
+            OkHttpClient client = pinnedClient(info.host(), pin, LanTlsPolicy.HEADER_TIMEOUT_MS,
+                    LanTlsPolicy.HEADER_TIMEOUT_MS, LanTlsPolicy.HEADER_TIMEOUT_MS, LanTlsPolicy.READ_TIMEOUT_MS);
+            try (Response response = client.newCall(new Request.Builder().url(info).build()).execute()) {
+                if (response.code() != 200 || !targetUuid.equals(readAscii(response.body(), 128))) {
+                    return failure("Receiver device identity did not match");
+                }
+            }
+            HttpUrl exchange = info.newBuilder().encodedPath(LanTlsPolicy.PAIR_PATH).build();
+            Request request = new Request.Builder().url(exchange)
+                    .headers(Headers.of(LanClientHeaders.of(device, "")))
+                    .post(RequestBody.create(code.getBytes(StandardCharsets.US_ASCII), TEXT)).build();
+            try (Response response = client.newCall(request).execute()) {
+                if (response.code() != 200) return failure("Receiver refused pairing");
+                String credential = readAscii(response.body(), 43);
+                if (!CREDENTIAL.matcher(credential).matches()) return failure("Invalid pairing response");
+                try {
+                    LanSenderCredentialStore.get().put(targetUuid, credential, pin);
+                } catch (Exception ignored) {
+                    return failure("Could not save receiver pairing");
+                }
+                return new PairResult(true, "Paired");
+            }
+        } catch (IOException | RuntimeException ignored) {
+            return failure("Secure connection to receiver failed; verify its fingerprint");
+        }
+    }
+
+    public static Call newCall(OkHttpClient timeoutProfile, String legacyActionUrl, String targetUuid, RequestBody body) throws IOException {
+        HttpUrl target = controlUrl(legacyActionUrl, LanTlsPolicy.ACTION_PATH, LanTlsPolicy.ACTION_PATH);
+        String device = Device.identityUuid();
+        if (!validId(device) || !validId(targetUuid)) throw new IOException("LAN device identity unavailable");
+        LanSenderCredentials store = LanSenderCredentialStore.get();
+        String pin;
+        String credential;
+        synchronized (store) {
+            pin = LanTlsIdentity.normalizePin(store.fingerprint(targetUuid));
+            credential = store.get(targetUuid);
+        }
+        if (pin.isEmpty() || !CREDENTIAL.matcher(credential).matches()) throw new IOException("Pair with the receiver first");
+        int connect = bound(timeoutProfile == null ? 0 : timeoutProfile.connectTimeoutMillis(), LanTlsPolicy.HEADER_TIMEOUT_MS);
+        int read = bound(timeoutProfile == null ? 0 : timeoutProfile.readTimeoutMillis(), LanTlsPolicy.TRANSFER_TIMEOUT_MS);
+        int write = bound(timeoutProfile == null ? 0 : timeoutProfile.writeTimeoutMillis(), LanTlsPolicy.TRANSFER_TIMEOUT_MS);
+        int call = bound(timeoutProfile == null ? 0 : timeoutProfile.callTimeoutMillis(), LanTlsPolicy.TRANSFER_TIMEOUT_MS);
+        OkHttpClient client = pinnedClient(target.host(), pin, connect, read, write, call);
+        Map<String, String> headers = LanClientHeaders.of(device, credential);
+        Request.Builder request = new Request.Builder().url(target).headers(Headers.of(headers));
+        return client.newCall((body == null ? request.get() : request.post(body)).build());
+    }
+
+    static OkHttpClient pinnedClient(String host, String pin, int connect, int read, int write, int call) throws IOException {
+        X509TrustManager trust = LanTlsIdentity.pinned(pin);
+        try {
+            return new OkHttpClient.Builder().sslSocketFactory(LanTlsIdentity.clientContext(trust).getSocketFactory(), trust)
+                    .hostnameVerifier((actual, session) -> LanTlsIdentity.matchesHostAndPin(host, actual, pin, session))
+                    .proxy(Proxy.NO_PROXY)
+                    .protocols(Collections.singletonList(Protocol.HTTP_1_1))
+                    .connectionSpecs(Collections.singletonList(new ConnectionSpec.Builder(ConnectionSpec.MODERN_TLS)
+                            .tlsVersions(TlsVersion.TLS_1_2).build()))
+                    .followRedirects(false).followSslRedirects(false).retryOnConnectionFailure(false)
+                    .connectTimeout(connect, TimeUnit.MILLISECONDS).readTimeout(read, TimeUnit.MILLISECONDS)
+                    .writeTimeout(write, TimeUnit.MILLISECONDS).callTimeout(call, TimeUnit.MILLISECONDS).build();
+        } catch (GeneralSecurityException e) {
+            throw new IOException("Secure LAN transport unavailable");
+        }
+    }
+
+    private static HttpUrl controlUrl(String value, String originalPath, String securePath) throws IOException {
+        HttpUrl legacy = value == null ? null : HttpUrl.parse(value);
+        if (legacy == null || !"http".equals(legacy.scheme()) || legacy.port() < LanTlsPolicy.FIRST_HTTP_PORT
+                || legacy.port() > LanTlsPolicy.LAST_HTTP_PORT || !legacy.encodedUsername().isEmpty()
+                || !legacy.encodedPassword().isEmpty() || legacy.fragment() != null
+                || (originalPath == null ? !"/".equals(legacy.encodedPath()) || legacy.encodedQuery() != null
+                    : !originalPath.equals(legacy.encodedPath()))) {
+            throw new IOException("Invalid LAN receiver address");
+        }
+        return legacy.newBuilder().scheme("https").port(legacy.port() + LanTlsPolicy.PORT_OFFSET).encodedPath(securePath).build();
+    }
+
+    private static boolean validId(String value) {
+        return value != null && !"0000000000000000".equals(value) && UUID.matcher(value).matches();
+    }
+
+    private static String readAscii(ResponseBody body, int max) throws IOException {
+        if (body == null || body.contentLength() > max) throw new IOException("Invalid LAN response");
+        InputStream stream = body.byteStream();
+        byte[] bytes = new byte[max];
+        int count = 0;
+        int value;
+        while ((value = stream.read()) != -1) {
+            if (count == max || value < 33 || value > 126) throw new IOException("Invalid LAN response");
+            bytes[count++] = (byte) value;
+        }
+        return new String(bytes, 0, count, StandardCharsets.US_ASCII);
+    }
+
+    private static int bound(int configured, int max) {
+        return configured == 0 ? max : Math.min(configured, max);
+    }
+
+    private static PairResult failure(String message) {
+        return new PairResult(false, message);
+    }
+
+    public static final class PairResult {
+        public final boolean success;
+        public final String message;
+
+        private PairResult(boolean success, String message) {
+            this.success = success;
+            this.message = message;
+        }
+
+        public boolean success() { return success; }
+        public String message() { return message; }
+    }
+
     static void resetForTest() {
         LanSenderCredentialStore.reset();
     }

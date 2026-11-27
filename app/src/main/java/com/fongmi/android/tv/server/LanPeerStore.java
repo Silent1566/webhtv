@@ -4,14 +4,19 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
+import android.system.ErrnoException;
+import android.system.Os;
+import android.system.OsConstants;
 import android.util.AtomicFile;
 import android.util.Base64;
 
 import com.fongmi.android.tv.App;
 
 import java.io.File;
+import java.io.FileDescriptor;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
@@ -43,6 +48,7 @@ public final class LanPeerStore {
     private static final String ALIAS = "webhtv_lan_peer";
     private static final String ANDROID_KEYSTORE = "AndroidKeyStore";
     private static final String LOCAL_PREFIX = "local-v1:";
+    private static final String INHIBIT_FILE = "lan_control.pending";
     private static final String LOCAL_KEY_FILE = "lan_peer.key";
     private static final int KEY_BYTES = 32;
     private static final int IV_BYTES = 12;
@@ -60,7 +66,7 @@ public final class LanPeerStore {
     }
 
     public static void clear() {
-        prefs().edit().remove(KEY).apply();
+        commit(prefs().edit().remove(KEY));
     }
 
     /** Raw stored value, for diagnostics and tests; never contains device identifiers. */
@@ -69,15 +75,15 @@ public final class LanPeerStore {
     }
 
     static void overwrite(String value) {
-        prefs().edit().putString(KEY, value).apply();
+        commit(prefs().edit().putString(KEY, value));
     }
 
     public static boolean isControlEnabled() {
-        return prefs().getBoolean(KEY_ENABLED, false);
+        return !controlInhibit().exists() && prefs().getBoolean(KEY_ENABLED, false);
     }
 
     public static void setControlEnabled(boolean enabled) {
-        prefs().edit().putBoolean(KEY_ENABLED, enabled).apply();
+        commit(prefs().edit().putBoolean(KEY_ENABLED, enabled));
     }
 
     /** Sensitive actions (config changes, sync, APK pushes) additionally need this local permission. */
@@ -86,7 +92,7 @@ public final class LanPeerStore {
     }
 
     public static void setLocalWriteEnabled(boolean enabled) {
-        prefs().edit().putBoolean(KEY_LOCAL_WRITE, enabled).apply();
+        commit(prefs().edit().putBoolean(KEY_LOCAL_WRITE, enabled));
     }
 
     static LanPeerPersist persist() {
@@ -111,8 +117,94 @@ public final class LanPeerStore {
             public void write(String value) {
                 overwrite(value);
             }
+
+            @Override
+            public boolean isInhibited() {
+                return controlInhibit().exists();
+            }
+
+            @Override
+            public void inhibit() throws Exception {
+                controlInhibit().write();
+            }
+
+            @Override
+            public void clearInhibit() throws Exception {
+                controlInhibit().clear();
+            }
         };
         return new LanPeerPersist(box, store);
+    }
+
+    private static ControlInhibit controlInhibit() {
+        return new ControlInhibit(new File(App.get().getNoBackupFilesDir(), INHIBIT_FILE));
+    }
+
+    static final class ControlInhibit {
+        private final File path;
+        private final File pending;
+        private final File backup;
+        private final AtomicFile file;
+
+        ControlInhibit(File path) {
+            this.path = path;
+            pending = new File(path + ".new");
+            backup = new File(path + ".bak");
+            file = new AtomicFile(path);
+        }
+
+        boolean exists() {
+            try {
+                return present(path) || present(pending) || present(backup);
+            } catch (ErrnoException unverifiable) {
+                return true;
+            }
+        }
+
+        void write() throws Exception {
+            FileOutputStream out = file.startWrite();
+            try {
+                out.write(1);
+                out.getFD().sync();
+            } catch (Exception failure) {
+                file.failWrite(out);
+                throw failure;
+            }
+            file.finishWrite(out);
+            if (!present(path)) throw new IOException("Could not persist LAN control interlock");
+            syncDirectory();
+        }
+
+        void clear() throws Exception {
+            file.delete();
+            pending.delete();
+            backup.delete();
+            if (present(path) || present(pending) || present(backup)) throw new IOException("Could not clear LAN control interlock");
+            syncDirectory();
+        }
+
+        private static boolean present(File file) throws ErrnoException {
+            try {
+                Os.stat(file.getPath());
+                return true;
+            } catch (ErrnoException error) {
+                if (error.errno == OsConstants.ENOENT) return false;
+                throw error;
+            }
+        }
+
+        private void syncDirectory() throws ErrnoException {
+            FileDescriptor fd = Os.open(path.getParent(), OsConstants.O_RDONLY, 0);
+            try {
+                Os.fsync(fd);
+            } finally {
+                Os.close(fd);
+            }
+        }
+    }
+
+    private static void commit(SharedPreferences.Editor editor) {
+        if (!editor.commit()) throw new IllegalStateException("Could not persist LAN authorization");
     }
 
     private static SharedPreferences prefs() {
@@ -120,6 +212,7 @@ public final class LanPeerStore {
     }
 
     static String encrypt(String text) throws Exception {
+        if (text == null || text.length() > LanPeerRegistry.MAX_PLAIN_CHARS) throw new IllegalArgumentException("LAN payload too large");
         Context context = App.get();
         SecretKey secret;
         String prefix = "";
@@ -142,6 +235,7 @@ public final class LanPeerStore {
     }
 
     static String decrypt(String value) throws Exception {
+        if (value == null || value.length() > LanPeerRegistry.MAX_SEALED_CHARS) throw new IllegalArgumentException("LAN ciphertext too large");
         Context context = App.get();
         boolean local = value.startsWith(LOCAL_PREFIX);
         byte[] input = Base64.decode(local ? value.substring(LOCAL_PREFIX.length()) : value, Base64.DEFAULT);

@@ -1,10 +1,13 @@
 package com.fongmi.android.tv.server;
 
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
 
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.security.KeyStore;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -16,16 +19,16 @@ import static org.junit.Assert.fail;
 
 public class LanSecureChannelTest {
 
-    private static final Path WORK = Path.of(System.getProperty("kn17.channel.dir", "build/kn17-channel"));
+    @Rule public final TemporaryFolder temp = new TemporaryFolder();
 
     @Test
     public void pinnedPeersReachTheHandlerAndAnUnpinnedPeerNeverDoes() throws Exception {
         KeyStore server = load("a");
         KeyStore client = load("b");
         KeyStore intruder = load("attacker");
-        String serverPin = LanSecureChannel.pinOf(Files.readAllBytes(WORK.resolve("a.der")));
-        String clientPin = LanSecureChannel.pinOf(Files.readAllBytes(WORK.resolve("b.der")));
-        String intruderPin = LanSecureChannel.pinOf(Files.readAllBytes(WORK.resolve("attacker.der")));
+        String serverPin = LanSecureChannel.pinOf(server.getCertificate("a").getEncoded());
+        String clientPin = LanSecureChannel.pinOf(client.getCertificate("b").getEncoded());
+        String intruderPin = LanSecureChannel.pinOf(intruder.getCertificate("attacker").getEncoded());
         assertNotEquals(serverPin, intruderPin);
 
         CompletableFuture<String> seen = new CompletableFuture<>();
@@ -78,9 +81,25 @@ public class LanSecureChannelTest {
         return "changeit".toCharArray();
     }
 
-    private static KeyStore load(String name) throws Exception {
+    private KeyStore load(String name) throws Exception {
+        return generate(temp.getRoot().toPath(), name);
+    }
+
+    static KeyStore generate(Path directory, String name) throws Exception {
+        Path storePath = directory.resolve(name + ".p12");
+        String executable = System.getProperty("os.name").startsWith("Windows") ? "keytool.exe" : "keytool";
+        String keytool = Paths.get(System.getProperty("java.home"), "bin", executable).toString();
+        Process process = new ProcessBuilder(keytool, "-genkeypair", "-noprompt", "-alias", name,
+                "-keyalg", "RSA", "-keysize", "2048", "-validity", "2", "-dname", "CN=" + name,
+                "-storetype", "PKCS12", "-storepass", "changeit", "-keystore", storePath.toString())
+                .redirectErrorStream(true).start();
+        if (!process.waitFor(15, TimeUnit.SECONDS)) {
+            process.destroyForcibly();
+            fail("keytool fixture timed out");
+        }
+        assertEquals("keytool fixture failed", 0, process.exitValue());
         KeyStore store = KeyStore.getInstance("PKCS12");
-        try (InputStream input = Files.newInputStream(WORK.resolve(name + ".p12"))) {
+        try (InputStream input = Files.newInputStream(storePath)) {
             store.load(input, pass());
         }
         return store;

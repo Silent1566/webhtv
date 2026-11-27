@@ -11,7 +11,7 @@
 **评估之后的情况变化（必须一起读）**：
 
 - 第 3 项「追剧日历」**已在随后实施并合入**：`9e921d7da7`、`0d6ac40dd8`、`52176f9118`、`dacaa8a283`、`30817a79d6`，文档见 `docs/FOLLOW-4-following-calendar.md`。本条保留在清单里只为说明来龙去脉，**不要再当作待办**。
-- 第 7 项已进入[授权内核阶段](KN-1-7-lan-receive-authorization-decision.md)，尚未接入运行时；其余 9 项仍是候选。
+- 第 7 项[局域网接收授权](KN-1-7-lan-receive-authorization-decision.md#15-最终实现验收与兼容性2026-11-27)已完成 TLS 配对/鉴权、双端 UI、第一方发送接线与双设备验收；其余 9 项仍是候选。
 
 ## 1. 优先级与证据（按收益 / 改动风险排序）
 
@@ -30,7 +30,7 @@
 |---|---|---|---|---|
 | 5 | 手动批量站点体检（只查首页/分类） | `services/site_self_check.dart:72-110`（≤100 站、并发 2、单站 30s）、`:258-296` | `ui/dialog/SiteHealthReportDialog.java:105-131` 只读已有记录（筛选/排序/清除/搜索），无主动检查 | 候选 |
 | 6 | 同步凭据与普通设置分离授权 | `core/android_sync.dart:765-790`：`tmdb_config`/`ai_config` 未授权时**既不落库也不留存** | `bean/Backup.java:289` 中两者与普通偏好同列 `APP_PREFS`，读取端由对端 `options.isSettings()` 决定（`Action.java:368-402`） | 候选 |
-| 7 | 局域网同步/推送接收授权 | `services/sync_server.dart:349-359`（开关＋网段）、`:437-460`（`isPeerAuthorized`） | `server/Nano.java:86-107` 直接进处理器；`Action.java:121-125`、`:186-203` 无设备白名单 | [进入内核阶段，未接入 HTTP](KN-1-7-lan-receive-authorization-decision.md) |
+| 7 | 局域网同步/推送接收授权 | `services/sync_server.dart:349-359`（开关＋网段）、`:437-460`（`isPeerAuthorized`） | `server/Nano.java:86-107` 直接进处理器；`Action.java:121-125`、`:186-203` 无设备白名单 | [已实施并双设备验收（TLS 配对）](KN-1-7-lan-receive-authorization-decision.md) |
 | 8 | 配置载体解码护栏（`<pre>`／无标记 Base64／层数/大小） | `core/config_carrier_decoder.dart:12-37`（8 MiB、≤3 层） | `api/Decoder.java:34-40,72-80` 只认 `**` 标记 Base64 与 `2423` | 候选 |
 | 9 | 更新检查缓存/限流/离线可解释 | `services/app_update_service.dart:272-355`（ETag/304、冷却窗口）、`:365-383`（旧缓存但标 `failed`） | `update/UpdateHttp.java:38-52` 只返回正文，非 2xx 抛 `HTTP <code>`；`Updater.java:175-191` 逐级兜底 | 候选 |
 | 10 | 第三方元数据源（Bangumi）与手动匹配 | `core/meta_source.dart:13-58`、`services/bangumi_service.dart:132-180`、`ui/meta_match_dialog.dart:1-10`（入口 `browse_pages.dart:2078`、`push_detail_page.dart:206`） | 豆瓣评分已在用（`TmdbItem.getDoubanRating`、`personalDouban` 行），但 `app/src` 内 `bangumi` 命中 0；手动匹配仅 `TmdbSearchDialog.java` | 候选 |

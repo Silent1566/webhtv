@@ -114,4 +114,30 @@ public class LanPeerPersistTest {
         Map<String, byte[]> loaded = persist.load();
         assertTrue(loaded.isEmpty());
     }
+
+    @Test
+    public void valueStoreReadFailureLoadsAsEmpty() {
+        MemoryBox box = new MemoryBox();
+        LanPeerPersist persist = new LanPeerPersist(box, new LanPeerPersist.ValueStore() {
+            public String read() { throw new IllegalStateException("read failed"); }
+            public void write(String value) { }
+        });
+        assertTrue(persist.load().isEmpty());
+    }
+
+    @Test
+    public void oversizedCiphertextIsRejectedBeforeOpeningIt() {
+        java.util.concurrent.atomic.AtomicInteger opened = new java.util.concurrent.atomic.AtomicInteger();
+        LanPeerPersist.SecretBox box = new LanPeerPersist.SecretBox() {
+            public String seal(String plain) { return plain; }
+            public String open(String sealed) { opened.incrementAndGet(); return ""; }
+        };
+        LanPeerPersist.ValueStore store = new LanPeerPersist.ValueStore() {
+            public String read() { return "x".repeat(100_000); }
+            public void write(String value) { }
+        };
+        assertTrue(new LanPeerPersist(box, store).load().isEmpty());
+        assertEquals(0, opened.get());
+    }
+
 }

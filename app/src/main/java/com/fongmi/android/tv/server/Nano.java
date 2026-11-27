@@ -3,7 +3,6 @@ package com.fongmi.android.tv.server;
 import com.fongmi.android.tv.api.config.LiveConfig;
 import com.fongmi.android.tv.bean.Device;
 import com.fongmi.android.tv.server.impl.Process;
-import com.fongmi.android.tv.server.process.Action;
 import com.fongmi.android.tv.server.process.Cache;
 import com.fongmi.android.tv.server.process.DebugLogs;
 import com.fongmi.android.tv.server.process.DriveCheck;
@@ -13,7 +12,6 @@ import com.fongmi.android.tv.server.process.Manage;
 import com.fongmi.android.tv.server.process.Media;
 import com.fongmi.android.tv.server.process.Parse;
 import com.fongmi.android.tv.server.process.PlaybackHistoryApi;
-import com.fongmi.android.tv.server.process.LanPairingApi;
 import com.fongmi.android.tv.server.process.PlaybackProgressApi;
 import com.fongmi.android.tv.server.process.PlaybackRecordApi;
 import com.fongmi.android.tv.server.process.Proxy;
@@ -47,8 +45,6 @@ public class Nano extends NanoHTTPD {
 
     private void addProcess() {
         process = new ArrayList<>();
-        process.add(new Action());
-        process.add(new LanPairingApi());
         process.add(new Cache());
         process.add(new DebugLogs());
         process.add(new DriveCheck());
@@ -87,6 +83,11 @@ public class Nano extends NanoHTTPD {
     @Override
     public Response serve(IHTTPSession session) {
         String url = session.getUri().trim();
+        if (LanTlsPolicy.rejectPlaintext(url)) {
+            Response denied = error(Response.Status.FORBIDDEN, "Secure LAN transport required");
+            denied.closeConnection(true);
+            return denied;
+        }
         Map<String, String> files = new HashMap<>();
         boolean pcImport = ConfigImport.PATH.equals(url);
         if (pcImport) {

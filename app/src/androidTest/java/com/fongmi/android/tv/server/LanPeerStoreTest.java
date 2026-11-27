@@ -13,6 +13,8 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -89,5 +91,30 @@ public class LanPeerStoreTest {
         restarted.restore(loaded);
         assertEquals(1, loaded.size());
         assertEquals(LanPeerAuthorization.Decision.UNAUTHORIZED, restarted.authorize("push", "phone-a", credential, false));
+    }
+
+    @Test
+    public void durableControlInhibitSurvivesReloadAndDetectsInterruptedWrites() throws Exception {
+        File dir = InstrumentationRegistry.getInstrumentation().getTargetContext().getNoBackupFilesDir();
+        File path = File.createTempFile("lan-test-inhibit-", ".pending", dir);
+        LanPeerStore.ControlInhibit marker = new LanPeerStore.ControlInhibit(path);
+        try {
+            marker.clear();
+            assertFalse(marker.exists());
+            marker.write();
+            assertTrue(new LanPeerStore.ControlInhibit(path).exists());
+            marker.clear();
+            assertFalse(new LanPeerStore.ControlInhibit(path).exists());
+
+            try (FileOutputStream interrupted = new FileOutputStream(path + ".new")) {
+                interrupted.write(1);
+                interrupted.getFD().sync();
+            }
+            assertTrue(new LanPeerStore.ControlInhibit(path).exists());
+            marker.clear();
+            assertFalse(new LanPeerStore.ControlInhibit(path).exists());
+        } finally {
+            marker.clear();
+        }
     }
 }

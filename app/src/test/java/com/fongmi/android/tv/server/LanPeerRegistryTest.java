@@ -92,7 +92,7 @@ public class LanPeerRegistryTest {
         oversized.put("phone-a", kernel.partners().get("phone-a"));
         kernel.restore(oversized);
         assertTrue(kernel.partners().size() <= LanPeerRegistry.MAX_PARTNERS);
-        assertEquals(LanPeerAuthorization.Decision.ALLOW, kernel.authorize("push", "phone-a", credential, false));
+        assertEquals(LanPeerAuthorization.Decision.UNAUTHORIZED, kernel.authorize("push", "phone-a", credential, false));
 
         kernel.restore(Map.of("phone-b", new byte[16]));
         assertFalse(kernel.partners().containsKey("phone-b"));
@@ -111,4 +111,50 @@ public class LanPeerRegistryTest {
         assertEquals("", LanPeerRegistry.encode(Map.of()));
         assertTrue(LanPeerRegistry.decode(LanPeerRegistry.encode(Map.of())).isEmpty());
     }
+
+    @Test
+    public void malformedVersionsNeverLoadCredentialsOrThrow() {
+        String devices = ",\"devices\":[" + entry("phone-a", "ab".repeat(32)) + "]}";
+        for (String version : new String[]{"null", "{}", "[]", "true", "\"garbage\"", "\"1\"", "1.5", "4294967297", "2"}) {
+            assertTrue(version, LanPeerRegistry.decode("{\"version\":" + version + devices).isEmpty());
+        }
+        assertTrue(LanPeerRegistry.decode("{\"devices\":[" + entry("phone-a", "ab".repeat(32)) + "]}").isEmpty());
+    }
+
+    @Test
+    public void emptyAndOversizedRestoreClearPreviouslyAuthorizedPeers() {
+        LanPeerAuthorization kernel = kernel();
+        String credential = pair(kernel, "phone-a");
+        kernel.restore(Map.of());
+        assertEquals(LanPeerAuthorization.Decision.UNAUTHORIZED, kernel.authorize("push", "phone-a", credential, false));
+        pair(kernel, "phone-a");
+        kernel.restore(null);
+        assertTrue(kernel.partners().isEmpty());
+    }
+
+    @Test
+    public void serializationCannotWriteAnUnloadableOversizedRegistry() {
+        Map<String, byte[]> entries = new HashMap<>();
+        for (int i = 0; i < 65; i++) entries.put("phone-" + i, new byte[32]);
+        org.junit.Assert.assertThrows(IllegalArgumentException.class, () -> LanPeerRegistry.encode(entries));
+    }
+
+    @Test
+    public void importedAndExportedDigestArraysAreDefensiveCopies() {
+        LanPeerAuthorization kernel = kernel();
+        String credential = pair(kernel, "phone-a");
+        Map<String, byte[]> exported = kernel.partners();
+        kernel.restore(exported);
+        java.util.Arrays.fill(exported.get("phone-a"), (byte) 0);
+        assertEquals(LanPeerAuthorization.Decision.ALLOW, kernel.authorize("push", "phone-a", credential, false));
+        java.util.Arrays.fill(kernel.partners().get("phone-a"), (byte) 0);
+        assertEquals(LanPeerAuthorization.Decision.ALLOW, kernel.authorize("push", "phone-a", credential, false));
+    }
+
+    @Test
+    public void oversizedPlaintextIsRejectedBeforeParsing() {
+        String payload = "{\"version\":1,\"devices\":[" + entry("phone-a", "ab".repeat(32)) + "],\"padding\":\"" + "x".repeat(100_000) + "\"}";
+        assertTrue(LanPeerRegistry.decode(payload).isEmpty());
+    }
+
 }

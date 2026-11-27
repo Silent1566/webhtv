@@ -4,34 +4,39 @@ import com.fongmi.android.tv.server.LanActionGate;
 import com.fongmi.android.tv.server.LanPairingEndpoint;
 import com.fongmi.android.tv.server.LanPeers;
 import com.fongmi.android.tv.server.Nano;
-import com.fongmi.android.tv.server.impl.Process;
-import com.github.catvod.crawler.SpiderDebug;
 
-import java.util.Map;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 
 import fi.iki.elonen.NanoHTTPD.IHTTPSession;
+import fi.iki.elonen.NanoHTTPD.Method;
 import fi.iki.elonen.NanoHTTPD.Response;
 
-/**
- * {@code POST /lan/pair} — exchanges the on-screen pairing code for this device's credential.
- *
- * <p>Deliberately the only unauthenticated write-shaped endpoint: it must be reachable before a
- * device has any credential. It is still gated by the master switch and by the one-time code.
- */
-public class LanPairingApi implements Process {
-
-    @Override
-    public boolean isRequest(IHTTPSession session, String url) {
-        return "/lan/pair".equals(url);
-    }
-
-    @Override
-    public Response doResponse(IHTTPSession session, String url, Map<String, String> files) {
-        Map<String, String> params = session.getParms();
+public final class LanPairingApi {
+    public Response handle(IHTTPSession session) throws IOException {
+        if (session.getMethod() != Method.POST) return Nano.error(Response.Status.METHOD_NOT_ALLOWED, "POST required");
+        if (!LanPeers.get().isEnabled()) return Nano.error(Response.Status.FORBIDDEN, "LAN access disabled");
+        if (!session.getParameters().isEmpty()) return Nano.error(Response.Status.BAD_REQUEST, "Query not allowed");
+        if (!"text/plain".equalsIgnoreCase(session.getHeaders().get("content-type"))) {
+            return Nano.error(Response.Status.UNSUPPORTED_MEDIA_TYPE, "text/plain required");
+        }
+        if (!"8".equals(session.getHeaders().get("content-length"))) {
+            return Nano.error(Response.Status.BAD_REQUEST, "Invalid pairing request");
+        }
         String device = LanActionGate.header(session.getHeaders(), LanActionGate.HEADER_DEVICE);
-        String code = params.get("code");
-        SpiderDebug.log("lan", "pair attempt keys=%s", params.keySet());
-        LanPairingEndpoint.Result result = LanPairingEndpoint.handle(LanPeers.get(), device, code);
-        return Nano.error(Response.Status.lookup(result.status()), result.body());
+        if (device.isEmpty()) return Nano.error(Response.Status.BAD_REQUEST, "Invalid pairing request");
+        InputStream input = session.getInputStream();
+        byte[] digits = new byte[8];
+        for (int i = 0; i < digits.length; i++) {
+            int digit = input.read();
+            if (digit < '0' || digit > '9') return Nano.error(Response.Status.BAD_REQUEST, "Invalid pairing request");
+            digits[i] = (byte) digit;
+        }
+        LanPairingEndpoint.Result result = LanPairingEndpoint.handle(LanPeers.get(), device, new String(digits, StandardCharsets.US_ASCII));
+        Response.Status status = Response.Status.lookup(result.status());
+        Response response = Nano.error(status == null ? Response.Status.INTERNAL_ERROR : status, result.body());
+        response.addHeader("Cache-Control", "no-store");
+        return response;
     }
 }

@@ -34,6 +34,7 @@ import com.fongmi.android.tv.ui.dialog.CustomCspDialog;
 import com.fongmi.android.tv.ui.dialog.DebugLogDialog;
 import com.fongmi.android.tv.ui.dialog.GitCloudDialog;
 import com.fongmi.android.tv.ui.dialog.LoginStateLearnDialog;
+import com.fongmi.android.tv.ui.dialog.LanPairingDialog;
 import com.fongmi.android.tv.ui.dialog.ManagePageDialog;
 import com.fongmi.android.tv.ui.dialog.OneKeySyncDialog;
 import com.fongmi.android.tv.ui.dialog.RemoteTrustDialog;
@@ -110,6 +111,7 @@ public class SettingEnhanceActivity extends BaseActivity {
         mBinding.oneKeySync.setOnClickListener(v -> OneKeySyncDialog.create().show(this));
         mBinding.pluginManager.setOnClickListener(view -> PluginManagerActivity.start(this));
         // SMB 浏览是实验能力：默认关闭，长按本行切换开关，开启后点击进入浏览页。
+        mBinding.lanPairing.setOnClickListener(view -> LanPairingDialog.show(this, this::updateLanPairing));
         mBinding.smbBrowser.setOnClickListener(view -> {
             if (!Setting.isSmbBrowserEnabled()) {
                 Notify.show(R.string.smb_browser_need_enable);
@@ -175,6 +177,7 @@ public class SettingEnhanceActivity extends BaseActivity {
         safeSet("remoteTrust", mBinding.remoteTrustText, () -> RemoteStore.summary(this));
         safeSet("gitCloud", mBinding.gitCloudText, () -> getString(R.string.git_cloud_account_count, GitCloudAccountStore.list().size()));
         safeSet("pluginManager", mBinding.pluginManagerText, () -> getString(R.string.plugin_manager_entry_count, PluginSourceConfig.get().entries().size()));
+        updateLanPairing();
         safeSet("smbBrowser", mBinding.smbBrowserText, () -> getString(Setting.isSmbBrowserEnabled() ? R.string.setting_enable : R.string.setting_disable));
         setShellProxyText();
         setCustomCspText();
@@ -345,6 +348,10 @@ public class SettingEnhanceActivity extends BaseActivity {
         } catch (Exception e) {
             Notify.show(R.string.manage_page_no_browser);
         }
+    }
+
+    private void updateLanPairing() {
+        LanPairingDialog.updateSummary(mBinding.lanPairingText);
     }
 
     @Override

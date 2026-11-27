@@ -10,6 +10,9 @@ public class Server {
 
     private volatile PlaybackService service;
     private volatile Nano nano;
+    private volatile LanTlsServer lan;
+    private long lanGeneration;
+    private boolean lanStarting;
     private volatile boolean manage;
     private PlaybackRouteRegistry.Registration routeRegistration;
 
@@ -35,6 +38,16 @@ public class Server {
 
     public boolean isRunning() {
         return nano != null;
+    }
+
+    public int getLanPort() {
+        LanTlsServer ready = lan;
+        return ready == null ? 0 : ready.getListeningPort();
+    }
+
+    public String getLanFingerprint() {
+        LanTlsServer ready = lan;
+        return ready == null ? "" : ready.fingerprint;
     }
 
     public String getAddress() {
@@ -64,19 +77,49 @@ public class Server {
     }
 
     public synchronized void start() {
-        if (nano != null) return;
-        for (int i = 9978; i < 9999; i++) {
+        if (nano != null) {
+            if (lan == null && !lanStarting) startLan(nano, nano.getListeningPort() + LanTlsPolicy.PORT_OFFSET);
+            return;
+        }
+        for (int i = LanTlsPolicy.FIRST_HTTP_PORT; i <= LanTlsPolicy.LAST_HTTP_PORT; i++) {
             try {
                 nano = new Nano(i);
                 nano.start(500);
                 Proxy.set(i);
                 if (routeRegistration != null) routeRegistration.close();
                 routeRegistration = PlaybackRouteRegistry.registerAppService(i, PlaybackRouteRegistry.AppOwner.MAIN_SERVER);
+                startLan(nano, i + LanTlsPolicy.PORT_OFFSET);
                 break;
             } catch (Throwable e) {
                 nano = null;
             }
         }
+    }
+
+    private void startLan(Nano expected, int port) {
+        long generation = ++lanGeneration;
+        lanStarting = true;
+        Task.execute(() -> {
+            LanTlsServer candidate = null;
+            try {
+                candidate = new LanTlsServer(port, LanTlsIdentity.load());
+                synchronized (this) {
+                    if (nano != expected || lanGeneration != generation) return;
+                    candidate.start(LanTlsPolicy.HEADER_TIMEOUT_MS);
+                    lan = candidate;
+                    candidate = null;
+                }
+            } catch (Exception ignored) {
+            } finally {
+                try {
+                    if (candidate != null) candidate.stop();
+                } finally {
+                    synchronized (this) {
+                        if (lanGeneration == generation) lanStarting = false;
+                    }
+                }
+            }
+        });
     }
 
     public void stop() {
@@ -96,6 +139,11 @@ public class Server {
     }
 
     private void stopNow() {
+        lanGeneration++;
+        lanStarting = false;
+        LanTlsServer previousLan = lan;
+        lan = null;
+        if (previousLan != null) previousLan.stop();
         if (nano != null) nano.stop();
         nano = null;
         if (routeRegistration != null) routeRegistration.close();

@@ -18,6 +18,21 @@ public class LanPairingControllerTest {
         private String sealedRegistry = "";
         private boolean enabled;
         private int changes;
+        private boolean failWrites;
+        private boolean failRead;
+        private boolean failOpen;
+        private boolean failToggle;
+        private boolean failInhibit;
+        private boolean inhibited;
+
+        public boolean isInhibited() { return inhibited; }
+
+        public void inhibit() throws java.io.IOException {
+            if (failInhibit) throw new java.io.IOException("journal unavailable");
+            inhibited = true;
+        }
+
+        public void clearInhibit() { inhibited = false; }
 
         @Override
         public String seal(String plain) {
@@ -26,16 +41,19 @@ public class LanPairingControllerTest {
 
         @Override
         public String open(String value) {
+            if (failOpen) throw new IllegalStateException("key unavailable");
             return new String(java.util.Base64.getDecoder().decode(value.substring(2)), java.nio.charset.StandardCharsets.UTF_8);
         }
 
         @Override
         public String read() {
+            if (failRead) throw new IllegalStateException("read unavailable");
             return sealedRegistry;
         }
 
         @Override
-        public void write(String value) {
+        public void write(String value) throws Exception {
+            if (failWrites) throw new java.io.IOException("disk full");
             sealedRegistry = value;
         }
 
@@ -46,6 +64,7 @@ public class LanPairingControllerTest {
 
         @Override
         public void setEnabled(boolean value) {
+            if (failToggle) throw new IllegalStateException("toggle write failed");
             enabled = value;
         }
 
@@ -142,5 +161,168 @@ public class LanPairingControllerTest {
 
     private static String wrong(String code) {
         return code.equals("00000000") ? "11111111" : "00000000";
+    }
+
+    @Test
+    public void failedPairPublishesNothingAndConsumesItsCode() {
+        Memory memory = new Memory();
+        LanPairingController controller = controller(memory);
+        controller.setEnabled(true);
+        String code = controller.issuePairingCode();
+        memory.failWrites = true;
+        org.junit.Assert.assertThrows(IllegalStateException.class, () -> controller.pair("phone-a", code));
+        assertTrue(controller.partners().isEmpty());
+        assertEquals("", memory.read());
+        memory.failWrites = false;
+        assertNull(controller.pair("phone-a", code));
+    }
+
+    @Test
+    public void failedRePairPreservesThePreviouslyPersistedCredential() {
+        Memory memory = new Memory();
+        LanPairingController controller = controller(memory);
+        controller.setEnabled(true);
+        String old = controller.pair("phone-a", controller.issuePairingCode());
+        memory.failWrites = true;
+        org.junit.Assert.assertThrows(IllegalStateException.class,
+                () -> controller.pair("phone-a", controller.issuePairingCode()));
+        assertEquals(LanPeerAuthorization.Decision.ALLOW, controller.authorize("push", "phone-a", old, false));
+    }
+
+    @Test
+    public void failedRevokeDisablesReceptionDurablyAndReportsFailure() {
+        Memory memory = new Memory();
+        LanPairingController controller = controller(memory);
+        controller.setEnabled(true);
+        String credential = controller.pair("phone-a", controller.issuePairingCode());
+        memory.failWrites = true;
+        IllegalStateException failure = org.junit.Assert.assertThrows(IllegalStateException.class,
+                () -> controller.revoke("phone-a"));
+        assertEquals("disk full", failure.getCause().getMessage());
+        assertFalse(controller.isEnabled());
+        assertFalse(memory.enabled);
+        assertEquals(LanPeerAuthorization.Decision.DISABLED,
+                controller(memory).authorize("push", "phone-a", credential, false));
+    }
+
+    @Test
+    public void revokeStillDisablesMemoryWhenEmergencyMasterOffCannotPersist() {
+        Memory memory = new Memory();
+        LanPairingController controller = controller(memory);
+        controller.setEnabled(true);
+        controller.pair("phone-a", controller.issuePairingCode());
+        memory.failWrites = true;
+        memory.failToggle = true;
+        IllegalStateException failure = org.junit.Assert.assertThrows(IllegalStateException.class,
+                () -> controller.revoke("phone-a"));
+        assertEquals("disk full", failure.getCause().getMessage());
+        assertEquals(1, failure.getSuppressed().length);
+        assertFalse(controller.isEnabled());
+    }
+
+    @Test
+    public void failedMasterOffStillClosesTheInMemoryGate() {
+        Memory memory = new Memory();
+        LanPairingController controller = controller(memory);
+        controller.setEnabled(true);
+        memory.failToggle = true;
+        org.junit.Assert.assertThrows(IllegalStateException.class, () -> controller.setEnabled(false));
+        assertFalse(controller.isEnabled());
+    }
+
+
+    @Test
+    public void failedRegistryAndSwitchWritesDoNotResurrectAuthorizationAfterRestart() {
+        Memory memory = new Memory();
+        LanPairingController live = controller(memory);
+        live.setEnabled(true);
+        String credential = live.pair("phone-a", live.issuePairingCode());
+        memory.failWrites = true;
+        memory.failToggle = true;
+        org.junit.Assert.assertThrows(IllegalStateException.class, () -> live.revoke("phone-a"));
+        assertTrue("old enabled preference survives the failure", memory.isEnabled());
+        assertFalse("old registry survives the failure", memory.read().isEmpty());
+        LanPairingController restarted = controller(memory);
+        assertFalse(restarted.isEnabled());
+        assertNull(restarted.issuePairingCode());
+        assertEquals(LanPeerAuthorization.Decision.DISABLED, restarted.authorize("push", "phone-a", credential, false));
+        assertTrue(restarted.partners().isEmpty());
+
+        memory.failToggle = false;
+        org.junit.Assert.assertThrows(IllegalStateException.class, () -> restarted.setEnabled(true));
+        assertFalse(restarted.isEnabled());
+        memory.failWrites = false;
+        restarted.setEnabled(true);
+        LanPairingController recovered = controller(memory);
+        assertTrue(recovered.isEnabled());
+        assertEquals(LanPeerAuthorization.Decision.UNAUTHORIZED, recovered.authorize("push", "phone-a", credential, false));
+    }
+
+    @Test
+    public void failedDisableStaysDisabledAfterRestartWithoutForgettingAfterSuccessfulDisable() {
+        Memory memory = new Memory();
+        LanPairingController live = controller(memory);
+        live.setEnabled(true);
+        String credential = live.pair("phone-a", live.issuePairingCode());
+        live.setEnabled(false);
+        LanPairingController restarted = controller(memory);
+        restarted.setEnabled(true);
+        assertEquals(LanPeerAuthorization.Decision.ALLOW, restarted.authorize("push", "phone-a", credential, false));
+        memory.failToggle = true;
+        org.junit.Assert.assertThrows(IllegalStateException.class, () -> restarted.setEnabled(false));
+        assertFalse(controller(memory).isEnabled());
+    }
+
+    @Test
+    public void unavailableInterlockReportsFailureAndStopsLivePairing() {
+        Memory memory = new Memory();
+        LanPairingController live = controller(memory);
+        live.setEnabled(true);
+        live.pair("phone-a", live.issuePairingCode());
+        memory.failInhibit = true;
+        org.junit.Assert.assertThrows(IllegalStateException.class, () -> live.revoke("phone-a"));
+        assertFalse(live.isEnabled());
+        assertNull(live.issuePairingCode());
+        assertFalse(controller(memory).isEnabled());
+    }
+
+    @Test
+    public void unreadableRegistryBlocksCodesAndPairingUntilExplicitRecovery() {
+        for (boolean readFailure : new boolean[]{true, false}) {
+            Memory memory = new Memory();
+            LanPairingController first = controller(memory);
+            first.setEnabled(true);
+            String credential = first.pair("phone-a", first.issuePairingCode());
+            String original = memory.sealedRegistry;
+            memory.failRead = readFailure;
+            memory.failOpen = !readFailure;
+            LanPairingController unreadable = controller(memory);
+            assertFalse(unreadable.isEnabled());
+            assertTrue(unreadable.partners().isEmpty());
+            assertNull(unreadable.issuePairingCode());
+            assertNull(unreadable.pair("phone-b", "12345678"));
+            assertEquals("failed load must not overwrite ciphertext", original, memory.sealedRegistry);
+            assertTrue(memory.enabled);
+
+            memory.failRead = false;
+            memory.failOpen = false;
+            unreadable.setEnabled(true);
+            assertEquals("", memory.sealedRegistry);
+            LanPairingController recovered = controller(memory);
+            assertTrue(recovered.isEnabled());
+            assertEquals(LanPeerAuthorization.Decision.UNAUTHORIZED, recovered.authorize("push", "phone-a", credential, false));
+            assertNotNull(recovered.issuePairingCode());
+        }
+    }
+
+    @Test
+    public void corruptedRegistryPreservesOriginalBytesUntilExplicitRecovery() {
+        Memory memory = new Memory();
+        memory.enabled = true;
+        memory.sealedRegistry = "corrupt-ciphertext";
+        LanPairingController corrupted = controller(memory);
+        assertFalse(corrupted.isEnabled());
+        assertNull(corrupted.issuePairingCode());
+        assertEquals("corrupt-ciphertext", memory.sealedRegistry);
     }
 }

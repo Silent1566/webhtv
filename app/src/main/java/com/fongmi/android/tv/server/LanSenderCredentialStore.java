@@ -36,6 +36,10 @@ public final class LanSenderCredentialStore {
         return get().get(target);
     }
 
+    public static String fingerprintFor(String target) {
+        return get().fingerprint(target);
+    }
+
     /** Test seam: drops the cache so the next call reloads from storage. */
     static void reset() {
         synchronized (LanSenderCredentialStore.class) {
@@ -63,7 +67,7 @@ public final class LanSenderCredentialStore {
 
             @Override
             public void write(String value) {
-                prefs().edit().putString(KEY, value).apply();
+                if (!prefs().edit().putString(KEY, value).commit()) throw new IllegalStateException("Could not persist LAN sender credentials");
             }
         };
         return new LanSenderCredentials(box, store);

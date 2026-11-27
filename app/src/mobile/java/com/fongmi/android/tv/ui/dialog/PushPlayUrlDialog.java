@@ -12,9 +12,11 @@ import com.fongmi.android.tv.Constant;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.bean.Device;
 import com.fongmi.android.tv.databinding.DialogRemoteTrustTextCommandBinding;
+import com.fongmi.android.tv.server.LanClient;
 import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.Sniffer;
+import com.fongmi.android.tv.utils.Task;
 import com.fongmi.android.tv.utils.Util;
 import com.github.catvod.net.OkHttp;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
@@ -85,6 +87,7 @@ public class PushPlayUrlDialog extends BaseAlertDialog {
     }
 
     private void send() {
+        if (binding == null || !binding.positive.isEnabled()) return;
         String url = binding.input.getText() == null ? "" : binding.input.getText().toString().trim();
         if (TextUtils.isEmpty(url)) {
             Notify.show(R.string.push_play_url_required);
@@ -96,36 +99,71 @@ public class PushPlayUrlDialog extends BaseAlertDialog {
             dismissAllowingStateLoss();
             return;
         }
+        Device target = LanRemotePairDialog.snapshot(device);
+        var current = binding;
         binding.positive.setEnabled(false);
-        call = OkHttp.newCall(client, device.getIp().concat("/action?do=push"), new FormBody.Builder().add("url", url).build());
-        call.enqueue(new Callback() {
-            @Override
-            public void onFailure(@NonNull Call call, @NonNull IOException e) {
-                if (call.isCanceled()) return;
-                App.post(() -> failed(e.getMessage()));
-            }
+        LanRemotePairDialog.withPairing(requireActivity(), target, () -> binding == current,
+                () -> send(target, url, current), () -> {
+                    if (binding == current) binding.positive.setEnabled(true);
+                });
+    }
 
-            @Override
-            public void onResponse(@NonNull Call call, @NonNull Response response) {
-                try (Response res = response) {
-                    String body = res.body() == null ? "" : res.body().string().trim();
-                    App.post(() -> {
-                        if (res.isSuccessful() && "OK".equals(body)) {
-                            Notify.show(R.string.push_play_success);
-                            dismissAllowingStateLoss();
-                        } else failed(res.isSuccessful() ? null : "HTTP " + res.code());
-                    });
-                } catch (IOException e) {
-                    App.post(() -> failed(e.getMessage()));
-                }
+    private void send(Device target, String url, DialogRemoteTrustTextCommandBinding current) {
+        Task.execute(() -> {
+            Call pending;
+            try {
+                pending = LanClient.newCall(client, target.getIp().concat("/action?do=push"), target.getUuid(),
+                        new FormBody.Builder().add("url", url).build());
+            } catch (IOException e) {
+                App.post(() -> {
+                    if (binding == current) failed(target, R.string.lan_pairing_required);
+                });
+                return;
             }
+            App.post(() -> {
+                if (binding != current) {
+                    pending.cancel();
+                    return;
+                }
+                call = pending;
+                call.enqueue(new Callback() {
+                    @Override
+                    public void onFailure(@NonNull Call call, @NonNull IOException e) {
+                        if (call.isCanceled()) return;
+                        App.post(() -> {
+                            if (binding == current) failed(target, LanRemotePairDialog.connectionError(e));
+                        });
+                    }
+
+                    @Override
+                    public void onResponse(@NonNull Call call, @NonNull Response response) {
+                        int result;
+                        try (Response res = response) {
+                            if (LanRemotePairDialog.denied(res.code())) result = R.string.lan_pairing_denied;
+                            else if (!res.isSuccessful()) result = R.string.lan_pairing_send_failed;
+                            else if ("OK".equals(res.body() == null ? "" : res.body().string().trim())) result = R.string.push_play_success;
+                            else result = R.string.push_play_failed;
+                        } catch (IOException e) {
+                            result = R.string.lan_pairing_send_failed;
+                        }
+                        int message = result;
+                        App.post(() -> {
+                            if (binding != current || call.isCanceled()) return;
+                            if (message == R.string.push_play_success) {
+                                Notify.show(message);
+                                dismissAllowingStateLoss();
+                            } else failed(target, message);
+                        });
+                    }
+                });
+            });
         });
     }
 
-    private void failed(String reason) {
-        if (binding == null) return;
+    private void failed(Device target, int reason) {
         binding.positive.setEnabled(true);
-        Notify.show(TextUtils.isEmpty(reason) ? getString(R.string.push_play_failed) : getString(R.string.push_play_failed_reason, reason));
+        if (LanRemotePairDialog.repairable(reason)) LanRemotePairDialog.offerRepair(getActivity(), target, reason);
+        else Notify.show(reason);
     }
 
     @Override
