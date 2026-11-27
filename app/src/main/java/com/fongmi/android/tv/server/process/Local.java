@@ -7,6 +7,7 @@ import static fi.iki.elonen.NanoHTTPD.newFixedLengthResponse;
 import com.fongmi.android.tv.server.Nano;
 import com.fongmi.android.tv.server.impl.Process;
 import com.fongmi.android.tv.utils.FileUtil;
+import com.fongmi.android.tv.utils.SafeZip;
 import com.fongmi.android.tv.utils.Formatters;
 import com.github.catvod.utils.Path;
 import com.google.gson.JsonArray;
@@ -14,7 +15,6 @@ import com.google.gson.JsonObject;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URLEncoder;
@@ -49,7 +49,7 @@ public class Local implements Process {
             File file = Path.local(path.substring(5));
             if (file.isDirectory()) return getFolder(file);
             if (file.isFile()) return getFile(headers, params, file, getMimeTypeForFile(path));
-            throw new FileNotFoundException();
+            return Nano.error(Status.NOT_FOUND, "File not found");
         } catch (Exception e) {
             return Nano.error(e.getMessage());
         }
@@ -62,27 +62,59 @@ public class Local implements Process {
     }
 
     private Response upload(Map<String, String> params, Map<String, String> files) {
-        String path = params.get("path");
-        for (String k : files.keySet()) {
-            String fn = params.get(k);
-            File temp = new File(files.get(k));
-            if (fn.toLowerCase().endsWith(".zip")) FileUtil.zipDecompress(temp, Path.root(path));
-            else Path.copy(temp, Path.root(path, fn));
+        try {
+            File folder = uploadFolder(params.get("path"));
+            for (String k : files.keySet()) {
+                File target = contained(folder, params.get(k), "file name");
+                File temp = new File(files.get(k));
+                if (target.getName().toLowerCase().endsWith(".zip")) SafeZip.extractInto(temp, folder);
+                else Path.copy(temp, target);
+            }
+            return Nano.ok();
+        } catch (Exception e) {
+            return Nano.error(Status.BAD_REQUEST, e.getMessage());
         }
-        return Nano.ok();
     }
 
     private Response newFolder(Map<String, String> params) {
-        String path = params.get("path");
-        String name = params.get("name");
-        Path.root(path, name).mkdirs();
-        return Nano.ok();
+        try {
+            File parent = contained(Path.root(), params.get("path"), "path");
+            contained(parent, params.get("name"), "folder name").mkdirs();
+            return Nano.ok();
+        } catch (Exception e) {
+            return Nano.error(Status.BAD_REQUEST, e.getMessage());
+        }
     }
 
     private Response delete(Map<String, String> params) {
-        String path = params.get("path");
-        Path.clear(Path.root(path));
-        return Nano.ok();
+        try {
+            File root = Path.root();
+            File target = contained(root, params.get("path"), "path");
+            if (target.equals(root.getCanonicalFile())) throw new IOException("Refusing to delete the shared root");
+            Path.clear(target);
+            return Nano.ok();
+        } catch (Exception e) {
+            return Nano.error(Status.BAD_REQUEST, e.getMessage());
+        }
+    }
+
+    private static File uploadFolder(String path) throws IOException {
+        File folder = contained(Path.root(), path, "path");
+        if (!folder.isDirectory() && !folder.mkdirs()) throw new IOException("Cannot create upload folder");
+        return folder;
+    }
+
+    /**
+     * 所有本地端点参数都必须解析到共享目录内部：空值或缺失按“目录本身”处理，
+     * 因此这里显式拒绝空名，避免把根目录当成删除或写入目标。
+     */
+    private static File contained(File root, String name, String label) throws IOException {
+        if (name == null || name.trim().isEmpty()) throw new IOException("Missing " + label);
+        File canonicalRoot = root.getCanonicalFile();
+        File target = new File(canonicalRoot, name).getCanonicalFile();
+        if (!target.equals(canonicalRoot) && !target.getPath().startsWith(canonicalRoot.getPath() + File.separator))
+            throw new IOException(label + " escapes the shared root");
+        return target;
     }
 
     private Response getFolder(File dir) {

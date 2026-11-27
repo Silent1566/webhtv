@@ -817,3 +817,41 @@ USB 再次短暂重连后，改为手机本地 shell 连续测量，保留原已
 - 绿灯：Leanback ARM64 Debug 的外挂配置 2/2 与 AssInput 6/6、Mobile ARM64 Debug 的 AssInput 6/6，共 14/14 无失败、错误或跳过；两端 Java 生产／测试编译均成功，标准 Gradle 命令不使用 init 脚本。日志 F:/temp/webhtv-e4-external-subtitle-red-contract-91000.log、F:/temp/webhtv-e4-external-subtitle-green-87440.log。
 - Android 设备冒烟：emulator-5558 / API 28，隔离 Mobile ARM64 APK 与测试 APK 构建、安装成功。真实 Exo 的 DualSubtitlePlaybackTest#testExternalAssAndSecondaryTextLifecycle 混入 null 和空地址，实际提取并切换有效字幕轨、运行 ASS/SRT 双轨生命周期，1/1 通过（9.69s）。临时包 com.silent.android.webhtv.e4verify 与 .test 均已卸载，未覆盖已安装应用；临时构建配置不入库。日志 F:/temp/webhtv-e4-subtitle-isolated-6386ae7f/dual-subtitle-device.log。
 - 收口：没有改变二进制、依赖、播放选轨策略或包体配置；本轮不是其他 ABI、真实站源表现或性能专项测量。按 Task-Guard: E4-LIBASS-EXTERNAL-SUBTITLE-GUARD 定位原子提交及恢复标签，必要时 revert 此提交；未授权推送或发布。
+
+## Exo 外挂字幕缺失格式补全（2026-11-27）
+
+- 授权与范围：用户批准 E4-LIBASS 的格式推断窄适配；基线 dev2@95d391fcde138e385132942ec36c0129a7f79f48，工作树干净。只修改 Exo Java 外挂配置入口、已有主机／设备回归及本任务文档和索引。
+- 决策问题：对缺失 format 的外接字幕，能否用地址路径补齐 Media3 选择解析器所需的 MIME，同时保留显式格式以及本仓 ASS 轨道身份？
+
+| 证据（2026-11-27） | 等级 | 决策影响 |
+| --- | --- | --- |
+| [FongMi/TV@125468f0ec3f448c93626b4a7ef27a03cad21790](https://github.com/FongMi/TV/commit/125468f0ec3f448c93626b4a7ef27a03cad21790)，父 2112cb48cf6570818ac578df011925a0a3494369 | A | 单文件 MediaItemFactory 差异在显式格式为空时按 URI 路径推断，同时为轨道设置 UUID。精确提交无关联 PR；后续工厂改动是播放器编排、直播鉴权与卡片，不随本补丁移入。 |
+| [Media3 SubtitleConfiguration.Builder#setMimeType](https://developer.android.com/reference/androidx/media3/common/MediaItem.SubtitleConfiguration.Builder#setMimeType(java.lang.String))；本仓锁定 Media3 1.11.0-alpha01-fongmi，源 e3e922d5c01bc0b564849940fe589daf37360d15，已打包 media3-exoplayer / media3-extractor AAR 的字节码 | A | DefaultMediaSourceFactory 读取配置 MIME 构造 Format，DefaultSubtitleParserFactory 按 sampleMimeType 匹配支持的解析器；URL 后缀不会在这一步补成 MIME。 |
+| WebHTV ExoUtil.java:1094–1109、AssInput.java:12–32、PlayerHelper.java:43–48 | A | 前一阶段只移除无效地址；当前 builder 与 ASS 标识分支均读取原 format。ASS 接受现有数字 ID；共用 helper 对未知类型默认 SubRip，不能直接用于本阶段保守推断。 |
+
+- 备选方案：保持不变会让无格式的有效外挂字幕仍不可识别；照搬上游会更改轨道身份；选择只在 format 为空时以原 URL 的 URI path（不使用查询参数／片段）识别 .ass/.ssa/.srt/.vtt，大小写不敏感。显式格式、未知类型行为、URL 转换、顺序、语言与标记不变；推断得到的 ASS 也使用原有数字标识。其他格式、MPV/IJK、字幕下载、依赖、原生库均不动。没有新请求、权限、算法、ABI 或性能主张；原生制品／供应链、论文和设备基准不改变本决策。成熟参考为 FongMi 与 Media3 的实际实现。
+- 验收与回滚：用现有公开 MediaItem 入口验证缺失/空格式、四种后缀、签名查询参数、显式格式优先、未知或无后缀保留原行为，并运行双端定向回归与真实 ASS/SRT 生命周期。单提交可 revert，基线不变更依赖或二进制。已完成实施及针对性验证，结果如下。
+- 回归记录：生产代码未改时，五项配置测试仅缺失格式的已知后缀用例失败（F:/temp/webhtv-e4-mime-red-90960.log）。窄适配后 Leanback ARM64 Debug 的配置 5/5、AssInput 6/6，Mobile ARM64 Debug 的 AssInput 6/6，共 17/17；两端生产与测试 Java 编译通过（F:/temp/webhtv-e4-mime-green-90796.log）。配置回归覆盖混合大小写、签名参数与片段、显式类型优先、未知／无后缀不猜测及有效轨道字段。
+- Android API 28（emulator-5558）专项验收：隔离 Mobile ARM64 Debug APK 与测试 APK 构建成功。真实 Exo 的 DualSubtitlePlaybackTest#testMissingExternalMimeProducesAssAndSrtCues 在兼容字幕路径上验证缺失格式的 ASS/SRT 都被解析、选中并输出预期字幕，1/1 通过（3.146s）。日志 F:/temp/webhtv-e4-mime-device-4f4b6fb3/compatibility-smoke/dual-subtitle-device.log。临时包均已卸载，未覆盖现有安装。
+- 原生渲染边界：原有完整双字幕生命周期用例未通过；改前、改后隔离包均 2/2 在同一模拟器触发原有 ASS render-time-budget 回退，降低分辨率也未解决，显示设置已恢复。两 APK 的 lib/arm64-v8a/libexo_ass.so SHA-256 一致（31e04a1d26c606dd2f5df0b0b81f2916ed0b29c13b3415515a77cff540e83cc2），原有用例与原生渲染预算保持不变；不宣称完成原生 ASS 渲染或性能验证。若后续需覆盖这条路径，用合适实体设备运行原有生命周期用例。
+- 收口：通过 Task-Guard: E4-LIBASS-EXTERNAL-SUBTITLE-MIME 定位原子提交和恢复标签；需要回滚时单独 revert。未授权推送或发布。
+
+
+## Exo 同名外挂 ASS 反查（2026-11-27）
+
+- 授权和基线：用户批准窄适配。dev2@2ef5aea4bfbb3f7f35186ff34a40977f723b14c0，工作树干净。仅修复「选中轨道 → 原外挂字幕文件」反查；不改选轨策略、轨道 ID 生成、持久化、MPV/IJK、依赖或渲染制品。
+- 决策：保持现状会令同名同格式文件无法区分；照搬上游基于 URL 的 UUID 会改变现有原生 ASS 准入标识；借鉴独立身份原则，沿用当前播放项的数字 ID，并从这一 MediaItem 的字幕配置取真实 URI，再回查本次 PlaySpec。不用可变列表下标、显示名或旧播放项索引来猜。内嵌 ASS 与已无法归属的轨道不回退到同名外挂；未进入选中 ASS 的其他路径保持现状。
+
+| 来源（2026-11-27） | 等级 | 本仓适配取舍 |
+| --- | --- | --- |
+| [FongMi/TV@125468f0ec3f448c93626b4a7ef27a03cad21790](https://github.com/FongMi/TV/commit/125468f0ec3f448c93626b4a7ef27a03cad21790)，父 2112cb48cf6570818ac578df011925a0a3494369 | A | 以 URL 派生 UUID 区分外挂身份，不以标签归属。精确提交无关联 PR；复用上一阶段的相邻提交审查，未发现该提交之外需要合并的媒体依赖。 |
+| [AndroidX Media3 MergingMediaPeriod](https://github.com/androidx/media/blob/release/libraries/exoplayer/src/main/java/androidx/media3/exoplayer/source/MergingMediaPeriod.java)，源码 blob 26e729bdb92a5591e253f732bd7067ed9e159376；本仓 1.11.0-alpha01-fongmi e3e922d5c01bc0b564849940fe589daf37360d15 的 exoplayer AAR 字节码 | A | DefaultMediaSourceFactory 把 SubtitleConfiguration.id 写入轨道 Format，合并时可以加数字前缀。应比较去掉合并前缀后的完整 ID，不用字符串包含关系判断。 |
+| WebHTV PlayerManager.java:632、1122–1139，ExoUtil.java:1095–1113，AssInput.java:18–33，TrackDialog.java:687–689 | A | 标签首条命中会把同名 ASS 反查错，界面再取错文件。保留本仓 ASS 准入规则、当前 MediaItem 字幕配置和既有 URL 转换；不占用用于播放诊断的 MediaItem tag。 |
+
+- 验收：双端定向 JVM／Java 编译；用真实 Exo MediaItem 和选中轨道快照复现同名文件、跳过无效条目、可变列表重排、切集及同名内嵌轨，检查无匹配不猜测以及普通字幕反查不变。此处是应用归属映射，不修改渲染、网络、存储合同或二进制；论文、性能样本和二进制对照不改变决定，不声称新设备兼容或提速。使用任务 guard 原子提交，必要时单独 revert。
+- 已验证红灯：公开 getSelectedSubtitleSub() 使用真实 Exo MediaItem 与选中轨道快照，新增五项中四项失败，分别暴露同名字幕返回首条（甚至空地址）、列表重排后错配、切集错配、内嵌同名误认。最初 JUnit 打印 Sub 时调用未初始化的 App.gson，改为比较实际 URL 后得到预期差异；产品代码没有为夹具让步。有效红灯日志 F:/temp/webhtv-e4-ass-identity-red-url-84844.log。
+- 最终实现：复用 AssInput 数字前缀校验并返回完整外部 ID 起点；从当前媒体字幕配置查 URI，再匹配本次 PlaySpec 中唯一有效项。当前媒体的 requestMetadata.mediaUri 必须与当前 PlaySpec 资源相符；短剧队列自定义 mediaId 不参与这个比较。缺失、畸形、无法归属或重复 URI 均不猜测。原生 ASS 的 ID 准入范围不变。
+- 复审发现并处理：拼接源的 ConcatenatingMediaSource2 默认暴露空的合成 MediaItem，故在拼接源保留既有反查，避免丢掉原行为，并加入专门用例。本阶段不声称解决拼接源同名歧义。此边界来自本仓 MediaSourceFactory.java:335–349 和已打包 Media3 Builder 的默认 Uri.EMPTY；没有改拼接工厂或媒体合同。
+- 最终验证：Leanback ARM64 Debug 的外挂配置与公开反查 11/11、AssInput 6/6、PlayerManager 39/39，Mobile ARM64 Debug 的 AssInput 6/6、PlayerManager 39/39，共 101/101，无失败、错误或跳过，两端生产／测试 Java 编译通过。最终日志 F:/temp/webhtv-e4-ass-identity-final-94388.log；此前 100/100 的检查因新增拼接兼容分支而重跑，不视为最终末态。
+- 验证范围：本阶段为真实媒体配置与受控选中轨道快照的应用映射检查；未重新安装或执行设备视频播放，也不宣称原生 ASS 性能／画面、双字幕角色选择或其他渲染边界完成验收。
+- 收口与回滚：本单元以 Task-Guard: E4-LIBASS-EXTERNAL-SUBTITLE-IDENTITY 定位原子提交和恢复标签；需要回滚时单独 revert，未授权推送或发布。已完成代码、回归与记录，下一动作仅为本地原子提交。

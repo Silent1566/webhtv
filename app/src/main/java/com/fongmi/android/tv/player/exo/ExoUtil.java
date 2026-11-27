@@ -91,6 +91,7 @@ import com.github.catvod.crawler.SpiderDebug;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -1102,11 +1103,24 @@ public class ExoUtil {
     }
 
     private static MediaItem.SubtitleConfiguration buildSubConfig(Sub sub, int index) {
-        MediaItem.SubtitleConfiguration.Builder builder = new MediaItem.SubtitleConfiguration.Builder(Uri.parse(UrlUtil.convert(sub.getUrl())))
-                .setLabel(sub.getName()).setMimeType(sub.getFormat()).setSelectionFlags(sub.getFlag()).setLanguage(sub.getLang());
-        if (MimeTypes.TEXT_SSA.equals(sub.getFormat()))
+        String url = sub.getUrl();
+        String mimeType = sub.getFormat();
+        if (mimeType.isEmpty()) mimeType = inferExternalSubtitleMimeType(url);
+        MediaItem.SubtitleConfiguration.Builder builder = new MediaItem.SubtitleConfiguration.Builder(Uri.parse(UrlUtil.convert(url)))
+                .setLabel(sub.getName()).setMimeType(mimeType).setSelectionFlags(sub.getFlag()).setLanguage(sub.getLang());
+        if (MimeTypes.TEXT_SSA.equals(mimeType))
             builder.setId(AssInput.EXTERNAL_ID_PREFIX + index);
         return builder.build();
+    }
+
+    private static String inferExternalSubtitleMimeType(String url) {
+        String path = Uri.parse(url).getPath();
+        if (path == null) return "";
+        String lowerPath = path.toLowerCase(Locale.ROOT);
+        if (lowerPath.endsWith(".ass") || lowerPath.endsWith(".ssa")) return MimeTypes.TEXT_SSA;
+        if (lowerPath.endsWith(".srt")) return MimeTypes.APPLICATION_SUBRIP;
+        if (lowerPath.endsWith(".vtt")) return MimeTypes.TEXT_VTT;
+        return "";
     }
 
     private static MediaItem.DrmConfiguration buildDrmConfig(Drm drm) {

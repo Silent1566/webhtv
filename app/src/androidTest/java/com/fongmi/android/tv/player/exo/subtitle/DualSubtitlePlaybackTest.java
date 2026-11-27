@@ -97,6 +97,36 @@ public class DualSubtitlePlaybackTest extends TestCase {
         exercise(true);
     }
 
+    public void testMissingExternalMimeProducesAssAndSrtCues() throws Exception {
+        File srt = File.createTempFile("missing-mime-", ".srt", instrumentation.getTargetContext().getCacheDir());
+        try {
+            Files.write(srt.toPath(), "1\n00:00:00,000 --> 00:01:00,000\nMIME FALLBACK SRT\n".getBytes(StandardCharsets.UTF_8));
+            PlaySpec spec = PlaySpec.from("missing-subtitle-mime", "asset:///exo-ass/sample-fonts.mkv",
+                    Collections.emptyMap(), MediaMetadata.EMPTY);
+            spec.setSub(Sub.create("Secondary SRT", srt.toURI().toString(), "en", ""));
+            spec.setSub(Sub.create("Primary ASS", "asset:///exo-ass/animated.ass", "zh", null));
+            main(() -> {
+                activity.session.setEnabled(false);
+                subtitles = activity.engine.getSubtitleSession();
+                subtitles.attach(activity.view);
+                activity.engine.start(spec, 1000, true);
+            });
+            await(() -> activity.player.getCurrentPosition() >= 1200
+                    && findPrimary() != null && find("Secondary SRT") != null, "video and both inferred subtitle tracks ready");
+            main(() -> {
+                activity.engine.setTrack(List.of(track(findPrimary())));
+                activity.engine.setSecondarySubtitleTrack(track(find("Secondary SRT")));
+            });
+            await(() -> activity.engine.isPrimarySubtitleSelected(findPrimary())
+                    && activity.engine.isSecondarySubtitleSelected(find("Secondary SRT"))
+                    && activity.player.getCurrentCues().cues.stream().anyMatch(cue -> cue.text != null
+                    && cue.text.toString().contains("ASS move + transform"))
+                    && secondaryText().equals("MIME FALLBACK SRT"), "both inferred subtitle tracks produce cues");
+        } finally {
+            Files.deleteIfExists(srt.toPath());
+        }
+    }
+
     private void exercise(boolean embedded) throws Exception {
         File directory = new File(instrumentation.getTargetContext().getCacheDir(), "dual-subtitle-fixture");
         assertTrue(directory.isDirectory() || directory.mkdirs());
