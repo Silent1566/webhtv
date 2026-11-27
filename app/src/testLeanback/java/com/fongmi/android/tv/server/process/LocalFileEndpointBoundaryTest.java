@@ -125,6 +125,38 @@ public class LocalFileEndpointBoundaryTest {
         assertEquals("ok", Files.readString(new File(root, "shows/uploaded.srt").toPath()));
     }
 
+    @Test
+    public void uploadingAZipCannotWriteEntriesOutsideTheSharedRoot() throws Exception {
+        File archive = files.newFile("payload.zip");
+        try (java.util.zip.ZipOutputStream output = new java.util.zip.ZipOutputStream(new java.io.FileOutputStream(archive))) {
+            output.putNextEntry(new java.util.zip.ZipEntry("../escaped-by-zip.srt"));
+            output.write("escape".getBytes(StandardCharsets.UTF_8));
+            output.closeEntry();
+        }
+
+        local.doResponse(session(Map.of("upload", "payload.zip", "path", "docs")), "/upload",
+                files(Map.of("upload", archive.getAbsolutePath())));
+
+        assertFalse("a ZIP entry must not escape the chosen upload folder",
+                new File(root, "escaped-by-zip.srt").exists());
+        assertFalse(new File(files.getRoot(), "escaped-by-zip.srt").exists());
+        assertFalse(new File(outside, "escaped-by-zip.srt").exists());
+    }
+
+    @Test
+    public void uploadingAValidZipExtractsIntoTheChosenFolder() throws Exception {
+        File archive = files.newFile("valid.zip");
+        try (java.util.zip.ZipOutputStream output = new java.util.zip.ZipOutputStream(new java.io.FileOutputStream(archive))) {
+            output.putNextEntry(new java.util.zip.ZipEntry("中文/inner.srt"));
+            output.write("inner".getBytes(StandardCharsets.UTF_8));
+            output.closeEntry();
+        }
+
+        local.doResponse(session(Map.of("upload", "valid.zip", "path", "docs")), "/upload",
+                files(Map.of("upload", archive.getAbsolutePath())));
+
+        assertEquals("inner", Files.readString(new File(root, "docs/中文/inner.srt").toPath()));
+    }
     private static IHTTPSession session(Map<String, String> parms) {
         Map<String, String> headers = new HashMap<>();
         return (IHTTPSession) Proxy.newProxyInstance(

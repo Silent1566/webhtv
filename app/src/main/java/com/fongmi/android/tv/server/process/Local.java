@@ -7,6 +7,7 @@ import static fi.iki.elonen.NanoHTTPD.newFixedLengthResponse;
 import com.fongmi.android.tv.server.Nano;
 import com.fongmi.android.tv.server.impl.Process;
 import com.fongmi.android.tv.utils.FileUtil;
+import com.fongmi.android.tv.utils.SafeZip;
 import com.fongmi.android.tv.utils.Formatters;
 import com.github.catvod.utils.Path;
 import com.google.gson.JsonArray;
@@ -66,7 +67,7 @@ public class Local implements Process {
             for (String k : files.keySet()) {
                 File target = contained(folder, params.get(k), "file name");
                 File temp = new File(files.get(k));
-                if (target.getName().toLowerCase().endsWith(".zip")) FileUtil.zipDecompress(temp, folder);
+                if (target.getName().toLowerCase().endsWith(".zip")) SafeZip.extractInto(temp, folder);
                 else Path.copy(temp, target);
             }
             return Nano.ok();

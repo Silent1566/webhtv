@@ -7,6 +7,7 @@ import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
 
+import com.fongmi.android.tv.utils.SafeZip;
 import com.github.catvod.Init;
 
 import org.junit.Before;
