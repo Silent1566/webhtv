@@ -61,6 +61,7 @@ public class VerticalPageSwitcher {
 
     @SuppressLint("ClickableViewAccessibility")
     public boolean onTouchEvent(MotionEvent event) {
+        if (peer == null) return false;
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
                 reset();
