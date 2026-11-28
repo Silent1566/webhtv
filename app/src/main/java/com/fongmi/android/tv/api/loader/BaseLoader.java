@@ -30,14 +30,15 @@ public class BaseLoader {
     private volatile JarLoader jarLoader;
     private final Set<JarLoader> retiringJars = new HashSet<>();
     private final PyLoader pyLoader;
-    private final JsLoader jsLoader;
+    private volatile JsLoader jsLoader;
+    private final Set<JsLoader> retiringJs = new HashSet<>();
     private final java.util.concurrent.ConcurrentHashMap<String, Spider> catSpiders;
     private final LoaderClearQueue clearQueue;
 
     private BaseLoader() {
         jarLoader = new JarLoader();
         pyLoader = new PyLoader();
-        jsLoader = new JsLoader();
+        jsLoader = new JsLoader(jarLoader::dex);
         catSpiders = new java.util.concurrent.ConcurrentHashMap<>();
         clearQueue = new LoaderClearQueue(Task.loaderExecutor());
     }
@@ -81,27 +82,38 @@ public class BaseLoader {
     public Future<?> clear(String reason) {
         String source = reason == null || reason.isEmpty() ? "unknown" : reason;
         SpiderDebug.log("base-loader", "clear requested reason=%s", source);
+        JarLoader nextJar = new JarLoader();
+        JsLoader nextJs = new JsLoader(nextJar::dex);
         synchronized (clearQueue) {
-            JarLoader previous = jarLoader;
-            JarLoader next = new JarLoader();
-            previous.retire();
-            retiringJars.add(previous);
-            jarLoader = next;
-            return clearQueue.submit(source, id -> clear(id, source, previous)).future();
+            JarLoader previousJar = jarLoader;
+            JsLoader previousJs = jsLoader;
+            previousJar.retire();
+            previousJs.retire();
+            retiringJars.add(previousJar);
+            retiringJs.add(previousJs);
+            jarLoader = nextJar;
+            jsLoader = nextJs;
+            return clearQueue.submit(source, id -> clear(id, source, previousJar, previousJs)).future();
         }
     }
 
-    private void clear(int id, String reason, JarLoader previous) {
+    private void clear(int id, String reason, JarLoader previousJar, JsLoader previousJs) {
         SpiderDebug.log("base-loader", "clear start id=%d reason=%s", id, reason);
         try {
-            clear("jar", previous::clear);
+            clear("jar", previousJar::clear);
         } finally {
             synchronized (clearQueue) {
-                retiringJars.remove(previous);
+                retiringJars.remove(previousJar);
             }
         }
         clear("py", pyLoader::clear);
-        clear("js", jsLoader::clear);
+        try {
+            clear("js", previousJs::clear);
+        } finally {
+            synchronized (clearQueue) {
+                retiringJs.remove(previousJs);
+            }
+        }
         clear("cat", catSpiders::clear);
         SpiderDebug.log("base-loader", "clear done id=%d reason=%s", id, reason);
     }
@@ -231,8 +243,9 @@ public class BaseLoader {
         synchronized (clearQueue) {
             keys.addAll(jarLoader.activeKeys());
             for (JarLoader previous : retiringJars) keys.addAll(previous.activeKeys());
+            keys.addAll(jsLoader.activeKeys());
+            for (JsLoader previous : retiringJs) keys.addAll(previous.activeKeys());
         }
-        keys.addAll(jsLoader.activeKeys());
         keys.addAll(pyLoader.activeKeys());
         return java.util.Set.copyOf(keys);
     }
