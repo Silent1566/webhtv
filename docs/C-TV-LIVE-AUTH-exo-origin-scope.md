@@ -37,3 +37,11 @@ Leanback JVM（Robolectric + MockWebServer，`127.0.0.1` 不同端口天然构�
 - 边界：`AuthInterceptor` 属共享模块，本次只收紧跨来源复用；未做真实局域网/外部站源的 HLS 认证端到端验证，也未接入 `Auth.Context`/`PlaySpec.auth`/MPV 路径。无依赖、ABI、制品或性能主张。
 
 **Recovery anchor：** 源码与回归已完成，待 Mobile 结果与守卫提交；后续若需要 MPV 侧，需另立阶段。
+
+## 设备侧验收（emulator-5556）
+
+- `app/src/androidTest/.../AuthInterceptorOriginDeviceTest.java` 走**真实生产客户端** `OkHttp.client()`（内置 `AuthInterceptor`），用同一主机 `127.0.0.1` 上两个 `NanoHTTPD` 端口构成不同来源，断言服务端实际收到什么，而非拦截器内部状态。
+- 结果：**3/3 通过**（2026-11-28，API 28，1482ms）。三个用例分别确认：另一来源的 401 不被记住的凭据应答（且不产生重试）、调用方 `Bearer` 未被替换且只有一次请求、跨端口 302 后的 401 不重试原 URL 也不把凭据发往重定向目标。
+- 隔离方式：`applicationIdSuffix=.authorigin5556` 的独立包名安装、运行后卸载；原有三个应用包路径前后一致，普通构建输出已归位。临时构建配置不入库。
+
+**边界：** 仍是本地夹具，不是真实站源或局域网设备的 HLS 认证端到端验证；未接入 `Auth.Context`/`PlaySpec.auth` 与 MPV 路径。
