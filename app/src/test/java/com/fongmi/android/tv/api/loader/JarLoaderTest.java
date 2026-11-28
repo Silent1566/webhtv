@@ -14,6 +14,10 @@ import org.junit.Test;
 import java.lang.reflect.Field;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -193,6 +197,73 @@ public class JarLoaderTest {
             first.join(2000);
             second.join(2000);
         }
+    }
+
+    @Test
+    public void retiredInitializationDestroysItsLateSpiderWithoutPublishingIt() throws Exception {
+        JarLoader oldOwner = new JarLoader();
+        CountDownLatch initStarted = new CountDownLatch(1);
+        CountDownLatch finishInit = new CountDownLatch(1);
+        AtomicInteger destroyed = new AtomicInteger();
+        Spider oldSpider = new Spider() {
+            @Override
+            public void destroy() {
+                destroyed.incrementAndGet();
+            }
+        };
+        ExecutorService worker = Executors.newSingleThreadExecutor();
+        try {
+            Future<Spider> late = worker.submit(() -> oldOwner.getOrCreateSpider("site", () -> {
+                initStarted.countDown();
+                try {
+                    if (!finishInit.await(5, TimeUnit.SECONDS)) throw new AssertionError("test did not release initialization");
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                return oldSpider;
+            }));
+            assertTrue("old initialization did not start", initStarted.await(5, TimeUnit.SECONDS));
+            oldOwner.clear();
+            JarLoader newOwner = new JarLoader();
+            Spider newSpider = new Spider() {};
+            assertSame(newSpider, newOwner.getOrCreateSpider("site", () -> newSpider));
+
+            finishInit.countDown();
+            Spider oldResult = late.get(5, TimeUnit.SECONDS);
+            assertEquals("late spider must be destroyed exactly once", 1, destroyed.get());
+            assertTrue("retired owner returned a stale instance", oldResult instanceof SpiderNull);
+            assertTrue(oldOwner.getOrCreateSpider("site", () -> {
+                throw new AssertionError("retired owner started another initialization");
+            }) instanceof SpiderNull);
+            assertSame(newSpider, newOwner.getOrCreateSpider("site", SpiderNull::new));
+        } finally {
+            finishInit.countDown();
+            worker.shutdownNow();
+        }
+    }
+
+    @Test
+    public void retirementRejectsNewUseBeforeQueuedCleanup() throws Exception {
+        JarLoader owner = new JarLoader();
+        AtomicInteger destroyed = new AtomicInteger();
+        Spider cached = new Spider() {
+            @Override
+            public void destroy() {
+                destroyed.incrementAndGet();
+            }
+        };
+        assertSame(cached, owner.getOrCreateSpider("site", () -> cached));
+        owner.setRecent("before");
+        owner.retire();
+        owner.setRecent("late");
+
+        assertTrue(owner.getOrCreateSpider("site", () -> cached) instanceof SpiderNull);
+        assertEquals("before", field("recent").get(owner));
+        assertEquals(0, destroyed.get());
+        owner.clear();
+        owner.clear();
+        assertEquals(1, destroyed.get());
+        assertNull(field("recent").get(owner));
     }
 
     @SuppressWarnings("unchecked")

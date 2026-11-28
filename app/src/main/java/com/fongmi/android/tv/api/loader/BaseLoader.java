@@ -16,8 +16,10 @@ import com.github.catvod.utils.Util;
 import org.json.JSONObject;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
@@ -25,16 +27,18 @@ import dalvik.system.DexClassLoader;
 
 public class BaseLoader {
 
-    private final JarLoader jarLoader;
+    private volatile JarLoader jarLoader;
+    private final Set<JarLoader> retiringJars = new HashSet<>();
     private final PyLoader pyLoader;
-    private final JsLoader jsLoader;
+    private volatile JsLoader jsLoader;
+    private final Set<JsLoader> retiringJs = new HashSet<>();
     private final java.util.concurrent.ConcurrentHashMap<String, Spider> catSpiders;
     private final LoaderClearQueue clearQueue;
 
     private BaseLoader() {
         jarLoader = new JarLoader();
         pyLoader = new PyLoader();
-        jsLoader = new JsLoader();
+        jsLoader = new JsLoader(jarLoader::dex);
         catSpiders = new java.util.concurrent.ConcurrentHashMap<>();
         clearQueue = new LoaderClearQueue(Task.loaderExecutor());
     }
@@ -78,15 +82,38 @@ public class BaseLoader {
     public Future<?> clear(String reason) {
         String source = reason == null || reason.isEmpty() ? "unknown" : reason;
         SpiderDebug.log("base-loader", "clear requested reason=%s", source);
-        LoaderClearQueue.Entry entry = clearQueue.submit(source, id -> clear(id, source));
-        return entry.future();
+        JarLoader nextJar = new JarLoader();
+        JsLoader nextJs = new JsLoader(nextJar::dex);
+        synchronized (clearQueue) {
+            JarLoader previousJar = jarLoader;
+            JsLoader previousJs = jsLoader;
+            previousJar.retire();
+            previousJs.retire();
+            retiringJars.add(previousJar);
+            retiringJs.add(previousJs);
+            jarLoader = nextJar;
+            jsLoader = nextJs;
+            return clearQueue.submit(source, id -> clear(id, source, previousJar, previousJs)).future();
+        }
     }
 
-    private void clear(int id, String reason) {
+    private void clear(int id, String reason, JarLoader previousJar, JsLoader previousJs) {
         SpiderDebug.log("base-loader", "clear start id=%d reason=%s", id, reason);
-        clear("jar", jarLoader::clear);
+        try {
+            clear("jar", previousJar::clear);
+        } finally {
+            synchronized (clearQueue) {
+                retiringJars.remove(previousJar);
+            }
+        }
         clear("py", pyLoader::clear);
-        clear("js", jsLoader::clear);
+        try {
+            clear("js", previousJs::clear);
+        } finally {
+            synchronized (clearQueue) {
+                retiringJs.remove(previousJs);
+            }
+        }
         clear("cat", catSpiders::clear);
         SpiderDebug.log("base-loader", "clear done id=%d reason=%s", id, reason);
     }
@@ -202,8 +229,9 @@ public class BaseLoader {
     public void parseJar(String jar, boolean recent) {
         if (TextUtils.isEmpty(jar)) return;
         String key = Util.md5(jar);
-        jarLoader.parseJar(key, jar);
-        if (recent) jarLoader.setRecent(key);
+        JarLoader owner = jarLoader;
+        owner.parseJar(key, jar);
+        if (recent) owner.setRecent(key);
     }
 
     public DexClassLoader dex(String jar) {
@@ -212,8 +240,12 @@ public class BaseLoader {
 
     public java.util.Set<String> activePluginKeys() {
         java.util.HashSet<String> keys = new java.util.HashSet<>();
-        keys.addAll(jarLoader.activeKeys());
-        keys.addAll(jsLoader.activeKeys());
+        synchronized (clearQueue) {
+            keys.addAll(jarLoader.activeKeys());
+            for (JarLoader previous : retiringJars) keys.addAll(previous.activeKeys());
+            keys.addAll(jsLoader.activeKeys());
+            for (JsLoader previous : retiringJs) keys.addAll(previous.activeKeys());
+        }
         keys.addAll(pyLoader.activeKeys());
         return java.util.Set.copyOf(keys);
     }

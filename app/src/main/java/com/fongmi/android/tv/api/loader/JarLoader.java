@@ -11,12 +11,15 @@ import com.github.catvod.crawler.SpiderNull;
 import com.github.catvod.net.OkHttp;
 import com.github.catvod.utils.Path;
 import com.github.catvod.utils.Util;
+import com.google.common.collect.Interner;
+import com.google.common.collect.Interners;
 
 import org.json.JSONObject;
 
 import java.io.File;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -34,6 +37,7 @@ import okhttp3.Response;
 public class JarLoader {
 
     private static final int SPIDER_INIT_ATTEMPTS = 2;
+    private static final Interner<String> JAR_FILE_LOCKS = Interners.newWeakInterner();
 
     /**
      * On translated runtimes (x86 emulator executing arm64 native code) ART's
@@ -50,6 +54,8 @@ public class JarLoader {
     private final ConcurrentHashMap<String, Spider> spiders;
     private final ConcurrentHashMap<String, Object> locks;
     private volatile String recent;
+    private volatile boolean retired;
+    private boolean cleanupStarted;
 
     public JarLoader() {
         loaders = new ConcurrentHashMap<>();
@@ -58,12 +64,21 @@ public class JarLoader {
         locks = new ConcurrentHashMap<>();
     }
 
+    synchronized void retire() {
+        retired = true;
+    }
+
     public void clear() {
+        synchronized (this) {
+            if (cleanupStarted) return;
+            retire();
+            cleanupStarted = true;
+        }
         SpiderDebug.log("jar-loader", "clear loaders=%s spiders=%s methods=%s", loaders.size(), spiders.size(), methods.size());
         try {
             SpiderCleanup.destroy("jar-loader", spiders);
         } finally {
-            retireLoaders();
+            retainTranslatedLoaders(loaders.values());
             loaders.clear();
             methods.clear();
             spiders.clear();
@@ -72,18 +87,24 @@ public class JarLoader {
         }
     }
 
-    private void retireLoaders() {
-        if (loaders.isEmpty()) return;
-        if (!NativeBridgeGuard.isTranslatedRuntime()) return;
+    private void retainTranslatedLoaders(Collection<DexClassLoader> previous) {
+        if (previous.isEmpty() || !NativeBridgeGuard.isTranslatedRuntime()) return;
         synchronized (RETAINED_ON_TRANSLATED_RUNTIME) {
-            RETAINED_ON_TRANSLATED_RUNTIME.addAll(loaders.values());
+            RETAINED_ON_TRANSLATED_RUNTIME.addAll(previous);
             SpiderDebug.log("jar-loader", "retained translated loaders count=%s total=%s",
-                    loaders.size(), RETAINED_ON_TRANSLATED_RUNTIME.size());
+                    previous.size(), RETAINED_ON_TRANSLATED_RUNTIME.size());
         }
     }
 
+    private synchronized Object lockIfActive(String key) {
+        return retired ? null : locks.computeIfAbsent(key, ignored -> new Object());
+    }
+
     public void setRecent(String recent) {
-        this.recent = recent;
+        synchronized (this) {
+            if (retired) return;
+            this.recent = recent;
+        }
         SpiderDebug.log("jar-loader", "recent=%s", recent);
     }
 
@@ -91,28 +112,45 @@ public class JarLoader {
         return java.util.Set.copyOf(loaders.keySet());
     }
 
-    private void load(String key, File file) {
-        long start = System.currentTimeMillis();
-        if (Thread.currentThread().isInterrupted()) {
-            SpiderDebug.log("jar-loader", "load skip interrupted key=%s", key);
-            return;
+    private DexClassLoader openDex(String key, File file) {
+        if (retired || Thread.currentThread().isInterrupted()) {
+            SpiderDebug.log("jar-loader", "load skip retired or interrupted key=%s", key);
+            return null;
         }
         if (!Path.exists(file)) {
             SpiderDebug.log("jar-loader", "load skip missing key=%s file=%s", key, file);
-            return;
+            return null;
         }
         if (!file.setReadOnly()) {
             SpiderDebug.log("jar-loader", "load skip readonly failed key=%s file=%s size=%s", key, file.getAbsolutePath(), file.length());
-            return;
+            return null;
         }
         String cachePath = Path.jar().getAbsolutePath();
         SpiderDebug.log("jar-loader", "load start key=%s file=%s size=%s cache=%s", key, file.getAbsolutePath(), file.length(), cachePath);
-        DexClassLoader loader = new CspDexClassLoader(file.getAbsolutePath(), cachePath, cachePath, App.get().getClassLoader());
+        return new CspDexClassLoader(file.getAbsolutePath(), cachePath, cachePath, App.get().getClassLoader());
+    }
+
+    private void initializeJar(String key, DexClassLoader loader) {
+        if (retired) {
+            retainTranslatedLoaders(List.of(loader));
+            return;
+        }
+        long start = System.currentTimeMillis();
         invokeInit(key, loader);
         invokeNetworkCompat(key, loader);
-        invokeProxy(key, loader);
+        Method proxy = findProxy(key, loader);
+        if (publishJar(key, loader, proxy)) {
+            SpiderDebug.log("jar-loader", "load done key=%s cost=%sms", key, System.currentTimeMillis() - start);
+        } else {
+            retainTranslatedLoaders(List.of(loader));
+        }
+    }
+
+    private synchronized boolean publishJar(String key, DexClassLoader loader, Method proxy) {
+        if (retired) return false;
+        if (proxy != null) methods.put(key, proxy);
         loaders.put(key, loader);
-        SpiderDebug.log("jar-loader", "load done key=%s cost=%sms", key, System.currentTimeMillis() - start);
+        return true;
     }
 
     private void invokeNetworkCompat(String key, DexClassLoader loader) {
@@ -169,45 +207,56 @@ public class JarLoader {
         }
     }
 
-    private void invokeProxy(String key, DexClassLoader loader) {
+    private Method findProxy(String key, DexClassLoader loader) {
         long start = System.currentTimeMillis();
         try {
             Class<?> clz = loader.loadClass("com.github.catvod.spider.Proxy");
             Method method = clz.getMethod("proxy", Map.class);
-            methods.put(key, method);
             SpiderDebug.log("jar-loader", "proxy method ready key=%s cost=%sms", key, System.currentTimeMillis() - start);
+            return method;
         } catch (Throwable e) {
             SpiderDebug.log("jar-loader", "proxy method missing key=%s cost=%sms error=%s", key, System.currentTimeMillis() - start, error(e));
             e.printStackTrace();
+            return null;
         }
     }
 
     public void parseJar(String key, String jar) {
-        if (loaders.containsKey(key)) return;
+        if (retired || loaders.containsKey(key)) return;
         if (jar.startsWith("assets")) jar = UrlUtil.convert(jar);
-        Object lock = locks.computeIfAbsent(key, k -> new Object());
+        Object lock = lockIfActive(key);
+        if (lock == null) return;
         synchronized (lock) {
-            if (loaders.containsKey(key)) return;
+            if (retired || loaders.containsKey(key)) return;
             String[] texts = jar.split(";md5;");
             String md5 = texts.length > 1 ? texts[1].trim() : "";
             if (md5.startsWith("http")) md5 = OkHttp.string(md5).trim();
             jar = texts[0];
             SpiderDebug.log("jar-loader", "parse start key=%s source=%s md5=%s", key, source(jar), !md5.isEmpty());
-            if (!md5.isEmpty() && Util.equals(jar, md5)) {
-                load(key, Path.jar(jar));
-            } else if (jar.startsWith("http")) {
-                load(key, Download.create(jar, Path.jar(jar)).get());
-            } else if (jar.startsWith("file")) {
-                load(key, Path.local(jar));
+            DexClassLoader loader = openJar(key, jar, md5);
+            if (loader != null) initializeJar(key, loader);
+        }
+    }
+
+    private DexClassLoader openJar(String key, String jar, String md5) {
+        boolean remote = jar.startsWith("http");
+        if (remote || !md5.isEmpty()) {
+            File cache = Path.jar(jar);
+            // Serialize writes to a shared archive, not plugin initialization.
+            synchronized (JAR_FILE_LOCKS.intern(cache.getAbsolutePath())) {
+                if (retired || Thread.currentThread().isInterrupted()) return null;
+                if (!md5.isEmpty() && Util.equals(jar, md5)) return openDex(key, cache);
+                if (remote) return openDex(key, Download.create(jar, cache).get());
             }
         }
+        return jar.startsWith("file") ? openDex(key, Path.local(jar)) : null;
     }
 
     public DexClassLoader dex(String jar) {
         try {
             String jaKey = Util.md5(jar);
             parseJar(jaKey, jar);
-            return loaders.get(jaKey);
+            return retired ? null : loaders.get(jaKey);
         } catch (Throwable e) {
             e.printStackTrace();
             return null;
@@ -257,29 +306,39 @@ public class JarLoader {
     Spider getOrCreateSpider(String key, Supplier<Spider> factory) {
         // A canceled request must stop immediately; a transient initialization failure
         // gets one retry and SpiderNull is never cached across requests.
-        if (Thread.currentThread().isInterrupted()) return new SpiderNull();
+        if (retired || Thread.currentThread().isInterrupted()) return new SpiderNull();
         Spider cached = spiders.get(key);
         if (cached != null) return cached;
-        Object lock = locks.computeIfAbsent("spider:" + key, ignored -> new Object());
+        Object lock = lockIfActive("spider:" + key);
+        if (lock == null) return new SpiderNull();
         synchronized (lock) {
-            if (Thread.currentThread().isInterrupted()) return new SpiderNull();
+            if (retired || Thread.currentThread().isInterrupted()) return new SpiderNull();
             cached = spiders.get(key);
             if (cached != null) return cached;
             Spider created = null;
             for (int attempt = 1; attempt <= SPIDER_INIT_ATTEMPTS; attempt++) {
-                if (Thread.currentThread().isInterrupted()) break;
+                if (retired || Thread.currentThread().isInterrupted()) break;
                 created = factory.get();
                 if (created != null && !(created instanceof SpiderNull)) {
-                    spiders.put(key, created);
-                    if (!Thread.currentThread().isInterrupted()) return created;
-                    SpiderDebug.log("jar-loader", "spider init completed after cancel key=%s", key);
+                    if (!publishSpider(key, created)) {
+                        SpiderCleanup.destroy("jar-loader", Map.of(key, created));
+                        return new SpiderNull();
+                    }
+                    if (!retired && !Thread.currentThread().isInterrupted()) return created;
+                    SpiderDebug.log("jar-loader", "spider init completed after retire or cancel key=%s", key);
                     return new SpiderNull();
                 }
-                if (Thread.currentThread().isInterrupted() || attempt == SPIDER_INIT_ATTEMPTS) break;
+                if (retired || Thread.currentThread().isInterrupted() || attempt == SPIDER_INIT_ATTEMPTS) break;
                 SpiderDebug.log("jar-loader", "spider init retry key=%s attempt=%s", key, attempt + 1);
             }
             return created == null ? new SpiderNull() : created;
         }
+    }
+
+    private synchronized boolean publishSpider(String key, Spider spider) {
+        if (retired) return false;
+        spiders.put(key, spider);
+        return true;
     }
 
     private static boolean isInterrupted(Throwable e) {
@@ -319,7 +378,9 @@ public class JarLoader {
     }
 
     public Object[] proxy(Map<String, String> params) throws Exception {
-        Method method = recent != null ? methods.get(recent) : null;
+        if (retired) return null;
+        String key = recent;
+        Method method = key != null ? methods.get(key) : null;
         Object[] result = proxyInvoke(method, params);
         if (result != null) return result;
         return tryOthers(params);

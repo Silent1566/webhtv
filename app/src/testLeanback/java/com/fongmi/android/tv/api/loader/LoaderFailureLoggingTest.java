@@ -36,7 +36,8 @@ import dalvik.system.DexClassLoader;
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = 28, application = Application.class, shadows = {
         LoaderFailureLoggingTest.PythonFactory.class,
-        LoaderFailureLoggingTest.JavaScriptFactory.class})
+        LoaderFailureLoggingTest.JavaScriptFactory.class,
+        QuickJsModuleCacheTest.HostLoader.class})
 public class LoaderFailureLoggingTest {
 
     @Before
@@ -343,10 +344,6 @@ public class LoaderFailureLoggingTest {
     @Implements(com.fongmi.quickjs.crawler.Loader.class)
     public static class JavaScriptFactory {
         static final ArrayDeque<com.fongmi.quickjs.crawler.Spider> spiders = new ArrayDeque<>();
-
-        @Implementation
-        protected void __constructor__() {
-        }
 
         @Implementation
         protected com.fongmi.quickjs.crawler.Spider spider(String api, DexClassLoader dex) {

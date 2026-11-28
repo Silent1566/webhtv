@@ -17,30 +17,32 @@ final class SpiderInit {
 
     static Spider load(ConcurrentHashMap<String, Spider> spiders, String key,
                        Callable<Spider> factory, Initializer initializer, Consumer<Throwable> log) {
-        Spider result = spiders.computeIfAbsent(key, ignored -> {
-            Spider spider = null;
-            try {
-                spider = Objects.requireNonNull(factory.call(), "Spider factory returned null");
-                initializer.init(spider);
-                return spider;
-            } catch (Throwable failure) {
-                if (spider != null) {
-                    try {
-                        spider.destroy();
-                    } catch (Throwable cleanup) {
-                        suppress(failure, cleanup);
-                    }
-                }
-                try {
-                    log.accept(failure);
-                } catch (Throwable diagnostic) {
-                    suppress(failure, diagnostic);
-                    printBestEffort(failure);
-                }
-                return null;
-            }
-        });
+        Spider result = spiders.computeIfAbsent(key, ignored -> create(factory, initializer, log));
         return result != null ? result : new SpiderNull();
+    }
+
+    static Spider create(Callable<Spider> factory, Initializer initializer, Consumer<Throwable> log) {
+        Spider spider = null;
+        try {
+            spider = Objects.requireNonNull(factory.call(), "Spider factory returned null");
+            initializer.init(spider);
+            return spider;
+        } catch (Throwable failure) {
+            if (spider != null) {
+                try {
+                    spider.destroy();
+                } catch (Throwable cleanup) {
+                    suppress(failure, cleanup);
+                }
+            }
+            try {
+                log.accept(failure);
+            } catch (Throwable diagnostic) {
+                suppress(failure, diagnostic);
+                printBestEffort(failure);
+            }
+            return null;
+        }
     }
 
     private static void printBestEffort(Throwable failure) {
