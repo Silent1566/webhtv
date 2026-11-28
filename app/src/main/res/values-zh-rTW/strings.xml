@@ -1824,6 +1824,7 @@
     <string name="manage_page_stop">停止頁面</string>
     <string name="manage_page_notification_title">管理頁面運行中</string>
     <string name="manage_page_no_browser">未找到可打開網頁的應用，請使用局域網地址訪問</string>
+    <string name="manage_page_qr_hint">掃碼在手機瀏覽器開啟</string>
     <string name="manage_page_url_copied">管理頁面地址已複製</string>
     <string name="manage_page_battery_title">後台訪問權限</string>
     <string name="manage_page_battery_message">目前設備可能會在 App 切到後台後限制網路，導致瀏覽器管理頁無法連接。點擊「打開設定」只會嘗試目前品牌已知的後台運行/耗電管理入口；如果系統不允許直達，請按下面路徑手動設定：\n\n%1$s</string>

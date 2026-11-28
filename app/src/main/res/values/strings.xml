@@ -1921,6 +1921,7 @@
     <string name="manage_page_stop">Stop page</string>
     <string name="manage_page_notification_title">Management page running</string>
     <string name="manage_page_no_browser">No browser app found. Use the LAN URL from another device.</string>
+    <string name="manage_page_qr_hint">Scan to open on your phone</string>
     <string name="manage_page_url_copied">Management page URL copied</string>
     <string name="manage_page_battery_title">Background access</string>
     <string name="manage_page_battery_message">This device may restrict network access after the app moves to the background, which can make the browser management page unreachable. Open settings only tries known background running or battery management pages for this device brand. If the system does not allow a direct page, use this manual path:\n\n%1$s</string>

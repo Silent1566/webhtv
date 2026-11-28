@@ -20,6 +20,7 @@ import com.fongmi.android.tv.databinding.DialogManagePageBinding;
 import com.fongmi.android.tv.service.ManageService;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.PermissionUtil;
+import com.fongmi.android.tv.utils.QRCode;
 import com.fongmi.android.tv.utils.ResUtil;
 import com.github.catvod.crawler.SpiderDebug;
 
@@ -48,6 +49,13 @@ public final class ManagePageDialog {
         DialogManagePageBinding binding = DialogManagePageBinding.inflate(LayoutInflater.from(activity));
         binding.message.setText(activity.getString(R.string.manage_page_dialog_message, lanUrl, localUrl));
         setScrollHeight(activity, binding.contentScroll, 0.34f, 300);
+        // 二维码指向局域网地址：手机与电视同一 WiFi 时扫码即可打开管理页。
+        // 本机地址 127.0.0.1 对手机无意义，不能作为二维码内容；无可用局域网地址时隐藏整块，
+        // 不展示扫了也打不开的码（Util.getIp() 无网络时可能返回 0.0.0.0/127.0.0.1）。
+        if (isLanAddress(lanUrl)) {
+            binding.qrImage.setImageBitmap(QRCode.getLightBitmap(lanUrl, 160, 0));
+            binding.qrArea.setVisibility(View.VISIBLE);
+        }
 
         Dialog dialog = LightDialog.create(activity, null, binding.getRoot(), 0.68f, 0.92f, 640);
         binding.open.setOnClickListener(v -> open(activity, localUrl));
@@ -58,6 +66,11 @@ public final class ManagePageDialog {
         });
         dialog.show();
         binding.open.requestFocus();
+    }
+
+    private static boolean isLanAddress(String url) {
+        return url != null && url.startsWith("http")
+                && !url.contains("127.0.0.1") && !url.contains("0.0.0.0");
     }
 
     private static void open(FragmentActivity activity, String url) {
