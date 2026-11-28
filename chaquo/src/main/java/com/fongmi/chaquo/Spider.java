@@ -20,14 +20,20 @@ public class Spider extends com.github.catvod.crawler.Spider {
 
     private final PyObject app;
     private final PyObject obj;
+    private final PyObject entryOwner;
     private final String api;
     private final Gson gson;
 
     public Spider(PyObject app, PyObject obj, String api) {
+        this(app, obj, api, null);
+    }
+
+    Spider(PyObject app, PyObject obj, String api, PyObject entryOwner) {
         this.gson = new Gson();
         this.app = app;
         this.obj = obj;
         this.api = api;
+        this.entryOwner = entryOwner;
     }
 
     @Override
@@ -152,7 +158,8 @@ public class Spider extends com.github.catvod.crawler.Spider {
     @Override
     public void destroy() {
         try {
-            app.callAttr("destroy", obj);
+            if (entryOwner == null) app.callAttr("destroy", obj);
+            else app.callAttr("destroy", obj, entryOwner);
         } catch (Exception ignored) {
         }
     }

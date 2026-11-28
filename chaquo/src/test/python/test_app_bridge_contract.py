@@ -23,6 +23,7 @@ import threading
 import types
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 SOURCE = Path(__file__).resolve().parents[2] / "main/python"
 
@@ -439,6 +440,105 @@ class ManualVideoCheckBridgeTest(unittest.TestCase):
         self.assertTrue(bridge.manualVideoCheck(Sniffer()))
         self.assertTrue(bridge.isVideoFormat(Sniffer(), "https://example.test/a.m3u8"))
         self.assertFalse(bridge.isVideoFormat(Sniffer(), "https://example.test/a.mp4"))
+
+
+class PythonEntryOwnershipTest(unittest.TestCase):
+    SOURCE = '''import sys
+assert sys.modules[__name__].__dict__ is globals()
+assert __spec__.name == __name__
+counter = 0
+class Spider:
+    def tick(self):
+        global counter
+        counter += 1
+        return counter
+    def state(self):
+        return counter
+    def destroy(self):
+        pass
+'''
+
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.file_name = "webhtv_owned_entry.py"
+        self.path = self.directory.name + "/" + self.file_name
+        self.addCleanup(self.clear_fixture_modules)
+
+    def registered(self):
+        return {name: module for name, module in list(sys.modules.items())
+                if getattr(module, "__file__", None) == self.path}
+
+    def clear_fixture_modules(self):
+        for name in self.registered():
+            sys.modules.pop(name, None)
+
+    def open_entry(self, source):
+        return bridge.spider(self.directory.name, source, self.file_name)
+
+    @staticmethod
+    def destroy_entry(opened):
+        bridge.destroy(*opened)
+
+    def test_same_source_instances_share_disk_but_not_globals(self):
+        first, _ = self.open_entry(self.SOURCE)
+        self.assertEqual((1, 2), (first.tick(), first.tick()))
+        second, _ = self.open_entry(self.SOURCE)
+        self.assertEqual(2, first.state(), "a second load reset the first module")
+        self.assertEqual(1, second.tick())
+        self.assertEqual(2, first.state())
+        self.assertNotEqual(type(first).__module__, type(second).__module__)
+        self.assertEqual({type(first).__module__, type(second).__module__}, self.registered().keys())
+        self.assertEqual(self.SOURCE, Path(self.path).read_text(encoding="utf-8"))
+
+    def test_execution_failure_does_not_mutate_active_module(self):
+        first, _ = self.open_entry(self.SOURCE)
+        first.tick()
+        before = self.registered()
+        with self.assertRaisesRegex(RuntimeError, "fixture execution failure"):
+            self.open_entry('counter = 999\nraise RuntimeError("fixture execution failure")\n')
+        self.assertEqual(1, first.state(), "a failing load rewrote the live module")
+        self.assertEqual(before, self.registered())
+
+    def test_constructor_failure_does_not_leave_an_entry_registered(self):
+        with self.assertRaisesRegex(RuntimeError, "fixture constructor failure"):
+            self.open_entry('class Spider:\n    def __init__(self):\n        raise RuntimeError("fixture constructor failure")\n')
+        self.assertEqual({}, self.registered())
+
+    def test_destroy_failure_still_unregisters_only_the_destroyed_entry(self):
+        first = self.open_entry(self.SOURCE.replace("        pass\n", '        raise RuntimeError("fixture destroy failure")\n'))
+        second = self.open_entry(self.SOURCE)
+        first_name = type(first[0]).__module__
+        second_name = type(second[0]).__module__
+        with self.assertRaisesRegex(RuntimeError, "fixture destroy failure"):
+            self.destroy_entry(first)
+        self.assertIsNone(sys.modules.get(first_name))
+        self.assertIn(second_name, self.registered())
+        self.assertEqual(1, second[0].tick())
+        self.destroy_entry(second)
+        self.assertEqual({}, self.registered())
+
+    def test_destroy_does_not_remove_a_different_module_under_the_key(self):
+        entry = self.open_entry(self.SOURCE)
+        name = type(entry[0]).__module__
+        replacement = types.ModuleType(name)
+        replacement.__file__ = self.path
+        sys.modules[name] = replacement
+        self.destroy_entry(entry)
+        self.assertIs(replacement, sys.modules.get(name))
+
+    def test_load_executes_acquired_source_without_rereading_shared_file(self):
+        original = bridge.writeFile
+        replacement = self.SOURCE.replace("counter = 0", "counter = 999").encode()
+
+        def overwrite_after_write(path, content):
+            original(path, content)
+            original(path, replacement)
+
+        with patch.object(bridge, "writeFile", side_effect=overwrite_after_write):
+            spider, _ = self.open_entry(self.SOURCE)
+        self.assertEqual(0, spider.state(), "read another loader's write instead of the supplied source")
+        self.assertEqual(replacement, Path(self.path).read_bytes())
 
 
 class BridgeContractTest(unittest.TestCase):

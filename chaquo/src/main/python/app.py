@@ -3,16 +3,42 @@ import os
 import contextlib
 import tempfile
 import textwrap
+import sys
 from importlib.machinery import SourceFileLoader
+from importlib.util import module_from_spec, spec_from_file_location
+from itertools import count
 import json
+
+
+_entry_ids = count()
 
 
 def spider(cache, source, file_name=None):
     name = file_name or os.path.basename(source)
     path = cache + '/' + name
-    writeFile(path, textwrap.dedent(source).encode())
-    name = name.split('.')[0]
-    return SourceFileLoader(name, path).load_module().Spider()
+    content = textwrap.dedent(source).encode()
+    writeFile(path, content)
+    prefix = '_webhtv_spider_' + name.split('.', 1)[0] + '_'
+    entry_name = prefix + str(next(_entry_ids))
+    while entry_name in sys.modules:
+        entry_name = prefix + str(next(_entry_ids))
+    spec = spec_from_file_location(entry_name, path, loader=SourceFileLoader(entry_name, path))
+    module = module_from_spec(spec)
+    owner = (entry_name, module)
+    sys.modules[entry_name] = module
+    try:
+        # Compile these bytes, not a shared cache file another instance can replace.
+        exec(compile(content, path, 'exec', dont_inherit=True), module.__dict__)
+        return module.Spider(), owner
+    except BaseException:
+        _unregister_entry(owner)
+        raise
+
+
+def _unregister_entry(owner):
+    name, module = owner
+    if sys.modules.get(name) is module:
+        del sys.modules[name]
 
 
 def writeFile(path, content):
@@ -225,8 +251,12 @@ def subtitle_resolve(ru, request):
     result = ru.resolve(str2json(request))
     return json.dumps(result, ensure_ascii=False)
 
-def destroy(ru):
-    ru.destroy()
+def destroy(ru, owner=None):
+    try:
+        ru.destroy()
+    finally:
+        if owner is not None:
+            _unregister_entry(owner)
 
 
 def run():
