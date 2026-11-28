@@ -29,7 +29,8 @@ public class BaseLoader {
 
     private volatile JarLoader jarLoader;
     private final Set<JarLoader> retiringJars = new HashSet<>();
-    private final PyLoader pyLoader;
+    private volatile PyLoader pyLoader;
+    private final Set<PyLoader> retiringPy = new HashSet<>();
     private volatile JsLoader jsLoader;
     private final Set<JsLoader> retiringJs = new HashSet<>();
     private final java.util.concurrent.ConcurrentHashMap<String, Spider> catSpiders;
@@ -86,18 +87,23 @@ public class BaseLoader {
         JsLoader nextJs = new JsLoader(nextJar::dex);
         synchronized (clearQueue) {
             JarLoader previousJar = jarLoader;
+            PyLoader previousPy = pyLoader;
             JsLoader previousJs = jsLoader;
+            PyLoader nextPy = previousPy.nextGeneration();
             previousJar.retire();
+            previousPy.retire();
             previousJs.retire();
             retiringJars.add(previousJar);
+            retiringPy.add(previousPy);
             retiringJs.add(previousJs);
             jarLoader = nextJar;
+            pyLoader = nextPy;
             jsLoader = nextJs;
-            return clearQueue.submit(source, id -> clear(id, source, previousJar, previousJs)).future();
+            return clearQueue.submit(source, id -> clear(id, source, previousJar, previousPy, previousJs)).future();
         }
     }
 
-    private void clear(int id, String reason, JarLoader previousJar, JsLoader previousJs) {
+    private void clear(int id, String reason, JarLoader previousJar, PyLoader previousPy, JsLoader previousJs) {
         SpiderDebug.log("base-loader", "clear start id=%d reason=%s", id, reason);
         try {
             clear("jar", previousJar::clear);
@@ -106,7 +112,13 @@ public class BaseLoader {
                 retiringJars.remove(previousJar);
             }
         }
-        clear("py", pyLoader::clear);
+        try {
+            clear("py", previousPy::clear);
+        } finally {
+            synchronized (clearQueue) {
+                retiringPy.remove(previousPy);
+            }
+        }
         try {
             clear("js", previousJs::clear);
         } finally {
@@ -245,8 +257,9 @@ public class BaseLoader {
             for (JarLoader previous : retiringJars) keys.addAll(previous.activeKeys());
             keys.addAll(jsLoader.activeKeys());
             for (JsLoader previous : retiringJs) keys.addAll(previous.activeKeys());
+            keys.addAll(pyLoader.activeKeys());
+            for (PyLoader previous : retiringPy) keys.addAll(previous.activeKeys());
         }
-        keys.addAll(pyLoader.activeKeys());
         return java.util.Set.copyOf(keys);
     }
 

@@ -106,3 +106,28 @@
 - Lead 复核：仅内部 Python 返回值保留模块归属，Java 既有 Spider 构造保留。缓存、离线下载路径和运行时启动不变。不处理第三方普通依赖的全局共享，不加 PyLoader 换代或强制中断，也无真机或外部站源播放结论。
 
 **Python 入口 recovery anchor：** 本子项达成主机、双端和 5556 验收，以守卫提交与本地恢复标签为交付点。唯一后续候选：用屏障验证 PyLoader 退役挡住迟到发布，不依赖中断 CPython。
+
+## Python 子项：PyLoader 退役和迟到结果门控
+
+基线：`dev2@4301fe1215a408fb752484f1d85875e8b2c77abd`，工作树干净。沿用已验收的独立入口模块；不更改普通依赖导入、全局 Python/日志启动或任何二进制，不推送。
+
+| 等级 | 核对证据（2026-11-28，UTC+8） | 决策影响 |
+| --- | --- | --- |
+| A | 本仓 `PyLoader.getSpider/clear`、`SpiderInit.load/create`、`BaseLoader.clear/awaitClear/activePluginKeys`，及 [OpenJDK 21 ConcurrentHashMap](https://github.com/openjdk/jdk/blob/jdk-21%2B35/src/java.base/share/classes/java/util/concurrent/ConcurrentHashMap.java) 的 clear/computeIfAbsent（见 JS 子项） | 旧实现初始化在 map 槽内执行，clear 可阻塞且未发布对象未被销毁。沿用经过验证的 JS 按槽协调和短锁发布语义，不重构已经验收的 JS/Jar。 |
+| A | 本仓 `com.fongmi.chaquo.Loader` 只持有进程级 app 模块句柄，构造时 Python.start 检查及调用 Python 安装日志；CPython 入口模块已隔离；5556 的 Future.cancel 实测线程带中断标志但 Python 继续 | 新 PyLoader 仅分配 Java 状态、复用既有桥接，不因换代再调用 Python 初始化或中断脚本。清理已有 Spider 仍调用 Python，不能保证对本身阻塞的 destroy/GIL 立即完成。 |
+| A | 本仓 `chaquo.Loader.source` 先用 `Path.write` 打开同一路径直接写，`app.spider` 随后已有 `writeFile/os.replace` 且编译本次字节；`Path.read` 是离线回退 | 新旧同槽可在不等待对方初始化时共享源文件，只保留已有 Python 原子写入，避免新一代离线回退读到 Java 半写；不更改 URL、超时、按 API MD5 的路径或回退优先级。保留最近一次完整替换的源，不承诺策略性的跨世代磁盘版本排序。 |
+| B | [FongMi/TV 8b499e0972b93f6173eac0e0414485c6b894294a](https://github.com/FongMi/TV/commit/8b499e0972b93f6173eac0e0414485c6b894294a.patch) 与冻结树 SpiderLoader（见 Jar/JS 子项） | 借鉴短锁发布与退役，不移植上游运行时或强制取消。无新算法、性能或 ABI 主张，无适用的独立论文或广泛设备矩阵。 |
+
+**取舍：** 维持同一 PyLoader 会留住旧发布路径；整移上游会改进程运行时及取消语义。窄适配：BaseLoader 同步退役并替换 Java PyLoader，原队列销毁旧实例，活跃键保留到清理结束。初始化在锁外的同槽协调下执行，发布与退役互斥，未采用 Spider 由其初始化调用销毁一次。旧 recent/代理不再服务，新 owner 的命名空间、失败重试、ext 和诊断语义维持。不变更 Cat/JS/Jar 的清理行为和配置 awaitClear。
+
+**验收/回滚：** Leanback 屏障分别验证未完成 init 不拖住队列、迟到结果回收、旧 cached destroy 未放行时仍可换代、模块桥接不重复构造、旧活跃 key 及新代理正确。双端 loader、CPython 全组及 5556 隔离包：真实 Chaquopy 旧 init 阻塞，新同槽临时离线仍能走已缓存脚本并保持入口隔离；不覆盖已有包。一个守卫提交，`git revert` 可回滚，无迁移。
+
+**红灯：** 旧实现的 2 项 Leanback 屏障均按预期失败：旧初始化令 clear Future 超时；旧 destroy 执行中仍是同一个 PyLoader。两项均为业务断言。
+
+**验证与复核：** 两条 JVM 屏障从红转绿。先退役 Java PyLoader 而无需再次构造 Chaquopy Loader；旧 init 暂停时队列完成，新同槽能加载，旧结果完成后返回 SpiderNull 并只销毁一次。旧 cached destroy 未完成时仍保护旧活跃键；新 recent 和代理可用，清理以后保留新键。以原先的 Python 原子写入作为共享入口文件的唯一写路径。
+
+- 主机 CPython **55/55**；ARM64 Debug 构建 exit 0，新的 Leanback loader XML **65/65**（含 PyLoader 新屏障 **2/2**），Mobile **49/49**，无失败或跳过。
+- emulator-5556 隔离包 **3/3**（2.746s）。真实 Chaquopy 的旧 init 被 Event 暂停，队列先完成；本地测试源转为 503，新同源同槽成功使用完整的磁盘缓存，旧 init 放行后只销毁一次并撤销模块登记；此前视频/字幕及失败入口隔离也通过。两个隔离包已卸载，3 个已有包路径未变，普通构建 APK 已归位。日志：`F:/temp/webhtv-py-retire-5556-N3Zhuh/device.log`。
+- Lead 核对未改 JS/Jar/Cat 清理顺序、配置 awaitClear、脚本请求配置、普通依赖及 JNI。换代拦截迟到结果，仍不会强制停止已运行的 Python 调用；已有 Spider 自身销毁阻塞不属于此保证。未验证真实外部站源或真机播放。
+
+**PyLoader recovery anchor：** 本子项已达双端与设备验收，以守卫提交和恢复标签为交付点。后续先考虑连续重载的多世代验收，不凭语言另行调整 Cat 或普通依赖。

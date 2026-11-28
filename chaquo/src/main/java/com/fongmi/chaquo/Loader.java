@@ -11,7 +11,6 @@ import com.github.catvod.utils.Path;
 import com.github.catvod.utils.Util;
 
 import java.io.File;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import okhttp3.Response;
@@ -76,7 +75,6 @@ public class Loader {
             if (!response.isSuccessful()) throw new IllegalStateException("HTTP " + response.code());
             String source = response.body().string();
             if (TextUtils.isEmpty(source)) throw new IllegalStateException("Empty python script");
-            Path.write(cache, source.getBytes(StandardCharsets.UTF_8));
             return source;
         } catch (Exception e) {
             String cached = Path.read(cache);
