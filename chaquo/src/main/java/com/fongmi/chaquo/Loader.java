@@ -11,7 +11,7 @@ import com.github.catvod.utils.Path;
 import com.github.catvod.utils.Util;
 
 import java.io.File;
-import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 import okhttp3.Response;
 
@@ -57,8 +57,10 @@ public class Loader {
     public Spider spider(String api) {
         String name = scriptName(api);
         String source = source(api, name);
-        PyObject obj = app.callAttr("spider", Path.py().getAbsolutePath(), source, name);
-        return new Spider(app, obj, api);
+        try (PyObject opened = app.callAttr("spider", Path.py().getAbsolutePath(), source, name)) {
+            List<PyObject> entry = opened.asList();
+            return new Spider(app, entry.get(0), api, entry.get(1));
+        }
     }
 
     private String source(String api, String name) {
@@ -73,7 +75,6 @@ public class Loader {
             if (!response.isSuccessful()) throw new IllegalStateException("HTTP " + response.code());
             String source = response.body().string();
             if (TextUtils.isEmpty(source)) throw new IllegalStateException("Empty python script");
-            Path.write(cache, source.getBytes(StandardCharsets.UTF_8));
             return source;
         } catch (Exception e) {
             String cached = Path.read(cache);
