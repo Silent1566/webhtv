@@ -34,3 +34,27 @@
 - 此阶段只隔离进入旧 Jar owner 后才完成的初始化；不处理尚未进入 loader 的旧配置任务，不承诺强行中止旧插件。JS/Python/Cat 的 owner 与共享 QuickJS 缓存还未调整。
 
 **Recovery anchor：** Jar 子项达成双端验收，以此逻辑单元的守卫提交和恢复标签为交付点。唯一后续候选：单独验证 QuickJS 旧清理清掉新模块缓存的竞态，先确定缓存归属再交换 JS loader。
+
+## QuickJS 子项：模块缓存归属
+
+本地起点：`Silent1566/webhtv dev2@749806c50d9aed55d278a1fcbc0b20bc6af6cd40`，工作树干净。按上一轮明确的建议先隔离缓存，本单元不交换 BaseLoader 的 JS owner，也不改 Python、Cat、原生桥或依赖。
+
+| 等级 | 核对证据（2026-11-28，UTC+8） | 取舍 |
+| --- | --- | --- |
+| A | 本仓 `JsLoader.clear`、`quickjs.crawler.Loader.spider`、`Spider.createCtx/createObj`、`Module.get/fetch/clear`；临时 JVM 屏障探针两次均观察新模块源读取 1→2，已有 Spider 和独立缓存不变 | 问题是清理的缓存归属；不是 JNI 销毁或初始化对象被旧 loader 覆盖。当前 BaseLoader 未切换 JS owner，探针模拟未来的实例交叠，不是真实设备故障证据。 |
+| A | [FongMi/TV 8b499e0972b93f6173eac0e0414485c6b894294a](https://github.com/FongMi/TV/commit/8b499e0972b93f6173eac0e0414485c6b894294a.patch)、[冻结树 JsLoader](https://github.com/FongMi/TV/blob/4512b4c9f82534ff66acfde06ccdd68f35b074f0/app/src/main/java/com/fongmi/android/tv/api/loader/JsLoader.java) | 最终上游具有每实例 QuickJsRuntime.Session，clear 只清该 session；借用归属不变量，不移植 runtime、整个退役协议或其生命周期后续（见 Jar 研究记录）。 |
+| A | [Android LruCache](https://developer.android.com/reference/android/util/LruCache) 与本机 Android SDK 中 `android.util.LruCache` 实现；本仓 `Module` 每对象一个 LRU，容量 50 | 保留现有缓存实现、容量、查找/取源规则和 JS 路径。没有新增并发算法、原生、性能或设备主张，不需独立论文或设备 benchmark；成熟实现的按会话隔离可直接对照上游。 |
+
+**取舍与实施：** 保留全局缓存会使旧清理驱逐新资源；原样移植会引入本仓未使用的 runtime/session。选择让现有 `quickjs.crawler.Loader` 持有一个 Module，明确传给由它创建的所有 Spider；入口脚本与 import 使用同一个 Module，`JsLoader.clear` 只清自己的 Module。保留公共双参 Spider 构造入口及其旧兼容行为。此阶段不承诺阻止旧初始化回写旧缓存。正常单 owner 的 LRU 容量仍为 50，不新增依赖/ABI/制品，不声称速度改善。
+
+**验收/回滚：** Leanback Robolectric 屏障驱动真实 Loader/Spider 读路径与 JsLoader 清理，仅替换原生桥和资源 I/O，要求旧清理前后新模块只读一次、入口和 import 共享、新实例已建 Spider 不受影响、旧缓存仍被清理。双端 ARM64 Debug 定向验证、旧 JS/Python 日志测试及 QuickJS 代理兼容护栏；一个本地守卫提交，可 `git revert`，无数据迁移。
+
+**红灯：** 新增 `QuickJsModuleCacheTest`，由真实 `JsLoader.clear`、`Loader.spider`、`Spider.createCtx/createObj` 与 `Module` 执行。修改前 Leanback 本次 Gradle exit 1，XML 1 项 1 失败，旧清理放行后新资源读次数 `expected 1, actual 2`；此前入口与 import 共用命中，旧清理确实完成。
+
+**验证：** 同一屏障用例从红转绿：放行旧清理后，新 loader 的入口与 import 仍命中同一缓存，源读取保持 1 次；旧缓存被清除，旧实例清理完成，新实例的 Spider 槽保留。测试使用真实 Java 读路径和清理，仅替换 QuickJS JNI 与资源 I/O，不是设备播放/真实站源测试。
+
+- ARM64 Debug：Leanback **81/81**（15 类），Mobile **49/49**（11 类），构建 exit 0，共 130 项无失败或跳过，XML 为本次运行（2026-11-28T01:43:53Z）生成。
+- 两端筛选 `com.fongmi.android.tv.api.loader.*`；Leanback 另跑代理响应兼容 14 项与代理消费者 6 项。既有 JS/Python 失败诊断 11 项通过；测试夹具只替换 JNI 初始化，由真实 Loader 构造初始化缓存。Windows JVM 临时设置 `-Drobolectric.conscryptMode=OFF`，不更改运行时配置。
+- Lead 复核：`BaseLoader`、`Module`、Python/Cat、依赖、JNI 均未修改；现有 50 项 LRU 与查找规则保持；独立双参 Spider 仍使用兼容的共享缓存路径，而经 Loader 创建的 Spider 不再访问它。
+
+**QuickJS recovery anchor：** 缓存归属子项达成双端验收；以守卫提交和本地恢复标签为交付点。唯一后续候选：增加 JS owner 退役与迟到发布门控，再让 BaseLoader 交换实例；本阶段不包含该行为。

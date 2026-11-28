@@ -2,7 +2,6 @@ package com.fongmi.android.tv.api.loader;
 
 import com.fongmi.android.tv.App;
 import com.fongmi.quickjs.crawler.Loader;
-import com.fongmi.quickjs.utils.Module;
 import com.github.catvod.crawler.Spider;
 import com.github.catvod.crawler.SpiderDebug;
 
@@ -23,7 +22,7 @@ public class JsLoader {
     public void clear() {
         try {
             SpiderCleanup.destroy("js-loader", spiders);
-            Module.get().clear();
+            loader.clearModules();
         } finally {
             spiders.clear();
             recent = null;
