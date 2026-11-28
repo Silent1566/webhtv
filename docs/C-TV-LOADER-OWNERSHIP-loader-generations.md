@@ -131,3 +131,13 @@
 - Lead 核对未改 JS/Jar/Cat 清理顺序、配置 awaitClear、脚本请求配置、普通依赖及 JNI。换代拦截迟到结果，仍不会强制停止已运行的 Python 调用；已有 Spider 自身销毁阻塞不属于此保证。未验证真实外部站源或真机播放。
 
 **PyLoader recovery anchor：** 本子项已达双端与设备验收，以守卫提交和恢复标签为交付点。后续先考虑连续重载的多世代验收，不凭语言另行调整 Cat 或普通依赖。
+
+## 多世代回归：A → B → C 连续重载
+
+基线：`dev2@1ab96787c27ad79653d3b275dce76cf88ac01577`。仅补 `PyLoaderLifecycleTest` 和本记录，无生产改动。Leanback Robolectric 用真实 BaseLoader、PyLoader 和串行清理队列，Python 桥接用测试替身；用 latch 固定时序，不用 sleep。
+
+- A 的 cached destroy 暂停时，B 已启用并开始另一个同槽 init；再切 C，B 的清理排在 A 后面。此时 C 已能加载同槽，recent / `?do=py` 指向 C；旧 active keys 在各自清理完成前仍受保护。
+- 在 A 未释放、B 清理尚未开始时放行 B init，结果为 SpiderNull 且只销毁一次，不修改 C 的缓存或代理。A 清完才进入 B 的 destroy；两代清完后活跃键只剩 C，C 不重建、不销毁、继续返回正确代理。
+- ARM64 Debug 定向验收：Leanback **66/66**（含新增 A→B→C），Mobile **49/49**，本次 Gradle exit 0，报告自 2026-11-28T03:13:12Z 后生成，无失败或跳过。没有重跑设备，上一阶段 5556 的真实 Chaquopy 两代验收仍为独立证据；不代表端到端 UI 自动切换，也不涉及 Cat 和普通 Python 依赖。
+
+**多代回归 recovery anchor：** 已完成测试与文档交付；以该测试提交及本地恢复标签为回滚点。后续以发布这条回归和已验收的 Python 两笔修复为主，不根据语言扩改现有 loader。
