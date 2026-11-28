@@ -1,7 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    插件管理入口图标的着色。宿主背景是固定浅色的 selector_dialog_switch（#E8F0FE），
+    与系统色板无关；默认态此前取 ?attr/colorOnSurface，夜间表是近白，压在固定浅底上
+    只有 1.13:1（TvFixedLightSurfaceContrastTest 抓出）。固定浅底上的前景必须也是
+    固定深色，因此统一取焦点态同款墨蓝 #174EA6（两表一致，对 #E8F0FE 约 6:1）。
+-->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:state_enabled="false" android:alpha="0.38" android:color="?attr/colorOnSurfaceVariant" />
+    <item android:state_enabled="false" android:alpha="0.38" android:color="#174EA6" />
     <item android:state_focused="true" android:color="#174EA6" />
     <item android:state_pressed="true" android:color="#174EA6" />
-    <item android:color="?attr/colorOnSurface" />
+    <item android:color="#174EA6" />
 </selector>

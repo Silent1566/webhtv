@@ -772,6 +772,11 @@ private AudioHistory.Record audioHistoryRecord;
         playerCallbacks.forEach(callback -> callback.onPlayerRebuild(newPlayer, resetVideoSurface));
     }
 
+    @Override
+    public void onManualSwitchRestored(int player) {
+        playerCallbacks.forEach(callback -> callback.onManualSwitchRestored(player));
+    }
+
     private final Player.Listener listener = new Player.Listener() {
         @Override
 public void onIsPlayingChanged(boolean isPlaying) {
@@ -888,6 +893,9 @@ public void onIsPlayingChanged(boolean isPlaying) {
         }
 
         default void onPlayerRebuild(Player player, boolean resetVideoSurface) {
+        }
+
+        default void onManualSwitchRestored(int player) {
         }
     }
 

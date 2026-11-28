@@ -1,7 +1,9 @@
 package androidx.media3.mpvplayer;
 
+import android.net.Uri;
 import android.os.SystemClock;
 import android.text.TextUtils;
+import android.util.Base64;
 
 import androidx.annotation.Nullable;
 import com.fongmi.android.tv.App;
@@ -41,6 +43,8 @@ import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.StringReader;
+import java.io.StringWriter;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -60,6 +64,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import javax.xml.parsers.DocumentBuilderFactory;
+import org.xml.sax.InputSource;
 import javax.xml.transform.OutputKeys;
 import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerFactory;
@@ -597,6 +602,34 @@ public final class MpvHlsProxy extends NanoHTTPD {
         int id = parseSessionId(httpSession);
         Session session = sessions.get(id);
         if (session == null || TextUtils.isEmpty(session.url)) return error(Status.NOT_FOUND, "expired dash");
+        // B 站等 spider 会把整份 MPD 以 data:application/dash+xml 内联返回，
+        // OkHttp 无法打开 data: scheme，这里直接解码内容走同一条重写链路。
+        if (isDataManifest(session.url)) {
+            String text = readDataManifest(session.url);
+            if (text == null || !text.toLowerCase(Locale.US).contains("<mpd")) return error(Status.BAD_REQUEST, "invalid dash");
+            String manifestUrl = session.url;
+            SessionStats stats = stats(id);
+            stats.classification = PlaybackResourceClassifier.classifyDash(
+                    started && getListeningPort() > 0 ? baseUrl() + "/mpv/index.mpd?s=" + id : null,
+                    session.url,
+                    text,
+                    SystemClock.elapsedRealtime());
+            text = rewriteSegmentBase(session, manifestUrl, text);
+            text = normalizeDashManifest(text);
+            Matcher matcher = DASH_BASE_URL.matcher(text);
+            StringBuffer rewritten = new StringBuffer();
+            int count = 0;
+            while (matcher.find()) {
+                String target = resolve(manifestUrl, decodeXml(matcher.group(2).trim()));
+                String local = proxyDashItemUrl(target, id).replace("&", "&amp;");
+                matcher.appendReplacement(rewritten, Matcher.quoteReplacement(matcher.group(1) + local + matcher.group(3)));
+                count++;
+            }
+            matcher.appendTail(rewritten);
+            byte[] data = rewritten.toString().getBytes(StandardCharsets.UTF_8);
+            SpiderDebug.log(TAG, "dash manifest mode=data bytes=%d baseUrls=%d url=%s", data.length, count, shortUrl(session.url));
+            return noCache(newFixedLengthResponse(Status.OK, "application/dash+xml; charset=utf-8", new ByteArrayInputStream(data), data.length));
+        }
         try (okhttp3.Response response = fetch(session, session.url, null, false)) {
             ResponseBody body = response.body();
             if (!response.isSuccessful() || body == null) return error(toStatus(response.code()), "dash http " + response.code());
@@ -610,6 +643,7 @@ public final class MpvHlsProxy extends NanoHTTPD {
                     text,
                     SystemClock.elapsedRealtime());
             text = rewriteSegmentBase(session, manifestUrl, text);
+            text = normalizeDashManifest(text);
             Matcher matcher = DASH_BASE_URL.matcher(text);
             StringBuffer rewritten = new StringBuffer();
             int count = 0;
@@ -620,12 +654,109 @@ public final class MpvHlsProxy extends NanoHTTPD {
                 count++;
             }
             matcher.appendTail(rewritten);
-            byte[] data = rewritten.toString().getBytes(StandardCharsets.UTF_8);
+            String finalXml = rewritten.toString();
+            java.util.regex.Matcher ranges = java.util.regex.Pattern.compile("(?:range|mediaRange)=\"([^\"]+)\"").matcher(finalXml);
+            StringBuilder rangeList = new StringBuilder();
+            while (ranges.find() && rangeList.length() < 400) {
+                if (rangeList.length() > 0) rangeList.append(',');
+                rangeList.append(ranges.group(1));
+            }
+            com.fongmi.android.tv.player.PlaybackSwitchLog.log("dash-mpd", "final session=%d bytes=%d baseUrls=%d segmentList=%d segmentURL=%d ranges=%s",
+                    id, finalXml.getBytes(StandardCharsets.UTF_8).length, count,
+                    finalXml.split("<SegmentList", -1).length - 1,
+                    finalXml.split("<SegmentURL", -1).length - 1, rangeList);
+            byte[] data = finalXml.getBytes(StandardCharsets.UTF_8);
             SpiderDebug.log(TAG, "dash manifest session=%d code=%d bytes=%d baseUrls=%d url=%s", id, response.code(), data.length, count, shortUrl(session.url));
             return noCache(newFixedLengthResponse(Status.OK, "application/dash+xml; charset=utf-8", new ByteArrayInputStream(data), data.length));
         }
     }
 
+    /**
+     * IJK 内嵌的是 FFmpeg 4.0，它的 dashdec 在 parse_manifest() 里把
+     * MPD@type 当成必填属性：缺失就直接返回 AVERROR_INVALIDDATA（-1094995529）。
+     * B 站等站点生成的 MPD 通常省略 type（DASH 规范默认 static），EXO 能接受，
+     * 但 IJK 会在 HTTP 200 打开清单后 5ms 内失败——表现就是「有流量、一直转圈、
+     * 换 IJK 自动跳回 EXO」。这里按规范补齐 type/profiles，只补缺失项，
+     * 不改站点原本给出的 dynamic 语义。
+     */
+    private String normalizeDashManifest(String text) {
+        try {
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            factory.setNamespaceAware(true);
+            Document document = factory.newDocumentBuilder().parse(new InputSource(new StringReader(text)));
+            Element root = document.getDocumentElement();
+            if (root == null || !"MPD".equals(root.getLocalName())) return text;
+            dumpDashManifest(text);
+            String type = root.getAttribute("type");
+            String profiles = root.getAttribute("profiles");
+            boolean typeMissing = TextUtils.isEmpty(type);
+            boolean profilesMissing = TextUtils.isEmpty(profiles)
+                    || !profiles.toLowerCase(Locale.US).contains("dash:profile");
+            com.fongmi.android.tv.player.PlaybackSwitchLog.log("dash-mpd",
+                    "normalize root=MPD type=%s profiles=%s typeMissing=%s profilesMissing=%s",
+                    typeMissing ? "missing" : type,
+                    profilesMissing ? "missing" : "present", typeMissing, profilesMissing);
+            if (!typeMissing && !profilesMissing) return text;
+            if (typeMissing) root.setAttribute("type", "static");
+            if (profilesMissing) root.setAttribute("profiles", "urn:mpeg:dash:profile:isoff-live:2011");
+            StringWriter output = new StringWriter();
+            Transformer transformer = TransformerFactory.newInstance().newTransformer();
+            transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "no");
+            transformer.setOutputProperty(OutputKeys.ENCODING, "UTF-8");
+            transformer.transform(new DOMSource(document), new StreamResult(output));
+            String normalized = output.toString();
+            com.fongmi.android.tv.player.PlaybackSwitchLog.log("dash-mpd",
+                    "normalized type=%s profiles=%s bytes=%d",
+                    root.getAttribute("type"), root.getAttribute("profiles"),
+                    normalized.getBytes(StandardCharsets.UTF_8).length);
+            dumpDashManifest(normalized);
+            return normalized;
+        } catch (Throwable e) {
+            com.fongmi.android.tv.player.PlaybackSwitchLog.log("dash-mpd",
+                    "normalize skipped errorType=%s action=keep-source", e.getClass().getSimpleName());
+            return text;
+        }
+    }
+
+    /** 保留最后一份实际交给内核的 MPD，便于用户导出后定位 FFmpeg/DASH 解析问题。 */
+    private void dumpDashManifest(String xml) {
+        try {
+            if (xml == null || xml.length() > 300_000) return;
+            java.io.File file = new java.io.File(App.get().getFilesDir(), "dash-manifest-last.xml");
+            try (FileOutputStream out = new FileOutputStream(file)) {
+                out.write(xml.getBytes(StandardCharsets.UTF_8));
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private static boolean isDataManifest(String url) {
+        return url != null && url.regionMatches(true, 0, "data:application/dash+xml", 0, "data:application/dash+xml".length());
+    }
+
+    private static String readDataManifest(String url) {
+        try {
+            int comma = url.indexOf(',');
+            if (comma < 0) return null;
+            String meta = url.substring(0, comma).toLowerCase(Locale.US);
+            String data = url.substring(comma + 1);
+            return meta.contains(";base64")
+                    ? new String(Base64.decode(data, Base64.DEFAULT), StandardCharsets.UTF_8)
+                    : Uri.decode(data);
+        } catch (Throwable e) {
+            SpiderDebug.log(TAG, "dash data decode failed errorType=%s", e.getClass().getSimpleName());
+            return null;
+        }
+    }
+
+    /**
+     * 参考上游 blbl(cat3399)/debugly-ijkplayer 的方案：不再把 SegmentBase 转成
+     * SegmentList。IJK 换用 ffmpeg7 内核后（libijkplayer.so 单库），其 dashdec
+     * 原生支持 SegmentBase indexRange + Initialization range，会自己下载 sidx、
+     * 自己解析分片边界并按 Range 请求分片，比手工生成分片清单可靠得多。
+     * 这里只做两件事：裁剪多余 AdaptationSet（pruneDashAlternatives），
+     * BaseURL 的本地代理改写由 serveDash 的 DASH_BASE_URL 逻辑统一完成。
+     */
     private String rewriteSegmentBase(Session session, String manifestUrl, String text) {
         try {
             DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
@@ -633,45 +764,22 @@ public final class MpvHlsProxy extends NanoHTTPD {
             Document document = factory.newDocumentBuilder().parse(new InputSource(new StringReader(text)));
             pruneDashAlternatives(document);
             NodeList representations = document.getElementsByTagNameNS("*", "Representation");
-            int converted = 0;
+            int kept = 0;
             for (int i = 0; i < representations.getLength(); i++) {
                 Element representation = (Element) representations.item(i);
                 Element baseUrl = directChild(representation, "BaseURL");
                 Element segmentBase = directChild(representation, "SegmentBase");
-                Element initialization = segmentBase == null ? null : directChild(segmentBase, "Initialization");
-                if (baseUrl == null || segmentBase == null || initialization == null) continue;
-                ByteRange index = ByteRange.parse(segmentBase.getAttribute("indexRange"));
-                ByteRange init = ByteRange.parse(initialization.getAttribute("range"));
-                if (index == null || init == null) continue;
-                String target = resolve(manifestUrl, baseUrl.getTextContent().trim());
-                Sidx sidx = fetchSidx(session, target, index);
-                if (sidx == null || sidx.ranges.isEmpty()) continue;
-                List<SidxRange> groups = sidx.grouped(60_000);
-                String namespace = segmentBase.getNamespaceURI();
-                Element segmentList = document.createElementNS(namespace, "SegmentList");
-                segmentList.setAttribute("timescale", Long.toString(sidx.timescale));
-                segmentList.setAttribute("duration", Long.toString(groups.get(0).duration));
-                Element initNode = document.createElementNS(namespace, "Initialization");
-                initNode.setAttribute("range", init.start + "-" + (init.end + 1));
-                segmentList.appendChild(initNode);
-                for (SidxRange range : groups) {
-                    Element segment = document.createElementNS(namespace, "SegmentURL");
-                    segment.setAttribute("mediaRange", range.start + "-" + (range.end + 1));
-                    segmentList.appendChild(segment);
-                }
-                representation.replaceChild(segmentList, segmentBase);
-                converted++;
+                if (baseUrl != null && segmentBase != null) kept++;
             }
-            if (converted == 0) return text;
             StringWriter output = new StringWriter();
             Transformer transformer = TransformerFactory.newInstance().newTransformer();
             transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "no");
             transformer.setOutputProperty(OutputKeys.ENCODING, "UTF-8");
             transformer.transform(new DOMSource(document), new StreamResult(output));
-            SpiderDebug.log(TAG, "dash SegmentBase grouped representations=%d url=%s", converted, shortUrl(manifestUrl));
+            SpiderDebug.log(TAG, "dash SegmentBase kept representations=%d url=%s", kept, shortUrl(manifestUrl));
             return output.toString();
         } catch (Throwable e) {
-            SpiderDebug.log(TAG, "dash SegmentBase grouping skipped errorType=%s", e.getClass().getSimpleName());
+            SpiderDebug.log(TAG, "dash SegmentBase normalize skipped errorType=%s", e.getClass().getSimpleName());
             return text;
         }
     }
@@ -970,6 +1078,7 @@ public final class MpvHlsProxy extends NanoHTTPD {
         String pipeline = kernel == PlayerSetting.IJK ? "IJK" : "MPV";
         AdBlockStatsStore.recordBlocks(parsed.host(), pipeline, outcome.ruleCounts(), fallbackCount,
                 parsed.host(), outcome.removedDurationSec(), outcome.removedSegmentDetails());
+        if (!Setting.isAdBlockNotice()) return;
         if (!HlsAdblockNotice.shouldNotify(url, System.currentTimeMillis())) return;
         int removed = outcome.removedSegments() > 0 ? outcome.removedSegments() : (int) fallbackCount;
         String message = HlsAdblockNotice.message(removed, outcome.removedDurationSec());

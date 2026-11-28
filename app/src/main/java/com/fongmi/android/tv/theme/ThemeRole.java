@@ -95,8 +95,21 @@ public enum ThemeRole {
         return ordinal() <= WARNING.ordinal();
     }
 
-    /** 是否参与「按基线色反查角色」的颜色改写；条目遮罩族不参与（理由见 {@link #isUserSlot()}）。 */
+    /**
+     * 是否参与「按基线色反查角色」的颜色改写。
+     *
+     * <p>不参与的家族（理由各自见下）：
+     * <ul>
+     *   <li>条目遮罩族：默认值在仓库里被大量**固定**资源共用，入表会让一次遮罩编辑连带改掉
+     *       刻意固定的深玻璃族。</li>
+     *   <li>FOCUS（2026-11-25）：产品把默认焦点色定为纯白（对齐上游 FongMi/TV），而
+     *       {@code webhtv_on_wallpaper} 两张表恒为 {@code #FFFFFF}。若 FOCUS 入表，壁纸白字
+     *       会被「按基线色反查」当成基线焦点色、在用户改焦点色时连带改写。焦点色的运行时
+     *       改写本就全部走专用通道——{@code ThemeBinder.bindStateList} 的环白名单与
+     *       {@code ThemeController.focusRingColor()} 的代码路径——不依赖通用索引。</li>
+     * </ul>
+     */
     public boolean rewritesBaseline() {
-        return this != ITEM_OVERLAY && this != ON_ITEM_OVERLAY;
+        return this != ITEM_OVERLAY && this != ON_ITEM_OVERLAY && this != FOCUS;
     }
 }

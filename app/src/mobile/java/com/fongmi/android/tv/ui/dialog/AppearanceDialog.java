@@ -11,6 +11,7 @@ import android.widget.LinearLayout;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.DialogFragment;
+import androidx.appcompat.app.AppCompatDelegate;
 import androidx.fragment.app.Fragment;
 
 import com.fongmi.android.tv.R;
@@ -22,6 +23,7 @@ import com.fongmi.android.tv.theme.ThemeController;
 import com.fongmi.android.tv.theme.ThemeProfile;
 import com.fongmi.android.tv.theme.ThemeProfileStore;
 import com.fongmi.android.tv.utils.ResUtil;
+import com.fongmi.android.tv.utils.UiRestart;
 import com.google.android.material.textview.MaterialTextView;
 
 import java.util.ArrayList;
@@ -50,20 +52,20 @@ public final class AppearanceDialog extends DialogFragment {
     @NonNull
     @Override
     public Dialog onCreateDialog(@Nullable Bundle savedInstanceState) {
-        uiScales = ResUtil.getStringArray(R.array.select_ui_scale);
-        languages = ResUtil.getStringArray(R.array.select_language);
-        imageSizes = ResUtil.getStringArray(R.array.select_size);
+        uiScales = safeArray(R.array.select_ui_scale);
+        languages = safeArray(R.array.select_language);
+        imageSizes = safeArray(R.array.select_size);
         return LightDialog.create(requireContext(), getString(R.string.setting_appearance), createContent(), getString(R.string.dialog_close), null, null, null);
     }
 
     private View createContent() {
         LinearLayout content = new LinearLayout(requireContext());
         content.setOrientation(LinearLayout.VERTICAL);
-        uiScaleValue = addRow(content, R.string.setting_ui_scale, uiScales[Setting.getUiScaleIndex()], this::chooseUiScale);
+        uiScaleValue = addRow(content, R.string.setting_ui_scale, at(uiScales, Setting.getUiScaleIndex()), this::chooseUiScale);
         themeModeValue = addRow(content, R.string.setting_theme_mode, getThemeModeText(), this::chooseThemeMode);
         themeValue = addRow(content, R.string.setting_theme_color, getThemeText(), view -> ThemeDialog.show(this));
-        imageSizeValue = addRow(content, R.string.setting_size, imageSizes[PlayerSetting.getSize()], this::chooseImageSize);
-        languageValue = addRow(content, R.string.setting_language, languages[Setting.getLanguageIndex()], this::chooseLanguage);
+        imageSizeValue = addRow(content, R.string.setting_size, at(imageSizes, PlayerSetting.getSize()), this::chooseImageSize);
+        languageValue = addRow(content, R.string.setting_language, at(languages, Setting.getLanguageIndex()), this::chooseLanguage);
         return content;
     }
 
@@ -117,10 +119,10 @@ public final class AppearanceDialog extends DialogFragment {
     private void chooseUiScale(View view) {
         ChoiceDialog.showSingle(this, R.string.setting_ui_scale, uiScales, Setting.getUiScaleIndex(), which -> {
             if (which == Setting.getUiScaleIndex()) return;
-            uiScaleValue.setText(uiScales[which]);
+            uiScaleValue.setText(at(uiScales, which));
             Setting.putUiScaleIndex(which);
             dismissAllowingStateLoss();
-            requireActivity().recreate();
+            UiRestart.rebuild(getActivity());
         });
     }
 
@@ -136,9 +138,12 @@ public final class AppearanceDialog extends DialogFragment {
             if (mode == Setting.getThemeMode()) return;
             Setting.putThemeMode(mode);
             themeModeValue.setText(getThemeModeText());
+            int before = AppCompatDelegate.getDefaultNightMode();
             ThemeController.applyNightModeToApp();
             dismissAllowingStateLoss();
-            RefreshEvent.theme();
+            // setDefaultNightMode 变化时会自行重建所有 Activity；未变化时才需要手动重建一次，
+            // 否则同一个页面会被要求重建两次。
+            if (AppCompatDelegate.getDefaultNightMode() == before) RefreshEvent.theme();
         });
     }
 
@@ -184,14 +189,35 @@ public final class AppearanceDialog extends DialogFragment {
     }
 
     private String getThemeText() {
-        ThemeProfile profile = ThemeProfileStore.load();
-        String name = profile.displayName();
-        return "Default".equals(name) ? themeText(Setting.getThemeColor()) : name;
+        try {
+            ThemeProfile profile = ThemeProfileStore.load();
+            String name = profile.displayName();
+            return "Default".equals(name) ? themeText(Setting.getThemeColor()) : name;
+        } catch (RuntimeException ignored) {
+            // 主题档损坏时外观页仍要能打开，显示回落到编译期基线。
+            return themeText(Setting.getThemeColor());
+        }
     }
 
     private String themeText(int color) {
         if (color == -1) return getString(R.string.setting_off);
         return getString(color == 0 ? R.string.setting_auto : R.string.setting_custom);
+    }
+
+    /** 资源数组缺失时返回空数组，避免重建/恢复途中的空指针。 */
+    private String[] safeArray(int resId) {
+        try {
+            String[] values = ResUtil.getStringArray(resId);
+            return values == null ? new String[0] : values;
+        } catch (Throwable ignored) {
+            return new String[0];
+        }
+    }
+
+    /** 索引超出数组时回落到第一项，避免偏好值与资源条目数量不一致导致越界。 */
+    private String at(String[] values, int index) {
+        if (values == null || values.length == 0) return "";
+        return values[Math.max(0, Math.min(index, values.length - 1))];
     }
 
     private int dp(int value) {

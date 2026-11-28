@@ -23,9 +23,6 @@
     <item android:state_selected="true">
         <shape>
             <solid android:color="#332196F3" />
-            <stroke
-                android:width="2dp"
-                android:color="@color/white" />
             <corners android:radius="6dp" />
         </shape>
     </item>

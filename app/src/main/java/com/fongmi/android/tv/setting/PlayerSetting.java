@@ -6,6 +6,7 @@ import android.provider.Settings;
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.player.VideoAspectMode;
+import com.fongmi.android.tv.player.engine.PlayerEngine;
 import com.fongmi.android.tv.utils.BrightnessPolicy;
 import com.fongmi.android.tv.utils.Util;
 import com.github.catvod.utils.Prefers;
@@ -263,11 +264,16 @@ public class PlayerSetting {
     }
 
     public static int getRender(int player) {
-        return useNativeVideoOutput(player) ? 0 : getRender();
+        return useNativeVideoOutput(player) ? RENDER_SURFACE : getRender();
     }
 
+    /**
+     * 是否必须用 SurfaceView 直渲。SYSTEM/MPV 的画面由内核自行合成，只能走 SurfaceView；
+     * IJK 的画面经 SDL 输出，SurfaceView 与 TextureView 都支持——TV 上部分设备的
+     * SurfaceView 渲染黑屏（有声无画），TextureView 是唯一的自救路径，所以 IJK 不在此列。
+     */
     public static boolean useNativeVideoOutput(int player) {
-        return player == IJK || player == SYSTEM || player == MPV;
+        return player == SYSTEM || player == MPV;
     }
 
     public static void putRender(int render) {
@@ -275,6 +281,29 @@ public class PlayerSetting {
         Prefers.put("render", value);
         if (isTunnel() && value == RENDER_TEXTURE) Prefers.put("tunnel", false);
         if (isExoEnhanced() && value == RENDER_TEXTURE) Prefers.put("exo_4k_compat", false);
+    }
+
+    /**
+     * 全局解码方式（软解/硬解），按内核分别保存。
+     * IJK 的硬解在部分设备上会出现「有声音无画面」，所以 IJK 默认软解；其余内核默认硬解。
+     */
+    public static int getDecode() {
+        return getDecode(getPlayer());
+    }
+
+    public static int getDecode(int player) {
+        int kernel = sanitizePlayer(player);
+        int fallback = kernel == IJK ? PlayerEngine.SOFT : PlayerEngine.HARD;
+        int value = Prefers.getInt("decode_" + kernel, fallback);
+        return value == PlayerEngine.SOFT ? PlayerEngine.SOFT : PlayerEngine.HARD;
+    }
+
+    public static void putDecode(int decode) {
+        Prefers.put("decode_" + sanitizePlayer(getPlayer()), decode == PlayerEngine.SOFT ? PlayerEngine.SOFT : PlayerEngine.HARD);
+    }
+
+    public static void putDecode(int player, int decode) {
+        Prefers.put("decode_" + sanitizePlayer(player), decode == PlayerEngine.SOFT ? PlayerEngine.SOFT : PlayerEngine.HARD);
     }
 
     public static int getMpvRender() {
@@ -425,7 +454,7 @@ public class PlayerSetting {
     }
 
     public static boolean isAutoChange() {
-        return Prefers.getBoolean("player_auto_change", true);
+        return Prefers.getBoolean("player_auto_change", false);
     }
 
     public static void putAutoChange(boolean autoChange) {

@@ -73,6 +73,38 @@ public record ThemeTokens(
         int colorOnItemOverlay
 ) {
 
+    /**
+     * 派生一个仅替换 FOCUS 槽的副本。
+     *
+     * <p>2026-11-25 起浅色/深色表的默认 FOCUS 槽统一为纯白 {@code #FFFFFFFF}
+     * （产品决策：所有焦点色默认白色），两者不再天然不同。主题行为测试因此
+     * 需要一个「仅 FOCUS 槽不同」的活动表来驱动 {@code ThemeBinder}，
+     * 避免测试依赖「换一张表必然换焦点色」这个已经不成立的旧前提。
+     */
+    public ThemeTokens withColorFocus(int colorFocus) {
+        return new ThemeTokens(
+                this.colorPrimary, this.colorOnPrimary, this.colorPrimaryContainer,
+                this.colorOnPrimaryContainer, this.colorSecondary, this.colorOnSecondary,
+                this.colorSecondaryContainer, this.colorOnSecondaryContainer, this.colorTertiary,
+                this.colorOnTertiary, this.colorError, this.colorOnError, this.colorErrorContainer,
+                this.colorOnErrorContainer, this.colorSuccess, this.colorOnSuccess,
+                this.colorSuccessContainer, this.colorOnSuccessContainer, this.colorWarning,
+                this.colorOnWarning, this.colorWarningContainer, this.colorOnWarningContainer,
+                this.colorSurface, this.colorSurfaceDim, this.colorSurfaceBright,
+                this.colorSurfaceContainerLowest, this.colorSurfaceContainerLow,
+                this.colorSurfaceContainer, this.colorSurfaceContainerHigh,
+                this.colorSurfaceContainerHighest, this.colorOnSurface, this.colorOnSurfaceVariant,
+                this.colorOutline, this.colorOutlineVariant, this.colorInverseSurface,
+                this.colorInverseOnSurface, this.colorInversePrimary, this.colorScrim,
+                this.colorShadow, colorFocus, this.focusScale, this.colorPlayerFocusRing,
+                this.colorPlayerCurrentRing, this.dialogOpacity, this.colorPlayerControl,
+                this.colorPlayerControlMuted, this.colorPlayerControlActive, this.colorPlayerScrim,
+                this.colorHealthGood, this.colorHealthWarn, this.colorHealthBad,
+                this.colorOverlayLight, this.colorOverlayDark, this.colorItemOverlay,
+                this.colorOnItemOverlay
+        );
+    }
+
     public static ThemeTokens light() {
         return new ThemeTokens(
             0xFF0B57D0,
@@ -114,16 +146,15 @@ public record ThemeTokens(
             0xFFA8C7FA,
             0x52000000,
             0xFF000000,
-            0xFF0B57D0,
+            0xFFFFFFFF,
             // 焦点缩放倍率与明暗模式无关：它是**动效**属性，不是配色属性。此前浅色表为
             // 1.0、深色表为 1.1，而各适配器一律写死 1.1，于是浅色主题的电视一旦改走 token
             // 就会丢掉缩放反馈。这里统一为 1.1（= 既有实机行为，也是 Android TV 按钮
             // 指南与设计文档 §5.2 记录的取值）。
             1.1f,
-            // 浅色表视频层环：FOCUS 深蓝在固定深靛玻璃上仅 1.83:1，
-            // 取 ThemeResolver 夹取到 ≥3:1 的派生值（与 values/webhtv_tokens.xml 同步）。
-            0xFF447BF5,
-            0xFF00A95A,
+            // 浅色表视频层环改为纯白，与全局焦点色一致（FongMi/TV 默认白色焦点环）。
+            0xFFFFFFFF,
+            0xFFFFFFFF,
             1.0f,
             0xFFFFFFFF,
             0xCCFFFFFF,
@@ -181,12 +212,12 @@ public record ThemeTokens(
             0xFF0B57D0,
             0x8A000000,
             0xFF000000,
-            0xFFF5F7FF,
+            0xFFFFFFFF,
             1.1f,
-            // 深色表视频层环 = 应用表面焦点环（近白）：深玻璃/深色画面都可读，
-            // 因此播放页只有一种高亮色。浅色表仍为固定玻璃上的派生夹取值。
-            0xFFF5F7FF,
-            0xFF00A95A,
+            // 深色表视频层环 = 应用表面焦点环（纯白）：深玻璃/深色画面都可读，
+            // 因此播放页只有一种高亮色。浅色表同为纯白，两表统一。
+            0xFFFFFFFF,
+            0xFFFFFFFF,
             1.0f,
             0xFFFFFFFF,
             0xCCFFFFFF,

@@ -115,10 +115,9 @@ public class SearchFieldFocusStateTest {
     }
 
     private static boolean containsColor(Bitmap bitmap, int color) {
-        int rgb = color & 0x00FFFFFF;
         for (int y = 0; y < bitmap.getHeight(); y++) {
             for (int x = 0; x < bitmap.getWidth(); x++) {
-                if ((bitmap.getPixel(x, y) & 0x00FFFFFF) == rgb) return true;
+                if (bitmap.getPixel(x, y) == color) return true;
             }
         }
         return false;

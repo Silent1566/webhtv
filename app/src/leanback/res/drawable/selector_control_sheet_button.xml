@@ -41,9 +41,6 @@
                 <shape android:shape="rectangle">
                     <corners android:radius="6dp" />
                     <solid android:color="#5CFFFFFF" />
-                    <stroke
-                        android:width="@dimen/webhtv_focus_ring_width"
-                        android:color="?attr/tvPlayerCurrentRing" />
                 </shape>
             </item>
             <!--
@@ -55,18 +52,12 @@
                 <shape android:shape="rectangle">
                     <corners android:radius="6dp" />
                     <solid android:color="#5CFFFFFF" />
-                    <stroke
-                        android:width="@dimen/webhtv_focus_ring_width"
-                        android:color="?attr/tvPlayerCurrentRing" />
                 </shape>
             </item>
             <item>
                 <shape android:shape="rectangle">
                     <corners android:radius="6dp" />
                     <solid android:color="#1FFFFFFF" />
-                    <stroke
-                        android:width="1dp"
-                        android:color="?attr/tvNormalStroke" />
                 </shape>
             </item>
         </selector>

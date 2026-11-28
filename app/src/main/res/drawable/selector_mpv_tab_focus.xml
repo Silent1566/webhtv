@@ -17,12 +17,18 @@
 
     实测（非文本 UI 门槛 3:1）：
     - 写死 #1A73E8：浅色面板 3.69:1、深色面板 3.00:1（刚好卡在门槛上）；
-    - ?attr/tvFocusRing：浅色表 #0B57D0 5.23:1、深色表 #F5F7FF 12.63:1。
+    - ?attr/tvFocusRing：改色前浅色表 #0B57D0 5.23:1、深色表 #F5F7FF 12.63:1。
+
+    2026-11-25：产品把默认 FOCUS 槽改为近白（所有焦点色默认白色）后，浅色表的
+    「浅填充 ?attr/colorSurfaceContainerHighest + 近白环」实测只剩约 1.15:1，环等于
+    看不见。聚焦/按下态的填充因此改为压暗遮罩 @color/webhtv_color_item_overlay
+    （40% 黑）：浅色面板压暗后近白环约 3.5:1，深色面板约 12:1，两张表都清晰，
+    且不写死任何调色板色值。
 -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:state_focused="true">
         <shape android:shape="rectangle">
-            <solid android:color="?attr/colorSurfaceContainerHighest" />
+            <solid android:color="@color/webhtv_color_item_overlay" />
             <corners android:radius="8dp" />
             <stroke
                 android:width="@dimen/webhtv_focus_ring_width"
@@ -31,7 +37,7 @@
     </item>
     <item android:state_pressed="true">
         <shape android:shape="rectangle">
-            <solid android:color="?attr/colorSurfaceContainerHighest" />
+            <solid android:color="@color/webhtv_color_item_overlay" />
             <corners android:radius="8dp" />
             <stroke
                 android:width="@dimen/webhtv_focus_ring_width"

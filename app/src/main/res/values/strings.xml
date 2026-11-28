@@ -1,7 +1,7 @@
 <resources xmlns:xliff="http://schemas.android.com/apk/res-auto">
 
     <!-- App -->
-   <string name="app_name">默影视</string>
+   <string name="app_name">蜂蜜影视</string>
    <string name="setting_app_branding">App icon</string>
     <string name="app_branding_icon_current">Default icon</string>
     <string name="app_branding_icon_history">Original icon</string>
@@ -280,6 +280,7 @@
     <string name="config_delete_message">Delete “%1$s”? Related playback history may also be lost. This cannot be undone.</string>
     <string name="config_current_delete_message">This interface is currently in use. Switch to another interface before deleting it.</string>
     <string name="setting_home_history">Home recent history</string>
+    <string name="setting_home_recommend">Home recent updates</string>
     <string name="setting_personal_recommendation">Personal recommendations</string>
     <string name="setting_recommendation_feedback">Not interested management</string>
     <string name="setting_recommendation_feedback_count">%1$d items · auto-restore after 90 days</string>
@@ -935,6 +936,7 @@
     <string name="theme_editor_hex_apply">Use this hex</string>
     <string name="theme_editor_hex_invalid">Enter #RRGGBB</string>
     <string name="theme_editor_preset_default">Default</string>
+    <string name="theme_editor_preset_honey">Honey</string>
     <string name="theme_editor_preset_wallpaper">Wallpaper</string>
     <string name="theme_editor_preset_blue">Ocean</string>
     <string name="theme_editor_preset_teal">Lagoon</string>
@@ -1513,6 +1515,19 @@
     <string name="player_preload_pause">Continue preload while paused</string>
     <string name="player_preload_pause_wifi">Wi-Fi only</string>
     <string name="player_preload_pause_always">Always</string>
+    <string name="player_seamless_queue">Seamless episode cache</string>
+    <string name="player_seamless_queue_value">%1$d episodes</string>
+    <string name="player_seamless_queue_off">Off (short drama only)</string>
+    <string name="player_seamless_switch">Seamless cache master switch</string>
+    <string name="player_input_title_depth">Input seamless cache episodes (0-10)</string>
+    <string name="player_input_title_threads">Input preload threads (1-128)</string>
+    <string name="player_input_title_size">Input disk preload quota in MB (128-32768)</string>
+    <string name="ad_rule_export">Export rules</string>
+    <string name="ad_rule_import">Import rules</string>
+    <string name="ad_rule_export_done">Exported %1$d rules to clipboard</string>
+    <string name="ad_rule_import_hint">Paste rules JSON or an http(s) URL</string>
+    <string name="ad_rule_import_done">Imported %1$d rules</string>
+    <string name="ad_rule_import_fail">Import failed: %1$s</string>
     <string name="player_auto_play">Auto play VOD</string>
     <string name="player_live_source_fallback">Switch live source on failure</string>
     <string name="player_auto_change">Auto source change</string>
@@ -1798,6 +1813,8 @@
     <string name="error_play_fallback">%1$s playback failed, switched to %2$s</string>
     <string name="error_play_ijk_unavailable">IJK is unavailable on this device</string>
     <string name="error_play_ijk_unavailable_switch">IJK is unavailable on this device, switched to %1$s</string>
+    <string name="error_play_external_unavailable">No external player available. Internal playback is unchanged.</string>
+    <string name="error_play_switch_restored">%1$s failed, restored to %2$s</string>
     <string name="error_play_tvbus">Error code: <xliff:g name="name">%s</xliff:g></string>
     <string name="error_detail">No play data</string>
     <string name="error_empty">Nothing here 👀</string>
@@ -2984,6 +3001,7 @@
     <string name="setting_ad_group_rule">Rules and stats</string>
     <string name="setting_ad_group_segment">Segment skipping</string>
     <string name="setting_ad_master">Ad blocking master switch</string>
+    <string name="setting_ad_notice">Ad-block success notice</string>
     <string name="dialog_tmdb_test_config">Test configuration</string>
     <string name="dialog_tmdb_test_result_title">Configuration test</string>
     <string name="dialog_tmdb_test_api_success">TMDB API: connected and returned valid data (%1$d ms)</string>
@@ -3118,5 +3136,13 @@
     <string name="plugin_manager_perm_events">Playback events (plugin.events)</string>
     <string name="plugin_manager_perm_episode_data">Episode data (plugin.data.episode)</string>
     <string name="plugin_panel_title">Plugin panel</string>
+    <string name="episode_cache_clear_title">Clear episode cache</string>
+    <string name="episode_cache_clear_confirm">Clear cached episodes for this title? This cannot be undone.</string>
+    <string name="player_preload_duration">Preload duration (minutes)</string>
+    <string name="player_preload_duration_value">%1$d min</string>
+    <string name="player_seamless_expand">Expand</string>
+    <string name="player_seamless_collapse">Collapse</string>
+    <string name="player_decode">Decoder</string>
+    <string name="player_seamless_detail">Seamless cache expands to the next episode automatically after playback.</string>
     <string name="crash_action_failed">Action failed. Please try again.</string>
 </resources>

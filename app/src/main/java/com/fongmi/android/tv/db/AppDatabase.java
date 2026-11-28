@@ -48,8 +48,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public abstract class AppDatabase extends RoomDatabase {
 
     // VERSION = 47 was the pre-identity-alias schema; 48 adds migration clues;
-    // 49 remembers the playback kernel per line instead of once per show.
-    public static final int VERSION = 49;
+    // 49 remembers the playback kernel per line instead of once per show;
+    // 50 lets Keep own its resume progress (episode/position) independent of History.
+    public static final int VERSION = 50;
     public static final String NAME = "tv";
     public static final String SYMBOL = "@@@";
     private static final int BACKUP_KEEP_COUNT = 7;
@@ -202,6 +203,7 @@ public abstract class AppDatabase extends RoomDatabase {
                 .addMigrations(Migrations.MIGRATION_46_47)
                 .addMigrations(Migrations.MIGRATION_47_48)
                 .addMigrations(Migrations.MIGRATION_48_49)
+                .addMigrations(Migrations.MIGRATION_49_50)
                 .openHelperFactory(new IntegrityRecoveringOpenHelperFactory(new FrameworkSQLiteOpenHelperFactory()))
                 .fallbackToDestructiveMigration(true)
                 .allowMainThreadQueries().build();

@@ -12,6 +12,17 @@ import com.google.android.material.card.MaterialCardView;
 final class TmdbCardFocusHelper {
 
     private static final int FOCUS_ELEVATION_DP = 8;
+    private static final int TAG_FOCUS_STATE = com.fongmi.android.tv.R.id.tag_tmdb_card_focus_state;
+
+    /** 单张卡片的焦点态缓存：颜色或宽度变化时重建，否则复用，避免每次焦点切换新建 drawable。 */
+    private static final class FocusState {
+        int backgroundColor;
+        int strokeColor;
+        int strokeWidthDp;
+        int focus;
+        int focusWidth;
+        GradientDrawable focusForeground;
+    }
 
     /**
      * 焦点环宽度（px）：唯一来源 {@code @dimen/webhtv_focus_ring_width}。
@@ -58,14 +69,27 @@ final class TmdbCardFocusHelper {
     }
 
     private static void apply(MaterialCardView card, boolean focused, int backgroundColor, int strokeColor, int strokeWidthDp) {
+        FocusState state = (FocusState) card.getTag(TAG_FOCUS_STATE);
+        if (state == null) {
+            state = new FocusState();
+            card.setTag(TAG_FOCUS_STATE, state);
+        }
         int focus = ThemeController.focusRingColor(card.getContext());
-        int focusWidth = focusStrokePx(card);
+        if (state.focus != focus || state.focusWidth == 0 || state.backgroundColor != backgroundColor
+                || state.strokeColor != strokeColor || state.strokeWidthDp != strokeWidthDp) {
+            state.focus = focus;
+            state.focusWidth = focusStrokePx(card);
+            state.backgroundColor = backgroundColor;
+            state.strokeColor = strokeColor;
+            state.strokeWidthDp = strokeWidthDp;
+            state.focusForeground = foregroundBorder(card, focus, state.focusWidth);
+        }
         card.setCardBackgroundColor(backgroundColor);
-        card.setStrokeColor(focused ? focus : strokeColor);
-        card.setStrokeWidth(focused ? focusWidth : ResUtil.dp2px(strokeWidthDp));
+        card.setStrokeColor(focused ? state.focus : strokeColor);
+        card.setStrokeWidth(focused ? state.focusWidth : ResUtil.dp2px(strokeWidthDp));
         card.setCardElevation(ResUtil.dp2px(focused ? FOCUS_ELEVATION_DP : 0));
         card.setTranslationZ(ResUtil.dp2px(focused ? FOCUS_ELEVATION_DP : 0));
-        card.setForeground(focused ? foregroundBorder(card, focus, focusWidth) : null);
+        card.setForeground(focused ? state.focusForeground : null);
         card.animate().cancel();
         card.setScaleX(1f);
         card.setScaleY(1f);

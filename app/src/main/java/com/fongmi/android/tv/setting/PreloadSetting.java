@@ -1,10 +1,12 @@
 package com.fongmi.android.tv.setting;
 
+import com.github.catvod.utils.Prefers;
+
 public class PreloadSetting {
 
     public static final int MIN_THREADS = 1;
-    public static final int MAX_THREADS = 4;
-    public static final int DEFAULT_THREADS = 1;
+    public static final int MAX_THREADS = 128;
+    public static final int DEFAULT_THREADS = 10;
     public static final int MIN_SIZE_MB = 128;
     public static final int MAX_SIZE_MB = 32768;
     public static final int MIN_TIME_SECONDS = 20;
@@ -13,6 +15,12 @@ public class PreloadSetting {
     public static final int STEP_TIME_SECONDS = 10;
     public static final int WHOLE_MEDIA_AHEAD_SECONDS = 0;
     public static final int DEFAULT_AHEAD_SECONDS = 300;
+    public static final int MIN_CACHE_MINUTES = 5;
+    public static final int DEFAULT_CACHE_MINUTES = 5;
+    /** Seamless multi-episode pre-buffer depth. 0 = only short-drama sites; 1..10 = also normal series. */
+    public static final int MIN_SEAMLESS_DEPTH = 0;
+    public static final int MAX_SEAMLESS_DEPTH = 10;
+    public static final int DEFAULT_SEAMLESS_DEPTH = 3;
     /** Legacy persisted value from the three-option pause preload setting. */
     public static final int PAUSE_PRELOAD_LEGACY_OFF = 0;
     public static final int PAUSE_PRELOAD_WIFI = 1;
@@ -21,6 +29,8 @@ public class PreloadSetting {
     private static final int[] SIZE_OPTIONS_MB = {128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768};
     private static final int[] AHEAD_OPTIONS_SECONDS = {60, 180, 300, 600, 1800, 3600, WHOLE_MEDIA_AHEAD_SECONDS};
     private static final int[] PAUSE_PRELOAD_OPTIONS = {PAUSE_PRELOAD_ALWAYS, PAUSE_PRELOAD_WIFI};
+    /** 无缝缓存集数档位：0 表示关闭（仅短剧站点保持默认无缝）。 */
+    private static final int[] SEAMLESS_DEPTH_OPTIONS = {0, 1, 2, 3, 5, 10};
 
     public static boolean isPreload() {
         return isPreload(PlayerSetting.getPlayer());
@@ -51,11 +61,11 @@ public class PreloadSetting {
     }
 
     public static int getPreloadSizeMb(int kernel) {
-        return closestSize(KernelPerformanceSetting.getPreloadSizeMb(PlayerSetting.sanitizePlayer(kernel)));
+        return KernelPerformanceSetting.getPreloadSizeMb(PlayerSetting.sanitizePlayer(kernel));
     }
 
     public static void putPreloadSizeMb(int size) {
-        KernelPerformanceSetting.putPreloadSizeMb(PlayerSetting.getPlayer(), closestSize(size));
+        KernelPerformanceSetting.putPreloadSizeMb(PlayerSetting.getPlayer(), size);
     }
 
     public static int getPreloadSizeOptionCount() {
@@ -68,8 +78,17 @@ public class PreloadSetting {
 
     public static int getPreloadSizeIndex() {
         int value = getPreloadSizeMb();
-        for (int i = 0; i < SIZE_OPTIONS_MB.length; i++) if (SIZE_OPTIONS_MB[i] == value) return i;
-        return 0;
+        int closest = 0;
+        int distance = Math.abs(value - SIZE_OPTIONS_MB[0]);
+        for (int i = 0; i < SIZE_OPTIONS_MB.length; i++) {
+            if (SIZE_OPTIONS_MB[i] == value) return i;
+            int current = Math.abs(value - SIZE_OPTIONS_MB[i]);
+            if (current < distance) {
+                closest = i;
+                distance = current;
+            }
+        }
+        return closest;
     }
 
     public static int getNextPreloadSizeMb() {
@@ -141,6 +160,48 @@ public class PreloadSetting {
         return seconds == WHOLE_MEDIA_AHEAD_SECONDS ? Long.MAX_VALUE : seconds * 1000L;
     }
 
+    private static final String KEY_SEAMLESS_ENABLED = "preload_seamless_enabled";
+    private static final String KEY_CACHE_MINUTES = "preload_cache_minutes";
+    private static final String KEY_SEAMLESS_EXPANDED = "preload_seamless_expanded";
+
+    /** Seamless multi-episode cache master switch. When off, ordinary series pre-buffer is disabled. */
+    public static boolean isSeamlessEnabled() {
+        return Prefers.getBoolean(KEY_SEAMLESS_ENABLED, true);
+    }
+
+    public static void putSeamlessEnabled(boolean enabled) {
+        Prefers.put(KEY_SEAMLESS_ENABLED, enabled);
+    }
+
+    /** Depth of the seamless pre-buffer queue for ordinary series. 0 disables it outside short-drama sites. */
+    public static int getSeamlessQueueDepth() {
+        return getSeamlessQueueDepth(PlayerSetting.getPlayer());
+    }
+
+    public static int getSeamlessQueueDepth(int kernel) {
+        if (!isSeamlessEnabled()) return MIN_SEAMLESS_DEPTH;
+        return clamp(KernelPerformanceSetting.getSeamlessQueueDepth(PlayerSetting.sanitizePlayer(kernel)),
+                MIN_SEAMLESS_DEPTH, MAX_SEAMLESS_DEPTH);
+    }
+
+    public static void putSeamlessQueueDepth(int depth) {
+        KernelPerformanceSetting.putSeamlessQueueDepth(PlayerSetting.getPlayer(), clamp(depth, MIN_SEAMLESS_DEPTH, MAX_SEAMLESS_DEPTH));
+    }
+
+    public static int getSeamlessDepthOptionCount() {
+        return SEAMLESS_DEPTH_OPTIONS.length;
+    }
+
+    public static int getSeamlessDepthAt(int index) {
+        return SEAMLESS_DEPTH_OPTIONS[clamp(index, 0, SEAMLESS_DEPTH_OPTIONS.length - 1)];
+    }
+
+    public static int getSeamlessDepthIndex() {
+        int value = getSeamlessQueueDepth();
+        for (int i = 0; i < SEAMLESS_DEPTH_OPTIONS.length; i++) if (SEAMLESS_DEPTH_OPTIONS[i] == value) return i;
+        return getSeamlessDepthOptionCount() - 1;
+    }
+
     public static int getPausePreloadPolicy() {
         return getPausePreloadPolicy(PlayerSetting.getPlayer());
     }
@@ -177,20 +238,24 @@ public class PreloadSetting {
         return policy == PAUSE_PRELOAD_ALWAYS ? PAUSE_PRELOAD_ALWAYS : PAUSE_PRELOAD_WIFI;
     }
 
-    private static int clamp(int value, int min, int max) {
-        return Math.min(Math.max(value, min), max);
+    public static int getCacheMinutes() {
+        return clamp(Prefers.getInt(KEY_CACHE_MINUTES, DEFAULT_CACHE_MINUTES), MIN_CACHE_MINUTES, 600);
     }
 
-    private static int closestSize(int value) {
-        int closest = SIZE_OPTIONS_MB[0];
-        int distance = Math.abs(value - closest);
-        for (int option : SIZE_OPTIONS_MB) {
-            int current = Math.abs(value - option);
-            if (current >= distance) continue;
-            closest = option;
-            distance = current;
-        }
-        return closest;
+    public static void putCacheMinutes(int minutes) {
+        Prefers.put(KEY_CACHE_MINUTES, clamp(minutes, MIN_CACHE_MINUTES, 600));
+    }
+
+    public static boolean isSeamlessExpanded() {
+        return Prefers.getBoolean(KEY_SEAMLESS_EXPANDED, false);
+    }
+
+    public static void putSeamlessExpanded(boolean expanded) {
+        Prefers.put(KEY_SEAMLESS_EXPANDED, expanded);
+    }
+
+    private static int clamp(int value, int min, int max) {
+        return Math.min(Math.max(value, min), max);
     }
 
     private static int closestAhead(int value) {

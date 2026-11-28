@@ -73,6 +73,10 @@ public final class DebugLogDialog {
                 }).show());
         android.widget.Button stop = new android.widget.Button(activity); stop.setText("停止深度统计"); stop.setFocusable(true); panel.addView(stop);
         stop.setOnClickListener(v -> { com.github.catvod.crawler.diagnostics.DiagnosticCapture.stop("user-stopped"); Notify.show("深度统计已停止"); });
+        // 切换诊断日志始终在记录（不依赖调试开关），一键把文件分享出去供排查。
+        android.widget.Button shareSwitch = new android.widget.Button(activity);
+        shareSwitch.setText("分享播放切换诊断日志"); shareSwitch.setFocusable(true); panel.addView(shareSwitch);
+        shareSwitch.setOnClickListener(v -> com.fongmi.android.tv.player.PlaybackSwitchLog.share(activity));
         android.widget.ScrollView scroll = new android.widget.ScrollView(activity); scroll.addView(panel);
         android.app.Dialog dialog = LightDialog.create(activity, activity.getString(R.string.setting_debug_log), scroll, activity.getString(R.string.debug_log_open_browser), v -> open(activity, localUrl), activity.getString(R.string.dialog_negative), null, activity.getString(R.string.debug_log_copy_url), v -> copy(activity, lanUrl));
         dialog.show();

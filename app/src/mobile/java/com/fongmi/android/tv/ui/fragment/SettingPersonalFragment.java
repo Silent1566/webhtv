@@ -15,13 +15,11 @@ import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.following.FollowingScheduler;
 import com.fongmi.android.tv.following.FollowingSettings;
-import com.fongmi.android.tv.setting.AppBranding;
 import com.fongmi.android.tv.setting.AutoBackupPolicy;
 import com.fongmi.android.tv.setting.GroupRuleConfig;
 import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder;
-import com.fongmi.android.tv.ui.activity.AppBrandingActivity;
 import com.fongmi.android.tv.ui.base.BaseFragment;
 import com.fongmi.android.tv.ui.dialog.GroupRuleDialog;
 import com.fongmi.android.tv.ui.dialog.SpeedSettingDialog;
@@ -69,6 +67,7 @@ public class SettingPersonalFragment extends BaseFragment {
         mBinding.playbackOverlay.setOnClickListener(this::setPlaybackOverlay);
         mBinding.playBackToDetail.setOnClickListener(this::setPlayBackToDetail);
         mBinding.episodeHistory.setOnClickListener(this::setEpisodeHistory);
+        mBinding.homeRecommend.setOnClickListener(this::setHomeRecommend);
         // Require a touch sequence which starts on this row. Keep the marker through
         // ACTION_UP so the following real click can change the persisted mode.
         mBinding.globalHistory.setOnTouchListener((view, event) -> {
@@ -89,7 +88,6 @@ public class SettingPersonalFragment extends BaseFragment {
         mBinding.siteColumn.setOnClickListener(this::setSiteColumn);
         mBinding.searchResultSort.setOnClickListener(this::setSearchResultSort);
         mBinding.resetApp.setOnClickListener(this::showResetAppDialog);
-        mBinding.appBranding.setOnClickListener(this::startAppBranding);
     }
 
     private void setText() {
@@ -99,6 +97,7 @@ public class SettingPersonalFragment extends BaseFragment {
         mBinding.playbackOverlayText.setText(getSwitch(Setting.isPlaybackOverlayEnabled()));
         mBinding.playBackToDetailText.setText(getSwitch(Setting.isPlayBackToDetail()));
         mBinding.episodeHistoryText.setText(getSwitch(Setting.isEpisodeHistory()));
+        mBinding.homeRecommendText.setText(getSwitch(Setting.isHomeRecommend()));
         mBinding.globalHistoryText.setText((globalHistoryMode = getResources().getStringArray(R.array.select_global_history_mode))[Setting.getGlobalHistoryMode()]);
         mBinding.interfaceFailoverText.setText((interfaceFailoverMode = getResources().getStringArray(R.array.select_interface_failover_mode))[Setting.getInterfaceFailoverMode()]);
         mBinding.playSpeedText.setText(getSpeedText(PlayerSetting.getDefaultSpeed()));
@@ -107,7 +106,6 @@ public class SettingPersonalFragment extends BaseFragment {
         mBinding.searchColumnText.setText(getSearchColumnText());
         mBinding.siteColumnText.setText((siteColumn = getResources().getStringArray(R.array.select_site_column))[Setting.getSiteColumn() - 1]);
         mBinding.searchResultSortText.setText((searchResultSort = getResources().getStringArray(R.array.select_search_result_sort))[Setting.getSearchResultSort()]);
-        mBinding.appBrandingText.setText(AppBranding.getSummary(requireContext()));
     }
 
     private String getSearchColumnText() {
@@ -179,6 +177,12 @@ public class SettingPersonalFragment extends BaseFragment {
         setText();
     }
 
+    private void setHomeRecommend(View view) {
+        Setting.putHomeRecommend(!Setting.isHomeRecommend());
+        RefreshEvent.home();
+        setText();
+    }
+
     private void setGlobalHistory(View view) {
         Setting.putGlobalHistoryMode((Setting.getGlobalHistoryMode() + 1) % globalHistoryMode.length);
         RefreshEvent.history();
@@ -230,10 +234,6 @@ public class SettingPersonalFragment extends BaseFragment {
                 .setNegativeButton(R.string.dialog_negative, null)
                 .setPositiveButton(R.string.dialog_positive, (dialog, which) -> resetApp())
                 .show();
-    }
-
-    private void startAppBranding(View view) {
-        AppBrandingActivity.start(requireActivity());
     }
 
     private void resetApp() {

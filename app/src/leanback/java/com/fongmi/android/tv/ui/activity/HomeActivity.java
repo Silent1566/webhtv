@@ -4,9 +4,11 @@ import android.annotation.SuppressLint;
 import android.app.SearchManager;
 import android.content.Intent;
 import android.os.Bundle;
+import android.os.SystemClock;
 import android.text.TextUtils;
 import android.view.KeyEvent;
 import android.view.View;
+import android.view.ViewParent;
 import android.view.ViewTreeObserver;
 import android.webkit.WebView;
 import android.widget.FrameLayout;
@@ -115,6 +117,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     private static final String TV_FULL = "tv-full";
     private static final long TYPE_SWITCH_DELAY_MS = 100;
     private static final long CONFIRM_LONG_PRESS_MS = 550;
+    private static final long BACK_EXIT_INTERVAL_MS = 2000;
 
     private ActivityHomeBinding mBinding;
     private ArrayObjectAdapter mHistoryAdapter;
@@ -135,6 +138,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     private String mCategorySiteKey = "";
     private String webChromeMode = TV_NORMAL;
     private String webDefaultChromeMode = TV_FULL;
+    private long mLastBackTime;
     private boolean webToolbarVisible = true;
     private boolean toolbarRequestedVisible = true;
     private boolean loadingHomeCategory;
@@ -186,7 +190,37 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
         super.onCreate(savedInstanceState);
     }
 
-    @Override
+    // 功能行首尾环形环绕的 Activity 级接管：焦点在第一个按钮按左 → 跳到行尾最后一个按钮，
+    // 在最后一个按钮按右 → 跳回第一个按钮。行级/项级环绕在部分真机上（目标在屏幕外、
+    // 布局回调不触发）会吞掉按键，这里在事件进视图树前确定性处理，挂到 dispatchKeyEvent 内。
+
+    private boolean wrapFuncRowEdge(KeyEvent event) {
+        View focus = getCurrentFocus();
+        if (focus == null || focus.getTag(R.id.tag_home_func_button) == null) return false;
+        ViewParent parent = focus.getParent();
+        while (parent != null && !(parent instanceof RecyclerView)) parent = parent.getParent();
+        if (!(parent instanceof RecyclerView grid) || grid.getAdapter() == null) return false;
+        int position = grid.getChildAdapterPosition(focus);
+        int count = grid.getAdapter().getItemCount();
+        if (position == RecyclerView.NO_POSITION || count <= 1) return false;
+        boolean left = KeyUtil.isLeftKey(event);
+        int target;
+        if (left && position == 0) target = count - 1;
+        else if (!left && position == count - 1) target = 0;
+        else return false;
+        focusFuncTarget(grid, target, 0);
+        return true;
+    }
+
+    /** 目标在屏幕外时 scrollToPosition 后布局要等下一帧，用 postDelayed 逐帧确认焦点落地；有上限，不长期占用主线程。 */
+    private void focusFuncTarget(RecyclerView grid, int target, int attempt) {
+        if (attempt > 8 || grid.getAdapter() == null || target >= grid.getAdapter().getItemCount()) return;
+        RecyclerView.ViewHolder holder = grid.findViewHolderForAdapterPosition(target);
+        if (holder != null && holder.itemView.requestFocus()) return;
+        grid.scrollToPosition(target);
+        grid.postDelayed(() -> focusFuncTarget(grid, target, attempt + 1), 33);
+    }
+
     protected void initView(Bundle savedInstanceState) {
         SpiderDebug.log("startup", "home initView start cost=%sms", System.currentTimeMillis() - App.time());
         mResult = Result.empty();
@@ -736,7 +770,8 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
                 setTypes(mHomeResult = result);
             }
             mResult = result;
-            addVideo(result);
+            // "更新推荐"关闭时，跳过首页推荐内容的追加；分类浏览结果不受影响。
+            if (categoryResult || Setting.isHomeRecommend()) addVideo(result);
             // 如果用户手动点击了"点播"按钮，数据加载完成后自动进入分类页
             if (pendingOpenVod && !result.getTypes().isEmpty()) {
                 pendingOpenVod = false;
@@ -753,7 +788,23 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
         mHistoryAdapter = new ArrayObjectAdapter(mPresenter = new HistoryPresenter(this));
         mAdapter.add(new ListRow(mFuncAdapter = new ArrayObjectAdapter(new FuncPresenter(this))));
         if (Setting.isHomeHistory()) mAdapter.add(R.string.home_history);
-        mAdapter.add(R.string.home_recommend);
+        if (Setting.isHomeRecommend()) mAdapter.add(R.string.home_recommend);
+    }
+
+    /**
+     * Keeps the "recent updates" header in sync with the setting at runtime.
+     * Recommendation rows always live after the header at the end of the adapter, so removing the
+     * header also removes every recommendation content row under it.
+     */
+    private void syncRecommendHeader() {
+        int index = mAdapter.indexOf(R.string.home_recommend);
+        if (Setting.isHomeRecommend()) {
+            if (index < 0) mAdapter.add(R.string.home_recommend);
+        } else if (index >= 0) {
+            int contentStart = index + 1;
+            if (mAdapter.size() > contentStart) mAdapter.removeItems(contentStart, mAdapter.size() - contentStart);
+            mAdapter.removeItems(index, 1);
+        }
     }
 
     private void setTitle() {
@@ -871,12 +922,40 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
         if (!mBinding.title.hasFocus()) mBinding.recycler.requestFocus();
     }
 
+    /**
+     * 从设置页返回时把焦点明确送回 Func 行第一个按钮「点播」。
+     * 主 recycler 第 0 行是 Func 行（见 setFunc 与 mAdapter 的组装顺序）；先选中该行，
+     * 待 holder 就绪后聚焦其第一个可聚焦子项，避免落回布局默认控件。
+     */
+    private void focusVodOnReturn() {
+        if (mAdapter.size() == 0) return;
+        mBinding.recycler.setSelectedPosition(0, holder -> {
+            if (holder == null || holder.itemView == null) return;
+            android.view.View target = firstFocusable(holder.itemView);
+            if (target != null) target.requestFocus();
+            else holder.itemView.requestFocus();
+        });
+    }
+
+    private static android.view.View firstFocusable(android.view.View view) {
+        if (view instanceof android.view.ViewGroup group) {
+            for (int i = 0; i < group.getChildCount(); i++) {
+                android.view.View child = group.getChildAt(i);
+                if (child.isFocusable() && child.getVisibility() == android.view.View.VISIBLE) return child;
+                android.view.View nested = firstFocusable(child);
+                if (nested != null) return nested;
+            }
+        }
+        return null;
+    }
+
     private void getVideo() {
         getVideo(false);
     }
 
     private void getVideo(boolean forceNative) {
         syncCategorySite();
+        syncRecommendHeader();
         // 这次刷新打给的是一个已经过去（已保存状态）的窗口：重建后的实例会由
         // initAfterFirstFrame → initConfig 自己加载。继续重排只会再撞一次事务守卫。
         if (!canCommitFragmentTransaction()) {
@@ -992,7 +1071,9 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
 
     private void clearRecommendRows() {
         mAdapter.remove("progress");
-        int index = getRecommendIndex();
+        int header = getRecommendHeaderIndex();
+        if (header < 0) return;
+        int index = header + 1;
         if (mAdapter.size() > index) mAdapter.removeItems(index, mAdapter.size() - index);
     }
 
@@ -1026,16 +1107,27 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     }
 
     private void getHistory(boolean renew) {
+        syncRecommendHeader();
         if (!Setting.isHomeHistory()) {
             removeHistoryRows();
             return;
         }
         int headerIndex = mAdapter.indexOf(R.string.home_history);
-        if (headerIndex == -1) mAdapter.add(getRecommendHeaderIndex(), R.string.home_history);
+        if (headerIndex == -1) {
+            int recommendHeader = getRecommendHeaderIndex();
+            if (recommendHeader < 0) recommendHeader = mAdapter.size();
+            mAdapter.add(recommendHeader, R.string.home_history);
+        }
         List<History> items = History.getForDisplay();
         int historyIndex = getHistoryIndex();
-        int recommendIndex = getRecommendIndex();
-        boolean exist = recommendIndex - historyIndex == 2;
+        boolean exist;
+        if (Setting.isHomeRecommend()) {
+            int recommendIndex = getRecommendIndex();
+            exist = recommendIndex - historyIndex == 2;
+        } else {
+            // No recommend header: the history ListRow, if present, directly follows the history header.
+            exist = historyIndex > 0 && historyIndex < mAdapter.size() && mAdapter.get(historyIndex) instanceof ListRow;
+        }
         if (renew) mHistoryAdapter = new ArrayObjectAdapter(mPresenter = new HistoryPresenter(this));
         if ((items.isEmpty() && exist) || (renew && exist)) mAdapter.removeItems(historyIndex, 1);
         if ((!items.isEmpty() && !exist) || (renew && exist)) mAdapter.add(historyIndex, new ListRow(mHistoryAdapter));
@@ -1046,6 +1138,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
         int headerIndex = mAdapter.indexOf(R.string.home_history);
         if (headerIndex == -1) return;
         int recommendIndex = mAdapter.indexOf(R.string.home_recommend);
+        if (recommendIndex < 0) recommendIndex = mAdapter.size();
         mAdapter.removeItems(headerIndex, recommendIndex - headerIndex);
         mHistoryAdapter.clear();
         mPresenter.setDelete(false);
@@ -1426,6 +1519,7 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
             else onHomeMenuKey();
             return true;
         }
+        if (KeyUtil.isActionDown(event) && (KeyUtil.isLeftKey(event) || KeyUtil.isRightKey(event)) && wrapFuncRowEdge(event)) return true;
         if (mWeb != null && mWeb.isVisible() && mBinding.webOverlay.getVisibility() == View.VISIBLE) {
             if (KeyUtil.isBackKey(event)) {
                 if (KeyUtil.isActionUp(event)) onBackInvoked();
@@ -1521,6 +1615,10 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
         syncTypeItems();
         resumeTypeSwitch();
         resumeDeferredFragmentWork();
+        // 设置页返回：把焦点送回 Func 行「点播」（一次性意图）。
+        if (com.fongmi.android.tv.ui.custom.ReturnFocusHint.consumeVodOnHomeReturn()) {
+            mBinding.recycler.post(this::focusVodOnReturn);
+        }
     }
 
     /** 回到前台后补做在「已保存状态」窗口里被推迟的分类页清理与首页内容刷新。 */
@@ -1567,6 +1665,8 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
             setHistoryDelete(false);
         } else if (mBinding.recycler.getSelectedPosition() != 0) {
             mBinding.recycler.scrollToPosition(0);
+            // 回到列表顶部后把焦点交给顶部「首页」分类 chip，而不是停在内容行。
+            selectHomeType();
         } else {
             exitHome();
         }
@@ -1590,7 +1690,14 @@ public class HomeActivity extends BaseActivity implements ExitConfirmDialog.List
     }
 
     private void exitHome() {
-        ExitConfirmDialog.create(PlaybackService.canContinueInBackground()).show(this);
+        // 首页返回两次退出：第一次提示，时间窗内第二次直接完全退出，不再弹确认对话框。
+        long now = SystemClock.elapsedRealtime();
+        if (now - mLastBackTime < BACK_EXIT_INTERVAL_MS) {
+            exitCompletely();
+        } else {
+            mLastBackTime = now;
+            Notify.show(R.string.app_exit_confirm);
+        }
     }
 
     private void continueInBackground() {

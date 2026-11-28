@@ -5,6 +5,9 @@ import android.text.TextUtils;
 import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.bean.History;
 import com.fongmi.android.tv.bean.TmdbItem;
+import com.fongmi.android.tv.db.AppDatabase;
+import com.fongmi.android.tv.event.RefreshEvent;
+import com.fongmi.android.tv.playback.TmdbSeasonProgressStore;
 import com.fongmi.android.tv.utils.Task;
 
 import java.util.function.Consumer;
@@ -98,6 +101,52 @@ public final class FollowingPlaybackBridge {
         FollowingUpdatePolicy.initializeNew(item, 0, now);
         item.nextCheckAt = now;
         return item;
+    }
+
+    /**
+     * Rebuilds a transient History from the Following snapshot when the playback history was cleared.
+     * Following keeps its own watchedEpisode/position/duration projection, so "continue watching" can
+     * still resume from the remembered episode even though the authoritative History row is gone.
+     * createTime is deliberately set to now so it is newer than any deletion tombstone, otherwise
+     * History.save() would discard the restored progress as "written before deletion".
+     */
+    public static History restoreHistory(Following item, FollowingSource source) {
+        if (item == null) return null;
+        if (item.watchedEpisode <= 0 && item.position <= 0) return null;
+        String siteKey = source != null && !TextUtils.isEmpty(source.siteKey) ? source.siteKey : item.siteKey;
+        String vodId = source != null && !TextUtils.isEmpty(source.vodId) ? source.vodId : item.vodId;
+        String key = FollowingStore.sourceHistoryKey(siteKey, vodId);
+        if (TextUtils.isEmpty(key)) return null;
+        History history = new History();
+        history.setKey(key);
+        history.setCid(item.cid);
+        history.setVodName(TextUtils.isEmpty(item.vodName) ? "" : item.vodName);
+        history.setVodPic(TextUtils.isEmpty(item.vodPic) ? "" : item.vodPic);
+        history.setMediaType(FollowingIdentity.normalizeMediaType(item.mediaType));
+        if (item.tmdbId > 0) history.setTmdbId(item.tmdbId);
+        history.setTmdbSeasonNumber(Math.max(0, item.watchedSeason));
+        history.setTmdbEpisodeNumber(Math.max(0, item.watchedEpisode));
+        // 续播定位依赖集名：VideoActivity.getSelectedEpisodePosition 用集号容错匹配选集列表。
+        // 纯数字集名可被 Util.getEpisodeNumber 直接解析，跨线路/换源后仍能命中第 watchedEpisode 集。
+        if (item.watchedEpisode > 0) history.setVodRemarks(String.valueOf(item.watchedEpisode));
+        history.setPosition(Math.max(0, item.position));
+        history.setDuration(Math.max(0, item.duration));
+        history.setCreateTime(System.currentTimeMillis());
+        return history;
+    }
+
+    /**
+     * Persists a rebuilt History so {@code HistoryResumePayload.restore} can find it on the
+     * receiving side: VideoActivity resolves the resume payload from the database, not from
+     * the Intent, so a transient-only History is dropped and playback restarts at episode 1
+     * (or bails out with "history_record_missing") once the user cleared playback history.
+     */
+    public static void persist(History history) {
+        if (history == null) return;
+        history.setCreateTime(System.currentTimeMillis());
+        AppDatabase.get().getHistoryDao().insertOrUpdate(history);
+        if (TmdbSeasonProgressStore.isEligible(history)) TmdbSeasonProgressStore.write(history);
+        RefreshEvent.history();
     }
 
     public static FollowingSource source(Following item, History history) {

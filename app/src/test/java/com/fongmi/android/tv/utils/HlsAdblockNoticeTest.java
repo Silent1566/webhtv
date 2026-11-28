@@ -29,7 +29,7 @@ public class HlsAdblockNoticeTest {
     public void noticeReportsSegmentCountAndTotalAdDuration() {
         String message = HlsAdblockNotice.message(3, 27.5);
 
-        assertEquals("已跳过 3 个广告片段，总广告时长 27.5 秒", message);
+        assertEquals("已跳过 3 个广告片段，时长 27.5 秒", message);
     }
 
     @Test
@@ -41,8 +41,8 @@ public class HlsAdblockNoticeTest {
 
     @Test
     public void noticeSwitchesToMinutesForLongAdBreaks() {
-        assertEquals("已跳过 30 个广告片段，总广告时长 1 分钟", HlsAdblockNotice.message(30, 60));
-        assertEquals("已跳过 45 个广告片段，总广告时长 2 分 5 秒", HlsAdblockNotice.message(45, 125));
+        assertEquals("已跳过 30 个广告片段，时长 1 分钟", HlsAdblockNotice.message(30, 60));
+        assertEquals("已跳过 45 个广告片段，时长 2 分 5 秒", HlsAdblockNotice.message(45, 125));
     }
 
     @Test
@@ -51,7 +51,7 @@ public class HlsAdblockNoticeTest {
         assertEquals("59.9 秒", HlsAdblockNotice.durationText(59.94));
         assertEquals("1 分钟", HlsAdblockNotice.durationText(59.96));
         assertEquals("1 分 30 秒", HlsAdblockNotice.durationText(90));
-        assertEquals("已跳过 12 个广告片段，总广告时长 1 分钟", HlsAdblockNotice.message(12, 59.96));
+        assertEquals("已跳过 12 个广告片段，时长 1 分钟", HlsAdblockNotice.message(12, 59.96));
     }
 
     @Test
@@ -60,7 +60,7 @@ public class HlsAdblockNoticeTest {
         assertEquals("", HlsAdblockNotice.durationText(0));
         assertEquals("已跳过 2 个广告片段", HlsAdblockNotice.message(2, 0.04));
         assertEquals("0.2 秒", HlsAdblockNotice.durationText(0.16));
-        assertEquals("已跳过 2 个广告片段，总广告时长 0.2 秒", HlsAdblockNotice.message(2, 0.16));
+        assertEquals("已跳过 2 个广告片段，时长 0.2 秒", HlsAdblockNotice.message(2, 0.16));
     }
 
     @Test

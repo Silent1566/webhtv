@@ -3,4 +3,6 @@
     <item name="tmdb_episode_still_request_key" type="id" />
     <item name="update_fullscreen_inset" type="id" />
     <item name="loadHost" type="id" />
+    <item name="tag_tmdb_card_focus_state" type="id" />
+    <item name="tag_home_func_button" type="id" />
 </resources>

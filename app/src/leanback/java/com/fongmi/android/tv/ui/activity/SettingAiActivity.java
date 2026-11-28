@@ -42,6 +42,11 @@ public class SettingAiActivity extends BaseActivity {
     }
 
     @Override
+    protected int settingTopFocusId() {
+        return R.id.aiRecommendation;
+    }
+
+    @Override
     protected void initView(Bundle savedInstanceState) {
         mBinding.aiRecommendation.requestFocus();
         realtimeModelLabels = ResUtil.getStringArray(R.array.select_realtime_subtitle_model);

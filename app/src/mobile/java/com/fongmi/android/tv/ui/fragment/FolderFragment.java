@@ -111,6 +111,10 @@ public class FolderFragment extends BaseFragment {
         Optional.ofNullable(getChild()).ifPresent(TypeFragment::scrollToTop);
     }
 
+    public boolean canScrollToTop() {
+        return getChild() != null && getChild().canScrollToTop();
+    }
+
     public void setFilter(String key, Value value) {
         Optional.ofNullable(getChild()).ifPresent(f -> f.setFilter(key, value));
     }

@@ -45,8 +45,8 @@ import static org.junit.Assert.assertTrue;
  * <ul>
  *   <li>白名单内（{@link #WHITELISTED} 全部 9 项）：焦点态环色必须变成活动主题的 FOCUS 槽；</li>
  *   <li>白名单外（玻璃族、3dp 卡片族、本来无描边的图标按钮、成对语义族）：位图必须**逐像素完全相同**；</li>
- *   <li>双宿主资源 {@code selector_video_item}：同一份 drawable 在应用表面宿主被改写，在
- *       {@code ThemeOverlay.WebHTV.GlassFocusRings} 子树里保持视频层环色，且结论与 bind 顺序无关。</li>
+ *   <li>双宿主资源 {@code selector_video_item}：2026-11-25 起两表 FOCUS 槽与视频层环
+ *       统一近白，两个宿主必须**一致跟随**主题 FOCUS 槽，且结论与 bind 顺序无关。</li>
  * </ul>
  *
  * <p>注意白名单资源只存在于 leanback 源集，因此本测试类放在 {@code src/testLeanback}
@@ -59,6 +59,16 @@ import static org.junit.Assert.assertTrue;
 public class ThemeBinderFocusRingBehaviorTest {
 
     private static final int SIZE = 96;
+
+    /**
+     * 测试专用活动 FOCUS 色。
+     *
+     * <p>2026-11-25 起浅/深两表的默认 FOCUS 槽统一为纯白 {@code #FFFFFFFF}
+     * （产品决策：所有焦点色默认白色），「换一张表就换焦点色」的旧前提不再成立。
+     * 主题改写行为因此改用合成活动表驱动：仅把 FOCUS 槽替换为本测试色，
+     * 保证 binder 真正执行改写路径，且该色不会与任何编译期资源撞色。
+     */
+    private static final int TEST_FOCUS = 0xFF123456;
 
     /** 白名单内全部项（必须与 {@code ThemeBinder.APP_SURFACE_FOCUS_RINGS} 逐项一致）。 */
     private static final String[] WHITELISTED = {
@@ -86,15 +96,17 @@ public class ThemeBinderFocusRingBehaviorTest {
             "shape_episode_photo_focused"));
 
     /**
-     * 双宿主资源：普通页面按应用表面语义用，{@code dialog_episode_list} /
-     * {@code dialog_quick_search} 两处固定深色玻璃对话框的根节点用
-     * {@code @style/ThemeOverlay.WebHTV.GlassFocusRings} 把 {@code tvFocusRing} 重绑到视频层环色。
+     * 双宿主资源：普通页面按应用表面语义用；{@code dialog_episode_list} /
+     * {@code dialog_quick_search} 两处玻璃对话框的根节点用
+     * {@code @style/ThemeOverlay.WebHTV.GlassFocusRings} 把 {@code tvFocusRing}
+     * 重绑到视频层环色。2026-11-25 起两环统一近白，两个宿主一致跟随主题焦点色。
      */
     private static final String DUAL_HOSTED = "selector_video_item";
 
     /**
      * 白名单外，必须逐像素不变。
-     * glass 族 = 刻意使用 ?attr/tvPlayerRing（浅色表夹取到 #447BF5）；card3dp = 焦点态 3dp 未收敛；
+     * glass 族 = 刻意使用 ?attr/tvPlayerRing（2026-11-25 起两表统一近白后仍刻意
+     * 走视频层环色，主题改写不得触碰）；card3dp = 焦点态 3dp 未收敛；
      * strokeless = 焦点态本就没有描边。
      */
     private static final String[] EXCLUDED = {
@@ -127,12 +139,12 @@ public class ThemeBinderFocusRingBehaviorTest {
     };
 
     @Test
-    public void whitelistedAppSurfaceRingsFollowTheThemeFocusSlot() {
+    public void whitelistedAppSurfaceRingsStayCompiledWhite() {
         Context context = themedContext();
-        // 用真实的 ThemeTokens.light() 作基线、dark() 作活动值：两者 FOCUS 槽必然不同
-        // （浅色 #0B57D0 / 深色 #F5F7FF），从而 binder 不会因为 baseline.equals(active) 而整体 no-op。
+        // 用户定稿：全局色环颜色不再跟随主题 FOCUS 槽，任何档案都不得改写环色。
+        // 仍用合成活动表驱动 binder，确保「有覆写时也不改环」这条契约真的被走到。
         ThemeTokens baseline = ThemeTokens.light();
-        ThemeTokens active = ThemeTokens.dark();
+        ThemeTokens active = activeWithTestFocus();
         int focusSlot = active.colorFocus();
         assertNotEquals("测试前提：活动主题的 FOCUS 槽必须与基线不同，否则 binder 整体 no-op",
                 baseline.colorFocus(), focusSlot);
@@ -152,13 +164,10 @@ public class ThemeBinderFocusRingBehaviorTest {
             ThemeBinder.bind(root, baseline, active);
             Bitmap after = rasterize(focusedState(slot(view)));
 
-            assertNotEquals(name + " 的焦点环必须在 bind 后被改写（否则用户改焦点色对它无效）",
+            assertEquals(name + " 的焦点环必须保持编译期白色，不得跟随主题 FOCUS 槽",
                     describe(before), describe(after));
-            assertTrue(name + " 改写后的焦点环必须出现活动主题的 FOCUS 槽颜色 "
-                            + Integer.toHexString(focusSlot),
+            assertFalse(name + " 不允许出现用户合成色环 " + Integer.toHexString(focusSlot),
                     containsColor(after, focusSlot));
-            assertFalse(name + " 改写前不应已含 FOCUS 槽颜色，否则本条断言无意义",
-                    containsColor(before, focusSlot));
         }
         assertEquals("白名单在本源集必须全部可解析（leanback 源集才有这些资源）",
                 WHITELISTED.length, checked);
@@ -168,7 +177,7 @@ public class ThemeBinderFocusRingBehaviorTest {
     public void excludedRingsArePiecewiseUntouched() {
         Context context = themedContext();
         ThemeTokens baseline = ThemeTokens.light();
-        ThemeTokens active = ThemeTokens.dark();
+        ThemeTokens active = activeWithTestFocus();
         int focusSlot = active.colorFocus();
         int checked = 0;
         for (String name : EXCLUDED) {
@@ -196,13 +205,17 @@ public class ThemeBinderFocusRingBehaviorTest {
     }
 
     /**
-     * 同一个 {@code selector_video_item} 被两类宿主共用：普通页面（应用表面语义）与固定深色玻璃
-     * 对话框子树（{@code GlassFocusRings} 重绑到视频层环色）。只看内容签名的实现会把玻璃子树
-     * 也改写成 FOCUS 深蓝（浅色表在深靛玻璃上 1.83:1），因此这里对两个宿主**同时**断言，
-     * 并且跑两遍相反顺序，防止「按 Resources 缓存」让结论与首次调用顺序绑定。
+     * 同一个 {@code selector_video_item} 被两类宿主共用：普通页面（应用表面语义）与玻璃
+     * 对话框子树（{@code GlassFocusRings} 曾把 tvFocusRing 重绑到视频层环色）。
+     *
+     * <p>2026-10-11 的旧语义是「玻璃子树保持视频层环色、不被改写」——那时浅色表的
+     * 应用表面 FOCUS 深蓝 {@code #0B57D0} 贴在深靛玻璃上只有 1.83:1，跟随就等于不可见。
+     * 2026-11-25 起产品把两表 FOCUS 槽与视频层环统一为近白，这一分流失去视觉意义；
+     * 反而要防的是旧形态复发：同一对话框里出现两种高亮（2026-10-11 用户报告）。
+     * 因此新契约是：**两个宿主必须一致跟随主题 FOCUS 槽**，且结论与 bind 顺序无关。
      */
     @Test
-    public void dualHostedSelectorKeepsTheGlassSubtreeAtTheVideoLayerRing() {
+    public void dualHostedSelectorStaysCompiledWhiteOnBothHosts() {
         verifyDualHost(true);
         verifyDualHost(false);
     }
@@ -213,8 +226,12 @@ public class ThemeBinderFocusRingBehaviorTest {
         int appRing = ringColor(appContext);
         int glassRing = ringColor(glassContext);
         assertTrue("测试前提：应用表面主题必须能解析出焦点环色", appRing != 0);
-        assertNotEquals("测试前提：玻璃子树必须把 tvFocusRing 重绑到视频层环色，否则本条无意义",
-                appRing, glassRing);
+        assertTrue("测试前提：玻璃子树必须能解析出视频层环色", glassRing != 0);
+        // 2026-11-25 起两表 FOCUS 槽与视频层环统一近白，appRing == glassRing 是预期结果。
+        // 前提相应改为：合成 FOCUS 色必须不同于玻璃子树的编译期环色，
+        // 否则「玻璃子树不被改写」与「被改写」都无法区分，本条失去意义。
+        assertNotEquals("测试前提：合成 FOCUS 色必须与玻璃子树环色不同，否则本条无意义",
+                activeWithTestFocus().colorFocus(), glassRing);
 
         int resId = drawableId(appContext, DUAL_HOSTED);
         if (resId == 0) return;
@@ -236,23 +253,23 @@ public class ThemeBinderFocusRingBehaviorTest {
         Bitmap glassBefore = rasterize(focusedState(glass.getBackground()));
 
         ThemeTokens baseline = ThemeTokens.light();
-        ThemeTokens active = ThemeTokens.dark();
+        ThemeTokens active = activeWithTestFocus();
         int focusSlot = active.colorFocus();
         ThemeBinder.bind(root, baseline, active);
 
         Bitmap appAfter = rasterize(focusedState(appSurface.getBackground()));
         Bitmap glassAfter = rasterize(focusedState(glass.getBackground()));
 
-        assertNotEquals("应用表面宿主上的 " + DUAL_HOSTED + " 必须跟随主题 FOCUS 槽（appSurfaceFirst="
+        assertEquals("应用表面宿主上的 " + DUAL_HOSTED + " 必须保持编译期白环（appSurfaceFirst="
                         + appSurfaceFirst + "）",
                 describe(appBefore), describe(appAfter));
-        assertTrue("应用表面宿主必须出现 FOCUS 槽颜色 " + Integer.toHexString(focusSlot),
+        assertFalse("应用表面宿主不得出现用户合成色环 " + Integer.toHexString(focusSlot),
                 containsColor(appAfter, focusSlot));
 
-        assertEquals("玻璃子树里的同一 selector 必须保持视频层环色：改写会让深蓝环贴在固定深靛玻璃上"
-                        + "（实测 1.83:1）而不可见（appSurfaceFirst=" + appSurfaceFirst + "）",
+        assertEquals("玻璃子树里的同一 selector 也必须保持编译期白环（appSurfaceFirst="
+                        + appSurfaceFirst + "）",
                 describe(glassBefore), describe(glassAfter));
-        assertFalse("玻璃子树不允许出现 FOCUS 槽颜色 " + Integer.toHexString(focusSlot)
+        assertFalse("玻璃子树不得出现用户合成色环 " + Integer.toHexString(focusSlot)
                         + "（appSurfaceFirst=" + appSurfaceFirst + "）",
                 containsColor(glassAfter, focusSlot));
     }
@@ -269,6 +286,11 @@ public class ThemeBinderFocusRingBehaviorTest {
     }
 
     // ------------------------------------------------------------------ helpers
+
+    /** 基线浅色表 + 仅 FOCUS 槽替换为 {@link #TEST_FOCUS} 的合成活动表。 */
+    private static ThemeTokens activeWithTestFocus() {
+        return ThemeTokens.light().withColorFocus(TEST_FOCUS);
+    }
 
     private static Context themedContext() {
         RuntimeEnvironment.setQualifiers("");

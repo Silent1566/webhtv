@@ -104,6 +104,7 @@ import com.fongmi.android.tv.following.FollowingSource;
 import com.fongmi.android.tv.impl.CustomTarget;
 import com.fongmi.android.tv.model.SiteViewModel;
 import com.fongmi.android.tv.playback.PlaybackEventCollector;
+import com.fongmi.android.tv.playback.ProgressVault;
 import com.fongmi.android.tv.playback.HistoryResumePayload;
 import com.fongmi.android.tv.playback.origin.OriginHistoryPlayback;
 import com.fongmi.android.tv.playback.PlaybackOrientation;
@@ -2493,6 +2494,13 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         mBinding.control.action.player.setText(player().getPlayerText());
     }
 
+    @Override
+    protected void onManualSwitchRestored(int player) {
+        super.onManualSwitchRestored(player);
+        setPlayerKernel();
+        setDecode();
+    }
+
     /**
      * 起播前把内核切到本剧记住的选择，并返回该内核给取址用——取播放地址要按内核区分线路。
      * 记住的内核只对当前线路自己的记录生效；跨源聚合来的记录回落到设置页的全局默认。
@@ -3096,8 +3104,12 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
     }
 
     private boolean isShortDramaQueueEligible(Result result) {
-        if (!PlaybackExperimentSetting.isAllowed(PlaybackExperimentPolicy.Action.EXO_SHORT_DRAMA_QUEUE)) return false;
-        if (!isShortDramaSource() || service() == null || player() == null || !player().isExo()
+        boolean shortDrama = isShortDramaSource();
+        // Ordinary series can also use the seamless pre-buffer queue when the depth setting is > 0.
+        boolean seamlessSeries = !shortDrama && PreloadSetting.getSeamlessQueueDepth() > 0;
+        if (!shortDrama && !seamlessSeries) return false;
+        if (shortDrama && !PlaybackExperimentSetting.isAllowed(PlaybackExperimentPolicy.Action.EXO_SHORT_DRAMA_QUEUE)) return false;
+        if (service() == null || player() == null || !player().isExo()
                 || !player().supportsPlaylistQueue() || !PreloadSetting.isPreload(PlayerSetting.EXO)) return false;
         if (MultiThreadProxySetting.get().enabled() || player().isRepeatOne() || mHistory == null
                 || mHistory.getOpening() > 0 || mHistory.getEnding() > 0
@@ -3213,7 +3225,7 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         mShortDramaQueuedSpec = spec;
         mShortDramaQueuedResult = result;
         mShortDramaQueuedEpisode = target;
-        player().setPlaylistPreloadDurationMs(5_000L);
+        player().setPlaylistPreloadDurationMs(Math.max(5_000L, PreloadSetting.getPreloadDurationMs()));
         if (SpiderDebug.isEnabled()) SpiderDebug.log("short-drama-queue", "append generation=%d index=%d kind=%s", generation, target.getIndex(), resolved.kind());
     }
 
@@ -5636,17 +5648,10 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         new WebHtvAlertDialogBuilder(this).setItems(items, (dialog, index) -> {
             if (index < kernel.length) {
                 int which = PlayerSetting.kernelAt(index);
-                if (!refreshAndSwitchPlayerKernel(which)) {
-                    clearLyrics();
-                    player().switchPlayerManually(which);
-                    setPlayer();
-                    setDecode();
-                    rememberPlayerKernel(kernelFlag(), which);
-                }
+                if (!refreshAndSwitchPlayerKernel(which)) switchPlayerKernelDirectly(which);
             } else {
                 playerKernelSwitchRequestId++;
-                PlayerHelper.choose(this, player().getUrl(), player().getHeaders(), player().isVod(), player().getPosition(), mBinding.control.title.getText());
-                setRedirect(true);
+                if (PlayerHelper.choose(this, player().getUrl(), player().getHeaders(), player().isVod(), player().getPosition(), mBinding.control.title.getText())) setRedirect(true);
             }
         }).show();
     }
@@ -5656,6 +5661,21 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         mClock.setCallback(null);
         onChoose();
         setR1Callback();
+    }
+
+    /**
+     * 直接用当前已解析的播放源换内核，不依赖 spider 重新取址。
+     * 用于 reparse 失败/返回无效的兜底：B站合集这类 type=3 线路重新取址容易失败，
+     * 但当前正在播的 URL 与 headers 已经可用，换引擎无需再取一次址。
+     */
+    private void switchPlayerKernelDirectly(int type) {
+        clearLyrics();
+        int next = PlayerSetting.sanitizePlayer(type);
+        player().switchPlayerManually(next);
+        setPlayer();
+        setDecode();
+        setR1Callback();
+        rememberPlayerKernel(kernelFlag(), next);
     }
 
     private boolean onPlayerKernelLong() {
@@ -5688,10 +5708,9 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
                 App.post(() -> {
                     if (requestId != playerKernelSwitchRequestId
                             || !isCurrentPlayerContentRequest(requestId, generation, key, flag, episode)) return;
-                    setPlayerKernel();
-                    setDecode();
-                    setR1Callback();
-                    Notify.show(e.getMessage());
+                    // 重新取址失败不代表内核切不了：当前源已经可用，直接换引擎保证任意线路都能切。
+                    SpiderDebug.log("video-flow", "switch player refresh failed, fallback to direct switch type=%d err=%s", nextType, e.getMessage());
+                    switchPlayerKernelDirectly(nextType);
                 });
             }
         });
@@ -5704,14 +5723,16 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
                 || !isCurrentPlayerContentRequest(requestId, generation, key, flag, episode)) return;
         if (!canApplyPlayerContentRequest(requestId, generation, key, flag, episode)) return;
         if (result == null || result.hasMsg() || result.getRealUrl().isEmpty()) {
-            Notify.show(result != null && result.hasMsg() ? result.getMsg() : getString(R.string.error_play_url));
-        } else {
-            PlayerManager danmakuManager = player();
-            String beforeTrace = danmakuManager.getPlaybackTraceId();
-            player().switchPlayer(type, result, activePlaybackKey(), metadata, isUseParse(), position, speed, repeat);
-            rememberPlayerKernel(flag, type);
-            searchAutoDanmaku(result, danmakuManager, beforeTrace);
+            // 取址返回空/报错同样回退到当前源直接切，避免「切内核报错」弹窗中断切换。
+            SpiderDebug.log("video-flow", "switch player refresh invalid result, fallback to direct switch type=%d msg=%s", type, result == null ? "null" : result.getMsg());
+            switchPlayerKernelDirectly(type);
+            return;
         }
+        PlayerManager danmakuManager = player();
+        String beforeTrace = danmakuManager.getPlaybackTraceId();
+        player().switchPlayer(type, result, activePlaybackKey(), metadata, isUseParse(), position, speed, repeat);
+        rememberPlayerKernel(flag, type);
+        searchAutoDanmaku(result, danmakuManager, beforeTrace);
         setPlayerKernel();
         setDecode();
         setR1Callback();
@@ -6266,6 +6287,14 @@ private final Task.Scope mPersonalRecommendationTasks = new Task.Scope(Task.reco
         mHistory = resumeHistory == null
                 ? History.findPlayback(getHistoryKey(), List.of(item.getName(), getName()), item.getFlags(), tmdbItem, currentSourceSeasonNumber(item))
                 : isOriginSession() ? resumeHistory : resumeHistory.forPlaybackKey(getHistoryKey(), VodConfig.getCid());
+        // 收藏夹入口续播优先级：Keep 自身进度 > 旧保险库兜底。
+        // Keep 已自带进度后，清空历史不会影响收藏；Vault 仅为升级前老数据兜底。
+        // 普通视频历史被删除后不走此路径，避免删掉的进度被复活。
+        if (isFromCollect() && mHistory == null && resumeHistory == null) {
+            mHistory = com.fongmi.android.tv.bean.Keep.resumeProgress(VodConfig.getCid(), getHistoryKey());
+            if (mHistory == null) mHistory = ProgressVault.resume(VodConfig.getCid(), getHistoryKey());
+            if (mHistory != null) FollowingPlaybackBridge.persist(mHistory);
+        }
         mHistory = mHistory == null ? createHistory(item) : mHistory;
         if (!TextUtils.isEmpty(getWallPic())) mHistory.setWallPic(getWallPic());
         // 文件夹点选需保留旧集身份，交给显式选集链路判断是否重置进度。

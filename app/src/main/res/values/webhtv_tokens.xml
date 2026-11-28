@@ -50,10 +50,10 @@
         非文本门槛）的派生色。深色表不需要这层夹取，取与应用表面焦点环一致的近白
         （见 values-night/webhtv_tokens.xml 与 ThemeResolver.PLAYER_RING_BACKDROPS）。
     -->
-    <color name="webhtv_color_player_focus_ring">#447BF5</color>
-    <color name="webhtv_color_player_current_ring">#00A95A</color>
+    <color name="webhtv_color_player_focus_ring">#FFFFFFFF</color>
+    <color name="webhtv_color_player_current_ring">#FFFFFFFF</color>
     <color name="webhtv_color_shadow">#000000</color>
-    <color name="webhtv_color_focus">#0B57D0</color>
+    <color name="webhtv_color_focus">#FFFFFFFF</color>
     <color name="webhtv_color_player_control">#FFFFFF</color>
     <color name="webhtv_color_player_control_muted">#CCFFFFFF</color>
     <color name="webhtv_color_player_control_active">#FFD35C</color>

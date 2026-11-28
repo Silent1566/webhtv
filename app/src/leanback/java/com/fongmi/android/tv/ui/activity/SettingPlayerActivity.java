@@ -4,12 +4,19 @@ import android.app.Activity;
 import android.content.Intent;
 import android.os.Bundle;
 import android.provider.Settings;
+import android.text.InputType;
+import android.view.KeyEvent;
 import android.view.View;
+import android.widget.EditText;
+import android.widget.FrameLayout;
+import android.widget.SeekBar;
 
+import androidx.appcompat.app.AlertDialog;
 import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.databinding.ActivitySettingPlayerBinding;
+import com.fongmi.android.tv.db.AppDatabase;
 import com.fongmi.android.tv.impl.BufferListener;
 import com.fongmi.android.tv.impl.SpeedListener;
 import com.fongmi.android.tv.impl.UaListener;
@@ -18,6 +25,7 @@ import com.fongmi.android.tv.player.mpv.MpvConfigStore;
 import com.fongmi.android.tv.setting.PlaybackPerformanceSetting;
 import com.fongmi.android.tv.setting.PlayerButtonSetting;
 import com.fongmi.android.tv.setting.LiveSetting;
+import com.fongmi.android.tv.player.engine.PlayerEngine;
 import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.PreloadSetting;
 import com.fongmi.android.tv.setting.Setting;
@@ -35,12 +43,14 @@ import com.fongmi.android.tv.ui.dialog.UaDialog;
 import com.fongmi.android.tv.ui.dialog.VideoAspectModeDialog;
 import com.fongmi.android.tv.utils.FileUtil;
 import com.fongmi.android.tv.utils.ResUtil;
+import com.fongmi.android.tv.utils.Task;
 
 import java.text.DecimalFormat;
+import java.util.function.IntConsumer;
 
 import is.xyz.mpv.MPVLib;
 
-public class SettingPlayerActivity extends BaseActivity implements UaListener, BufferListener, SpeedListener {
+public class SettingPlayerActivity extends BaseActivity implements UaListener, BufferListener, SpeedListener, SeekBar.OnSeekBarChangeListener {
 
     private ActivitySettingPlayerBinding mBinding;
     private DecimalFormat format;
@@ -52,6 +62,7 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
     private String[] mpvRender;
     private String[] playCache;
     private String[] render;
+    private String[] decodeModes;
     private String[] scale;
     private String[] badgePosition;
     private String[] osd;
@@ -70,11 +81,16 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
     }
 
     @Override
+    protected int settingTopFocusId() {
+        return R.id.decode;
+    }
+
+    @Override
     protected void initView(Bundle savedInstanceState) {
         setVisible();
         format = new DecimalFormat("0.#");
         PlaybackPerformanceSetting.ensureInitialized();
-        mBinding.exo4kCompat.requestFocus();
+        mBinding.decode.requestFocus();
         mBinding.uaText.setText(Setting.getUa());
         mBinding.aacText.setText(getSwitch(PlayerSetting.isPreferAAC()));
         mBinding.tunnelText.setText(getSwitch(PlayerSetting.isTunnel()));
@@ -106,6 +122,7 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
         mBinding.lutText.setText(LutSetting.getSummary());
         setMpvRows();
         mBinding.renderText.setText((render = ResUtil.getStringArray(R.array.select_render))[PlayerSetting.getRender()]);
+        mBinding.decodeText.setText((decodeModes = ResUtil.getStringArray(R.array.select_decode))[PlayerSetting.getDecode()]);
         mBinding.captionText.setText((caption = ResUtil.getStringArray(R.array.select_caption))[PlayerSetting.isCaption() ? 1 : 0]);
         hidePerformanceRows();
     }
@@ -133,9 +150,27 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
         mBinding.playCache.setOnClickListener(this::setPlayCache);
         mBinding.preload.setOnClickListener(this::setPreload);
         mBinding.preloadThread.setOnClickListener(this::setPreloadThread);
+        mBinding.preloadThreadBar.setOnSeekBarChangeListener(this);
         mBinding.preloadSize.setOnClickListener(this::setPreloadSize);
+        mBinding.preloadSizeBar.setOnSeekBarChangeListener(this);
         mBinding.preloadTime.setOnClickListener(this::setPreloadTime);
         mBinding.preloadAhead.setOnClickListener(this::setPreloadAhead);
+        mBinding.preloadSeamless.setOnClickListener(this::setPreloadSeamless);
+        mBinding.preloadSeamlessBar.setOnSeekBarChangeListener(this);
+        mBinding.preloadDuration.setOnClickListener(this::setPreloadDuration);
+        mBinding.preloadDurationBar.setOnSeekBarChangeListener(this);
+        // 四个档位滑动条统一接管遥控左右键：焦点落在带白色焦点框的整行容器上，
+        // 左右键由容器显式按档位增减并即时落盘，SeekBar/数值文字都不抢焦点。
+        bindDpadSeekBar(mBinding.preloadSeamless, mBinding.preloadSeamlessBar, mBinding.preloadSeamlessText);
+        bindDpadSeekBar(mBinding.preloadThread, mBinding.preloadThreadBar, mBinding.preloadThreadText);
+        bindDpadSeekBar(mBinding.preloadSize, mBinding.preloadSizeBar, mBinding.preloadSizeText);
+        bindDpadSeekBar(mBinding.preloadDuration, mBinding.preloadDurationBar, mBinding.preloadDurationText);
+        // 下键目标全部由 setPreloadText() 按展开/总开关状态动态设置，不能在这里静态覆盖：
+        // 否则总开关关闭后仍指向 GONE 的展开行，真机上会丢焦点。无缝行上键恒定指向展开行。
+        mBinding.preloadSeamless.setNextFocusUpId(R.id.preloadExpand);
+        mBinding.preloadSeamlessSwitch.setOnClickListener(this::setSeamlessSwitch);
+        mBinding.preloadExpand.setOnClickListener(this::setPreloadExpand);
+        mBinding.decode.setOnClickListener(this::setDecode);
         mBinding.preloadPause.setOnClickListener(this::setPreloadPause);
         mBinding.autoPlay.setOnClickListener(this::setAutoPlay);
         mBinding.autoChange.setOnClickListener(this::setAutoChange);
@@ -183,8 +218,11 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
         PlayerKernelDialog.show(this, PlayerSetting.getPlayer(), index -> {
             mBinding.kernelText.setText(kernel[index]);
             PlayerSetting.putPlayer(index);
+            // 改全局默认后清掉各线路记住的旧内核，否则记忆会盖过新默认，表现为「默认播放器设了不生效」。
+            Task.execute(() -> AppDatabase.get().getHistoryDao().clearPlayerKernelMemory());
             setMpvRows();
             setPerformanceText();
+            refreshKernelScopedRows();
         });
     }
 
@@ -197,6 +235,15 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
 
     private void onLut(View view) {
         LutDialog.show(this, null, () -> mBinding.lutText.setText(LutSetting.getSummary()));
+    }
+
+    /** 解码方式 / 音频直通 / 软解 / AAC 都是按内核保存，切内核后要重新读一次。 */
+    private void refreshKernelScopedRows() {
+        mBinding.decodeText.setText(decodeModes[PlayerSetting.getDecode()]);
+        mBinding.aacText.setText(getSwitch(PlayerSetting.isPreferAAC()));
+        mBinding.audioDecodeText.setText(getSwitch(PlayerSetting.isAudioPrefer()));
+        mBinding.audioPassThroughText.setText(getSwitch(PlayerSetting.isAudioPassThrough()));
+        mBinding.videoDecodeText.setText(getSwitch(PlayerSetting.isVideoPrefer()));
     }
 
     private void setMpvRows() {
@@ -320,19 +367,21 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
     }
 
     private void setPreloadThread(View view) {
-        int value = PreloadSetting.getPreloadThreads() + 1;
-        if (value > PreloadSetting.MAX_THREADS) value = PreloadSetting.MIN_THREADS;
-        PreloadSetting.putPreloadThreads(value);
-        PlaybackPerformanceSetting.markCustom();
-        setPreloadText();
-        setPerformanceText();
+        showNumberInput(R.string.player_input_title_threads, PreloadSetting.getPreloadThreads(), value -> {
+            PreloadSetting.putPreloadThreads(value);
+            PlaybackPerformanceSetting.markCustom();
+            setPreloadText();
+            setPerformanceText();
+        });
     }
 
     private void setPreloadSize(View view) {
-        PreloadSetting.putPreloadSizeMb(PreloadSetting.getNextPreloadSizeMb());
-        PlaybackPerformanceSetting.markCustom();
-        setPreloadText();
-        setPerformanceText();
+        showNumberInput(R.string.player_input_title_size, PreloadSetting.getPreloadSizeMb(), value -> {
+            PreloadSetting.putPreloadSizeMb(value);
+            PlaybackPerformanceSetting.markCustom();
+            setPreloadText();
+            setPerformanceText();
+        });
     }
 
     private void setPreloadTime(View view) {
@@ -351,6 +400,164 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
         setPerformanceText();
     }
 
+    private void setPreloadSeamless(View view) {
+        showNumberInput(R.string.player_input_title_depth, PreloadSetting.getSeamlessQueueDepth(), value -> {
+            if (value > 0) PreloadSetting.putSeamlessEnabled(true);
+            PreloadSetting.putSeamlessQueueDepth(value);
+            setPreloadText();
+        });
+    }
+
+    private void setSeamlessSwitch(View view) {
+        PreloadSetting.putSeamlessEnabled(!PreloadSetting.isSeamlessEnabled());
+        setPreloadText();
+    }
+
+    private void setDecode(View view) {
+        int next = PlayerSetting.getDecode() == PlayerEngine.SOFT ? PlayerEngine.HARD : PlayerEngine.SOFT;
+        PlayerSetting.putDecode(next);
+        mBinding.decodeText.setText(decodeModes[next]);
+    }
+
+    private void setPreloadExpand(View view) {
+        PreloadSetting.putSeamlessExpanded(!PreloadSetting.isSeamlessExpanded());
+        setPreloadText();
+    }
+
+    private void setPreloadDuration(View view) {
+        showNumberInput(R.string.player_preload_duration, PreloadSetting.getCacheMinutes(), value -> {
+            PreloadSetting.putCacheMinutes(value);
+            setPreloadText();
+        });
+    }
+
+    private void showNumberInput(int titleRes, int initial, IntConsumer apply) {
+        EditText input = new EditText(this);
+        input.setInputType(InputType.TYPE_CLASS_NUMBER);
+        input.setText(String.valueOf(initial));
+        input.setSelection(input.getText().length());
+        int pad = (int) (getResources().getDisplayMetrics().density * 8);
+        // 底部留白 + 垂直居中 + 足够高度，避免数字基线穿过输入框下划线
+        input.setPadding(pad * 2, pad, pad * 2, pad);
+        input.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        input.setSingleLine(true);
+        input.setMinHeight((int) (getResources().getDisplayMetrics().density * 48));
+        FrameLayout container = new FrameLayout(this);
+        int side = (int) (getResources().getDisplayMetrics().density * 24);
+        container.setPadding(side, side / 2, side, pad);
+        container.addView(input, new FrameLayout.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT));
+        new com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder(this)
+                .setTitle(titleRes)
+                .setView(container)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(android.R.string.ok, (dialog, which) -> {
+                    try {
+                        apply.accept(Integer.parseInt(input.getText().toString().trim()));
+                    } catch (NumberFormatException ignored) {
+                    }
+                })
+                .show();
+    }
+
+    /**
+     * TV 端档位滑动条统一接管遥控左右键。SeekBar 默认按键行为在 NestedScrollView +
+     * LinearLayout 嵌套布局里会被父布局当作焦点移动吞掉，真机表现为左右键不能增减档位；
+     * 这里在 View 层显式消费 DPAD_LEFT/RIGHT，按一档步进并即时落盘。数值 TextView 不参与
+     * 聚焦，遥控焦点直接落在滑动条本身，避免焦点停在文字上导致左右键无响应。
+     */
+    private void bindDpadSeekBar(View row, SeekBar bar, View valueText) {
+        // 焦点落在整行容器（selector_item 白色焦点框），SeekBar 与数值文字都不抢焦点。
+        // 这样无论从上方的展开行下键，还是从播放器按钮上键，焦点都落在同一行容器上，
+        // 白框表现一致；左右键由 Activity 级 dispatchKeyEvent 统一接管（见下），
+        // 不依赖 View.OnKeyListener —— 根布局 NestedScrollView + animateLayoutChanges
+        // 会让按键在视图树中的分发路径不稳定，真机出现「左右键偶尔失效」。
+        valueText.setFocusable(false);
+        valueText.setFocusableInTouchMode(false);
+        bar.setFocusable(false);
+        bar.setFocusableInTouchMode(false);
+        row.setFocusable(true);
+        row.setFocusableInTouchMode(true);
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        int keyCode = event.getKeyCode();
+        if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+            SeekBar bar = focusedSeekBar();
+            if (bar != null) {
+                if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                    int step = keyCode == KeyEvent.KEYCODE_DPAD_RIGHT ? 1 : -1;
+                    int progress = Math.max(0, Math.min(bar.getMax(), bar.getProgress() + step));
+                    if (progress != bar.getProgress()) {
+                        bar.setProgress(progress);
+                        onProgressChanged(bar, progress, true);
+                        onStopTrackingTouch(bar);
+                    }
+                }
+                // 焦点在四个滑动条行时，左右键一律消费：既不触发焦点横移/NestedScrollView
+                // 横向滚动，也不让 SeekBar 默认实现重复步进。
+                return true;
+            }
+        }
+        return super.dispatchKeyEvent(event);
+    }
+
+    private SeekBar focusedSeekBar() {
+        View focus = getCurrentFocus();
+        if (focus == null) return null;
+        // 焦点可能落在整行容器或其内部子视图上，向上找容器 id。
+        View view = focus;
+        while (view != null) {
+            int id = view.getId();
+            if (id == R.id.preloadSeamless) return mBinding.preloadSeamlessBar;
+            if (id == R.id.preloadSize) return mBinding.preloadSizeBar;
+            if (id == R.id.preloadThread) return mBinding.preloadThreadBar;
+            if (id == R.id.preloadDuration) return mBinding.preloadDurationBar;
+            view = view.getParent() instanceof View ? (View) view.getParent() : null;
+        }
+        return null;
+    }
+
+    @Override
+    public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
+        if (!fromUser || mBinding == null) return;
+        int id = bar.getId();
+        if (id == R.id.preloadSeamlessBar) {
+            mBinding.preloadSeamlessText.setText(progress == 0 ? getString(R.string.player_seamless_queue_off) : getString(R.string.player_seamless_queue_value, progress));
+        } else if (id == R.id.preloadDurationBar) {
+            mBinding.preloadDurationText.setText(getString(R.string.player_preload_duration_value, progress + PreloadSetting.MIN_CACHE_MINUTES));
+        } else if (id == R.id.preloadThreadBar) {
+            mBinding.preloadThreadText.setText(getString(R.string.player_preload_threads_value, progress + PreloadSetting.MIN_THREADS));
+        } else if (id == R.id.preloadSizeBar) {
+            mBinding.preloadSizeText.setText(FileUtil.byteCountToDisplaySize(PreloadSetting.getPreloadSizeMbAt(progress) * 1024L * 1024L));
+        }
+    }
+
+    @Override
+    public void onStartTrackingTouch(SeekBar bar) {
+    }
+
+    @Override
+    public void onStopTrackingTouch(SeekBar bar) {
+        int id = bar.getId();
+        if (id == R.id.preloadSeamlessBar) {
+            if (bar.getProgress() > 0) PreloadSetting.putSeamlessEnabled(true);
+            PreloadSetting.putSeamlessQueueDepth(bar.getProgress());
+        } else if (id == R.id.preloadDurationBar) {
+            PreloadSetting.putCacheMinutes(bar.getProgress() + PreloadSetting.MIN_CACHE_MINUTES);
+        } else if (id == R.id.preloadThreadBar) {
+            PreloadSetting.putPreloadThreads(bar.getProgress() + PreloadSetting.MIN_THREADS);
+            PlaybackPerformanceSetting.markCustom();
+        } else if (id == R.id.preloadSizeBar) {
+            PreloadSetting.putPreloadSizeMb(PreloadSetting.getPreloadSizeMbAt(bar.getProgress()));
+            PlaybackPerformanceSetting.markCustom();
+        } else {
+            return;
+        }
+        setPreloadText();
+        setPerformanceText();
+    }
+
     private void setPreloadPause(View view) {
         PreloadSetting.putPausePreloadPolicy(PreloadSetting.getNextPausePreloadPolicy());
         PlaybackPerformanceSetting.markCustom();
@@ -361,8 +568,6 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
     private void setPreloadText() {
         boolean preload = PreloadSetting.isPreload();
         mBinding.preloadText.setText(getSwitch(preload));
-        mBinding.preloadThread.setVisibility(preload ? View.VISIBLE : View.GONE);
-        mBinding.preloadSize.setVisibility(preload ? View.VISIBLE : View.GONE);
         mBinding.preloadTime.setVisibility(preload ? View.VISIBLE : View.GONE);
         mBinding.preloadAhead.setVisibility(preload ? View.VISIBLE : View.GONE);
         mBinding.preloadPause.setVisibility(preload ? View.VISIBLE : View.GONE);
@@ -370,6 +575,38 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
         mBinding.preloadSizeText.setText(FileUtil.byteCountToDisplaySize(PreloadSetting.getPreloadSizeBytes()));
         mBinding.preloadTimeText.setText(getString(R.string.player_preload_time_value, PreloadSetting.getPreloadTimeSeconds()));
         mBinding.preloadAheadText.setText(getPreloadAheadText());
+        boolean seamless = PreloadSetting.isSeamlessEnabled();
+        boolean expanded = seamless && PreloadSetting.isSeamlessExpanded();
+        mBinding.preloadSeamlessSwitchText.setText(getSwitch(seamless));
+        // 总开关只控制「无缝集数 / 磁盘配额」这组随展开收起的子项；「预载并发 / 预加载时长」
+        // 已脱离总开关常驻显示，位置在总开关与播放器按钮之间（布局顺序亦如此）。
+        mBinding.preloadExpand.setVisibility(seamless ? View.VISIBLE : View.GONE);
+        mBinding.preloadExpandText.setText(getString(expanded ? R.string.player_seamless_collapse : R.string.player_seamless_expand));
+        int seamlessVisibility = expanded ? View.VISIBLE : View.GONE;
+        mBinding.preloadSeamless.setVisibility(seamlessVisibility);
+        mBinding.preloadSize.setVisibility(seamlessVisibility);
+        mBinding.preloadThread.setVisibility(View.VISIBLE);
+        mBinding.preloadDuration.setVisibility(View.VISIBLE);
+        // 焦点链随展开状态动态维护，任何下/上键目标都不能指向 GONE 视图（真机曾因此丢焦点）。
+        // 目标全部指向整行容器而非 SeekBar：容器带 selector_item 白色焦点框，四行焦点表现一致。
+        //   展开：总开关 → 展开行 → 无缝集数 → 磁盘配额 → 预载并发 → 预加载时长 → 播放器按钮
+        //   收起：总开关 → 展开行 → 预载并发 → 预加载时长 → 播放器按钮
+        //   总开关关闭：总开关 → 预载并发 → 预加载时长 → 播放器按钮
+        mBinding.preloadSeamlessSwitch.setNextFocusDownId(seamless ? R.id.preloadExpand : R.id.preloadThread);
+        mBinding.preloadExpand.setNextFocusDownId(expanded ? R.id.preloadSeamless : R.id.preloadThread);
+        mBinding.preloadSeamless.setNextFocusDownId(R.id.preloadSize);
+        mBinding.preloadSize.setNextFocusUpId(R.id.preloadSeamless);
+        mBinding.preloadSize.setNextFocusDownId(R.id.preloadThread);
+        mBinding.preloadThread.setNextFocusDownId(R.id.preloadDuration);
+        mBinding.preloadThread.setNextFocusUpId(expanded ? R.id.preloadSize : seamless ? R.id.preloadExpand : R.id.preloadSeamlessSwitch);
+        mBinding.preloadDuration.setNextFocusUpId(R.id.preloadThread);
+        int seamlessDepth = PreloadSetting.getSeamlessQueueDepth();
+        mBinding.preloadSeamlessText.setText(seamlessDepth == 0 ? getString(R.string.player_seamless_queue_off) : getString(R.string.player_seamless_queue_value, seamlessDepth));
+        mBinding.preloadSeamlessBar.setProgress(seamlessDepth);
+        mBinding.preloadDurationText.setText(getString(R.string.player_preload_duration_value, PreloadSetting.getCacheMinutes()));
+        mBinding.preloadDurationBar.setProgress(PreloadSetting.getCacheMinutes() - PreloadSetting.MIN_CACHE_MINUTES);
+        mBinding.preloadThreadBar.setProgress(PreloadSetting.getPreloadThreads() - PreloadSetting.MIN_THREADS);
+        mBinding.preloadSizeBar.setProgress(PreloadSetting.getPreloadSizeIndex());
         mBinding.preloadPauseText.setText(getPreloadPauseText());
     }
 
@@ -451,22 +688,15 @@ public class SettingPlayerActivity extends BaseActivity implements UaListener, B
     }
 
     private void hidePerformanceRows() {
-        mBinding.render.setVisibility(View.GONE);
         mBinding.buffer.setVisibility(View.GONE);
         mBinding.bufferBytes.setVisibility(View.GONE);
         mBinding.backBuffer.setVisibility(View.GONE);
         mBinding.playCache.setVisibility(View.GONE);
         mBinding.preload.setVisibility(View.GONE);
-        mBinding.preloadThread.setVisibility(View.GONE);
-        mBinding.preloadSize.setVisibility(View.GONE);
         mBinding.preloadTime.setVisibility(View.GONE);
         mBinding.preloadAhead.setVisibility(View.GONE);
         mBinding.preloadPause.setVisibility(View.GONE);
         mBinding.tunnel.setVisibility(View.GONE);
-        mBinding.audioDecode.setVisibility(View.GONE);
-        mBinding.audioPassThrough.setVisibility(View.GONE);
-        mBinding.videoDecode.setVisibility(View.GONE);
-        mBinding.aac.setVisibility(View.GONE);
     }
 
     private void setCaption(View view) {

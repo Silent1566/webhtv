@@ -148,7 +148,7 @@ public class KeepActivity extends BaseActivity implements KeepAdapter.OnClickLis
         VodConfig.load(config, new Callback() {
             @Override
             public void success() {
-                VideoActivity.start(getActivity(), item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic());
+                VideoActivity.collect(getActivity(), item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic());
             }
 
             @Override
@@ -179,7 +179,7 @@ public class KeepActivity extends BaseActivity implements KeepAdapter.OnClickLis
         Config config = Config.find(item.getCid());
         if (config == null) SearchActivity.start(this, item.getVodName());
         else if (item.getCid() != VodConfig.getCid()) loadConfig(config, item);
-        else VideoActivity.start(this, item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic());
+        else VideoActivity.collect(this, item.getSiteKey(), item.getVodId(), item.getVodName(), item.getVodPic());
     }
 
     @Override
@@ -210,6 +210,13 @@ public class KeepActivity extends BaseActivity implements KeepAdapter.OnClickLis
         else if (item.getItemId() == R.id.delete) onDelete();
         else if (item.getItemId() == R.id.sync) onSync();
         return super.onOptionsItemSelected(item);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // 从播放页返回后刷新收藏进度集数（Keep 自身持有的进度会在播放时更新）。
+        if (mAdapter != null && !mAdapter.isDelete()) getKeep();
     }
 
     @Override

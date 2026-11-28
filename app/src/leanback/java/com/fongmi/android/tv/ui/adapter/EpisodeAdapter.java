@@ -80,9 +80,27 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
 
     public void addAll(List<Episode> items) {
         EpisodeTitleCompact.apply(items);
+        int previous = mItems.size();
+        boolean sameSize = previous == items.size();
         mItems.clear();
         mItems.addAll(items);
-        notifyDataSetChanged();
+        // 替换式翻页每段集数相同：范围更新让 RecyclerView 复用原卡片，
+        // 避免 notifyDataSetChanged 触发全量重绑 + Glide 重新加载剧照造成遥控翻页卡顿。
+        // 视图类型（卡片/文本）由 setUseTmdbCard 单独全量刷新，这里不会混用不同类型。
+        if (sameSize && previous > 0) notifyItemRangeChanged(0, previous);
+        else notifyDataSetChanged();
+    }
+
+    /**
+     * 追加一段集数到列表末尾。用 notifyItemRangeInserted 而不是 notifyDataSetChanged，
+     * 让已聚焦/已绑定的卡片保持不变，焦点不会因为全量重绑被甩回列表顶部。
+     */
+    public void append(List<Episode> items) {
+        if (items == null || items.isEmpty()) return;
+        EpisodeTitleCompact.apply(items);
+        int start = mItems.size();
+        mItems.addAll(items);
+        notifyItemRangeInserted(start, items.size());
     }
 
     public void setUseTmdbCard(boolean useTmdbCard) {

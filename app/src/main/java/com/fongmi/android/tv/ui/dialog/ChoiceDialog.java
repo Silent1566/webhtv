@@ -6,6 +6,7 @@ import android.graphics.Color;
 import android.graphics.Rect;
 import android.graphics.drawable.ColorDrawable;
 import android.text.TextUtils;
+import android.util.Log;
 import android.util.TypedValue;
 import android.os.Bundle;
 import android.view.Gravity;
@@ -45,6 +46,8 @@ import java.util.Map;
 
 public final class ChoiceDialog extends DialogFragment {
 
+    private static final String TAG = "ChoiceDialog";
+
     private CharSequence title;
     private CharSequence message;
     private String positive;
@@ -56,6 +59,7 @@ public final class ChoiceDialog extends DialogFragment {
     private boolean multi;
     private boolean showCancel = true;
     private boolean dismissOnChoice = true;
+    private boolean backToTopOnBack;
     private OnChoice choice;
     private OnApply apply;
     private OnItemEnabled itemEnabled;
@@ -156,6 +160,17 @@ public final class ChoiceDialog extends DialogFragment {
         showSingle(manager, title, items, selected, true, choice);
     }
 
+    /** Settings list dialogs (e.g. DoH): back first returns focus to the first item. */
+    public static void showSingleWithBackTop(FragmentActivity activity, int titleRes, CharSequence[] items, int selected, OnChoice choice) {
+        ChoiceDialog dialog = new ChoiceDialog();
+        dialog.title = activity.getString(titleRes);
+        dialog.items = items == null ? new CharSequence[0] : Arrays.copyOf(items, items.length);
+        dialog.selected = selected;
+        dialog.choice = choice;
+        dialog.backToTopOnBack = true;
+        dialog.show(activity.getSupportFragmentManager(), ChoiceDialog.class.getSimpleName());
+    }
+
     private static void showSingle(FragmentManager manager, CharSequence title, CharSequence[] items, int selected, boolean showCancel, OnChoice choice) {
         ChoiceDialog dialog = new ChoiceDialog();
         dialog.title = title;
@@ -236,6 +251,14 @@ public final class ChoiceDialog extends DialogFragment {
         dialog.show(manager, ChoiceDialog.class.getSimpleName());
     }
 
+    @Override
+    public void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        // 界面重建（语言/主题切换）或进程回收后，Fragment 会被系统用无参构造重新创建，
+        // 此时构造期传入的标题与条目都不存在。继续创建只会得到一个空白弹窗，直接关闭。
+        if (title == null && items == null) dismissAllowingStateLoss();
+    }
+
     @NonNull
     @Override
     public Dialog onCreateDialog(@Nullable Bundle savedInstanceState) {
@@ -244,6 +267,10 @@ public final class ChoiceDialog extends DialogFragment {
         dialog.setContentView(createView(LayoutInflater.from(requireContext())));
         ThemeController.bindDialog(dialog);
         dialog.setCanceledOnTouchOutside(true);
+        dialog.setOnKeyListener((ignored, keyCode, event) -> backToTopOnBack
+                && event.getAction() == KeyEvent.ACTION_DOWN
+                && keyCode == KeyEvent.KEYCODE_BACK
+                && focusFirstChoiceItemOnBack());
         return dialog;
     }
 
@@ -267,6 +294,20 @@ public final class ChoiceDialog extends DialogFragment {
             adaptListHeight(window);
             if (Util.isLeanback()) window.getDecorView().post(this::focusSelectedItem);
         });
+    }
+
+    private boolean focusFirstChoiceItemOnBack() {
+        View root = viewRoot();
+        View listView = root == null ? null : root.findViewWithTag("choice_list");
+        if (!(listView instanceof ViewGroup list)) return false;
+        View focused = root.findFocus();
+        for (int index = 0; index < list.getChildCount(); index++) {
+            View child = list.getChildAt(index);
+            if (!child.isEnabled() || !child.isFocusable()) continue;
+            if (focused == child) return false;
+            return requestItemFocus(list, child);
+        }
+        return false;
     }
 
     private void focusSelectedItem() {
@@ -514,12 +555,23 @@ public final class ChoiceDialog extends DialogFragment {
             View root = viewRoot();
             refreshItems(root == null ? null : root.findViewWithTag("choice_list"));
         } else {
-            if (choice != null) choice.onChoice(position);
             selected = position;
-            if (dismissOnChoice) dismiss();
+            // 单选回调里可能触发 Activity.recreate()（如语言/主题/UI 缩放切换）。若在回调之后
+            // 才 dismiss()，此时旧 Activity 已进入状态保存，Fragment 事务提交会抛
+            // IllegalStateException 导致退出崩溃。先关闭弹窗再回调，且用允许状态丢失的方式，
+            // 确保重建窗口里不再提交事务。
+            if (dismissOnChoice) dismissAllowingStateLoss();
             else {
                 View root = viewRoot();
                 refreshItems(root == null ? null : root.findViewWithTag("choice_list"));
+            }
+            if (choice != null) {
+                // 回调里通常要落盘设置并重建界面；任何异常都不应该把整个应用带走。
+                try {
+                    choice.onChoice(position);
+                } catch (RuntimeException e) {
+                    Log.e(TAG, "choice callback failed, which=" + position, e);
+                }
             }
         }
     }
@@ -554,11 +606,15 @@ public final class ChoiceDialog extends DialogFragment {
             CharSequence next = neutralAction.onNeutral();
             if (next != null) button.setText(next);
         }, compact, index++ == 0));
-        if (negative != null) actions.addView(actionButton(negative, false, view -> dismiss(), compact, index++ == 0));
+        if (negative != null) actions.addView(actionButton(negative, false, view -> dismissAllowingStateLoss(), compact, index++ == 0));
         if (positive != null) actions.addView(actionButton(positive, true, view -> {
-            if (multi && apply != null) apply.onApply(Arrays.copyOf(checked, checked.length));
-            if (positiveAction != null) positiveAction.run();
-            dismiss();
+            try {
+                if (multi && apply != null) apply.onApply(Arrays.copyOf(checked, checked.length));
+                if (positiveAction != null) positiveAction.run();
+            } catch (RuntimeException e) {
+                Log.e(TAG, "dialog action failed", e);
+            }
+            dismissAllowingStateLoss();
         }, compact, index == 0));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         params.topMargin = dp(18);

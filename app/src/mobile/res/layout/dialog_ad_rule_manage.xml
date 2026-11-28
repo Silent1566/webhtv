@@ -31,6 +31,39 @@
         app:backgroundTint="@color/dialog_outlined_button_bg"
         app:strokeColor="?attr/colorOutline" />
 
+    <androidx.appcompat.widget.LinearLayoutCompat
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:orientation="horizontal">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/exportRules"
+            style="?attr/materialButtonOutlinedStyle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/ad_rule_export"
+            android:textColor="@color/dialog_outlined_button_text"
+            android:textSize="12sp"
+            app:backgroundTint="@color/dialog_outlined_button_bg"
+            app:strokeColor="?attr/colorOutline" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/importRules"
+            style="?attr/materialButtonOutlinedStyle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:text="@string/ad_rule_import"
+            android:textColor="@color/dialog_outlined_button_text"
+            android:textSize="12sp"
+            app:backgroundTint="@color/dialog_outlined_button_bg"
+            app:strokeColor="?attr/colorOutline" />
+
+    </androidx.appcompat.widget.LinearLayoutCompat>
+
     <com.google.android.material.button.MaterialButton
         android:id="@+id/importCandidates"
         style="?attr/materialButtonOutlinedStyle"

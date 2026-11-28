@@ -6,6 +6,7 @@ import com.fongmi.android.tv.setting.Setting;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -75,6 +76,16 @@ public final class EpisodeTitleCompact {
     private static final Pattern FILE_EDGE_SEPARATORS = Pattern.compile("^[\\s._\\-·|/\\\\:：,，;；]+|[\\s._\\-·|/\\\\:：,，;；]+$");
     private static final Pattern EDGE_SEPARATORS = Pattern.compile("^[\\s._\\-·|/\\\\:：,，;；\\[\\]()（）【】《》]+|[\\s._\\-·|/\\\\:：,，;；\\[\\]()（）【】《》]+$");
     private static final int MAX_COMPACT_LENGTH = 14;
+    // 详情页/全屏选集切分页时会反复对同一批集名做正则整理；这是.tv 遥控器连续翻页卡顿的主要来源。
+    // 按整段原始标题缓存结果，既保留「同段多集互相去重」的语义，又让回到旧分页变成一次 Map 查找。
+    private static final int COMPACT_CACHE_MAX = 32;
+    private static final LinkedHashMap<List<String>, List<String>> COMPACT_CACHE =
+            new LinkedHashMap<List<String>, List<String>>(COMPACT_CACHE_MAX, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<List<String>, List<String>> eldest) {
+                    return size() > COMPACT_CACHE_MAX;
+                }
+            };
 
     private EpisodeTitleCompact() {
     }
@@ -97,7 +108,16 @@ public final class EpisodeTitleCompact {
             for (int i = 0; i < rawNames.size(); i++) displayNames.add(null);
             return displayNames;
         }
-        return compact(rawNames);
+        List<String> key = new ArrayList<>(rawNames);
+        synchronized (COMPACT_CACHE) {
+            List<String> cached = COMPACT_CACHE.get(key);
+            if (cached != null) return new ArrayList<>(cached);
+        }
+        List<String> result = compact(rawNames);
+        synchronized (COMPACT_CACHE) {
+            COMPACT_CACHE.put(key, new ArrayList<>(result));
+        }
+        return result;
     }
 
     public static void apply(List<Episode> episodes, List<String> displayNames) {

@@ -1,7 +1,7 @@
 <resources xmlns:xliff="http://schemas.android.com/apk/res-auto">
 
     <!-- App -->
-    <string name="app_name">默影視</string>
+    <string name="app_name">蜂蜜影視</string>
    <string name="setting_app_branding">APP 圖示</string>
     <string name="app_branding_icon_current">預設圖示</string>
     <string name="app_branding_icon_history">原始圖示</string>
@@ -885,6 +885,7 @@
     <string name="theme_editor_hex_apply">使用此顏色</string>
     <string name="theme_editor_hex_invalid">請輸入 #RRGGBB</string>
     <string name="theme_editor_preset_default">預設配置</string>
+    <string name="theme_editor_preset_honey">蜂蜜</string>
     <string name="theme_editor_preset_wallpaper">桌布取色</string>
     <string name="theme_editor_preset_blue">澄海藍</string>
     <string name="theme_editor_preset_teal">碧灣青</string>
@@ -1463,6 +1464,19 @@
     <string name="player_preload_pause">暫停時繼續預載</string>
     <string name="player_preload_pause_wifi">僅 WiFi</string>
     <string name="player_preload_pause_always">始終</string>
+    <string name="player_seamless_queue">劇集無縫快取集數</string>
+    <string name="player_seamless_queue_value">%1$d 集</string>
+    <string name="player_seamless_queue_off">關閉（僅短劇）</string>
+    <string name="player_seamless_switch">集數快取總開關</string>
+    <string name="player_input_title_depth">輸入無縫快取集數（0-10）</string>
+    <string name="player_input_title_threads">輸入預載執行緒數（1-128）</string>
+    <string name="player_input_title_size">輸入快取大小（MB，128-32768）</string>
+    <string name="ad_rule_export">匯出規則</string>
+    <string name="ad_rule_import">匯入規則</string>
+    <string name="ad_rule_export_done">已匯出 %1$d 條規則到剪貼簿</string>
+    <string name="ad_rule_import_hint">貼上規則JSON或 http(s) 連結</string>
+    <string name="ad_rule_import_done">已匯入 %1$d 條規則</string>
+    <string name="ad_rule_import_fail">匯入失敗：%1$s</string>
     <string name="player_auto_play">點播自動播放</string>
     <string name="player_live_source_fallback">直播源失效自動切換</string>
     <string name="player_auto_change">自動換源</string>
@@ -1702,6 +1716,8 @@
     <string name="error_play_fallback">%1$s 播放失敗，已切換到 %2$s</string>
     <string name="error_play_ijk_unavailable">目前裝置不可用 IJK 內核</string>
     <string name="error_play_ijk_unavailable_switch">目前裝置不可用 IJK 內核，已切換到 %1$s</string>
+    <string name="error_play_external_unavailable">沒有可用的外接播放器，內部播放保持不變</string>
+    <string name="error_play_switch_restored">%1$s 切換失敗，已恢復到 %2$s</string>
     <string name="error_play_tvbus">錯誤代碼：<xliff:g name="name">%s</xliff:g></string>
     <string name="error_detail">暫無播放資料</string>
     <string name="error_empty">這裡什麼都沒有 👀</string>
@@ -2702,6 +2718,7 @@
     <string name="config_delete_message">確定刪除「%1$s」嗎？相關播放歷史也可能遺失，此操作無法復原。</string>
     <string name="config_current_delete_message">目前接口正在使用中，請先切換到其他接口再刪除。</string>
     <string name="setting_home_history">首頁最近觀看</string>
+    <string name="setting_home_recommend">首頁更新推薦</string>
     <string name="site_health_report_ad_blocked">播放 %1$d 次 / 廣告攔截 %2$d 次</string>
     <string name="setting_custom_csp_sort">排序</string>
     <string name="setting_custom_csp_sort_done">完成</string>
@@ -2916,6 +2933,7 @@
     <string name="setting_ad_group_rule">規則與統計</string>
     <string name="setting_ad_group_segment">片段跳過</string>
     <string name="setting_ad_master">去廣告總開關</string>
+    <string name="setting_ad_notice">廣告攔截成功提示</string>
     <string name="dialog_tmdb_test_config">測試配置</string>
     <string name="dialog_tmdb_test_result_title">配置測試結果</string>
     <string name="dialog_tmdb_test_api_success">TMDB API：連線成功並傳回有效資料（%1$d 毫秒）</string>
@@ -3013,5 +3031,13 @@
     <string name="plugin_manager_params_invalid">參數必須是 JSON 物件</string>
     <string name="plugin_manager_params_too_large">參數量超出儲存上限</string>
     <string name="plugin_panel_title">外掛面板</string>
+    <string name="episode_cache_clear_title">清除劇集快取</string>
+    <string name="episode_cache_clear_confirm">確定清除本片的劇集快取嗎？此操作無法復原。</string>
+    <string name="player_preload_duration">預載時長（分鐘）</string>
+    <string name="player_preload_duration_value">%1$d 分鐘</string>
+    <string name="player_seamless_expand">展開</string>
+    <string name="player_seamless_collapse">收起</string>
+    <string name="player_decode">解碼方式</string>
+    <string name="player_seamless_detail">開啟後播放完畢自動無縫銜接快取的下一集。</string>
     <string name="crash_action_failed">操作失敗，請重試。</string>
 </resources>

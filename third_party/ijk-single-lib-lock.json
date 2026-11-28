@@ -1,0 +1,62 @@
+{
+  "_comment": "FFmpeg7 single-lib IJK artifact consumed by this fork. This is NOT reproducible from scripts/build_ijk_native.sh (that script builds the legacy FFmpeg4 3-library variant from ShikinChen). The AAR is consumed verbatim from cat3399/blbl; no local rebuild recipe is claimed.",
+  "distribution": {
+    "kind": "prebuilt-aar",
+    "consumer_repository": "https://github.com/cat3399/blbl",
+    "consumer_file": "app/libs/ijkplayer-cmake-release.aar",
+    "consumer_branch": "main",
+    "aar_size_bytes": 17356718,
+    "aar_sha256": "bb8db505aa08c22c2dba2e0cb7727341197ea2a8a3d80a165c80824226bbd230",
+    "verified_identical_to_local": true,
+    "verification_method": "downloaded raw.githubusercontent.com/cat3399/blbl/main/app/libs/ijkplayer-cmake-release.aar via gh-proxy; byte-for-byte identical (cmp) and SHA-256 match with app/libs/ijkplayer-cmake-release.aar"
+  },
+  "upstream_project": {
+    "repository": "https://github.com/debugly/ijkplayer",
+    "mirror_repository": "https://github.com/cat3399/ijkplayer",
+    "description": "cat3399/blbl credits debugly/ijkplayer (via cat3399/ijkplayer mirror) as the IJK provider; the mirror README states single AAR replaces the three .so, CMake instead of ndk-build, NDK r27c, FFmpeg built as static libs."
+  },
+  "ffmpeg": {
+    "version_string": "n7.1.1-4-g834d732",
+    "library_version": "Lavf61.7.100 (FFmpeg 7.1.x libavformat)",
+    "detected_from": "strings embedded in jni/arm64-v8a/libijkplayer.so and jni/armeabi-v7a/libijkplayer.so",
+    "configure_flags_observed": [
+      "--enable-openssl",
+      "--enable-demuxer=dash",
+      "--enable-libxml2"
+    ],
+    "toolchain_path_observed": "/usr/local/lib/android/sdk/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/{aarch64,armv7a}-linux-android21-clang",
+    "ndk_version_observed": "27.2.12479018",
+    "notes": "FFmpeg configuration line embedded in the .so references ijkplayer/FFToolChain/build/product/android/ijkffmpeg-arm64. The exact source tag, patch set and CMake command are not published in this repo; do not fabricate them."
+  },
+  "outputs": {
+    "aar_inner": {
+      "jni/arm64-v8a/libijkplayer.so": {
+        "size": 9933776,
+        "sha256": "85b5e17973e1d2406866d047053fada4d9f28e1f60c1558b61fcf8ae7d93440b"
+      },
+      "jni/armeabi-v7a/libijkplayer.so": {
+        "size": 8811784,
+        "sha256": "356169e7803830edfbb641654a9f192120044b6c3296d96becdb41278205e6ad"
+      },
+      "jni/x86/libijkplayer.so": {
+        "size": 10241916,
+        "sha256": "d387a8a94f0a78d8"
+      },
+      "jni/x86_64/libijkplayer.so": {
+        "size": 10949376,
+        "sha256": "eab9613e0f9921e7"
+      }
+    },
+    "installed_jniLibs": [
+      "app/src/main/jniLibs/arm64-v8a/libijkplayer.so",
+      "app/src/main/jniLibs/armeabi-v7a/libijkplayer.so"
+    ],
+    "installed_matches_aar_inner": true,
+    "no_separate_libijkffmpeg_or_libijksdl": true
+  },
+  "build_recipe_status": {
+    "reproducible_from_this_repo": false,
+    "reason": "The upstream debugly/ijkplayer CMake build project and its exact revision/patches are not vendored here. This fork consumes the prebuilt AAR from cat3399/blbl verbatim.",
+    "how_to_refresh": "Download the AAR from cat3399/blbl app/libs, verify SHA-256 against aar_sha256 above, replace app/libs/ijkplayer-cmake-release.aar, and re-extract the two ARM .so into app/src/main/jniLibs/."
+  }
+}

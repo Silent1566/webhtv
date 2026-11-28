@@ -20,6 +20,7 @@ import androidx.fragment.app.FragmentActivity;
 import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.R;
+import com.fongmi.android.tv.App;
 import com.fongmi.android.tv.api.config.DisabledDefaultRuleStore;
 import com.fongmi.android.tv.api.config.HlsRuleConfig;
 import com.fongmi.android.tv.api.config.HlsRuleStateStore;
@@ -89,19 +90,27 @@ public class AdRuleManageDialog extends BaseAlertDialog implements AdRuleAdapter
     protected void initEvent() {
         binding.add.setOnClickListener(v -> onAddManual());
         binding.stats.setOnClickListener(v -> onStats());
+        binding.exportRules.setOnClickListener(v -> onExportRules());
+        binding.importRules.setOnClickListener(v -> onImportRules());
         binding.importCandidates.setOnClickListener(v -> onImportCandidates());
         binding.enableImported.setOnClickListener(v -> onEnableImported());
         binding.disableImported.setOnClickListener(v -> onDisableImported());
         binding.add.setOnKeyListener((v, keyCode, event) -> moveFocus(event, keyCode, KeyEvent.KEYCODE_DPAD_DOWN, binding.stats));
-        binding.stats.setOnKeyListener((v, keyCode, event) -> {
-            if (moveFocus(event, keyCode, KeyEvent.KEYCODE_DPAD_UP, binding.add)) return true;
+        binding.stats.setOnKeyListener((v, keyCode, event) -> moveFocus(event, keyCode, KeyEvent.KEYCODE_DPAD_DOWN, binding.exportRules));
+        binding.exportRules.setOnKeyListener((v, keyCode, event) -> {
+            if (moveFocus(event, keyCode, KeyEvent.KEYCODE_DPAD_UP, binding.stats)) return true;
+            return moveFocus(event, keyCode, KeyEvent.KEYCODE_DPAD_RIGHT, binding.importRules);
+        });
+        binding.importRules.setOnKeyListener((v, keyCode, event) -> {
+            if (moveFocus(event, keyCode, KeyEvent.KEYCODE_DPAD_UP, binding.stats)) return true;
+            if (moveFocus(event, keyCode, KeyEvent.KEYCODE_DPAD_LEFT, binding.exportRules)) return true;
             if (event.getAction() != KeyEvent.ACTION_DOWN || keyCode != KeyEvent.KEYCODE_DPAD_DOWN) return false;
             if (binding.importCandidates.getVisibility() == View.VISIBLE) return requestFocus(binding.importCandidates);
             if (binding.importBulkActions.getVisibility() == View.VISIBLE) return requestFocus(binding.enableImported);
             return focusFirstRule();
         });
         binding.importCandidates.setOnKeyListener((v, keyCode, event) -> {
-            if (moveFocus(event, keyCode, KeyEvent.KEYCODE_DPAD_UP, binding.stats)) return true;
+            if (moveFocus(event, keyCode, KeyEvent.KEYCODE_DPAD_UP, binding.importRules)) return true;
             if (event.getAction() == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
                 if (binding.importBulkActions.getVisibility() == View.VISIBLE) return requestFocus(binding.enableImported);
                 return focusFirstRule();
@@ -110,7 +119,7 @@ public class AdRuleManageDialog extends BaseAlertDialog implements AdRuleAdapter
         });
         binding.enableImported.setOnKeyListener((v, keyCode, event) -> {
             if (event.getAction() == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_UP) {
-                return requestFocus(binding.importCandidates.getVisibility() == View.VISIBLE ? binding.importCandidates : binding.stats);
+                return requestFocus(binding.importCandidates.getVisibility() == View.VISIBLE ? binding.importCandidates : binding.importRules);
             }
             if (moveFocus(event, keyCode, KeyEvent.KEYCODE_DPAD_RIGHT, binding.disableImported)) return true;
             if (event.getAction() == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_DOWN) return focusFirstRule();
@@ -209,6 +218,52 @@ public class AdRuleManageDialog extends BaseAlertDialog implements AdRuleAdapter
 
     private void onStats() {
         AdBlockStatsDialog.create((FragmentActivity) requireActivity()).show();
+    }
+
+    private void onExportRules() {
+        android.content.ClipboardManager manager = (android.content.ClipboardManager) requireActivity().getSystemService(Context.CLIPBOARD_SERVICE);
+        String json = com.fongmi.android.tv.api.config.AdRuleTransfer.exportPackage();
+        if (manager != null) manager.setPrimaryClip(android.content.ClipData.newPlainText("honey_ad_rules", json));
+        int count = UserAdRuleStore.load().size();
+        android.widget.Toast.makeText(requireContext(), getString(R.string.ad_rule_export_done, count), android.widget.Toast.LENGTH_LONG).show();
+    }
+
+    private void onImportRules() {
+        android.widget.EditText input = new android.widget.EditText(requireContext());
+        input.setHint(R.string.ad_rule_import_hint);
+        input.setMinLines(3);
+        input.setTextSize(13);
+        int pad = (int) (getResources().getDisplayMetrics().density * 8);
+        input.setPadding(pad * 2, pad, pad * 2, 0);
+        android.widget.FrameLayout container = new android.widget.FrameLayout(requireContext());
+        int side = (int) (getResources().getDisplayMetrics().density * 24);
+        container.setPadding(side, side / 2, side, 0);
+        container.addView(input, new android.widget.FrameLayout.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT));
+        new WebHtvAlertDialogBuilder(requireActivity(), R.style.Theme_WebHTV_Dialog)
+                .setTitle(R.string.ad_rule_import)
+                .setView(container)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(android.R.string.ok, (dialog, which) -> {
+                    String text = input.getText().toString().trim();
+                    if (text.isEmpty()) return;
+                    com.fongmi.android.tv.utils.Task.executor().submit(() -> {
+                        try {
+                            int count = com.fongmi.android.tv.api.config.AdRuleTransfer.importFrom(text);
+                            App.post(() -> {
+                                if (!isAdded()) return;
+                                android.widget.Toast.makeText(requireContext(), getString(R.string.ad_rule_import_done, count), android.widget.Toast.LENGTH_LONG).show();
+                                loadData();
+                                if (callback != null) callback.onRuleChanged();
+                            });
+                        } catch (Throwable e) {
+                            App.post(() -> {
+                                if (!isAdded()) return;
+                                android.widget.Toast.makeText(requireContext(), getString(R.string.ad_rule_import_fail, e.getMessage()), android.widget.Toast.LENGTH_LONG).show();
+                            });
+                        }
+                    });
+                })
+                .show();
     }
 
     private void onEnableImported() {

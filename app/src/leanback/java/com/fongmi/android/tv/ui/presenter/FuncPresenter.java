@@ -8,6 +8,7 @@ import androidx.annotation.NonNull;
 import androidx.leanback.widget.Presenter;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.bean.Func;
 import com.fongmi.android.tv.databinding.AdapterFuncBinding;
 import com.fongmi.android.tv.utils.KeyUtil;
@@ -38,6 +39,10 @@ public class FuncPresenter extends Presenter {
         ViewHolder holder = (ViewHolder) viewHolder;
         holder.binding.text.setText(item.getText());
         holder.binding.icon.setImageResource(item.getDrawable());
+        // 打标记供 HomeActivity.dispatchKeyEvent 识别功能行芯片：行级环绕在部分真机上
+        // （目标在屏幕外时 grid 级/项级监听拿不到可靠布局回调）仍会吞键，Activity 级
+        // 在事件进视图树前接管是最确定的兜底路径。
+        holder.view.setTag(R.id.tag_home_func_button, Boolean.TRUE);
         setOnClickListener(holder, view -> listener.onItemClick(item));
         holder.view.setOnLongClickListener(view -> listener.onLongClick(item));
         holder.view.setOnKeyListener((view, keyCode, event) -> onKeyDown(view, event));
@@ -62,13 +67,16 @@ public class FuncPresenter extends Presenter {
     }
 
     private boolean requestFocus(RecyclerView recyclerView, int position) {
+        return requestFocus(recyclerView, position, 0);
+    }
+
+    /** 行级环绕未开启时的兜底：滚动到目标后逐帧确认焦点真的落地。 */
+    private boolean requestFocus(RecyclerView recyclerView, int position, int attempt) {
         RecyclerView.ViewHolder holder = recyclerView.findViewHolderForAdapterPosition(position);
         if (holder != null && holder.itemView.requestFocus()) return true;
+        if (attempt >= 4) return true;
         recyclerView.scrollToPosition(position);
-        recyclerView.post(() -> {
-            RecyclerView.ViewHolder next = recyclerView.findViewHolderForAdapterPosition(position);
-            if (next != null) next.itemView.requestFocus();
-        });
+        recyclerView.post(() -> requestFocus(recyclerView, position, attempt + 1));
         return true;
     }
 

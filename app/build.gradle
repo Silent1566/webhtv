@@ -12,8 +12,13 @@ if (localPropsFile.exists()) {
 def hasReleaseSigning = localProps['storeFile'] && localProps['keyAlias'] && localProps['storePassword']
 def releaseKeyPassword = localProps['keyPassword'] ?: localProps['storePassword']
 def fastRelease = (project.findProperty('fastRelease') ?: 'false').toString().toBoolean()
+// 低配机器可传 -PskipLint=true 跳过 release lintVital 静态分析（不影响 APK 内容与签名）
+def skipLint = (project.findProperty('skipLint') ?: 'false').toString().toBoolean()
+def stableBuild = (project.findProperty('stableBuild') ?: 'false').toString().toBoolean()
 def buildTimestamp = new Date().format('yyyyMMddHHmm', TimeZone.getTimeZone('Asia/Shanghai'))
-def buildTime = fastRelease ? "fast-${buildTimestamp}" : buildTimestamp
+// stableBuild=true 时固定 BUILD_TIME：源码未变时 Java 编译与两次 R8 可直接 UP-TO-DATE，
+// 避免每次编译都因时间戳变化而强制全量重跑（低配机器单次可省 ~18 分钟）。正式出包用默认即可。
+def buildTime = stableBuild ? "stable-build" : (fastRelease ? "fast-${buildTimestamp}" : buildTimestamp)
 def releaseTag = (System.getenv('WEBHTV_RELEASE_TAG') ?: '').replace('\\', '\\\\').replace('"', '\\"')
 def apkSuffix = (System.getenv('WEBHTV_APK_SUFFIX') ?: '').replaceAll('[^A-Za-z0-9._-]', '')
 def gitRevision = 'unavailable'
@@ -35,11 +40,11 @@ android {
     ndkVersion "29.0.14206865"
 
     defaultConfig {
-        applicationId "com.silent.android.webhtv"
+        applicationId "com.fongmi.android.tv.plus"
         minSdk libs.versions.minSdk.get().toInteger()
         targetSdk libs.versions.targetSdk.get().toInteger()
-        versionCode 560
-        versionName "5.6.0"
+        versionCode 610
+        versionName "5.6.50"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField "String", "BUILD_TIME", "\"${buildTime}\""
         buildConfigField "String", "BUILD_TAG", "\"${releaseTag}\""
@@ -82,6 +87,16 @@ android {
     buildFeatures {
         buildConfig = true
         viewBinding = true
+    }
+
+    packaging {
+        jniLibs {
+            // 压缩 native 库存储，APK 体积大幅减小；安装时由系统解压到 lib 目录，
+            // 运行时 System.loadLibrary/System.load 行为不变。
+            // 已核实：lib/ 由系统解压加载；assets 中 mpv(MPVLib)、chaquopy、
+            // lab/proot 均通过 AssetManager.open 流式读取，无 openFd 依赖，压缩安全。
+            useLegacyPackaging = true
+        }
     }
 
     testOptions {
@@ -130,7 +145,7 @@ android {
     lint {
         disable 'UnsafeOptInUsageError'
         disable 'ExpiredTargetSdkVersion'
-        checkReleaseBuilds = !fastRelease
+        checkReleaseBuilds = !fastRelease && !skipLint
     }
 
     compileOptions {

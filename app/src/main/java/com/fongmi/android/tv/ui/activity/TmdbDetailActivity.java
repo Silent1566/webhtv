@@ -374,6 +374,12 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     @androidx.annotation.Keep
     private ActivityTmdbDetailBinding mBinding;
     private ViewTreeObserver.OnGlobalFocusChangeListener cardRowFocusMarginListener;
+    private View pendingMarginFocus;
+    private final Runnable focusMarginRunnable = () -> {
+        View target = pendingMarginFocus;
+        pendingMarginFocus = null;
+        if (target != null) ensureFocusVisibleWithMargin(target);
+    };
     private final List<View> cardRowOrder = new ArrayList<>();
     private final List<View> cardRowTitleOrder = new ArrayList<>();
     private TmdbDetailModeController modeController;
@@ -3010,7 +3016,9 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             binding.loading.setVisibility(View.GONE);
             SpiderDebug.log("tmdb-detail-flow", "apply loaded empty cost=%dms mode=%d error=%s", System.currentTimeMillis() - start, getDetailMode(), TextUtils.isEmpty(error) ? "" : error);
             if (!TextUtils.isEmpty(error)) Notify.show(error);
-            tryAutoChangeSource();
+            // 进入详情默认直接播放当前集数线路，不自动全站搜索；仅用户开启自动换源时才兜底搜索。
+            if (PlayerSetting.isAutoChange()) tryAutoChangeSource();
+            else revealDefaultPlaybackLoadingPage();
             return;
         }
         vod = loadedVod;
@@ -5714,9 +5722,10 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         buildCardRowIndex();
         cardRowFocusMarginListener = (previousFocus, newFocus) -> {
             if (binding == null || newFocus == null) return;
-            // 系统默认的焦点滚动可能在下一帧完成；使用动画帧而非固定延时，避免视觉闪烁。
-            binding.scroll.postOnAnimation(() -> ensureFocusVisibleWithMargin(newFocus));
-            binding.scroll.postOnAnimationDelayed(() -> ensureFocusVisibleWithMargin(newFocus), 260);
+            // 合并连续焦点事件，每帧最多校正一次，避免连按方向键时堆积多个延迟校正任务。
+            pendingMarginFocus = newFocus;
+            binding.scroll.removeCallbacks(focusMarginRunnable);
+            binding.scroll.postOnAnimation(focusMarginRunnable);
         };
         binding.scroll.getViewTreeObserver().addOnGlobalFocusChangeListener(cardRowFocusMarginListener);
     }
@@ -5725,6 +5734,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         if (binding == null || cardRowFocusMarginListener == null) return;
         ViewTreeObserver observer = binding.scroll.getViewTreeObserver();
         if (observer.isAlive()) observer.removeOnGlobalFocusChangeListener(cardRowFocusMarginListener);
+        binding.scroll.removeCallbacks(focusMarginRunnable);
+        pendingMarginFocus = null;
         cardRowFocusMarginListener = null;
     }
 
@@ -6121,7 +6132,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         int cardCenter = focusedView.getLeft() + focusedView.getWidth() / 2;
         int delta = cardCenter - viewportCenter;
         if (Math.abs(delta) <= ResUtil.dp2px(2)) return;
-        binding.episodeContainer.smoothScrollBy(delta, 0);
+        binding.episodeContainer.scrollBy(delta, 0);
     }
 
     private void alignDetailEpisodeFocusedCardNow(View focusedView) {
@@ -9764,8 +9775,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private void openInlineExternal() {
         if (service() == null || player().isEmpty()) return;
         cancelPendingInlinePlayerSwitch();
-        PlayerHelper.choose(this, player().getUrl(), player().getHeaders(), player().isVod(), player().getPosition(), inlineTitleText());
-        setRedirect(true);
+        if (PlayerHelper.choose(this, player().getUrl(), player().getHeaders(), player().isVod(), player().getPosition(), inlineTitleText())) setRedirect(true);
     }
 
     private void showInlineEpisodes() {
@@ -9973,7 +9983,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
             }
         });
         adapter.setLight(lightTheme);
-        adapter.setActiveStrokeColor(0xFF2CC56F);
+        // 产品决策（2026-11-25）：所有焦点/当前态描边默认纯白，主题开启时由 ThemeBinder 跟随焦点色。
+        adapter.setActiveStrokeColor(0xFFFFFFFF);
         adapter.setNativeEnhanced(true);
         recycler.setAdapter(adapter);
         LinearLayout.LayoutParams recyclerParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);

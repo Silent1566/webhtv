@@ -1,7 +1,7 @@
 <resources xmlns:xliff="http://schemas.android.com/apk/res-auto">
 
     <!-- App -->
-    <string name="app_name">默影视</string>
+    <string name="app_name">蜂蜜影视</string>
    <string name="setting_app_branding">APP 图标</string>
     <string name="app_branding_icon_current">默认图标</string>
     <string name="app_branding_icon_history">原版图标</string>
@@ -276,6 +276,7 @@
     <string name="config_delete_message">确定删除“%1$s”吗？相关播放历史也可能丢失，此操作无法撤销。</string>
     <string name="config_current_delete_message">当前接口正在使用中，请先切换到其他接口再删除。</string>
     <string name="setting_home_history">首页最近观看</string>
+    <string name="setting_home_recommend">首页更新推荐</string>
     <string name="setting_personal_recommendation">个性推荐</string>
     <string name="setting_recommendation_feedback">不感兴趣管理</string>
     <string name="setting_recommendation_feedback_count">%1$d 项 · 90 天后自动恢复</string>
@@ -930,6 +931,7 @@
     <string name="theme_editor_hex_apply">使用此颜色</string>
     <string name="theme_editor_hex_invalid">请输入 #RRGGBB</string>
     <string name="theme_editor_preset_default">默认配置</string>
+    <string name="theme_editor_preset_honey">蜂蜜</string>
     <string name="theme_editor_preset_wallpaper">壁纸取色</string>
     <string name="theme_editor_preset_blue">澄海蓝</string>
     <string name="theme_editor_preset_teal">碧湾青</string>
@@ -1508,6 +1510,19 @@
     <string name="player_preload_pause">暂停时继续预载</string>
     <string name="player_preload_pause_wifi">仅 WiFi</string>
     <string name="player_preload_pause_always">始终</string>
+    <string name="player_seamless_queue">剧集无缝缓存集数</string>
+    <string name="player_seamless_queue_value">%1$d 集</string>
+    <string name="player_seamless_queue_off">关闭（仅短剧）</string>
+    <string name="player_seamless_switch">集数缓存总开关</string>
+    <string name="player_input_title_depth">输入无缝缓存集数（0-10）</string>
+    <string name="player_input_title_threads">输入预载线程数（1-128）</string>
+    <string name="player_input_title_size">输入缓存大小（MB，128-32768）</string>
+    <string name="ad_rule_export">导出规则</string>
+    <string name="ad_rule_import">导入规则</string>
+    <string name="ad_rule_export_done">已导出 %1$d 条规则到剪贴板</string>
+    <string name="ad_rule_import_hint">粘贴规则JSON或 http(s) 链接</string>
+    <string name="ad_rule_import_done">已导入 %1$d 条规则</string>
+    <string name="ad_rule_import_fail">导入失败：%1$s</string>
     <string name="player_auto_play">点播自动播放</string>
     <string name="player_live_source_fallback">直播源失效自动切换</string>
     <string name="player_auto_change">自动换源</string>
@@ -1751,6 +1766,8 @@
     <string name="error_play_fallback">%1$s 播放失败，已切换到 %2$s</string>
     <string name="error_play_ijk_unavailable">当前设备不可用 IJK 内核</string>
     <string name="error_play_ijk_unavailable_switch">当前设备不可用 IJK 内核，已切换到 %1$s</string>
+    <string name="error_play_external_unavailable">没有可用的外置播放器，内部播放保持不变</string>
+    <string name="error_play_switch_restored">%1$s 切换失败，已恢复到 %2$s</string>
     <string name="error_play_tvbus">错误代码：<xliff:g name="name">%s</xliff:g></string>
     <string name="error_detail">暂无播放数据</string>
     <string name="error_empty">这里什麽都没有 👀</string>
@@ -2976,6 +2993,7 @@
     <string name="setting_ad_group_rule">规则与统计</string>
     <string name="setting_ad_group_segment">片段跳过</string>
     <string name="setting_ad_master">去广告总开关</string>
+    <string name="setting_ad_notice">广告拦截成功提示</string>
     <string name="dialog_tmdb_test_config">测试配置</string>
     <string name="dialog_tmdb_test_result_title">配置测试结果</string>
     <string name="dialog_tmdb_test_api_success">TMDB API：连接成功并返回有效数据（%1$d 毫秒）</string>
@@ -3110,5 +3128,13 @@
     <string name="plugin_manager_perm_events">播放事件（plugin.events）</string>
     <string name="plugin_manager_perm_episode_data">剧集数据（plugin.data.episode）</string>
     <string name="plugin_panel_title">插件面板</string>
+    <string name="episode_cache_clear_title">清除剧集缓存</string>
+    <string name="episode_cache_clear_confirm">确定清除本片的剧集缓存吗？此操作不可撤销。</string>
+    <string name="player_preload_duration">预加载时长（分钟）</string>
+    <string name="player_preload_duration_value">%1$d 分钟</string>
+    <string name="player_seamless_expand">展开</string>
+    <string name="player_seamless_collapse">收起</string>
+    <string name="player_decode">解码方式</string>
+    <string name="player_seamless_detail">开启后播放完毕自动无缝衔接缓存的下一集。</string>
     <string name="crash_action_failed">操作失败，请重试。</string>
 </resources>

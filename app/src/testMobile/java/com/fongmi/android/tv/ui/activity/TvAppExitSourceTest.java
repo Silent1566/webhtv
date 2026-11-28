@@ -24,14 +24,16 @@ public class TvAppExitSourceTest {
     }
 
     @Test
-    public void homeRoutesExitThroughExplicitActions() throws Exception {
+    public void homeRoutesExitThroughDoubleBackWithoutConfirmDialog() throws Exception {
         String home = read("leanback", "java", "com", "fongmi", "android", "tv", "ui", "activity", "HomeActivity.java");
 
-        assertTrue(home.contains("ExitConfirmDialog.create(PlaybackService.canContinueInBackground())"));
+        // 首页改为两次返回退出，不再弹确认对话框（需求3、4）。
+        assertTrue(home.contains("BACK_EXIT_INTERVAL_MS"));
+        assertTrue(home.contains("mLastBackTime"));
         assertTrue(home.contains("AppExitCoordinator.exit(this)"));
         assertTrue(home.contains("moveTaskToBack(true)"));
+        assertFalse(home.contains("ExitConfirmDialog.create("));
         assertFalse(home.contains("confirmExitHome"));
-        assertFalse(home.contains("if (PlaybackService.isRunning()) moveTaskToBack(true)"));
     }
 
     @Test

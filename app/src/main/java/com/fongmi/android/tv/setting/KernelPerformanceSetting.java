@@ -72,12 +72,12 @@ public final class KernelPerformanceSetting {
 
     public static int getPreloadSizeMb(int kernel) {
         ensureMigrated();
-        return closestPreloadSize(Prefers.getInt(key(kernel, "preload_size"), PreloadSetting.MIN_SIZE_MB));
+        return clamp(Prefers.getInt(key(kernel, "preload_size"), PreloadSetting.MIN_SIZE_MB), PreloadSetting.MIN_SIZE_MB, PreloadSetting.MAX_SIZE_MB);
     }
 
     public static void putPreloadSizeMb(int kernel, int value) {
         ensureMigrated();
-        Prefers.put(key(kernel, "preload_size"), closestPreloadSize(value));
+        Prefers.put(key(kernel, "preload_size"), clamp(value, PreloadSetting.MIN_SIZE_MB, PreloadSetting.MAX_SIZE_MB));
     }
 
     public static int getPreloadTimeSeconds(int kernel) {
@@ -100,6 +100,16 @@ public final class KernelPerformanceSetting {
     public static void putPreloadAheadSeconds(int kernel, int value) {
         ensureMigrated();
         Prefers.put(key(kernel, "preload_ahead"), value);
+    }
+
+    public static int getSeamlessQueueDepth(int kernel) {
+        ensureMigrated();
+        return Prefers.getInt(key(kernel, "seamless_depth"), PreloadSetting.DEFAULT_SEAMLESS_DEPTH);
+    }
+
+    public static void putSeamlessQueueDepth(int kernel, int value) {
+        ensureMigrated();
+        Prefers.put(key(kernel, "seamless_depth"), value);
     }
 
     public static int getPausePreloadPolicy(int kernel) {
@@ -305,7 +315,7 @@ public final class KernelPerformanceSetting {
         int playCache = clamp(Prefers.getInt("play_cache"), 0, 4);
         boolean preload = Prefers.getBoolean("preload");
         int preloadThreads = clamp(Prefers.getInt("preload_threads", PreloadSetting.DEFAULT_THREADS), PreloadSetting.MIN_THREADS, PreloadSetting.MAX_THREADS);
-        int preloadSize = closestPreloadSize(Prefers.getInt("preload_size", PreloadSetting.MIN_SIZE_MB));
+        int preloadSize = clamp(Prefers.getInt("preload_size", PreloadSetting.MIN_SIZE_MB), PreloadSetting.MIN_SIZE_MB, PreloadSetting.MAX_SIZE_MB);
         int preloadTime = clamp(Prefers.getInt("preload_time", PreloadSetting.DEFAULT_TIME_SECONDS), PreloadSetting.MIN_TIME_SECONDS, PreloadSetting.MAX_TIME_SECONDS);
         boolean audioPass = Prefers.getBoolean("audio_pass_through", true);
         boolean preferAac = Prefers.getBoolean("prefer_aac");
@@ -348,19 +358,6 @@ public final class KernelPerformanceSetting {
     private static String key(int kernel, String suffix) {
         String prefix = kernel == PlayerSetting.MPV ? "perf_mpv_" : kernel == PlayerSetting.IJK ? "perf_ijk_" : "perf_exo_";
         return prefix + suffix;
-    }
-
-    private static int closestPreloadSize(int value) {
-        int[] options = {128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768};
-        int closest = options[0];
-        int distance = Math.abs(value - closest);
-        for (int option : options) {
-            int current = Math.abs(value - option);
-            if (current >= distance) continue;
-            closest = option;
-            distance = current;
-        }
-        return closest;
     }
 
     private static int clamp(int value, int min, int max) {

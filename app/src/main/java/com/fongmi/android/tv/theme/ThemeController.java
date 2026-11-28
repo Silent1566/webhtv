@@ -345,6 +345,17 @@ public final class ThemeController {
      * existing immersive layouts.
      */
     public static void applyFromPreferences(AppCompatActivity activity) {
+        try {
+            applyFromPreferencesInternal(activity);
+        } catch (RuntimeException ignored) {
+            // 外观只是装饰层：解析失败时回落到出厂浅色表，而不是让界面重建失败退出。
+            profile = ThemeProfile.defaultProfile();
+            baseline = ThemeTokens.light();
+            current = baseline;
+        }
+    }
+
+    private static void applyFromPreferencesInternal(AppCompatActivity activity) {
         ThemeProfile stored = null;
         try {
             stored = ThemeProfileStore.load();
@@ -373,7 +384,11 @@ public final class ThemeController {
      * default Layer 1 path is byte-identical and costs nothing.
      */
     public static void bindTheme(View root) {
-        ThemeBinder.bind(root, baseline, current);
+        try {
+            ThemeBinder.bind(root, baseline, current);
+        } catch (RuntimeException ignored) {
+            // 某个视图的颜色改写失败不应该让整棵视图树创建失败。
+        }
     }
 
     /** Same controlled channel for a dialog or bottom-sheet window. */
@@ -432,12 +447,9 @@ public final class ThemeController {
      * 而主题 FOCUS 槽的浅色取值是 5.03–5.99:1（Resolver 另有 ≥3:1 的对比度门）。
      */
     public static int focusRingColor(Context context) {
-        int compiled = compiledFocusRingColor(context);
-        // Comparing the resolved FOCUS role against the frozen baseline avoids a second
-        // light/dark resolution here (this runs on every card focus change) and states the
-        // rule exactly: follow the profile only when it actually moved the focus colour.
-        int active = current.colorFocus();
-        return active == baseline.colorFocus() ? compiled : active;
+        // 用户最终定稿：全局焦点色环不再跟随主题 FOCUS 槽，恒等于编译期白色。
+        // 只封住环色改写通道，白色焦点文字/图标与既有 selector 描边保持不变。
+        return compiledFocusRingColor(context);
     }
 
     /** The compiled {@code ?attr/tvFocusRing} value, shared with the XML selector path. */

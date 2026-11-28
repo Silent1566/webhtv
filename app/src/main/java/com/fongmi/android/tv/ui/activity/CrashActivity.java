@@ -43,6 +43,13 @@ public class CrashActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         mBinding = ActivityCrashBinding.inflate(getLayoutInflater());
         setContentView(mBinding.getRoot());
+        // Theme contract: CrashActivity is outside BaseActivity, so it binds its own tree.
+        // Any failure here must never mask the crash screen itself.
+        try {
+            com.fongmi.android.tv.theme.ThemeController.applyFromPreferences(this);
+            com.fongmi.android.tv.theme.ThemeController.bindTheme(mBinding.getRoot());
+        } catch (Throwable ignored) {
+        }
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
@@ -258,7 +265,7 @@ public class CrashActivity extends AppCompatActivity {
         } catch (Throwable ignored) {
             version = "unknown";
         }
-        new AlertDialog.Builder(this)
+        new com.fongmi.android.tv.theme.WebHtvAlertDialogBuilder(this)
                 .setTitle(R.string.crash_details_title)
                 .setMessage(getString(R.string.crash_details_message, version, errorDetails()))
                 .setPositiveButton(R.string.crash_details_close, null)

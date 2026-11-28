@@ -51,7 +51,7 @@ import com.fongmi.android.tv.web.ext.WebHomeExtensionRegistry;
 
 public class SettingEnhanceActivity extends BaseActivity {
 
-    private static final String URL_GITHUB = "https://github.com/Silent1566/webhtv";
+    private static final String URL_GITHUB = "https://github.com/AZHUZHITAN/webhtv";
     private static final String URL_CNB = "https://cnb.cool/fish2018/ext";
 
     private ActivitySettingEnhanceBinding mBinding;
@@ -67,6 +67,11 @@ public class SettingEnhanceActivity extends BaseActivity {
     @Override
     protected ViewBinding getBinding() {
         return mBinding = ActivitySettingEnhanceBinding.inflate(getLayoutInflater());
+    }
+
+    @Override
+    protected int settingTopFocusId() {
+        return R.id.customCsp;
     }
 
     @Override

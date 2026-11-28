@@ -16,10 +16,38 @@ public final class ThemeProfileStore {
 
     /** Reads the active profile; corrupted or missing data never blocks the caller. */
     public static ThemeProfile load() {
+        try {
+            return loadInternal();
+        } catch (RuntimeException ignored) {
+            // 任何主题档损坏或内置预设异常都不应该阻断界面：回落到出厂档。
+            return ThemeProfile.defaultProfile();
+        }
+    }
+
+    private static ThemeProfile loadInternal() {
         ThemeProfile current = parse(Prefers.getString(KEY_PROFILE));
         if (current != null) return current;
         ThemeProfile lastGood = parse(Prefers.getString(KEY_LAST_GOOD));
-        return lastGood != null ? lastGood : migrateLegacy(Setting.getThemeColor(), Prefers.getString(LEGACY_KEY_PROFILE));
+        if (lastGood != null) return lastGood;
+        String legacyJson = Prefers.getString(LEGACY_KEY_PROFILE);
+        int legacyColor = Setting.getThemeColor();
+        // 产品默认（2026-11-25 定稿）：用户从未做过任何主题选择时，默认**主题配色关闭**，
+        // 全局观感对齐上游 FongMi/TV——原生编译期基线色板 + 纯白焦点环。
+        // 蜂蜜金等预设仍保留在外观编辑器里供用户主动选择。
+        if (legacyColor == -1 && (legacyJson == null || legacyJson.isBlank())) return honeyDefault();
+        return migrateLegacy(legacyColor, legacyJson);
+    }
+
+    /**
+     * The shipped default theme: an empty profile that leaves the compiled baseline
+     * (FongMi/TV stock palette with pure-white focus rings) untouched — i.e. theme OFF.
+     */
+    public static ThemeProfile honeyDefault() {
+        try {
+            return ThemeProfile.defaultProfile();
+        } catch (RuntimeException ignored) {
+            return ThemeProfile.defaultProfile();
+        }
     }
 
     /** Returns the last successfully persisted profile, or null when none is usable. */
@@ -49,7 +77,7 @@ public final class ThemeProfileStore {
     }
 
     public static ApplyResult reset() {
-        return apply(ThemeProfile.defaultProfile());
+        return apply(honeyDefault());
     }
 
     /** Maps the legacy theme_color mirror and, when present, bounded v1 profile fields. */

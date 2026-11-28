@@ -62,7 +62,7 @@ public final class AppBranding {
     }
 
     public static int getIconMode() {
-        return normalizeIconMode(Prefers.getInt(ICON_KEY, ICON_CURRENT));
+        return normalizeIconMode(Prefers.getInt(ICON_KEY, ICON_HISTORY));
     }
 
     public static int getIconMode(@NonNull Context context) {

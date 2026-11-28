@@ -40,6 +40,11 @@ public class SettingAppearanceActivity extends BaseActivity {
     }
 
     @Override
+    protected int settingTopFocusId() {
+        return R.id.uiScale;
+    }
+
+    @Override
     protected void initView(Bundle savedInstanceState) {
         mBinding.uiScale.requestFocus();
         setText();

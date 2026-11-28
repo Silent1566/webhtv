@@ -39,7 +39,8 @@ public class NativeEnhancedPlaybackStyleFocusTest {
         String colors = read(COLORS);
         assertTrue("焦点环色必须只有一个来源且必须跟随主题焦点槽",
                 colors.contains("<color name=\"tv_item_focus_ring\">@color/webhtv_color_focus</color>"));
-        assertTrue("当前播放环色必须只有一个来源", colors.contains("<color name=\"tv_item_current_ring\">#2CC56F</color>"));
+        assertTrue("当前播放环色默认必须为纯白且只有一个来源（主题配色开启时由 ThemeBinder 改写为焦点色）",
+                colors.contains("<color name=\"tv_item_current_ring\">#FFFFFFFF</color>"));
         assertTrue("常态描边色必须只有一个来源", colors.contains("<color name=\"tv_item_normal_stroke\">#33FFFFFF</color>"));
 
         // 焦点语义必须可被主题覆写，而不是散落的字面量：属性定义 + 两个 flavor 的绑定都要在。
@@ -70,8 +71,9 @@ public class NativeEnhancedPlaybackStyleFocusTest {
         String episode = values(read(EPISODE_CARD_SELECTOR));
         assertTrue("选集卡（应用表面，与详情页/手机版共用）焦点环必须继续走 tvFocusRing",
                 episode.contains("android:color=\"?attr/tvFocusRing\""));
-        assertTrue("选集卡当前态必须继续走 tvCurrentRing",
-                episode.contains("android:color=\"?attr/tvCurrentRing\""));
+        // 2026-11-25 对齐 FongMi/TV：白环只跟随焦点，选集卡当前态（activated/selected）不再有常驻描边。
+        assertFalse("选集卡当前态不允许再有常驻描边（白环只跟焦点）",
+                episode.contains("?attr/tvCurrentRing"));
 
         String chip = values(read(CHIP_SELECTOR));
         assertTrue("播放页芯片焦点态必须引用统一宽度 token",
@@ -119,8 +121,9 @@ public class NativeEnhancedPlaybackStyleFocusTest {
         // 2026-10-11：芯片改归「应用表面」族，当前态同步收回到 ?attr/tvCurrentRing。
         assertTrue("当前播放环必须引用统一宽度 token",
                 body.contains("android:width=\"@dimen/webhtv_focus_ring_width\""));
-        assertTrue("常态必须补上 1dp 常态描边，消除「没有边框颜色」的芯片",
-                body.contains("android:width=\"1dp\" android:color=\"?attr/tvNormalStroke\""));
+        // 2026-11-25 对齐 FongMi/TV：常态不再有描边轮廓，白环只跟随焦点。
+        assertFalse("常态不允许再出现描边轮廓",
+                body.contains("?attr/tvNormalStroke"));
         assertTrue("state_selected 仍然只承担跑马灯开关，不能加描边",
                 body.contains("跑马灯开关"));
         assertTrue("chip selector 的 activated 分支（selector_chip→shape_chip_activated）必须走 tvPlayerCurrentRing",
@@ -326,7 +329,8 @@ public class NativeEnhancedPlaybackStyleFocusTest {
                 source.contains("private void styleRatingChipBackground(View view, boolean focused)")
                         && source.contains("ResUtil.dp2px(TV_ITEM_FOCUS_WIDTH_DP), getColor(R.color.tv_item_focus_ring)")
                         && source.contains("TV_ITEM_FOCUS_WIDTH_DP = 3"));
-        assertTrue("评分卡片常态必须保留可读的 1dp 半透明描边",
+        // 2026-11-25 对齐 FongMi/TV：评分卡片常态不再有描边轮廓，白环只跟焦点。
+        assertFalse("评分卡片常态不允许再有描边轮廓",
                 source.contains("background.setStroke(ResUtil.dp2px(1), 0x33FFFFFF)"));
         assertTrue("评分卡片必须在异步到达后重算焦点链",
                 source.contains("private void renderTmdbRatingChips(View label, ViewGroup container, java.util.List<String[]> chips)")

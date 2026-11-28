@@ -24,6 +24,7 @@ import com.fongmi.android.tv.history.HistoryDisplayPolicy;
 import com.fongmi.android.tv.player.VideoAspectMode;
 import com.fongmi.android.tv.playback.PlaybackProgressWriter;
 import com.fongmi.android.tv.playback.PlaybackDeleteTombstoneStore;
+import com.fongmi.android.tv.playback.ProgressVault;
 import com.fongmi.android.tv.playback.SubtitleSource;
 import com.fongmi.android.tv.playback.TmdbSeasonProgressStore;
 import com.fongmi.android.tv.setting.PlayerSetting;
@@ -1237,6 +1238,8 @@ public class History implements Diffable<History> {
         });
         if (saved[0] && recommendationSignalsChanged(before[0], this)) notifyChanged();
         if (saved[0]) FollowingStore.project(this);
+        if (saved[0]) ProgressVault.record(this);
+        if (saved[0]) Keep.mirrorProgress(this);
     }
 
     public History save(int cid) {
@@ -1297,6 +1300,8 @@ public class History implements Diffable<History> {
         });
         if (saved[0] && recommendationSignalsChanged(before[0], this)) notifyChanged();
         if (saved[0]) FollowingStore.project(this);
+        if (saved[0]) ProgressVault.record(this);
+        if (saved[0]) Keep.mirrorProgress(this);
         return this;
     }
 

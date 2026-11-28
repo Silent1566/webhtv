@@ -14,7 +14,6 @@ import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.event.RefreshEvent;
 import com.fongmi.android.tv.following.FollowingScheduler;
 import com.fongmi.android.tv.following.FollowingSettings;
-import com.fongmi.android.tv.setting.AppBranding;
 import com.fongmi.android.tv.setting.AutoBackupPolicy;
 import com.fongmi.android.tv.setting.GroupRuleConfig;
 import com.fongmi.android.tv.setting.PlayerSetting;
@@ -58,6 +57,11 @@ public class SettingPersonalActivity extends BaseActivity {
     }
 
     @Override
+    protected int settingTopFocusId() {
+        return R.id.homeVodAutoLoad;
+    }
+
+    @Override
     protected void initView(Bundle savedInstanceState) {
         mBinding.homeVodAutoLoad.requestFocus();
         setText();
@@ -80,11 +84,11 @@ public class SettingPersonalActivity extends BaseActivity {
         mBinding.playSpeed.setOnClickListener(this::setPlaySpeed);
         mBinding.groupRule.setOnClickListener(this::setGroupRule);
         mBinding.homeHistory.setOnClickListener(this::setHomeHistory);
+        mBinding.homeRecommend.setOnClickListener(this::setHomeRecommend);
         mBinding.searchThread.setOnClickListener(this::setSearchThread);
         mBinding.searchUi.setOnClickListener(this::setSearchUi);
         mBinding.searchResultSort.setOnClickListener(this::setSearchResultSort);
         // mBinding.searchColumn.setOnClickListener(this::setSearchColumn); // 在搜索页面切换更方便
-        mBinding.appBranding.setOnClickListener(this::startAppBranding);
         mBinding.resetApp.setOnClickListener(this::showResetAppDialog);
         mBinding.touchOptimization.setOnClickListener(this::setTouchOptimization);
     }
@@ -111,11 +115,11 @@ public class SettingPersonalActivity extends BaseActivity {
         mBinding.playSpeedText.setText(getSpeedText(PlayerSetting.getDefaultSpeed()));
         mBinding.groupRuleText.setText(getString(R.string.setting_group_rule_summary, GroupRuleConfig.enabledCount(), GroupRuleConfig.totalCount()));
         mBinding.homeHistoryText.setText(getSwitch(Setting.isHomeHistory()));
+        mBinding.homeRecommendText.setText(getSwitch(Setting.isHomeRecommend()));
         mBinding.searchThreadText.setText(String.valueOf(Setting.getSearchThread()));
         mBinding.searchUiText.setText((searchUi = getResources().getStringArray(R.array.select_search_ui))[Setting.getSearchUi()]);
         mBinding.searchResultSortText.setText((searchResultSort = getResources().getStringArray(R.array.select_search_result_sort))[Setting.getSearchResultSort()]);
         // mBinding.searchColumnText.setText(getSearchColumnText()); // 在搜索页面切换更方便
-        mBinding.appBrandingText.setText(AppBranding.getSummary(this));
         mBinding.touchOptimizationText.setText(getSwitch(Setting.isTouchOptimized()));
     }
 
@@ -232,6 +236,12 @@ public class SettingPersonalActivity extends BaseActivity {
         setText();
     }
 
+    private void setHomeRecommend(View view) {
+        Setting.putHomeRecommend(!Setting.isHomeRecommend());
+        RefreshEvent.home();
+        setText();
+    }
+
     private void setSearchThread(View view) {
         SliderNumberDialog.show(this, R.string.setting_search_thread, Setting.getSearchThread(), 1, 100, value -> {
             Setting.putSearchThread(value);
@@ -256,10 +266,6 @@ public class SettingPersonalActivity extends BaseActivity {
                 .setNegativeButton(R.string.dialog_negative, null)
                 .setPositiveButton(R.string.dialog_positive, (dialog, which) -> resetApp())
                 .show();
-    }
-
-    private void startAppBranding(View view) {
-        AppBrandingActivity.start(this);
     }
 
     private void setTouchOptimization(View view) {

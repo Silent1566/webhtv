@@ -130,6 +130,7 @@ import com.fongmi.android.tv.utils.Task;
 import com.fongmi.android.tv.utils.Util;
 import com.github.catvod.crawler.SpiderDebug;
 import com.github.catvod.net.OkHttp;
+import com.github.catvod.utils.Prefers;
 import com.google.common.net.HttpHeaders;
 
 import is.xyz.mpv.MPVLib;
@@ -297,8 +298,13 @@ public class PlayerManager implements ParseCallback {
     private boolean lutWarmupReloadPreviewPending;
     private boolean hardDecodeSwitchRetryArmed;
     private boolean softDecodeFallbackAttempted;
+    private boolean ijkRenderSwapFallbackTried;
+    private int ijkRenderSwapTriedTarget = -1;
     private boolean lutAllowed = true;
     private boolean manualPlayerSwitchPending;
+    /** 手动换核前的引擎：新内核起播失败时用它恢复画面，不让播放页停在黑屏。 */
+    private int manualSwitchRestorePlayer = PlayerSetting.NONE;
+    private long manualSwitchRestorePosition;
     private boolean mpvAutoOutputEvaluated;
     private boolean mpvAutoOutputFrameReady;
     private boolean mpvAutoOutputEvaluationScheduled;
@@ -320,9 +326,15 @@ public class PlayerManager implements ParseCallback {
     private boolean ijkRuntimeTemporaryFallback;
     private boolean ijkRuntimeManualOverride;
     private boolean pendingIjkRuntimeFallbackReparse;
+    /** 当前会话内核是否来自自动回退（IJK 失败换核等）。自动回退只对本集有效：
+     *  下一次 start() 起播时回到设置页的全局默认内核；手动选择（chosen=true）会清掉本标记。 */
+    private boolean autoKernelOverride;
     private boolean playbackForeground;
     private boolean exoDecoderResourceRecoveryInProgress;
+    /** 用户请求/记录的内核（设置页或历史记忆），不等于实际运行的内核。 */
     private int playerType;
+    /** 实际创建并运行的引擎内核。DASH+SYSTEM 会被透明委派给 EXO，此时 playerType=SYSTEM 而本值=EXO。 */
+    private int effectivePlayerType;
     private int retry;
     private int localProxyRetry;
     private int transientSourceRetry;
@@ -409,11 +421,31 @@ public class PlayerManager implements ParseCallback {
         // 播放页可能在服务起来之前就定好了本次要用的内核（按剧集记住的选择），
         // 所以这里读会话内核；没有会话时它自然退回设置页的全局默认。
         this.playerType = PlayerSetting.getActivePlayer();
+        this.effectivePlayerType = this.playerType;
         PlayerSetting.putActivePlayer(this.playerType);
         this.playerFallbackTried = new boolean[PLAYER_COUNT];
+        migrateIjkTvPlaybackDefaults();
         mediaSession.begin(0L);
-        this.engine = buildEngine(playerType, PlayerEngine.HARD);
+        this.engine = buildEngine(playerType, PlayerSetting.getDecode(playerType));
         this.player = engine.getPlayer();
+    }
+
+    /**
+     * TV 端一次性播放默认迁移：旧版本把 IJK 锁死在 SurfaceView 且默认硬解，两处叠加是
+     * 「黑屏有声」的直接来源。升级到修复版后，TV 设备重置为软解 + TextureView——
+     * 与手机端正常组合（软解 + Surface）等价的 TV 适配路径；手机端不动。
+     * 设置页仍可随时改回，看门狗的渲染互换兜底也会在起播失败时自动换向。
+     */
+    private static void migrateIjkTvPlaybackDefaults() {
+        if (Util.isMobile()) return;
+        if (Prefers.getBoolean("ijk_tv_playback_migrated_578")) return;
+        Prefers.put("ijk_tv_playback_migrated_578", true);
+        if (PlayerSetting.getDecode(PlayerSetting.IJK) == PlayerEngine.HARD) {
+            PlayerSetting.putDecode(PlayerSetting.IJK, PlayerEngine.SOFT);
+        }
+        if (PlayerSetting.getRender() == PlayerSetting.RENDER_SURFACE) {
+            PlayerSetting.putRender(PlayerSetting.RENDER_TEXTURE);
+        }
     }
 
     public void release() {
@@ -448,6 +480,7 @@ public class PlayerManager implements ParseCallback {
         ijkRuntimeTemporaryFallback = false;
         ijkRuntimeManualOverride = false;
         pendingIjkRuntimeFallbackReparse = false;
+        manualSwitchRestorePlayer = PlayerSetting.NONE;
         closeMultiThreadProxyRegistration();
         mpvAutoGpuPinnedForSession = false;
         mpvAutoVulkanPinnedForItem = false;
@@ -1047,7 +1080,7 @@ public class PlayerManager implements ParseCallback {
     }
 
     public boolean isIjk() {
-        return playerType == PlayerSetting.IJK;
+        return effectivePlayerType == PlayerSetting.IJK;
     }
 
     public boolean useNativeVideoOutput() {
@@ -1185,7 +1218,7 @@ public class PlayerManager implements ParseCallback {
     }
 
     public boolean isMpv() {
-        return playerType == PlayerSetting.MPV;
+        return effectivePlayerType == PlayerSetting.MPV;
     }
 
     public boolean sendMpvCustomButton(String id, boolean longPress) {
@@ -1234,7 +1267,7 @@ public class PlayerManager implements ParseCallback {
     }
 
     public boolean isExo() {
-        return playerType == PlayerSetting.EXO;
+        return effectivePlayerType == PlayerSetting.EXO;
     }
 
     public boolean requiresTextureRenderForLut() {
@@ -2188,7 +2221,7 @@ public void resetTrack(int type) {
         beginIjkRuntimeManualOverride();
         int previousDecode = engine.getDecode();
         int next = engine.isHard() ? PlayerEngine.SOFT : PlayerEngine.HARD;
-        boolean resetVideoSurface = playerType == PlayerSetting.EXO && next == PlayerEngine.HARD;
+        boolean resetVideoSurface = isExo() && next == PlayerEngine.HARD;
         hardDecodeSwitchRetryArmed = next == PlayerEngine.HARD;
         beginPlaybackTrace("switch-decode");
         // The control bar's decode button is the primary manual soft/hard switch, so it must be
@@ -2259,7 +2292,7 @@ public void resetTrack(int type) {
         beginPlaybackTrace("switch-decode-fresh");
         int next = engine.isHard() ? PlayerEngine.SOFT : PlayerEngine.HARD;
         logSwitchCause("decode", "user-choice", playerType, playerType, engine.getDecode(), next, false, position);
-        boolean resetVideoSurface = playerType == PlayerSetting.EXO && next == PlayerEngine.HARD;
+        boolean resetVideoSurface = isExo() && next == PlayerEngine.HARD;
         boolean wasPlayWhenReady = player.getPlayWhenReady();
         prepareSeq++;
         resetLutRuntimeState("switch_decode_fresh", true);
@@ -2285,7 +2318,7 @@ public void resetTrack(int type) {
         beginPlaybackTrace("switch-decode-result");
         int next = engine.isHard() ? PlayerEngine.SOFT : PlayerEngine.HARD;
         logSwitchCause("decode", "user-choice", playerType, playerType, engine.getDecode(), next, false, position);
-        boolean resetVideoSurface = playerType == PlayerSetting.EXO && next == PlayerEngine.HARD;
+        boolean resetVideoSurface = isExo() && next == PlayerEngine.HARD;
         boolean wasPlayWhenReady = player.getPlayWhenReady();
         prepareSeq++;
         resetLutRuntimeState("switch_decode_result", true);
@@ -2347,7 +2380,11 @@ public void resetTrack(int type) {
     public void preparePlayer(int type, boolean force) {
         int next = resolveAvailablePlayer(PlayerSetting.sanitizePlayer(type));
         PlayerSetting.putActivePlayer(next);
-        if (engine == null || player == null || (next == playerType && !force)) return;
+        // 历史内核起播是用户意图的直接体现：清除自动回退标记。
+        autoKernelOverride = false;
+        // 同核心不重建也要看「实际运行内核」：DASH 委派后 playerType=SYSTEM 但实际是 EXO，
+        // 若仅比较 playerType 会把下一条普通视频误判为同核心，一直留在 EXO，无法回到用户选的 SYSTEM。
+        if (engine == null || player == null || (next == playerType && next == effectivePlayerType && !force)) return;
         int decode = engine.getDecode();
         int previousType = playerType;
         resetPlayerFallback();
@@ -2390,6 +2427,8 @@ public void resetTrack(int type) {
         engine.release();
         playerType = type;
         PlayerSetting.putActivePlayer(type);
+        // 用户指定的起播内核：清除自动回退标记。
+        autoKernelOverride = false;
         spec = freshSpec;
         bindPlaybackTrace();
         playWhenReady = wasPlayWhenReady;
@@ -2408,6 +2447,13 @@ public void resetTrack(int type) {
         beginIjkRuntimeManualOverride();
         beginPlaybackTrace("switch-player-result");
         type = PlayerSetting.sanitizePlayer(type);
+        if (type != playerType) {
+            manualSwitchRestorePlayer = playerType;
+            // 这个重载（移动端「重新取址后换核」走这里）此前只记了要回退的内核，
+            // 漏记播放位置；新内核失败回退时拿到的是 0，用户看到的是「切回 EXO 后
+            // 从头播/黑屏」。与 switchPlayerManually() 保持同一口径。
+            manualSwitchRestorePosition = position;
+        }
         manualPlayerSwitchPending = true;
         boolean resetVideoSurface = type != playerType;
         boolean wasPlayWhenReady = player.getPlayWhenReady();
@@ -2420,23 +2466,33 @@ public void resetTrack(int type) {
         engine.release();
         playerType = type;
         PlayerSetting.putActivePlayer(type);
+        // 用户指定的起播内核：清除自动回退标记。
+        autoKernelOverride = false;
         logSwitchCause("user-choice", previousType, type, decode, decode, true, position);
         engine = buildEngine(playerType, decode);
         player = engine.getPlayer();
         playWhenReady = wasPlayWhenReady;
-        callback.onPlayerRebuild(player, resetVideoSurface);
-        if (result.needParse() || useParse) {
+        // 必须在 spec 换成新会话之后再通知重建：onPlayerRebuild 里的 isOwner() 用
+        // manager.getKey()（即 spec.key）与会话令牌比对。若沿用旧 spec，B 站等线路
+        // 切内核那一刻 key 尚未更新，归属判假，setRender/surface 重绑整段被跳过，
+        // 新引擎拿不到输出面 —— 表现为切 IJK 失败、报错或黑屏。与
+        // switchPlayer(int, PlaySpec, ...) 的顺序保持一致（先 spec 后回调）。
+        boolean needParse = result.needParse() || useParse;
+        if (needParse) {
             pendingSwitchRestore = true;
             pendingSwitchPositionMs = position;
             pendingSwitchSpeed = speed;
             pendingSwitchRepeat = repeat;
             spec = PlaySpec.fromParse(result, key, metadata, useParse);
-            bindPlaybackTrace();
+        } else {
+            spec = PlaySpec.from(result, key, metadata);
+        }
+        bindPlaybackTrace();
+        callback.onPlayerRebuild(player, resetVideoSurface);
+        if (needParse) {
             if (SpiderDebug.isEnabled()) SpiderDebug.log("player", "switch player fresh parse type=%d position=%d useParse=%s spec=%s", type, position, useParse, debugSpec());
             parseJob = ParseJob.create(this).start(result, useParse);
         } else {
-            spec = PlaySpec.from(result, key, metadata);
-            bindPlaybackTrace();
             if (SpiderDebug.isEnabled()) SpiderDebug.log("player", "switch player fresh result type=%d position=%d spec=%s", type, position, debugSpec());
             setMediaItem(Constant.TIMEOUT_PLAY);
             if (position > 0) seekTo(position);
@@ -2446,12 +2502,28 @@ public void resetTrack(int type) {
     }
 
     private void switchPlayer(int type, boolean manual) {
-        if (engine == null || player == null) return;
+        if (engine == null || player == null) {
+            PlaybackSwitchLog.log("switch", "request aborted reason=no-engine-or-player manual=%s", manual);
+            return;
+        }
+        int requested = type;
         type = PlayerSetting.sanitizePlayer(type);
         type = manual ? resolveManualPlayer(type) : resolveAvailablePlayer(type);
-        if (type == playerType) return;
+        PlaybackSwitchLog.log("switch", "request from=%s to=%s(manual=%s) resolved=%s current=%s",
+                getPlayerText(playerType), getPlayerText(requested), manual, getPlayerText(type), getPlayerText(playerType));
+        if (type == playerType) {
+            PlaybackSwitchLog.log("switch", "request aborted reason=resolved-same player=%s", getPlayerText(type));
+            return;
+        }
+        if (manual) {
+            manualSwitchRestorePlayer = playerType;
+            // 换核那一刻先记住播放位置：新内核若失败回退，恢复时要用这个位置，
+            // 而不是已重建引擎上的 0（失败内核从未 prepared，getPosition()=0）。
+            manualSwitchRestorePosition = getPosition();
+        }
         resetPlayerFallback();
         manualPlayerSwitchPending = manual;
+        PlaybackSwitchLog.log("switch", "pending set=%s restore=%s", manual, getPlayerText(manualSwitchRestorePlayer));
         if (manual) beginIjkRuntimeManualOverride();
         beginPlaybackTrace("switch-player");
         switchEngine(type, true, true, true, engine.getDecode(), "user-choice");
@@ -2498,13 +2570,18 @@ public void resetTrack(int type) {
         // 于是「以为在跑 A、实际在跑 B」被后续每一次取址放大。用户的选择由历史记录承载，
         // 每次起播 applyHistoryPlayerKernel() 会重新写回它。
         PlayerSetting.putActivePlayer(type);
+        // 自动回退产生的内核不粘滞到下一集：标记后由 start() 在新起播时恢复全局默认。
+        autoKernelOverride = !chosen;
         logSwitchCause(cause, previousType, type, previousDecode, sanitizeDecode(decode), chosen, position);
         if (SpiderDebug.isEnabled()) SpiderDebug.log("player", "switch player type=%d chosen=%s position=%d spec=%s", type, chosen, position, debugSpec());
         engine = buildEngine(playerType, sanitizeDecode(decode));
         player = engine.getPlayer();
+        PlaybackSwitchLog.log("engine", "built type=%s decode=%d player=%s cause=%s chosen=%s specNull=%s",
+                getPlayerText(playerType), sanitizeDecode(decode), player == null ? "null" : player.getClass().getSimpleName(), cause, chosen, spec == null || spec.getUrl() == null);
         // A Surface used by a CPU renderer stays connected after decoder release.
         // A different player needs a new Surface before its GPU/codec can connect.
         callback.onPlayerRebuild(player, true);
+        PlaybackSwitchLog.log("engine", "onPlayerRebuild dispatched player=%s", getPlayerText(playerType));
         if (spec == null || spec.getUrl() == null) return;
         this.playWhenReady = wasPlayWhenReady;
         if (reparseForPlayerSwitch(position, speed, repeat)) return;
@@ -4298,12 +4375,38 @@ public void resetTrack(int type) {
                         new IjkFirstFrameWatchdog.RuntimeSample(
                                 sample.active(),
                                 hasVideoTrackForFirstFrame(facts),
-                                sample.outputFrameRateUsable()),
+                                // 必须真的收到 VIDEO_RENDERING_START 才算「有画面」：
+                                // 硬解在部分设备上会持续解码并出声，但 SDL 没有拿到有效 Surface，
+                                // 此时 outputFps 仍可能非 0，旧判定会一直不触发，表现就是永久黑屏。
+                                sample.outputFrameRateUsable()
+                                        && ijkRenderedFirstFrame()),
                         nowElapsedMs);
         if (!decision.timedOut()) return false;
         int fallbackMode = PlayerSetting.getFailureFallback();
         int decode = engine == null ? PlayerEngine.HARD : engine.getDecode();
         int fallbackAction = nextFallbackAction(fallbackMode, decode);
+        // 软解都黑屏（6 秒无 VIDEO_RENDERING_START）说明问题多半不在解码而在渲染：
+        // 部分设备 SurfaceView 路径黑屏（有声无画），换 TextureView 是最后的自救手段。
+        // 互换一次性生效并持久化，用户能在设置页看到被改的值；同一方向只试一次，
+        // 重复超时不再换回已知失败的方向，直接按原链切内核。
+        if (fallbackAction == FALLBACK_PLAYER && !ijkRenderSwapFallbackTried) {
+            ijkRenderSwapFallbackTried = true;
+            int swapped = PlayerSetting.getRender() == PlayerSetting.RENDER_SURFACE
+                    ? PlayerSetting.RENDER_TEXTURE : PlayerSetting.RENDER_SURFACE;
+            if (swapped != ijkRenderSwapTriedTarget) {
+                ijkRenderSwapTriedTarget = swapped;
+                PlayerSetting.putRender(swapped);
+                PlaybackTrace.log("ijk-first-frame-watchdog", playbackTrace.current(),
+                        "action=render-swap from=%s to=%s",
+                        PlayerSetting.RENDER_SURFACE == swapped ? "texture" : "surface",
+                        swapped == PlayerSetting.RENDER_SURFACE ? "surface" : "texture");
+                App.removeCallbacks(runnable);
+                completeIjkBufferManagedReload(false, "first-frame-render-swap", nowElapsedMs, true);
+                switchEngine(playerType, false, true, true, PlayerSetting.getDecode(playerType),
+                        "ijk-render-swap");
+                return true;
+            }
+        }
         PlaybackTrace.log(
                 "ijk-first-frame-watchdog",
                 playbackTrace.current(),
@@ -4338,6 +4441,14 @@ public void resetTrack(int type) {
                 "first-frame-timeout", nowElapsedMs);
         callback.onError(ResUtil.getString(R.string.error_play_stage_output));
         return true;
+    }
+
+    private boolean ijkRenderedFirstFrame() {
+        try {
+            return !(engine instanceof IjkPlayerEngine ijk) || ijk.hasRenderedFirstFrame();
+        } catch (Throwable ignored) {
+            return true;
+        }
     }
 
     // 首帧看门狗的视频轨证据：轨道列表在 prepared 后即可得，不依赖
@@ -4532,7 +4643,7 @@ public void resetTrack(int type) {
         }
         PlayerEngine replacement;
         try {
-            replacement = buildEngine(PlayerSetting.IJK, PlayerEngine.HARD);
+            replacement = buildEngine(PlayerSetting.IJK, PlayerSetting.getDecode(PlayerSetting.IJK));
         } catch (Throwable error) {
             PlaybackTrace.log(
                     "ijk-runtime-profile",
@@ -6292,6 +6403,16 @@ public void resetTrack(int type) {
     }
 
     private PlayerEngine buildEngine(int type, int decode) {
+        if (type == PlayerSetting.SYSTEM && isDashSpec(spec)) {
+            // Android MediaPlayer 不支持 DASH MPD：选「系统」时实测 what=1,
+            // extra=-2147483648，随后立刻回退 EXO，用户看到的是「默认播放器不行」。
+            // DASH 线路透明交给 EXO 起播，避免点一下就报错/黑屏。
+            PlaybackSwitchLog.log("engine",
+                    "system dash delegated to exo format=%s urlLen=%d",
+                    spec == null ? "null" : spec.getFormat(),
+                    spec == null || spec.getUrl() == null ? 0 : spec.getUrl().length());
+            type = PlayerSetting.EXO;
+        }
         if (type != PlayerSetting.EXO) {
             exoSpeedRestoreState.clear();
             mediaSignals.detachPipeline();
@@ -6302,7 +6423,26 @@ public void resetTrack(int type) {
             case PlayerSetting.MPV -> new MpvPlayerEngine(decode, lutAllowed, listener, this::onMpvVideoSizeProbed);
             default -> new ExoPlayerEngine(decode, listener, mediaSignals, mediaClock);
         };
+        // type 已含 DASH 委派结果：记录实际运行内核，与用户请求的 playerType 区分开。
+        // 这样 isExo() 等引擎能力判断反映真实引擎，而不是用户当初选的内核。
+        this.effectivePlayerType = type;
         return next;
+    }
+
+    private static boolean isDashSpec(PlaySpec spec) {
+        if (spec == null) return false;
+        String format = spec.getFormat();
+        if (format != null && (format.toLowerCase(Locale.US).contains("dash")
+                || format.toLowerCase(Locale.US).contains("mpd"))) return true;
+        String url = spec.getUrl();
+        if (url == null) return false;
+        String lower = url.toLowerCase(Locale.US);
+        return lower.contains("type=mpd") || lower.contains("format=mpd") || lower.endsWith(".mpd")
+                // 本地代理改写后的 MPD（/mpv/index.mpd?s=N）不含上述标记，
+                // 漏判会让系统播放器直接拿到 MPD，MediaPlayer 探测 MPD 失败
+                // 前会挂起十几秒，用户看到的就是「切系统加载缓慢」。
+                || lower.contains("/mpv/index.mpd")
+                || lower.contains("application/dash+xml");
     }
 
     public void browse(PlaySpec spec) {
@@ -6328,17 +6468,33 @@ public void resetTrack(int type) {
         prepareIjkRuntimeForUserPlayback();
         clearPendingSwitchRestore();
         clearDanmaku("start");
+        // 默认内核尊重：上一集的自动回退（如 IJK 失败换 EXO）只对那一集有效，
+        // 新起播回到设置页的全局默认内核；用户手动选择不受影响（chosen=true 清标记）。
+        if (autoKernelOverride) {
+            autoKernelOverride = false;
+            int defaultPlayer = PlayerSetting.getPlayer();
+            if (playerType != defaultPlayer) {
+                if (SpiderDebug.isEnabled()) {
+                    SpiderDebug.log("player", "start restore default player from=%s to=%s (auto-fallback not sticky)",
+                            getPlayerText(playerType), getPlayerText(defaultPlayer));
+                }
+                preparePlayer(defaultPlayer);
+            }
+        }
         this.spec = spec;
         pendingInitialStartPositionMs = positionMs > 0 ? positionMs : C.TIME_UNSET;
         prepareMpvOutputForNewItem();
         beginPlaybackTrace("start", false);
         this.playWhenReady = playWhenReady;
         manualPlayerSwitchPending = false;
+        manualSwitchRestorePlayer = PlayerSetting.NONE;
         localProxyRetry = 0;
         transientSourceRetry = 0;
         resetPlayerFallback();
         hardDecodeSwitchRetryArmed = false;
         softDecodeFallbackAttempted = false;
+        ijkRenderSwapFallbackTried = false;
+        ijkRenderSwapTriedTarget = -1;
         setMediaItem(timeout);
     }
 
@@ -6366,12 +6522,15 @@ public void resetTrack(int type) {
         beginPlaybackTrace("parse", false);
         this.playWhenReady = playWhenReady;
         manualPlayerSwitchPending = false;
+        manualSwitchRestorePlayer = PlayerSetting.NONE;
         localProxyRetry = 0;
         parseHealthStartedAt = System.currentTimeMillis();
         parseHealthRecorded = false;
         resetPlayerFallback();
         hardDecodeSwitchRetryArmed = false;
         softDecodeFallbackAttempted = false;
+        ijkRenderSwapFallbackTried = false;
+        ijkRenderSwapTriedTarget = -1;
         parseJob = ParseJob.create(this).start(result, useParse);
     }
 
@@ -8849,6 +9008,10 @@ public void resetTrack(int type) {
         }
 
         void onPlayerRebuild(Player newPlayer, boolean resetVideoSurface);
+
+        /** 手动换核失败后已恢复到原内核，宿主可据此同步内核显示（不改用户的历史选择）。 */
+        default void onManualSwitchRestored(int player) {
+        }
     }
 
     private final Player.Listener listener = new Player.Listener() {
@@ -9064,6 +9227,10 @@ public void resetTrack(int type) {
             int statusCode = httpStatus(e);
             String errorMessage = engine.getErrorMessage(e);
             PlaybackTrace.log("playback-error", playbackTrace.current(), "%s action=%s player=%d decode=%d", failure.logSummary(), action, playerType, engine.getDecode());
+            PlaybackSwitchLog.log("error", "player=%s decode=%d code=%d http=%d type=%s action=%s retry=%d pending=%s message=%s",
+                    getPlayerText(playerType), engine.getDecode(), e.errorCode, statusCode, e.getClass().getSimpleName(), action, retry, manualPlayerSwitchPending, e.getMessage());
+            PlaybackSwitchLog.log("error", "spec=%s", debugSpec());
+            PlaybackSwitchLog.log("error", "causes=%s", causeChain(e));
             if (SpiderDebug.isEnabled()) SpiderDebug.log("player", "error code=%d http=%d errorType=%s message=%s action=%s retry=%d spec=%s causeTypes=%s", e.errorCode, statusCode, e.getClass().getSimpleName(), e.getMessage(), action, retry, debugSpec(), causeChain(e));
             LocalProxyDebug.dumpIfLocalFailure(spec == null ? null : spec.getUrl(), e);
             if (statusCode > 0 && callback.onSourceHttpError(statusCode, errorMessage)) return;
@@ -9079,6 +9246,7 @@ public void resetTrack(int type) {
             if (action == PlayerEngine.ErrorAction.FATAL && retryLocalProxy(e)) return;
             if (retryTransientSourceFailure(e, failure)) return;
             if (shouldStopOnManualSwitchFailure(manualPlayerSwitchPending, action)) {
+                if (restoreManualSwitchPlayer()) return;
                 finishPlaybackProfileAbSession(
                         "manual-switch-error", SystemClock.elapsedRealtime());
                 callback.onError(errorMessage);
@@ -9178,6 +9346,7 @@ public void resetTrack(int type) {
         if (retryMpvAutoVulkanToOpenGl("auto-vulkan-first-frame-timeout")) return;
         if (retryExoDv7FirstFrameTimeout()) return;
         if (manualPlayerSwitchPending) {
+            if (restoreManualSwitchPlayer()) return;
             finishPlaybackProfileAbSession(
                     "manual-switch-timeout", SystemClock.elapsedRealtime());
             callback.onError(ResUtil.getString(R.string.error_play_timeout));
@@ -9775,10 +9944,47 @@ public void resetTrack(int type) {
     }
 
     private int resolveManualPlayer(int type) {
-        if (PlayerSetting.isPlayerAvailable(type)) return type;
+        boolean available = PlayerSetting.isPlayerAvailable(type);
+        PlaybackSwitchLog.log("switch", "manual-available check=%s result=%s current=%s", getPlayerText(type), available, getPlayerText(playerType));
+        if (available) return type;
         SpiderDebug.log("player", "manual player unavailable type=%s package=%s", getPlayerText(type), App.get().getPackageName());
+        PlaybackSwitchLog.log("switch", "manual-available DENIED type=%s reason=not-available package=%s", getPlayerText(type), App.get().getPackageName());
         Notify.show(ResUtil.getString(R.string.error_play_ijk_unavailable));
         return playerType;
+    }
+
+    /**
+     * 手动换核后新内核起播失败/超时：切回换之前的内核并重建 Surface。
+     * 自动回退不覆盖手动切换（见 manualPlayerSwitchPending），所以失败现场原本会
+     * 一直停在错误提示与黑屏上；这里把「用户主动换核」的失败也纳入可恢复路径。
+     */
+    private boolean restoreManualSwitchPlayer() {
+        int restore = manualSwitchRestorePlayer;
+        PlaybackSwitchLog.log("switch", "restore begin from=%s to=%s(restorePlayer)", getPlayerText(playerType), getPlayerText(restore));
+        manualSwitchRestorePlayer = PlayerSetting.NONE;
+        manualPlayerSwitchPending = false;
+        if (!PlayerSetting.isPlayer(restore) || restore == playerType) {
+            PlaybackSwitchLog.log("switch", "restore skipped reason=invalid-or-same restore=%s current=%s", getPlayerText(restore), getPlayerText(playerType));
+            return false;
+        }
+        if (!PlayerSetting.isPlayerAvailable(restore) || engine == null || spec == null || spec.getUrl() == null) {
+            PlaybackSwitchLog.log("switch", "restore skipped reason=unavailable-or-no-spec restore=%s available=%s engine=%s spec=%s",
+                    getPlayerText(restore), PlayerSetting.isPlayerAvailable(restore), engine != null, spec != null && spec.getUrl() != null);
+            return false;
+        }
+        String from = getPlayerText(playerType);
+        String to = getPlayerText(restore);
+        int decode = sanitizeDecode(engine.getDecode());
+        // 用换核前记住的位置恢复，避免失败内核从未 prepared 导致回退后从头播放。
+        long position = manualSwitchRestorePosition > 0 ? manualSwitchRestorePosition : getPosition();
+        manualSwitchRestorePosition = 0;
+        switchEngine(restore, false, true, decode, position, getSpeed(), isRepeatOne(),
+                player != null ? player.getPlayWhenReady() : playWhenReady, "manual-switch-restore");
+        ijkRuntimeManualOverride = false;
+        callback.onManualSwitchRestored(restore);
+        PlaybackSwitchLog.log("switch", "restore done from=%s to=%s", from, to);
+        Notify.show(ResUtil.getString(R.string.error_play_switch_restored, from, to));
+        return true;
     }
 
     private void logUnavailablePlayer(int from, int to) {

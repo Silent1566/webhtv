@@ -147,10 +147,11 @@ public class Setting {
     public static final int WALL_MIDNIGHT_MOON = 34;
     public static final int WALL_CYAN_CRYSTAL = 35;
     public static final int WALL_LAVENDER_CRYSTAL = 36;
+    public static final int WALL_HONEY = 37;
     public static final int WALL_GREEN = 1;
 
     private static final int[] DEFAULT_WALLS = {
-            WALL_DREAM_PURPLE, WALL_LAVENDER_CRYSTAL, WALL_PASTEL_PRISM, WALL_ROSE_VEIL, WALL_VIOLET_SMOKE,
+            WALL_HONEY, WALL_DREAM_PURPLE, WALL_LAVENDER_CRYSTAL, WALL_PASTEL_PRISM, WALL_ROSE_VEIL, WALL_VIOLET_SMOKE,
             WALL_NEON_BERRY, WALL_MIDNIGHT_MOON, WALL_NEON_CYBER, WALL_DEEP_SPACE_GLASS, WALL_GRAPHITE_SMOKE,
             WALL_DAYLIGHT_MINIMAL, WALL_SKY_MINT, WALL_POLAR_LIGHT_GLASS, WALL_GLASS_GRADIENT, WALL_CRYSTAL_SKY,
             WALL_BLUE_SILK, WALL_CYAN_CRYSTAL, WALL_MINT_GLACIER, WALL_AURORA_GLASS, WALL_DEEP_SEA,
@@ -215,8 +216,34 @@ public class Setting {
     }
 
     public static int getWall() {
-        int wall = Prefers.getInt("wall", WALL_DREAM_PURPLE);
-        return wall == WALL_GREEN || isLegacyColorWall(wall) ? WALL_DREAM_PURPLE : wall;
+        ensureHoneyWallSync();
+        int wall = Prefers.getInt("wall", WALL_HONEY);
+        return wall == WALL_GREEN || isLegacyColorWall(wall) ? WALL_HONEY : wall;
+    }
+
+    /** 蜂蜜壁纸同步迁移标记：只执行一次，之后用户仍可自由更换壁纸。 */
+    private static final String KEY_WALL_SYNC = "wall_honey_sync_migrated";
+
+    /**
+     * 一次性升级迁移：把残留的「接口网络壁纸/自定义壁纸」方案重置回蜂蜜内置壁纸。
+     *
+     * <p>老版本（默影视方案）通过壁纸接口下载图片并缓存到本地；升级到蜂蜜版后，
+     * 这份持久化状态会让 TV 端继续回放旧壁纸缓存，表现为「TV 壁纸没有同步手机端」。
+     * 手机端是全新安装、默认即蜂蜜壁纸，所以只有老设备会命中这条迁移。
+     */
+    private static void ensureHoneyWallSync() {
+        if (Prefers.getBoolean(KEY_WALL_SYNC)) return;
+        Prefers.put(KEY_WALL_SYNC, true);
+        int wall = Prefers.getInt("wall", WALL_HONEY);
+        int type = Prefers.getInt("wall_type", 0);
+        // 已是内置设计壁纸（含蜂蜜）且未挂网络壁纸方案：不需要动。
+        if (type == 0 && isBuiltInDesignWall(wall)) return;
+        Prefers.put("wall", WALL_HONEY);
+        Prefers.put("wall_type", 0);
+        try {
+            com.fongmi.android.tv.utils.FileUtil.getWallCache().delete();
+        } catch (Throwable ignored) {
+        }
     }
 
     public static void putWall(int wall) {
@@ -236,7 +263,7 @@ public class Setting {
         for (int i = 0; i < DEFAULT_WALLS.length; i++) {
             if (DEFAULT_WALLS[i] == wall) return DEFAULT_WALLS[(i + 1) % DEFAULT_WALLS.length];
         }
-        return WALL_DREAM_PURPLE;
+        return WALL_HONEY;
     }
 
     public static int[] getDefaultWalls() {
@@ -267,6 +294,7 @@ public class Setting {
     }
 
     public static int getBuiltInWallColor(int wall) {
+        if (wall == WALL_HONEY) return 0xFF69BDA4;
         if (wall == WALL_AURORA_GLASS) return 0xFF2B8ECB;
         if (wall == WALL_SUNSET_PRISM) return 0xFFB65B88;
         if (wall == WALL_MINT_GLACIER) return 0xFF55BCA8;
@@ -298,6 +326,7 @@ public class Setting {
     }
 
     public static String getBuiltInWallName(int wall) {
+        if (wall == WALL_HONEY) return "蜂蜜影视";
         if (wall == WALL_AURORA_GLASS) return "蓝紫流光";
         if (wall == WALL_SUNSET_PRISM) return "珊瑚暮色";
         if (wall == WALL_MINT_GLACIER) return "薄荷星云";
@@ -325,7 +354,7 @@ public class Setting {
         if (wall == WALL_MIDNIGHT_MOON) return "午夜月影";
         if (wall == WALL_CYAN_CRYSTAL) return "水晶青蓝";
         if (wall == WALL_LAVENDER_CRYSTAL) return "薰衣水晶";
-        return "梦幻紫霞";
+        return "蜂蜜影视";
     }
 
     public static String getWallDesc(String desc) {
@@ -450,7 +479,12 @@ public class Setting {
     }
 
     public static Context wrapDisplay(Context context) {
-        return wrapUiScale(wrapLanguage(context));
+        try {
+            return wrapUiScale(wrapLanguage(context));
+        } catch (RuntimeException ignored) {
+            // 语言/缩放配置无法应用时退回系统配置，保证 Activity 能正常 attach 与重建。
+            return context;
+        }
     }
 
     public static Context wrapLanguage(Context context) {
@@ -458,10 +492,14 @@ public class Setting {
         applyLanguage(language);
         if (language == LANGUAGE_FOLLOW_SYSTEM) return context;
         Locale locale = language == LANGUAGE_TRADITIONAL ? Locale.TRADITIONAL_CHINESE : Locale.SIMPLIFIED_CHINESE;
-        Configuration config = new Configuration(context.getResources().getConfiguration());
-        config.setLocale(locale);
-        config.setLocales(new LocaleList(locale));
-        return context.createConfigurationContext(config);
+        try {
+            Configuration config = new Configuration(context.getResources().getConfiguration());
+            config.setLocale(locale);
+            config.setLocales(new LocaleList(locale));
+            return context.createConfigurationContext(config);
+        } catch (RuntimeException ignored) {
+            return context;
+        }
     }
 
     public static int getUiScale() {
@@ -884,6 +922,16 @@ public class Setting {
 
     public static void putAdblock(boolean adblock) {
         Prefers.put("adblock", adblock);
+    }
+
+    // 广告拦截成功提示：开启时在成功拦截后弹出「已跳过 N 个广告片段，时长 X」。
+    // 默认 true 保持增强版既有观感（原逻辑无条件提示），用户可关闭。
+    public static boolean isAdBlockNotice() {
+        return Prefers.getBoolean("ad_block_notice", true);
+    }
+
+    public static void putAdBlockNotice(boolean enabled) {
+        Prefers.put("ad_block_notice", enabled);
     }
 
     public static boolean isZhuyin() {
@@ -1340,6 +1388,14 @@ public class Setting {
 
     public static void putHomeHistory(boolean homeHistory) {
         Prefers.put("home_history", homeHistory);
+    }
+
+    public static boolean isHomeRecommend() {
+        return Prefers.getBoolean("home_recommend", true);
+    }
+
+    public static void putHomeRecommend(boolean homeRecommend) {
+        Prefers.put("home_recommend", homeRecommend);
     }
 
     public static boolean isEpisodeHistory() {

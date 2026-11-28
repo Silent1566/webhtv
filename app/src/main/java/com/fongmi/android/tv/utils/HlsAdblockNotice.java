@@ -36,7 +36,7 @@ public final class HlsAdblockNotice {
     public static String message(int removedSegments, double removedDurationSec) {
         String count = "已跳过 " + Math.max(0, removedSegments) + " 个广告片段";
         String duration = durationText(removedDurationSec);
-        return duration.isEmpty() ? count : count + "，总广告时长 " + duration;
+        return duration.isEmpty() ? count : count + "，时长 " + duration;
     }
 
     /**

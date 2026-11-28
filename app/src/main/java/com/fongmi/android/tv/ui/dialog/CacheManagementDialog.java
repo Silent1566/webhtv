@@ -182,6 +182,10 @@ public class CacheManagementDialog extends DialogFragment {
         binding.cleanupDeep.setOnClickListener(view -> {
             if (!CacheCleanupManager.isRunning()) confirmDeep(view);
         });
+        // 一键清除剧集缓存：只清播放缓存（EXO + MPV_HLS），与设置页长按弹窗共用本面板的进度与结果展示。
+        binding.cleanupEpisodes.setOnClickListener(view -> {
+            if (!CacheCleanupManager.isRunning()) confirmEpisodes(view);
+        });
         binding.autoCleanup.setOnClickListener(view -> toggleAutoCleanup());
         binding.retention.setOnClickListener(view -> chooseRetention());
         binding.totalLimit.setOnClickListener(view -> chooseTotalLimit());
@@ -296,6 +300,26 @@ public class CacheManagementDialog extends DialogFragment {
         focusNegativeOnShow(dialog);
         restoreFocusOnDismiss(dialog, returnFocus);
         dialog.show();
+    }
+
+    /** 一键清除剧集缓存：确认后只清播放缓存两个模块，进度与结果复用面板自身的状态行。 */
+    private void confirmEpisodes(View returnFocus) {
+        AlertDialog dialog = new WebHtvAlertDialogBuilder(requireContext())
+                .setTitle(R.string.episode_cache_clear_title)
+                .setMessage(R.string.episode_cache_clear_confirm)
+                .setNegativeButton(R.string.dialog_negative, null)
+                .setPositiveButton(R.string.dialog_positive,
+                        (ignored, which) -> startCleanup(episodePlaybackPlan()))
+                .create();
+        focusNegativeOnShow(dialog);
+        restoreFocusOnDismiss(dialog, returnFocus);
+        dialog.show();
+    }
+
+    /** 播放缓存两个模块（EXO 点播 + MPV_HLS 代理），与旧的设置页一键清除范围完全一致。 */
+    private static com.fongmi.android.tv.cache.CacheCleanupPlan episodePlaybackPlan() {
+        return new com.fongmi.android.tv.cache.CacheCleanupPlan(CacheCleanupMode.MODULE,
+                java.util.List.of(CacheModuleId.EXO, CacheModuleId.MPV_HLS));
     }
 
     private void confirmModule(CacheModuleId id, View returnFocus) {
@@ -421,6 +445,7 @@ public class CacheManagementDialog extends DialogFragment {
         setCleanupButtonInteractive(binding.cleanupLight, enabled);
         setCleanupButtonInteractive(binding.cleanupStandard, enabled);
         setCleanupButtonInteractive(binding.cleanupDeep, enabled);
+        setCleanupButtonInteractive(binding.cleanupEpisodes, enabled);
     }
 
     /**

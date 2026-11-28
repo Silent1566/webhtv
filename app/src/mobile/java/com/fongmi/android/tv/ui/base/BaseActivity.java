@@ -24,6 +24,7 @@ import com.fongmi.android.tv.theme.ThemeController;
 import com.fongmi.android.tv.ui.audio.AudioMiniPlayer;
 import com.fongmi.android.tv.ui.custom.CustomWallView;
 import com.fongmi.android.tv.utils.ResUtil;
+import com.fongmi.android.tv.utils.UiRestart;
 import com.google.android.material.color.DynamicColors;
 import com.google.android.material.color.DynamicColorsOptions;
 
@@ -141,11 +142,39 @@ public abstract class BaseActivity extends AppCompatActivity {
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onSubscribe(Object o) {
-        if (o instanceof RefreshEvent event && (event.getType() == RefreshEvent.Type.LANGUAGE || event.getType() == RefreshEvent.Type.THEME)) recreate();
+        if (o instanceof RefreshEvent event && (event.getType() == RefreshEvent.Type.LANGUAGE || event.getType() == RefreshEvent.Type.THEME)) UiRestart.rebuild(this);
     }
 
     protected void onBackInvoked() {
         finish();
+    }
+
+    /**
+     * 把给定视图里第一个可垂直滚动的容器滚回顶部。手机端设置页是 HomeActivity 里的
+     * Fragment，滚动容器（NestedScrollView）没有 id，故从 Fragment 根视图递归查找。
+     *
+     * @return 是否真的发生了回顶（原本不在顶部）
+     */
+    protected static boolean scrollViewToTop(View view) {
+        if (view == null) return false;
+        if (view instanceof androidx.core.widget.NestedScrollView && ((androidx.core.widget.NestedScrollView) view).getScrollY() > 0) {
+            ((androidx.core.widget.NestedScrollView) view).smoothScrollTo(0, 0);
+            return true;
+        }
+        if (view instanceof android.widget.ScrollView && ((android.widget.ScrollView) view).getScrollY() > 0) {
+            ((android.widget.ScrollView) view).smoothScrollTo(0, 0);
+            return true;
+        }
+        if (view instanceof androidx.recyclerview.widget.RecyclerView && ((androidx.recyclerview.widget.RecyclerView) view).canScrollVertically(-1)) {
+            ((androidx.recyclerview.widget.RecyclerView) view).smoothScrollToPosition(0);
+            return true;
+        }
+        if (view instanceof ViewGroup group) {
+            for (int i = 0; i < group.getChildCount(); i++) {
+                if (scrollViewToTop(group.getChildAt(i))) return true;
+            }
+        }
+        return false;
     }
 
     @Override

@@ -65,6 +65,6 @@ public class ExoHlsAdblockDataSourceTest {
                 "https://example.test/live/index.m3u8", manifest);
 
         assertTrue(result.changed());
-        assertEquals("已跳过 1 个广告片段，总广告时长 5.0 秒", result.notice());
+        assertEquals("已跳过 1 个广告片段，时长 5.0 秒", result.notice());
     }
 }
